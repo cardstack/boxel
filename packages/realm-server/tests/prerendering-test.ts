@@ -16,7 +16,10 @@ import {
   cleanWhiteSpace,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { baseCardRef } from '@cardstack/runtime-common';
+import {
+  baseCardRef,
+  trimExecutableExtension,
+} from '@cardstack/runtime-common';
 
 module(basename(__filename), function () {
   module('prerender - dynamic tests', function (hooks) {
@@ -150,6 +153,189 @@ module(basename(__filename), function () {
         second.response.serialized?.data.attributes?.name,
         'Juniper',
         'second render picks up updated value',
+      );
+    });
+
+    test('prerenderModule returns module metadata', async function (assert) {
+      const moduleURL = `${realmURL}person.gts`;
+
+      let result = await prerenderer.prerenderModule({
+        realm: realmURL,
+        url: moduleURL,
+        userId: testUserId,
+        permissions,
+      });
+
+      assert.false(result.pool.reused, 'first module render not reused');
+      assert.strictEqual(
+        result.response.status,
+        'ready',
+        'module marked ready',
+      );
+      let key = `${trimExecutableExtension(new URL(moduleURL)).href}/Person`;
+      let entry = result.response.definitions[key];
+      assert.ok(entry, 'definition captured');
+      assert.strictEqual(
+        entry?.type,
+        'definition',
+        'definition entry type correct',
+      );
+      if (entry?.type === 'definition') {
+        assert.ok(entry.definition.displayName, 'display name present');
+      } else {
+        assert.ok(false, 'module definition should be present');
+      }
+    });
+
+    test('module prerender reuses pooled page after updates', async function (assert) {
+      const moduleURL = `${realmURL}person.gts`;
+
+      let first = await prerenderer.prerenderModule({
+        realm: realmURL,
+        url: moduleURL,
+        userId: testUserId,
+        permissions,
+      });
+
+      assert.false(first.pool.reused, 'first module render not reused');
+
+      await realmAdapter.write(
+        'person.gts',
+        `
+          import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+          export class Person extends CardDef {
+            static displayName = "Updated Person";
+            @field name = contains(StringField);
+            static isolated = class extends Component<typeof this> {
+              <template>{{@model.name}}</template>
+            }
+          }
+        `,
+      );
+      realm.__testOnlyClearCaches(); // out write bypasses the index so we need to manually flush the realm cache
+
+      let second = await prerenderer.prerenderModule({
+        realm: realmURL,
+        url: moduleURL,
+        userId: testUserId,
+        permissions,
+        renderOptions: { clearCache: true },
+      });
+
+      assert.true(
+        second.pool.reused,
+        'second module render reused pooled page',
+      );
+      assert.strictEqual(
+        first.pool.pageId,
+        second.pool.pageId,
+        'same page reused',
+      );
+      let key = `${trimExecutableExtension(new URL(moduleURL)).href}/Person`;
+      let entry = second.response.definitions[key];
+      assert.ok(entry, 'updated module definition entry present');
+      assert.strictEqual(
+        entry?.type,
+        'definition',
+        'updated module definition entry correct',
+      );
+      if (entry?.type === 'definition') {
+        assert.strictEqual(
+          entry.definition.displayName,
+          'Updated Person',
+          'updated module definition observed',
+        );
+      } else {
+        assert.ok(false, 'updated module definition entry should be present');
+      }
+    });
+
+    test('module prerender surfaces syntax errors', async function (assert) {
+      const modulePath = 'person.gts';
+      const moduleURL = `${realmURL}${modulePath}`;
+
+      await realmAdapter.write(modulePath, 'export const Broken = ;');
+      realm.__testOnlyClearCaches();
+
+      let result = await prerenderer.prerenderModule({
+        realm: realmURL,
+        url: moduleURL,
+        userId: testUserId,
+        permissions,
+      });
+
+      assert.strictEqual(
+        result.response.status,
+        'error',
+        'module render errored',
+      );
+      assert.strictEqual(
+        result.response.error?.error.status,
+        406,
+        'syntax error surfaces as 406',
+      );
+      assert.false(result.pool.evicted, 'page not evicted for syntax error');
+    });
+
+    test('module prerender evicts pooled page on timeout', async function (assert) {
+      const moduleURL = `${realmURL}person.gts`;
+
+      let first = await prerenderer.prerenderModule({
+        realm: realmURL,
+        url: moduleURL,
+        userId: testUserId,
+        permissions,
+      });
+      assert.false(first.pool.reused, 'initial module render not reused');
+      assert.false(first.pool.evicted, 'initial module render not evicted');
+
+      let timedOut = await prerenderer.prerenderModule({
+        realm: realmURL,
+        url: moduleURL,
+        userId: testUserId,
+        permissions,
+        opts: { timeoutMs: 1, simulateTimeoutMs: 25 },
+      });
+
+      assert.strictEqual(
+        timedOut.response.status,
+        'error',
+        'timeout returns error response',
+      );
+      assert.strictEqual(
+        timedOut.response.error?.error.title,
+        'Render timeout',
+        'timeout surfaces render timeout title',
+      );
+      assert.strictEqual(
+        timedOut.response.error?.error.status,
+        504,
+        'timeout surfaces 504 status',
+      );
+      assert.true(timedOut.pool.timedOut, 'timeout flagged on pool');
+      assert.true(timedOut.pool.evicted, 'pool evicted after timeout');
+      assert.notStrictEqual(
+        timedOut.pool.pageId,
+        'unknown',
+        'timeout retains page identifier',
+      );
+
+      let afterTimeout = await prerenderer.prerenderModule({
+        realm: realmURL,
+        url: moduleURL,
+        userId: testUserId,
+        permissions,
+      });
+      assert.false(
+        afterTimeout.pool.reused,
+        'timeout eviction prevents reuse on next render',
+      );
+      assert.false(afterTimeout.pool.evicted, 'no eviction on recovery render');
+      assert.false(afterTimeout.pool.timedOut, 'no timeout after recovery');
+      assert.strictEqual(
+        afterTimeout.response.status,
+        'ready',
+        'subsequent render succeeds',
       );
     });
   });

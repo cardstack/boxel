@@ -751,7 +751,7 @@ export class CurrentRun {
           let shouldClearCache = this.#consumeClearCacheForRender();
           let prerenderOptions: RenderRouteOptions | undefined =
             shouldClearCache ? { clearCache: true } : undefined;
-          renderResult = await this.#prerenderer({
+          renderResult = await this.#prerenderer.prerenderCard({
             url: fileURL,
             realm: this.#realmURL.href,
             userId: this.#userId,

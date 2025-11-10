@@ -95,7 +95,10 @@ export function cleanWhiteSpace(text: string) {
   // this also normalizes non-breaking space characters which seem
   // to be appearing in date/time serialization in some envs
 
-  return text.replace('<!---->', '').replace(/[\s]+/g, ' ').trim();
+  return text
+    .replace(/<!---->/g, '')
+    .replace(/[\s]+/g, ' ')
+    .trim();
 }
 
 export function getMonacoContent(
