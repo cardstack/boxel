@@ -22,6 +22,7 @@ import {
   type Format,
   FieldDef,
   linksToMany,
+  queryableValue,
 } from '../card-api';
 import CodeRefField from '../code-ref';
 
@@ -37,16 +38,143 @@ interface CardListSignature {
 
 export class JsonField extends FieldDef {
   static [primitive]: Record<string, any>;
+  static [queryableValue](value: Record<string, any>) {
+    if (value == null) {
+      return value;
+    }
+    return JSON.stringify(value);
+  }
 }
 
-export class QueryField extends FieldDef {
+class QueryFieldEdit extends Component<typeof JsonField> {
+  @tracked value = JSON.stringify(this.args.model ?? {}, null, 2);
+  @tracked error: string | null = null;
+
+  private parse(value: string): Query | undefined {
+    try {
+      let parsed = JSON.parse(value);
+      this.error = null;
+      return parsed;
+    } catch (e) {
+      this.error = 'Enter valid JSON for the query';
+      return undefined;
+    }
+  }
+
+  @action
+  onInput(event: Event) {
+    let target = event.target as HTMLTextAreaElement;
+    this.value = target.value;
+    let parsed = this.parse(target.value);
+    if (parsed) {
+      this.args.set?.(parsed);
+    }
+  }
+
+  <template>
+    <label class='query-field-edit'>
+      <span class='query-field-edit__label'>JSON Query</span>
+      <textarea
+        value={{this.value}}
+        class='query-field-edit__textarea'
+        aria-invalid={{if this.error 'true' 'false'}}
+        {{on 'input' this.onInput}}
+        rows='12'
+      ></textarea>
+      {{#if this.error}}
+        <span class='query-field-edit__error'>{{this.error}}</span>
+      {{/if}}
+    </label>
+    <style scoped>
+      .query-field-edit {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-2xs);
+        width: 100%;
+      }
+      .query-field-edit__label {
+        font-weight: 600;
+      }
+      .query-field-edit__textarea {
+        font-family: var(--boxel-font-family-monospace, monospace);
+        border-radius: var(--boxel-border-radius);
+        border: 1px solid var(--boxel-300);
+        padding: var(--boxel-sp);
+        min-height: 10rem;
+        resize: vertical;
+      }
+      .query-field-edit__textarea[aria-invalid='true'] {
+        border-color: var(--boxel-danger);
+      }
+      .query-field-edit__error {
+        color: var(--boxel-danger);
+        font-size: var(--boxel-font-sm);
+      }
+    </style>
+  </template>
+}
+
+export class QueryField extends JsonField {
   static [primitive]: Query;
+  static edit = QueryFieldEdit;
+}
+
+class SearchCardsByQueryInputIsolatedView extends Component<
+  typeof SearchCardsByQueryInput
+> {
+  get queryString() {
+    if (!this.args.model.query) {
+      return 'No query provided';
+    }
+    return JSON.stringify(this.args.model.query, null, 2);
+  }
+
+  <template>
+    <section class='search-query-input' data-test-search-query-input>
+      <header>
+        <h3>Search Query</h3>
+      </header>
+      <div class='query-display'>
+        <FieldContainer @label='Query'>
+          <pre><code>{{this.queryString}}</code></pre>
+        </FieldContainer>
+      </div>
+    </section>
+    <style scoped>
+      .search-query-input {
+        padding: var(--boxel-sp-lg) var(--boxel-sp-xl);
+      }
+      .search-query-input > * + * {
+        margin-top: var(--boxel-sp-lg);
+      }
+      h3 {
+        margin: 0;
+        font: 600 var(--boxel-font-lg);
+      }
+      .query-display {
+        margin-top: var(--boxel-sp);
+      }
+      pre {
+        margin: 0;
+        padding: var(--boxel-sp);
+        background-color: var(--boxel-100);
+        border-radius: var(--boxel-border-radius);
+        overflow-x: auto;
+      }
+      code {
+        font-family: var(--boxel-font-family-monospace, monospace);
+        font-size: var(--boxel-font-sm);
+        line-height: 1.5;
+      }
+    </style>
+  </template>
 }
 
 export class SearchCardsByQueryInput extends CardDef {
   static displayName = 'Search Cards';
   static icon = IconSearchThick;
   @field query = contains(QueryField);
+  static isolated = SearchCardsByQueryInputIsolatedView;
 }
 
 export class SearchCardsByTypeAndTitleInput extends CardDef {

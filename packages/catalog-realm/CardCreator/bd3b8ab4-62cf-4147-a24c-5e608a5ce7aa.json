@@ -1,0 +1,44 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardCreator",
+        "module": "../card-generation/card-creator"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "steps": [],
+      "prompt": "Generate a structured theme preset with balanced typography and unique accent colors.",
+      "codeRef": {
+        "name": "default",
+        "module": "https://cardstack.com/base/structured-theme"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": "Structured Theme Generator",
+        "description": "Seed new structured-theme instances with AI-generated presets.",
+        "thumbnailURL": null
+      },
+      "localDir": "StructuredTheme",
+      "targetRealmUrl": "http://localhost:4201/catalog/"
+    },
+    "relationships": {
+      "llmModel": {
+        "links": {
+          "self": "../ModelConfiguration/anthropic-claude-sonnet-45"
+        }
+      },
+      "exampleCard": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

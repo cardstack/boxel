@@ -39,6 +39,7 @@ import type {
   BaseDef,
   SignatureFor,
 } from 'https://cardstack.com/base/card-api';
+import { JsonField } from 'https://cardstack.com/base/commands/search-card-result';
 
 import {
   cleanWhiteSpace,
@@ -3839,6 +3840,22 @@ module('Integration | card-basics', function (hooks) {
         getQueryableValue(StringField, 'Van Gogh'),
         'Van Gogh',
         'The queryable value from user supplied data is correct',
+      );
+    });
+
+    test('JsonField queryable value serializes objects to strings', async function (assert) {
+      let value = { firstName: 'Mango', details: { age: 6 } };
+      let queryValue = getQueryableValue(JsonField, value);
+
+      assert.strictEqual(
+        typeof queryValue,
+        'string',
+        'queryable value is serialized to a string',
+      );
+      assert.deepEqual(
+        JSON.parse(queryValue),
+        value,
+        'queryable value can round-trip back to the original JSON',
       );
     });
 

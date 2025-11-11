@@ -1,5 +1,10 @@
 import { service } from '@ember/service';
 
+import {
+  isCardErrorJSONAPI,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -7,7 +12,8 @@ import HostBaseCommand from '../lib/host-base-command';
 import type StoreService from '../services/store';
 
 export default class SaveCardCommand extends HostBaseCommand<
-  typeof BaseCommandModule.SaveCardInput
+  typeof BaseCommandModule.SaveCardInput,
+  typeof BaseCommandModule.SaveCardResult
 > {
   @service declare private store: StoreService;
 
@@ -27,10 +33,23 @@ export default class SaveCardCommand extends HostBaseCommand<
   // the consumer.
   protected async run(
     input: BaseCommandModule.SaveCardInput,
-  ): Promise<undefined> {
-    await this.store.add(input.card, {
+  ): Promise<BaseCommandModule.SaveCardResult> {
+    let savedCard = await this.store.add(cardInput, {
       realm: input.realm,
       localDir: input.localDir,
+    });
+
+    if (isCardErrorJSONAPI(savedCard)) {
+      throw new Error(
+        savedCard.message ?? 'Failed to save card due to server error',
+      );
+    }
+
+    let commandModule = await this.loadCommandModule();
+    const { SaveCardResult } = commandModule;
+
+    return new SaveCardResult({
+      card: savedCard,
     });
   }
 }
