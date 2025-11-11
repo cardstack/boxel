@@ -30,6 +30,7 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   getMonacoContent,
+  TestContextWithSave,
 } from '../helpers';
 
 import { CardsGrid, setupBaseRealm } from '../helpers/base-realm';
@@ -1453,7 +1454,7 @@ ${REPLACE_MARKER}
       );
   });
 
-  test('automatic Accept All spinner appears in Act mode for multiple patches', async function (assert) {
+  test<TestContextWithSave>('automatic Accept All spinner appears in Act mode for multiple patches', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}hello.txt`,
@@ -1533,6 +1534,12 @@ ${REPLACE_MARKER}
         'Apply Diff',
         'Action bar shows applying text during automatic execution',
       );
+
+    let save = 0;
+    this.onSave((_saveURL) => {
+      save++;
+    });
+    await waitUntil(() => save >= 2, { timeout: 2000 });
 
     // Wait for all patches to be applied
     await waitUntil(
