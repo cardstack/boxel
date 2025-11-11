@@ -45,15 +45,15 @@ export default class HomePageResolverService extends Service {
       return null;
     }
 
-    let promise = this.inflight.get(realmURL);
-    if (!promise) {
-      promise = this.loadHomePage(realmURL).finally(() => {
+    let loadingHomePagePromise = this.inflight.get(realmURL);
+    if (!loadingHomePagePromise) {
+      loadingHomePagePromise = this.loadHomePage(realmURL).finally(() => {
         this.inflight.delete(realmURL);
       });
-      this.inflight.set(realmURL, promise);
+      this.inflight.set(realmURL, loadingHomePagePromise);
     }
 
-    let cardId = await promise;
+    let cardId = await loadingHomePagePromise;
     if (!cardId) {
       return null;
     }
