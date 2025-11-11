@@ -14,20 +14,25 @@ import {
   logger,
   jobIdentity,
   userIdFromUsername,
-  fetchUserPermissions,
   type QueueRunner,
   type TextFileRef,
   type VirtualNetwork,
   type ResponseWithNodeStream,
   type Prerenderer,
-  type RealmPermissions,
   type IndexWriter,
   type QueuePublisher,
   type DBAdapter,
 } from '.';
 import { MatrixClient } from './matrix-client';
 import * as Tasks from './tasks';
-import type { WorkerArgs, TaskArgs } from './tasks';
+import type {
+  WorkerArgs,
+  TaskArgs,
+  IncrementalArgs,
+  IncrementalResult,
+  FromScratchArgs,
+  FromScratchResult,
+} from './tasks';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
@@ -37,12 +42,6 @@ export interface Stats extends JSONTypes.Object {
   moduleErrors: number;
   definitionErrors: number;
   totalIndexEntries: number;
-}
-
-export interface IndexResults {
-  ignoreData: Record<string, string>;
-  stats: Stats;
-  invalidations: string[];
 }
 
 export interface Reader {
@@ -64,8 +63,8 @@ export interface StatusArgs {
 }
 
 export type RunnerRegistration = (
-  fromScratch: (args: FromScratchArgsWithPermissions) => Promise<IndexResults>,
-  incremental: (args: IncrementalArgsWithPermissions) => Promise<IndexResults>,
+  fromScratch: (args: FromScratchArgs) => Promise<FromScratchResult>,
+  incremental: (args: IncrementalArgs) => Promise<IncrementalResult>,
 ) => Promise<void>;
 
 export interface RunnerOpts {
@@ -76,34 +75,6 @@ export interface RunnerOpts {
   indexWriter: IndexWriter;
   jobInfo?: JobInfo;
   reportStatus?(args: StatusArgs): void;
-}
-
-export interface IncrementalArgs extends WorkerArgs {
-  urls: string[];
-  operation: 'update' | 'delete';
-  ignoreData: Record<string, string>;
-  clientRequestId: string | null;
-}
-
-export type IncrementalArgsWithPermissions = IncrementalArgs & {
-  permissions: RealmPermissions;
-};
-
-export interface IncrementalResult {
-  invalidations: string[];
-  ignoreData: Record<string, string>;
-  stats: Stats;
-}
-
-export type FromScratchArgs = WorkerArgs;
-
-export type FromScratchArgsWithPermissions = FromScratchArgs & {
-  permissions: RealmPermissions;
-};
-
-export interface FromScratchResult extends JSONTypes.Object {
-  ignoreData: Record<string, string>;
-  stats: Stats;
 }
 
 export type IndexRunner = (optsId: number) => Promise<void>;
@@ -139,6 +110,15 @@ export class RunnerOptionsManager {
   }
 }
 
+function isHeadlessChromeFeatureFlagEnabled() {
+  let useHeadlessChromePrerender = (globalThis as any)
+    .__useHeadlessChromePrerender;
+  if (typeof useHeadlessChromePrerender === 'function') {
+    return useHeadlessChromePrerender();
+  }
+  return useHeadlessChromePrerender;
+}
+
 export class Worker {
   #log = logger('worker');
   #runner: IndexRunner;
@@ -154,12 +134,10 @@ export class Worker {
   #realmAuthCache: Map<string, RealmAuthDataSource> = new Map();
   #secretSeed: string;
   #fromScratch:
-    | ((
-        args: FromScratchArgsWithPermissions & { boom?: true },
-      ) => Promise<IndexResults>)
+    | ((args: FromScratchArgs & { boom?: true }) => Promise<FromScratchResult>)
     | undefined;
   #incremental:
-    | ((args: IncrementalArgsWithPermissions) => Promise<IndexResults>)
+    | ((args: IncrementalArgs) => Promise<IncrementalResult>)
     | undefined;
   #reportStatus: ((args: StatusArgs) => void) | undefined;
   #realmServerMatrixUsername;
@@ -207,16 +185,31 @@ export class Worker {
 
   async run() {
     let taskArgs: TaskArgs = {
-      dbAdapter: this.#dbAdapter,
-      queuePublisher: this.#queuePublisher,
-      indexWriter: this.#indexWriter,
+      getReader,
       log: this.#log,
+      matrixURL: this.#matrixURL.href,
+      dbAdapter: this.#dbAdapter,
+      indexWriter: this.#indexWriter,
+      prerenderer: this.#prerenderer,
+      queuePublisher: this.#queuePublisher,
       getAuthedFetch: this.makeAuthedFetch.bind(this),
       reportStatus: this.reportStatus.bind(this),
     };
+
+    let isFeatureFlagEnabled = isHeadlessChromeFeatureFlagEnabled();
     await Promise.all([
-      this.#queue.register(`from-scratch-index`, this.fromScratch),
-      this.#queue.register(`incremental-index`, this.incremental),
+      this.#queue.register(
+        `from-scratch-index`,
+        isFeatureFlagEnabled
+          ? Tasks['fromScratchIndex'](taskArgs)
+          : this.fromScratch,
+      ),
+      this.#queue.register(
+        `incremental-index`,
+        isFeatureFlagEnabled
+          ? Tasks['incrementalIndex'](taskArgs)
+          : this.incremental,
+      ),
       this.#queue.register(`copy-index`, Tasks['copy'](taskArgs)),
       this.#queue.register(`lint-source`, Tasks['lintSource'](taskArgs)),
       this.#queue.register(
@@ -271,7 +264,6 @@ export class Worker {
         req.headers.set('X-Boxel-Disable-Module-Cache', 'true');
         return next(req);
       },
-      // TODO do we need this in our indexer?
       async (req, next) => {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
       },
@@ -337,12 +329,9 @@ export class Worker {
     return result;
   }
 
-  private reportStatus(
-    jobInfo: JobInfo | undefined,
-    status: 'start' | 'finish',
-  ) {
-    if (jobInfo?.jobId) {
-      this.#reportStatus?.({ jobId: String(jobInfo.jobId), status });
+  private reportStatus(args: JobInfo | undefined, status: 'start' | 'finish') {
+    if (args?.jobId) {
+      this.#reportStatus?.({ ...args, jobId: String(args.jobId), status });
     }
   }
 
@@ -359,17 +348,8 @@ export class Worker {
       if (!this.#fromScratch) {
         throw new Error(`Index runner has not been registered`);
       }
-      let realmUserId = userIdFromUsername(
-        args.realmUsername,
-        this.#matrixURL.href,
-      );
-      let permissions = await fetchUserPermissions(this.#dbAdapter, {
-        userId: realmUserId,
-      });
       let { ignoreData, stats } = await this.#fromScratch({
         ...args,
-        realmUsername: realmUserId, // we fashion JWT from this which needs to be full matrix userid
-        permissions,
       });
       this.#log.debug(
         `${jobIdentity(args.jobInfo)} completed from-scratch indexing for realm ${
@@ -397,17 +377,8 @@ export class Worker {
       if (!this.#incremental) {
         throw new Error(`Index runner has not been registered`);
       }
-      let realmUserId = userIdFromUsername(
-        args.realmUsername,
-        this.#matrixURL.href,
-      );
-      let permissions = await fetchUserPermissions(this.#dbAdapter, {
-        userId: realmUserId,
-      });
       let { ignoreData, stats, invalidations } = await this.#incremental({
         ...args,
-        realmUsername: realmUserId, // we fashion JWT from this which needs to be full matrix userid
-        permissions,
       });
       this.#log.debug(
         `${jobIdentity(args.jobInfo)} completed incremental indexing for  ${args.urls.join()}:\n${JSON.stringify(
