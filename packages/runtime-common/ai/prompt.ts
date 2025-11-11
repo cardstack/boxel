@@ -992,7 +992,10 @@ export const attachedCardsToMessage = (
 export const skillCardsToMessage = (cards: LooseCardResource[]) => {
   return cards
     .map((card) => {
-      return `Skill (id: ${card.id}):
+      let title = card.attributes?.title
+        ? `title: ${card.attributes.title}`
+        : '';
+      return `Skill (id: ${card.id} ${title}):
 ${card.attributes?.instructions}`;
     })
     .join('\n\n');

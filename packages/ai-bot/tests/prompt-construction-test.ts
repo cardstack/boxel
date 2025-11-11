@@ -1964,6 +1964,13 @@ Attached Files (files with newer versions don't show their content):
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
     assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
+    console.log(result[0].content);
+    assert.true(
+      result[0].content?.includes(
+        'Skill (id: https://cardstack.com/base/Skill/card-editing title: Card Editing):',
+      ),
+      'includes skill title metadata when present',
+    );
     assert.false(result[0].content?.includes('['));
     assert.true(
       result[0].content?.includes(
