@@ -151,12 +151,12 @@ module('Integration | date-time fields', function (hooks) {
   async function renderConfiguredField(
     FieldClass: any,
     value: unknown,
-    presentation: string,
-    extraConfig: Record<string, unknown> = {},
+    presentation: any,
+    extraConfig: Record<any, unknown> = {},
   ) {
     const fieldType = FieldClass;
     const configuration = { presentation, ...extraConfig } as Record<
-      string,
+      any,
       unknown
     >;
 
@@ -176,7 +176,7 @@ module('Integration | date-time fields', function (hooks) {
     await renderCard(loader, card, 'isolated');
   }
 
-  function buildField(FieldClass: any, attrs: Record<string, unknown>) {
+  function buildField(FieldClass: any, attrs: Record<any, unknown>) {
     return new FieldClass(attrs);
   }
 
@@ -268,7 +268,7 @@ module('Integration | date-time fields', function (hooks) {
 
     await renderField(
       YearFieldClass,
-      buildField(YearFieldClass, { value: '2025' }),
+      buildField(YearFieldClass, { value: 2025 }),
     );
     assert.dom('[data-test-year-embedded]').hasText('2025');
 
@@ -292,7 +292,7 @@ module('Integration | date-time fields', function (hooks) {
 
     await renderField(
       QuarterFieldClass,
-      buildField(QuarterFieldClass, { quarter: 'Q2', year: '2025' }),
+      buildField(QuarterFieldClass, { quarter: 2, year: 2025 }),
     );
     assert.dom('[data-test-quarter-embedded]').hasText('Q2 2025');
   });

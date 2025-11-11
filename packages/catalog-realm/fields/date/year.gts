@@ -1,21 +1,20 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 import {
   FieldDef,
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import StringField from 'https://cardstack.com/base/string';
+} from 'https://cardstack.com/base/card-api';
+import NumberField from 'https://cardstack.com/base/number';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event'; // ² Calendar event icon
-import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down'; // ³ Chevron down icon
+import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event';
+import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down';
 
 class YearFieldEdit extends Component<typeof YearField> {
   @action
   updateValue(event: Event) {
     const target = event.target as HTMLSelectElement;
-    this.args.model.value = target.value;
+    this.args.model.value = Number(target.value);
   }
 
   get years() {
@@ -112,14 +111,12 @@ class YearFieldEdit extends Component<typeof YearField> {
   </template>
 }
 
-// ⁴ YearField - Independent FieldDef for year-only selection
 export class YearField extends FieldDef {
   static displayName = 'Year';
   static icon = CalendarEventIcon;
 
-  @field value = contains(StringField); // ⁵ Year value (e.g., "2024")
+  @field value = contains(NumberField);
 
-  // ⁶ Embedded format - formatted year display
   static embedded = class Embedded extends Component<typeof this> {
     get displayValue() {
       return this.args.model?.value || 'No year set';
@@ -146,7 +143,6 @@ export class YearField extends FieldDef {
     </template>
   };
 
-  // ⁷ Atom format - compact year badge
   static atom = class Atom extends Component<typeof this> {
     get displayValue() {
       return this.args.model?.value || 'No year';
@@ -184,7 +180,6 @@ export class YearField extends FieldDef {
     </template>
   };
 
-  // ⁸ Edit format - year dropdown
   static edit = YearFieldEdit;
 }
 

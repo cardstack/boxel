@@ -26,10 +26,10 @@
       },
       "publishIn": {
         "unit": null,
-        "amount": null
+        "amount": 3
       },
       "fiscalYear": {
-        "value": "2025"
+        "value": 2029
       },
       "employeeAge": "2025-01-15",
       "meetingTime": {
@@ -66,18 +66,18 @@
         "value": null
       },
       "playgroundYear": {
-        "value": null
+        "value": 2028
       },
       "appointmentDate": "2025-11-28",
       "playgroundMonth": {
-        "value": null
+        "value": "04"
       },
       "appointmentSlots": {
         "value": "13:00"
       },
       "financialQuarter": {
-        "year": null,
-        "quarter": null
+        "year": 2025,
+        "quarter": 4
       },
       "lastActivityTime": "2025-11-06T13:20:00.000Z",
       "meetingRecurrence": {
@@ -105,9 +105,9 @@
         "end": null,
         "start": null
       },
-      "playgroundFieldType": "datetime",
+      "playgroundFieldType": "duration",
       "playgroundMonthYear": {
-        "value": null
+        "value": "2025-10"
       },
       "playgroundTimeRange": {
         "end": {

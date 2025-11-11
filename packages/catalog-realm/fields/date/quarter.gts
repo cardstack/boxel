@@ -1,47 +1,43 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 import {
   FieldDef,
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import StringField from 'https://cardstack.com/base/string';
+} from 'https://cardstack.com/base/card-api';
+import NumberField from 'https://cardstack.com/base/number';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import CalendarStatsIcon from '@cardstack/boxel-icons/calendar-stats'; // ² Calendar stats icon
-import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down'; // ³ Chevron down icon
+import CalendarStatsIcon from '@cardstack/boxel-icons/calendar-stats';
+import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down';
 
 class QuarterFieldEdit extends Component<typeof QuarterField> {
-  @tracked quarter = 'Q1';
-  @tracked year = '2024';
+  @tracked quarter = 1;
+  @tracked year = 2024;
 
   constructor(owner: any, args: any) {
     super(owner, args);
-    // ¹⁰ Initialize from model or set defaults
-    this.quarter = this.args.model?.quarter || 'Q1';
-    this.year = this.args.model?.year || new Date().getFullYear().toString();
+    this.quarter = this.args.model?.quarter || 1;
+    this.year = this.args.model?.year || new Date().getFullYear();
   }
 
   @action
   updateQuarter(event: Event) {
     const target = event.target as HTMLSelectElement;
-    this.quarter = target.value;
-    this.args.model.quarter = target.value;
+    this.quarter = parseInt(target.value, 10);
+    this.args.model.quarter = this.quarter;
   }
 
   @action
   updateYear(event: Event) {
     const target = event.target as HTMLSelectElement;
-    this.year = target.value;
-    this.args.model.year = target.value;
+    this.year = parseInt(target.value, 10);
+    this.args.model.year = this.year;
   }
 
   get years() {
     const currentYear = new Date().getFullYear();
-    return Array.from({ length: 10 }, (_, i) =>
-      (currentYear - 4 + i).toString(),
-    );
+    return Array.from({ length: 10 }, (_, i) => currentYear - 4 + i);
   }
 
   <template>
@@ -59,10 +55,10 @@ class QuarterFieldEdit extends Component<typeof QuarterField> {
             class='quarter-select-input'
             data-test-quarter-select
           >
-            <option value='Q1'>Q1 (Jan-Mar)</option>
-            <option value='Q2'>Q2 (Apr-Jun)</option>
-            <option value='Q3'>Q3 (Jul-Sep)</option>
-            <option value='Q4'>Q4 (Oct-Dec)</option>
+            <option value='1'>Q1 (Jan-Mar)</option>
+            <option value='2'>Q2 (Apr-Jun)</option>
+            <option value='3'>Q3 (Jul-Sep)</option>
+            <option value='4'>Q4 (Oct-Dec)</option>
           </select>
           <div class='select-icon'>
             <ChevronDownIcon class='icon' />
@@ -86,7 +82,7 @@ class QuarterFieldEdit extends Component<typeof QuarterField> {
           </div>
         </div>
       </div>
-      <p class='quarter-display'>Period: {{this.quarter}} {{this.year}}</p>
+      <p class='quarter-display'>Period: Q{{this.quarter}} {{this.year}}</p>
     </div>
 
     <style scoped>
@@ -178,15 +174,13 @@ class QuarterFieldEdit extends Component<typeof QuarterField> {
   </template>
 }
 
-// ⁴ QuarterField - Independent FieldDef for fiscal/financial quarters
 export class QuarterField extends FieldDef {
   static displayName = 'Quarter';
   static icon = CalendarStatsIcon;
 
-  @field quarter = contains(StringField); // ⁵ Quarter value (Q1, Q2, Q3, Q4)
-  @field year = contains(StringField); // ⁶ Year value (e.g., "2024")
+  @field quarter = contains(NumberField);
+  @field year = contains(NumberField);
 
-  // ⁷ Embedded format - formatted quarter display
   static embedded = class Embedded extends Component<typeof this> {
     get displayValue() {
       const quarter = this.args.model?.quarter;
@@ -194,7 +188,7 @@ export class QuarterField extends FieldDef {
 
       if (!quarter || !year) return 'No quarter set';
 
-      return `${quarter} ${year}`;
+      return `Q${quarter} ${year}`;
     }
 
     <template>
@@ -218,7 +212,6 @@ export class QuarterField extends FieldDef {
     </template>
   };
 
-  // ⁸ Atom format - compact quarter badge
   static atom = class Atom extends Component<typeof this> {
     get displayValue() {
       const quarter = this.args.model?.quarter;
@@ -226,7 +219,7 @@ export class QuarterField extends FieldDef {
 
       if (!quarter || !year) return 'No quarter';
 
-      return `${quarter} ${year}`;
+      return `Q${quarter} ${year}`;
     }
 
     <template>
@@ -261,7 +254,6 @@ export class QuarterField extends FieldDef {
     </template>
   };
 
-  // ⁹ Edit format - quarter and year dropdowns
   static edit = QuarterFieldEdit;
 }
 
