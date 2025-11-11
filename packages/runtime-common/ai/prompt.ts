@@ -994,11 +994,16 @@ export const skillCardsToMessage = (
 ) => {
   return cards
     .map((card) => {
-      let title = card.attributes?.title
-        ? `title: ${card.attributes.title}`
-        : undefined;
-      return `Skill (id: ${card.id}${title ? `, ${title}` : ''}):
-${card.attributes?.instructions}`;
+      let headerParts = [`id: ${card.id}`];
+      if (card.attributes?.title) {
+        headerParts.push(`title: ${card.attributes.title}`);
+      }
+
+      let header = `Skill (${headerParts.join(', ')}):`;
+      let instructions =
+        card.attributes?.instructions?.trim() ?? 'No instructions provided.';
+
+      return `${header}\n${instructions}`;
     })
     .join('\n\n');
 };
