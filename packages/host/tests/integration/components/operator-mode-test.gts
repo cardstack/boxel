@@ -756,9 +756,7 @@ module('Integration | operator-mode', function (hooks) {
         await click('[data-test-toggle-details]');
         assert
           .dom('[data-test-error-details]')
-          .containsText(
-            `${testRealmURL}FriendWithCSS/does-not-exist.json not found`,
-          );
+          .containsText(`FriendWithCSS/does-not-exist.json not found`);
         assert
           .dom('[data-test-error-stack]')
           .containsText('at Realm.getSourceOrRedirect');

@@ -193,6 +193,8 @@ export default class RenderService extends Service {
     let element = getIsolatedRenderElement(this.document);
     render(component, element, this.owner, format);
     await waitForAsync?.();
+    // re-render after we have waited for the links to finish loading
+    render(component, element, this.owner, format);
     let serializer = new Serializer(voidMap);
     let html = serializer.serialize(element);
     return parseCardHtml(html, capture);
