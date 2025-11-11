@@ -989,7 +989,9 @@ export const attachedCardsToMessage = (
   return a + b;
 };
 
-export const skillCardsToMessage = (cards: LooseCardResource[]) => {
+export const skillCardsToMessage = (
+  cards: Omit<LooseCardResource, 'meta'>[],
+) => {
   return cards
     .map((card) => {
       let title = card.attributes?.title
