@@ -144,11 +144,16 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     await this.realm.unpublish(this.realmURL, publishedRealmURL);
   });
 
+  // Ensure host mode shows the resolved home page card when the operator switches
+  // realms so the primary card state always matches the realm's configured entry point.
   private ensureHomePageCardTask = restartableTask(async () => {
     let realmURL = this.operatorModeStateService.realmURL.href;
     let homePage = await this.homePageResolver.resolve(realmURL);
     let homePageCardId = homePage?.cardId;
     if (homePageCardId) {
+      // Prefer the resolved home page card whenever host mode is empty or still
+      // pointing at the realm index so operators always land on the realm's
+      // configured entry card instead of a stale default.
       let currentPrimary =
         this.operatorModeStateService.hostModePrimaryCard ?? undefined;
       let normalizedRealm = realmURL.endsWith('/') ? realmURL : `${realmURL}/`;
