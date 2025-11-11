@@ -113,6 +113,11 @@ module('Acceptance | prerender | module', function (hooks) {
       'card-def',
       'captures definition details',
     );
+    assert.strictEqual(
+      personEntry.moduleURL,
+      trimExecutableExtension(new URL(moduleURL)).href,
+      'moduleURL exposes trimmed module path',
+    );
     assert.ok(
       personEntry.types.includes(personKey),
       'types include the card itself',
@@ -196,6 +201,11 @@ module('Acceptance | prerender | module', function (hooks) {
     let shimEntry = model.definitions[shimKey];
     assert.ok(shimEntry, 'definition generated for shimmed export');
     assert.strictEqual(shimEntry.type, 'definition', 'shim definition entry');
+    assert.strictEqual(
+      shimEntry.moduleURL,
+      trimExecutableExtension(new URL(shimURL)).href,
+      'moduleURL always omits executable extension',
+    );
   });
 
   test('retains status when type resolution fails for a definition', async function (assert) {

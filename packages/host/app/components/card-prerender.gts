@@ -14,7 +14,7 @@ import {
   CardError,
   type RenderResponse,
   type RenderError,
-  type ModulePrerenderResponse,
+  type ModuleRenderResponse,
   type IndexWriter,
   type JobInfo,
   type Prerenderer,
@@ -22,18 +22,19 @@ import {
   type Format,
   type PrerenderMeta,
   type RenderRouteOptions,
+  type FromScratchArgs,
+  type IncrementalArgs,
+  type FromScratchResult,
+  type IncrementalResult,
   serializeRenderRouteOptions,
   cleanCapturedHTML,
 } from '@cardstack/runtime-common';
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 import {
   getReader,
-  type IndexResults,
   type Reader,
   type RunnerOpts,
   type StatusArgs,
-  type FromScratchArgsWithPermissions,
-  type IncrementalArgsWithPermissions,
 } from '@cardstack/runtime-common/worker';
 
 import { CurrentRun } from '../lib/current-run';
@@ -147,7 +148,7 @@ export default class CardPrerender extends Component {
     userId: string;
     permissions: RealmPermissions;
     renderOptions?: RenderRouteOptions;
-  }): Promise<ModulePrerenderResponse> {
+  }): Promise<ModuleRenderResponse> {
     try {
       return await this.modulePrerenderTask.perform({
         url,
@@ -282,7 +283,7 @@ export default class CardPrerender extends Component {
       userId: string;
       permissions: RealmPermissions;
       renderOptions?: RenderRouteOptions;
-    }): Promise<ModulePrerenderResponse> => {
+    }): Promise<ModuleRenderResponse> => {
       this.#nonce++;
       let shouldClearCache = this.#consumeClearCacheForRender(
         Boolean(renderOptions?.clearCache),
@@ -304,7 +305,7 @@ export default class CardPrerender extends Component {
       let routeInfo = await this.router.recognizeAndLoad(
         this.#moduleBasePath(url, initialRenderOptions),
       );
-      return routeInfo.attributes as ModulePrerenderResponse;
+      return routeInfo.attributes as ModuleRenderResponse;
     },
   );
 
@@ -410,14 +411,10 @@ export default class CardPrerender extends Component {
 
   private async fromScratch({
     realmURL,
-    realmUsername: userId,
-    permissions,
-  }: FromScratchArgsWithPermissions): Promise<IndexResults> {
+  }: FromScratchArgs): Promise<FromScratchResult> {
     try {
       let results = await this.doFromScratch.perform({
         realmURL,
-        userId,
-        permissions,
       });
       return results;
     } catch (e: any) {
@@ -432,17 +429,13 @@ export default class CardPrerender extends Component {
 
   private async incremental({
     realmURL,
-    realmUsername: userId,
     urls,
     operation,
     ignoreData,
-    permissions,
-  }: IncrementalArgsWithPermissions): Promise<IndexResults> {
+  }: IncrementalArgs): Promise<IncrementalResult> {
     try {
       let state = await this.doIncremental.perform({
         urls,
-        userId,
-        permissions,
         realmURL,
         operation,
         ignoreData,
@@ -468,28 +461,17 @@ export default class CardPrerender extends Component {
   });
 
   private doFromScratch = enqueueTask(
-    async ({
-      realmURL,
-      userId,
-      permissions,
-    }: {
-      userId: string;
-      permissions: RealmPermissions;
-      realmURL: string;
-    }) => {
-      let { reader, indexWriter, jobInfo, reportStatus, prerenderer } =
+    async ({ realmURL }: { realmURL: string }) => {
+      let { reader, indexWriter, jobInfo, reportStatus } =
         this.getRunnerParams(realmURL);
       let currentRun = new CurrentRun({
         realmURL: new URL(realmURL),
-        userId,
-        permissions,
         reader,
         indexWriter,
         jobInfo,
         renderCard: this.renderService.renderCard,
         render: this.renderService.render,
         reportStatus,
-        prerenderer,
       });
       setOwner(currentRun, getOwner(this)!);
 
@@ -503,8 +485,6 @@ export default class CardPrerender extends Component {
     async ({
       urls,
       realmURL,
-      userId,
-      permissions,
       operation,
       ignoreData,
     }: {
@@ -512,15 +492,11 @@ export default class CardPrerender extends Component {
       realmURL: string;
       operation: 'delete' | 'update';
       ignoreData: Record<string, string>;
-      userId: string;
-      permissions: RealmPermissions;
     }) => {
-      let { reader, indexWriter, jobInfo, reportStatus, prerenderer } =
+      let { reader, indexWriter, jobInfo, reportStatus } =
         this.getRunnerParams(realmURL);
       let currentRun = new CurrentRun({
         realmURL: new URL(realmURL),
-        userId,
-        permissions,
         reader,
         indexWriter,
         jobInfo,
@@ -528,7 +504,6 @@ export default class CardPrerender extends Component {
         renderCard: this.renderService.renderCard,
         render: this.renderService.render,
         reportStatus,
-        prerenderer,
       });
       setOwner(currentRun, getOwner(this)!);
       let current = await CurrentRun.incremental(currentRun, {
@@ -543,7 +518,6 @@ export default class CardPrerender extends Component {
   private getRunnerParams(realmURL: string): {
     reader: Reader;
     indexWriter: IndexWriter;
-    prerenderer: Prerenderer;
     jobInfo?: JobInfo;
     reportStatus?: (args: StatusArgs) => void;
   } {
@@ -552,20 +526,18 @@ export default class CardPrerender extends Component {
       if (optsId == null) {
         throw new Error(`Runner Options Identifier was not set`);
       }
-      let { reader, indexWriter, jobInfo, reportStatus, prerenderer } =
+      let { reader, indexWriter, jobInfo, reportStatus } =
         getRunnerOpts(optsId);
       return {
         reader,
         indexWriter,
         jobInfo,
         reportStatus,
-        prerenderer,
       };
     } else {
       return {
         reader: getReader(this.network.authedFetch, realmURL),
         indexWriter: this.localIndexer.indexWriter,
-        prerenderer: this.localIndexer.prerenderer,
       };
     }
   }
