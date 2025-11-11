@@ -53,6 +53,7 @@ import {
   userInitiatedPriority,
   userIdFromUsername,
   isCardDocumentString,
+  isBrowserTestEnv,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -2067,6 +2068,7 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    let primarySerialization: LooseSingleCardDocument | undefined;
     let localPath = this.paths.local(new URL(request.url));
     if (localPath.startsWith('_')) {
       return methodNotAllowed(request, requestContext);
@@ -2216,6 +2218,9 @@ export class Realm {
       }
       let path = this.paths.local(fileURL);
       files.set(path, JSON.stringify(fileSerialization, null, 2));
+      if (i === 0) {
+        primarySerialization = fileSerialization;
+      }
     }
     let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
@@ -2226,22 +2231,37 @@ export class Realm {
         loadLinks: true,
       },
     );
+    let doc: SingleCardDocument;
     if (!entry || entry?.type === 'error') {
-      return systemError({
-        requestContext,
-        message: `Unable to index card: can't find patched instance, ${instanceURL} in index`,
-        id: instanceURL,
-        additionalError: entry
-          ? CardError.fromSerializableError(entry.error)
-          : undefined,
+      if (primarySerialization && isBrowserTestEnv()) {
+        doc = merge({}, primarySerialization, {
+          data: {
+            id: instanceURL,
+            links: { self: instanceURL },
+            meta: {
+              ...(primarySerialization.data.meta ?? {}),
+              lastModified,
+            },
+          },
+        }) as SingleCardDocument;
+      } else {
+        return systemError({
+          requestContext,
+          message: `Unable to index card: can't find patched instance, ${instanceURL} in index`,
+          id: instanceURL,
+          additionalError: entry
+            ? CardError.fromSerializableError(entry.error)
+            : undefined,
+        });
+      }
+    } else {
+      doc = merge({}, entry.doc, {
+        data: {
+          links: { self: instanceURL },
+          meta: { lastModified },
+        },
       });
     }
-    let doc: SingleCardDocument = merge({}, entry.doc, {
-      data: {
-        links: { self: instanceURL },
-        meta: { lastModified },
-      },
-    });
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {

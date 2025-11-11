@@ -1,8 +1,5 @@
-import { unixTime, delay } from './index';
+import { unixTime, delay, isBrowserTestEnv } from './index';
 
-function isBrowserTestEnv() {
-  return typeof window !== 'undefined' && Boolean((globalThis as any).QUnit);
-}
 import type { TokenClaims } from './realm';
 
 // iat - issued at (seconds since epoch)

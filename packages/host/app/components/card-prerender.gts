@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import { getOwner, setOwner } from '@ember/owner';
 import type {
@@ -59,6 +60,7 @@ export default class CardPrerender extends Component {
   #nonce = 0;
   #shouldClearCacheForNextRender = true;
   #prerendererDelegate!: Prerenderer;
+  #renderErrorPayload: string | undefined;
 
   #renderBasePath(url: string, renderOptions?: RenderRouteOptions) {
     let optionsSegment = encodeURIComponent(
@@ -102,6 +104,13 @@ export default class CardPrerender extends Component {
         this.#prerendererDelegate,
       );
     }
+    window.addEventListener('boxel-render-error', this.#handleRenderErrorEvent);
+    registerDestructor(this, () => {
+      window.removeEventListener(
+        'boxel-render-error',
+        this.#handleRenderErrorEvent,
+      );
+    });
   }
 
   private async prerender({
@@ -117,23 +126,25 @@ export default class CardPrerender extends Component {
     permissions: RealmPermissions;
     renderOptions?: RenderRouteOptions;
   }): Promise<RenderResponse> {
-    try {
-      let results = await this.prerenderTask.perform({
-        url,
-        realm,
-        userId,
-        permissions,
-        renderOptions,
-      });
-      return results;
-    } catch (e: any) {
-      if (!didCancel(e)) {
-        throw e;
+    return await withRenderContext(async () => {
+      try {
+        let results = await this.prerenderTask.perform({
+          url,
+          realm,
+          userId,
+          permissions,
+          renderOptions,
+        });
+        return results;
+      } catch (e: any) {
+        if (!didCancel(e)) {
+          throw e;
+        }
       }
-    }
-    throw new Error(
-      `card-prerender component is missing or being destroyed before prerender of url ${url} was completed`,
-    );
+      throw new Error(
+        `card-prerender component is missing or being destroyed before prerender of url ${url} was completed`,
+      );
+    });
   }
 
   private async prerenderModule({
@@ -149,22 +160,24 @@ export default class CardPrerender extends Component {
     permissions: RealmPermissions;
     renderOptions?: RenderRouteOptions;
   }): Promise<ModuleRenderResponse> {
-    try {
-      return await this.modulePrerenderTask.perform({
-        url,
-        realm,
-        userId,
-        permissions,
-        renderOptions,
-      });
-    } catch (e: any) {
-      if (!didCancel(e)) {
-        throw e;
+    return await withRenderContext(async () => {
+      try {
+        return await this.modulePrerenderTask.perform({
+          url,
+          realm,
+          userId,
+          permissions,
+          renderOptions,
+        });
+      } catch (e: any) {
+        if (!didCancel(e)) {
+          throw e;
+        }
       }
-    }
-    throw new Error(
-      `card-prerender component is missing or being destroyed before module prerender of url ${url} was completed`,
-    );
+      throw new Error(
+        `card-prerender component is missing or being destroyed before module prerender of url ${url} was completed`,
+      );
+    });
   }
 
   // This emulates the job of the Prerenderer that runs in the server
@@ -326,12 +339,18 @@ export default class CardPrerender extends Component {
         throw new Error(this.localIndexer.renderError);
       }
       let component = routeInfo.attributes.Component;
-      let captured = this.renderService.renderCardComponent(
+      this.#renderErrorPayload = undefined;
+      let captured = await this.renderService.renderCardComponent(
         component,
         // I think this is right, may need to revisit this as we incorporate more tests
         ['isolated', 'atom'].includes(format) ? 'innerHTML' : 'outerHTML',
         format,
+        this.waitForLinkedData,
       );
+      if (this.#renderErrorPayload) {
+        throw new Error(this.#renderErrorPayload);
+      }
+
       if (typeof captured !== 'string') {
         return null;
       }
@@ -356,6 +375,32 @@ export default class CardPrerender extends Component {
     },
   );
 
+  #handleRenderErrorEvent = (
+    event: Event & { detail?: { reason?: unknown }; reason?: unknown },
+  ) => {
+    let reason =
+      'reason' in event ? (event as any).reason : event.detail?.reason;
+    if (!reason) {
+      return;
+    }
+    if (reason instanceof Error) {
+      this.#renderErrorPayload = reason.message;
+    } else if (typeof reason === 'string') {
+      this.#renderErrorPayload = reason;
+    } else {
+      try {
+        this.#renderErrorPayload = JSON.stringify(reason);
+      } catch (_err) {
+        this.#renderErrorPayload = String(reason);
+      }
+    }
+  };
+
+  private waitForLinkedData = async () => {
+    await Promise.resolve(); // ensure lazy link fetches enqueue
+    await this.store.loaded?.();
+  };
+
   private renderMeta = enqueueTask(
     async (url: string, renderOptions?: RenderRouteOptions) => {
       let routeInfo = await this.router.recognizeAndLoad(
@@ -378,7 +423,16 @@ export default class CardPrerender extends Component {
         throw new Error(this.localIndexer.renderError);
       }
       let component = routeInfo.attributes.Component;
-      let captured = this.renderService.renderCardComponent(component);
+      this.#renderErrorPayload = undefined;
+      let captured = await this.renderService.renderCardComponent(
+        component,
+        'outerHTML',
+        'isolated',
+        this.waitForLinkedData,
+      );
+      if (this.#renderErrorPayload) {
+        throw new Error(this.#renderErrorPayload);
+      }
       if (typeof captured !== 'string') {
         return null;
       }
@@ -564,6 +618,20 @@ export default class CardPrerender extends Component {
       throw new Error(errorPayload);
     }
     return cleaned;
+  }
+}
+
+async function withRenderContext<T>(cb: () => Promise<T>): Promise<T> {
+  let hadContext = Boolean((globalThis as any).__boxelRenderContext);
+  if (!hadContext) {
+    (globalThis as any).__boxelRenderContext = true;
+  }
+  try {
+    return await cb();
+  } finally {
+    if (!hadContext) {
+      delete (globalThis as any).__boxelRenderContext;
+    }
   }
 }
 

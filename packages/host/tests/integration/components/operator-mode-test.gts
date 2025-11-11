@@ -677,12 +677,10 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-toggle-details]');
     assert
       .dom('[data-test-error-details]')
-      .containsText(
-        `missing file ${testRealmURL}FriendWithCSS/does-not-exist.json`,
-      );
+      .containsText(`FriendWithCSS/does-not-exist.json not found`);
     assert
       .dom('[data-test-error-stack]')
-      .containsText('at CurrentRun.visitFile');
+      .containsText('at Realm.getSourceOrRedirect');
     assert.strictEqual(
       operatorModeStateService.state?.submode,
       'interact',
@@ -759,11 +757,11 @@ module('Integration | operator-mode', function (hooks) {
         assert
           .dom('[data-test-error-details]')
           .containsText(
-            `missing file ${testRealmURL}FriendWithCSS/does-not-exist.json`,
+            `${testRealmURL}FriendWithCSS/does-not-exist.json not found`,
           );
         assert
           .dom('[data-test-error-stack]')
-          .containsText('at CurrentRun.visitFile');
+          .containsText('at Realm.getSourceOrRedirect');
         assert.strictEqual(
           operatorModeStateService.state?.submode,
           'interact',

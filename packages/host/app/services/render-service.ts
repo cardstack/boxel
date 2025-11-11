@@ -184,13 +184,15 @@ export default class RenderService extends Service {
     return parseCardHtml(html);
   };
 
-  renderCardComponent(
+  async renderCardComponent(
     component: BoxComponent,
     capture: 'innerHTML' | 'outerHTML' = 'outerHTML',
     format: Format = 'isolated',
-  ): string {
+    waitForAsync?: () => Promise<void>,
+  ): Promise<string> {
     let element = getIsolatedRenderElement(this.document);
     render(component, element, this.owner, format);
+    await waitForAsync?.();
     let serializer = new Serializer(voidMap);
     let html = serializer.serialize(element);
     return parseCardHtml(html, capture);
