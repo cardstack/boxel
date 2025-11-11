@@ -460,7 +460,6 @@ export default class Room extends Component<Signature> {
   });
   private removedAttachedCardIds = new TrackedArray<string>();
   private removedAttachedFileUrls: string[] = [];
-  private lastAutoAttachedFileUrl: string | undefined = undefined;
   private getConversationScrollability: (() => boolean) | undefined;
   private scrollConversationToBottom: (() => void) | undefined;
   private roomScrollState: WeakMap<
@@ -565,12 +564,15 @@ export default class Room extends Component<Signature> {
 
   private get autoAttachedFileUrl() {
     let url = this.operatorModeStateService.state.codePath?.href;
-    if (!this.lastAutoAttachedFileUrl === url) {
-      this.lastAutoAttachedFileUrl = url;
-      this.removedAttachedFileUrls.splice(0);
-    }
+    // use a task to avoid ember/no-side-effects rule violation
+    this.resetAttachedFileRemovedStateTask.perform();
     return url;
   }
+
+  private resetAttachedFileRemovedStateTask = task(async () => {
+    await Promise.resolve();
+    this.removedAttachedFileUrls.splice(0);
+  });
 
   private get autoAttachedFile() {
     return this.operatorModeStateService.state.submode === Submodes.Code
@@ -1058,6 +1060,8 @@ export default class Room extends Component<Signature> {
       // If the send fails, we restore those saved values in the catch block so nothing is lost.
       if (shouldClearDraft) {
         this.matrixService.setMessageToSend(this.args.roomId, undefined);
+        this.matrixService.cardsToSend.set(this.args.roomId, undefined);
+        this.matrixService.filesToSend.set(this.args.roomId, undefined);
       }
 
       let openCardIds = new Set([

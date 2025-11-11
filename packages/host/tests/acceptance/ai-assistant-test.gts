@@ -2834,10 +2834,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       {
         from: 'testuser',
         message: 'Message with another card',
-        cards: [
-          { id: `${testRealmURL}Person/hassan`, title: 'Hassan' },
-          { id: `${testRealmURL}Pet/mango`, title: 'Mango' },
-        ],
+        cards: [{ id: `${testRealmURL}Pet/mango`, title: 'Mango' }],
       },
     ]);
     // Create new session with "Copy File History" option
@@ -2984,7 +2981,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       {
         from: 'testuser',
         message: 'Can you help me understand this structure?',
-        files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
       },
     ]);
 
@@ -3274,10 +3270,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       {
         from: 'testuser',
         message: 'Third message with another card',
-        cards: [
-          { id: `${testRealmURL}Person/hassan`, title: 'Hassan' },
-          { id: `${testRealmURL}Pet/mango`, title: 'Mango' },
-        ],
+        cards: [{ id: `${testRealmURL}Pet/mango`, title: 'Mango' }],
       },
     ]);
 
@@ -3326,10 +3319,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       {
         from: 'testuser',
         message: 'Third message with another card',
-        cards: [
-          { id: `${testRealmURL}Person/hassan`, title: 'Hassan' },
-          { id: `${testRealmURL}Pet/mango`, title: 'Mango' },
-        ],
+        cards: [{ id: `${testRealmURL}Pet/mango`, title: 'Mango' }],
       },
     ]);
 
