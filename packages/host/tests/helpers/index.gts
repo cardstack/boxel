@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import Service from '@ember/service';
 import {
   type TestContext,
@@ -876,6 +877,13 @@ async function persistDocumentToTestRealm(
     realm.paths.inRealm(url),
   );
   if (!matching) {
+    return;
+  }
+  let owner = matching.adapter.owner as
+    | (Owner & { isDestroying?: boolean; isDestroyed?: boolean })
+    | undefined;
+  if (owner?.isDestroying || owner?.isDestroyed) {
+    getTestRealmRegistry().delete(matching.realm.url);
     return;
   }
   let localPath: string;
