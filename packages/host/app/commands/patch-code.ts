@@ -73,7 +73,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
         );
 
       if (!(await this.trySaveThroughOpenFile(finalFileUrl, patchedCode))) {
-        void this.cardService
+        this.cardService
           .saveSource(new URL(finalFileUrl), patchedCode, 'bot-patch', {
             resetLoader: hasExecutableExtension(finalFileUrl),
             clientRequestId,
