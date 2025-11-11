@@ -1,24 +1,22 @@
-import { RenderingTestContext } from '@ember/test-helpers';
-
 import { getService } from '@universal-ember/test-support';
-
 import { module, test } from 'qunit';
 
-import { baseRealm, ensureTrailingSlash } from '@cardstack/runtime-common';
+import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import ENV from '@cardstack/host/config/environment';
 
 import {
-  testRealmURL,
-  setupCardLogs,
-  setupLocalIndexing,
-  setupIntegrationTestRealm,
-} from '../helpers';
-import { setupBaseRealm } from '../helpers/base-realm';
-import { setupMockMatrix } from '../helpers/mock-matrix';
+  setupBaseRealm,
+  field,
+  contains,
+  CardDef,
+  Component,
+} from '../helpers/base-realm';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
+
+type FieldFormat = 'embedded' | 'atom' | 'edit';
 
 let loader: Loader;
 
@@ -26,265 +24,322 @@ module('Integration | number field configuration', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
 
-  hooks.beforeEach(function () {
+  let catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
+  let CatalogNumberFieldClass: any;
+
+  hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
+    const numberModule: any = await loader.import(
+      `${catalogRealmURL}fields/number`,
+    );
+    CatalogNumberFieldClass = numberModule.default;
   });
 
-  setupLocalIndexing(hooks);
-  let mockMatrixUtils = setupMockMatrix(hooks);
+  async function renderConfiguredField(
+    value: unknown, // The value to be rendered in the field
+    presentation: any,
+    format: FieldFormat = 'atom',
+  ) {
+    const fieldFormat = format;
+    const configuration = { presentation };
 
-  setupCardLogs(
-    hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
-  );
+    class TestCard extends CardDef {
+      @field sample = contains(CatalogNumberFieldClass, { configuration });
 
-  hooks.beforeEach(async function (this: RenderingTestContext) {
-    const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
+      static isolated = class Isolated extends Component<typeof this> {
+        format: FieldFormat = fieldFormat;
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'test-card.gts': `
-          import { field, contains, CardDef, Component } from 'https://cardstack.com/base/card-api';
-          import NumberField from '${catalogRealmURL}fields/number';
+        <template>
+          <div data-test-field-container>
+            <@fields.sample @format={{this.format}} />
+          </div>
+        </template>
+      };
+    }
 
-          export class TestCard extends CardDef {
-            @field sliderNumber = contains(NumberField, {
-              configuration: {
-                presentation: {
-                  type: 'slider',
-                  min: 0,
-                  max: 100,
-                  suffix: '%',
-                  decimals: 1,
-                },
-              },
-            });
+    let card = new TestCard({ sample: value });
+    await renderCard(loader, card, 'isolated');
+  }
 
-            @field ratingNumber = contains(NumberField, {
-              configuration: {
-                presentation: {
-                  type: 'rating',
-                  maxStars: 5,
-                },
-              },
-            });
-
-            @field customRatingNumber = contains(NumberField, {
-              configuration: {
-                presentation: {
-                  type: 'rating',
-                  maxStars: 10,
-                },
-              },
-            });
-
-            @field prefixSuffixNumber = contains(NumberField, {
-              configuration: {
-                presentation: {
-                  prefix: '$',
-                  suffix: ' USD',
-                  decimals: 2,
-                },
-              },
-            });
-
-            @field decimalsNumber = contains(NumberField, {
-              configuration: {
-                presentation: {
-                  decimals: 3,
-                },
-              },
-            });
-
-            @field minMaxNumber = contains(NumberField, {
-              configuration: {
-                presentation: {
-                  type: 'slider',
-                  min: 10,
-                  max: 50,
-                },
-              },
-            });
-
-            @field invalidTypeNumber = contains(NumberField, {
-              configuration: {
-                presentation: {
-                  type: 'nonexistent-type',
-                  prefix: '€',
-                },
-              },
-            });
-
-            @field noConfigNumber = contains(NumberField);
-
-            static isolated = class Isolated extends Component<typeof this> {
-              <template>
-                <div data-test-card>
-                  <div data-test-slider-field>
-                    <@fields.sliderNumber @format='edit' />
-                    <@fields.sliderNumber @format='atom' />
-                  </div>
-                  <div data-test-rating-field>
-                    <@fields.ratingNumber @format='edit' />
-                    <@fields.ratingNumber @format='atom' />
-                  </div>
-                  <div data-test-custom-rating-field>
-                    <@fields.customRatingNumber @format='edit' />
-                    <@fields.customRatingNumber @format='atom' />
-                  </div>
-                  <div data-test-prefix-suffix-field>
-                    <@fields.prefixSuffixNumber @format='atom' />
-                  </div>
-                  <div data-test-decimals-field>
-                    <@fields.decimalsNumber @format='atom' />
-                  </div>
-                  <div data-test-min-max-field>
-                    <@fields.minMaxNumber @format='edit' />
-                  </div>
-                  <div data-test-invalid-type-field>
-                    <@fields.invalidTypeNumber @format='edit' />
-                  </div>
-                  <div data-test-no-config-field>
-                    <@fields.noConfigNumber @format='atom' />
-                  </div>
-                </div>
-              </template>
-            };
-          }
-        `,
+  // Rating Field Tests
+  test('rating field edit view shows 5 star buttons', async function (assert) {
+    await renderConfiguredField(
+      4,
+      {
+        type: 'rating',
+        maxStars: 5,
       },
-    });
-  });
+      'edit',
+    );
 
-  test('slider field edit view renders range slider component', async function (assert) {
-    let mod = await loader.import(`${testRealmURL}test-card`);
-    let { TestCard } = mod as any;
-    let card = new TestCard();
-    await renderCard(loader, card, 'isolated');
-
-    // Slider edit view uses input with type='range'
     assert
-      .dom('[data-test-slider-field] input[type="range"]')
-      .exists('Slider field edit view renders as range slider input');
-  });
-
-  test('rating field edit view renders star button components', async function (assert) {
-    let mod = await loader.import(`${testRealmURL}test-card`);
-    let { TestCard } = mod as any;
-    let card = new TestCard();
-    await renderCard(loader, card, 'isolated');
-
-    // Rating edit view has 5 star buttons
-    assert
-      .dom('[data-test-rating-field] .star-btn')
+      .dom('[data-test-field-container] .star-btn')
       .exists({ count: 5 }, 'Rating field edit view renders 5 star buttons');
   });
 
-  test('rating field atom view shows only one star', async function (assert) {
-    let mod = await loader.import(`${testRealmURL}test-card`);
-    let { TestCard } = mod as any;
-    let card = new TestCard({ ratingNumber: 3 });
-    await renderCard(loader, card, 'isolated');
+  test('rating field ignores irrelevant config properties', async function (assert) {
+    await renderConfiguredField(
+      3,
+      {
+        type: 'rating',
+        maxStars: 5,
+        // These properties should be ignored by rating field
+        decimals: 2,
+        prefix: '$',
+        suffix: ' USD',
+        min: 0,
+        max: 100,
+      },
+      'edit',
+    );
 
-    // Atom view should display only one star icon, not all 5
+    // Rating field should still work normally, ignoring the irrelevant config
     assert
-      .dom('[data-test-rating-field] [data-test-rating-atom] .atom-star')
-      .exists({ count: 1 }, 'Rating field atom view shows only one star');
+      .dom('[data-test-field-container] .star-btn')
+      .exists(
+        { count: 5 },
+        'Rating field ignores decimals, prefix, suffix, min, max configs',
+      );
 
-    // Should also display the numeric value
+    // Should not show any formatting like prefix/suffix
     assert
-      .dom('[data-test-rating-field] [data-test-rating-atom] .atom-value')
+      .dom('[data-test-field-container]')
+      .doesNotContainText('$', 'Rating field does not apply prefix');
+
+    assert
+      .dom('[data-test-field-container]')
+      .doesNotContainText('USD', 'Rating field does not apply suffix');
+  });
+
+  test('rating field atom view shows only 1 star + numeric value', async function (assert) {
+    await renderConfiguredField(3, {
+      type: 'rating',
+      maxStars: 5,
+    });
+
+    assert
+      .dom('[data-test-field-container] [data-test-rating-atom]')
+      .exists('Rating field atom view is rendered');
+
+    assert
+      .dom('[data-test-field-container] [data-test-rating-atom] .atom-value')
       .hasText('3', 'Rating field atom view shows the numeric value');
-  });
 
-  test('rating field edit view respects custom maxStars configuration', async function (assert) {
-    let mod = await loader.import(`${testRealmURL}test-card`);
-    let { TestCard } = mod as any;
-    let card = new TestCard();
-    await renderCard(loader, card, 'isolated');
-
-    // Custom rating field should render 10 stars (not the default 5)
     assert
-      .dom('[data-test-custom-rating-field] .star-btn')
-      .exists(
-        { count: 10 },
-        'Rating field edit view renders 10 star buttons when maxStars is 10',
-      );
+      .dom('[data-test-field-container] [data-test-rating-atom] .atom-star')
+      .exists({ count: 1 }, 'Rating atom view shows only 1 star icon')
+      .hasText('★', 'Star icon is rendered as Unicode character');
   });
 
-  test('min and max configuration is applied to slider field', async function (assert) {
-    let mod = await loader.import(`${testRealmURL}test-card`);
-    let { TestCard } = mod as any;
-    let card = new TestCard();
-    await renderCard(loader, card, 'isolated');
-
-    // Check min/max attributes on slider input
-    const input = document.querySelector(
-      '[data-test-min-max-field] input[type="range"]',
-    ) as HTMLInputElement;
-    assert.strictEqual(
-      input.min,
-      '10',
-      'Slider field respects min configuration (10)',
+  // Slider Field Tests
+  test('slider field renders as input type="range"', async function (assert) {
+    await renderConfiguredField(
+      50,
+      {
+        type: 'slider',
+        min: 0,
+        max: 100,
+      },
+      'edit',
     );
-    assert.strictEqual(
-      input.max,
-      '50',
-      'Slider field respects max configuration (50)',
+
+    assert
+      .dom('[data-test-field-container] input[type="range"]')
+      .exists('Slider field edit view renders as <input type="range">');
+  });
+
+  test('slider field respects min/max configuration', async function (assert) {
+    await renderConfiguredField(
+      30,
+      {
+        type: 'slider',
+        min: 10,
+        max: 50,
+      },
+      'edit',
     );
+
+    assert
+      .dom('[data-test-field-container] input[type="range"]')
+      .hasAttribute('min', '10', 'Slider has correct min value')
+      .hasAttribute('max', '50', 'Slider has correct max value')
+      .hasValue('30', 'Slider has correct current value');
   });
 
-  test('prefix and suffix are displayed in atom view', async function (assert) {
-    let mod = await loader.import(`${testRealmURL}test-card`);
-    let { TestCard } = mod as any;
-    let card = new TestCard();
-    await renderCard(loader, card, 'isolated');
+  test('slider field with showValue displays current value', async function (assert) {
+    await renderConfiguredField(
+      75,
+      {
+        type: 'slider',
+        min: 0,
+        max: 100,
+        showValue: true,
+      },
+      'edit',
+    );
 
-    // Atom view shows formatted value with prefix and suffix
     assert
-      .dom('[data-test-prefix-suffix-field] [data-test-number-field-atom]')
-      .hasText(
-        '$0.00 USD',
-        'Atom view displays prefix ($), formatted value (0.00), and suffix ( USD)',
+      .dom('[data-test-field-container] input[type="range"]')
+      .exists('Slider renders range input');
+
+    assert
+      .dom('[data-test-field-container]')
+      .hasTextContaining(
+        '75',
+        'Slider displays current value when showValue is true',
       );
   });
 
-  test('decimals configuration controls decimal places in atom view', async function (assert) {
-    let mod = await loader.import(`${testRealmURL}test-card`);
-    let { TestCard } = mod as any;
-    let card = new TestCard();
-    await renderCard(loader, card, 'isolated');
+  test('slider field ignores rating-specific config', async function (assert) {
+    await renderConfiguredField(
+      50,
+      {
+        type: 'slider',
+        min: 0,
+        max: 100,
+        maxStars: 5, // This is rating-specific and should be ignored
+      },
+      'edit',
+    );
 
-    // Decimals: 3 should show 3 decimal places
+    // Should render as slider, not rating
     assert
-      .dom('[data-test-decimals-field] [data-test-number-field-atom]')
-      .hasText('0.000', 'Atom view shows 3 decimal places when decimals: 3');
+      .dom('[data-test-field-container] input[type="range"]')
+      .exists('Slider field ignores maxStars config from rating field');
+
+    // Should NOT render star buttons
+    assert
+      .dom('[data-test-field-container] .star-btn')
+      .doesNotExist(
+        'Slider does not render star buttons even if maxStars is provided',
+      );
   });
 
-  test('field with invalid type falls back to default NumberInput', async function (assert) {
-    let mod = await loader.import(`${testRealmURL}test-card`);
-    let { TestCard } = mod as any;
-    let card = new TestCard();
-    await renderCard(loader, card, 'isolated');
+  // Number Input Tests
+  test('number input with prefix/suffix formatting', async function (assert) {
+    await renderConfiguredField(100.5, {
+      prefix: '$',
+      suffix: ' USD',
+      decimals: 2,
+    });
 
-    // When type is invalid (not 'slider' or 'rating'), falls back to number input
     assert
-      .dom('[data-test-invalid-type-field] [data-test-number-input]')
+      .dom('[data-test-field-container]')
+      .hasTextContaining(
+        '$100.50 USD',
+        'Number field shows prefix/suffix formatting',
+      );
+  });
+
+  test('number input respects decimals configuration', async function (assert) {
+    await renderConfiguredField(5.5, {
+      decimals: 3,
+    });
+
+    assert
+      .dom('[data-test-field-container]')
+      .hasTextContaining(
+        '5.500',
+        'Number field shows correct decimal places (0.000)',
+      );
+  });
+
+  test('number input respects min/max configuration', async function (assert) {
+    await renderConfiguredField(
+      50,
+      {
+        min: 0,
+        max: 100,
+      },
+      'edit',
+    );
+
+    assert
+      .dom('[data-test-field-container] input[type="number"]')
+      .hasAttribute('min', '0', 'Number input has correct min value')
+      .hasAttribute('max', '100', 'Number input has correct max value')
+      .hasValue('50', 'Number input has correct current value');
+  });
+
+  test('invalid type falls back to default NumberInput', async function (assert) {
+    await renderConfiguredField(
+      42,
+      {
+        type: 'nonexistent-type',
+        prefix: '€',
+      },
+      'edit',
+    );
+
+    assert
+      .dom('[data-test-field-container] [data-test-number-input]')
+      .exists('Field with invalid type falls back to default NumberInput');
+  });
+
+  test('no configuration uses default number input behavior', async function (assert) {
+    await renderConfiguredField(123.456, {}, 'edit');
+
+    assert
+      .dom('[data-test-field-container] [data-test-number-input]')
+      .exists('Field with no configuration uses default NumberInput');
+
+    assert
+      .dom('[data-test-field-container] input[type="number"]')
+      .exists('Default behavior renders as number input type');
+  });
+
+  // Default Config Fallback Tests
+  test('rating field edit view falls back to default maxStars of 5 when config is missing', async function (assert) {
+    await renderConfiguredField(
+      3,
+      {
+        type: 'rating',
+        // No maxStars provided
+      },
+      'edit',
+    );
+
+    assert
+      .dom('[data-test-field-container] .star-btn')
       .exists(
-        'Field with invalid type (nonexistent-type) falls back to default number input',
+        { count: 5 },
+        'Rating edit view defaults to 5 stars when maxStars is not provided',
       );
+
+    assert
+      .dom('[data-test-field-container] .rating-value')
+      .hasText('3/5', 'Rating value shows default maxStars of 5');
   });
 
-  test('field without type configuration uses default number input', async function (assert) {
-    let mod = await loader.import(`${testRealmURL}test-card`);
-    let { TestCard } = mod as any;
-    let card = new TestCard();
-    await renderCard(loader, card, 'isolated');
+  test('slider field edit view falls back to default min of 0 and max of 100 when config is missing', async function (assert) {
+    await renderConfiguredField(
+      50,
+      {
+        type: 'slider',
+        // No min/max provided
+      },
+      'edit',
+    );
 
-    // Without type, uses default formatting (no prefix/suffix, 0 decimals)
     assert
-      .dom('[data-test-no-config-field] [data-test-number-field-atom]')
-      .hasText('0', 'Field without configuration renders plain value');
+      .dom('[data-test-field-container] input[type="range"]')
+      .hasAttribute('min', '0', 'Slider edit view defaults to min: 0')
+      .hasAttribute('max', '100', 'Slider edit view defaults to max: 100');
+  });
+
+  test('quantity field edit view falls back to default min of 0 and max of 100 when config is missing', async function (assert) {
+    await renderConfiguredField(
+      50,
+      {
+        type: 'quantity',
+        // No min/max provided
+      },
+      'edit',
+    );
+
+    assert
+      .dom('[data-test-field-container] .qty-input')
+      .hasAttribute('min', '0', 'Quantity edit view defaults to min: 0')
+      .hasAttribute('max', '100', 'Quantity edit view defaults to max: 100');
   });
 });

@@ -9,6 +9,7 @@ import { TextInputValidator } from 'https://cardstack.com/base/text-input-valida
 import { NumberSerializer } from '@cardstack/runtime-common';
 
 import type { BadgeNotificationConfig } from './util/types';
+import { getFormattedDisplayValue } from './util/index';
 
 interface Configuration {
   presentation: BadgeNotificationConfig;
@@ -19,16 +20,12 @@ class NotificationAtom extends Component<typeof BadgeNotificationField> {
     return this.args.configuration?.presentation;
   }
 
-  get numericValue() {
-    return this.args.model ?? 0;
-  }
-
   get displayValue() {
-    return this.numericValue > 9 ? '9+' : String(this.numericValue);
+    return getFormattedDisplayValue(this.args.model, this.config);
   }
 
   get BadgeIcon() {
-    return this.config.icon;
+    return this.config?.icon;
   }
 
   <template>
@@ -82,20 +79,16 @@ class NotificationEmbedded extends Component<typeof BadgeNotificationField> {
     return this.args.configuration?.presentation;
   }
 
-  get numericValue() {
-    return this.args.model ?? 0;
-  }
-
   get displayValue() {
-    return this.numericValue > 9 ? '9+' : String(this.numericValue);
+    return getFormattedDisplayValue(this.args.model, this.config);
   }
 
   get BadgeIcon() {
-    return this.config.icon;
+    return this.config?.icon;
   }
 
   get label() {
-    return this.config.label ?? '';
+    return this.config?.label ?? '';
   }
 
   <template>

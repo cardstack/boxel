@@ -28,8 +28,16 @@ export default class RatingField extends NumberField {
   };
 
   static edit = class Edit extends Component<typeof this> {
-    get config() {
-      return this.args.configuration?.presentation;
+    get config(): RatingConfig {
+      const defaultConfig: RatingConfig = {
+        type: 'rating',
+        maxStars: 5,
+      };
+      const userConfig = this.args.configuration?.presentation;
+      return {
+        ...defaultConfig,
+        ...userConfig,
+      } as RatingConfig;
     }
 
     get numericValue() {
@@ -99,8 +107,16 @@ export default class RatingField extends NumberField {
   };
 
   static atom = class Atom extends Component<typeof this> {
-    get config() {
-      return this.args.configuration?.presentation;
+    get config(): RatingConfig {
+      const defaultConfig: RatingConfig = {
+        type: 'rating',
+        maxStars: 5,
+      };
+      const userConfig = this.args.configuration?.presentation;
+      return {
+        ...defaultConfig,
+        ...userConfig,
+      } as RatingConfig;
     }
 
     get hasValue() {
@@ -145,8 +161,16 @@ export default class RatingField extends NumberField {
   };
 
   static embedded = class Embedded extends Component<typeof this> {
-    get config() {
-      return this.args.configuration?.presentation;
+    get config(): RatingConfig {
+      const defaultConfig: RatingConfig = {
+        type: 'rating',
+        maxStars: 5,
+      };
+      const userConfig = this.args.configuration?.presentation;
+      return {
+        ...defaultConfig,
+        ...userConfig,
+      } as RatingConfig;
     }
 
     get numericValue() {

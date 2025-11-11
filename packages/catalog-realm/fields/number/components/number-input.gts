@@ -1,12 +1,15 @@
 import GlimmerComponent from '@glimmer/component';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { hasValue, clamp } from '../util/index';
-import type { DisplayConfig } from '../util/types';
+import type {
+  NumberDisplayConfig,
+  NumericRangeConfig,
+} from '../util/types';
 
 interface Signature {
   Args: {
     value: number | null;
-    config: DisplayConfig;
+    config: NumberDisplayConfig;
     onChange: (value: number | null) => void;
   };
 }
@@ -14,6 +17,11 @@ interface Signature {
 export default class NumberInput extends GlimmerComponent<Signature> {
   get config() {
     return this.args.config;
+  }
+
+  get rangeConfig() {
+    // Type guard: safely access min/max properties if they exist
+    return this.args.config as Partial<NumericRangeConfig>;
   }
 
   get value() {
@@ -28,8 +36,8 @@ export default class NumberInput extends GlimmerComponent<Signature> {
     }
     const num = parseFloat(val);
     if (!isNaN(num)) {
-      const min = this.config.min ?? -Infinity;
-      const max = this.config.max ?? Infinity;
+      const min = this.rangeConfig.min ?? -Infinity;
+      const max = this.rangeConfig.max ?? Infinity;
       this.args.onChange(clamp(num, min, max));
     }
   };
@@ -39,8 +47,8 @@ export default class NumberInput extends GlimmerComponent<Signature> {
       @type='number'
       @value={{this.value}}
       @onInput={{this.handleInputChange}}
-      @min={{this.config.min}}
-      @max={{this.config.max}}
+      @min={{this.rangeConfig.min}}
+      @max={{this.rangeConfig.max}}
       data-test-number-input
     />
   </template>

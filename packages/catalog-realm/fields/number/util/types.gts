@@ -1,143 +1,145 @@
 import type IconComponent from '@cardstack/boxel-icons/captions';
 
 /**
- * Core field types provided by the catalog-realm
- * These are the built-in field types that ship with Boxel
+ * Base configuration interface for number fields
+ * Contains only the type discriminator - field-specific configs should define their own properties
  */
-export type CoreFieldType =
-  | 'slider'
-  | 'rating'
-  | 'quantity'
-  | 'percentage'
-  | 'stat'
-  | 'badge-notification'
-  | 'badge-metric'
-  | 'badge-counter'
-  | 'score'
-  | 'progress-bar'
-  | 'progress-circle'
-  | 'gauge';
-
-export type FieldType = CoreFieldType | (string & {});
+export interface NumberDisplayConfig {
+  type?: string; // Field type for dynamic delegation (open to custom types)
+}
 
 /**
- * Common display configuration for number fields
- *
- * This interface provides the base properties shared by all number field configurations.
- * Custom field types should extend this interface to add their own type-safe properties,
- * NOT use the `[key: string]: any` pattern, which would compromise type safety.
- *
- *
- * // This maintains full type safety for your custom properties
+ * Common formatting options for numeric display
  */
-export interface DisplayConfig {
-  type?: string; // Field type for dynamic delegation (open to custom types)
+export interface NumericFormattingConfig {
   decimals?: number;
   prefix?: string;
   suffix?: string;
+}
+
+/**
+ * Common range constraints for numeric input
+ */
+export interface NumericRangeConfig {
   min?: number;
   max?: number;
 }
 
-export interface SliderConfig extends DisplayConfig {
+export interface SliderConfig
+  extends NumberDisplayConfig,
+    NumericFormattingConfig,
+    NumericRangeConfig {
   type: 'slider'; // Required - ensures proper delegation
-  min: number;
-  max: number;
-  suffix?: string;
-  prefix?: string;
-  decimals?: number;
+  min: number; // Required for slider
+  max: number; // Required for slider
   showValue?: boolean;
 }
 
-export interface RatingConfig extends DisplayConfig {
+export interface RatingConfig extends NumberDisplayConfig {
   type: 'rating'; // Required
-  maxStars: number;
+  maxStars: number; // Only property needed - rating doesn't use decimals, prefix, suffix, min, max
 }
 
-export interface QuantityConfig extends DisplayConfig {
+export interface QuantityConfig
+  extends NumberDisplayConfig,
+    NumericRangeConfig {
   type: 'quantity'; // Required
-  min: number;
-  max: number;
+  min: number; // Required
+  max: number; // Required
 }
 
-export interface PercentageConfig extends DisplayConfig {
+export interface PercentageConfig
+  extends NumberDisplayConfig,
+    NumericFormattingConfig,
+    NumericRangeConfig {
   type: 'percentage'; // Required
-  decimals?: number;
-  min: number;
-  max: number;
+  min: number; // Required
+  max: number; // Required
 }
 
-export interface StatConfig extends DisplayConfig {
+export interface StatConfig
+  extends NumberDisplayConfig,
+    NumericFormattingConfig,
+    NumericRangeConfig {
   type: 'stat'; // Required
-  prefix?: string;
-  suffix?: string;
-  decimals?: number;
-  min: number;
-  max: number;
+  min: number; // Required
+  max: number; // Required
   label?: string;
   placeholder?: string;
   subtitle?: string;
   icon?: typeof IconComponent;
 }
 
-export interface ScoreConfig extends DisplayConfig {
+export interface ScoreConfig
+  extends NumberDisplayConfig,
+    NumericFormattingConfig,
+    NumericRangeConfig {
   type: 'score'; // Required
-  decimals?: number;
-  min: number;
-  max: number;
+  min: number; // Required
+  max: number; // Required
 }
 
-export interface ProgressBarConfig extends DisplayConfig {
+export interface ProgressBarConfig
+  extends NumberDisplayConfig,
+    NumericRangeConfig {
   type: 'progress-bar'; // Required
-  min: number;
-  max: number;
+  min: number; // Required
+  max: number; // Required
   label?: string;
 }
 
-export interface ProgressCircleConfig extends DisplayConfig {
+export interface ProgressCircleConfig
+  extends NumberDisplayConfig,
+    NumericRangeConfig {
   type: 'progress-circle'; // Required
-  min: number;
-  max: number;
+  min: number; // Required
+  max: number; // Required
 }
 
-export interface GaugeConfig extends DisplayConfig {
+export interface GaugeConfig
+  extends NumberDisplayConfig,
+    NumericFormattingConfig,
+    NumericRangeConfig {
   type: 'gauge'; // Required
-  min: number;
-  max: number;
-  decimals?: number;
-  suffix?: string;
-  prefix?: string;
+  min: number; // Required
+  max: number; // Required
   label?: string;
   showValue?: boolean;
   dangerThreshold?: number; // Value above which gauge shows danger color
   warningThreshold?: number; // Value above which gauge shows warning color
 }
 
-export interface BadgeNotificationConfig extends DisplayConfig {
+export interface BadgeNotificationConfig
+  extends NumberDisplayConfig,
+    NumericFormattingConfig,
+    NumericRangeConfig {
   type: 'badge-notification'; // Required
-  decimals?: number;
-  min: number;
-  max: number;
+  min: number; // Required
+  max: number; // Required
   label?: string;
   placeholder?: string;
   icon?: typeof IconComponent;
 }
 
-export interface BadgeMetricConfig extends DisplayConfig {
+export interface BadgeMetricConfig
+  extends NumberDisplayConfig,
+    NumericFormattingConfig,
+    NumericRangeConfig {
   type: 'badge-metric'; // Required
-  decimals?: number;
-  min: number;
-  max: number;
+  min: number; // Required
+  max: number; // Required
   label?: string;
   placeholder?: string;
   icon?: typeof IconComponent;
 }
 
-export interface BadgeCounterConfig extends DisplayConfig {
+export interface BadgeCounterConfig
+  extends NumberDisplayConfig,
+    NumericFormattingConfig,
+    NumericRangeConfig {
   type: 'badge-counter'; // Required
-  decimals?: number;
-  min: number;
-  max: number;
+  min: number; // Required
+  max: number; // Required
   label?: string;
   placeholder?: string;
   icon?: typeof IconComponent;

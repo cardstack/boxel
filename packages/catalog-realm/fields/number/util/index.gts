@@ -12,7 +12,8 @@ import ProgressCircleField from '../progress-circle';
 import GaugeField from '../gauge';
 
 import {
-  DisplayConfig,
+  NumberDisplayConfig,
+  NumericFormattingConfig,
   SliderConfig,
   RatingConfig,
   QuantityConfig,
@@ -66,9 +67,15 @@ export function getNumericValue(model: any): number {
  */
 export function getFormattedDisplayValue(
   model: any,
-  config: DisplayConfig = {},
+  config: NumberDisplayConfig = {},
 ): string {
-  const { decimals = 0, prefix = '', suffix = '' } = config;
+  // Type guard: check if config has formatting properties
+  const formattingConfig = config as Partial<NumericFormattingConfig>;
+
+  // Safely extract formatting properties, with defaults for configs that don't have them
+  const decimals = formattingConfig.decimals ?? 0;
+  const prefix = formattingConfig.prefix ?? '';
+  const suffix = formattingConfig.suffix ?? '';
 
   // Always default to 0 for empty values
   const numericValue = getNumericValue(model);

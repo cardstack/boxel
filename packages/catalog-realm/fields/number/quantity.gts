@@ -25,13 +25,22 @@ export default class QuantityField extends NumberField {
     presentation: {
       type: 'quantity',
       min: 0,
-      max: 999,
+      max: 100,
     },
   };
 
   static edit = class Edit extends Component<typeof this> {
-    get config() {
-      return this.args.configuration?.presentation;
+    get config(): QuantityConfig {
+      const defaultConfig: QuantityConfig = {
+        type: 'quantity',
+        min: 0,
+        max: 100,
+      };
+      const userConfig = this.args.configuration?.presentation;
+      return {
+        ...defaultConfig,
+        ...userConfig,
+      } as QuantityConfig;
     }
 
     get numericValue() {
@@ -163,8 +172,17 @@ export default class QuantityField extends NumberField {
   };
 
   static embedded = class Embedded extends Component<typeof this> {
-    get config() {
-      return this.args.configuration?.presentation;
+    get config(): QuantityConfig {
+      const defaultConfig: QuantityConfig = {
+        type: 'quantity',
+        min: 0,
+        max: 100,
+      };
+      const userConfig = this.args.configuration?.presentation;
+      return {
+        ...defaultConfig,
+        ...userConfig,
+      } as QuantityConfig;
     }
 
     get numericValue() {
@@ -249,8 +267,17 @@ export default class QuantityField extends NumberField {
   };
 
   static atom = class Atom extends Component<typeof this> {
-    get config() {
-      return this.args.configuration?.presentation;
+    get config(): QuantityConfig {
+      const defaultConfig: QuantityConfig = {
+        type: 'quantity',
+        min: 0,
+        max: 100,
+      };
+      const userConfig = this.args.configuration?.presentation;
+      return {
+        ...defaultConfig,
+        ...userConfig,
+      } as QuantityConfig;
     }
 
     get numericValue() {

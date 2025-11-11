@@ -28,16 +28,21 @@ export default class SliderField extends NumberField {
       type: 'slider',
       min: 0,
       max: 100,
-      suffix: '%',
-      prefix: '',
-      decimals: 0,
-      showValue: true,
     },
   };
 
   static edit = class Edit extends Component<typeof this> {
-    get config() {
-      return this.args.configuration?.presentation;
+    get config(): SliderConfig {
+      const defaultConfig: SliderConfig = {
+        type: 'slider',
+        min: 0,
+        max: 100,
+      };
+      const userConfig = this.args.configuration?.presentation;
+      return {
+        ...defaultConfig,
+        ...userConfig,
+      } as SliderConfig;
     }
 
     get displayValue() {
@@ -89,8 +94,17 @@ export default class SliderField extends NumberField {
   };
 
   static atom = class Atom extends Component<typeof this> {
-    get config() {
-      return this.args.configuration?.presentation;
+    get config(): SliderConfig {
+      const defaultConfig: SliderConfig = {
+        type: 'slider',
+        min: 0,
+        max: 100,
+      };
+      const userConfig = this.args.configuration?.presentation;
+      return {
+        ...defaultConfig,
+        ...userConfig,
+      } as SliderConfig;
     }
 
     get percentage() {
@@ -148,8 +162,17 @@ export default class SliderField extends NumberField {
   };
 
   static embedded = class Embedded extends Component<typeof this> {
-    get config() {
-      return this.args.configuration?.presentation;
+    get config(): SliderConfig {
+      const defaultConfig: SliderConfig = {
+        type: 'slider',
+        min: 0,
+        max: 100,
+      };
+      const userConfig = this.args.configuration?.presentation;
+      return {
+        ...defaultConfig,
+        ...userConfig,
+      } as SliderConfig;
     }
 
     get percentage() {
