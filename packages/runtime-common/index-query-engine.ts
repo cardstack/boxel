@@ -137,7 +137,7 @@ interface PrerenderedCardOptions {
   cardUrls?: string[];
 }
 
-interface WIPOptions {
+export interface WIPOptions {
   useWorkInProgressIndex?: boolean;
 }
 
@@ -185,8 +185,8 @@ export class IndexQueryEngine {
     return await query(this.#dbAdapter, expression, coerceTypes);
   }
 
-  async #queryCards(query: CardExpression) {
-    return this.#query(await this.makeExpression(query));
+  async #queryCards(query: CardExpression, opts?: WIPOptions) {
+    return this.#query(await this.makeExpression(query, opts));
   }
 
   async getOwnDefinition(
@@ -444,8 +444,8 @@ export class IndexQueryEngine {
       ];
 
       let [results, totalResults] = await Promise.all([
-        this.#queryCards(query),
-        this.#queryCards(queryCount),
+        this.#queryCards(query, opts),
+        this.#queryCards(queryCount, opts),
       ]);
 
       return {
@@ -881,7 +881,10 @@ export class IndexQueryEngine {
     return every(cardExpressions);
   }
 
-  private async makeExpression(query: CardExpression): Promise<Expression> {
+  private async makeExpression(
+    query: CardExpression,
+    opts?: WIPOptions,
+  ): Promise<Expression> {
     return flatten(
       await Promise.all(
         query.map((element) => {
@@ -898,7 +901,7 @@ export class IndexQueryEngine {
           } else if (element.kind === 'field-value') {
             return this.handleFieldValue(element);
           } else if (element.kind === 'field-arity') {
-            return this.handleFieldArity(element);
+            return this.handleFieldArity(element, opts);
           } else {
             throw assertNever(element);
           }
@@ -937,7 +940,10 @@ export class IndexQueryEngine {
   //   GROUP BY url
   //   ORDER BY url
 
-  private async handleFieldArity(fieldArity: FieldArity): Promise<Expression> {
+  private async handleFieldArity(
+    fieldArity: FieldArity,
+    opts?: WIPOptions,
+  ): Promise<Expression> {
     let { path, value, type, pluralValue, usePluralContainer } = fieldArity;
     let definition = await this.getDefinition(type);
     let exp: CardExpression = await this.walkFilterFieldPath(
@@ -974,9 +980,12 @@ export class IndexQueryEngine {
     return await this.makeExpression(exp);
   }
 
-  private async handleFieldQuery(fieldQuery: FieldQuery): Promise<Expression> {
+  private async handleFieldQuery(
+    fieldQuery: FieldQuery,
+    opts?: WIPOptions,
+  ): Promise<Expression> {
     let { path, type, useJsonBValue } = fieldQuery;
-    let definition = await this.getDefinition(type);
+    let definition = await this.getDefinition(type, opts);
     // The rootPluralPath should line up with the tableValuedTree that was
     // used in the handleFieldArity (the multiple tableValuedTree expressions will
     // collapse into a single function)
@@ -1038,7 +1047,10 @@ export class IndexQueryEngine {
     return exp;
   }
 
-  private async handleFieldValue(fieldValue: FieldValue): Promise<Expression> {
+  private async handleFieldValue(
+    fieldValue: FieldValue,
+    opts?: WIPOptions,
+  ): Promise<Expression> {
     let { path, value, type } = fieldValue;
     let definition = await this.getDefinition(type);
     let exp = await this.makeExpression(value);

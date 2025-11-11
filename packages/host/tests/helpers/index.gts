@@ -1091,6 +1091,13 @@ async function persistDocumentToTestRealm(
   if (!matching) {
     return;
   }
+  let owner = matching.adapter.owner as
+    | (Owner & { isDestroying?: boolean; isDestroyed?: boolean })
+    | undefined;
+  if (owner?.isDestroying || owner?.isDestroyed) {
+    getTestRealmRegistry().delete(matching.realm.url);
+    return;
+  }
   let localPath: string;
   try {
     localPath = matching.realm.paths.local(url);
