@@ -3,6 +3,8 @@ import Service from '@ember/service';
 import window from 'ember-window-mock';
 import { v4 as uuidv4 } from 'uuid';
 
+import type { SerializedFileDef } from 'https://cardstack.com/base/file-api';
+
 import {
   AiAssistantMessageDrafts,
   CurrentRoomIdPersistenceKey,
@@ -10,9 +12,22 @@ import {
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
+export type StoredFileDraft = Pick<
+  SerializedFileDef,
+  'sourceUrl' | 'name' | 'url' | 'contentType' | 'contentHash'
+>;
+
 type StoredMessageDraft = {
-  message: string;
+  message?: string;
+  attachedCardIds?: string[];
+  attachedFiles?: StoredFileDraft[];
   createdAt: number;
+};
+
+type DraftUpdate = {
+  message?: string;
+  attachedCardIds?: string[] | undefined;
+  attachedFiles?: StoredFileDraft[] | undefined;
 };
 
 export default class LocalPersistenceService extends Service {
@@ -52,21 +67,44 @@ export default class LocalPersistenceService extends Service {
     window.localStorage.setItem(CurrentRoomIdPersistenceKey, roomId);
   }
 
+  getDraft(roomId: string) {
+    return this.readMessageDrafts()[roomId];
+  }
+
   getMessageDraft(roomId: string) {
-    return this.readMessageDrafts()[roomId]?.message;
+    return this.getDraft(roomId)?.message;
   }
 
   setMessageDraft(roomId: string, message: string | undefined) {
-    let drafts = this.readMessageDrafts();
-    if (message && message.length > 0) {
-      drafts[roomId] = {
-        message,
-        createdAt: Date.now(),
-      };
-    } else {
-      delete drafts[roomId];
-    }
-    this.writeMessageDrafts(drafts);
+    this.updateDraft(roomId, {
+      message: message?.length ? message : undefined,
+    });
+  }
+
+  getAttachedCardIds(roomId: string) {
+    return this.getDraft(roomId)?.attachedCardIds;
+  }
+
+  setAttachedCardIds(roomId: string, cardIds: string[] | undefined) {
+    let sanitized = cardIds?.filter((id) => typeof id === 'string' && id);
+    this.updateDraft(roomId, {
+      attachedCardIds: sanitized && sanitized.length ? sanitized : undefined,
+    });
+  }
+
+  getAttachedFiles(roomId: string) {
+    return this.getDraft(roomId)?.attachedFiles;
+  }
+
+  setAttachedFiles(roomId: string, files: StoredFileDraft[] | undefined) {
+    let sanitized = files
+      ? (files
+          .map((file) => this.sanitizeFile(file))
+          .filter(Boolean) as StoredFileDraft[])
+      : undefined;
+    this.updateDraft(roomId, {
+      attachedFiles: sanitized && sanitized.length ? sanitized : undefined,
+    });
   }
 
   private readMessageDrafts(): Record<string, StoredMessageDraft> {
@@ -87,23 +125,9 @@ export default class LocalPersistenceService extends Service {
       for (let [roomId, value] of Object.entries(
         parsed as Record<string, unknown>,
       )) {
-        if (!value) {
-          continue;
-        }
-
-        if (typeof value === 'object') {
-          let message = (value as { message?: unknown }).message;
-          let createdAt = Number((value as { createdAt?: unknown }).createdAt);
-          if (typeof message !== 'string') {
-            continue;
-          }
-
-          if (!Number.isFinite(createdAt)) {
-            createdAt = now;
-          }
-
-          sanitized[roomId] = { message, createdAt };
-          continue;
+        let draft = this.sanitizeDraft(value, now);
+        if (draft) {
+          sanitized[roomId] = draft;
         }
       }
 
@@ -114,17 +138,91 @@ export default class LocalPersistenceService extends Service {
     }
   }
 
+  private sanitizeDraft(value: unknown, now: number) {
+    if (!value || typeof value !== 'object') {
+      return;
+    }
+
+    let message = (value as { message?: unknown }).message;
+    let createdAt = Number((value as { createdAt?: unknown }).createdAt);
+    let attachedCardIds = (value as { attachedCardIds?: unknown })
+      .attachedCardIds;
+    let attachedFiles = (value as { attachedFiles?: unknown }).attachedFiles;
+
+    let sanitizedMessage = typeof message === 'string' ? message : undefined;
+    let sanitizedCards = Array.isArray(attachedCardIds)
+      ? attachedCardIds.filter(
+          (id): id is string => typeof id === 'string' && id.length > 0,
+        )
+      : undefined;
+    let sanitizedFiles = Array.isArray(attachedFiles)
+      ? (attachedFiles
+          .map((file) => this.sanitizeFile(file))
+          .filter(Boolean) as StoredFileDraft[])
+      : undefined;
+
+    if (!Number.isFinite(createdAt)) {
+      createdAt = now;
+    }
+
+    if (
+      this.isDraftEmpty({
+        message: sanitizedMessage,
+        attachedCardIds: sanitizedCards,
+        attachedFiles: sanitizedFiles,
+        createdAt,
+      })
+    ) {
+      return;
+    }
+
+    return {
+      message: sanitizedMessage,
+      attachedCardIds: sanitizedCards,
+      attachedFiles: sanitizedFiles,
+      createdAt,
+    } satisfies StoredMessageDraft;
+  }
+
+  private sanitizeFile(file: unknown): StoredFileDraft | undefined {
+    if (!file || typeof file !== 'object') {
+      return;
+    }
+
+    let sourceUrl = (file as { sourceUrl?: unknown }).sourceUrl;
+    if (typeof sourceUrl !== 'string' || sourceUrl.length === 0) {
+      return;
+    }
+
+    let name = (file as { name?: unknown }).name;
+    let url = (file as { url?: unknown }).url;
+    let contentType = (file as { contentType?: unknown }).contentType;
+    let contentHash = (file as { contentHash?: unknown }).contentHash;
+
+    return {
+      sourceUrl,
+      ...(typeof name === 'string' ? { name } : {}),
+      ...(typeof url === 'string' ? { url } : {}),
+      ...(typeof contentType === 'string' ? { contentType } : {}),
+      ...(typeof contentHash === 'string' ? { contentHash } : {}),
+    } satisfies StoredFileDraft;
+  }
+
   private writeMessageDrafts(drafts: Record<string, StoredMessageDraft>) {
     let now = Date.now();
     let prunedEntries = Object.entries(drafts).filter(([, draft]) => {
-      if (!draft || typeof draft.message !== 'string') {
+      if (!draft) {
         return false;
       }
       let createdAt = Number(draft?.createdAt);
       if (!Number.isFinite(createdAt)) {
         return false;
       }
-      return now - createdAt <= ONE_WEEK_MS;
+      if (now - createdAt > ONE_WEEK_MS) {
+        return false;
+      }
+
+      return !this.isDraftEmpty(draft);
     });
 
     if (prunedEntries.length === 0) {
@@ -141,6 +239,47 @@ export default class LocalPersistenceService extends Service {
       AiAssistantMessageDrafts,
       JSON.stringify(prunedDrafts),
     );
+  }
+
+  private updateDraft(roomId: string, updates: DraftUpdate) {
+    let drafts = this.readMessageDrafts();
+    let existing = drafts[roomId];
+    let next: StoredMessageDraft = {
+      message: existing?.message,
+      attachedCardIds: existing?.attachedCardIds,
+      attachedFiles: existing?.attachedFiles,
+      createdAt: existing?.createdAt ?? Date.now(),
+    };
+
+    if ('message' in updates) {
+      next.message = updates.message;
+    }
+    if ('attachedCardIds' in updates) {
+      next.attachedCardIds = updates.attachedCardIds;
+    }
+    if ('attachedFiles' in updates) {
+      next.attachedFiles = updates.attachedFiles;
+    }
+
+    if (this.isDraftEmpty(next)) {
+      delete drafts[roomId];
+    } else {
+      next.createdAt = Date.now();
+      drafts[roomId] = next;
+    }
+
+    this.writeMessageDrafts(drafts);
+  }
+
+  private isDraftEmpty(draft: StoredMessageDraft | undefined) {
+    if (!draft) {
+      return true;
+    }
+    let hasMessage =
+      typeof draft.message === 'string' && draft.message.length > 0;
+    let hasCards = draft.attachedCardIds && draft.attachedCardIds.length > 0;
+    let hasFiles = draft.attachedFiles && draft.attachedFiles.length > 0;
+    return !hasMessage && !hasCards && !hasFiles;
   }
 }
 

@@ -32,6 +32,7 @@ import {
 
 import ENV from '@cardstack/host/config/environment';
 import type MonacoService from '@cardstack/host/services/monaco-service';
+import { AiAssistantMessageDrafts } from '@cardstack/host/utils/local-storage-keys';
 
 import { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 
@@ -2383,6 +2384,93 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     }
   });
 
+  test('manually attached cards and files persist through reload without duplicating auto attachments', async function (assert) {
+    window.localStorage.removeItem(AiAssistantMessageDrafts);
+
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}plant.gts`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      aiAssistantOpen: true,
+    });
+
+    await waitFor(`[data-room-settled]`);
+    await click('[data-test-module-inspector-view="spec"]');
+    await waitFor('[data-test-spec-selector-item-path]');
+
+    let autoAttachedSpecId: string | undefined;
+    await waitUntil(() => {
+      let autoAttachedCards = document.querySelectorAll(
+        '[data-test-autoattached-card]',
+      );
+      let specCard = Array.from(autoAttachedCards).find((card) => {
+        let cardId = card.getAttribute('data-test-attached-card');
+        return cardId?.includes('Spec/');
+      });
+      if (specCard) {
+        autoAttachedSpecId = specCard.getAttribute(
+          'data-test-attached-card',
+        ) as string;
+        return true;
+      }
+      return false;
+    });
+
+    assert.ok(autoAttachedSpecId, 'expected a spec card to be auto-attached');
+
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-card-btn]');
+    await fillIn('[data-test-search-field]', 'Plant spec');
+    await click(`[data-test-select="${autoAttachedSpecId}"]`);
+    await click('[data-test-card-catalog-go-button]');
+
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-file-btn]');
+    await click('[data-test-file="plant.gts"]');
+    await click('[data-test-choose-file-modal-add-button]');
+
+    await fillIn('[data-test-message-field]', 'Reload keeps my draft');
+
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}plant.gts`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      aiAssistantOpen: true,
+    });
+
+    await waitFor(`[data-room-settled]`);
+    await click('[data-test-module-inspector-view="spec"]');
+    await waitFor('[data-test-spec-selector-item-path]');
+
+    assert.dom('[data-test-message-field]').hasValue('Reload keeps my draft');
+    assert
+      .dom(`[data-test-attached-card="${autoAttachedSpecId}"]`)
+      .exists({ count: 1 });
+    assert
+      .dom(
+        `[data-test-autoattached-card][data-test-attached-card="${autoAttachedSpecId}"]`,
+      )
+      .doesNotExist();
+    assert
+      .dom(`[data-test-attached-file="${testRealmURL}plant.gts"]`)
+      .exists({ count: 1 });
+    assert.dom('[data-test-autoattached-file]').doesNotExist();
+  });
+
   test('auto-attached spec card can be removed', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
@@ -2746,7 +2834,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       {
         from: 'testuser',
         message: 'Message with another card',
-        cards: [{ id: `${testRealmURL}Pet/mango`, title: 'Mango' }],
+        cards: [
+          { id: `${testRealmURL}Person/hassan`, title: 'Hassan' },
+          { id: `${testRealmURL}Pet/mango`, title: 'Mango' },
+        ],
       },
     ]);
     // Create new session with "Copy File History" option
@@ -2761,7 +2852,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         message:
           'This session includes files and cards from the previous conversation for context.',
         cards: [
-          { id: `${testRealmURL}Pet/mango`, title: 'Mango' },
+          { id: `${testRealmURL}Person/hassan`, title: 'Hassan' },
           { id: `${testRealmURL}Pet/mango`, title: 'Mango' },
         ],
         files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
@@ -3183,7 +3274,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       {
         from: 'testuser',
         message: 'Third message with another card',
-        cards: [{ id: `${testRealmURL}Pet/mango`, title: 'Mango' }],
+        cards: [
+          { id: `${testRealmURL}Person/hassan`, title: 'Hassan' },
+          { id: `${testRealmURL}Pet/mango`, title: 'Mango' },
+        ],
       },
     ]);
 
@@ -3232,7 +3326,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       {
         from: 'testuser',
         message: 'Third message with another card',
-        cards: [{ id: `${testRealmURL}Pet/mango`, title: 'Mango' }],
+        cards: [
+          { id: `${testRealmURL}Person/hassan`, title: 'Hassan' },
+          { id: `${testRealmURL}Pet/mango`, title: 'Mango' },
+        ],
       },
     ]);
 

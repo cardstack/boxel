@@ -459,6 +459,8 @@ export default class Room extends Component<Signature> {
     removedCardIds: () => this.removedAttachedCardIds,
   });
   private removedAttachedCardIds = new TrackedArray<string>();
+  private removedAttachedFileUrls: string[] = [];
+  private lastAutoAttachedFileUrl: string | undefined = undefined;
   private getConversationScrollability: (() => boolean) | undefined;
   private scrollConversationToBottom: (() => void) | undefined;
   private roomScrollState: WeakMap<
@@ -538,12 +540,23 @@ export default class Room extends Component<Signature> {
       },
     });
 
-    if (!this.autoAttachedFileUrl) {
+    let autoAttachedFileUrl = this.autoAttachedFileUrl;
+    let manualFiles = this.filesToAttach;
+    let removedFileUrls = this.removedAttachedFileUrls;
+
+    let isManuallyAttached = manualFiles.some(
+      (file) => file.sourceUrl === autoAttachedFileUrl,
+    );
+    let isRemoved = autoAttachedFileUrl
+      ? removedFileUrls.includes(autoAttachedFileUrl)
+      : false;
+
+    if (!autoAttachedFileUrl || isManuallyAttached || isRemoved) {
       state.value = undefined;
     } else {
       state.value = this.matrixService.fileAPI.createFileDef({
-        sourceUrl: this.autoAttachedFileUrl,
-        name: this.autoAttachedFileUrl.split('/').pop(),
+        sourceUrl: autoAttachedFileUrl,
+        name: autoAttachedFileUrl.split('/').pop(),
       });
     }
 
@@ -551,7 +564,12 @@ export default class Room extends Component<Signature> {
   });
 
   private get autoAttachedFileUrl() {
-    return this.operatorModeStateService.state.codePath?.href;
+    let url = this.operatorModeStateService.state.codePath?.href;
+    if (!this.lastAutoAttachedFileUrl === url) {
+      this.lastAutoAttachedFileUrl = url;
+      this.removedAttachedFileUrls.splice(0);
+    }
+    return url;
   }
 
   private get autoAttachedFile() {
@@ -561,11 +579,23 @@ export default class Room extends Component<Signature> {
   }
 
   private get removeAutoAttachedFile() {
-    return this.autoAttachedFileResource.remove;
+    return () => {
+      //this.markAttachedFileRemoved(this.autoAttachedFileUrl);
+      this.autoAttachedFileResource.remove();
+    };
+  }
+
+  private markAttachedFileRemoved(sourceUrl?: string | null) {
+    if (!sourceUrl) {
+      return;
+    }
+    if (!this.removedAttachedFileUrls.includes(sourceUrl)) {
+      this.removedAttachedFileUrls.push(sourceUrl);
+    }
   }
 
   private get filesToAttach() {
-    return this.matrixService.filesToSend.get(this.args.roomId) ?? [];
+    return this.matrixService.getFilesToSend(this.args.roomId) ?? [];
   }
 
   @use private playgroundPanelCardIdResource = resource(() => {
@@ -861,7 +891,7 @@ export default class Room extends Component<Signature> {
   }
 
   private get cardIdsToAttach() {
-    return this.matrixService.cardsToSend.get(this.args.roomId);
+    return this.matrixService.getCardsToSend(this.args.roomId);
   }
 
   @action private resendLastMessage() {
@@ -929,10 +959,7 @@ export default class Room extends Component<Signature> {
 
     let cardIds = this.cardIdsToAttach ?? [];
     if (!cardIds.includes(cardId)) {
-      this.matrixService.cardsToSend.set(this.args.roomId, [
-        ...cardIds,
-        cardId,
-      ]);
+      this.matrixService.setCardsToSend(this.args.roomId, [...cardIds, cardId]);
     }
   }
 
@@ -940,19 +967,27 @@ export default class Room extends Component<Signature> {
   private removeCard(id: string) {
     if (this.playgroundPanelCardId === id) {
       this.removePlaygroundPanelCard();
-    } else if (this.autoAttachedCardIds.has(id)) {
-      this.removedAttachedCardIds.push(id);
-    } else {
-      const cardIndex = this.cardIdsToAttach?.findIndex((url) => url === id);
-      if (cardIndex != undefined && cardIndex !== -1) {
-        if (this.cardIdsToAttach !== undefined) {
-          this.cardIdsToAttach.splice(cardIndex, 1);
-        }
-      }
+      return;
     }
-    this.matrixService.cardsToSend.set(
+
+    if (this.autoAttachedCardIds.has(id)) {
+      this.removedAttachedCardIds.push(id);
+      return;
+    }
+
+    let cardIds = this.cardIdsToAttach ?? [];
+    if (!cardIds.length) {
+      return;
+    }
+
+    let next = cardIds.filter((url) => url !== id);
+    if (next.length === cardIds.length) {
+      return;
+    }
+
+    this.matrixService.setCardsToSend(
       this.args.roomId,
-      this.cardIdsToAttach?.length ? this.cardIdsToAttach : undefined,
+      next.length ? next : undefined,
     );
   }
 
@@ -965,7 +1000,7 @@ export default class Room extends Component<Signature> {
 
     let files = this.filesToAttach;
     if (!files?.find((f) => f.sourceUrl === file.sourceUrl)) {
-      this.matrixService.filesToSend.set(this.args.roomId, [...files, file]);
+      this.matrixService.setFilesToSend(this.args.roomId, [...files, file]);
     }
   }
 
@@ -981,19 +1016,22 @@ export default class Room extends Component<Signature> {
       return;
     }
 
-    const fileIndex = this.filesToAttach?.findIndex(
-      (f) => f.sourceUrl === file.sourceUrl,
-    );
-    if (fileIndex != undefined && fileIndex !== -1) {
-      if (this.filesToAttach !== undefined) {
-        this.filesToAttach.splice(fileIndex, 1);
-      }
+    let files = this.filesToAttach;
+    if (!files.length) {
+      return;
     }
 
-    this.matrixService.cardsToSend.set(
+    let next = files.filter((f) => f.sourceUrl !== file.sourceUrl);
+    if (next.length === files.length) {
+      return;
+    }
+
+    this.matrixService.setFilesToSend(
       this.args.roomId,
-      this.cardIdsToAttach?.length ? this.cardIdsToAttach : undefined,
+      next.length ? next : undefined,
     );
+
+    this.markAttachedFileRemoved(file.sourceUrl);
   }
 
   private doSendMessage = enqueueTask(
@@ -1007,8 +1045,11 @@ export default class Room extends Component<Signature> {
       this.unknownMessageSendError = undefined;
       let messageToSend = this.matrixService.getMessageToSend(this.args.roomId);
       let cardsToSend =
-        this.matrixService.cardsToSend.get(this.args.roomId) ?? undefined;
+        this.matrixService.getCardsToSend(this.args.roomId) ?? undefined;
       let cardsToSendCopy = cardsToSend ? [...cardsToSend] : undefined;
+      let filesToSend =
+        this.matrixService.getFilesToSend(this.args.roomId) ?? undefined;
+      let filesToSendCopy = filesToSend ? [...filesToSend] : undefined;
       const shouldClearDraft = !keepInputAndAttachments;
 
       // We copy the draft and attachments into local variables before clearing them
@@ -1017,7 +1058,6 @@ export default class Room extends Component<Signature> {
       // If the send fails, we restore those saved values in the catch block so nothing is lost.
       if (shouldClearDraft) {
         this.matrixService.setMessageToSend(this.args.roomId, undefined);
-        this.matrixService.cardsToSend.set(this.args.roomId, undefined);
       }
 
       let openCardIds = new Set([
@@ -1072,12 +1112,18 @@ export default class Room extends Component<Signature> {
 
         if (shouldClearDraft) {
           this.matrixService.setMessageToSend(this.args.roomId, messageToSend);
-          if (cardsToSendCopy && cardsToSendCopy.length > 0) {
-            this.matrixService.cardsToSend.set(
-              this.args.roomId,
-              cardsToSendCopy,
-            );
-          }
+          this.matrixService.setCardsToSend(
+            this.args.roomId,
+            cardsToSendCopy && cardsToSendCopy.length > 0
+              ? cardsToSendCopy
+              : undefined,
+          );
+          this.matrixService.setFilesToSend(
+            this.args.roomId,
+            filesToSendCopy && filesToSendCopy.length > 0
+              ? filesToSendCopy
+              : undefined,
+          );
         }
       }
     },

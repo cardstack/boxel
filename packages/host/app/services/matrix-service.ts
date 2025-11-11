@@ -198,6 +198,7 @@ export default class MatrixService extends Service {
 
   private slidingSync: SlidingSync | undefined;
   private aiRoomIds: Set<string> = new Set();
+  private hydratedDraftRooms = new Set<string>();
   @tracked private _isLoadingMoreAIRooms = false;
   private initialSyncCompleted = false;
   private initialSyncCompletedDeferred = new Deferred<void>();
@@ -213,6 +214,7 @@ export default class MatrixService extends Service {
   }
 
   setMessageToSend(roomId: string, message: string | undefined) {
+    this.ensureRoomDraftHydrated(roomId);
     if (message === undefined) {
       this.messagesToSend.delete(roomId);
     } else {
@@ -222,11 +224,46 @@ export default class MatrixService extends Service {
   }
 
   getMessageToSend(roomId: string) {
-    if (this.messagesToSend.has(roomId)) {
-      return this.messagesToSend.get(roomId);
-    }
+    this.ensureRoomDraftHydrated(roomId);
+    return this.messagesToSend.get(roomId);
+  }
 
-    return this.localPersistenceService.getMessageDraft(roomId);
+  setCardsToSend(roomId: string, cardIds: string[] | undefined) {
+    this.ensureRoomDraftHydrated(roomId);
+    let sanitized = cardIds?.filter(
+      (id): id is string => typeof id === 'string' && id.length > 0,
+    );
+    if (sanitized && sanitized.length > 0) {
+      this.cardsToSend.set(roomId, [...new Set(sanitized)]);
+    } else {
+      this.cardsToSend.delete(roomId);
+      sanitized = undefined;
+    }
+    this.localPersistenceService.setAttachedCardIds(roomId, sanitized);
+  }
+
+  getCardsToSend(roomId: string) {
+    this.ensureRoomDraftHydrated(roomId);
+    return this.cardsToSend.get(roomId);
+  }
+
+  setFilesToSend(roomId: string, files: FileDef[] | undefined) {
+    this.ensureRoomDraftHydrated(roomId);
+    let nextFiles = files && files.length > 0 ? [...files] : undefined;
+    if (nextFiles) {
+      this.filesToSend.set(roomId, nextFiles);
+    } else {
+      this.filesToSend.delete(roomId);
+    }
+    this.localPersistenceService.setAttachedFiles(
+      roomId,
+      nextFiles?.map((file) => file.serialize()),
+    );
+  }
+
+  getFilesToSend(roomId: string) {
+    this.ensureRoomDraftHydrated(roomId);
+    return this.filesToSend.get(roomId);
   }
 
   private setAgentId() {
@@ -1203,6 +1240,7 @@ export default class MatrixService extends Service {
     this.cardsToSend = new TrackedMap();
     this.filesToSend = new TrackedMap();
     this.currentUserEventReadReceipts = new TrackedMap();
+    this.hydratedDraftRooms = new Set();
 
     // Reset it here rather than in the reset function of each service
     // because it is possible that
@@ -1961,6 +1999,35 @@ export default class MatrixService extends Service {
     await this.slidingSync.setListRanges(SLIDING_SYNC_AUTH_ROOM_LIST_NAME, [
       [0, newEndRange],
     ]);
+  }
+
+  private ensureRoomDraftHydrated(roomId: string) {
+    if (this.hydratedDraftRooms.has(roomId)) {
+      return;
+    }
+    this.hydratedDraftRooms.add(roomId);
+
+    let draft = this.localPersistenceService.getDraft(roomId);
+    if (!draft) {
+      return;
+    }
+
+    if (typeof draft.message === 'string' && draft.message.length > 0) {
+      this.messagesToSend.set(roomId, draft.message);
+    }
+
+    if (draft.attachedCardIds && draft.attachedCardIds.length > 0) {
+      this.cardsToSend.set(roomId, [...draft.attachedCardIds]);
+    }
+
+    if (draft.attachedFiles && draft.attachedFiles.length > 0) {
+      let fileDefs = draft.attachedFiles
+        .map((file) => this.fileAPI.createFileDef(file))
+        .filter(Boolean);
+      if (fileDefs.length > 0) {
+        this.filesToSend.set(roomId, fileDefs as FileDef[]);
+      }
+    }
   }
 
   async getPromptParts(roomId: string) {
