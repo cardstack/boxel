@@ -994,8 +994,8 @@ export const skillCardsToMessage = (cards: LooseCardResource[]) => {
     .map((card) => {
       let title = card.attributes?.title
         ? `title: ${card.attributes.title}`
-        : '';
-      return `Skill (id: ${card.id} ${title}):
+        : undefined;
+      return `Skill (id: ${card.id}${title ? `, ${title}` : ''}):
 ${card.attributes?.instructions}`;
     })
     .join('\n\n');
