@@ -1,4 +1,4 @@
-import Accordion from './components/accordion/index.gts';
+import Accordion, { AccordionItem } from './components/accordion/index.gts';
 import AddButton from './components/add-button/index.gts';
 import Alert from './components/alert/index.gts';
 import Avatar from './components/avatar/index.gts';
@@ -76,6 +76,7 @@ export {
   type SortOption,
   type ViewItem,
   Accordion,
+  AccordionItem,
   AddButton,
   Alert,
   Avatar,
