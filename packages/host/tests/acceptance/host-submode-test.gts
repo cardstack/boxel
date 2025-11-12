@@ -580,6 +580,7 @@ module('Acceptance | host submode', function (hooks) {
           trail: [`${testRealmURL}Person/1.json`],
         });
 
+        assert.dom('[data-test-publish-realm-button]').hasText('Publish Site');
         await click('[data-test-publish-realm-button]');
         assert.dom('[data-test-publish-realm-modal]').exists();
 
@@ -618,7 +619,9 @@ module('Acceptance | host submode', function (hooks) {
           );
         });
 
-        assert.dom('[data-test-publish-realm-button]').hasText('Publish Site');
+        assert
+          .dom('[data-test-publish-realm-button]')
+          .hasText('Republish Site');
         assert
           .dom('[data-test-publish-realm-button]')
           .doesNotHaveClass('publishing');

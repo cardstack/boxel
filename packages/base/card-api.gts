@@ -1390,8 +1390,11 @@ class LinksToMany<FieldT extends CardDefConstructor>
       if (!(globalThis as any).__lazilyLoadLinks) {
         throw new NotLoaded(instance, notLoadedRefs, this.name);
       }
-      for (let reference of notLoadedRefs) {
-        lazilyLoadLink(instance, this, reference, { value });
+      for (let entry of value) {
+        if (isNotLoadedValue(entry) && !(entry as any).loading) {
+          lazilyLoadLink(instance, this, entry.reference, { value });
+          (entry as any).loading = true;
+        }
       }
     }
 
@@ -3415,7 +3418,7 @@ export class Box<T> {
       }
     });
     this.prevChildren = newChildren;
-    this.prevValues = newChildren.map((child) => child.value);
+    this.prevValues = value.slice();
     return newChildren;
   }
 }

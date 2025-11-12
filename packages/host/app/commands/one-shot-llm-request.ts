@@ -1,6 +1,7 @@
 import { service } from '@ember/service';
 
 import { isCardInstance, logger } from '@cardstack/runtime-common';
+import { skillCardsToMessage } from '@cardstack/runtime-common/ai/prompt';
 
 // Conventional module-scoped logger (pattern used elsewhere like store & realm events)
 const oneShotLogger = logger('llm:oneshot');
@@ -183,12 +184,3 @@ ${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : ''}${attachedFilesContent ? a
     }
   }
 }
-
-export const skillCardsToMessage = (cards: Skill[]) => {
-  return cards
-    .map((card) => {
-      return `Skill (id: ${card.id}):
-${card.instructions}`;
-    })
-    .join('\n\n');
-};

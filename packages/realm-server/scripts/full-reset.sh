@@ -6,6 +6,7 @@ cd ${SCRIPTS_DIR}/../../postgres
 pnpm run drop-db boxel
 pnpm run drop-db boxel_test
 pnpm run drop-db boxel_base
+pnpm migrate up
 
 # clearing the DB means that we also lose all the info we have on the realm
 # owners of the dynamic realms, which means that we should eliminate these as

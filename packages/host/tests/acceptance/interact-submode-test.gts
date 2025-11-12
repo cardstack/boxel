@@ -1438,6 +1438,42 @@ module('Acceptance | interact submode tests', function (hooks) {
         .dom("[data-test-field='friends'] [data-test-remove-card]")
         .exists();
     });
+
+    test('card catalog create buttons respect realm write permissions for linksTo field', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealm2URL}Person/hassan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      await click('[data-test-stack-card-index="0"] [data-test-edit-button]');
+      await click('[data-test-add-new="friends"]');
+
+      await waitFor('[data-test-card-catalog]');
+      await waitFor('[data-test-realm="Test Workspace A"]');
+      await waitFor('[data-test-realm="Test Workspace B"]');
+
+      assert
+        .dom(`[data-test-card-catalog-create-new-button="${testRealm2URL}"]`)
+        .exists('create button is shown for writable realm');
+
+      assert
+        .dom(`[data-test-card-catalog-create-new-button="${testRealmURL}"]`)
+        .doesNotExist('create button is hidden for read-only realm');
+
+      await triggerKeyEvent(
+        '[data-test-card-catalog-modal]',
+        'keydown',
+        'Escape',
+      );
+      await waitFor('[data-test-card-catalog]', { count: 0 });
+    });
+
     test('the delete item is not present in "..." menu of stack item', async function (assert) {
       await visitOperatorMode({
         stacks: [

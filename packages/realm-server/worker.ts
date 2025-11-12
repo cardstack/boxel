@@ -102,8 +102,13 @@ if (process.env.USE_HEADLESS_CHROME_INDEXING === 'true' && prerendererUrl) {
   log.info(`Using prerender server ${prerendererUrl}`);
   prerenderer = createRemotePrerenderer(prerendererUrl);
 } else {
-  prerenderer = async () => {
-    throw new Error(`Prerenderer server has not been configured/enabled`);
+  prerenderer = {
+    async prerenderCard() {
+      throw new Error(`Prerenderer server has not been configured/enabled`);
+    },
+    async prerenderModule() {
+      throw new Error(`Prerenderer server has not been configured/enabled`);
+    },
   };
 }
 

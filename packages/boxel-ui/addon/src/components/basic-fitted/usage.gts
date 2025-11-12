@@ -1,272 +1,309 @@
+import Captions from '@cardstack/boxel-icons/captions';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
+import { cn, gt, gte } from '../../helpers.ts';
+import type { Icon } from '../../icons.ts';
 import CardContainer from '../card-container/index.gts';
 import BasicFitted from './index.gts';
 
-const Captions: TemplateOnlyComponent<{ Element: Element }> = <template>
-  <svg
-    xmlns='http://www.w3.org/2000/svg'
-    width='24'
-    height='24'
-    fill='none'
-    stroke='currentColor'
-    stroke-linecap='round'
-    stroke-linejoin='round'
-    stroke-width='2'
-    class='lucide lucide-captions'
-    viewBox='0 0 24 24'
-    ...attributes
-  ><rect width='18' height='14' x='3' y='5' rx='2' ry='2' /><path
-      d='M7 15h4m4 0h2M7 11h2m4 0h4'
-    /></svg>
-</template>;
+type Spec = { height: number; title?: string; width: number };
+
+// These can be imported from the @cardstack/runtime-common package:
+// `import { FITTED_FORMATS } from '@cardstack/runtime-common'`
+// For various build problems, could not do that here.
+const FITTED_FORMATS = [
+  {
+    name: 'Badges',
+    specs: [
+      {
+        id: 'small-badge',
+        title: 'Small Badge',
+        width: 150,
+        height: 40,
+      },
+      {
+        id: 'medium-badge',
+        title: 'Medium Badge',
+        width: 150,
+        height: 65,
+      },
+      {
+        id: 'large-badge',
+        title: 'Large Badge',
+        width: 150,
+        height: 105,
+      },
+    ],
+  },
+  {
+    name: 'Strips',
+    specs: [
+      {
+        id: 'single-strip',
+        title: 'Single Strip',
+        width: 250,
+        height: 40,
+      },
+      {
+        id: 'double-strip',
+        title: 'Double Strip',
+        width: 250,
+        height: 65,
+      },
+      {
+        id: 'triple-strip',
+        title: 'Triple Strip',
+        width: 250,
+        height: 105,
+      },
+      {
+        id: 'double-wide-strip',
+        title: 'Double Wide Strip',
+        width: 400,
+        height: 65,
+      },
+      {
+        id: 'triple-wide-strip',
+        title: 'Triple Wide Strip',
+        width: 400,
+        height: 105,
+      },
+    ],
+  },
+  {
+    name: 'Tiles',
+    specs: [
+      {
+        id: 'small-tile',
+        title: 'Small Tile',
+        width: 150,
+        height: 170,
+      },
+      {
+        id: 'regular-tile',
+        title: 'Regular Tile',
+        width: 250,
+        height: 170,
+      },
+      {
+        id: 'cardsgrid-tile',
+        title: 'CardsGrid Tile',
+        width: 170,
+        height: 250,
+      },
+      {
+        id: 'tall-tile',
+        title: 'Tall Tile',
+        width: 150,
+        height: 275,
+      },
+      {
+        id: 'large-tile',
+        title: 'Large Tile',
+        width: 250,
+        height: 275,
+      },
+    ],
+  },
+  {
+    name: 'Cards',
+    specs: [
+      {
+        id: 'compact-card',
+        title: 'Compact Card',
+        width: 400,
+        height: 170,
+      },
+      {
+        id: 'full-card',
+        title: 'Full Card',
+        width: 400,
+        height: 275,
+      },
+      {
+        id: 'expanded-card',
+        title: 'Expanded Card',
+        width: 400,
+        height: 445,
+      },
+    ],
+  },
+];
+
+const OTHER_SIZES: Spec[] = [
+  { width: 226, height: 226 },
+  { width: 164, height: 224 },
+  { width: 164, height: 180 },
+  { width: 140, height: 148 },
+  { width: 120, height: 128 },
+  { width: 100, height: 118 },
+  { width: 100, height: 400 },
+  { width: 151, height: 78 },
+  { width: 300, height: 151 },
+  { width: 300, height: 180 },
+  { width: 100, height: 29 },
+  { width: 150, height: 58 },
+  { width: 226, height: 58 },
+  { width: 300, height: 115 },
+];
+
+const calcRatio = ({ width, height }: Spec) => (width / height).toFixed(2);
+
+interface FittedItemContainerSignature {
+  Args: { spec: Spec };
+  Blocks: { default: [] };
+}
+
+const FittedItemContainer: TemplateOnlyComponent<FittedItemContainerSignature> =
+  <template>
+    <div
+      class={{cn
+        'item'
+        wide=(gt @spec.width 300)
+        full-width=(gte @spec.width 400)
+      }}
+    >
+      <div class='desc'>
+        <h4>{{@spec.title}} {{@spec.width}}px &times; {{@spec.height}}px</h4>
+        Aspect Ratio
+        {{calcRatio @spec}}
+      </div>
+
+      {{yield}}
+    </div>
+    <style scoped>
+      .card {
+        container-name: fitted-card;
+        container-type: size;
+        overflow: hidden;
+      }
+      .wide {
+        grid-column: span 2;
+      }
+      .full-width {
+        grid-column: -1 / 1;
+      }
+      .item {
+        position: relative;
+        padding-top: 50px;
+        padding-inline: var(--boxel-sp);
+        padding-bottom: var(--boxel-sp);
+        background-color: color-mix(
+          in oklab,
+          var(--background, var(--boxel-light)) 90%,
+          var(--foreground, var(--boxel-dark))
+        );
+      }
+      .desc {
+        position: absolute;
+        top: 0;
+        right: 0;
+        padding: var(--boxel-sp-4xs);
+        background-color: var(--boxel-light);
+        border-left: var(--boxel-border-card);
+        border-right: var(--boxel-border-card);
+        border-bottom: var(--boxel-border-card);
+        color: var(--muted-foreground, var(--boxel-450));
+        font: var(--boxel-font-xs);
+      }
+      h4 {
+        margin: 0;
+        font-weight: 500;
+      }
+    </style>
+  </template>;
+
+interface PreviewTemplateSignature {
+  Args: { specs: { items: Spec[]; title: string }[] };
+  Blocks: { default: [spec: Spec] };
+}
+
+const FittedUsagePreview: TemplateOnlyComponent<PreviewTemplateSignature> =
+  <template>
+    <div class='scroller' tabindex='0'>
+      <h3>Standard Fitted Sizes</h3>
+      {{#each @specs as |specGroup|}}
+        <h3>{{specGroup.title}}</h3>
+        {{#each specGroup.items as |spec|}}
+          <FittedItemContainer @spec={{spec}}>
+            {{yield spec}}
+          </FittedItemContainer>
+        {{/each}}
+      {{/each}}
+    </div>
+    <style scoped>
+      .scroller {
+        max-height: 40vh;
+        overflow-y: scroll;
+        border: 1px solid var(--border, var(--boxel-200));
+        padding: 10px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: var(--boxel-sp-xs);
+      }
+      h3 {
+        grid-column: -1 / 1;
+        font-weight: 500;
+      }
+    </style>
+  </template>;
 
 export default class BasicFittedUsage extends Component {
-  @tracked primary: string = 'The Primary';
-  @tracked secondary: string = 'Secondary';
-  @tracked description: string = 'This is the description. It is often longer';
-  @tracked thumbnailURL: string = 'https://i.imgur.com/RZ0rsfxt.jpg';
-  iconComponent = Captions;
+  @tracked primary: string =
+    'Primary: Singularity’s Echo – A Mind-Bending Sci-Fi Masterpiece';
+  @tracked secondary: string = 'Secondary: Robert Fields';
+  @tracked description: string =
+    'Description: In an era hungry for originality, "Singularity’s Echo" emerges as a luminous beacon in the cosmic darkness—an audacious journey that redefines what viewers can expect from the genre. Directed by the elusive auteur Oruni Kilrain, this film harnesses the raw power of interstellar wonder and transforms it into a multilayered narrative tapestry. Blending heart-stirring drama with disorienting visuals, "Singularity’s Echo" reminds us that true cinematic frontiers remain ripe for exploration, stretching beyond the gravitational pull of safe storytelling.';
+  @tracked thumbnailURL: string =
+    'https://boxel-images.boxel.ai/app-assets/blog-posts/space-movie-thumb.jpeg';
+  iconComponent: Icon = Captions;
+  specs = [
+    ...FITTED_FORMATS.flatMap((format) => ({
+      title: format.name,
+      items: format.specs,
+    })),
+    {
+      title: 'More Sizes',
+      items: OTHER_SIZES,
+    },
+  ];
 
   <template>
-    {{! template-lint-disable no-inline-styles }}
-    <FreestyleUsage
-      @name='BasicFitted'
-      @description='Designed to render well inside a CSS container with container-name: fitted-card, container-type: size'
-    >
+    {{! template-lint-disable no-inline-styles style-concatenation }}
+    <FreestyleUsage @name='BasicFitted'>
+      <:description>
+        Designed to render well inside a CSS container with the following
+        properties specified:
+        <pre
+        >
+          .sample-container-class {
+            container-name: fitted-card;
+            container-type: size;
+            width: /* ... */;
+            height: /* ... */;
+          }
+        </pre>
+      </:description>
       <:example>
-        <div class='scroller' tabindex='0'>
-          <div class='item'>
-            <div class='desc'>Aspect Ratio 1.0, 226px &times; 226px</div>
-            <CardContainer
-              @displayBoundaries={{true}}
-              class='card'
-              style='width: 226px; height: 226px'
-            >
-              <BasicFitted
-                @primary={{this.primary}}
-                @secondary={{this.secondary}}
-                @description={{this.description}}
-                @thumbnailURL={{this.thumbnailURL}}
-                @iconComponent={{this.iconComponent}}
-              />
-            </CardContainer>
-          </div>
-          <div class='item'>
-            <div class='desc'>Aspect Ratio 0.73, 164px &times; 224px</div>
-            <CardContainer
-              @displayBoundaries={{true}}
-              class='card'
-              style='width: 164px; height: 224px'
-            >
-              <BasicFitted
-                @primary={{this.primary}}
-                @secondary={{this.secondary}}
-                @description={{this.description}}
-                @thumbnailURL={{this.thumbnailURL}}
-                @iconComponent={{this.iconComponent}}
-              />
-            </CardContainer>
-          </div>
-          <div class='item'>
-            <div class='desc'>Aspect Ratio 0.91, 164px &times; 180px</div>
-            <CardContainer
-              @displayBoundaries={{true}}
-              class='card'
-              style='width: 164px; height: 180px'
-            >
-              <BasicFitted
-                @primary={{this.primary}}
-                @secondary={{this.secondary}}
-                @description={{this.description}}
-                @thumbnailURL={{this.thumbnailURL}}
-                @iconComponent={{this.iconComponent}}
-              />
-            </CardContainer>
-          </div>
-          <div class='item'>
-            <div class='desc'>Aspect Ratio 0.95, 140px &times; 148px</div>
-            <CardContainer
-              @displayBoundaries={{true}}
-              class='card'
-              style='width: 140px; height: 148px'
-            >
-              <BasicFitted
-                @primary={{this.primary}}
-                @secondary={{this.secondary}}
-                @description={{this.description}}
-                @thumbnailURL={{this.thumbnailURL}}
-                @iconComponent={{this.iconComponent}}
-              />
-            </CardContainer>
-          </div>
-          <div class='item'>
-            <div class='desc'>Aspect Ratio 0.94, 120px &times; 128px</div>
-            <CardContainer
-              @displayBoundaries={{true}}
-              class='card'
-              style='width: 120px; height: 128px'
-            >
-              <BasicFitted
-                @primary={{this.primary}}
-                @secondary={{this.secondary}}
-                @description={{this.description}}
-                @thumbnailURL={{this.thumbnailURL}}
-                @iconComponent={{this.iconComponent}}
-              />
-            </CardContainer>
-          </div>
-          <div class='item'>
-            <div class='desc'>Aspect Ratio 0.85, 100px &times; 118px</div>
-            <CardContainer
-              @displayBoundaries={{true}}
-              class='card'
-              style='width: 100px; height: 118px'
-            >
-              <BasicFitted
-                @primary={{this.primary}}
-                @secondary={{this.secondary}}
-                @description={{this.description}}
-                @thumbnailURL={{this.thumbnailURL}}
-                @iconComponent={{this.iconComponent}}
-              />
-            </CardContainer>
-          </div>
-          <div class='item'>
-            <div class='desc'>Aspect Ratio 0.25, 100px &times; 400px</div>
-            <CardContainer
-              @displayBoundaries={{true}}
-              class='card'
-              style='width: 100px; height: 400px'
-            >
-              <BasicFitted
-                @primary={{this.primary}}
-                @secondary={{this.secondary}}
-                @description={{this.description}}
-                @thumbnailURL={{this.thumbnailURL}}
-                @iconComponent={{this.iconComponent}}
-              />
-            </CardContainer>
-          </div>
-          <div class='item'>
-            <div class='desc'>Aspect Ratio 1.9, 151px &times; 78px</div>
-            <CardContainer
-              @displayBoundaries={{true}}
-              class='card'
-              style='width: 151px; height: 78px'
-            >
-              <BasicFitted
-                @primary={{this.primary}}
-                @secondary={{this.secondary}}
-                @description={{this.description}}
-                @thumbnailURL={{this.thumbnailURL}}
-                @iconComponent={{this.iconComponent}}
-              />
-            </CardContainer>
-          </div>
-          <div class='item'>
-            <div class='desc'>Aspect Ratio 1.99, 300px &times; 151px</div>
-            <CardContainer
-              @displayBoundaries={{true}}
-              class='card'
-              style='width: 300px; height: 151px'
-            >
-              <BasicFitted
-                @primary={{this.primary}}
-                @secondary={{this.secondary}}
-                @description={{this.description}}
-                @thumbnailURL={{this.thumbnailURL}}
-                @iconComponent={{this.iconComponent}}
-              />
-            </CardContainer>
-          </div>
-          <div class='item'>
-            <div class='desc'>Aspect Ratio 1.66, 300px &times; 180px</div>
-            <CardContainer
-              @displayBoundaries={{true}}
-              class='card'
-              style='width: 300px; height: 180px'
-            >
-              <BasicFitted
-                @primary={{this.primary}}
-                @secondary={{this.secondary}}
-                @description={{this.description}}
-                @thumbnailURL={{this.thumbnailURL}}
-                @iconComponent={{this.iconComponent}}
-              />
-            </CardContainer>
-          </div>
-          <div class='item'>
-            <div class='desc'>Aspect Ratio 3.4, 100px &times; 29px</div>
-            <CardContainer
-              @displayBoundaries={{true}}
-              class='card'
-              style='width: 100px; height: 29px'
-            >
-              <BasicFitted
-                @primary={{this.primary}}
-                @secondary={{this.secondary}}
-                @description={{this.description}}
-                @thumbnailURL={{this.thumbnailURL}}
-                @iconComponent={{this.iconComponent}}
-              />
-            </CardContainer>
-          </div>
-          <div class='item'>
-            <div class='desc'>Aspect Ratio 2.6, 150px &times; 58px</div>
-            <CardContainer
-              @displayBoundaries={{true}}
-              class='card'
-              style='width: 150px; height: 58px'
-            >
-              <BasicFitted
-                @primary={{this.primary}}
-                @secondary={{this.secondary}}
-                @description={{this.description}}
-                @thumbnailURL={{this.thumbnailURL}}
-                @iconComponent={{this.iconComponent}}
-              />
-            </CardContainer>
-          </div>
-          <div class='item'>
-            <div class='desc'>Aspect Ratio 3.9, 226px &times; 58px</div>
-            <CardContainer
-              @displayBoundaries={{true}}
-              class='card'
-              style='width: 226px; height: 58px'
-            >
-              <BasicFitted
-                @primary={{this.primary}}
-                @secondary={{this.secondary}}
-                @description={{this.description}}
-                @thumbnailURL={{this.thumbnailURL}}
-                @iconComponent={{this.iconComponent}}
-              />
-            </CardContainer>
-          </div>
-          <div class='item'>
-            <div class='desc'>Aspect Ratio 2.6, 300px &times; 115px</div>
-            <CardContainer
-              @displayBoundaries={{true}}
-              class='card'
-              style='width: 300px; height: 115px'
-            >
-              <BasicFitted
-                @primary={{this.primary}}
-                @secondary={{this.secondary}}
-                @description={{this.description}}
-                @thumbnailURL={{this.thumbnailURL}}
-                @iconComponent={{this.iconComponent}}
-              />
-            </CardContainer>
-          </div>
-        </div>
+        <FittedUsagePreview @specs={{this.specs}} as |spec|>
+          <CardContainer
+            @displayBoundaries={{true}}
+            style='container-name: fitted-card; container-type: size; width: {{spec.width}}px; height: {{spec.height}}px'
+          >
+            <BasicFitted
+              @primary={{this.primary}}
+              @secondary={{this.secondary}}
+              @description={{this.description}}
+              @thumbnailURL={{this.thumbnailURL}}
+              @iconComponent={{this.iconComponent}}
+            />
+          </CardContainer>
+        </FittedUsagePreview>
       </:example>
-
       <:api as |Args|>
         <Args.String
           @name='primary'
@@ -294,42 +331,10 @@ export default class BasicFittedUsage extends Component {
         />
         <Args.Component
           @name='iconComponent'
-          @description='Component for the card type icon'
+          @description='Component for the thumbnail icon'
           @value={{this.iconComponent}}
         />
       </:api>
     </FreestyleUsage>
-    <style scoped>
-      .scroller {
-        max-height: 40vh;
-        overflow-y: scroll;
-        border: 2px inset var(--boxel-200);
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: var(--boxel-sp-xs);
-      }
-      .card {
-        container-name: fitted-card;
-        container-type: size;
-        overflow: hidden;
-      }
-      .item {
-        position: relative;
-        padding: var(--boxel-sp);
-        background-color: var(--boxel-100);
-      }
-      .desc {
-        position: absolute;
-        top: 0;
-        right: 0;
-        padding: var(--boxel-sp-4xs);
-        background-color: var(--boxel-light);
-        border-left: var(--boxel-border-card);
-        border-right: var(--boxel-border-card);
-        border-bottom: var(--boxel-border-card);
-        color: var(--boxel-450);
-        font: var(--boxel-font-xs);
-      }
-    </style>
   </template>
 }

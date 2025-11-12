@@ -27,10 +27,11 @@ import {
   type TokenClaims,
   type RunnerRegistration,
   type IndexRunner,
-  type IndexResults,
   type Prerenderer,
-  type FromScratchArgsWithPermissions,
-  type IncrementalArgsWithPermissions,
+  type FromScratchArgs,
+  type IncrementalArgs,
+  type FromScratchResult,
+  type IncrementalResult,
   insertPermissions,
   unixTime,
   RealmAction,
@@ -95,7 +96,10 @@ export function cleanWhiteSpace(text: string) {
   // this also normalizes non-breaking space characters which seem
   // to be appearing in date/time serialization in some envs
 
-  return text.replace('<!---->', '').replace(/[\s]+/g, ' ').trim();
+  return text
+    .replace(/<!---->/g, '')
+    .replace(/[\s]+/g, ' ')
+    .trim();
 }
 
 export function getMonacoContent(
@@ -324,18 +328,14 @@ class MockLocalIndexer extends Service {
   #indexWriter: IndexWriter | undefined;
   #prerenderer: Prerenderer | undefined;
   #fromScratch:
-    | ((args: FromScratchArgsWithPermissions) => Promise<IndexResults>)
+    | ((args: FromScratchArgs) => Promise<FromScratchResult>)
     | undefined;
   #incremental:
-    | ((args: IncrementalArgsWithPermissions) => Promise<IndexResults>)
+    | ((args: IncrementalArgs) => Promise<IncrementalResult>)
     | undefined;
   setup(
-    fromScratch: (
-      args: FromScratchArgsWithPermissions,
-    ) => Promise<IndexResults>,
-    incremental: (
-      args: IncrementalArgsWithPermissions,
-    ) => Promise<IndexResults>,
+    fromScratch: (args: FromScratchArgs) => Promise<FromScratchResult>,
+    incremental: (args: IncrementalArgs) => Promise<IncrementalResult>,
     prerenderer: Prerenderer,
   ) {
     this.#fromScratch = fromScratch;
