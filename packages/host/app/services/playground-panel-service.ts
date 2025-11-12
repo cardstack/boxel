@@ -145,6 +145,12 @@ export default class PlaygroundPanelService extends Service {
     );
   };
 
+  resetSelections = () => {
+    this.playgroundSelections = new TrackedObject({});
+    this.selectionsForNewInstances.clear();
+    window.localStorage.removeItem(PlaygroundSelections);
+  };
+
   getSelection = (moduleId: string) => {
     return this.playgroundSelections[moduleId];
   };
