@@ -46,6 +46,8 @@ import {
   type FieldDefinition,
   type RealmPermissions,
   type RealmAction,
+  type LintArgs,
+  type LintResult,
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
   userInitiatedPriority,
@@ -101,7 +103,6 @@ import type {
   RealmEventContent,
   UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
-import type { LintArgs, LintResult } from './lint';
 import type {
   AtomicOperation,
   AtomicOperationResult,
@@ -640,16 +641,16 @@ export class Realm {
     let lastWriteType: 'module' | 'instance' | undefined;
     let currentWriteType: 'module' | 'instance' | undefined;
     let invalidations: Set<string> = new Set();
-    let clientRequestId: string | null | undefined;
+    let clientRequestId: string | null = options?.clientRequestId ?? null;
     let performIndex = async () => {
       await this.#realmIndexUpdater.update(urls, {
+        clientRequestId,
         onInvalidation: (invalidatedURLs: URL[]) => {
           this.handleExecutableInvalidations(invalidatedURLs);
           invalidations = new Set([
             ...invalidations,
             ...invalidatedURLs.map((u) => u.href),
           ]);
-          clientRequestId = clientRequestId ?? options?.clientRequestId;
         },
       });
     };
@@ -1621,7 +1622,7 @@ export class Realm {
     let authorizationString = request.headers.get('Authorization');
     if (!authorizationString) {
       this.#log.warn(
-        `auth failed for ${request.method} ${request.url} missing auth header`,
+        `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) missing auth header`,
       );
       throw new AuthenticationError(
         AuthenticationErrorMessages.MissingAuthHeader,
@@ -1662,7 +1663,7 @@ export class Realm {
           JSON.stringify(userPermissions.sort())
       ) {
         this.#log.warn(
-          `auth failed for ${request.method} ${request.url}, for user ${user} token permissions do not match realm permissions for user. token permissions: ${JSON.stringify(token.permissions?.sort())}, user's realm permissions: ${JSON.stringify(userPermissions.sort())}`,
+          `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), for user ${user} token permissions do not match realm permissions for user. token permissions: ${JSON.stringify(token.permissions?.sort())}, user's realm permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
         throw new AuthenticationError(
           AuthenticationErrorMessages.PermissionMismatch,
@@ -1671,7 +1672,7 @@ export class Realm {
 
       if (!(await realmPermissionChecker.can(user, requiredPermission))) {
         this.#log.warn(
-          `auth failed for ${request.method} ${request.url}, for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
+          `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
         throw new AuthorizationError(
           'Insufficient permissions to perform this action',
@@ -1680,13 +1681,13 @@ export class Realm {
     } catch (e: any) {
       if (e instanceof TokenExpiredError) {
         this.#log.warn(
-          `JWT verification failed for ${request.method} ${request.url} with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
+          `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
       if (e instanceof JsonWebTokenError) {
         this.#log.warn(
-          `JWT verification failed for ${request.method} ${request.url} with token string ${tokenString}. ${e.message}`,
+          `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }

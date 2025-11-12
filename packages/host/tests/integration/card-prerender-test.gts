@@ -314,7 +314,6 @@ module('Integration | card-prerender', function (hooks) {
               <h3 class="card-title" data-test-card-title>${title}</h3>
               <h4 class="card-display-name" data-test-card-display-name> ${type} </h4>
             </div>
-            <div class="card-description" data-test-card-description></div>
           </div>
       `),
       );

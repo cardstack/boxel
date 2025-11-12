@@ -9,6 +9,8 @@ module.exports = {
     bool: ['bool', '@cardstack/boxel-ui/helpers'],
     concat: ['concat', '@ember/helper'],
     divide: ['divide', '@cardstack/boxel-ui/helpers'],
+    enumOptions: ['enumOptions', 'https://cardstack.com/base/enum'],
+    enumValues: ['enumValues', 'https://cardstack.com/base/enum'],
     eq: ['eq', '@cardstack/boxel-ui/helpers'],
     fn: ['fn', '@ember/helper'],
     formatDateTime: ['formatDateTime', '@cardstack/boxel-ui/helpers'],

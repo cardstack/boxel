@@ -11,12 +11,12 @@ import type {
 
 type Validation = NormalizePhoneFormatResult | null | undefined;
 
-const phoneInput = '[data-test-boxel-phone-input-group] input';
+const phoneInput = '[data-test-boxel-phone-input]';
 
 module('Integration | Component | phone-input', function (hooks) {
   setupRenderingTest(hooks);
 
-  test('it normalizes valid numbers on blur and shows the related flag', async function (assert) {
+  test('it formats valid numbers', async function (assert) {
     let value: string | null = null;
     let validation: Validation;
     let event: Event | undefined;
@@ -36,11 +36,10 @@ module('Integration | Component | phone-input', function (hooks) {
     </template>);
 
     await fillIn(phoneInput, '2025550125');
-    await triggerEvent(phoneInput, 'blur');
 
     assert
-      .dom('[data-test-boxel-phone-input-group]')
-      .hasAttribute('data-test-boxel-input-group-validation-state', 'valid');
+      .dom(`${phoneInput}[data-test-boxel-input-validation-state='valid']`)
+      .exists();
 
     let validationResult =
       validation?.ok && 'value' in validation
@@ -62,7 +61,6 @@ module('Integration | Component | phone-input', function (hooks) {
       'US',
       'validation reports detected region code',
     );
-    assert.dom('[data-test-boxel-phone-input-flag]').hasText('🇺🇸');
     assert.ok(event, 'onChange receives the originating event');
   });
 
@@ -86,10 +84,10 @@ module('Integration | Component | phone-input', function (hooks) {
     await triggerEvent(phoneInput, 'blur');
 
     assert
-      .dom('[data-test-boxel-phone-input-group]')
-      .hasAttribute('data-test-boxel-input-group-validation-state', 'invalid');
+      .dom(`${phoneInput}[data-test-boxel-input-validation-state="invalid"]`)
+      .exists();
     assert
-      .dom('[data-test-boxel-input-group-error-message]')
+      .dom('[data-test-boxel-input-error-message]')
       .hasText('Phone number is too short');
     assert.strictEqual(
       value,
@@ -129,9 +127,9 @@ module('Integration | Component | phone-input', function (hooks) {
     await triggerEvent(phoneInput, 'blur');
 
     assert
-      .dom('[data-test-boxel-phone-input-group]')
-      .hasAttribute('data-test-boxel-input-group-validation-state', 'initial');
-    assert.dom('[data-test-boxel-input-group-error-message]').doesNotExist();
+      .dom(`${phoneInput}[data-test-boxel-input-validation-state="initial"]`)
+      .exists();
+    assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
     assert.strictEqual(
       value,
       '',
@@ -142,9 +140,6 @@ module('Integration | Component | phone-input', function (hooks) {
       null,
       'onChange receives null validation result',
     );
-    assert
-      .dom('[data-test-boxel-phone-input-flag]')
-      .doesNotExist('flag is cleared when the input is empty');
   });
 
   test('it requires a value when marked as required', async function (assert) {
@@ -158,10 +153,10 @@ module('Integration | Component | phone-input', function (hooks) {
     await triggerEvent(phoneInput, 'blur');
 
     assert
-      .dom('[data-test-boxel-phone-input-group]')
-      .hasAttribute('data-test-boxel-input-group-validation-state', 'invalid');
+      .dom(`${phoneInput}[data-test-boxel-input-validation-state="invalid"]`)
+      .exists();
     assert
-      .dom('[data-test-boxel-input-group-error-message]')
+      .dom('[data-test-boxel-input-error-message]')
       .hasText('Enter a phone number');
     assert.strictEqual(value, '', 'value is updated');
   });

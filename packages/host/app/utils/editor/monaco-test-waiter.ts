@@ -64,6 +64,12 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
 
     trackEditorInit(editor, operationId): void {
       let isInitialized = false;
+      const isDiffEditor =
+        'getLineChanges' in editor &&
+        typeof editor.getLineChanges === 'function';
+      const diffEditor = isDiffEditor
+        ? (editor as MonacoSDK.editor.IStandaloneDiffEditor)
+        : null;
 
       // For diff editors, we track the modified editor which contains the primary content
       const targetEditor =
@@ -88,11 +94,43 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
         );
       };
 
-      const checkInitComplete = () => {
-        if (isInitialized) return;
+      // Render waits on Monaco UI elements that appear asynchronously:
+      // 1. Layout of the text viewport + scroll area (so the code area actually has size)
+      // 2. Diff overview ruler for diff editors (the colored heat map in the scroll gutter)
+      // 3. Bracket/indent guides (the vertical indentation highlight blocks inside the code area)
+      let layoutReady = false;
+      let diffReady = !diffEditor;
+      // Diff computation emits multiple updates; wait until results stabilize
+      let diffStableCount = 0;
+      let lastDiffSignature: string | null = null;
+      const indentGuidesExpected = (() => {
+        const model = targetEditor.getModel();
+        if (!model) return false;
+        const maxLines = Math.min(model.getLineCount(), 200);
+        for (let lineNumber = 1; lineNumber <= maxLines; lineNumber++) {
+          const lineText = model.getLineContent(lineNumber);
+          if (!lineText) continue;
+          const leadingWhitespace = lineText.match(/^\s+/u)?.[0]?.length ?? 0;
+          if (leadingWhitespace >= 2) {
+            return true;
+          }
+        }
+        return false;
+      })();
+      let indentGuidesReady = !indentGuidesExpected;
+      let tokenizationForced = false;
 
-        // Editor is considered initialized when it has content dimensions
-        // and layout is complete
+      const ensureTokenization = () => {
+        if (tokenizationForced) return;
+        tokenizationForced = true;
+
+        forceFullTokenization(targetEditor);
+        if ('getOriginalEditor' in editor) {
+          forceFullTokenization(editor.getOriginalEditor());
+        }
+      };
+
+      const updateLayoutReady = () => {
         const contentHeight = targetEditor.getContentHeight();
         const layoutInfo = targetEditor.getLayoutInfo();
 
@@ -101,45 +139,138 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
           layoutInfo.width > 0 &&
           layoutInfo.height > 0
         ) {
-          forceFullTokenization(targetEditor);
-          if ('getOriginalEditor' in editor) {
-            forceFullTokenization(editor.getOriginalEditor());
-          }
-
-          isInitialized = true;
-          this.endAsync(operationId);
+          layoutReady = true;
         }
+      };
+
+      const updateIndentGuidesReady = () => {
+        if (indentGuidesReady) return;
+        const domNode = targetEditor.getDomNode();
+        if (!domNode) return;
+        if (indentGuidesExpected) {
+          ensureTokenization();
+        }
+        const guide = domNode.querySelector(
+          '.core-guide.bracket-indent-guide, .core-guide-indent',
+        );
+        if (guide) {
+          indentGuidesReady = true;
+        }
+      };
+
+      const updateDiffReady = () => {
+        if (!diffEditor) return;
+        const lineChanges = diffEditor.getLineChanges();
+        if (!lineChanges) {
+          return;
+        }
+
+        if (lineChanges.length === 0) {
+          diffReady = true;
+          return;
+        }
+
+        const diffSignature = lineChanges
+          .map((change) => {
+            const changeSignature = [
+              change.originalStartLineNumber,
+              change.originalEndLineNumber,
+              change.modifiedStartLineNumber,
+              change.modifiedEndLineNumber,
+            ].join(':');
+
+            const charSignature =
+              change.charChanges
+                ?.map((charChange) =>
+                  [
+                    charChange.originalStartLineNumber,
+                    charChange.originalEndLineNumber,
+                    charChange.modifiedStartLineNumber,
+                    charChange.modifiedEndLineNumber,
+                    charChange.originalStartColumn,
+                    charChange.originalEndColumn,
+                    charChange.modifiedStartColumn,
+                    charChange.modifiedEndColumn,
+                  ].join(':'),
+                )
+                .join(',') ?? '';
+
+            return `${changeSignature}|${charSignature}`;
+          })
+          .join(';');
+
+        if (diffSignature === lastDiffSignature) {
+          diffStableCount += 1;
+        } else {
+          lastDiffSignature = diffSignature;
+          diffStableCount = 1;
+        }
+
+        if (diffStableCount >= 2) {
+          diffReady = true;
+        }
+      };
+
+      const checkInitComplete = () => {
+        if (isInitialized) return;
+
+        if (!layoutReady || !diffReady || !indentGuidesReady) {
+          return;
+        }
+
+        ensureTokenization();
+        isInitialized = true;
+        this.endAsync(operationId);
       };
 
       // Listen for layout changes to detect when initialization is complete
       const layoutDisposable = targetEditor.onDidLayoutChange(() => {
+        updateLayoutReady();
+        updateIndentGuidesReady();
         checkInitComplete();
       });
 
       // Listen for content size changes as well
       const contentSizeDisposable = targetEditor.onDidContentSizeChange(() => {
+        updateLayoutReady();
+        updateIndentGuidesReady();
         checkInitComplete();
       });
 
       // For diff editors, also listen to diff updates
       let diffDisposable: MonacoSDK.IDisposable | undefined;
-      if ('getModifiedEditor' in editor) {
-        diffDisposable = editor.onDidUpdateDiff(() => {
+      if (diffEditor) {
+        diffDisposable = diffEditor.onDidUpdateDiff(() => {
+          updateDiffReady();
           checkInitComplete();
         });
       }
 
+      const decorationsDisposable = targetEditor.onDidChangeModelDecorations(
+        () => {
+          updateIndentGuidesReady();
+          checkInitComplete();
+        },
+      );
+
+      // Run an initial readiness check in case everything is already available
+      updateLayoutReady();
+      updateDiffReady();
+      updateIndentGuidesReady();
+      checkInitComplete();
+
       // Fallback timeout to prevent hanging tests
       const timeoutId = setTimeout(() => {
         if (!isInitialized) {
-          forceFullTokenization(targetEditor);
-          if ('getOriginalEditor' in editor) {
-            forceFullTokenization(editor.getOriginalEditor());
-          }
+          updateLayoutReady();
+          updateDiffReady();
+          updateIndentGuidesReady();
+          ensureTokenization();
           isInitialized = true;
           layoutDisposable.dispose();
           contentSizeDisposable.dispose();
           diffDisposable?.dispose();
+          decorationsDisposable.dispose();
           this.endAsync(operationId);
         }
       }, 2000);
@@ -152,6 +283,7 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
           layoutDisposable.dispose();
           contentSizeDisposable.dispose();
           diffDisposable?.dispose();
+          decorationsDisposable.dispose();
           // Restore original endAsync
           this.endAsync = originalEndAsync;
         }

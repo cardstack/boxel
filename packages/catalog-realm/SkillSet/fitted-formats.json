@@ -1,0 +1,30 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Skill",
+        "module": "https://cardstack.com/base/skill"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": "Fitted Formats",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "commands": [],
+      "description": "Four sub-formats strategy for responsive card layouts",
+      "instructions": "## Fitted Format Essentials\n\n**Four sub-formats strategy:**\n- **Badge** (≤150px width, <170px height) - Exportable graphics\n- **Strip** (>150px width, <170px height) - Dropdown/chooser panels\n- **Tile** (<400px width, ≥170px height) - Grid viewing\n- **Card** (≥400px width, ≥170px height) - Full layout\n\n**Container query skeleton:**\n```css\n.fitted-container {\n  container-type: size;\n  width: 100%;\n  height: 100%;\n}\n\n/* Hide all by default */\n.badge, .strip, .tile, .card {\n  display: none;\n  padding: clamp(0.25rem, 2%, 0.5rem);\n}\n\n/* Activate by size - NO GAPS! */\n@container (max-width: 150px) and (max-height: 169px) {\n  .badge { display: flex; }\n}\n```\n\n**Content priority:**\n1. Title/Name\n2. Image\n3. Short ID\n4. Key info\n5. Status badges\n\n<!--more-->\n\n# Fitted Formats - Four Sub-formats Strategy\n\n## Core Concept\n\nCreate 4 subformats that activate based on container size:\n- **Badge** (≤150px width, <170px height)\n- **Strip** (>150px width, <170px height)\n- **Tile** (<400px width, ≥170px height)\n- **Card** (≥400px width, ≥170px height)\n\n## Container Size Decision Tree\n\n```\nContainer Size\n    │\n    ├─ Height < 170px (Horizontal)\n    │   ├─ Width ≤ 150px → BADGE\n    │   └─ Width > 150px → STRIP\n    │\n    └─ Height ≥ 170px (Vertical)\n        ├─ Width < 400px → TILE\n        └─ Width ≥ 400px → CARD\n```\n\n## Container Query Skeleton\n\n```css\n.fitted-container {\n  width: 100%;\n  height: 100%;\n}\n\n.badge-format, .strip-format, .tile-format, .card-format {\n  display: none;\n  width: 100%;\n  height: 100%;\n  padding: clamp(0.375rem, 3%, 0.75rem);\n  box-sizing: border-box;\n}\n\n@container (max-width: 150px) and (max-height: 169px) {\n  .badge-format { display: flex; }\n}\n\n@container (min-width: 151px) and (max-height: 169px) {\n  .strip-format { display: flex; }\n}\n\n@container (max-width: 399px) and (min-height: 170px) {\n  .tile-format { display: flex; flex-direction: column; }\n}\n\n@container (min-width: 400px) and (min-height: 170px) {\n  .card-format { display: flex; flex-direction: column; }\n}\n```\n\n## Subformat Rules\n\n**Badge:**\n- Exportable graphics feel\n- Left-aligned\n- Images: 16-34px\n- Heights: 40px (horizontal), 65px (stacked), 105px (magnetic edges)\n\n**Strip:**\n- Dropdown/chooser panels\n- Title MUST ALWAYS be visible\n- Left-aligned\n- Images: 20-34px at 40px, 40px at 65px+\n\n**Tile:**\n- Standard vertical card\n- Grid viewing\n- Primary identity fully visible\n- Last element magnetically sticks to bottom\n\n**Card:**\n- 400×170: Horizontal split at golden ratio\n- Larger: Vertically subdivided\n- Expanded MUST use all vertical space\n\n## Content Priority\n\n1. Title/Name\n2. Image\n3. Short ID\n4. Key Info\n5. Badge/Status\n6. Metadata\n7. Description\n8. CTA (hover only)\n\n## Typography Hierarchy\n\n- **Size cascade:** 80-87% per level (1em → 0.875em → 0.75em)\n- **Weight cascade:** Drop 100-200 units per level\n- **Spacing cascade:** 50% → 37.5% → 25%"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
