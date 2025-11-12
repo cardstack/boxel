@@ -466,9 +466,9 @@ export class Realm {
         this.getResourceIndex.bind(this),
       )
       .get(
-        '/_has-private-dependencies',
+        '/_publishability',
         SupportedMimeType.JSONAPI,
-        this.hasPrivateExternalDependencies.bind(this),
+        this.publishability.bind(this),
       )
       .get(
         '/_dependencies',
@@ -2832,7 +2832,7 @@ export class Realm {
     });
   }
 
-  private async hasPrivateExternalDependencies(
+  private async publishability(
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {

@@ -17,7 +17,11 @@ import {
   DEFAULT_PERMISSIONS,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
-import { PgAdapter, PgQueuePublisher, PgQueueRunner } from '@cardstack/postgres';
+import {
+  PgAdapter,
+  PgQueuePublisher,
+  PgQueueRunner,
+} from '@cardstack/postgres';
 
 import {
   closeServer,
@@ -125,7 +129,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     });
 
     let response = await request
-      .get(`${new URL(url).pathname}_has-private-dependencies`)
+      .get(`${new URL(url).pathname}_publishability`)
       .set('Accept', SupportedMimeType.JSONAPI)
       .set(
         'Authorization',
@@ -195,7 +199,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     });
 
     let response = await request
-      .get(`${new URL(sourceRealmURL).pathname}_has-private-dependencies`)
+      .get(`${new URL(sourceRealmURL).pathname}_publishability`)
       .set('Accept', SupportedMimeType.JSONAPI)
       .set(
         'Authorization',
@@ -321,7 +325,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     });
 
     let response = await request
-      .get(`${new URL(sourceRealmURL).pathname}_has-private-dependencies`)
+      .get(`${new URL(sourceRealmURL).pathname}_publishability`)
       .set('Accept', SupportedMimeType.JSONAPI)
       .set(
         'Authorization',
@@ -431,7 +435,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     });
 
     let response = await request
-      .get(`${new URL(sourceRealmURL).pathname}_has-private-dependencies`)
+      .get(`${new URL(sourceRealmURL).pathname}_publishability`)
       .set('Accept', SupportedMimeType.JSONAPI)
       .set(
         'Authorization',
@@ -517,7 +521,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
       });
 
       let response = await request
-        .get(`${new URL(sourceRealmURL).pathname}_has-private-dependencies`)
+        .get(`${new URL(sourceRealmURL).pathname}_publishability`)
         .set('Accept', SupportedMimeType.JSONAPI)
         .set(
           'Authorization',
@@ -622,7 +626,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     await privateRealm.realmIndexUpdater.fullIndex();
 
     let response = await request
-      .get(`${new URL(sourceRealmURL).pathname}_has-private-dependencies`)
+      .get(`${new URL(sourceRealmURL).pathname}_publishability`)
       .set('Accept', SupportedMimeType.JSONAPI)
       .set(
         'Authorization',
@@ -695,7 +699,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     await realm.realmIndexUpdater.fullIndex();
 
     let response = await request
-      .get(`${new URL(url).pathname}_has-private-dependencies`)
+      .get(`${new URL(url).pathname}_publishability`)
       .set('Accept', SupportedMimeType.JSONAPI)
       .set(
         'Authorization',
