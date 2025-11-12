@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "ThemeCreator",
+        "module": "../theme-creator"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "realm": "http://localhost:4201/catalog/",
+      "prompt": "",
+      "codeRef": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "numberOfVariants": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

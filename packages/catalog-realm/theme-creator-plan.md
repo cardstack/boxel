@@ -70,7 +70,7 @@ export class ThemeCreatorCard extends CardDef {
 - Secondary users: design reviewers who inspect generated drafts before approving publication.
 
 ## TODO / Commit-Sized Tasks
-- [ ] Build Visual 1 (Prompt Controls): field wiring, FieldContainer layout, generate/regenerate buttons, inline guidance.
+- [x] Build Visual 1 (Prompt Controls): field wiring, FieldContainer layout, generate/regenerate buttons, inline guidance.
 - [ ] Configure `codeRef` field dropdown with the three generator modules + helper copy (lives alongside Visual 1 form).
 - [ ] Build Visual 2 (Existing Cards Inspector): reuse/port `PaginatedCards`, wire filters, copy + view/edit actions.
 - [ ] Build Visual 3 (Newly Generated Cards): `PaginatedCards` with view/edit/tweak buttons, multi-select + delete-all UX, and per-row progress indicators for in-flight generations.
