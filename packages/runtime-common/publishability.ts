@@ -118,13 +118,8 @@ export async function analyzeRealmPublishability({
         let visibility = realmVisibility.get(dependencyRealmURL) ?? 'private';
         if (visibility !== 'public') {
           chains.push([resourceUrl, dependency]);
-          continue;
         }
-
-        let subchains = await collectChains(dependency, updatedAncestry);
-        for (let subchain of subchains) {
-          chains.push([resourceUrl, ...subchain]);
-        }
+        continue;
       }
     }
 
