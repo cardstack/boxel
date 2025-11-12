@@ -1,61 +1,30 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
+import { appURL } from '../helpers/isolated-realm-server';
 import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-  registerUser,
-} from '../docker/synapse';
-import {
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-  appURL,
-} from '../helpers/isolated-realm-server';
-import {
-  clearLocalStorage,
   createRealm,
-  login,
-  registerRealmUsers,
   showAllCards,
-  setupUserSubscribed,
   patchCardInstance,
   postCardSource,
   postNewCard,
   getMonacoContent,
   waitUntil,
+  createSubscribedUserAndLogin,
 } from '../helpers';
 
 test.describe('Live Cards', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
   const serverIndexUrl = new URL(appURL).origin;
   const realmName = 'realm1';
-  const realmURL = new URL(`user1/${realmName}/`, serverIndexUrl).href;
-
-  test.beforeEach(async () => {
-    // synapse defaults to 30s for beforeEach to finish, we need a bit more time
-    // to safely start the realm
-    test.setTimeout(120_000);
-    synapse = await synapseStart({
-      template: 'test',
-    });
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
-    await registerUser(synapse, 'user1', 'pass');
-    await setupUserSubscribed('@user1:localhost', realmServer);
-  });
-
-  test.afterEach(async () => {
-    await realmServer?.stop();
-    await synapseStop(synapse.synapseId);
-  });
 
   test('it can subscribe to realm events of a private realm', async ({
     page,
   }) => {
-    await clearLocalStorage(page, serverIndexUrl);
-    await login(page, 'user1', 'pass', {
-      url: serverIndexUrl,
-    });
+    let { username } = await createSubscribedUserAndLogin(
+      page,
+      'subscriber',
+      serverIndexUrl,
+    );
+
+    const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
     await createRealm(page, realmName);
     let instanceUrl = await postNewCard(page, realmURL, {
       data: {
@@ -194,10 +163,13 @@ test.describe('Live Cards', () => {
   test('updating a card in code mode edit updates its source', async ({
     page,
   }) => {
-    await clearLocalStorage(page, serverIndexUrl);
-    await login(page, 'user1', 'pass', {
-      url: serverIndexUrl,
-    });
+    let { username } = await createSubscribedUserAndLogin(
+      page,
+      'subscriber',
+      serverIndexUrl,
+    );
+
+    const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
     await createRealm(page, realmName);
     let instanceUrl = await postNewCard(page, realmURL, {
       data: {
