@@ -6,16 +6,16 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import RealmField from 'https://cardstack.com/base/realm';
 import MarkdownField from 'https://cardstack.com/base/markdown';
-import CodeRefField from 'https://cardstack.com/base/code-ref';
 import NumberField from 'https://cardstack.com/base/number';
 import { Button } from '@cardstack/boxel-ui/components';
+import ThemeCodeRefField from './fields/theme-code-ref';
 
 export class ThemeCreator extends CardDef {
   static displayName = 'Theme Creator';
 
   @field prompt = contains(MarkdownField);
   @field realm = contains(RealmField);
-  @field codeRef = contains(CodeRefField);
+  @field codeRef = contains(ThemeCodeRefField);
   @field numberOfVariants = contains(NumberField);
 
   static isolated = class Isolated extends Component<typeof ThemeCreator> {
@@ -37,7 +37,8 @@ export class ThemeCreator extends CardDef {
           <div class='theme-creator__prompt-pane theme-creator__meta-field'>
             <label class='theme-creator__label'>Prompt</label>
             <p class='theme-creator__description'>
-              Instruction to AI describing the type of theme (e.g., “a bold red festival kit”).
+              Instruction to AI describing the type of theme (e.g., “a bold red
+              festival kit”).
             </p>
             <@fields.prompt @format='edit' />
           </div>
@@ -54,7 +55,7 @@ export class ThemeCreator extends CardDef {
             <div class='theme-creator__meta-field'>
               <label class='theme-creator__label'>Code reference</label>
               <p class='theme-creator__description'>
-                Choose the theme type you want to generate (structured-theme, style-reference, or theme).
+                Choose the theme type you want to generate.
               </p>
               <@fields.codeRef @format='edit' />
             </div>
@@ -70,7 +71,10 @@ export class ThemeCreator extends CardDef {
         </div>
 
         <div class='theme-creator__actions'>
-          <Button @kind='primary' disabled={{this.isGenerateDisabled}}>Generate</Button>
+          <Button
+            @kind='primary'
+            disabled={{this.isGenerateDisabled}}
+          >Generate</Button>
         </div>
       </section>
 

@@ -11,7 +11,7 @@
       "realm": "http://localhost:4201/catalog/",
       "prompt": "",
       "codeRef": {
-        "name": "default",
+        "name": "StyleReference",
         "module": "https://cardstack.com/base/style-reference"
       },
       "cardInfo": {
