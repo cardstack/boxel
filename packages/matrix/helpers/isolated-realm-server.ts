@@ -88,7 +88,10 @@ async function waitForHttpReady(url: string, timeoutMs = 60_000) {
   throw new Error(`timed out waiting for ${url} to become ready`);
 }
 
-function stopChildProcess(proc: ChildProcess, signal: NodeJS.Signals = 'SIGINT') {
+function stopChildProcess(
+  proc: ChildProcess,
+  signal: NodeJS.Signals = 'SIGINT',
+) {
   return new Promise<void>((resolve) => {
     if (proc.exitCode !== null || proc.killed) {
       resolve();
@@ -162,7 +165,9 @@ export async function startPrerenderServer(
     console.error(`prerender: ${data.toString()}`),
   );
 
-  let exitListener: ((code: number | null, signal: NodeJS.Signals | null) => void) | undefined;
+  let exitListener:
+    | ((code: number | null, signal: NodeJS.Signals | null) => void)
+    | undefined;
   let errorListener: ((err: Error) => void) | undefined;
 
   const exitPromise = new Promise<never>((_, reject) => {
@@ -282,73 +287,64 @@ export async function startServer({
     `--toUrl='http://localhost:4205/base/'`,
   ]);
 
-  let realmServer: ChildProcess | undefined;
-  try {
-    realmServer = spawn('ts-node', serverArgs, {
-      cwd: realmServerDir,
-      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
-      env: {
-        ...process.env,
-        PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: 'localhost:4205',
-        PUBLISHED_REALM_BOXEL_SITE_DOMAIN: 'localhost:4205',
-      },
-    });
-    realmServer.unref();
-    if (realmServer.stdout) {
-      realmServer.stdout.on('data', (data: Buffer) =>
-        console.log(`realm server: ${data.toString()}`),
-      );
-    }
-    if (realmServer.stderr) {
-      realmServer.stderr.on('data', (data: Buffer) =>
-        console.error(`realm server: ${data.toString()}`),
-      );
-    }
-    realmServer.on('message', (message) => {
-      if (message === 'get-registration-secret' && realmServer.send) {
-        let secret = readFileSync(
-          join(matrixDir, 'registration_secret.txt'),
-          'utf8',
-        );
-        realmServer.send(`registration-secret:${secret}`);
-      }
-    });
-
-    let timeout = await Promise.race([
-      new Promise<void>((r) => {
-        if (!realmServer) {
-          r();
-          return;
-        }
-        const onMessage = (message: unknown) => {
-          if (message === 'ready') {
-            realmServer?.off('message', onMessage);
-            r();
-          }
-        };
-        realmServer.on('message', onMessage);
-      }),
-      new Promise<true>((r) => setTimeout(() => r(true), 60_000)),
-    ]);
-    if (timeout) {
-      throw new Error(
-        `timed-out waiting for realm server to start. Stopping server`,
-      );
-    }
-
-    return new IsolatedRealmServer(
-      realmServer,
-      workerManager,
-      testRealmDir,
-      testDBName,
+  let realmServer = spawn('ts-node', serverArgs, {
+    cwd: realmServerDir,
+    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+    env: {
+      ...process.env,
+      PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: 'localhost:4205',
+      PUBLISHED_REALM_BOXEL_SITE_DOMAIN: 'localhost:4205',
+    },
+  });
+  realmServer.unref();
+  if (realmServer.stdout) {
+    realmServer.stdout.on('data', (data: Buffer) =>
+      console.log(`realm server: ${data.toString()}`),
     );
-  } catch (err) {
-    if (realmServer) {
-      await stopChildProcess(realmServer);
-    }
-    await stopChildProcess(workerManager);
-    throw err;
   }
+  if (realmServer.stderr) {
+    realmServer.stderr.on('data', (data: Buffer) =>
+      console.error(`realm server: ${data.toString()}`),
+    );
+  }
+  realmServer.on('message', (message) => {
+    if (message === 'get-registration-secret' && realmServer.send) {
+      let secret = readFileSync(
+        join(matrixDir, 'registration_secret.txt'),
+        'utf8',
+      );
+      realmServer.send(`registration-secret:${secret}`);
+    }
+  });
+
+  let timeout = await Promise.race([
+    new Promise<void>((r) => {
+      if (!realmServer) {
+        r();
+        return;
+      }
+      const onMessage = (message: unknown) => {
+        if (message === 'ready') {
+          realmServer?.off('message', onMessage);
+          r();
+        }
+      };
+      realmServer.on('message', onMessage);
+    }),
+    new Promise<true>((r) => setTimeout(() => r(true), 60_000)),
+  ]);
+  if (timeout) {
+    throw new Error(
+      `timed-out waiting for realm server to start. Stopping server`,
+    );
+  }
+
+  return new IsolatedRealmServer(
+    realmServer,
+    workerManager,
+    testRealmDir,
+    testDBName,
+  );
 }
 
 export interface SQLExecutor {
