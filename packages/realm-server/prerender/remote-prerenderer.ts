@@ -1,7 +1,7 @@
 import {
   type Prerenderer,
   type RenderResponse,
-  type ModulePrerenderResponse,
+  type ModuleRenderResponse,
   logger,
 } from '@cardstack/runtime-common';
 
@@ -74,7 +74,7 @@ export function createRemotePrerenderer(
       );
     },
     async prerenderModule({ realm, url, userId, permissions, renderOptions }) {
-      return await request<ModulePrerenderResponse>(
+      return await request<ModuleRenderResponse>(
         'prerender-module',
         'prerender-module-request',
         {

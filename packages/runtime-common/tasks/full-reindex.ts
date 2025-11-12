@@ -1,7 +1,5 @@
 import type * as JSONTypes from 'json-typescript';
-import type { Task } from './index';
-// TODO import this from sibling module
-import type { FromScratchResult } from '../worker';
+import type { Task, FromScratchResult } from './index';
 
 import {
   jobIdentity,

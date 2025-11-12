@@ -11,6 +11,7 @@ import {
   type CodeRef,
   type ResolvedCodeRef,
   type ErrorEntry,
+  type ModuleDefinitionResult,
   isBaseDef,
   baseCardRef,
   baseRealm,
@@ -35,15 +36,11 @@ import {
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
+import { createAuthErrorGuard } from '../utils/auth-error-guard';
+
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 import type StoreService from '../services/store';
-
-interface DefinitionResult {
-  type: 'definition';
-  definition: Definition;
-  types: string[];
-}
 
 export type Model = {
   id: string;
@@ -54,7 +51,7 @@ export type Model = {
   createdAt: number;
   deps: string[];
   definitions: {
-    [name: string]: DefinitionResult | ErrorEntry;
+    [name: string]: ModuleDefinitionResult | ErrorEntry;
   };
   error?: ErrorEntry;
 };
@@ -82,11 +79,13 @@ export default class ModuleRoute extends Route<Model> {
 
   private typesCache = new WeakMap<typeof BaseDef, Promise<TypesWithErrors>>();
   private lastStoreResetKey: string | undefined;
+  #authGuard = createAuthErrorGuard();
 
   deactivate() {
     (globalThis as any).__lazilyLoadLinks = undefined;
     (globalThis as any).__boxelRenderContext = undefined;
     this.lastStoreResetKey = undefined;
+    this.#authGuard.unregister();
   }
 
   beforeModel() {
@@ -94,6 +93,7 @@ export default class ModuleRoute extends Route<Model> {
     // hook is run
     (globalThis as any).__lazilyLoadLinks = true;
     (globalThis as any).__boxelRenderContext = true;
+    this.#authGuard.register();
   }
 
   async model({
@@ -128,8 +128,19 @@ export default class ModuleRoute extends Route<Model> {
 
     let module: Record<string, any> | undefined;
     try {
-      module = await this.loaderService.loader.import(id);
+      module = await this.#authGuard.race(() =>
+        this.loaderService.loader.import(id),
+      );
     } catch (err: any) {
+      if (this.#authGuard.isAuthError(err)) {
+        return modelWithError({
+          id,
+          nonce,
+          message: err.message ?? 'Authorization error logging into realm',
+          err,
+          status: err.status ?? (isCardError(err) ? err.status : 401),
+        });
+      }
       console.warn(`encountered error loading module "${id}": ${err.message}`);
       let depsSet = new Set(
         await (
@@ -212,7 +223,7 @@ export default class ModuleRoute extends Route<Model> {
     }
 
     let definitions: {
-      [name: string]: DefinitionResult | ErrorEntry;
+      [name: string]: ModuleDefinitionResult | ErrorEntry;
     } = {};
     for (let [name, maybeBaseDef] of Object.entries(module)) {
       if (isBaseDef(maybeBaseDef)) {
@@ -246,7 +257,7 @@ export default class ModuleRoute extends Route<Model> {
     url: URL;
     name: string;
     cardOrFieldDef: typeof BaseDef;
-  }): Promise<DefinitionResult | ErrorEntry> {
+  }): Promise<ModuleDefinitionResult | ErrorEntry> {
     try {
       let api = await this.loaderService.loader.import<typeof CardAPI>(
         `${baseRealm.url}card-api`,
@@ -279,6 +290,7 @@ export default class ModuleRoute extends Route<Model> {
       return {
         type: 'definition',
         definition,
+        moduleURL: trimExecutableExtension(new URL(url)).href,
         types: typesMaybeError.types.map(({ refURL }) => refURL),
       };
     } catch (err: any) {

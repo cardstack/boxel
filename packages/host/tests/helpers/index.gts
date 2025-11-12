@@ -27,10 +27,11 @@ import {
   type TokenClaims,
   type RunnerRegistration,
   type IndexRunner,
-  type IndexResults,
   type Prerenderer,
-  type FromScratchArgsWithPermissions,
-  type IncrementalArgsWithPermissions,
+  type FromScratchArgs,
+  type IncrementalArgs,
+  type FromScratchResult,
+  type IncrementalResult,
   insertPermissions,
   unixTime,
   RealmAction,
@@ -327,18 +328,14 @@ class MockLocalIndexer extends Service {
   #indexWriter: IndexWriter | undefined;
   #prerenderer: Prerenderer | undefined;
   #fromScratch:
-    | ((args: FromScratchArgsWithPermissions) => Promise<IndexResults>)
+    | ((args: FromScratchArgs) => Promise<FromScratchResult>)
     | undefined;
   #incremental:
-    | ((args: IncrementalArgsWithPermissions) => Promise<IndexResults>)
+    | ((args: IncrementalArgs) => Promise<IncrementalResult>)
     | undefined;
   setup(
-    fromScratch: (
-      args: FromScratchArgsWithPermissions,
-    ) => Promise<IndexResults>,
-    incremental: (
-      args: IncrementalArgsWithPermissions,
-    ) => Promise<IndexResults>,
+    fromScratch: (args: FromScratchArgs) => Promise<FromScratchResult>,
+    incremental: (args: IncrementalArgs) => Promise<IncrementalResult>,
     prerenderer: Prerenderer,
   ) {
     this.#fromScratch = fromScratch;

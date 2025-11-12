@@ -1,232 +1,448 @@
-import { module, test } from 'qunit';
+import { hash } from '@ember/helper';
 import { render } from '@ember/test-helpers';
+import { module, test } from 'qunit';
 import { setupRenderingTest } from 'test-app/tests/helpers';
-import { formatRelativeTime } from '@cardstack/boxel-ui/helpers';
+
+import {
+  formatDateTime,
+  formatRelativeTime,
+} from '@cardstack/boxel-ui/helpers';
+
+const REFERENCE_TIME = new Date('2024-05-01T12:00:00.000Z');
+const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
 
 module('Integration | helpers | formatRelativeTime', function (hooks) {
   setupRenderingTest(hooks);
 
-  test('basic relative time formatting', async function (assert) {
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-
-    await render(<template>{{formatRelativeTime twoHoursAgo}}</template>);
-    assert.dom().hasText('2 hours ago', 'formats basic relative time');
+  test('minimal invocation returns non-empty string', function (assert) {
+    assert.ok(
+      formatRelativeTime(REFERENCE_TIME).length > 0,
+      'returns text with defaults',
+    );
   });
 
-  test('relative time size variants', async function (assert) {
-    const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+  test('formats past times using default options', async function (assert) {
+    const past = new Date(REFERENCE_TIME.getTime() - 2 * HOUR);
 
     await render(<template>
-      {{formatRelativeTime threeMinutesAgo size='tiny'}}
+      {{formatRelativeTime past locale='en-US' now=REFERENCE_TIME}}
     </template>);
-    assert.dom().hasText('3m', 'tiny size uses abbreviated format');
 
-    await render(<template>
-      {{formatRelativeTime threeMinutesAgo size='medium'}}
-    </template>);
-    assert.dom().hasText('3 minutes ago', 'medium size uses full format');
+    assert.dom().hasText('2 hours ago', 'shows localized relative time');
   });
 
-  test('various time intervals', async function (assert) {
-    const now = new Date();
+  test('supports future times and tiny size', async function (assert) {
+    const future = new Date(REFERENCE_TIME.getTime() + 2 * HOUR);
 
-    const thirtySecondsAgo = new Date(now.getTime() - 30 * 1000);
-    await render(<template>{{formatRelativeTime thirtySecondsAgo}}</template>);
-    assert.dom().hasText('30 seconds ago', 'formats seconds ago');
+    await render(<template>
+      {{formatRelativeTime
+        future
+        locale='en-US'
+        now=REFERENCE_TIME
+        size='tiny'
+      }}
+    </template>);
 
-    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
-    await render(<template>{{formatRelativeTime fiveMinutesAgo}}</template>);
-    assert.dom().hasText('5 minutes ago', 'formats minutes ago');
-
-    const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000);
-    await render(<template>{{formatRelativeTime sixHoursAgo}}</template>);
-    assert.dom().hasText('6 hours ago', 'formats hours ago');
-
-    const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
-    await render(<template>{{formatRelativeTime threeDaysAgo}}</template>);
-    assert.dom().hasText('3 days ago', 'formats days ago');
-
-    const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
-    await render(<template>{{formatRelativeTime twoWeeksAgo}}</template>);
-    assert.dom().hasText('2 weeks ago', 'formats weeks ago');
-
-    const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    await render(<template>{{formatRelativeTime oneMonthAgo}}</template>);
-    assert.dom().hasText('last month', 'formats months ago 1');
-
-    const twoMonthsAgo = new Date(now.getTime() - 2 * 30 * 24 * 60 * 60 * 1000);
-    await render(<template>{{formatRelativeTime twoMonthsAgo}}</template>);
-    assert.dom().hasText('2 months ago', 'formats months ago 1');
+    assert.dom().hasText('+2h', 'tiny size uses abbreviated format with sign');
   });
 
-  test('future time formatting', async function (assert) {
-    const now = new Date();
+  test('long size with numeric always', async function (assert) {
+    const future = new Date(REFERENCE_TIME.getTime() + HOUR);
 
-    const inTwoHours = new Date(now.getTime() + 2.01 * 60 * 60 * 1000);
-    await render(<template>{{formatRelativeTime inTwoHours}}</template>);
-    assert.dom().hasText('in 2 hours', 'formats future time');
+    await render(<template>
+      {{formatRelativeTime
+        future
+        locale='en-US'
+        now=REFERENCE_TIME
+        size='long'
+        numeric='always'
+      }}
+    </template>);
 
-    const inThreeDays = new Date(now.getTime() + 3.01 * 24 * 60 * 60 * 1000);
-    await render(<template>{{formatRelativeTime inThreeDays}}</template>);
-    assert.dom().hasText('in 3 days', 'formats future days');
-
-    const inOneMinute = new Date(now.getTime() + 1.01 * 60 * 1000);
-    await render(<template>{{formatRelativeTime inOneMinute}}</template>);
-    assert.dom().hasText('in 1 minute', 'formats near future');
+    assert.dom().hasText('in 1 hour', 'long size spells out units');
   });
 
-  test('edge cases and special times', async function (assert) {
-    const now = new Date();
-
-    await render(<template>{{formatRelativeTime now}}</template>);
-    assert.dom().hasText('now', 'formats current time');
-
-    const justNow = new Date(now.getTime() - 1000);
-    await render(<template>{{formatRelativeTime justNow}}</template>);
-    assert.dom().hasText('just now', 'formats very recent time');
+  test('short style uses narrow relative time output', async function (assert) {
+    const future = new Date(REFERENCE_TIME.getTime() + 3 * HOUR);
 
     await render(<template>
-      {{formatRelativeTime null fallback='No time'}}
+      {{formatRelativeTime
+        future
+        locale='en-US'
+        now=REFERENCE_TIME
+        size='short'
+      }}
     </template>);
-    assert.dom().hasText('No time', 'uses fallback for null');
 
-    await render(<template>
-      {{formatRelativeTime undefined fallback='Unknown time'}}
-    </template>);
-    assert.dom().hasText('Unknown time', 'uses fallback for undefined');
+    assert
+      .dom()
+      .includesText('3 hr', 'short size uses abbreviated unit from Intl');
   });
 
-  test('string and number input', async function (assert) {
-    const timestamp = Date.now() - 2 * 60 * 60 * 1000; // 2 hours ago
+  test('short size prefers days for ~last-month spans', function (assert) {
+    const twentyEightDaysAgo = new Date(REFERENCE_TIME.getTime() - 28 * DAY);
+    const sixtyDaysAgo = new Date(REFERENCE_TIME.getTime() - 60 * DAY);
 
-    await render(<template>{{formatRelativeTime timestamp}}</template>);
-    assert.dom().hasText('2 hours ago', 'handles numeric timestamp');
+    assert.strictEqual(
+      formatRelativeTime(twentyEightDaysAgo, {
+        locale: 'en-US',
+        now: REFERENCE_TIME,
+        size: 'short',
+      }),
+      '28 days ago',
+      'short size shows days for ~last-month spans',
+    );
 
-    const isoString = new Date(timestamp).toISOString();
-    await render(<template>{{formatRelativeTime isoString}}</template>);
-    assert.dom().hasText('2 hours ago', 'handles ISO string');
+    assert.strictEqual(
+      formatRelativeTime(sixtyDaysAgo, {
+        locale: 'en-US',
+        now: REFERENCE_TIME,
+        size: 'short',
+      }),
+      '2 months ago',
+      'short size falls back to months for larger spans',
+    );
   });
 
-  test('localization', async function (assert) {
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  test('multi-unit precision outputs detailed spans', function (assert) {
+    const span = 75 * DAY + 10 * HOUR + 30 * MINUTE;
+    const past = new Date(REFERENCE_TIME.getTime() - span);
 
-    await render(<template>
-      {{formatRelativeTime twoHoursAgo locale='en-US'}}
-    </template>);
-    assert.dom().hasText('2 hours ago', 'English relative time');
+    assert.strictEqual(
+      formatRelativeTime(past, {
+        locale: 'en-US',
+        now: REFERENCE_TIME,
+        precision: 2,
+      }),
+      '2 months, 15 days ago',
+      'precision=2 returns the top two units',
+    );
 
-    await render(<template>
-      {{formatRelativeTime twoHoursAgo locale='es-ES'}}
-    </template>);
-    assert.dom().hasText('hace 2 horas', 'Spanish relative time');
-
-    await render(<template>
-      {{formatRelativeTime twoHoursAgo locale='fr-FR'}}
-    </template>);
-    assert.dom().hasText('il y a 2 heures', 'French relative time');
-
-    await render(<template>
-      {{formatRelativeTime twoHoursAgo locale='de-DE'}}
-    </template>);
-    assert.dom().hasText('vor 2 Stunden', 'German relative time');
-
-    await render(<template>
-      {{formatRelativeTime twoHoursAgo locale='ar-SA'}}
-    </template>);
-    assert.dom().hasText('قبل ساعتين', 'Arabic relative time');
+    assert.strictEqual(
+      formatRelativeTime(past, {
+        locale: 'en-US',
+        now: REFERENCE_TIME,
+        precision: 3,
+      }),
+      '2 months, 15 days, 10 hours ago',
+      'precision=3 adds the next unit',
+    );
   });
 
-  test('tiny size with localization', async function (assert) {
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+  test('multi-unit precision supports future and locale-specific output', function (assert) {
+    const future = new Date(REFERENCE_TIME.getTime() + 2 * HOUR + 30 * MINUTE);
 
-    await render(<template>
-      {{formatRelativeTime oneHourAgo size='tiny' locale='en-US'}}
-    </template>);
-    assert.dom().hasText('1h', 'English tiny format');
+    assert.strictEqual(
+      formatRelativeTime(future, {
+        locale: 'en-US',
+        now: REFERENCE_TIME,
+        precision: 2,
+      }),
+      'in 2 hours, 30 minutes',
+      'future multi-unit renders leading "in"',
+    );
 
-    await render(<template>
-      {{formatRelativeTime oneHourAgo size='tiny' locale='fr-FR'}}
-    </template>);
-    assert.dom().hasText('1h', 'French tiny format');
-
-    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-    await render(<template>
-      {{formatRelativeTime thirtyMinutesAgo size='tiny'}}
-    </template>);
-    assert.dom().hasText('30m', 'tiny format for minutes');
+    const spanishPast = new Date(REFERENCE_TIME.getTime() - 75 * DAY);
+    assert.strictEqual(
+      formatRelativeTime(spanishPast, {
+        locale: 'es-ES',
+        now: REFERENCE_TIME,
+        precision: 2,
+      }),
+      'hace 2 meses, 15 días',
+      'non-English locale preserves localized direction words',
+    );
   });
 
-  test('invalid time handling', async function (assert) {
-    await render(<template>
-      {{formatRelativeTime 'invalid-date' fallback='Invalid time'}}
-    </template>);
-    assert.dom().hasText('Invalid time', 'handles invalid date strings');
+  test('multi-unit precision honors tiny size compact output', function (assert) {
+    const future = new Date(REFERENCE_TIME.getTime() + 3 * DAY + 4 * HOUR);
 
-    await render(<template>
-      {{formatRelativeTime 'not-a-date' fallback='Bad timestamp'}}
-    </template>);
-    assert.dom().hasText('Bad timestamp', 'handles non-date strings');
-
-    const nanValue = NaN;
-    await render(<template>
-      {{formatRelativeTime nanValue fallback='Invalid number'}}
-    </template>);
-    assert.dom().hasText('Invalid number', 'handles NaN input');
+    assert.strictEqual(
+      formatRelativeTime(future, {
+        now: REFERENCE_TIME,
+        precision: 2,
+        size: 'tiny',
+      }),
+      '+3d, 4h',
+      'tiny size multi-unit uses compact labels',
+    );
   });
 
-  test('extreme time differences', async function (assert) {
-    const veryLongAgo = new Date(Date.now() - 10 * 365 * 24 * 60 * 60 * 1000); // 10 years ago
+  test('rounding modes and unit ceilings', async function (assert) {
+    const almostThreeHours = new Date(
+      REFERENCE_TIME.getTime() - (2 * HOUR + 5 * MINUTE),
+    );
+    const twoHours = new Date(REFERENCE_TIME.getTime() - 2 * HOUR);
 
-    await render(<template>{{formatRelativeTime veryLongAgo}}</template>);
-    assert.dom().hasText('10 years ago', 'handles very long time differences');
+    await render(<template>
+      {{formatRelativeTime
+        almostThreeHours
+        locale='en-US'
+        now=REFERENCE_TIME
+        round='ceil'
+      }}
+    </template>);
+    assert.dom().hasText('3 hours ago', 'ceil rounding bumps to next hour');
 
-    const centuryAgo = new Date(Date.now() - 100 * 365 * 24 * 60 * 60 * 1000);
-    await render(<template>{{formatRelativeTime centuryAgo}}</template>);
-    assert.dom().hasText('100 years ago', 'handles century-long differences');
+    await render(<template>
+      {{formatRelativeTime
+        twoHours
+        locale='en-US'
+        now=REFERENCE_TIME
+        unitCeil='minute'
+      }}
+    </template>);
+    assert
+      .dom()
+      .hasText('120 minutes ago', 'unit ceiling restricts to minutes');
   });
 
-  test('precise timing around boundaries', async function (assert) {
-    const almostTwoHours = new Date(
-      Date.now() - (2 * 60 * 60 * 1000 - 30 * 1000),
-    ); // 1h 59m 30s ago
+  test('formatDateTime relative forwards numeric and precision options', function (assert) {
+    const multiUnitPast = new Date(
+      REFERENCE_TIME.getTime() - (75 * DAY + 10 * HOUR),
+    );
+    const yesterday = new Date(REFERENCE_TIME.getTime() - DAY);
 
-    await render(<template>{{formatRelativeTime almostTwoHours}}</template>);
-    assert.dom().hasText('about 2 hours ago', 'handles near-boundary times');
+    assert.strictEqual(
+      formatDateTime(multiUnitPast, {
+        locale: 'en-US',
+        now: REFERENCE_TIME,
+        precision: 2,
+        relative: true,
+      }),
+      '2 months, 15 days ago',
+      'formatDateTime relays precision to the relative helper',
+    );
 
-    const justOverOneDay = new Date(
-      Date.now() - (24 * 60 * 60 * 1000 + 60 * 1000),
-    ); // 1 day 1 minute ago
+    assert.strictEqual(
+      formatDateTime(yesterday, {
+        locale: 'en-US',
+        now: REFERENCE_TIME,
+        relative: true,
+      }),
+      'yesterday',
+      'default relative formatting uses linguistic labels',
+    );
 
-    await render(<template>{{formatRelativeTime justOverOneDay}}</template>);
-    assert.dom().hasText('yesterday', 'rounds to nearest day');
+    assert.strictEqual(
+      formatDateTime(yesterday, {
+        locale: 'en-US',
+        now: REFERENCE_TIME,
+        relative: true,
+        numeric: 'always',
+      }),
+      '1 day ago',
+      'numeric flag is forwarded to formatRelativeTime',
+    );
+  });
+
+  test('unit selection thresholds pivot at 45 seconds and 45 minutes', function (assert) {
+    const fortyFourSecondsAgo = new Date(REFERENCE_TIME.getTime() - 44 * 1000);
+    const fortyFiveSecondsAgo = new Date(REFERENCE_TIME.getTime() - 45 * 1000);
+    const fortyFourMinutesAgo = new Date(
+      REFERENCE_TIME.getTime() - 44 * MINUTE,
+    );
+    const fortyFiveMinutesAgo = new Date(
+      REFERENCE_TIME.getTime() - 45 * MINUTE,
+    );
+
+    assert.strictEqual(
+      formatRelativeTime(fortyFourSecondsAgo, {
+        locale: 'en-US',
+        now: REFERENCE_TIME,
+      }),
+      '44 seconds ago',
+      'values under 45 seconds stay in seconds',
+    );
+
+    assert.strictEqual(
+      formatRelativeTime(fortyFiveSecondsAgo, {
+        locale: 'en-US',
+        now: REFERENCE_TIME,
+      }),
+      '1 minute ago',
+      '45 seconds rounds to 1 minute',
+    );
+
+    assert.strictEqual(
+      formatRelativeTime(fortyFourMinutesAgo, {
+        locale: 'en-US',
+        now: REFERENCE_TIME,
+      }),
+      '44 minutes ago',
+      'values under 45 minutes stay in minutes',
+    );
+
+    assert.strictEqual(
+      formatRelativeTime(fortyFiveMinutesAgo, {
+        locale: 'en-US',
+        now: REFERENCE_TIME,
+      }),
+      '1 hour ago',
+      '45 minutes rounds to 1 hour',
+    );
+  });
+
+  test('now threshold collapses near events', async function (assert) {
+    const recent = new Date(REFERENCE_TIME.getTime() - 4 * 1000);
+
+    await render(<template>
+      {{formatRelativeTime
+        recent
+        locale='en-US'
+        now=REFERENCE_TIME
+        nowThresholdMs=5000
+      }}
+    </template>);
+
+    assert.dom().hasText('now', 'values within threshold render as now');
+  });
+
+  test('switches to absolute formatting after threshold', async function (assert) {
+    const past = new Date(REFERENCE_TIME.getTime() - 3 * DAY);
+    const switchToAbsoluteAfterMs = 2 * DAY;
+    const absoluteOptions = {
+      dateStyle: 'medium' as const,
+      locale: 'en-US',
+      timeZone: 'UTC',
+    };
+
+    await render(<template>
+      {{formatRelativeTime
+        past
+        locale='en-US'
+        now=REFERENCE_TIME
+        switchToAbsoluteAfterMs=switchToAbsoluteAfterMs
+        absoluteOptions=absoluteOptions
+      }}
+    </template>);
+
+    assert
+      .dom()
+      .hasText('Apr 28, 2024', 'uses absolute formatting after cutoff');
+  });
+
+  test('supports seconds unit and Excel serial parsing', async function (assert) {
+    const pastSeconds = Math.floor(REFERENCE_TIME.getTime() / 1000) - 60 * 60;
+    const excelSerial = 45412; // 2024-04-30 (Excel 1900 system)
+
+    await render(<template>
+      {{formatRelativeTime
+        pastSeconds
+        locale='en-US'
+        now=REFERENCE_TIME
+        unit='s'
+      }}
+    </template>);
+    assert.dom().hasText('1 hour ago', 'interprets numeric seconds timestamps');
+
+    await render(<template>
+      {{formatRelativeTime
+        excelSerial
+        locale='en-US'
+        now=REFERENCE_TIME
+        parse=(hash serialOrigin='excel1900')
+      }}
+    </template>);
+    assert.dom().hasText('yesterday', 'parses Excel serial values');
+  });
+
+  test('falls back for invalid values', async function (assert) {
+    await render(<template>
+      {{formatRelativeTime 'invalid' fallback='Unknown'}}
+    </template>);
+    assert.dom().hasText('Unknown', 'uses fallback for invalid strings');
+
+    await render(<template>
+      {{formatRelativeTime null fallback='Missing'}}
+    </template>);
+    assert.dom().hasText('Missing', 'uses fallback for null');
   });
 
   module('JavaScript function usage', function () {
-    test('formatRelativeTime function can be called directly', async function (assert) {
-      const timestamp = Date.now() - 3 * 60 * 60 * 1000; // 3 hours ago
-
-      const result = formatRelativeTime(timestamp, { size: 'medium' });
-      assert.strictEqual(
-        result,
-        '3 hours ago',
-        'function returns formatted relative time',
+    test('formatRelativeTime can be called directly', async function (assert) {
+      const result = formatRelativeTime(
+        new Date(REFERENCE_TIME.getTime() - HOUR),
+        {
+          locale: 'en-US',
+          now: REFERENCE_TIME,
+        },
       );
+      assert.strictEqual(result, '1 hour ago', 'returns relative text in code');
 
-      const tinyResult = formatRelativeTime(timestamp, {
-        size: 'tiny',
-        fallback: 'No time',
-      });
-      assert.strictEqual(tinyResult, '3h', 'function handles tiny format');
-
-      const futureTimestamp = Date.now() + 2 * 60 * 60 * 1000; // 2 hours from now
-      const futureResult = formatRelativeTime(futureTimestamp, {
-        locale: 'en-US',
-      });
-      assert.strictEqual(
-        futureResult,
-        'in 2 hours',
-        'function handles future times',
+      const tinyFuture = formatRelativeTime(
+        new Date(REFERENCE_TIME.getTime() + HOUR),
+        {
+          locale: 'en-US',
+          now: REFERENCE_TIME,
+          size: 'tiny',
+        },
       );
+      assert.strictEqual(tinyFuture, '+1h', 'supports tiny format in code');
     });
+  });
+
+  test('absolute threshold boundary', async function (assert) {
+    const past = new Date(REFERENCE_TIME.getTime() - DAY);
+    const absoluteOptions = {
+      dateStyle: 'medium',
+      locale: 'en-US',
+      timeZone: 'UTC',
+    } as const;
+    const expected = formatDateTime(past, absoluteOptions);
+
+    await render(<template>
+      {{formatRelativeTime
+        past
+        locale='en-US'
+        now=REFERENCE_TIME
+        switchToAbsoluteAfterMs=DAY
+        absoluteOptions=absoluteOptions
+      }}
+    </template>);
+
+    assert.dom().hasText(expected, 'uses absolute formatting at the threshold');
+  });
+
+  test('absolute formatting delegates to formatDateTime', async function (assert) {
+    const past = new Date(REFERENCE_TIME.getTime() - 5 * DAY);
+    const switchToAbsoluteAfterMs = DAY;
+    const absoluteOptions = {
+      dateStyle: 'long' as const,
+      locale: 'en-CA',
+      timeZone: 'UTC',
+    };
+
+    const expected = formatDateTime(past, absoluteOptions);
+
+    await render(<template>
+      {{formatRelativeTime
+        past
+        locale='en-US'
+        now=REFERENCE_TIME
+        switchToAbsoluteAfterMs=switchToAbsoluteAfterMs
+        absoluteOptions=absoluteOptions
+      }}
+    </template>);
+
+    assert.dom().hasText(expected, 'uses formatDateTime for absolute fallback');
+  });
+
+  test('unit ceiling can force seconds granularity', async function (assert) {
+    const past = new Date(REFERENCE_TIME.getTime() - 1500);
+
+    await render(<template>
+      {{formatRelativeTime
+        past
+        locale='en-US'
+        now=REFERENCE_TIME
+        unitCeil='second'
+        nowThresholdMs=0
+      }}
+    </template>);
+
+    assert.dom().hasText('1 second ago', 'respects smallest unit ceiling');
   });
 });
