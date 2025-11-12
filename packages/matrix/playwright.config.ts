@@ -14,7 +14,7 @@ export default defineConfig({
   reporter: process.env.CI ? 'blob' : 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
-    baseURL: 'http://localhost:4202/test',
+    baseURL: 'http://localhost:4205/test',
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'retry-with-trace',

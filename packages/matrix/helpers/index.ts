@@ -15,7 +15,7 @@ import { appURL, BasicSQLExecutor, SQLExecutor } from './isolated-realm-server';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
 import { randomUUID } from 'crypto';
 
-export const testHost = 'http://localhost:4202/test';
+export const testHost = 'http://localhost:4205/test';
 export const mailHost = 'http://localhost:5001';
 export const initialRoomName = 'New AI Assistant Chat';
 export const REGISTRATION_TOKEN = 'abc123';
@@ -48,7 +48,9 @@ export function getMatrixTestContext(): MatrixTestContext {
   if (!cachedMatrixTestContext) {
     let raw = process.env.MATRIX_TEST_CONTEXT;
     if (!raw) {
-      throw new Error('MATRIX_TEST_CONTEXT environment variable is not defined');
+      throw new Error(
+        'MATRIX_TEST_CONTEXT environment variable is not defined',
+      );
     }
     let parsed = JSON.parse(raw) as Partial<MatrixTestContext>;
     if (
