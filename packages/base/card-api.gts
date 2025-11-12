@@ -14,8 +14,6 @@ import { getContainsManyComponent } from './contains-many-component';
 import { LinksToEditor } from './links-to-editor';
 import { getLinksToManyComponent } from './links-to-many-component';
 import {
-  THIS_INTERPOLATION_PREFIX,
-  THIS_REALM_TOKEN,
   Deferred,
   isCardResource,
   Loader,
@@ -66,12 +64,19 @@ import {
   loadDocument,
   LocalPath,
   getCardMenuItems,
-  parseQuery,
-  assertQuery,
-  normalizeQueryForSignature,
-  querySignature,
   type Query as RelationshipQuery,
 } from '@cardstack/runtime-common';
+import {
+  beginQueryFieldEvaluation,
+  getQueryFieldState,
+  notifyQueryFieldAccess,
+  registerQueryFieldCoordinator,
+  seedQueryFieldState,
+  setQueryFieldState,
+  validateRelationshipQuery,
+  type QueryFieldAccessPayload,
+  type QueryFieldCoordinator,
+} from './query-field-support';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
 import DefaultFittedTemplate from './default-templates/fitted';
@@ -126,9 +131,7 @@ import {
   notifyCardTracking,
   peekAtField,
   relationshipMeta,
-  setQueryFieldState,
-  getQueryFieldState,
-  getQueryFieldStateKeys,
+  markQueryFieldStale,
   setFieldDescription,
   type NotLoadedValue,
 } from './field-support';
@@ -146,6 +149,7 @@ interface CardOrFieldTypeIconSignature {
 export type CardOrFieldTypeIcon = ComponentLike<CardOrFieldTypeIconSignature>;
 
 export {
+  beginQueryFieldEvaluation,
   deserialize,
   getCardMeta,
   getFieldDescription,
@@ -157,16 +161,20 @@ export {
   meta,
   primitive,
   realmURL,
+  registerQueryFieldCoordinator,
   relativeTo,
   relationshipMeta,
   serialize,
   serializeCard,
   getQueryFieldState,
   setQueryFieldState,
+  markQueryFieldStale,
   type BoxComponent,
   type DeserializeOpts,
   type GetCardMenuItemParams,
   type JSONAPISingleResourceDocument,
+  type QueryFieldAccessPayload,
+  type QueryFieldCoordinator,
   type ResourceID,
   type SerializeOpts,
 };
@@ -228,74 +236,6 @@ export type FieldFormats = {
   ['cardDef']: Format;
 };
 type Setter = (value: any) => void;
-
-export interface QueryFieldAccessPayload {
-  instance: CardDef;
-  fieldName: string;
-  field: Field;
-}
-
-export interface QueryFieldCoordinator {
-  handleQueryFieldAccess(payload: QueryFieldAccessPayload): void;
-}
-
-let queryFieldCoordinator: QueryFieldCoordinator | undefined;
-
-export function registerQueryFieldCoordinator(
-  coordinator: QueryFieldCoordinator | undefined,
-) {
-  queryFieldCoordinator = coordinator;
-}
-
-const queryFieldEvaluationGuards = new WeakMap<BaseDef, Map<string, number>>();
-
-export function beginQueryFieldEvaluation(
-  instance: BaseDef,
-  fieldName: string,
-): () => void {
-  let guards = queryFieldEvaluationGuards.get(instance);
-  if (!guards) {
-    guards = new Map();
-    queryFieldEvaluationGuards.set(instance, guards);
-  }
-  let current = guards.get(fieldName) ?? 0;
-  guards.set(fieldName, current + 1);
-  return () => {
-    let existing = guards?.get(fieldName);
-    if (existing === undefined) {
-      return;
-    }
-    if (existing <= 1) {
-      guards?.delete(fieldName);
-      if (guards && guards.size === 0) {
-        queryFieldEvaluationGuards.delete(instance);
-      }
-    } else {
-      guards?.set(fieldName, existing - 1);
-    }
-  };
-}
-
-export function isQueryFieldEvaluationInProgress(
-  instance: BaseDef,
-  fieldName: string,
-): boolean {
-  return (queryFieldEvaluationGuards.get(instance)?.get(fieldName) ?? 0) > 0;
-}
-
-function notifyQueryFieldAccess(instance: CardDef, field: Field) {
-  if (!field.queryDefinition || !queryFieldCoordinator) {
-    return;
-  }
-  if (isQueryFieldEvaluationInProgress(instance, field.name)) {
-    return;
-  }
-  queryFieldCoordinator.handleQueryFieldAccess({
-    instance,
-    fieldName: field.name,
-    field,
-  });
-}
 
 interface Options {
   computeVia?: () => unknown;
@@ -3475,97 +3415,6 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   return instance;
 }
 
-function seedQueryFieldState(
-  instance: CardDef,
-  resource: LooseCardResource,
-): void {
-  let queryFieldsMeta =
-    ((resource.meta as any)?.queryFields as Record<string, unknown>) ?? {};
-
-  for (let existingField of getQueryFieldStateKeys(instance)) {
-    if (!(existingField in queryFieldsMeta)) {
-      setQueryFieldState(instance, existingField, undefined);
-    }
-  }
-
-  for (let [fieldName] of Object.entries(queryFieldsMeta)) {
-    let field = getField(instance, fieldName);
-    if (!field || !('queryDefinition' in field) || !field.queryDefinition) {
-      setQueryFieldState(instance, fieldName, undefined);
-      continue;
-    }
-
-    let relationship = resource.relationships?.[fieldName];
-    if (!relationship) {
-      setQueryFieldState(instance, fieldName, undefined);
-      continue;
-    }
-
-    let relationshipClone = cloneRelationship(relationship);
-    let searchURL = relationshipClone?.links?.search ?? null;
-    let normalizedQuery: RelationshipQuery | undefined;
-    let signature: string | undefined;
-
-    if (typeof searchURL === 'string' && searchURL.length > 0) {
-      let queryString: string | undefined;
-      try {
-        let url = new URL(searchURL);
-        queryString =
-          url.search && url.search.startsWith('?')
-            ? url.search.slice(1)
-            : url.search;
-      } catch {
-        if (searchURL.startsWith('?')) {
-          queryString = searchURL.slice(1);
-        }
-      }
-      if (queryString) {
-        try {
-          let parsed = parseQuery(queryString);
-          assertQuery(parsed);
-          normalizedQuery = normalizeQueryForSignature(
-            parsed as RelationshipQuery,
-          );
-          signature = querySignature(normalizedQuery);
-        } catch {
-          normalizedQuery = undefined;
-          signature = undefined;
-        }
-      }
-    }
-
-    setQueryFieldState(instance, fieldName, {
-      query: normalizedQuery,
-      signature,
-      searchURL,
-      relationship: relationshipClone,
-    });
-  }
-}
-
-function cloneRelationship(
-  relationship?: Relationship,
-): Relationship | undefined {
-  if (!relationship) {
-    return undefined;
-  }
-  let cloned: Relationship = {};
-  if (relationship.links) {
-    cloned.links = { ...relationship.links };
-  }
-  if (Array.isArray(relationship.data)) {
-    cloned.data = relationship.data.map((item) => ({ ...item }));
-  } else if (relationship.data && typeof relationship.data === 'object') {
-    cloned.data = { ...relationship.data };
-  } else if (relationship.data === null) {
-    cloned.data = null;
-  }
-  if (relationship.meta) {
-    cloned.meta = JSON.parse(JSON.stringify(relationship.meta));
-  }
-  return cloned;
-}
-
 export function setCardAsSavedForTest(instance: CardDef, id?: string): void {
   if (id != null) {
     let deserialized = getDataBucket(instance);
@@ -3581,67 +3430,6 @@ export function searchDoc<CardT extends BaseDefConstructor>(
     string,
     any
   >;
-}
-
-function validateRelationshipQuery(
-  ownerPrototype: BaseDef | undefined,
-  fieldName: string,
-  query: RelationshipQuery,
-): void {
-  if (typeof query !== 'object' || query == null) {
-    throw new Error(`query field "${fieldName}" must provide a query object`);
-  }
-  if (!ownerPrototype) {
-    return;
-  }
-  let tokens = new Set<string>();
-  collectInterpolationTokens(query, tokens);
-  let ownerClass = ownerPrototype.constructor as typeof BaseDef;
-  for (let token of tokens) {
-    if (token === THIS_REALM_TOKEN) {
-      continue;
-    }
-    if (
-      typeof token === 'string' &&
-      token.startsWith(THIS_INTERPOLATION_PREFIX)
-    ) {
-      let path = token.slice(THIS_INTERPOLATION_PREFIX.length);
-      let [head] = path.split('.');
-      let referencedField = getField(ownerClass, head, { untracked: true });
-      if (!referencedField) {
-        let ownerName = ownerClass.name ?? 'Card';
-        throw new Error(
-          `query field "${fieldName}" references unknown path "${token}" on ${ownerName}`,
-        );
-      }
-    }
-  }
-}
-
-function collectInterpolationTokens(value: unknown, tokens: Set<string>): void {
-  if (value == null) {
-    return;
-  }
-  if (typeof value === 'string') {
-    if (
-      value.startsWith(THIS_INTERPOLATION_PREFIX) ||
-      value === THIS_REALM_TOKEN
-    ) {
-      tokens.add(value);
-    }
-    return;
-  }
-  if (Array.isArray(value)) {
-    for (let entry of value) {
-      collectInterpolationTokens(entry, tokens);
-    }
-    return;
-  }
-  if (typeof value === 'object') {
-    for (let entry of Object.values(value as Record<string, unknown>)) {
-      collectInterpolationTokens(entry, tokens);
-    }
-  }
 }
 
 function makeDescriptor<

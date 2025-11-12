@@ -662,6 +662,9 @@ export default class StoreService extends Service implements StoreInterface {
     let instance = this.store.get(id);
     if (instance) {
       if (this.cardApiCache && instance) {
+        if (isCardInstance(instance)) {
+          this.queryFieldCoordinator.unregisterInstance(instance);
+        }
         this.cardApiCache?.unsubscribeFromChanges(
           instance,
           this.onInstanceUpdated,
@@ -720,53 +723,57 @@ export default class StoreService extends Service implements StoreInterface {
       );
 
       let instance = this.peekLive(invalidation);
-      if (instance && isCardInstance(instance)) {
-        // Do not reload if the event is a result of an instance-editing request that we made. Otherwise we risk
-        // overwriting the inputs with past values. This can happen if the user makes edits in the time between
-        // the auto save request and the arrival realm event.
+      if (instance) {
+        if (isCardInstance(instance)) {
+          // Do not reload if the event is a result of an instance-editing request that we made. Otherwise we risk
+          // overwriting the inputs with past values. This can happen if the user makes edits in the time between
+          // the auto save request and the arrival realm event.
+          let reloadFile = false;
 
-        let reloadFile = false;
-
-        if (!clientRequestId) {
-          reloadFile = true;
-          realmEventsLogger.debug(
-            `reloading file resource ${invalidation} because event has no clientRequestId`,
-          );
-        } else if (this.cardService.clientRequestIds.has(clientRequestId)) {
-          if (
-            clientRequestId.startsWith('instance:') ||
-            clientRequestId.startsWith('editor-with-instance')
-          ) {
+          if (!clientRequestId) {
+            reloadFile = true;
             realmEventsLogger.debug(
-              `ignoring invalidation for card ${invalidation} because request id ${clientRequestId} is ours and an instance type`,
+              `reloading file resource ${invalidation} because event has no clientRequestId`,
             );
+          } else if (this.cardService.clientRequestIds.has(clientRequestId)) {
+            if (
+              clientRequestId.startsWith('instance:') ||
+              clientRequestId.startsWith('editor-with-instance')
+            ) {
+              realmEventsLogger.debug(
+                `ignoring invalidation for card ${invalidation} because request id ${clientRequestId} is ours and an instance type`,
+              );
+            } else {
+              reloadFile = true;
+              realmEventsLogger.debug(
+                `reloading file resource ${invalidation} because request id ${clientRequestId} is not instance type`,
+              );
+            }
           } else {
             reloadFile = true;
             realmEventsLogger.debug(
-              `reloading file resource ${invalidation} because request id ${clientRequestId} is not instance type`,
+              `reloading file resource ${invalidation} because request id ${clientRequestId} is not contained within known clientRequestIds`,
+              Array.from(this.cardService.clientRequestIds.values()),
+            );
+          }
+
+          if (reloadFile) {
+            this.reloadTask.perform(instance);
+          } else {
+            realmEventsLogger.debug(
+              `ignoring invalidation ${invalidation} for request id ${clientRequestId}`,
             );
           }
         } else {
-          reloadFile = true;
           realmEventsLogger.debug(
-            `reloading file resource ${invalidation} because request id ${clientRequestId} is not contained within known clientRequestIds`,
-            Array.from(this.cardService.clientRequestIds.values()),
+            `reloading file resource ${invalidation} because it is in an error state`,
           );
-        }
-
-        if (reloadFile) {
-          this.reloadTask.perform(instance);
-        } else {
-          realmEventsLogger.debug(
-            `ignoring invalidation ${invalidation} for request id ${clientRequestId}`,
-          );
+          this.loadInstanceTask.perform(invalidation);
         }
       } else {
-        // load the card using just the ID because we don't have a running card on hand
         realmEventsLogger.debug(
-          `reloading file resource ${invalidation} because it is not found in the identity context`,
+          `ignoring invalidation ${invalidation} because we did not previously try to load it`,
         );
-        this.loadInstanceTask.perform(invalidation);
       }
     }
   };

@@ -5,6 +5,7 @@ import { service } from '@ember/service';
 
 import {
   buildQuerySearchURL,
+  cloneRelationship,
   identifyCard,
   isCardCollectionDocument,
   localId,
@@ -20,7 +21,6 @@ import {
   type LooseSingleCardDocument,
   type Query,
   type Relationship,
-  type ResourceID,
 } from '@cardstack/runtime-common';
 
 import type {
@@ -30,8 +30,10 @@ import type {
   QueryFieldCoordinator,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import type CardService from './card-service';
+import type MessageService from './message-service';
 import type RealmService from './realm';
 
 interface RefreshOptions {
@@ -40,6 +42,12 @@ interface RefreshOptions {
 }
 
 type PendingMap = Map<string, Promise<void>>;
+type FieldHandle = { instance: CardDef; fieldName: string };
+type FieldRealmEntry = { realm?: string; handle?: FieldHandle };
+type RealmRegistration = {
+  unsubscribe: () => void;
+  fields: Set<FieldHandle>;
+};
 
 export default class QueryFieldCoordinatorService
   extends Service
@@ -47,9 +55,12 @@ export default class QueryFieldCoordinatorService
 {
   @service declare cardService: CardService;
   @service declare realm: RealmService;
+  @service declare messageService: MessageService;
 
   #pending = new WeakMap<CardDef, PendingMap>();
   #cardAPI?: Promise<typeof CardAPI>;
+  #fieldRealms = new WeakMap<CardDef, Map<string, FieldRealmEntry>>();
+  #realmRegistrations = new Map<string, RealmRegistration>();
 
   constructor(owner: Owner) {
     super(owner);
@@ -127,6 +138,7 @@ export default class QueryFieldCoordinatorService
     let api = await this.#getCardAPI();
     let { instance, field } = payload;
     if (!field.queryDefinition) {
+      this.#registerFieldRealm(instance, field.name, undefined);
       return;
     }
     let serialized = await this.cardService.serializeCard(instance, {
@@ -152,6 +164,7 @@ export default class QueryFieldCoordinatorService
       fieldName: field.name,
     });
     if (!normalized) {
+      this.#registerFieldRealm(instance, field.name, undefined);
       await this.#applyResults({
         payload,
         normalizedQuery: undefined,
@@ -159,13 +172,20 @@ export default class QueryFieldCoordinatorService
         searchURL: '',
         results: [],
         included: [],
+        realmHref: undefined,
       });
       return;
     }
+    this.#registerFieldRealm(instance, field.name, normalized.realm);
     let normalizedQuery = normalizeQueryForSignature(normalized.query);
     let signature = querySignature(normalizedQuery);
     let currentState = api.getQueryFieldState(instance, field.name);
-    if (!opts.force && currentState?.signature === signature) {
+    if (
+      !opts.force &&
+      currentState &&
+      !currentState.stale &&
+      currentState.signature === signature
+    ) {
       return;
     }
     let { cards, included } = await this.#executeQuery(
@@ -179,6 +199,7 @@ export default class QueryFieldCoordinatorService
       searchURL: buildQuerySearchURL(normalized.realm, normalized.query),
       results: cards,
       included,
+      realmHref: normalized.realm,
     });
   }
 
@@ -215,6 +236,7 @@ export default class QueryFieldCoordinatorService
     searchURL,
     results,
     included,
+    realmHref,
   }: {
     payload: QueryFieldAccessPayload;
     normalizedQuery: Query | undefined;
@@ -222,6 +244,7 @@ export default class QueryFieldCoordinatorService
     searchURL: string;
     results: CardResource[];
     included: CardResource[];
+    realmHref: string | undefined;
   }): Promise<void> {
     let api = await this.#getCardAPI();
     let relationships = this.#buildRelationshipPayload(
@@ -229,6 +252,31 @@ export default class QueryFieldCoordinatorService
       results,
       searchURL,
     );
+    let trackedFields = this.#fieldRealms.get(payload.instance);
+    if (trackedFields) {
+      for (let [fieldName] of trackedFields) {
+        if (fieldName === payload.field.name) {
+          continue;
+        }
+        let otherState = api.getQueryFieldState(payload.instance, fieldName);
+        if (otherState?.relationship) {
+          relationships[fieldName] = cloneRelationship(
+            otherState.relationship,
+          )!;
+        }
+      }
+    }
+
+    let nextState = {
+      query: normalizedQuery,
+      signature,
+      searchURL: relationships[payload.field.name]?.links?.search ?? null,
+      relationship: cloneRelationship(relationships[payload.field.name]),
+      realm: realmHref ?? null,
+      stale: false,
+    };
+
+    api.setQueryFieldState(payload.instance, payload.field.name, nextState);
 
     let updateDoc: LooseSingleCardDocument = {
       data: this.#buildResourceForUpdate(
@@ -239,12 +287,6 @@ export default class QueryFieldCoordinatorService
       ...(included.length > 0 ? { included } : {}),
     };
     await api.updateFromSerialized(payload.instance, updateDoc);
-    api.setQueryFieldState(payload.instance, payload.field.name, {
-      query: normalizedQuery,
-      signature,
-      searchURL: relationships[payload.field.name]?.links?.search ?? null,
-      relationship: cloneRelationship(relationships[payload.field.name]),
-    });
   }
 
   #buildFieldDefinition(field: Field): FieldDefinition | undefined {
@@ -388,33 +430,129 @@ export default class QueryFieldCoordinatorService
     return this.#cardAPI;
   }
 
+  unregisterInstance(instance: CardDef): void {
+    let fields = this.#fieldRealms.get(instance);
+    if (!fields) {
+      return;
+    }
+    for (let entry of fields.values()) {
+      if (entry.realm) {
+        this.#removeFieldHandle(entry.realm, entry.handle);
+      }
+    }
+    this.#fieldRealms.delete(instance);
+  }
+
   async #setQueryFieldCoordinator(
     coordinator: QueryFieldCoordinator | undefined,
   ): Promise<void> {
     let api = await this.#getCardAPI();
     api.registerQueryFieldCoordinator(coordinator);
   }
-}
 
-function cloneRelationship(
-  relationship?: Relationship,
-): Relationship | undefined {
-  if (!relationship) {
-    return undefined;
+  #registerFieldRealm(
+    instance: CardDef,
+    fieldName: string,
+    realmHref: string | undefined,
+  ): void {
+    let entries = this.#fieldRealms.get(instance);
+    if (!entries) {
+      if (!realmHref) {
+        return;
+      }
+      entries = new Map();
+      this.#fieldRealms.set(instance, entries);
+    }
+
+    let existing = entries.get(fieldName);
+    let normalizedRealm = realmHref
+      ? this.#normalizeRealmHref(realmHref)
+      : undefined;
+    if (existing?.realm === normalizedRealm) {
+      return;
+    }
+
+    if (existing?.realm) {
+      this.#removeFieldHandle(existing.realm, existing.handle);
+    }
+
+    if (!normalizedRealm) {
+      entries.delete(fieldName);
+      if (entries.size === 0) {
+        this.#fieldRealms.delete(instance);
+      }
+      return;
+    }
+
+    let handle: FieldHandle = { instance, fieldName };
+    let registration = this.#realmRegistrations.get(normalizedRealm);
+    if (!registration) {
+      let unsubscribe = this.messageService.subscribe(
+        normalizedRealm,
+        (event) => {
+          void this.#handleRealmEvent(normalizedRealm, event);
+        },
+      );
+      registration = { unsubscribe, fields: new Set() };
+      this.#realmRegistrations.set(normalizedRealm, registration);
+    }
+    registration.fields.add(handle);
+    entries.set(fieldName, { realm: normalizedRealm, handle });
   }
-  let cloned: Relationship = {};
-  if (relationship.links) {
-    cloned.links = { ...relationship.links };
+
+  #removeFieldHandle(realmHref: string, handle: FieldHandle | undefined): void {
+    if (!handle) {
+      return;
+    }
+    let registration = this.#realmRegistrations.get(realmHref);
+    if (!registration) {
+      return;
+    }
+    registration.fields.delete(handle);
+    if (registration.fields.size === 0) {
+      registration.unsubscribe();
+      this.#realmRegistrations.delete(realmHref);
+    }
   }
-  if (Array.isArray(relationship.data)) {
-    cloned.data = relationship.data.map((item) => ({ ...item }));
-  } else if (relationship.data && typeof relationship.data === 'object') {
-    cloned.data = { ...(relationship.data as ResourceID) };
-  } else if (relationship.data === null) {
-    cloned.data = null;
+
+  async #handleRealmEvent(
+    realmHref: string,
+    event: RealmEventContent,
+  ): Promise<void> {
+    if (event.eventName !== 'index' || event.indexType !== 'incremental') {
+      return;
+    }
+    let registration = this.#realmRegistrations.get(realmHref);
+    if (!registration || registration.fields.size === 0) {
+      return;
+    }
+    let api = await this.#getCardAPI();
+    for (let handle of Array.from(registration.fields)) {
+      let entry = this.#fieldRealms.get(handle.instance)?.get(handle.fieldName);
+      if (!entry || entry.realm !== realmHref) {
+        registration.fields.delete(handle);
+        continue;
+      }
+      let marked = api.markQueryFieldStale(handle.instance, handle.fieldName);
+      if (!marked) {
+        registration.fields.delete(handle);
+        continue;
+      }
+    }
+
+    if (registration.fields.size === 0) {
+      registration.unsubscribe();
+      this.#realmRegistrations.delete(realmHref);
+    }
   }
-  if (relationship.meta) {
-    cloned.meta = JSON.parse(JSON.stringify(relationship.meta));
+
+  #normalizeRealmHref(realmHref: string): string {
+    let url = new URL(realmHref);
+    if (!url.pathname.endsWith('/')) {
+      url.pathname = `${url.pathname}/`;
+    }
+    url.search = '';
+    url.hash = '';
+    return url.href;
   }
-  return cloned;
 }

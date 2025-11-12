@@ -1,6 +1,10 @@
 import { codeRefWithAbsoluteURL } from './code-ref';
 import type { FieldDefinition } from './index-structure';
-import type { LooseCardResource } from './resource-types';
+import type {
+  LooseCardResource,
+  Relationship,
+  ResourceID,
+} from './resource-types';
 import { buildQueryString, type Query } from './query';
 
 const EMPTY_PREDICATE_KEYS = new Set([
@@ -262,4 +266,27 @@ export function buildQuerySearchURL(realmHref: string, query: Query): string {
   let searchURL = new URL('./_search', baseHref);
   searchURL.search = buildQueryString(query);
   return searchURL.href;
+}
+
+export function cloneRelationship(
+  relationship?: Relationship,
+): Relationship | undefined {
+  if (!relationship) {
+    return undefined;
+  }
+  let cloned: Relationship = {};
+  if (relationship.links) {
+    cloned.links = { ...relationship.links };
+  }
+  if (Array.isArray(relationship.data)) {
+    cloned.data = relationship.data.map((item) => ({ ...item }));
+  } else if (relationship.data && typeof relationship.data === 'object') {
+    cloned.data = { ...(relationship.data as ResourceID) };
+  } else if (relationship.data === null) {
+    cloned.data = null;
+  }
+  if (relationship.meta) {
+    cloned.meta = JSON.parse(JSON.stringify(relationship.meta));
+  }
+  return cloned;
 }
