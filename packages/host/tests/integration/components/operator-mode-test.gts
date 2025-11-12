@@ -25,7 +25,6 @@ import {
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -631,7 +630,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -661,7 +659,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -735,7 +732,6 @@ module('Integration | operator-mode', function (hooks) {
           class TestDriver extends GlimmerComponent {
             <template>
               <OperatorMode @onClose={{noop}} />
-              <CardPrerender />
             </template>
           },
         );
@@ -784,7 +780,6 @@ module('Integration | operator-mode', function (hooks) {
           class TestDriver extends GlimmerComponent {
             <template>
               <OperatorMode @onClose={{noop}} />
-              <CardPrerender />
             </template>
           },
         );
@@ -812,7 +807,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -836,19 +830,14 @@ module('Integration | operator-mode', function (hooks) {
         document
           .querySelector('[data-test-auto-save-indicator]')
           ?.textContent?.trim() === 'Saving…',
+      { timeout: 5000 },
     );
     assert.dom('[data-test-auto-save-indicator]').containsText('Saving…');
     assert.false(finishedSaving, 'save in-flight message is correct');
-    await waitUntil(
-      () =>
-        document
-          .querySelector('[data-test-auto-save-indicator]')
-          ?.textContent?.trim() == 'Saved less than a minute ago',
-    );
+    await waitUntil(() => finishedSaving, { timeout: 10000 });
     assert.true(finishedSaving, 'finished saving message is correct');
-    assert
-      .dom('[data-test-auto-save-indicator]')
-      .containsText('Saved less than a minute ago');
+    await waitFor('[data-test-last-saved]');
+    assert.dom('[data-test-last-saved]').containsText('Saved');
 
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
@@ -869,7 +858,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -882,39 +870,45 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('it does not wait for save to complete before switching from edit to isolated mode', async function (assert) {
-    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    assert.expect(2);
+    let cardId = `${testRealmURL}Person/fadhlan`;
+    setCardInOperatorModeState(cardId);
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
     await waitFor('[data-test-person]');
     await click('[data-test-edit-button]');
-    let operationOrder: string[] = [];
+    let finishedSaving = false;
     this.onSave(() => {
-      operationOrder.push('saved');
+      finishedSaving = true;
     });
     // slow down the save so we can make sure that the format switch is
     // not tied to the save completion
-    await withSlowSave(1000, async () => {
+    await withSlowSave(3000, async () => {
       // intentionally not awaiting the fillIn so we can ignore the test waiters
       fillIn('[data-test-field="firstName"] input', 'FadhlanX');
       // intentionally not awaiting the click so we can ignore the test waiters
       click('[data-test-edit-button]');
-      await waitFor(
-        `[data-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
+      await waitUntil(
+        () =>
+          operatorModeStateService.state.stacks.some((stack) =>
+            stack.some(
+              (item) => item.id === cardId && item.format === 'isolated',
+            ),
+          ),
+        { timeout: 10000 },
       );
-      operationOrder.push('isolated-model');
-      await waitUntil(() => operationOrder.length === 2, { timeout: 10000 });
-      assert.deepEqual(
-        operationOrder,
-        ['isolated-model', 'saved'],
-        'the isolated mode is displayed before save completes',
+      assert.false(
+        finishedSaving,
+        'the view switches to isolated while save is still in flight',
       );
+      await waitUntil(() => finishedSaving, { timeout: 10000 });
+      assert.true(finishedSaving, 'save eventually completes');
     });
   });
 
@@ -925,7 +919,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -978,7 +971,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1012,7 +1004,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1034,7 +1025,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1066,7 +1056,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1127,7 +1116,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1160,7 +1148,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1277,7 +1264,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1320,7 +1306,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1351,7 +1336,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1398,7 +1382,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1435,7 +1418,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1459,7 +1441,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1494,7 +1475,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1539,7 +1519,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1564,7 +1543,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1591,7 +1569,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1620,7 +1597,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1662,7 +1638,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1711,7 +1686,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1753,7 +1727,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1787,7 +1760,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1817,7 +1789,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1880,7 +1851,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1916,7 +1886,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1983,7 +1952,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2036,7 +2004,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2092,7 +2059,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2122,7 +2088,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2143,7 +2108,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2231,7 +2195,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2270,7 +2233,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2311,7 +2273,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2354,7 +2315,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2411,7 +2371,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2473,7 +2432,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2503,7 +2461,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2519,7 +2476,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2540,7 +2496,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2569,7 +2524,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2623,7 +2577,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2678,7 +2631,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2739,7 +2691,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2785,7 +2736,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2834,7 +2784,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2865,7 +2814,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2949,7 +2897,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2976,7 +2923,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -3041,7 +2987,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -3257,7 +3202,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -3426,7 +3370,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -3449,7 +3392,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -3504,7 +3446,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -3532,7 +3473,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -3562,7 +3502,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );

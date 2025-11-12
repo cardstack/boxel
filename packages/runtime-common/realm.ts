@@ -2233,7 +2233,11 @@ export class Realm {
     );
     let doc: SingleCardDocument;
     if (!entry || entry?.type === 'error') {
-      if (primarySerialization && isBrowserTestEnv()) {
+      if (
+        primarySerialization &&
+        isBrowserTestEnv() &&
+        !(globalThis as any).__emulateServerPatchFailure
+      ) {
         doc = merge({}, primarySerialization, {
           data: {
             id: instanceURL,

@@ -8,7 +8,6 @@ import { module, test } from 'qunit';
 
 import { type Realm } from '@cardstack/runtime-common';
 
-import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import {
@@ -74,7 +73,6 @@ module('Integration | text-input-validator', function (hooks) {
         noop = () => {};
         <template>
           <OperatorMode @onClose={{this.noop}} />
-          <CardPrerender />
         </template>
       },
     );

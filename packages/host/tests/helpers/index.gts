@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import Service from '@ember/service';
 import {
   type TestContext,
@@ -49,8 +50,8 @@ import { Realm } from '@cardstack/runtime-common/realm';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
+import { render as renderIntoElement } from '@cardstack/host/lib/isolated-render';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
-
 import { RealmServerTokenClaims } from '@cardstack/host/services/realm-server';
 
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
@@ -65,8 +66,10 @@ import { TestRealmAdapter } from './adapter';
 import { testRealmServerMatrixUsername } from './mock-matrix';
 import { getRoomIdForRealmAndUser, type MockUtils } from './mock-matrix/_utils';
 import percySnapshot from './percy-snapshot';
-import { renderComponent } from './render-component';
+
 import visitOperatorMode from './visit-operator-mode';
+
+import type { SimpleElement } from '@simple-dom/interface';
 
 export {
   visitOperatorMode,
@@ -309,14 +312,34 @@ export function captureModuleResult(): {
   return { status, model, raw };
 }
 
+type RenderingContextWithPrerender = TestContext & {
+  owner: Owner;
+  __cardPrerenderElement?: HTMLElement;
+};
+
 async function makeRenderer() {
-  // This emulates the application.hbs
-  await renderComponent(
-    class TestDriver extends GlimmerComponent {
+  let context = getContext() as RenderingContextWithPrerender;
+  let owner = context.owner;
+  if (!owner) {
+    throw new Error('makeRenderer: missing test owner');
+  }
+
+  let element = context.__cardPrerenderElement;
+  if (!element) {
+    element = document.createElement('div');
+    element.dataset.testCardPrerenderRoot = 'true';
+    document.body.appendChild(element);
+    context.__cardPrerenderElement = element;
+  }
+
+  renderIntoElement(
+    class CardPrerenderHost extends GlimmerComponent {
       <template>
         <CardPrerender />
       </template>
     },
+    element as unknown as SimpleElement,
+    owner,
   );
 }
 
@@ -338,6 +361,9 @@ class MockLocalIndexer extends Service {
     incremental: (args: IncrementalArgs) => Promise<IncrementalResult>,
     prerenderer: Prerenderer,
   ) {
+    if (this.#prerenderer) {
+      return;
+    }
     this.#fromScratch = fromScratch;
     this.#incremental = incremental;
     this.#prerenderer = prerenderer;
@@ -402,6 +428,9 @@ export function setupLocalIndexing(hooks: NestedHooks) {
     let store = getService('store');
     await store.flushSaves();
     await store.loaded();
+    let context = this as RenderingContextWithPrerender;
+    context.__cardPrerenderElement?.remove();
+    context.__cardPrerenderElement = undefined;
   });
 }
 

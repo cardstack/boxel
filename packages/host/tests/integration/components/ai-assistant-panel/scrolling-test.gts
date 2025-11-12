@@ -12,7 +12,6 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import { BOTTOM_THRESHOLD } from '@cardstack/host/components/ai-assistant/message';
-import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -140,7 +139,6 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -293,7 +291,6 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -318,7 +315,6 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -343,7 +339,6 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );

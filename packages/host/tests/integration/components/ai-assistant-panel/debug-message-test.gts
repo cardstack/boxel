@@ -15,7 +15,6 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -109,7 +108,6 @@ module('Integration | ai-assistant-panel | debug-message', function (hooks) {
         noop = () => {};
         <template>
           <OperatorMode @onClose={{this.noop}} />
-          <CardPrerender />
         </template>
       },
     );
