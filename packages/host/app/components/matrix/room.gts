@@ -540,10 +540,10 @@ export default class Room extends Component<Signature> {
     });
 
     let autoAttachedFileUrl = this.autoAttachedFileUrl;
-    let manualFiles = this.filesToAttach;
+    let manuallyAttachedFiles = this.filesToAttach;
     let removedFileUrls = this.removedAttachedFileUrls;
 
-    let isManuallyAttached = manualFiles.some(
+    let isManuallyAttached = manuallyAttachedFiles.some(
       (file) => file.sourceUrl === autoAttachedFileUrl,
     );
     let isRemoved = autoAttachedFileUrl
@@ -582,7 +582,6 @@ export default class Room extends Component<Signature> {
 
   private get removeAutoAttachedFile() {
     return () => {
-      //this.markAttachedFileRemoved(this.autoAttachedFileUrl);
       this.autoAttachedFileResource.remove();
     };
   }
@@ -1023,14 +1022,14 @@ export default class Room extends Component<Signature> {
       return;
     }
 
-    let next = files.filter((f) => f.sourceUrl !== file.sourceUrl);
-    if (next.length === files.length) {
+    let newFiles = files.filter((f) => f.sourceUrl !== file.sourceUrl);
+    if (newFiles.length === files.length) {
       return;
     }
 
     this.matrixService.setFilesToSend(
       this.args.roomId,
-      next.length ? next : undefined,
+      newFiles.length ? newFiles : undefined,
     );
 
     this.markAttachedFileRemoved(file.sourceUrl);
@@ -1060,8 +1059,8 @@ export default class Room extends Component<Signature> {
       // If the send fails, we restore those saved values in the catch block so nothing is lost.
       if (shouldClearDraft) {
         this.matrixService.setMessageToSend(this.args.roomId, undefined);
-        this.matrixService.cardsToSend.set(this.args.roomId, undefined);
-        this.matrixService.filesToSend.set(this.args.roomId, undefined);
+        this.matrixService.setCardsToSend(this.args.roomId, undefined);
+        this.matrixService.setFilesToSend(this.args.roomId, undefined);
       }
 
       let openCardIds = new Set([
