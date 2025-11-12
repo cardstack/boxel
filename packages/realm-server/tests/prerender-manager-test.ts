@@ -90,7 +90,7 @@ module(basename(__filename), function () {
       // Make a prerender request to assign a realm to a server
       let realm = 'https://realm.example/R';
       let body = makeBody(realm, `${realm}/1`);
-      let proxyResponse = await request.post('/prerender').send(body);
+      let proxyResponse = await request.post('/prerender-card').send(body);
       assert.strictEqual(proxyResponse.status, 201, 'proxy request successful');
       let assignedServer = proxyResponse.headers['x-boxel-prerender-target'];
 
@@ -172,6 +172,80 @@ module(basename(__filename), function () {
       );
     });
 
+    test('proxies card prerender requests', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlA },
+        },
+      });
+
+      let realm = 'https://realm.example/C';
+      let cardURL = `${realm}/1`;
+
+      let proxyResponse = await request
+        .post('/prerender-card')
+        .send(makeBody(realm, cardURL));
+
+      assert.strictEqual(proxyResponse.status, 201, 'proxy request successful');
+      assert.strictEqual(
+        proxyResponse.headers['x-boxel-prerender-target'],
+        serverUrlA,
+        'card request routed to registered prerender server',
+      );
+
+      assert.strictEqual(
+        proxyResponse.body?.data?.type,
+        'prerender-result',
+        'card result type returned',
+      );
+      assert.true(
+        proxyResponse.body?.data?.attributes?.ok,
+        'card proxy payload echoed',
+      );
+    });
+
+    test('proxies module prerender requests', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      // Register a single server
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlA },
+        },
+      });
+
+      let realm = 'https://realm.example/M';
+      let moduleURL = `${realm}/module.gts`;
+
+      let proxyResponse = await request
+        .post('/prerender-module')
+        .send(makeModuleBody(realm, moduleURL));
+
+      assert.strictEqual(proxyResponse.status, 201, 'proxy request successful');
+      assert.strictEqual(
+        proxyResponse.headers['x-boxel-prerender-target'],
+        serverUrlA,
+        'module request routed to registered prerender server',
+      );
+
+      assert.strictEqual(
+        proxyResponse.body?.data?.type,
+        'prerender-module-result',
+        'module result type returned',
+      );
+      assert.strictEqual(
+        proxyResponse.body?.data?.attributes?.id,
+        moduleURL,
+        'module result id echoed',
+      );
+    });
+
     test('registration: explicit url passes and returns 204', async function (assert) {
       let { app } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());
@@ -244,14 +318,16 @@ module(basename(__filename), function () {
         'https://realm.example/R',
         'https://realm.example/R/1',
       );
-      let firstProxyResponse = await request.post('/prerender').send(body);
+      let firstProxyResponse = await request.post('/prerender-card').send(body);
       assert.strictEqual(firstProxyResponse.status, 201, 'proxy 201');
       let firstTarget = firstProxyResponse.headers['x-boxel-prerender-target'];
       assert.ok(
         [serverUrlA, serverUrlB].includes(firstTarget),
         'target is one of servers',
       );
-      let secondProxyResponse = await request.post('/prerender').send(body);
+      let secondProxyResponse = await request
+        .post('/prerender-card')
+        .send(body);
       assert.strictEqual(secondProxyResponse.status, 201, 'proxy 201 again');
       assert.strictEqual(
         secondProxyResponse.headers['x-boxel-prerender-target'],
@@ -282,9 +358,11 @@ module(basename(__filename), function () {
         'https://realm.example/R',
         'https://realm.example/R/1',
       );
-      let firstProxyResponse = await request.post('/prerender').send(body);
+      let firstProxyResponse = await request.post('/prerender-card').send(body);
       let firstTarget = firstProxyResponse.headers['x-boxel-prerender-target'];
-      let secondProxyResponse = await request.post('/prerender').send(body);
+      let secondProxyResponse = await request
+        .post('/prerender-card')
+        .send(body);
       let secondTarget =
         secondProxyResponse.headers['x-boxel-prerender-target'];
       assert.notStrictEqual(firstTarget, undefined, 'first target exists');
@@ -301,7 +379,7 @@ module(basename(__filename), function () {
         'https://realm.example/R2/1',
       );
       let realm2ProxyResponse = await request
-        .post('/prerender')
+        .post('/prerender-card')
         .send(realm2RequestBody);
       let realm2Target =
         realm2ProxyResponse.headers['x-boxel-prerender-target'];
@@ -316,7 +394,7 @@ module(basename(__filename), function () {
         'https://realm.example/R3/1',
       );
       let realm3ProxyResponse = await request
-        .post('/prerender')
+        .post('/prerender-card')
         .send(realm3RequestBody);
       let realm3Target =
         realm3ProxyResponse.headers['x-boxel-prerender-target'];
@@ -345,7 +423,7 @@ module(basename(__filename), function () {
 
       let realm = 'https://realm.example/R';
       let body = makeBody(realm, `${realm}/1`);
-      let firstProxyResponse = await request.post('/prerender').send(body);
+      let firstProxyResponse = await request.post('/prerender-card').send(body);
       assert.strictEqual(firstProxyResponse.status, 201, 'initial proxy ok');
       let firstTarget = firstProxyResponse.headers['x-boxel-prerender-target'];
       assert.ok(firstTarget, 'proxy response includes target header');
@@ -366,7 +444,9 @@ module(basename(__filename), function () {
       assert.strictEqual(disposalResponse.status, 204, 'realm disposal 204');
 
       // next request should succeed; mapping for that realm should no longer be required
-      let secondProxyResponse = await request.post('/prerender').send(body);
+      let secondProxyResponse = await request
+        .post('/prerender-card')
+        .send(body);
       assert.strictEqual(
         secondProxyResponse.status,
         201,
@@ -399,7 +479,7 @@ module(basename(__filename), function () {
 
       let realm = 'https://realm.example/R';
       let body = makeBody(realm, `${realm}/1`);
-      let firstProxyResponse = await request.post('/prerender').send(body);
+      let firstProxyResponse = await request.post('/prerender-card').send(body);
       assert.strictEqual(firstProxyResponse.status, 201, 'initial proxy ok');
       let firstTarget = firstProxyResponse.headers['x-boxel-prerender-target'];
       assert.ok(firstTarget, 'proxy response includes target header');
@@ -410,7 +490,9 @@ module(basename(__filename), function () {
       assert.strictEqual(disposalResponse.status, 204, 'realm disposal 204');
 
       let otherTarget = firstTarget === serverUrlA ? serverUrlB : serverUrlA;
-      let secondProxyResponse = await request.post('/prerender').send(body);
+      let secondProxyResponse = await request
+        .post('/prerender-card')
+        .send(body);
       assert.strictEqual(
         secondProxyResponse.status,
         201,
@@ -459,7 +541,7 @@ module(basename(__filename), function () {
         'https://realm.example/R2/1',
       );
       let proxyResponse = await request
-        .post('/prerender')
+        .post('/prerender-card')
         .send(realm2RequestBody);
       assert.strictEqual(proxyResponse.status, 201, 'proxy ok');
       assert.notStrictEqual(
@@ -491,7 +573,7 @@ module(basename(__filename), function () {
         'https://realm.example/R',
         'https://realm.example/R/1',
       );
-      let firstProxyResponse = await request.post('/prerender').send(body);
+      let firstProxyResponse = await request.post('/prerender-card').send(body);
       assert.strictEqual(firstProxyResponse.status, 201, 'initial proxy ok');
 
       // Stop server A to make it unreachable
@@ -506,7 +588,7 @@ module(basename(__filename), function () {
         'https://realm.example/R2/1',
       );
       let proxyResponse = await request
-        .post('/prerender')
+        .post('/prerender-card')
         .send(realm2RequestBody);
       assert.strictEqual(proxyResponse.status, 201, 'proxy ok');
       assert.notStrictEqual(
@@ -530,12 +612,15 @@ function makeMockPrerender(): {
     ctxt.status = 200;
     ctxt.body = 'OK';
   });
-  router.post('/prerender', async (ctxt) => {
-    let raw = await new Promise<string>((resolve) => {
+  async function readBody(ctxt: Koa.Context) {
+    return await new Promise<string>((resolve) => {
       let buf: Buffer[] = [];
       ctxt.req.on('data', (c) => buf.push(c));
       ctxt.req.on('end', () => resolve(Buffer.concat(buf).toString('utf8')));
     });
+  }
+  router.post('/prerender-card', async (ctxt) => {
+    let raw = await readBody(ctxt);
     let body = raw ? JSON.parse(raw) : {};
     ctxt.status = 201;
     ctxt.set('Content-Type', 'application/vnd.api+json');
@@ -545,6 +630,37 @@ function makeMockPrerender(): {
         type: 'prerender-result',
         id: body?.data?.attributes?.url || 'x',
         attributes: { ok: true },
+      },
+      meta: {
+        timing: { launchMs: 0, renderMs: 0, totalMs: 0 },
+        pool: {
+          pageId: 'p',
+          realm: body?.data?.attributes?.realm,
+          reused: false,
+          evicted: false,
+        },
+      },
+    });
+  });
+  router.post('/prerender-module', async (ctxt) => {
+    let raw = await readBody(ctxt);
+    let body = raw ? JSON.parse(raw) : {};
+    ctxt.status = 201;
+    ctxt.set('Content-Type', 'application/vnd.api+json');
+    ctxt.body = JSON.stringify({
+      data: {
+        type: 'prerender-module-result',
+        id: body?.data?.attributes?.url || 'x',
+        attributes: {
+          id: body?.data?.attributes?.url || 'x',
+          status: 'ready',
+          isShimmed: false,
+          nonce: '1',
+          lastModified: 0,
+          createdAt: 0,
+          deps: [],
+          definitions: {},
+        },
       },
       meta: {
         timing: { launchMs: 0, renderMs: 0, totalMs: 0 },
@@ -577,6 +693,20 @@ function makeBody(realm: string, url: string) {
   return {
     data: {
       type: 'prerender-request',
+      attributes: {
+        url,
+        userId: '@user:localhost',
+        permissions: { [realm]: ['read', 'write', 'realm-owner'] },
+        realm,
+      },
+    },
+  };
+}
+
+function makeModuleBody(realm: string, url: string) {
+  return {
+    data: {
+      type: 'prerender-module-request',
       attributes: {
         url,
         userId: '@user:localhost',

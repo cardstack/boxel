@@ -126,7 +126,11 @@ export class RealmIndexUpdater {
 
   async update(
     urls: URL[],
-    opts?: { delete?: true; onInvalidation?: (invalidatedURLs: URL[]) => void },
+    opts?: {
+      delete?: true;
+      onInvalidation?: (invalidatedURLs: URL[]) => void;
+      clientRequestId?: string | null;
+    },
   ): Promise<void> {
     this.#indexingDeferred = new Deferred<void>();
     try {
@@ -136,6 +140,7 @@ export class RealmIndexUpdater {
         realmUsername: await this.#realm.getRealmOwnerUsername(),
         operation: opts?.delete ? 'delete' : 'update',
         ignoreData: { ...this.#ignoreData },
+        clientRequestId: opts?.clientRequestId ?? null,
       };
       let job = await this.#queue.publish<IncrementalResult>({
         jobType: `incremental-index`,

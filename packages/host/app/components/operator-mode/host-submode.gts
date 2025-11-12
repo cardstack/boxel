@@ -95,6 +95,10 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     return this.hostModeService.publishedRealmURLs;
   }
 
+  get publishButtonLabel() {
+    return this.hasPublishedSites ? 'Republish Site' : 'Publish Site';
+  }
+
   get defaultPublishedRealmURL(): string | undefined {
     return this.hostModeService.defaultPublishedRealmURL;
   }
@@ -231,7 +235,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
               data-test-publish-realm-button
             >
               <PublishSiteIcon width='22' height='22' class='publish-icon' />
-              Publish Site
+              {{this.publishButtonLabel}}
             </BoxelButton>
           {{/if}}
           <PublishingRealmPopover

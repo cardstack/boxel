@@ -1,53 +1,10 @@
 import type { ParsedPhoneNumber } from 'awesome-phonenumber';
 import { parsePhoneNumber } from 'awesome-phonenumber';
 
-const FALLBACK_PHONE_REGION_CODE = 'US';
+export const DEFAULT_PHONE_REGION_CODE = 'US';
 
-const extractRegionFromLocale = (locale?: string): string | undefined => {
-  if (!locale) {
-    return undefined;
-  }
-
-  try {
-    if (
-      typeof Intl !== 'undefined' &&
-      typeof (Intl as any).Locale === 'function'
-    ) {
-      const region = new (Intl as any).Locale(locale).region;
-      if (region) {
-        return region.toUpperCase();
-      }
-    }
-  } catch {
-    // Ignore parsing errors and fall back to regex extraction
-  }
-
-  const match = locale.match(/-([a-z]{2})(?:[-_]|$)/i);
-  return match?.[1] ? match[1].toUpperCase() : undefined;
-};
-
-const getUserRegionCode = (): string | undefined => {
-  if (typeof navigator === 'undefined') {
-    return undefined;
-  }
-
-  const locales =
-    Array.isArray(navigator.languages) && navigator.languages.length
-      ? navigator.languages
-      : [navigator.language];
-
-  for (const locale of locales) {
-    const region = extractRegionFromLocale(locale);
-    if (region) {
-      return region;
-    }
-  }
-
-  return undefined;
-};
-
-export const DEFAULT_PHONE_REGION_CODE =
-  getUserRegionCode() ?? FALLBACK_PHONE_REGION_CODE;
+export const DEFAULT_PHONE_VALIDATION_MESSAGE =
+  'Enter a valid phone number. Numbers with a country code must start with "+"';
 
 export const PHONE_VALIDATION_ERROR_CODES = [
   'invalid-type',
@@ -77,7 +34,7 @@ const generateErrorDescription = (
 export const PHONE_VALIDATION_ERRORS = {
   invalidType: generateErrorDescription(
     'invalid-type',
-    'Enter a valid phone number',
+    DEFAULT_PHONE_VALIDATION_MESSAGE,
   ),
   empty: generateErrorDescription('empty', 'Enter a phone number'),
   invalidCountryCode: generateErrorDescription(
@@ -88,7 +45,7 @@ export const PHONE_VALIDATION_ERRORS = {
   tooLong: generateErrorDescription('too-long', 'Phone number is too long'),
   invalidFormat: generateErrorDescription(
     'invalid-format',
-    'Enter a valid phone number',
+    DEFAULT_PHONE_VALIDATION_MESSAGE,
   ),
   disallowedCountry: generateErrorDescription(
     'disallowed-country',

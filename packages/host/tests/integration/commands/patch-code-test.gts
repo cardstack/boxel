@@ -5,9 +5,8 @@ import {
   REPLACE_MARKER,
   SEARCH_MARKER,
   SEPARATOR_MARKER,
+  type LintResult,
 } from '@cardstack/runtime-common';
-
-import { LintResult } from '@cardstack/runtime-common/lint';
 
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 

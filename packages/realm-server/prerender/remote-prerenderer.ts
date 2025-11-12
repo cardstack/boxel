@@ -1,6 +1,7 @@
 import {
   type Prerenderer,
   type RenderResponse,
+  type ModuleRenderResponse,
   logger,
 } from '@cardstack/runtime-common';
 
@@ -10,25 +11,17 @@ export function createRemotePrerenderer(
   prerenderServerURL: string,
 ): Prerenderer {
   let prerenderURL = new URL(prerenderServerURL);
-  return async function prerender({
-    realm,
-    url,
-    userId,
-    permissions,
-    renderOptions,
-  }: Parameters<Prerenderer>[0]): Promise<RenderResponse> {
-    let endpoint = new URL('prerender', prerenderURL);
 
+  async function request<T>(
+    path: string,
+    type: string,
+    attributes: Record<string, unknown>,
+  ): Promise<T> {
+    let endpoint = new URL(path, prerenderURL);
     let body = {
       data: {
-        type: 'prerender-request',
-        attributes: {
-          realm,
-          url,
-          userId,
-          permissions,
-          renderOptions: renderOptions ?? {},
-        },
+        type,
+        attributes,
       },
     };
 
@@ -58,11 +51,40 @@ export function createRemotePrerenderer(
       throw new Error('Failed to parse prerender response as JSON');
     }
 
-    let renderResponse: RenderResponse | undefined = json?.data?.attributes;
-    if (!renderResponse) {
+    let attributesPayload: T | undefined = json?.data?.attributes;
+    if (!attributesPayload) {
       throw new Error('Prerender response did not contain data.attributes');
     }
 
-    return renderResponse;
+    return attributesPayload;
+  }
+
+  return {
+    async prerenderCard({ realm, url, userId, permissions, renderOptions }) {
+      return await request<RenderResponse>(
+        'prerender-card',
+        'prerender-request',
+        {
+          realm,
+          url,
+          userId,
+          permissions,
+          renderOptions: renderOptions ?? {},
+        },
+      );
+    },
+    async prerenderModule({ realm, url, userId, permissions, renderOptions }) {
+      return await request<ModuleRenderResponse>(
+        'prerender-module',
+        'prerender-module-request',
+        {
+          realm,
+          url,
+          userId,
+          permissions,
+          renderOptions: renderOptions ?? {},
+        },
+      );
+    },
   };
 }

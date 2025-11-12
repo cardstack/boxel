@@ -9,6 +9,7 @@ import Ajv from 'ajv';
 import { task, timeout, all } from 'ember-concurrency';
 
 import { TrackedSet } from 'tracked-built-ins';
+import { v4 as uuidv4 } from 'uuid';
 
 import type { Command, CommandContext } from '@cardstack/runtime-common';
 import {
@@ -28,6 +29,8 @@ import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
+
+import LimitedSet from '../lib/limited-set';
 
 import type LoaderService from './loader-service';
 import type OperatorModeStateService from './operator-mode-state-service';
@@ -55,10 +58,35 @@ export default class CommandService extends Service {
   currentlyExecutingCommandRequestIds = new TrackedSet<string>();
   executedCommandRequestIds = new TrackedSet<string>();
   acceptingAllRoomIds = new TrackedSet<string>();
+  private aiAssistantClientRequestIdsByRoom = new Map<
+    string,
+    LimitedSet<string>
+  >();
+
   private commandProcessingEventQueue: string[] = [];
   private codePatchProcessingEventQueue: string[] = [];
   private flushCommandProcessingQueue: Promise<void> | undefined;
   private flushCodePatchProcessingQueue: Promise<void> | undefined;
+
+  registerAiAssistantClientRequestId(
+    action: string,
+    roomId?: string,
+  ): string | undefined {
+    if (!roomId) {
+      return `bot-patch:${action}:${uuidv4()}`;
+    }
+    let encodedRoom = encodeURIComponent(roomId);
+    let clientRequestId = `bot-patch:${encodedRoom}:${action}:${uuidv4()}`;
+
+    let roomSet = this.aiAssistantClientRequestIdsByRoom.get(roomId!);
+    if (!roomSet) {
+      roomSet = new LimitedSet<string>(250);
+      this.aiAssistantClientRequestIdsByRoom.set(roomId!, roomSet);
+    }
+    roomSet.add(clientRequestId);
+
+    return clientRequestId;
+  }
 
   public queueEventForCommandProcessing(event: Partial<IEvent>) {
     let eventId = event.event_id;
@@ -347,6 +375,7 @@ export default class CommandService extends Service {
           payload?.attributes,
           payload?.relationships,
         );
+
         [resultCard] = await all([
           await commandToRun.execute(typedInput as any),
           await timeout(DELAY_FOR_APPLYING_UI), // leave a beat for the "applying" state of the UI to be shown
@@ -357,10 +386,18 @@ export default class CommandService extends Service {
             "Patch command can't run because it doesn't have all the fields in arguments returned by open ai",
           );
         }
-        await this.store.patch(payload?.attributes?.cardId, {
-          attributes: payload?.attributes?.patch?.attributes,
-          relationships: payload?.attributes?.patch?.relationships,
-        });
+        let clientRequestId = this.registerAiAssistantClientRequestId(
+          'patch-instance',
+          command.message.roomId,
+        );
+        await this.store.patch(
+          payload?.attributes?.cardId,
+          {
+            attributes: payload?.attributes?.patch?.attributes,
+            relationships: payload?.attributes?.patch?.relationships,
+          },
+          { clientRequestId },
+        );
       } else {
         // Unrecognized command. This can happen if a programmatically-provided command is no longer available due to a browser refresh.
         throw new Error(
@@ -517,13 +554,16 @@ export default class CommandService extends Service {
       );
     }
     let finalFileUrl: string | undefined;
+
     try {
       let patchCodeCommand = new PatchCodeCommand(this.commandContext);
+
       let patchCodeResult = await patchCodeCommand.execute({
         fileUrl,
         codeBlocks: codeDataItems.map(
           (codeData) => codeData.searchReplaceBlock!,
         ),
+        roomId,
       });
       finalFileUrl = patchCodeResult.finalFileUrl;
 
