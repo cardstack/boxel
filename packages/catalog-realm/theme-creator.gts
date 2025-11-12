@@ -8,7 +8,9 @@ import RealmField from 'https://cardstack.com/base/realm';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import NumberField from 'https://cardstack.com/base/number';
 import { Button } from '@cardstack/boxel-ui/components';
+import { type Query } from '@cardstack/runtime-common';
 import ThemeCodeRefField from './fields/theme-code-ref';
+import PaginatedCards from './components/paginated-cards';
 
 export class ThemeCreator extends CardDef {
   static displayName = 'Theme Creator';
@@ -25,6 +27,65 @@ export class ThemeCreator extends CardDef {
 
     get isGenerateDisabled() {
       return !this.canGenerate;
+    }
+
+    get selectedRealm(): string | null {
+      let realm = this.args.model.realm;
+      if (typeof realm !== 'string') {
+        return null;
+      }
+      let trimmed = realm.trim();
+      return trimmed.length ? trimmed : null;
+    }
+
+    get codeRefSelection() {
+      let ref = this.args.model.codeRef;
+      if (ref && ref.module && ref.name) {
+        return ref;
+      }
+      return null;
+    }
+
+    get generatedCardsRealms(): string[] {
+      return this.selectedRealm ? [this.selectedRealm] : [];
+    }
+
+    get generatedCardsQuery(): Query | undefined {
+      let ref = this.codeRefSelection;
+      if (!ref) {
+        return undefined;
+      }
+      return {
+        filter: {
+          type: {
+            module: ref.module,
+            name: ref.name,
+          },
+        },
+        sort: [
+          {
+            by: 'createdAt',
+            direction: 'desc',
+          },
+        ],
+      };
+    }
+
+    get canShowGeneratedCards(): boolean {
+      return Boolean(this.generatedCardsQuery && this.generatedCardsRealms.length);
+    }
+
+    get generatedCardsHint(): string {
+      if (!this.selectedRealm && !this.codeRefSelection) {
+        return 'Select a realm and theme type to preview matching cards.';
+      }
+      if (!this.selectedRealm) {
+        return 'Select a realm to preview cards.';
+      }
+      if (!this.codeRefSelection) {
+        return 'Select a theme type to preview cards.';
+      }
+      return 'Update the selections above to preview cards.';
     }
 
     <template>
@@ -76,6 +137,27 @@ export class ThemeCreator extends CardDef {
             disabled={{this.isGenerateDisabled}}
           >Generate</Button>
         </div>
+
+        <section class='theme-creator__generated'>
+          <div class='theme-creator__section-header'>
+            <h2>Existing Theme Cards</h2>
+            <p class='theme-creator__description'>
+              Preview cards of this type in the selected realm.
+            </p>
+          </div>
+
+          <div class='theme-creator__generated-wrapper theme-creator__meta-field'>
+            {{#if this.canShowGeneratedCards}}
+              <PaginatedCards
+                @query={{this.generatedCardsQuery}}
+                @realms={{this.generatedCardsRealms}}
+                @context={{@context}}
+              />
+            {{else}}
+              <p class='theme-creator__hint'>{{this.generatedCardsHint}}</p>
+            {{/if}}
+          </div>
+        </section>
       </section>
 
       <style scoped>
@@ -136,6 +218,35 @@ export class ThemeCreator extends CardDef {
         .theme-creator__actions {
           display: flex;
           gap: var(--boxel-sp-sm);
+        }
+
+        .theme-creator__generated {
+          margin-top: var(--boxel-sp-lg);
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-md);
+        }
+
+        .theme-creator__section-header {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xxs);
+        }
+
+        .theme-creator__section-header h2 {
+          margin: 0;
+        }
+
+        .theme-creator__section-header p,
+        .theme-creator__hint {
+          margin: 0;
+          color: var(--boxel-600);
+          font-size: var(--boxel-font-size-sm);
+        }
+
+        .theme-creator__generated-wrapper {
+          padding: var(--boxel-sp-sm);
+          margin-top: var(--boxel-sp-sm);
         }
       </style>
     </template>

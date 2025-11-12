@@ -8,10 +8,10 @@
     },
     "type": "card",
     "attributes": {
-      "realm": "http://localhost:4201/catalog/",
+      "realm": "http://localhost:4201/experiments/",
       "prompt": "",
       "codeRef": {
-        "name": "StyleReference",
+        "name": "default",
         "module": "https://cardstack.com/base/style-reference"
       },
       "cardInfo": {

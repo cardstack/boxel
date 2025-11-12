@@ -8,21 +8,21 @@ const THEME_CODE_REF_OPTIONS: Array<{ label: string; ref: ResolvedCodeRef }> = [
     label: 'Style Reference',
     ref: {
       module: 'https://cardstack.com/base/style-reference',
-      name: 'StyleReference',
+      name: 'default',
     },
   },
   {
     label: 'Brand Guide',
     ref: {
       module: 'https://cardstack.com/base/brand-guide',
-      name: 'BrandGuide',
+      name: 'default',
     },
   },
   {
     label: 'Structured Theme',
     ref: {
       module: 'https://cardstack.com/base/structured-theme',
-      name: 'StructuredTheme',
+      name: 'default',
     },
   },
 ];
