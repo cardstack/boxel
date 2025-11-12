@@ -24,7 +24,8 @@ import { APP_BOXEL_MESSAGE_MSGTYPE } from '../helpers/matrix-constants';
 
 test.describe('Room messages', () => {
   test(`it can send a message in a room`, async ({ page }) => {
-    // TODO: this tests multiple different behaviours beyond just sending a message.
+    // TODO: Split up this test (CS-9722).
+    // This tests multiple different behaviours beyond just sending a message.
     // There are tests for:
     // - sending messages with a button
     // - sending messages with Enter key
