@@ -23,6 +23,7 @@ import './realm-endpoints/info-test';
 import './realm-endpoints/lint-test';
 import './realm-endpoints/mtimes-test';
 import './realm-endpoints/permissions-test';
+import './realm-endpoints/resource-index-test';
 import './realm-endpoints/search-test';
 import './realm-endpoints/user-test';
 import './realm-endpoints/definition-test';

@@ -434,6 +434,7 @@ jobs:
             "realm-endpoints/lint-test.ts",
             "realm-endpoints/mtimes-test.ts",
             "realm-endpoints/permissions-test.ts",
+            "realm-endpoints/resource-index-test.ts",
             "realm-endpoints/search-test.ts",
             "realm-endpoints/user-test.ts",
             "realm-endpoints/definition-test.ts",
