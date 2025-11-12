@@ -3636,7 +3636,7 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('query-backed relationships include canonical search links in serialized payloads', async function (assert) {
-    assert.expect(30);
+    assert.expect(34);
 
     class Person extends CardDef {
       @field title = contains(StringField);
@@ -3810,6 +3810,15 @@ module('Integration | serialization', function (hooks) {
       1,
       'favorite query field cache normalizes page size',
     );
+    assert.strictEqual(
+      favoriteState?.realm,
+      testRealmURL,
+      'favorite query field cache records resolved realm',
+    );
+    assert.false(
+      favoriteState?.stale,
+      'favorite query field cache starts in a non-stale state',
+    );
 
     let matchesState = getQueryFieldState(queryCardInstance, 'matches');
     assert.ok(matchesState, 'matches query field state is seeded');
@@ -3852,6 +3861,15 @@ module('Integration | serialization', function (hooks) {
       matchesState?.query?.sort?.[0]?.direction,
       'asc',
       'matches query field cache preserves sort direction',
+    );
+    assert.strictEqual(
+      matchesState?.realm,
+      testRealmURL,
+      'matches query field cache records resolved realm',
+    );
+    assert.false(
+      matchesState?.stale,
+      'matches query field cache starts in a non-stale state',
     );
   });
 
