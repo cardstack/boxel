@@ -168,7 +168,7 @@ export default class CardCatalog extends Component<Signature> {
               container='card-catalog'
             }}
           >
-            {{#if @offerToCreate}}
+            {{#if (this.showCreateCardForRealm realmUrl)}}
               {{#let
                 (deepEq @selectedCard (this.newCardArgs realmUrl))
                 as |isSelected|
@@ -252,19 +252,21 @@ export default class CardCatalog extends Component<Signature> {
                 container='card-catalog'
               }}
             >
-              {{#let
-                (deepEq @selectedCard (this.newCardArgs realmUrl))
-                as |isSelected|
-              }}
-                <ItemButton
-                  @newCard={{this.newCardArgs realmUrl}}
-                  @isSelected={{isSelected}}
-                  @select={{@select}}
-                  @handleEnterKey={{this.handleEnterKey}}
-                  @newCardKey={{this.newCardKey}}
-                  @cardRefName={{this.cardRefName}}
-                />
-              {{/let}}
+              {{#if (this.showCreateCardForRealm realmUrl)}}
+                {{#let
+                  (deepEq @selectedCard (this.newCardArgs realmUrl))
+                  as |isSelected|
+                }}
+                  <ItemButton
+                    @newCard={{this.newCardArgs realmUrl}}
+                    @isSelected={{isSelected}}
+                    @select={{@select}}
+                    @handleEnterKey={{this.handleEnterKey}}
+                    @newCardKey={{this.newCardKey}}
+                    @cardRefName={{this.cardRefName}}
+                  />
+                {{/let}}
+              {{/if}}
             </ul>
           </section>
         {{/each-in}}
@@ -420,6 +422,10 @@ export default class CardCatalog extends Component<Signature> {
       this.args.select(card, event);
     }
   }
+
+  private showCreateCardForRealm = (realmURL: string) => {
+    return !!this.args.offerToCreate && this.realm.canWrite(realmURL);
+  };
 
   @action
   private newCardArgs(realmURL: string) {

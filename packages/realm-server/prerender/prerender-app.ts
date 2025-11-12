@@ -8,7 +8,7 @@ import {
   type RealmPermissions,
   type RenderRouteOptions,
   type RenderResponse,
-  type ModulePrerenderResponse,
+  type ModuleRenderResponse,
 } from '@cardstack/runtime-common';
 import {
   ecsMetadata,
@@ -231,7 +231,7 @@ export function buildPrerenderApp(
     errorContext: '/prerender-module',
     execute: (args) => prerenderer.prerenderModule(args),
     afterResponse: (url, response) => {
-      const moduleResponse = response as ModulePrerenderResponse;
+      const moduleResponse = response as ModuleRenderResponse;
       if (moduleResponse.status === 'error' && moduleResponse.error) {
         log.debug(
           `module render of ${url} resulted in error doc:\n${JSON.stringify(moduleResponse.error, null, 2)}`,
