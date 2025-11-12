@@ -1,19 +1,24 @@
 import { expect, type Page } from '@playwright/test';
 import {
+  Credentials,
   loginUser,
   getAllRoomEvents,
   getJoinedRooms,
+  registerUser,
   type SynapseInstance,
   sync,
+  updateUser,
+  type UpdateUserOptions,
 } from '../docker/synapse';
 import { realmPassword } from './realm-credentials';
-import { registerUser } from '../docker/synapse';
-import { IsolatedRealmServer } from './isolated-realm-server';
+import { appURL, BasicSQLExecutor, SQLExecutor } from './isolated-realm-server';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
+import { randomUUID } from 'crypto';
 
-export const testHost = 'http://localhost:4202/test';
+export const testHost = 'http://localhost:4205/test';
 export const mailHost = 'http://localhost:5001';
 export const initialRoomName = 'New AI Assistant Chat';
+export const REGISTRATION_TOKEN = 'abc123';
 
 const realmSecretSeed = "shhh! it's a secret";
 
@@ -27,13 +32,91 @@ interface LoginOptions {
   showAllCards?: boolean; //default true
 }
 
-export async function setSkillsRedirect(page: Page) {
-  await page.route('http://localhost:4201/skills/**', async (route) => {
+// Shared SQL executor is created on demand for tests
+interface MatrixTestContext {
+  adminAccessToken: string;
+  synapse: SynapseInstance;
+  realmServerDb: string;
+  matrixUrl?: string;
+  prerenderUrl?: string;
+}
+
+let cachedMatrixTestContext: MatrixTestContext | undefined;
+let cachedSQLExecutor: SQLExecutor | undefined;
+
+export function getMatrixTestContext(): MatrixTestContext {
+  if (!cachedMatrixTestContext) {
+    let raw = process.env.MATRIX_TEST_CONTEXT;
+    if (!raw) {
+      throw new Error(
+        'MATRIX_TEST_CONTEXT environment variable is not defined',
+      );
+    }
+    let parsed = JSON.parse(raw) as Partial<MatrixTestContext>;
+    if (
+      typeof parsed.adminAccessToken !== 'string' ||
+      typeof parsed.realmServerDb !== 'string' ||
+      !parsed.synapse
+    ) {
+      throw new Error(
+        'MATRIX_TEST_CONTEXT is missing required properties: adminAccessToken, realmServerDb, synapse',
+      );
+    }
+    cachedMatrixTestContext = {
+      adminAccessToken: parsed.adminAccessToken,
+      realmServerDb: parsed.realmServerDb,
+      synapse: parsed.synapse as SynapseInstance,
+      matrixUrl:
+        typeof parsed.matrixUrl === 'string' ? parsed.matrixUrl : undefined,
+      prerenderUrl:
+        typeof parsed.prerenderUrl === 'string'
+          ? parsed.prerenderUrl
+          : undefined,
+    };
+  }
+  return cachedMatrixTestContext;
+}
+
+export function getSharedSQLExecutor(): SQLExecutor {
+  if (!cachedSQLExecutor) {
+    let { realmServerDb } = getMatrixTestContext();
+    cachedSQLExecutor = new BasicSQLExecutor(realmServerDb);
+  }
+  return cachedSQLExecutor;
+}
+
+export async function updateSynapseUser(
+  userId: string,
+  options: UpdateUserOptions,
+) {
+  let { adminAccessToken } = getMatrixTestContext();
+  await updateUser(adminAccessToken, userId, options);
+}
+
+async function registerRealmRedirect(
+  page: Page,
+  fromPrefix: string,
+  toPrefix: string,
+) {
+  await page.route(`${fromPrefix}**`, async (route) => {
     const url = route.request().url();
-    const suffix = url.split('http://localhost:4201/skills/').pop();
-    const newUrl = `http://localhost:4205/skills/${suffix}`;
+    const suffix = url.slice(fromPrefix.length);
+    const newUrl = `${toPrefix}${suffix}`;
     await route.continue({ url: newUrl });
   });
+}
+
+export async function setRealmRedirects(page: Page) {
+  await registerRealmRedirect(
+    page,
+    'http://localhost:4201/skills/',
+    'http://localhost:4205/skills/',
+  );
+  await registerRealmRedirect(
+    page,
+    'http://localhost:4201/base/',
+    'http://localhost:4205/base/',
+  );
 }
 
 export async function registerRealmUsers(synapse: SynapseInstance) {
@@ -100,10 +183,7 @@ export async function createRealm(
   await page.locator('[data-test-display-name-field]').fill(name);
   await page.locator('[data-test-endpoint-field]').fill(endpoint);
   await page.locator('[data-test-create-workspace-submit]').click();
-  await waitUntil(
-    async () =>
-      (await page.locator(`[data-test-workspace="${name}"]`).count()) === 1,
-  );
+  await expect(page.locator(`[data-test-workspace="${name}"]`)).toHaveCount(1);
 }
 
 export async function openRoot(page: Page, url = testHost) {
@@ -313,8 +393,16 @@ export async function logout(page: Page) {
 }
 
 export async function createRoom(page: Page) {
+  let existingRoomId = await getRoomId(page);
   await page.locator('[data-test-create-room-btn]').click();
-  let roomId = await getRoomId(page);
+  let roomId;
+  await expect(async () => {
+    roomId = await getRoomId(page);
+    expect(roomId).toBeTruthy();
+    expect(roomId).not.toEqual(existingRoomId);
+  }).toPass();
+  // insist that the room id exists
+  roomId = roomId!;
   await isInRoom(page, roomId);
   return roomId;
 }
@@ -537,12 +625,6 @@ export async function assertRooms(page: Page, rooms: string[]) {
   await page.locator(`[data-test-past-sessions-button]`).click(); // toggle past sessions on
 
   if (rooms && rooms.length > 0) {
-    await page.waitForFunction(
-      (rooms) =>
-        document.querySelectorAll('[data-test-joined-room]').length >=
-        rooms.length,
-      rooms,
-    );
     await Promise.all(
       rooms.map((name) =>
         expect(
@@ -560,7 +642,7 @@ export async function assertRooms(page: Page, rooms: string[]) {
   await page.locator('[data-test-ai-assistant-panel]').click();
 }
 
-export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
+export async function assertLoggedIn(page: Page, opts: ProfileAssertions) {
   await page.locator('[data-test-profile-icon-button]').click();
 
   await expect(
@@ -571,12 +653,11 @@ export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
     page.locator('[data-test-password-field]'),
     'password field is not displayed',
   ).toHaveCount(0);
-
   await expect(page.locator('[data-test-profile-display-name]')).toContainText(
-    opts?.displayName ?? 'user1',
+    opts.displayName!,
   );
   await expect(page.locator('[data-test-profile-icon-handle]')).toContainText(
-    opts?.userId ?? '@user1:localhost',
+    opts.userId!,
   );
 
   if (opts?.email) {
@@ -590,11 +671,9 @@ export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
   }
 }
 
-export async function setupUser(
-  username: string,
-  realmServer: IsolatedRealmServer,
-) {
-  await realmServer.executeSQL(
+export async function setupUser(username: string, realmServer?: SQLExecutor) {
+  let executor = realmServer ?? getSharedSQLExecutor();
+  await executor.executeSQL(
     `INSERT INTO users (matrix_user_id) VALUES ('${username}')`,
   );
 }
@@ -602,9 +681,10 @@ export async function setupUser(
 export async function setupPermissions(
   username: string,
   realmURL: string,
-  realmServer: IsolatedRealmServer,
+  realmServer?: SQLExecutor,
 ) {
-  await realmServer.executeSQL(
+  let executor = realmServer ?? getSharedSQLExecutor();
+  await executor.executeSQL(
     `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
     VALUES (
       '${realmURL}',
@@ -619,11 +699,12 @@ export async function setupPermissions(
 
 export async function setupPayment(
   username: string,
-  realmServer: IsolatedRealmServer,
+  realmServer?: SQLExecutor,
   _page?: Page,
 ) {
+  let executor = realmServer ?? getSharedSQLExecutor();
   // mock trigger stripe webhook 'checkout.session.completed'
-  let starterPlan = await realmServer.executeSQL(
+  let starterPlan = await executor.executeSQL(
     `SELECT * FROM plans WHERE name = 'Starter'`,
   );
 
@@ -632,11 +713,11 @@ export async function setupPayment(
   let subscriptionId = `sub_${randomNumber}`;
   let stripeCustomerId = `cus_${randomNumber}`;
 
-  await realmServer.executeSQL(
+  await executor.executeSQL(
     `UPDATE users SET stripe_customer_id = '${stripeCustomerId}' WHERE matrix_user_id = '${username}'`,
   );
 
-  let findUser = await realmServer.executeSQL(
+  let findUser = await executor.executeSQL(
     `SELECT * FROM users WHERE matrix_user_id = '${username}'`,
   );
 
@@ -647,7 +728,7 @@ export async function setupPayment(
   const oneMonthFromNow = now + 2592000; // One month in seconds
 
   // mock trigger stripe webhook 'invoice.payment_succeeded'
-  await realmServer.executeSQL(
+  await executor.executeSQL(
     `INSERT INTO subscriptions (
       user_id,
       plan_id,
@@ -665,12 +746,12 @@ export async function setupPayment(
     )`,
   );
 
-  const getSubscription = await realmServer.executeSQL(
+  const getSubscription = await executor.executeSQL(
     `SELECT id FROM subscriptions WHERE stripe_subscription_id = '${subscriptionId}'`,
   );
   const subscriptionUUID = getSubscription[0].id;
 
-  await realmServer.executeSQL(
+  await executor.executeSQL(
     `INSERT INTO subscription_cycles (
       subscription_id,
       period_start,
@@ -682,22 +763,58 @@ export async function setupPayment(
     )`,
   );
 
-  let subscriptionCycle = await realmServer.executeSQL(
+  let subscriptionCycle = await executor.executeSQL(
     `SELECT id FROM subscription_cycles WHERE subscription_id = '${subscriptionUUID}'`,
   );
   const subscriptionCycleUUID = subscriptionCycle[0].id;
 
-  await realmServer.executeSQL(
+  await executor.executeSQL(
     `INSERT INTO credits_ledger (user_id, credit_amount, credit_type, subscription_cycle_id) VALUES ('${userId}', ${starterPlan[0].credits_included}, 'plan_allowance', '${subscriptionCycleUUID}')`,
   );
 }
 
 export async function setupUserSubscribed(
   username: string,
-  realmServer: IsolatedRealmServer,
+  realmServer?: SQLExecutor,
 ) {
   await setupUser(username, realmServer);
   await setupPayment(username, realmServer);
+}
+
+export function getUniqueUsername(prefix = 'user'): string {
+  return `${prefix}-${randomUUID()}`;
+}
+
+export function getUniquePassword(): string {
+  return randomUUID();
+}
+
+export async function createUser(
+  prefix = 'user',
+): Promise<{ username: string; password: string; credentials: Credentials }> {
+  let { synapse } = getMatrixTestContext();
+  const username = getUniqueUsername(prefix);
+  const password = getUniquePassword();
+  const credentials = await registerUser(synapse, username, password);
+  return { username, password, credentials };
+}
+
+export async function createSubscribedUser(
+  prefix = 'user',
+): Promise<{ username: string; password: string; credentials: Credentials }> {
+  const { username, password, credentials } = await createUser(prefix);
+  await setupUserSubscribed(`@${username}:localhost`);
+  return { username, password, credentials };
+}
+
+export async function createSubscribedUserAndLogin(
+  page: Page,
+  prefix: string,
+  url = appURL,
+): Promise<{ username: string; password: string; credentials: Credentials }> {
+  const user = await createSubscribedUser(prefix);
+  await login(page, user.username, user.password, { url });
+  return user;
 }
 
 export async function assertLoggedOut(page: Page) {
@@ -720,8 +837,8 @@ export async function assertLoggedOut(page: Page) {
 }
 
 export async function getRoomEvents(
-  username = 'user1',
-  password = 'pass',
+  username: string,
+  password: string,
   roomId?: string,
 ) {
   let { accessToken } = await loginUser(username, password);
@@ -765,7 +882,7 @@ export function getAgentId(
   }
 }
 
-export async function getRoomsFromSync(username = 'user1', password = 'pass') {
+export async function getRoomsFromSync(username: string, password: string) {
   let { accessToken } = await loginUser(username, password);
   let response = (await sync(accessToken)) as any;
   return response.rooms;
