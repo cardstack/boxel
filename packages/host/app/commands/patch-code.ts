@@ -72,7 +72,13 @@ export default class PatchCodeCommand extends HostBaseCommand<
           roomId,
         );
 
-      if (!(await this.trySaveThroughOpenFile(finalFileUrl, patchedCode))) {
+      if (
+        !(await this.trySaveThroughOpenFile(
+          finalFileUrl,
+          patchedCode,
+          clientRequestId,
+        ))
+      ) {
         this.cardService
           .saveSource(new URL(finalFileUrl), patchedCode, 'bot-patch', {
             resetLoader: hasExecutableExtension(finalFileUrl),
@@ -102,6 +108,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
   private async trySaveThroughOpenFile(
     targetFileUrl: string,
     content: string,
+    clientRequestId?: string,
   ): Promise<boolean> {
     try {
       let openFileResource = this.operatorModeStateService.openFile?.current;
@@ -117,6 +124,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
         .write(content, {
           flushLoader: hasExecutableExtension(targetFileUrl),
           saveType: 'bot-patch',
+          clientRequestId,
         })
         .catch((error: unknown) => {
           console.error(

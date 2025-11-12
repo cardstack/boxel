@@ -106,7 +106,11 @@ export interface Ready {
   size: number; // size in bytes
   write(
     content: string,
-    opts?: { flushLoader?: boolean; saveType?: SaveType },
+    opts?: {
+      flushLoader?: boolean;
+      saveType?: SaveType;
+      clientRequestId?: string;
+    },
   ): Promise<void>;
   lastModifiedAsDate?: Date;
   isBinary?: boolean;
@@ -245,7 +249,11 @@ class _FileResource extends Resource<Args> {
       url: response.url,
       write(
         content: string,
-        opts?: { flushLoader?: boolean; saveType?: SaveType },
+        opts?: {
+          flushLoader?: boolean;
+          saveType?: SaveType;
+          clientRequestId?: string;
+        },
       ) {
         self.writing = self.writeTask
           .unlinked() // If the component which performs this task from within another task is destroyed, for example the "add field" modal, we want this task to continue running
@@ -318,13 +326,20 @@ class _FileResource extends Resource<Args> {
     async (
       state: Ready,
       content: string,
-      opts?: { flushLoader?: boolean; saveType?: SaveType },
+      opts?: {
+        flushLoader?: boolean;
+        saveType?: SaveType;
+        clientRequestId?: string;
+      },
     ) => {
       let response = await this.cardService.saveSource(
         new URL(this._url),
         content,
         opts?.saveType ?? 'editor',
-        { resetLoader: opts?.flushLoader },
+        {
+          resetLoader: opts?.flushLoader,
+          clientRequestId: opts?.clientRequestId,
+        },
       );
       if (this.innerState.state === 'not-found') {
         // TODO think about the "unauthorized" scenario
