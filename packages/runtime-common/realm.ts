@@ -461,6 +461,11 @@ export class Realm {
         this.fetchCardTypeSummary.bind(this),
       )
       .get(
+        '/_resource-index',
+        SupportedMimeType.JSON,
+        this.getResourceIndex.bind(this),
+      )
+      .get(
         '/_has-private-dependencies',
         SupportedMimeType.JSONAPI,
         this.hasPrivateExternalDependencies.bind(this),
@@ -2788,6 +2793,45 @@ export class Realm {
     }
   }
 
+  private async getResourceIndex(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let href = new URL(request.url).search.slice(1);
+    let payload = parseQuery(href);
+    if (!payload.url) {
+      return badRequest({
+        message: `The request body is missing the url parameter`,
+        requestContext,
+      });
+    }
+    let resourceUrl = Array.isArray(payload.url)
+      ? String(payload.url[0])
+      : String(payload.url);
+
+    let rows = (await query(this.#dbAdapter, [
+      `SELECT url, realm_url, deps FROM boxel_index WHERE (url =`,
+      param(resourceUrl),
+      `OR file_alias =`,
+      param(resourceUrl),
+      `) AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+    ])) as { url: string; realm_url: string; deps: unknown }[];
+
+    let entries = rows.map((row) => ({
+      canonicalUrl: row.url,
+      realmUrl: ensureTrailingSlash(row.realm_url),
+      dependencies: parseDeps(row.deps),
+    }));
+
+    return createResponse({
+      body: JSON.stringify(entries, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.JSON },
+      },
+      requestContext,
+    });
+  }
+
   private async hasPrivateExternalDependencies(
     _request: Request,
     requestContext: RequestContext,
@@ -2795,6 +2839,11 @@ export class Realm {
     let sourceRealmURL = ensureTrailingSlash(this.url);
     let resourceEntries = new Map<string, ResourceIndexEntry[]>();
     let visibilityCache = new Map<string, RealmVisibility>();
+    let remoteRealmBaseCache = new Map<string, URL>();
+    let remoteResourceFetches = new Map<
+      string,
+      Promise<ResourceIndexEntry[]>
+    >();
 
     let instanceRows = (await query(this.#dbAdapter, [
       `SELECT url FROM boxel_index WHERE realm_url =`,
@@ -2809,32 +2858,194 @@ export class Realm {
     let queued = new Set(queue);
 
     let resolveRealmVisibility = async (realmUrl: string) => {
-      if (visibilityCache.has(realmUrl)) {
-        return visibilityCache.get(realmUrl)!;
+      let normalizedRealmUrl = ensureTrailingSlash(realmUrl);
+      if (visibilityCache.has(normalizedRealmUrl)) {
+        return visibilityCache.get(normalizedRealmUrl)!;
       }
 
       let visibility: RealmVisibility;
-      if (realmUrl === sourceRealmURL) {
+      if (normalizedRealmUrl === sourceRealmURL) {
         visibility = await this.visibility();
       } else {
         let permissions = await fetchRealmPermissions(
           this.#dbAdapter,
-          new URL(realmUrl),
+          new URL(normalizedRealmUrl),
         );
-        let usernames = Object.keys(permissions).filter(
-          (username) => !username.startsWith('@realm/'),
-        );
-        if (usernames.includes('*')) {
-          visibility = 'public';
-        } else if (usernames.includes('users') || usernames.length > 1) {
-          visibility = 'shared';
+        if (Object.keys(permissions).length === 0) {
+          visibility =
+            (await fetchRemoteRealmVisibility(normalizedRealmUrl)) ?? 'private';
         } else {
-          visibility = 'private';
+          let usernames = Object.keys(permissions).filter(
+            (username) => !username.startsWith('@realm/'),
+          );
+          if (usernames.includes('*')) {
+            visibility = 'public';
+          } else if (usernames.includes('users') || usernames.length > 1) {
+            visibility = 'shared';
+          } else {
+            visibility = 'private';
+          }
         }
       }
 
-      visibilityCache.set(realmUrl, visibility);
+      visibilityCache.set(normalizedRealmUrl, visibility);
       return visibility;
+    };
+
+    let fetchRemoteRealmVisibility = async (
+      realmUrl: string,
+    ): Promise<RealmVisibility | undefined> => {
+      try {
+        let infoURL = new URL('_info', realmUrl);
+        let response = await this.__fetchForTesting(infoURL, {
+          headers: { Accept: SupportedMimeType.RealmInfo },
+        });
+        if (!response.ok) {
+          return undefined;
+        }
+        let doc = (await response.json()) as {
+          data?: { attributes?: { visibility?: RealmVisibility } };
+        };
+        return doc.data?.attributes?.visibility;
+      } catch (error: any) {
+        this.#log.warn(
+          `failed to fetch remote realm visibility for ${realmUrl}: ${error?.message ?? error}`,
+        );
+        return undefined;
+      }
+    };
+
+    let loadLocalResourceEntries = async (
+      resourceUrl: string,
+    ): Promise<ResourceIndexEntry[]> => {
+      if (isGloballyPublicDependency(resourceUrl)) {
+        return [];
+      }
+      let rows = (await query(this.#dbAdapter, [
+        `SELECT url, realm_url, deps FROM boxel_index WHERE (url =`,
+        param(resourceUrl),
+        `OR file_alias =`,
+        param(resourceUrl),
+        `) AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+      ])) as { url: string; realm_url: string; deps: unknown }[];
+
+      if (rows.length === 0) {
+        return [];
+      }
+
+      return rows.map((row) => ({
+        canonicalUrl: row.url,
+        realmUrl: ensureTrailingSlash(row.realm_url),
+        dependencies: parseDeps(row.deps),
+      }));
+    };
+
+    let tryFetchRemoteEntriesFromBase = async (
+      base: URL,
+      resourceUrl: string,
+    ): Promise<ResourceIndexEntry[] | undefined> => {
+      let endpoint = new URL('_resource-index', base);
+      endpoint.searchParams.set('url', resourceUrl);
+      let response: Response;
+      try {
+        response = await this.__fetchForTesting(endpoint, {
+          headers: { Accept: SupportedMimeType.JSON },
+        });
+      } catch (error: any) {
+        this.#log.warn(
+          `failed to fetch remote resource index for ${resourceUrl} via ${endpoint.href}: ${error?.message ?? error}`,
+        );
+        return undefined;
+      }
+
+      if (response.status === 404) {
+        return undefined;
+      }
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch remote resource index for ${resourceUrl} (${response.status})`,
+        );
+      }
+      let payload = (await response.json()) as ResourceIndexEntry[];
+      let normalized = payload.map((entry) => ({
+        ...entry,
+        realmUrl: ensureTrailingSlash(entry.realmUrl),
+      }));
+      let remoteRealm = normalized[0]?.realmUrl;
+      if (remoteRealm) {
+        remoteRealmBaseCache.set(remoteRealm, base);
+      }
+      return normalized;
+    };
+
+    let tryFetchUsingKnownRealm = async (resourceUrl: string) => {
+      for (let [realmUrl, base] of remoteRealmBaseCache.entries()) {
+        if (resourceUrl.startsWith(realmUrl)) {
+          return await tryFetchRemoteEntriesFromBase(base, resourceUrl);
+        }
+      }
+      return undefined;
+    };
+
+    let fetchRemoteResourceEntries = async (
+      resourceUrl: string,
+    ): Promise<ResourceIndexEntry[]> => {
+      if (isGloballyPublicDependency(resourceUrl)) {
+        return [];
+      }
+      if (remoteResourceFetches.has(resourceUrl)) {
+        return remoteResourceFetches.get(resourceUrl)!;
+      }
+      let fetchPromise = (async () => {
+        let existing = await tryFetchUsingKnownRealm(resourceUrl);
+        if (existing !== undefined) {
+          return existing;
+        }
+        let parsed = maybeURL(resourceUrl);
+        if (!parsed) {
+          return [];
+        }
+        let current = parsed;
+        let visited = new Set<string>();
+        while (true) {
+          if (!current.pathname.endsWith('/')) {
+            current = new URL('./', current);
+          }
+          if (visited.has(current.href)) {
+            break;
+          }
+          visited.add(current.href);
+          let result = await tryFetchRemoteEntriesFromBase(
+            current,
+            resourceUrl,
+          );
+          if (result !== undefined) {
+            return result;
+          }
+          let parent = new URL('../', current);
+          if (parent.href === current.href) {
+            break;
+          }
+          current = parent;
+        }
+        return [];
+      })().finally(() => {
+        remoteResourceFetches.delete(resourceUrl);
+      });
+      remoteResourceFetches.set(resourceUrl, fetchPromise);
+      return fetchPromise;
+    };
+
+    let loadResourceEntries = async (resourceUrl: string) => {
+      let entries = await loadLocalResourceEntries(resourceUrl);
+      if (
+        (entries == null || entries.length === 0) &&
+        !isGloballyPublicDependency(resourceUrl) &&
+        maybeURL(resourceUrl)
+      ) {
+        entries = await fetchRemoteResourceEntries(resourceUrl);
+      }
+      return entries ?? [];
     };
 
     while (queue.length > 0) {
@@ -2845,29 +3056,16 @@ export class Realm {
         continue;
       }
 
-      let rows = (await query(this.#dbAdapter, [
-        `SELECT url, realm_url, deps FROM boxel_index WHERE (url =`,
-        param(resourceUrl),
-        `OR file_alias =`,
-        param(resourceUrl),
-        `) AND (is_deleted IS NULL OR is_deleted = FALSE)`,
-      ])) as { url: string; realm_url: string; deps: unknown }[];
-
-      if (rows.length === 0) {
-        resourceEntries.set(resourceUrl, []);
-        continue;
-      }
-
-      let entries = rows.map((row) => ({
-        canonicalUrl: row.url,
-        realmUrl: ensureTrailingSlash(row.realm_url),
-        dependencies: parseDeps(row.deps),
-      }));
+      let entries = await loadResourceEntries(resourceUrl);
 
       resourceEntries.set(resourceUrl, entries);
-      let canonical = entries[0].canonicalUrl;
-      if (!resourceEntries.has(canonical)) {
+      let canonical = entries[0]?.canonicalUrl;
+      if (canonical && !resourceEntries.has(canonical)) {
         resourceEntries.set(canonical, entries);
+      }
+
+      if (entries.length === 0) {
+        continue;
       }
 
       for (let entry of entries) {
@@ -2888,16 +3086,8 @@ export class Realm {
       resources: rootResources,
       resourceEntries,
       realmVisibility: visibilityCache,
-      isResourceInherentlyPublic: (resourceUrl) => {
-        let parsed = maybeURL(resourceUrl);
-        if (!parsed) {
-          return resourceUrl.startsWith('data:');
-        }
-        if (parsed.protocol === 'data:') {
-          return true;
-        }
-        return baseRealm.inRealm(parsed);
-      },
+      isResourceInherentlyPublic: (resourceUrl) =>
+        isGloballyPublicDependency(resourceUrl),
     });
 
     let doc = {
@@ -3433,6 +3623,35 @@ function parseDeps(value: unknown): string[] {
   }
 
   return [];
+}
+
+function isGloballyPublicDependency(resourceUrl: string): boolean {
+  if (resourceUrl.startsWith('data:')) {
+    return true;
+  }
+  if (
+    resourceUrl.startsWith('@cardstack/boxel-icons') ||
+    resourceUrl.startsWith('@cardstack/boxel-ui')
+  ) {
+    return true;
+  }
+  let parsed = maybeURL(resourceUrl);
+  if (!parsed) {
+    return false;
+  }
+  if (parsed.protocol === 'data:') {
+    return true;
+  }
+  if (parsed.hostname === 'boxel-icons.boxel.ai') {
+    return true;
+  }
+  if (
+    parsed.hostname === 'packages' &&
+    parsed.pathname.startsWith('/@cardstack/boxel-ui')
+  ) {
+    return true;
+  }
+  return baseRealm.inRealm(parsed);
 }
 
 function lastModifiedHeader(

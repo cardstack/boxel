@@ -17,13 +17,14 @@ import {
   DEFAULT_PERMISSIONS,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
-import type { PgAdapter } from '@cardstack/postgres';
+import { PgAdapter, PgQueuePublisher, PgQueueRunner } from '@cardstack/postgres';
 
 import {
   closeServer,
   createJWT,
   createVirtualNetwork,
   matrixURL,
+  prepareTestDB,
   realmSecretSeed,
   runTestRealmServer,
   setupBaseRealmServer,
@@ -461,6 +462,95 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     );
   });
 
+  test('detects private dependencies served by another realm server', async function (assert) {
+    let remote = await createAdditionalRealmServer();
+    try {
+      let { url: remoteRealmURL } = await createRealm({
+        name: 'Remote Private Realm',
+        files: {
+          'secret-card.gts': `
+            import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+            import StringField from "https://cardstack.com/base/string";
+
+            export class SecretCard extends CardDef {
+              @field name = contains(StringField);
+            }
+          `,
+        },
+        requestAgent: remote.request,
+        realmServerInstance: remote.realmServer,
+      });
+
+      let { url: sourceRealmURL, realm: sourceRealm } = await createRealm({
+        name: 'Source Realm With Remote Dependencies',
+        files: {
+          'source-card.gts': `
+            import {
+              contains,
+              field,
+              linksTo,
+              CardDef,
+            } from "https://cardstack.com/base/card-api";
+            import StringField from "https://cardstack.com/base/string";
+            import { SecretCard } from "${remoteRealmURL}secret-card";
+
+            export class SourceCard extends CardDef {
+              @field label = contains(StringField);
+              @field secret = linksTo(() => SecretCard);
+            }
+          `,
+          'source-instance.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                label: 'Remote secret label',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './source-card',
+                  name: 'SourceCard',
+                },
+              },
+            },
+          },
+        },
+      });
+
+      let response = await request
+        .get(`${new URL(sourceRealmURL).pathname}_has-private-dependencies`)
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(sourceRealm, ownerUserId, DEFAULT_PERMISSIONS)}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.false(
+        response.body.data.attributes.publishable,
+        'Realm is not publishable due to remote private dependency',
+      );
+      assert.strictEqual(
+        response.body.data.attributes.violations.length,
+        1,
+        'one violating resource is reported',
+      );
+      let remoteViolation = response.body.data.attributes.violations[0];
+      assert.strictEqual(
+        remoteViolation.resource,
+        `${sourceRealmURL}source-instance.json`,
+        'violation references the local instance',
+      );
+      assert.true(
+        remoteViolation.externalDependencies.some((dep: any) =>
+          String(dep.dependency).startsWith(`${remoteRealmURL}secret-card`),
+        ),
+        'violation references the remote realm dependency',
+      );
+    } finally {
+      await remote.cleanup();
+    }
+  });
+
   test('handles circular dependencies', async function (assert) {
     let { url: privateRealmURL, realm: privateRealm } = await createRealm({
       name: 'Circular Private Realm',
@@ -624,16 +714,75 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     );
   });
 
+  async function createAdditionalRealmServer(port = 4560) {
+    let remoteTempDir = dirSync({ unsafeCleanup: true });
+    let remoteRealmsRootPath = join(
+      remoteTempDir.name,
+      'realm_server_publishability_remote',
+    );
+    let remoteTestRealmDir = join(remoteRealmsRootPath, 'remote');
+    ensureDirSync(remoteTestRealmDir);
+    copySync(join(__dirname, '..', 'cards'), remoteTestRealmDir);
+
+    let previousDbName = process.env.PGDATABASE;
+    prepareTestDB();
+    let remoteDbAdapter = new PgAdapter({ autoMigrate: true });
+    let remotePublisher = new PgQueuePublisher(remoteDbAdapter);
+    let remoteRunner = new PgQueueRunner({
+      adapter: remoteDbAdapter,
+      workerId: `remote-test-worker-${port}`,
+    });
+
+    let remoteRealmServerURL = new URL(`http://127.0.0.1:${port}/remote/`);
+    let remote = await runTestRealmServer({
+      virtualNetwork,
+      testRealmDir: remoteTestRealmDir,
+      realmsRootPath: remoteRealmsRootPath,
+      realmURL: remoteRealmServerURL,
+      dbAdapter: remoteDbAdapter,
+      publisher: remotePublisher,
+      runner: remoteRunner,
+      matrixURL,
+      permissions: {
+        '*': ['read', 'write'],
+        [ownerUserId]: DEFAULT_PERMISSIONS,
+      },
+    });
+
+    process.env.PGDATABASE = previousDbName;
+
+    return {
+      request: supertest(remote.testRealmHttpServer),
+      realmServer: remote.testRealmServer,
+      realmHttpServer: remote.testRealmHttpServer,
+      dbAdapter: remoteDbAdapter,
+      publisher: remotePublisher,
+      runner: remoteRunner,
+      tempDir: remoteTempDir,
+      async cleanup() {
+        await closeServer(remote.testRealmHttpServer);
+        await remotePublisher.destroy();
+        await remoteRunner.destroy();
+        await remoteDbAdapter.close();
+        remoteTempDir.removeCallback();
+      },
+    };
+  }
+
   async function createRealm({
     name,
     files,
+    requestAgent = request,
+    realmServerInstance = testRealmServer,
   }: {
     name: string;
     files?: Record<string, string | object>;
+    requestAgent?: SuperTest<Test>;
+    realmServerInstance?: RealmServer;
   }): Promise<{ realm: Realm; url: string }> {
     let endpoint = `realm-${uuidv4()}`;
 
-    let response = await request
+    let response = await requestAgent
       .post('/_create-realm')
       .set('Accept', SupportedMimeType.JSONAPI)
       .set('Content-Type', 'application/json')
@@ -657,7 +806,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     }
 
     let realmURL: string = response.body.data.id;
-    let realm = getRealm(realmURL);
+    let realm = getRealm(realmURL, realmServerInstance);
 
     if (files && Object.keys(files).length > 0) {
       await seedRealm(realm, files);
@@ -671,9 +820,12 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     };
   }
 
-  function getRealm(realmURL: string): Realm {
+  function getRealm(
+    realmURL: string,
+    realmServerInstance: RealmServer = testRealmServer,
+  ): Realm {
     let normalized = realmURL;
-    let realm = testRealmServer.testingOnlyRealms.find(
+    let realm = realmServerInstance.testingOnlyRealms.find(
       (candidate) => candidate.url === normalized,
     );
     if (!realm) {
