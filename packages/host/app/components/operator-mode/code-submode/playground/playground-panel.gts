@@ -564,6 +564,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private createNewCard = restartableTask(async () => {
+    let localId = this.newCardLocalId;
     let newCardJSON: LooseSingleCardDocument;
     let isFieldDef = this.args.isFieldDef;
 
@@ -574,7 +575,7 @@ export default class PlaygroundPanel extends Component<Signature> {
       // for field def, create a new spec card instance
       newCardJSON = {
         data: {
-          lid: this.newCardLocalId,
+          lid: localId,
           attributes: {
             specType: 'field',
             ref: this.args.codeRef,
@@ -597,7 +598,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     } else {
       newCardJSON = {
         data: {
-          lid: this.newCardLocalId,
+          lid: localId,
           meta: {
             adoptsFrom: this.args.codeRef,
             realmURL: this.currentRealm,
@@ -614,7 +615,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     this.persistSelections(
       // in the case of an error we still need to persist it in
       // order render the error doc
-      typeof maybeId === 'string' ? maybeId : this.newCardLocalId,
+      typeof maybeId === 'string' ? maybeId : localId,
       // preview new instance in isolated format
       isFieldDef ? 'edit' : 'isolated',
       isFieldDef ? 0 : undefined,

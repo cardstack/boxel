@@ -108,22 +108,26 @@ export function transformResultsToPrerenderedCardsDoc(results: {
 }): PrerenderedCardCollectionDocument {
   let { prerenderedCards, scopedCssUrls, meta } = results;
 
-  let data = prerenderedCards.map((card) => ({
-    type: 'prerendered-card' as const,
-    id: card.url,
-    attributes: {
-      html: card.html || '',
-      ...(card.isError ? { isError: true as const } : {}),
-    },
-    relationships: {
-      'prerendered-card-css': {
-        data: [],
+  let data = prerenderedCards.map((card) => {
+    let resource: PrerenderedCardResource = {
+      type: 'prerendered-card',
+      id: card.url,
+      attributes: {
+        html: card.html || '',
+        ...(card.isError ? { isError: true as const } : {}),
       },
-    },
-    meta: {
-      adoptsFrom: card.usedRenderType,
-    },
-  }));
+      relationships: {
+        'prerendered-card-css': {
+          data: [],
+        },
+      },
+      meta: {},
+    };
+    if (card.usedRenderType) {
+      resource.meta.adoptsFrom = card.usedRenderType;
+    }
+    return resource;
+  });
 
   meta.scopedCssUrls = scopedCssUrls;
 

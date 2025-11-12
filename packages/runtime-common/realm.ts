@@ -2235,6 +2235,7 @@ export class Realm {
     if (!entry || entry?.type === 'error') {
       if (
         primarySerialization &&
+        // TODO we might not need this anymore...
         isBrowserTestEnv() &&
         !(globalThis as any).__emulateServerPatchFailure
       ) {

@@ -31,6 +31,11 @@ import {
   errorJsonApiToErrorEntry,
 } from '../lib/window-error-handler';
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
+import {
+  RenderCardTypeTracker,
+  deriveCardTypeFromDoc,
+  withCardType,
+} from '../utils/render-error-card-type';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
@@ -69,6 +74,7 @@ export default class RenderRoute extends Route<Model> {
   private lastStoreResetKey: string | undefined;
   private renderBaseParams: [string, string, string] | undefined;
   private lastRenderErrorSignature: string | undefined;
+  #cardTypeTracker = new RenderCardTypeTracker();
   #modelStates = new Map<Model, ModelState>();
   #pendingReadyModels = new Set<Model>();
   #modelPromises = new Map<string, Promise<Model>>();
@@ -114,6 +120,7 @@ export default class RenderRoute extends Route<Model> {
     this.#pendingReadyModels.clear();
     this.#modelPromises.clear();
     this.#authGuard.unregister();
+    this.#cardTypeTracker.clear();
   }
 
   beforeModel() {
@@ -193,6 +200,8 @@ export default class RenderRoute extends Route<Model> {
     let lastModified = new Date(response.headers.get('last-modified')!);
     let doc: LooseSingleCardDocument | CardErrorsJSONAPI =
       await response.json();
+    let canonicalId = id.replace(/\.json$/, '');
+
     let state = new TrackedMap<string, unknown>();
     state.set('status', 'loading');
 
@@ -210,7 +219,6 @@ export default class RenderRoute extends Route<Model> {
       readyDeferred,
       isReady: false,
     };
-    let canonicalId = id.replace(/\.json$/, '');
     let model: Model = {
       instance: undefined as unknown as CardDef,
       nonce,
@@ -229,8 +237,18 @@ export default class RenderRoute extends Route<Model> {
     try {
       if ('errors' in doc) {
         this.#dispositionModel(model, 'error');
+        this.#cardTypeTracker.set({ cardId: canonicalId, nonce }, undefined);
         throw new Error(JSON.stringify(doc.errors[0], null, 2));
       }
+      let derivedCardType = await deriveCardTypeFromDoc(
+        doc,
+        id,
+        this.loaderService.loader,
+      );
+      this.#cardTypeTracker.set(
+        { cardId: canonicalId, nonce },
+        derivedCardType,
+      );
 
       await this.realm.ensureRealmMeta(realmURL);
 
@@ -447,7 +465,15 @@ export default class RenderRoute extends Route<Model> {
     this.currentTransition?.abort();
     this.#rejectAllModelStates('error');
     let context = this.#deriveErrorContext(transition);
-    let serializedError = this.#serializeRenderError(error, transition);
+    let cardType = this.#cardTypeTracker.get({
+      cardId: context.cardId,
+      nonce: context.nonce,
+    });
+    let serializedError = this.#serializeRenderError(
+      error,
+      transition,
+      cardType,
+    );
     let signature = this.#makeErrorSignature(serializedError, context);
     if (signature === this.lastRenderErrorSignature) {
       return;
@@ -462,14 +488,23 @@ export default class RenderRoute extends Route<Model> {
     this.#transitionToErrorRoute(transition);
   }
 
-  #serializeRenderError(error: any, transition?: Transition): string {
+  #serializeRenderError(
+    error: any,
+    transition?: Transition,
+    cardType?: string,
+  ): string {
     try {
       let cardError: CardError = JSON.parse(error.message);
       return JSON.stringify(
-        this.#stripLastKnownGoodHtml({
-          type: 'error',
-          error: cardError,
-        } as RenderError),
+        this.#stripLastKnownGoodHtml(
+          withCardType(
+            {
+              type: 'error',
+              error: cardError,
+            },
+            cardType,
+          ),
+        ),
         null,
         2,
       );
@@ -484,10 +519,15 @@ export default class RenderRoute extends Route<Model> {
       } while (current && !id);
       if (isCardError(error)) {
         return JSON.stringify(
-          this.#stripLastKnownGoodHtml({
-            type: 'error',
-            error: serializableError(error),
-          }),
+          this.#stripLastKnownGoodHtml(
+            withCardType(
+              {
+                type: 'error',
+                error: serializableError(error),
+              },
+              cardType,
+            ),
+          ),
           null,
           2,
         );
@@ -495,7 +535,9 @@ export default class RenderRoute extends Route<Model> {
       let errorJSONAPI = formattedError(id, error).errors[0];
       let errorPayload = errorJsonApiToErrorEntry(errorJSONAPI);
       return JSON.stringify(
-        this.#stripLastKnownGoodHtml(errorPayload),
+        this.#stripLastKnownGoodHtml(
+          withCardType(errorPayload as RenderError, cardType),
+        ),
         null,
         2,
       );

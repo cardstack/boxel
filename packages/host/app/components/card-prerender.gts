@@ -13,6 +13,9 @@ import { didCancel, enqueueTask } from 'ember-concurrency';
 
 import {
   CardError,
+  SupportedMimeType,
+  type CardErrorsJSONAPI,
+  type LooseSingleCardDocument,
   type RenderResponse,
   type RenderError,
   type ModuleRenderResponse,
@@ -39,6 +42,12 @@ import {
 } from '@cardstack/runtime-common/worker';
 
 import { CurrentRun } from '../lib/current-run';
+import {
+  RenderCardTypeTracker,
+  type CardRenderContext,
+  deriveCardTypeFromDoc,
+  withCardType,
+} from '../utils/render-error-card-type';
 
 import type LoaderService from '../services/loader-service';
 import type LocalIndexer from '../services/local-indexer';
@@ -61,6 +70,8 @@ export default class CardPrerender extends Component {
   #shouldClearCacheForNextRender = true;
   #prerendererDelegate!: Prerenderer;
   #renderErrorPayload: string | undefined;
+  #cardTypeTracker = new RenderCardTypeTracker();
+  #currentContext: CardRenderContext | undefined;
 
   #renderBasePath(url: string, renderOptions?: RenderRouteOptions) {
     let optionsSegment = encodeURIComponent(
@@ -110,6 +121,7 @@ export default class CardPrerender extends Component {
         'boxel-render-error',
         this.#handleRenderErrorEvent,
       );
+      this.#cardTypeTracker.clear();
     });
   }
 
@@ -193,6 +205,11 @@ export default class CardPrerender extends Component {
       renderOptions?: RenderRouteOptions;
     }): Promise<RenderResponse> => {
       this.#nonce++;
+      let context: CardRenderContext = {
+        cardId: url.replace(/\.json$/, ''),
+        nonce: String(this.#nonce),
+      };
+      this.#currentContext = context;
       this.localIndexer.renderError = undefined;
       this.localIndexer.prerenderStatus = 'loading';
       let shouldClearCache = this.#consumeClearCacheForRender(
@@ -211,78 +228,91 @@ export default class CardPrerender extends Component {
       } else {
         delete initialRenderOptions.clearCache;
       }
-      let error: RenderError | undefined;
-      let isolatedHTML: string | null = null;
-      let meta: PrerenderMeta = {
-        serialized: null,
-        searchDoc: null,
-        displayNames: null,
-        deps: null,
-        types: null,
-      };
-      let atomHTML = null;
-      let iconHTML = null;
-      let embeddedHTML: Record<string, string> | null = null;
-      let fittedHTML: Record<string, string> | null = null;
+
       try {
-        let subsequentRenderOptions = omitOneTimeOptions(initialRenderOptions);
-        isolatedHTML = await this.renderHTML.perform(
-          url,
-          'isolated',
-          0,
-          initialRenderOptions,
-        );
-        meta = await this.renderMeta.perform(url, subsequentRenderOptions);
-        atomHTML = await this.renderHTML.perform(
-          url,
-          'atom',
-          0,
-          subsequentRenderOptions,
-        );
-        iconHTML = await this.renderIcon.perform(url, subsequentRenderOptions);
-        if (meta?.types) {
-          embeddedHTML = await this.renderAncestors.perform(
-            url,
-            'embedded',
-            meta.types,
-            subsequentRenderOptions,
-          );
-          fittedHTML = await this.renderAncestors.perform(
-            url,
-            'fitted',
-            meta.types,
-            subsequentRenderOptions,
-          );
-        }
-      } catch (e: any) {
+        await this.#primeCardType(url, context);
+        let error: RenderError | undefined;
+        let isolatedHTML: string | null = null;
+        let meta: PrerenderMeta = {
+          serialized: null,
+          searchDoc: null,
+          displayNames: null,
+          deps: null,
+          types: null,
+        };
+        let atomHTML = null;
+        let iconHTML = null;
+        let embeddedHTML: Record<string, string> | null = null;
+        let fittedHTML: Record<string, string> | null = null;
         try {
-          error = { ...JSON.parse(e.message), type: 'error' };
-        } catch (err) {
-          let cardErr = new CardError(e.message);
-          cardErr.stack = e.stack;
-          error = {
-            error: {
-              ...cardErr.toJSON(),
-              deps: [url.replace(/\.json$/, '')],
-              additionalErrors: null,
-            },
-            type: 'error',
-          };
+          let subsequentRenderOptions =
+            omitOneTimeOptions(initialRenderOptions);
+          isolatedHTML = await this.renderHTML.perform(
+            url,
+            'isolated',
+            0,
+            initialRenderOptions,
+          );
+          meta = await this.renderMeta.perform(url, subsequentRenderOptions);
+          atomHTML = await this.renderHTML.perform(
+            url,
+            'atom',
+            0,
+            subsequentRenderOptions,
+          );
+          iconHTML = await this.renderIcon.perform(
+            url,
+            subsequentRenderOptions,
+          );
+          if (meta?.types) {
+            embeddedHTML = await this.renderAncestors.perform(
+              url,
+              'embedded',
+              meta.types,
+              subsequentRenderOptions,
+            );
+            fittedHTML = await this.renderAncestors.perform(
+              url,
+              'fitted',
+              meta.types,
+              subsequentRenderOptions,
+            );
+          }
+        } catch (e: any) {
+          try {
+            error = { ...JSON.parse(e.message), type: 'error' };
+          } catch (err) {
+            let cardErr = new CardError(e.message);
+            cardErr.stack = e.stack;
+            error = {
+              error: {
+                ...cardErr.toJSON(),
+                deps: [url.replace(/\.json$/, '')],
+                additionalErrors: null,
+              },
+              type: 'error',
+            };
+          }
+          this.store.resetCache();
         }
-        this.store.resetCache();
+        if (this.localIndexer.prerenderStatus === 'loading') {
+          this.localIndexer.prerenderStatus = 'ready';
+        }
+        return {
+          ...meta,
+          isolatedHTML,
+          atomHTML,
+          embeddedHTML,
+          fittedHTML,
+          iconHTML,
+          ...(error ? { error } : {}),
+        };
+      } finally {
+        this.#cardTypeTracker.set(context, undefined);
+        if (this.#currentContext === context) {
+          this.#currentContext = undefined;
+        }
       }
-      if (this.localIndexer.prerenderStatus === 'loading') {
-        this.localIndexer.prerenderStatus = 'ready';
-      }
-      return {
-        ...meta,
-        isolatedHTML,
-        atomHTML,
-        embeddedHTML,
-        fittedHTML,
-        iconHTML,
-        ...(error ? { error } : {}),
-      };
     },
   );
 
@@ -375,12 +405,49 @@ export default class CardPrerender extends Component {
     },
   );
 
+  async #primeCardType(url: string, context: CardRenderContext) {
+    try {
+      let response = await this.network.authedFetch(url, {
+        method: 'GET',
+        headers: {
+          Accept: SupportedMimeType.CardSource,
+        },
+      });
+      if (!response.ok) {
+        return;
+      }
+      let doc = (await response.json()) as
+        | LooseSingleCardDocument
+        | CardErrorsJSONAPI;
+      if ('errors' in doc) {
+        return;
+      }
+      let cardType = await deriveCardTypeFromDoc(
+        doc,
+        url,
+        this.loaderService.loader,
+      );
+      this.#cardTypeTracker.set(context, cardType);
+    } catch (_error) {
+      // ignore
+    }
+  }
+
   #handleRenderErrorEvent = (
     event: Event & { detail?: { reason?: unknown }; reason?: unknown },
   ) => {
     let reason =
       'reason' in event ? (event as any).reason : event.detail?.reason;
     if (!reason) {
+      return;
+    }
+    let context = this.#currentContext ?? this.#contextFromDom();
+    let cardType = context ? this.#cardTypeTracker.get(context) : undefined;
+    let renderErrorPayload = this.#coerceRenderError(reason);
+    if (renderErrorPayload) {
+      this.#renderErrorPayload = JSON.stringify(
+        withCardType(renderErrorPayload, cardType),
+      );
       return;
     }
     if (reason instanceof Error) {
@@ -395,6 +462,50 @@ export default class CardPrerender extends Component {
       }
     }
   };
+
+  #coerceRenderError(reason: unknown): RenderError | undefined {
+    if (typeof reason === 'string') {
+      try {
+        let parsed = JSON.parse(reason);
+        if (this.#isRenderErrorLike(parsed)) {
+          return parsed as RenderError;
+        }
+      } catch {
+        return undefined;
+      }
+    } else if (
+      reason &&
+      typeof reason === 'object' &&
+      this.#isRenderErrorLike(reason)
+    ) {
+      return JSON.parse(JSON.stringify(reason));
+    }
+    return undefined;
+  }
+
+  #isRenderErrorLike(value: unknown): value is RenderError {
+    return (
+      !!value &&
+      typeof value === 'object' &&
+      'error' in (value as Record<string, unknown>)
+    );
+  }
+
+  #contextFromDom(): CardRenderContext | undefined {
+    if (typeof document === 'undefined') {
+      return undefined;
+    }
+    let container = document.querySelector(
+      '[data-prerender]',
+    ) as HTMLElement | null;
+    if (!container) {
+      return undefined;
+    }
+    return {
+      cardId: container.dataset.prerenderId ?? undefined,
+      nonce: container.dataset.prerenderNonce ?? undefined,
+    };
+  }
 
   private waitForLinkedData = async () => {
     await Promise.resolve(); // ensure lazy link fetches enqueue

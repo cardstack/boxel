@@ -1910,7 +1910,7 @@ module('Integration | realm', function (hooks) {
         },
         'dir/different-friend.json': {
           data: {
-            id: `${testRealmURL}dir/friend`,
+            id: `${testRealmURL}dir/different-friend`,
             attributes: { firstName: 'Burcu' },
             meta: {
               adoptsFrom: {
@@ -2055,7 +2055,7 @@ module('Integration | realm', function (hooks) {
         },
         'dir/different-friend.json': {
           data: {
-            id: `${testRealmURL}dir/friend`,
+            id: `${testRealmURL}dir/different-friend`,
             attributes: { firstName: 'Burcu' },
             meta: {
               adoptsFrom: {

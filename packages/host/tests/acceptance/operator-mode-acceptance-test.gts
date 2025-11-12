@@ -630,6 +630,9 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click('[data-test-workspace="Test Workspace B"]');
     await click('[data-test-boxel-filter-list-button="All Cards"]');
 
+    await waitFor(
+      `[data-test-cards-grid-item="${testRealmURL}Person/error"][data-test-instance-error]`,
+    );
     assert
       .dom(
         `[data-test-cards-grid-item="${testRealmURL}Person/error"][data-test-instance-error]`,

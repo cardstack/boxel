@@ -2961,10 +2961,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     // Mock the matrix service getPromptParts method to block summarization
     const matrixService = getService('matrix-service');
     const originalGetPromptParts = matrixService.getPromptParts;
+    let summarizationDeferred = new Deferred<void>();
     matrixService.getPromptParts = async (roomId: string) => {
-      if (summarizationDeferred) {
-        await summarizationDeferred.promise;
-      }
+      await summarizationDeferred.promise;
       return originalGetPromptParts.call(matrixService, roomId);
     };
 
@@ -2987,7 +2986,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await fillIn('[data-test-message-field]', 'Test message for summarization');
     await click('[data-test-send-message-btn]');
 
-    let summarizationDeferred = new Deferred<void>();
     // Create new session with "Summarize Current Session" option
     await click('[data-test-create-room-btn]', { shiftKey: true });
     await click(
@@ -2995,31 +2993,37 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
     await click('[data-test-new-session-settings-create-button]');
 
-    // Verify the session preparation message is shown with correct wording
-    assert
-      .dom('[data-test-session-preparation]')
-      .includesText('Summarizing previous session');
-    assert
-      .dom('[data-test-session-preparation]')
-      .includesText('Takes 10-20 seconds');
-    assert.dom('[data-test-session-preparation-skip-button]').exists();
-    assert.dom('[data-test-session-preparation-skip-button]').hasText('Skip');
-    // Click the skip button to skip session preparation
-    await click('[data-test-session-preparation-skip-button]');
+    try {
+      await waitFor('[data-test-session-preparation]');
+      // Verify the session preparation message is shown with correct wording
+      assert
+        .dom('[data-test-session-preparation]')
+        .includesText('Summarizing previous session');
+      assert
+        .dom('[data-test-session-preparation]')
+        .includesText('Takes 10-20 seconds');
+      await waitFor('[data-test-session-preparation-skip-button]');
+      assert.dom('[data-test-session-preparation-skip-button]').hasText('Skip');
 
-    // Verify that the session preparation UI is no longer shown
-    assert.dom('[data-test-session-preparation]').doesNotExist();
+      // Click the skip button to skip session preparation
+      await click('[data-test-session-preparation-skip-button]');
 
-    // Verify that the message input is now enabled (canSend should be true)
-    assert.dom('[data-test-message-field]').isNotDisabled();
+      // Verify that the session preparation UI is no longer shown
+      await waitFor('[data-test-session-preparation]', { count: 0 });
 
-    assertMessages(assert, []);
+      // Verify that the message input is now enabled (canSend should be true)
+      await waitFor('[data-test-message-field]');
+      await waitUntil(() => {
+        let field = document.querySelector('[data-test-message-field]');
+        return Boolean(field && !field.hasAttribute('disabled'));
+      });
+      assert.dom('[data-test-message-field]').isNotDisabled();
 
-    // Resolve the deferred promise to clean up
-    summarizationDeferred.fulfill();
-
-    // Restore the original getPromptParts method
-    matrixService.getPromptParts = originalGetPromptParts;
+      assertMessages(assert, []);
+    } finally {
+      summarizationDeferred.fulfill();
+      matrixService.getPromptParts = originalGetPromptParts;
+    }
   });
 
   test('ai assistant panel width persists to localStorage', async function (assert) {
