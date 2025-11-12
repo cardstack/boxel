@@ -105,7 +105,7 @@ import type {
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 import type { SystemCard } from 'https://cardstack.com/base/system-card';
 
-import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
+import UpdateRoomSkillsCommand from '../commands/update-room-skills';
 import { addPatchTools } from '../commands/utils';
 import { isSkillCard } from '../lib/file-def-manager';
 import { skillCardURL } from '../lib/utils';
@@ -1818,12 +1818,13 @@ export default class MatrixService extends Service {
       return;
     }
 
-    let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
+    let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
       this.commandService.commandContext,
     );
-    await addSkillsToRoomCommand.execute({
+    let defaultSkills = await this.loadDefaultSkills('code');
+    await updateRoomSkillsCommand.execute({
       roomId: this.currentRoomId,
-      skills: await this.loadDefaultSkills('code'),
+      skillCardIdsToActivate: defaultSkills.map((s) => s.id),
     });
   }
 

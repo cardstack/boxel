@@ -1,173 +1,149 @@
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
+import { debounce } from '@ember/runloop';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import {
-  getCountryCodeForRegionCode,
-  getExample,
-  getSupportedRegionCodes,
-  parsePhoneNumber,
-} from 'awesome-phonenumber';
-import { type TCountryCode, countries, getEmojiFlag } from 'countries-list';
-import { debounce } from 'lodash';
+import { type AsYouType, getAsYouType } from 'awesome-phonenumber';
 
+import validatePhoneFormat, {
+  type NormalizePhoneFormatResult,
+  DEFAULT_PHONE_REGION_CODE,
+  DEFAULT_PHONE_VALIDATION_MESSAGE,
+  isValidPhoneFormat,
+  normalizePhoneFormat,
+} from '../../helpers/validate-phone-format.ts';
 import { type InputValidationState } from '../input/index.gts';
-import BoxelInputGroup from '../input-group/index.gts';
+import BoxelInput from '../input/index.gts';
 
 interface Signature {
   Args: {
-    countryCode: string;
-    onCountryCodeChange: (code: string) => void;
-    onInput: (value: string) => void;
-    value: string;
-  };
-  Blocks: {
-    default: [];
+    disabled?: boolean;
+    onChange?: (
+      value: string | null,
+      validation: NormalizePhoneFormatResult | null,
+      ev: Event,
+    ) => void;
+    placeholder?: string;
+    required?: boolean;
+    value: string | null;
   };
   Element: HTMLElement;
 }
 
-interface CountryInfo {
-  callingCode?: string;
-  code: string;
-  example?: {
-    callingCode: string;
-    nationalNumber: string;
-  };
-  flag?: string;
-  name?: string;
-}
+export default class PhoneInput extends Component<Signature> {
+  private fallbackErrorMessage = DEFAULT_PHONE_VALIDATION_MESSAGE;
+  private asYouType: AsYouType = getAsYouType(DEFAULT_PHONE_REGION_CODE);
 
-const getCountryInfo = (countryCode: string): CountryInfo | undefined => {
-  let example = getExample(countryCode);
-  let callingCode = getCountryCodeForRegionCode(countryCode);
+  @tracked private validationState: InputValidationState = this.args.value
+    ? isValidPhoneFormat(this.args.value)
+      ? 'valid'
+      : 'invalid'
+    : 'initial';
+  @tracked private inputValue = this.args.value ?? '';
+  @tracked private errorMessage = this.args.value
+    ? validatePhoneFormat(this.args.value)?.message
+    : '';
+  @tracked private hasBlurred = false;
 
-  let c = countries[countryCode as TCountryCode];
-  if (c === undefined) {
-    //here some country code may not be found due to the discrepancy between countries-list and libphonenumber-js library
-    //Only scenario where this is true is the usage of "AC"
-    //Most countries consider "AC" Ascension Island as part of "SH" Saint Helena
-    return;
-  }
-  return {
-    code: countryCode,
-    callingCode: callingCode.toString(),
-    name: c ? c.name : undefined,
-    flag: getEmojiFlag(countryCode as TCountryCode),
-    example: example
-      ? {
-          callingCode: callingCode.toString(),
-          nationalNumber: example.number?.international ?? '',
-        }
-      : undefined,
-  };
-};
-
-class PhoneInput extends Component<Signature> {
-  @tracked items: Array<CountryInfo> = [];
-  @tracked selectedItem: CountryInfo = getCountryInfo('US')!;
-  @tracked validationState: InputValidationState = 'initial';
-  @tracked input: string = this.args.value ?? '';
-
-  @action onSelectItem(item: CountryInfo): void {
-    this.selectedItem = item;
-    if (this.args.onCountryCodeChange) {
-      this.args.onCountryCodeChange(item.callingCode ?? '');
-    }
-    if (this.input.length > 0) {
-      const parsedPhoneNumber = parsePhoneNumber(this.input, {
-        regionCode: this.selectedItem.code,
-      });
-      this.validationState = parsedPhoneNumber.valid ? 'valid' : 'invalid';
-    }
+  private notify(
+    value: string | null,
+    validation: NormalizePhoneFormatResult | null,
+    ev: Event,
+  ) {
+    this.args.onChange?.(value, validation, ev);
   }
 
-  constructor(owner: Owner, args: Signature['Args']) {
-    super(owner, args);
-    this.items = getSupportedRegionCodes()
-      .map((code) => {
-        return getCountryInfo(code);
-      })
-      .filter((c) => c !== undefined) as CountryInfo[];
+  private handleValidation = (input: string, ev: Event) => {
+    input = this.sanitizeForFormatting(input);
 
-    if (this.args.countryCode) {
-      this.selectedItem = this.items.find(
-        (item) => item.callingCode === this.args.countryCode,
-      )!;
-    }
-  }
+    let t = ev.target as HTMLInputElement | null;
+    let required = this.args.required || t?.required;
 
-  get placeholder(): string | undefined {
-    if (this.selectedItem) {
-      return this.selectedItem.example?.nationalNumber;
-    }
-    return undefined;
-  }
-
-  @action onInput(v: string): void {
-    this.debouncedInput(v);
-  }
-
-  private debouncedInput = debounce((input: string) => {
-    this.input = input;
-
-    if (input === '') {
+    if (!input?.length && !required) {
       this.validationState = 'initial';
+      this.errorMessage = undefined;
+      this.notify(input, null, ev);
       return;
     }
 
-    const parsedPhoneNumber = parsePhoneNumber(input, {
-      regionCode: this.selectedItem.code,
-    });
-    this.validationState = parsedPhoneNumber.valid ? 'valid' : 'invalid';
-    //save when the state is valid
-    if (this.validationState === 'valid') {
-      this.args.onInput(this.input);
+    const normalized = normalizePhoneFormat(input);
+    if (!normalized.ok) {
+      this.validationState = this.hasBlurred ? 'invalid' : 'initial';
+      this.errorMessage =
+        this.validationState === 'invalid'
+          ? normalized.error.message ?? this.fallbackErrorMessage
+          : undefined;
+      this.notify(input, normalized, ev);
+    } else {
+      this.validationState = 'valid';
+      this.errorMessage = undefined;
+      this.inputValue = normalized.value.international;
+      this.notify(normalized.value.e164, normalized, ev);
     }
-  }, 300);
-
-  <template>
-    <BoxelInputGroup
-      @placeholder={{this.placeholder}}
-      @state={{this.validationState}}
-      @onInput={{this.onInput}}
-      @value={{this.input}}
-    >
-      <:before as |Accessories|>
-        <Accessories.Select
-          @placeholder={{this.placeholder}}
-          @selected={{this.selectedItem}}
-          @onChange={{this.onSelectItem}}
-          @options={{this.items}}
-          @selectedItemComponent={{PhoneSelectedItem}}
-          @searchEnabled={{true}}
-          @searchField='name'
-          @matchTriggerWidth={{false}}
-          aria-label='Select an country calling code'
-          as |item|
-        >
-          <div>{{item.flag}} {{item.name}} +{{item.callingCode}}</div>
-        </Accessories.Select>
-      </:before>
-    </BoxelInputGroup>
-  </template>
-}
-
-export interface SelectedItemSignature {
-  Args: {
-    option: any;
   };
-  Element: HTMLDivElement;
-}
 
-// eslint-disable-next-line ember/no-empty-glimmer-component-classes
-class PhoneSelectedItem extends Component<SelectedItemSignature> {
+  @action onInput(ev: Event): void {
+    this.hasBlurred = false;
+    if (this.validationState === 'invalid') {
+      this.validationState = 'initial';
+    }
+    this.errorMessage = undefined;
+    let value = (ev?.target as HTMLInputElement | null)?.value ?? '';
+    this.inputValue = value;
+    debounce(this.handleValidation, value, ev, 300);
+  }
+
+  @action onBlur(ev: Event): void {
+    this.hasBlurred = true;
+    const formatted = this.formatForDisplay(this.inputValue);
+    this.inputValue = formatted;
+    this.handleValidation(this.inputValue, ev);
+  }
+
+  private sanitizeForFormatting(value: string): string {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return '';
+    }
+
+    const hasLeadingPlus = trimmed.startsWith('+');
+    const digits = trimmed.replace(/\D/g, '');
+    if (hasLeadingPlus) {
+      return digits.length ? `+${digits}` : '+';
+    }
+
+    return digits;
+  }
+
+  private formatForDisplay(value: string | null): string {
+    if (!value) {
+      this.asYouType.reset();
+      return '';
+    }
+
+    const sanitized = this.sanitizeForFormatting(value);
+    if (!sanitized) {
+      this.asYouType.reset();
+      return '';
+    }
+
+    const formatted = this.asYouType.reset(sanitized);
+    return formatted;
+  }
+
   <template>
-    <div>
-      {{@option.flag}}
-      +{{@option.callingCode}}
-    </div>
+    <BoxelInput
+      @type='tel'
+      @value={{this.inputValue}}
+      {{on 'input' this.onInput}}
+      @onBlur={{this.onBlur}}
+      @state={{this.validationState}}
+      @errorMessage={{this.errorMessage}}
+      @disabled={{@disabled}}
+      @placeholder={{if @placeholder @placeholder 'Enter phone'}}
+      @required={{@required}}
+      data-test-boxel-phone-input
+      ...attributes
+    />
   </template>
 }
-
-export default PhoneInput;

@@ -1,0 +1,30 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Skill",
+        "module": "https://cardstack.com/base/skill"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": "Spec Usage",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "commands": [],
+      "description": "Usage patterns for Card, Field, Component, App, and Command specs",
+      "instructions": "**Card specs (linksTo/linksToMany):**\n```gts\nimport { Author } from './author';\n@field author = linksTo(Author);\n@field contributors = linksToMany(Author);\n```\n\n**Field specs (contains/containsMany):**\n```gts\nimport StringField from 'https://cardstack.com/base/string';\nimport { AddressField } from './address-field';\n@field name = contains(StringField);\n@field addresses = containsMany(AddressField);\n```\n\n**Component specs (direct template usage):**\n```hbs\n<BoxelSelect @options={{this.options}} />\n<Button @variant=\"primary\">Save</Button>\n```\n\n**Command specs (programmatic execution):**\n```ts\nconst cmd = new MyCommand(commandContext);\nconst result = await cmd.execute(input);\n```\n\n<!--more-->\n\n# Spec Usage Examples\n\nA Spec is a comprehensive documentation and metadata container for code within the Boxel ecosystem.\n\nThis document provides real-world usage examples for each spec type based on actual implementations found in the Boxel repository.\n\n## Card Specs (`specType: 'card'`)\n(Cards are linked to using `linksTo` and `linksToMany` within consuming cards...)\n\n### Import\n```typescript\nimport { Author } from './author';\nimport { Country } from './country';\nimport { Skill } from './skill';\n```\n\n### Usage as a Field\n```typescript\nexport class BlogPost extends CardDef {\n  // Single card reference\n  @field author = linksTo(Author);\n  @field country = linksTo(Country);\n  \n  // Multiple card references\n  @field enabledSkills = linksToMany(Skill);\n  @field attachedCards = linksToMany(CardDef);\n}\n```\n\n### Template Usage\n```handlebars\n{{! Display linked card in different formats }}\n<@fields.author @format=\"embedded\" />\n<@fields.author @format=\"atom\" />\n\n{{! Display collection of linked cards }}\n<div class=\"skills-container\">\n  <@fields.enabledSkills @format=\"embedded\" />\n</div>\n```\n\n## Field Specs (`specType: 'field'`)\n(Fields are embedded using `contains` and `containsMany` within cards.)\n\n### Import\n```typescript\nimport StringField from 'https://cardstack.com/base/string';\nimport DateField from 'https://cardstack.com/base/date';\nimport { SocialMediaLink } from './social-media-link';\n```\n\n### Usage as a Field\n```typescript\nexport class MinecraftInvite extends CardDef {\n  // Basic field types\n  @field celebrantName = contains(StringField);\n  @field age = contains(StringField);\n  @field date = contains(DateField);\n  \n  // Custom field types\n  @field socialLinks = containsMany(SocialMediaLink);\n}\n```\n\n### Template Usage\n```handlebars\n{{! Display contained fields }}\n<@fields.celebrantName />\n<@fields.date @format=\"atom\" />\n\n{{! Display collection of contained fields }}\n<div class=\"social-links\">\n  <@fields.socialLinks @format=\"embedded\" />\n</div>\n```\n\n## Component Specs (`specType: 'component'`)\n(Components are used directly in templates, extending GlimmerComponent...)\n\n### Import\n```typescript\nimport { BoxelSelect, Pill } from '@cardstack/boxel-ui/components';\nimport { FilterDropdown } from './filter-dropdown';\nimport { CardsGrid } from './cards-grid';\n```\n\n### Usage in Templates\n```handlebars\n{{! Basic component usage }}\n<BoxelSelect\n  @placeholder=\"Select option\"\n  @options={{this.options}}\n  @onChange={{this.onSelectOption}}\n/>\n\n{{! Custom components }}\n<FilterDropdown @filters={{this.filters}} />\n<CardsGrid @cards={{this.cards}} @columns={{3}} />\n\n{{! Component with content }}\n<Pill @variant=\"success\">\n  Active Status\n</Pill>\n```\n\n## App Specs (`specType: 'app'`)\n(Apps extend AppCard and are typically linked to like regular cards...)\n\n### Import\n```typescript\nimport { AppCard } from '/experiments/app-card';\nimport { GardenAppCard } from './garden-app';\n```\n\n### Usage as a Field\n```typescript\nexport class Dashboard extends CardDef {\n  @field primaryApp = linksTo(GardenAppCard);\n  @field availableApps = linksToMany(AppCard);\n}\n```\n\n\n### Template Usage\n```handlebars\n{{! Display app in card context }}\n<@fields.primaryApp @format=\"fitted\" />\n\n{{! App navigation }}\n<div class=\"app-grid\">\n  <@fields.availableApps @format=\"embedded\" />\n</div>\n```\n\n## Command Specs (`specType: 'command'`)\n(Commands are instantiated and executed programmatically.)\n\n### Import\n```typescript\nimport { GenerateReadmeSpecCommand } from './generate-readme-spec';\nimport { SwitchSubmodeCommand } from './switch-submode';\nimport { UpdatePlaygroundSelectionCommand } from './update-playground-selection';\n```\n\n### Template Usage\n\nWhen you need to execute commands in response to user interactions, you can just access the commandContext and invoke it as how you would a simple async function in javascript\n\n```typescript\nlet commandContext = this.args.context?.commandContext;\nif (!commandContext) {\n   console.error('Command context not available');\n   return;\n}\n\nconst someCommandInput = new CommandInput({...args})\nconst myCommand = new MyCommand(commandContext);\nconst result = await myCommand.execute(someCommandInput);\n```"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

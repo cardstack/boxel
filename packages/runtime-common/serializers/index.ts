@@ -8,6 +8,7 @@ import * as EthereumAddressSerializer from './ethereum-address';
 import * as NumberSerializer from './number';
 import * as EmailSerializer from './email';
 import * as ImageSizeSerializer from './image-size';
+import * as PhoneSerializer from './phone';
 
 import type { CardDocument } from '../index';
 import type {
@@ -31,6 +32,7 @@ export {
   NumberSerializer,
   ImageSizeSerializer,
   EmailSerializer,
+  PhoneSerializer,
 };
 
 interface Serializer {
@@ -62,6 +64,7 @@ const serializerMapping: { [name: string]: Serializer } = {
   number: NumberSerializer,
   'image-size': ImageSizeSerializer,
   email: EmailSerializer,
+  phone: PhoneSerializer,
 };
 
 export type SerializerName =
@@ -74,7 +77,8 @@ export type SerializerName =
   | 'ethereum-address'
   | 'number'
   | 'image-size'
-  | 'email';
+  | 'email'
+  | 'phone';
 
 export function getSerializer(name: SerializerName): Serializer {
   assertIsSerializerName(name);

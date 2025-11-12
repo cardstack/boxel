@@ -48,6 +48,8 @@ import {
   type FieldDefinition,
   type RealmPermissions,
   type RealmAction,
+  type LintArgs,
+  type LintResult,
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
   userInitiatedPriority,
@@ -103,7 +105,6 @@ import type {
   RealmEventContent,
   UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
-import type { LintArgs, LintResult } from './lint';
 import type {
   AtomicOperation,
   AtomicOperationResult,
@@ -154,6 +155,8 @@ export interface FileRef {
 const CACHE_HEADER = 'X-Boxel-Cache';
 const CACHE_HIT_VALUE = 'hit';
 const CACHE_MISS_VALUE = 'miss';
+const MODULE_ETAG_VARIANT = 'module';
+const SOURCE_ETAG_VARIANT = 'source';
 
 type CachedSourceFileEntry = {
   type: 'file';
@@ -192,6 +195,17 @@ type ModuleLoadResult =
       body: string;
       headers: Record<string, string>;
     };
+
+function buildEtag(
+  lastModified: number | undefined,
+  variant?: string,
+): string | undefined {
+  if (lastModified == null) {
+    return undefined;
+  }
+  let base = String(lastModified);
+  return variant ? `${base}:${variant}` : base;
+}
 
 export interface TokenClaims {
   user: string;
@@ -638,16 +652,16 @@ export class Realm {
     let lastWriteType: 'module' | 'instance' | undefined;
     let currentWriteType: 'module' | 'instance' | undefined;
     let invalidations: Set<string> = new Set();
-    let clientRequestId: string | null | undefined;
+    let clientRequestId: string | null = options?.clientRequestId ?? null;
     let performIndex = async () => {
       await this.#realmIndexUpdater.update(urls, {
+        clientRequestId,
         onInvalidation: (invalidatedURLs: URL[]) => {
           this.handleExecutableInvalidations(invalidatedURLs);
           invalidations = new Set([
             ...invalidations,
             ...invalidatedURLs.map((u) => u.href),
           ]);
-          clientRequestId = clientRequestId ?? options?.clientRequestId;
         },
       });
     };
@@ -1465,13 +1479,12 @@ export class Realm {
       return { kind: 'shimmed', response };
     }
 
-    let etag =
-      fileRef.lastModified != null ? String(fileRef.lastModified) : undefined;
+    let etag = buildEtag(fileRef.lastModified, MODULE_ETAG_VARIANT);
     if (etag && request.headers.get('if-none-match') === etag) {
       let headers: Record<string, string> = {
         'cache-control': 'public, max-age=0',
-        etag,
       };
+      headers.etag = etag;
       if (fileRef.lastModified != null) {
         headers['last-modified'] = formatRFC7231(fileRef.lastModified * 1000);
       }
@@ -1547,12 +1560,11 @@ export class Realm {
     requestContext: RequestContext,
     options?: {
       defaultHeaders?: Record<string, string>;
+      etagVariant?: string;
     },
   ): Promise<ResponseWithNodeStream> {
-    if (
-      ref.lastModified != null &&
-      request.headers.get('if-none-match') === String(ref.lastModified)
-    ) {
+    let etag = buildEtag(ref.lastModified, options?.etagVariant);
+    if (etag && request.headers.get('if-none-match') === etag) {
       return createResponse({
         body: null,
         init: { status: 304 },
@@ -1566,7 +1578,7 @@ export class Realm {
       ...(Symbol.for('shimmed-module') in ref
         ? { 'X-Boxel-Shimmed-Module': 'true' }
         : {}),
-      etag: String(ref.lastModified),
+      ...(etag ? { etag } : {}),
       'cache-control': 'public, max-age=0', // instructs the browser to check with server before using cache
     };
     if (createdFromDb != null) {
@@ -1621,7 +1633,7 @@ export class Realm {
     let authorizationString = request.headers.get('Authorization');
     if (!authorizationString) {
       this.#log.warn(
-        `auth failed for ${request.method} ${request.url} missing auth header`,
+        `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) missing auth header`,
       );
       throw new AuthenticationError(
         AuthenticationErrorMessages.MissingAuthHeader,
@@ -1662,7 +1674,7 @@ export class Realm {
           JSON.stringify(userPermissions.sort())
       ) {
         this.#log.warn(
-          `auth failed for ${request.method} ${request.url}, for user ${user} token permissions do not match realm permissions for user. token permissions: ${JSON.stringify(token.permissions?.sort())}, user's realm permissions: ${JSON.stringify(userPermissions.sort())}`,
+          `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), for user ${user} token permissions do not match realm permissions for user. token permissions: ${JSON.stringify(token.permissions?.sort())}, user's realm permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
         throw new AuthenticationError(
           AuthenticationErrorMessages.PermissionMismatch,
@@ -1671,7 +1683,7 @@ export class Realm {
 
       if (!(await realmPermissionChecker.can(user, requiredPermission))) {
         this.#log.warn(
-          `auth failed for ${request.method} ${request.url}, for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
+          `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
         throw new AuthorizationError(
           'Insufficient permissions to perform this action',
@@ -1680,13 +1692,13 @@ export class Realm {
     } catch (e: any) {
       if (e instanceof TokenExpiredError) {
         this.#log.warn(
-          `JWT verification failed for ${request.method} ${request.url} with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
+          `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
       if (e instanceof JsonWebTokenError) {
         this.#log.warn(
-          `JWT verification failed for ${request.method} ${request.url} with token string ${tokenString}. ${e.message}`,
+          `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }
@@ -1761,6 +1773,7 @@ export class Realm {
                 ...cached.defaultHeaders,
                 [CACHE_HEADER]: CACHE_HIT_VALUE,
               },
+              etagVariant: SOURCE_ETAG_VARIANT,
             },
           );
         } finally {
@@ -1814,6 +1827,7 @@ export class Realm {
       if (bypassCache) {
         return await this.serveLocalFile(request, handle, requestContext, {
           defaultHeaders,
+          etagVariant: SOURCE_ETAG_VARIANT,
         });
       } else {
         let cachedRef = await this.materializeFileRef(handle);
@@ -1825,6 +1839,7 @@ export class Realm {
         });
         return await this.serveLocalFile(request, cachedRef, requestContext, {
           defaultHeaders,
+          etagVariant: SOURCE_ETAG_VARIANT,
         });
       }
     } finally {
