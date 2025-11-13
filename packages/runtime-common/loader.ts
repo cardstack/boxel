@@ -1,5 +1,5 @@
 import TransformModulesAmdPlugin from 'transform-modules-amd-plugin';
-import { transformSync } from '@babel/core';
+import { transformAsync } from '@babel/core';
 import { Deferred } from './deferred';
 import { cachedFetch, type MaybeCachedResponse } from './cached-fetch';
 import { trimExecutableExtension, logger } from './index';
@@ -529,16 +529,18 @@ export class Loader {
     let src: string | null | undefined = loaded.source;
 
     try {
-      src = transformSync(src, {
-        plugins: [
-          [
-            TransformModulesAmdPlugin,
-            { noInterop: true, moduleId: moduleIdentifier },
+      src = (
+        await transformAsync(src, {
+          plugins: [
+            [
+              TransformModulesAmdPlugin,
+              { noInterop: true, moduleId: moduleIdentifier },
+            ],
           ],
-        ],
-        sourceMaps: 'inline',
-        filename: moduleIdentifier,
-      })?.code;
+          sourceMaps: 'inline',
+          filename: moduleIdentifier,
+        })
+      )?.code;
     } catch (exception) {
       this.setModule(moduleIdentifier, {
         state: 'broken',
