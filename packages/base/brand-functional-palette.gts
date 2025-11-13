@@ -25,7 +25,7 @@ export default class BrandFunctionalPalette extends FieldDef {
       <GridContainer class='functional-palette'>
         {{#each @model.cssVariableFields as |color|}}
           {{#if color.value}}
-            <Swatch @label={{color.name}} @color={{color.value}} />
+            <Swatch @label={{color.fieldName}} @color={{color.value}} />
           {{/if}}
         {{/each}}
       </GridContainer>
@@ -38,6 +38,7 @@ export default class BrandFunctionalPalette extends FieldDef {
         }
         :deep(.boxel-swatch-name) {
           font-weight: 600;
+          text-transform: capitalize;
         }
       </style>
     </template>

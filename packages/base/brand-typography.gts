@@ -27,7 +27,7 @@ class Embedded extends Component<typeof BrandTypography> {
       <FieldContainer
         class='preview-container'
         @vertical={{true}}
-        @label='Body'
+        @label='Body Copy'
       >
         <@fields.body />
       </FieldContainer>
@@ -96,6 +96,10 @@ class TypographyEmbedded extends Component<typeof TypographyField> {
   }
 
   private get styleSummary() {
+    const defaultFontSize = '13px';
+    const defaultFontWeight = 'regular';
+    const defaultFontFamily = 'Poppins';
+
     let { fontFamily, fontSize, fontWeight } = this.args.model;
 
     switch (fontWeight) {
@@ -105,7 +109,7 @@ class TypographyEmbedded extends Component<typeof TypographyField> {
         break;
       case '400':
       case 'normal':
-        fontWeight = 'normal';
+        fontWeight = 'regular';
         break;
       case '500':
       case 'medium':
@@ -127,11 +131,12 @@ class TypographyEmbedded extends Component<typeof TypographyField> {
         fontWeight;
     }
 
-    fontFamily = fontFamily?.split(',')?.[0]?.replace(/'/g, '') ?? 'Poppins';
+    fontFamily =
+      fontFamily?.split(',')?.[0]?.replace(/'/g, '') ?? defaultFontFamily;
+    fontSize = fontSize?.length ? fontSize : defaultFontSize;
+    fontWeight = fontWeight?.length ? fontWeight : defaultFontWeight;
 
-    return sanitizeHtmlSafe(
-      `${fontFamily} ${fontWeight ?? 'normal'}, ${fontSize ?? '16px'}`,
-    );
+    return sanitizeHtmlSafe(`${fontFamily} ${fontSize}, ${fontWeight}`);
   }
 }
 
