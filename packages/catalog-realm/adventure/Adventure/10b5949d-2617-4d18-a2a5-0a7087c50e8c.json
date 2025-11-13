@@ -14,23 +14,30 @@
         "description": null,
         "thumbnailURL": null
       },
-      "startedAt": null,
-      "chatRoomId": null,
-      "gameStatus": "setup",
+      "startedAt": "2025-11-13T08:56:28.675Z",
+      "chatRoomId": "!VvkRQDzdWWBghqVziN:localhost",
+      "gameStatus": "playing",
       "completedAt": null,
-      "currentTurn": 0,
-      "lastNarration": null,
-      "lastTimestamp": null,
-      "lastTurnNumber": null,
+      "currentTurn": 3,
+      "lastNarration": "# A Dangerous Conversation\n\nYou weave through the crowd, ignoring the blonde's pout and the nervous man's furtive glances. Georgie \"The Fish\" Castellano watches your approach with dead eyes that have seen everything twice. He doesn't stand, doesn't even acknowledge you until you're right in front of him.\n\n\"Detective,\" he says, his voice like gravel in a garbage disposal. \"You're either very brave or very stupid, walking into my establishment.\"\n\n\"I'm looking for Victor Mallory,\" you say, cutting straight to it.\n\nSomething flickers across Georgie's face—surprise? Fear? It's gone before you can pin it down. \"Mallory. Yeah, he was here. Three nights ago. Had a... disagreement with some associates of mine. About a property deal that went south.\" He lights a cigar, the flame illuminating the scar that runs from his ear to his chin. \"But here's the thing, detective—Mallory walked out of here alive. What happened after? Not my problem.\"\n\nBehind you, you hear movement. The doorman has positioned himself near the exit. The platinum blonde has vanished. The nervous man is gone too.\n\n\"Course,\" Georgie continues, \"his partner might know more. Name's Sullivan. Runs a pawn shop on Bleecker Street. Opens at dawn.\" He smiles without warmth. \"Now, you gonna buy a drink, or are we done here?\"",
+      "lastTimestamp": "2025-11-13T09:01:51.600Z",
+      "lastTurnNumber": 3,
       "customAdventure": {
-        "tags": [],
+        "tags": [
+          "noir",
+          "mystery",
+          "gritty"
+        ],
         "title": null,
         "description": null,
-        "imageStyles": []
+        "imageStyles": [
+          "film-noir",
+          "black-and-white"
+        ]
       },
-      "lastImagePrompt": null,
-      "lastIsPlayerTurn": false,
-      "lastPlayerChoice": null,
+      "lastImagePrompt": "menacing club manager, cigar smoke, noir lighting, dangerous atmosphere, roulette wheel, threatening bodyguards in background, film-noir, black-and-white",
+      "lastIsPlayerTurn": true,
+      "lastPlayerChoice": "Confront Georgie \"The Fish\" directly",
       "autoGenerateImages": true
     },
     "relationships": {
@@ -41,7 +48,12 @@
       },
       "selectedScenario": {
         "links": {
-          "self": null
+          "self": "../AdventureScenario/example-scenario-detective-mystery"
+        }
+      },
+      "lastChoiceOffered": {
+        "links": {
+          "self": "../../MultipleChoice/bbd53fe2-c0fb-4a32-8d7e-f76e5362e627"
         }
       },
       "linkedScenarios.0": {
@@ -64,9 +76,14 @@
           "self": "../AdventureScenario/example-scenario-undersea-kingdom"
         }
       },
+      "linkedScenarios.4": {
+        "links": {
+          "self": "../AdventureScenario/example-scenario-time-traveler"
+        }
+      },
       "lastCloudflareImage": {
         "links": {
-          "self": null
+          "self": "../../CloudflareImage/0a320d7e-f76e-4362-a627-ab9e3783007f"
         }
       }
     }
