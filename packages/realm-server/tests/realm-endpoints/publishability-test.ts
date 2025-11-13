@@ -112,6 +112,14 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
             @field label = contains(StringField);
 
             command = CreateAiAssistantRoomCommand;
+
+            <template>
+              label: <span class='label'>{{@fields.label}}</span>
+
+              <style scoped>
+                .label { font-weight: bold; }
+              </style>
+            </template>
           }
         `,
         'source-instance.json': {
