@@ -18,6 +18,9 @@ import {
   setupUserSubscribed,
   postCardSource,
   postNewCard,
+  setRealmPermissions,
+  waitUntil,
+  getRealmPublishability,
 } from '../helpers';
 
 const serverIndexUrl = new URL(appURL).origin;
@@ -166,11 +169,11 @@ test.describe('Publish realm', () => {
       url: serverIndexUrl,
     });
 
-    await createRealm(page, 'new-workspace', '1New Workspace');
-    await createRealm(page, 'secret-realm', 'Secret Realm');
-
     let defaultRealmURL = new URL('user1/new-workspace/', serverIndexUrl).href;
     let privateRealmURL = new URL('user1/secret-realm/', serverIndexUrl).href;
+
+    await createRealm(page, 'new-workspace', '1New Workspace');
+    await createRealm(page, 'secret-realm', 'Secret Realm');
 
     await postCardSource(
       page,
@@ -216,19 +219,35 @@ test.describe('Publish realm', () => {
       `,
     );
 
-    let dependentCardURL = await postNewCard(page, defaultRealmURL, {
-      data: {
-        attributes: {
-          label: 'Leaky Card',
-        },
-        meta: {
-          adoptsFrom: {
-            module: './dependent-card',
-            name: 'DependentCard',
+    await postCardSource(
+      page,
+      defaultRealmURL,
+      'index.json',
+      JSON.stringify(
+        {
+          data: {
+            type: 'card',
+            attributes: {
+              label: 'Leaky Card',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './dependent-card',
+                name: 'DependentCard',
+              },
+            },
           },
         },
-      },
-    });
+        null,
+        2,
+      ),
+    );
+    let dependentCardURL = `${defaultRealmURL}index`;
+
+    await waitUntil(async () => {
+      let publishability = await getRealmPublishability(page, defaultRealmURL);
+      return publishability.publishable === false;
+    }, 20000);
 
     await page.locator('[data-test-workspace="1New Workspace"]').click();
     await page.locator('[data-test-submode-switcher] button').click();
