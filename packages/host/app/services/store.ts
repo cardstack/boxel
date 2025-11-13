@@ -355,7 +355,36 @@ export default class StoreService extends Service implements StoreInterface {
   async patch<T extends CardDef = CardDef>(
     id: string,
     patch: PatchData,
-    opts?: { doNotPersist?: true; clientRequestId?: string },
+    opts?: { doNotPersist?: true },
+  ): Promise<T | CardErrorJSONAPI | undefined>;
+  async patch<T extends CardDef = CardDef>(
+    id: string,
+    patch: PatchData,
+    opts?: { doNotWaitForPersist?: true },
+  ): Promise<T | CardErrorJSONAPI | undefined>;
+  async patch<T extends CardDef = CardDef>(
+    id: string,
+    patch: PatchData,
+    opts?: { doNotPersist?: true; doNotWaitForPersist?: true },
+  ): Promise<T | CardErrorJSONAPI | undefined>;
+  async patch<T extends CardDef = CardDef>(
+    id: string,
+    patch: PatchData,
+    opts?: { clientRequestId?: string },
+  ): Promise<T | CardErrorJSONAPI | undefined>;
+  async patch<T extends CardDef = CardDef>(
+    id: string,
+    patch: PatchData,
+    opts?: { doNotWaitForPersist?: true; clientRequestId?: string },
+  ): Promise<T | CardErrorJSONAPI | undefined>;
+  async patch<T extends CardDef = CardDef>(
+    id: string,
+    patch: PatchData,
+    opts?: {
+      doNotPersist?: true;
+      doNotWaitForPersist?: true;
+      clientRequestId?: string;
+    },
   ): Promise<T | CardErrorJSONAPI | undefined> {
     if (this.renderContextBlocksPersistence()) {
       return;
@@ -406,14 +435,22 @@ export default class StoreService extends Service implements StoreInterface {
     }
     let api = await this.cardService.getAPI();
     await api.updateFromSerialized(instance, doc, this.store);
+    let shouldPersist = !opts?.doNotPersist;
+    let shouldAwaitPersist = shouldPersist && !opts?.doNotWaitForPersist;
+    let persistedResult: CardDef | CardErrorJSONAPI | undefined = instance;
+
     if (opts?.doNotPersist) {
       await this.startAutoSaving(instance);
-    } else {
-      await this.persistAndUpdate(instance, {
+    } else if (shouldPersist) {
+      let persistPromise = this.persistAndUpdate(instance, {
         clientRequestId: opts?.clientRequestId,
       });
+      if (shouldAwaitPersist) {
+        persistedResult = await persistPromise;
+      }
     }
-    return instance as T | CardErrorJSONAPI;
+
+    return persistedResult as T | CardErrorJSONAPI;
   }
 
   async search(query: Query, realmURL?: URL): Promise<CardDef[]> {

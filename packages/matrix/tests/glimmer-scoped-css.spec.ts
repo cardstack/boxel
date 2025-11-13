@@ -1,57 +1,27 @@
-import { test, expect } from '@playwright/test';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-  registerUser,
-} from '../docker/synapse';
-import {
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-  appURL,
-} from '../helpers/isolated-realm-server';
+import { test, expect } from './fixtures';
+import { appURL } from '../helpers/isolated-realm-server';
 import {
   clearLocalStorage,
   createRealm,
-  login,
-  registerRealmUsers,
-  setupUserSubscribed,
   postCardSource,
   postNewCard,
+  createSubscribedUserAndLogin,
 } from '../helpers';
 
 test.describe('glimmer-scoped-css', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
   const serverIndexUrl = new URL(appURL).origin;
-  const realmName = 'realm1';
-  const realmURL = new URL(`user1/${realmName}/`, serverIndexUrl).href;
 
   let newCardURL: string;
 
-  test.beforeEach(async () => {
-    // synapse defaults to 30s for beforeEach to finish, we need a bit more time
-    // to safely start the realm
-    test.setTimeout(120_000);
-    synapse = await synapseStart({
-      template: 'test',
-    });
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
-    await registerUser(synapse, 'user1', 'pass');
-    await setupUserSubscribed('@user1:localhost', realmServer);
-  });
-
-  test.afterEach(async () => {
-    await realmServer?.stop();
-    await synapseStop(synapse.synapseId);
-  });
-
   test(':global is ignored and does not affect styles', async ({ page }) => {
+    const realmName = 'realm1';
     await clearLocalStorage(page, serverIndexUrl);
-    await login(page, 'user1', 'pass', {
-      url: serverIndexUrl,
-    });
+    let { username } = await createSubscribedUserAndLogin(
+      page,
+      'glimmer-css-user',
+      serverIndexUrl,
+    );
+    const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
     await createRealm(page, realmName);
 
     await postCardSource(

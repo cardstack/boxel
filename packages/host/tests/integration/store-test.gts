@@ -1012,6 +1012,51 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test<TestContextWithSave>('can skip waiting for the save when patching an instance', async function (assert) {
+    assert.expect(4);
+
+    let targetId = `${testRealmURL}Person/hassan`;
+    let instance = await storeService.get(targetId);
+
+    let didSave = false;
+    this.onSave((url, doc) => {
+      if (url.href === targetId) {
+        didSave = true;
+        assert.strictEqual(
+          (doc as SingleCardDocument).data.attributes?.name,
+          'Hassan Updated',
+          'patched data is persisted',
+        );
+      }
+    });
+
+    await storeService.patch(
+      targetId,
+      {
+        attributes: {
+          name: 'Hassan Updated',
+        },
+      },
+      { doNotWaitForPersist: true },
+    );
+
+    assert.strictEqual(
+      (instance as any).name,
+      'Hassan Updated',
+      'local instance updated immediately',
+    );
+    assert.false(didSave, 'instance has not been persisted yet');
+
+    await waitUntil(() => didSave);
+
+    let file = await testRealmAdapter.openFile('Person/hassan.json');
+    assert.strictEqual(
+      JSON.parse(file!.content as string).data.attributes.name,
+      'Hassan Updated',
+      'remote document reflects patch after persistence completes',
+    );
+  });
+
   test('can patch an unsaved instance', async function (assert) {
     let instance = new PersonDef({ name: 'Andrea' });
     await storeService.add(instance, {
