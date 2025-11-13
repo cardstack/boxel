@@ -29,7 +29,7 @@ export interface PublishabilityGraph {
   resources: string[];
   resourceEntries: Map<string, ResourceIndexEntry[]>;
   realmVisibility: Map<string, RealmVisibility>;
-  isResourceInherentlyPublic?: (resourceUrl: string) => boolean;
+  isResourceInherentlyPublic: (resourceUrl: string) => boolean;
 }
 
 type DependencyChain = string[];
@@ -90,7 +90,7 @@ export async function analyzeRealmPublishability({
           continue;
         }
         // Some dependency entries are synthetic (e.g. base realm or scoped CSS)
-        if (isResourceInherentlyPublic?.(dependency)) {
+        if (isResourceInherentlyPublic(dependency)) {
           continue;
         }
 
