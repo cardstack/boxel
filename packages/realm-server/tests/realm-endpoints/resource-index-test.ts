@@ -10,6 +10,7 @@ import {
   setupBaseRealmServer,
   setupPermissionedRealm,
 } from '../helpers';
+
 module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
   let testRealm: Realm;
   let testRealmHttpServer: Server;
