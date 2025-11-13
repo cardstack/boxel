@@ -1,0 +1,80 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "QueryFieldPlayground",
+        "module": "../query-field-playground"
+      },
+      "queryFields": {
+        "featuredFriend": {
+          "page": {
+            "size": "$this.pageSize"
+          },
+          "sort": [
+            {
+              "by": "firstName",
+              "direction": "$this.sortDirection"
+            }
+          ],
+          "realm": "$thisRealm",
+          "filter": {
+            "contains": {
+              "firstName": "$this.nameFilter"
+            }
+          }
+        },
+        "matchingFriends": {
+          "page": {
+            "size": "$this.pageSize"
+          },
+          "sort": [
+            {
+              "by": "firstName",
+              "direction": "$this.sortDirection"
+            }
+          ],
+          "realm": "$thisRealm",
+          "filter": {
+            "contains": {
+              "firstName": "$this.nameFilter"
+            }
+          }
+        }
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Query Field Playground",
+        "description": "Interactively exercise linksTo and linksToMany query fields.",
+        "thumbnailURL": null
+      },
+      "pageSize": 3,
+      "nameFilter": "ha",
+      "sortDirection": "asc"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "featuredFriend": {
+        "links": {
+          "self": "../Friend/dog/1"
+        }
+      },
+      "matchingFriends.0": {
+        "links": {
+          "self": "../Friend/dog/1"
+        }
+      },
+      "matchingFriends.1": {
+        "links": {
+          "self": "../Friend/1"
+        }
+      }
+    }
+  }
+}
