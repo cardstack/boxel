@@ -139,10 +139,10 @@ export class QueryFieldPlayground extends CardDef {
             </h3>
             {{#if @fields.matchingFriends.length}}
               <div class='card-grid'>
-                {{#each @fields.matchingFriends as |friend index|}}
+                {{#each @fields.matchingFriends as |Friend index|}}
                   <div class='friend-card'>
                     {{index}}
-                    <friend />
+                    <Friend />
                   </div>
                 {{/each}}
               </div>
