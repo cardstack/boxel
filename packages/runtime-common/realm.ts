@@ -3005,29 +3005,32 @@ export class Realm {
         if (!parsed) {
           return [];
         }
-        let current = parsed;
+        let normalizeToDirectory = (url: URL) =>
+          url.pathname.endsWith('/') ? url : new URL('./', url);
+        let current = normalizeToDirectory(parsed);
         let visited = new Set<string>();
-        while (true) {
-          if (!current.pathname.endsWith('/')) {
-            current = new URL('./', current);
-          }
-          if (visited.has(current.href)) {
-            break;
-          }
+
+        while (!visited.has(current.href)) {
           visited.add(current.href);
+
           let result = await tryFetchRemoteEntriesFromBase(
             current,
             resourceUrl,
           );
+
           if (result !== undefined) {
             return result;
           }
+
           let parent = new URL('../', current);
+
           if (parent.href === current.href) {
             break;
           }
-          current = parent;
+
+          current = normalizeToDirectory(parent);
         }
+
         return [];
       })().finally(() => {
         remoteResourceFetches.delete(resourceUrl);
