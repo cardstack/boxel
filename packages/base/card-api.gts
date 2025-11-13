@@ -157,7 +157,6 @@ export {
 
 export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
 export const fieldDecorator = Symbol.for('cardstack-field-decorator');
-export const fieldType = Symbol.for('cardstack-field-type');
 export const queryableValue = Symbol.for('cardstack-queryable-value');
 export const formatQuery = Symbol.for('cardstack-format-query');
 export const realmInfo = Symbol.for('cardstack-realm-info');
@@ -1880,7 +1879,6 @@ export function containsMany<FieldT extends FieldDefConstructor>(
     },
   } as any;
 }
-containsMany[fieldType] = 'contains-many' as FieldType;
 
 export function contains<FieldT extends FieldDefConstructor>(
   field: FieldT,
@@ -1901,7 +1899,6 @@ export function contains<FieldT extends FieldDefConstructor>(
     },
   } as any;
 }
-contains[fieldType] = 'contains' as FieldType;
 
 export function linksTo<CardT extends CardDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
@@ -1922,7 +1919,6 @@ export function linksTo<CardT extends CardDefConstructor>(
     },
   } as any;
 }
-linksTo[fieldType] = 'linksTo' as FieldType;
 
 export function linksToMany<CardT extends CardDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
@@ -1943,7 +1939,6 @@ export function linksToMany<CardT extends CardDefConstructor>(
     },
   } as any;
 }
-linksToMany[fieldType] = 'linksToMany' as FieldType;
 
 // (moved below BaseDef & FieldDef declarations)
 
