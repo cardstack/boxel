@@ -53,8 +53,12 @@ jobs:
             18,
             19,
             20,
+            21,
+            22,
+            23,
+            24,
           ]
-        shardTotal: [20]
+        shardTotal: [24]
     concurrency:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
