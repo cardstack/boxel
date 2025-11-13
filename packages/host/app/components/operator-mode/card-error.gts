@@ -1,6 +1,5 @@
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-
 import { cached } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
