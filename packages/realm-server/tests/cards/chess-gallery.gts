@@ -52,7 +52,7 @@ export class ChessGallery extends FieldDef {
         }
         .white,
         .black {
-          color: var(--boxel-purple-600);
+          color: var(--boxel-600);
         }
       </style>
     </template>

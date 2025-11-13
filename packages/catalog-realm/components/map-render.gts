@@ -93,7 +93,7 @@ export class MapRender extends GlimmerComponent<MapRenderSignature> {
         display: flex;
         align-items: center;
         justify-content: center;
-        background: var(--boxel-50);
+        background: var(--boxel-150);
         color: #666;
         font-size: 14px;
         text-align: center;

@@ -73,7 +73,7 @@ export default class SummaryCard extends GlimmerComponent<SummaryCardArgs> {
         .summary-title {
           margin-block: 0;
           font: 600 var(--boxel-font);
-          letter-spacing: var(--boxel-lsp-xxs);
+          letter-spacing: var(--boxel-lsp-2xs);
           align-self: flex-start;
         }
         .summary-card-icon {

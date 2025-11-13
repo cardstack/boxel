@@ -178,7 +178,7 @@ export class SocialMediaLink extends FieldDef {
         .community-link {
           display: inline-block;
           padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-          background: var(--boxel-light-200);
+          background: var(--boxel-200);
           color: var(--boxel-blue);
           border-radius: var(--boxel-border-radius-sm);
           font: 500 var(--boxel-font-sm);
@@ -188,7 +188,7 @@ export class SocialMediaLink extends FieldDef {
         }
 
         .community-link:hover {
-          background: var(--boxel-light-300);
+          background: var(--boxel-200);
         }
       </style>
     </template>
@@ -217,7 +217,7 @@ export class JoinTheCommunity extends CardDef {
           gap: var(--boxel-sp);
           width: 100%;
           padding: var(--boxel-sp);
-          background-color: var(--boxel-light-100);
+          background-color: var(--boxel-150);
           border-radius: var(--boxel-border-radius);
         }
       </style>

@@ -63,7 +63,7 @@ export class IngredientField extends FieldDef {
         }
 
         .ingredient-name {
-          color: var(--boxel-50);
+          color: var(--boxel-150);
           font-size: 1rem;
           flex: 1;
         }
@@ -181,7 +181,7 @@ export class IngredientField extends FieldDef {
           border: 1px solid #d4af37;
           border-radius: 4px;
           background: rgba(40, 40, 40, 0.9);
-          color: var(--boxel-50);
+          color: var(--boxel-150);
           font-size: 0.9rem;
         }
 

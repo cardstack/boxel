@@ -118,15 +118,15 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         letter-spacing: var(--boxel-lsp-xs);
       }
       h1 {
-        font-size: var(--brand-heading-font-size, var(--boxel-font-size-med));
+        font-size: var(--brand-heading-font-size, var(--boxel-font-size-md));
         line-height: var(
           --brand-heading-line-height,
-          var(--boxel-lineheight-med)
+          var(--boxel-lineheight-md)
         );
       }
       h2 {
-        font-size: var(--boxel-font-size-med);
-        line-height: var(--boxel-lineheight-med);
+        font-size: var(--boxel-font-size-md);
+        line-height: var(--boxel-lineheight-md);
       }
       p {
         margin-block: 0;

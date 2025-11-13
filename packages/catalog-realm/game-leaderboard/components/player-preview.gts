@@ -105,7 +105,7 @@ export default class PlayerPreview extends GlimmerComponent<PlayerPreviewSignatu
       .player-preview__rank-label {
         font: 600 var(--boxel-font-xxs);
         text-transform: uppercase;
-        letter-spacing: var(--boxel-lsp-xxs);
+        letter-spacing: var(--boxel-lsp-2xs);
         color: rgba(255, 255, 255, 0.65);
       }
       .player-preview__rank-value {
@@ -137,7 +137,7 @@ export default class PlayerPreview extends GlimmerComponent<PlayerPreviewSignatu
       .player-preview__stat-label {
         color: rgba(255, 255, 255, 0.7);
         text-transform: uppercase;
-        letter-spacing: var(--boxel-lsp-xxs);
+        letter-spacing: var(--boxel-lsp-2xs);
       }
       .player-preview__stat-value {
         font: 700 var(--boxel-font-sm);

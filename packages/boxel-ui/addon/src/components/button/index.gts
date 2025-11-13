@@ -285,7 +285,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         --boxel-button-color: var(--destructive, var(--boxel-danger));
         --boxel-button-text-color: var(
           --destructive-foreground,
-          var(--boxel-light-100)
+          var(--boxel-150)
         );
         --boxel-button-box-shadow: var(--shadow);
       }
@@ -369,7 +369,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
         --boxel-button-min-height: var(--boxel-button-xs);
         --boxel-button-min-width: 5rem;
-        --boxel-button-loading-icon-size: var(--boxel-icon-xxs);
+        --boxel-button-loading-icon-size: var(--boxel-icon-2xs);
         --boxel-button-font: 600 var(--boxel-font-xs);
         --boxel-button-letter-spacing: var(--boxel-lsp-lg);
       }

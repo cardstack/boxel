@@ -230,7 +230,7 @@ export default class CardHeader extends Component<Signature> {
           );
           --inner-boxel-card-header-realm-icon-size: var(
             --boxel-card-header-realm-icon-size,
-            var(--boxel-icon-med)
+            var(--boxel-icon-md)
           );
           --inner-boxel-card-header-card-type-icon-size: var(
             --boxel-card-header-card-type-icon-size,

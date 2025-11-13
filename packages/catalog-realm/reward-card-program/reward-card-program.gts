@@ -249,7 +249,7 @@ export class SignupBonus extends CardDef {
           background: linear-gradient(
             135deg,
             var(--card, var(--boxel-light)) 0%,
-            var(--secondary, var(--boxel-light-200)) 100%
+            var(--secondary, var(--boxel-200)) 100%
           );
           color: var(--card-foreground, var(--boxel-dark));
           font-size: 0.875rem;
@@ -509,7 +509,7 @@ export class Benefit extends CardDef {
           font-weight: 500;
         }
         .spend-requirement {
-          background: var(--muted, var(--boxel-light-200));
+          background: var(--muted, var(--boxel-200));
           border: 1px solid var(--border, var(--boxel-border-color));
           border-radius: calc(var(--radius, var(--boxel-border-radius)) * 0.5);
           padding: calc(var(--spacing, var(--boxel-sp-xs)) * 2);
@@ -557,7 +557,7 @@ export class Benefit extends CardDef {
           list-style: none;
           padding: 0;
           margin: 0;
-          background: var(--muted, var(--boxel-light-200));
+          background: var(--muted, var(--boxel-200));
           border-radius: calc(var(--radius, var(--boxel-border-radius)) * 0.5);
           padding: calc(var(--spacing, var(--boxel-sp-xs)) * 2);
         }
@@ -666,7 +666,7 @@ export class MembershipBenefit extends CardDef {
           background: linear-gradient(
             135deg,
             var(--card, var(--boxel-light)) 0%,
-            var(--secondary, var(--boxel-light-200)) 100%
+            var(--secondary, var(--boxel-200)) 100%
           );
           color: var(--card-foreground, var(--boxel-dark));
           font-size: 0.875rem;
@@ -868,7 +868,7 @@ export class EarningRule extends CardDef {
           background: linear-gradient(
             135deg,
             var(--card, var(--boxel-light)) 0%,
-            var(--secondary, var(--boxel-light-200)) 100%
+            var(--secondary, var(--boxel-200)) 100%
           );
           color: var(--card-foreground, var(--boxel-dark));
           font-size: 0.875rem;
@@ -1093,7 +1093,7 @@ export class RewardCardProgram extends CardDef {
     <template>
       <div class='platinum-stage'>
         <div class='command-center'>
-          
+
           <header class='executive-header'>
             {{#if @model.networkLogoUrl}}
               <div class='top-network-logo'>
@@ -1197,7 +1197,7 @@ export class RewardCardProgram extends CardDef {
           </header>
 
           <main class='content-grid'>
-            
+
             {{#if @fields.signupBonus}}
               <section class='welcome-section'>
                 <h2 class='section-title'>

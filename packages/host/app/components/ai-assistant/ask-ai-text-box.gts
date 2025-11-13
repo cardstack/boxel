@@ -57,7 +57,7 @@ const AskAiTextBox: TemplateOnlyComponent<Signature> = <template>
       background-color: var(--boxel-ai-purple);
       color: var(--boxel-light);
       border: var(--boxel-form-control-dark-mode-border);
-      border-radius: var(--boxel-border-radius-xxl);
+      border-radius: var(--boxel-border-radius-2xl);
     }
     .ask-ai-input:hover:not(:disabled) {
       border-color: var(--boxel-light);

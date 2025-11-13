@@ -44,7 +44,7 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
       .boxel-pricing-container {
         color: var(--boxel-700);
         background-color: var(--boxel-light);
-        max-width: var(--boxel-xxl-container);
+        max-width: var(--boxel-2xl-container);
         margin: 0 auto;
       }
 
@@ -150,7 +150,7 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
       }
 
       .plan-name {
-        font: var(--boxel-font-med);
+        font: var(--boxel-font-md);
         font-weight: 600;
         margin: 0 0 var(--boxel-sp-xs) 0;
       }

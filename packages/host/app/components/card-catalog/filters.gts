@@ -94,7 +94,7 @@ export default class CardCatalogFilters extends Component<Signature> {
         justify-content: flex-start;
         gap: var(--boxel-sp-sm);
         padding: var(--boxel-sp-5xs) var(--boxel-sp-sm);
-        border-radius: var(--boxel-border-radius-xxl);
+        border-radius: var(--boxel-border-radius-2xl);
       }
       .dropdown-arrow {
         flex-shrink: 0;

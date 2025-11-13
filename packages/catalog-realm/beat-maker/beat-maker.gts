@@ -443,7 +443,7 @@ export class BeatPatternField extends FieldDef {
           width: 12px;
           height: 8px;
           background: #f3f4f6;
-          border-radius: var(--radius-xxs, var(--boxel-border-radius-xxs));
+          border-radius: var(--radius-xxs, var(--boxel-border-radius-2xs));
         }
 
         .pattern-step.has-kick {
@@ -3038,7 +3038,7 @@ export class BeatMakerCard extends CardDef {
           width: 2px;
           height: 6px;
           background: #f59e0b;
-          border-radius: var(--radius-xxs, var(--boxel-border-radius-xxs));
+          border-radius: var(--radius-xxs, var(--boxel-border-radius-2xs));
         }
 
         .card-grid {

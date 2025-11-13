@@ -67,7 +67,7 @@ export class CardList extends GlimmerComponent<CardListSignature> {
       }
       .bordered-items > .card-list-item > * {
         border-radius: var(--boxel-border-radius);
-        box-shadow: inset 0 0 0 1px var(--boxel-light-500);
+        box-shadow: inset 0 0 0 1px var(--boxel-300);
       }
     </style>
   </template>

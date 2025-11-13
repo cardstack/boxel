@@ -92,7 +92,7 @@ export default class PublishingRealmPopover extends Component<PublishingRealmArg
       .realm-item {
         display: flex;
         align-items: center;
-        border-bottom: 1px solid var(--boxel-light-200);
+        border-bottom: 1px solid var(--boxel-200);
       }
 
       .realm-item:last-child {
@@ -116,7 +116,7 @@ export default class PublishingRealmPopover extends Component<PublishingRealmArg
       .default-realm-icon {
         width: 100%;
         height: 100%;
-        background-color: var(--boxel-light-400);
+        background-color: var(--boxel-200);
         border-radius: 3px;
       }
 
@@ -135,12 +135,12 @@ export default class PublishingRealmPopover extends Component<PublishingRealmArg
       }
 
       .loading-icon {
-        color: var(--boxel-purple-600);
+        color: var(--boxel-600);
       }
 
       .no-domains-message {
         text-align: center;
-        color: var(--boxel-light-600);
+        color: var(--boxel-300);
         font-style: italic;
         padding: 1rem;
         font-size: var(--boxel-font-size-xs);

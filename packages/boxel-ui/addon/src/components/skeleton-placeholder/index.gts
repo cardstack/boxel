@@ -23,12 +23,9 @@ export default class SkeletonPlaceholder extends Component<Signature> {
       .boxel-skeleton-placeholder {
         --skeleton-background: var(
           --boxel-skeleton-background,
-          var(--boxel-light-200)
+          var(--boxel-200)
         );
-        --skeleton-highlight: var(
-          --boxel-skeleton-highlight,
-          var(--boxel-light-100)
-        );
+        --skeleton-highlight: var(--boxel-skeleton-highlight, var(--boxel-150));
         --skeleton-width: var(--boxel-skeleton-width, 100%);
         --skeleton-height: var(--boxel-skeleton-height, 1.5em);
         --skeleton-border-radius: var(

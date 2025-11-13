@@ -319,8 +319,8 @@ export default class SearchSheet extends Component<Signature> {
           width var(--boxel-transition);
       }
       .search-sheet:not(.closed) {
-        border-top-right-radius: var(--boxel-border-radius-xxl);
-        border-top-left-radius: var(--boxel-border-radius-xxl);
+        border-top-right-radius: var(--boxel-border-radius-2xl);
+        border-top-left-radius: var(--boxel-border-radius-2xl);
         border-bottom-right-radius: 0;
         border-bottom-left-radius: 0;
         overflow: hidden;

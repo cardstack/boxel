@@ -574,7 +574,7 @@ export default class SubmodeLayout extends Component<Signature> {
 
       .boxel-title {
         color: var(--boxel-light);
-        font: 900 var(--boxel-font-size-med) 'Rustica';
+        font: 900 var(--boxel-font-size-md) 'Rustica';
         letter-spacing: 3px;
       }
 

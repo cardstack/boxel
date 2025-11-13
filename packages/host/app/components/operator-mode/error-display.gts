@@ -279,7 +279,7 @@ export default class ErrorDisplay
       }
 
       .no-stack-message {
-        color: var(--boxel-purple-700);
+        color: var(--boxel-700);
         font-style: italic;
         margin: 0;
       }

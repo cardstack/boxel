@@ -114,7 +114,7 @@ const CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
       background-color: var(--boxel-dark);
       color: var(--boxel-light);
       border: 1px solid var(--boxel-550);
-      border-radius: var(--boxel-border-radius-xxl);
+      border-radius: var(--boxel-border-radius-2xl);
       overflow: hidden;
     }
     :deep(.monaco-editor) {

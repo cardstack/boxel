@@ -643,7 +643,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
       }
       .account-name {
         font: 600 var(--boxel-font-lg);
-        letter-spacing: var(--boxel-lsp-xxs);
+        letter-spacing: var(--boxel-lsp-2xs);
       }
       .user-icon {
         margin-left: auto;
@@ -677,7 +677,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
       }
       .summary-title {
         font: 600 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp-xxs);
+        letter-spacing: var(--boxel-lsp-2xs);
         align-self: flex-start;
       }
       .summary-highlight {
@@ -882,7 +882,7 @@ class EmbeddedTemplate extends Component<typeof Deal> {
         gap: var(--boxel-sp-xxs);
       }
       .account-name {
-        font: 600 var(--boxel-font-med);
+        font: 600 var(--boxel-font-md);
         overflow: hidden;
         text-overflow: ellipsis;
         display: -webkit-box;
@@ -1161,7 +1161,7 @@ class FittedTemplate extends Component<typeof Deal> {
         gap: var(--boxel-sp-xxs);
       }
       .account-name {
-        font: 600 var(--boxel-font-med);
+        font: 600 var(--boxel-font-md);
         overflow: hidden;
         text-overflow: ellipsis;
         display: -webkit-box;
@@ -1383,7 +1383,7 @@ class FittedTemplate extends Component<typeof Deal> {
           --account-header-info-content-display: none;
         }
         .account-name {
-          font: 600 var(--boxel-font-med);
+          font: 600 var(--boxel-font-md);
           -webkit-line-clamp: 1;
         }
 

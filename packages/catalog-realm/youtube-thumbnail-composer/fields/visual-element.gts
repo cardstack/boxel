@@ -120,7 +120,7 @@ export class VisualElement extends FieldDef {
           flex-wrap: wrap;
         }
         .type-badge {
-          background: var(--boxel-purple-200);
+          background: var(--boxel-400);
           color: var(--boxel-purple);
           padding: 2px 6px;
           border-radius: var(--boxel-border-radius-xs);

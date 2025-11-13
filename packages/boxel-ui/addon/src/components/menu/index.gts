@@ -148,7 +148,7 @@ export default class Menu extends Component<Signature> {
           --boxel-menu-border-radius: var(--boxel-border-radius);
           --boxel-menu-color: var(--boxel-light);
           --boxel-menu-text-color: var(--boxel-dark);
-          --boxel-menu-current-color: var(--boxel-light-100);
+          --boxel-menu-current-color: var(--boxel-150);
           --boxel-menu-selected-color: var(--boxel-highlight);
           --boxel-menu-disabled-color: var(--boxel-highlight);
           --boxel-menu-font: 500 var(--boxel-font-sm);
@@ -238,7 +238,7 @@ export default class Menu extends Component<Signature> {
           margin: 0;
           border: 0;
           height: 0;
-          border-bottom: 1px solid var(--boxel-purple-300);
+          border-bottom: 1px solid var(--boxel-400);
         }
 
         .menu-item {

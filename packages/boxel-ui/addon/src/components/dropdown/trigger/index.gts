@@ -48,7 +48,7 @@ const BoxelDropdownTrigger: TemplateOnlyComponent<Signature> = <template>
       }
 
       .boxel-dropdown-trigger--showing-placeholder {
-        color: var(--boxel-purple-300);
+        color: var(--boxel-400);
       }
 
       .boxel-dropdown-trigger__icon {
@@ -60,7 +60,7 @@ const BoxelDropdownTrigger: TemplateOnlyComponent<Signature> = <template>
       }
 
       .boxel-dropdown-trigger__caret {
-        --icon-color: var(--boxel-purple-200);
+        --icon-color: var(--boxel-400);
         margin-left: var(--boxel-sp-xxs);
       }
     }
