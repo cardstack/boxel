@@ -226,6 +226,9 @@
   --boxel-form-control-dark-mode-placeholder-color: var(--boxel-425);
   --boxel-form-control-dark-mode-border: var(--boxel-border-flexible);
 
+  /* Theme defaults */
+  --spacing: 0.25rem;
+
   /* deprecated */
   --boxel-sp-xxxs: var(--boxel-sp-3xs);
   --boxel-sp-xxs: var(--boxel-sp-2xs);
