@@ -582,8 +582,8 @@ export default class PublishRealmModal extends Component<Signature> {
         {{else if this.shouldShowPrivateDependencyWarning}}
           <div class='publish-warning' data-test-private-dependency-warning>
             <div class='publish-warning__message'>
-              Publishing this realm may render with errors because it depends on
-              private workspaces.
+              Publishing may result in errors because it depends on private
+              workspaces.
             </div>
             <ul class='publish-warning__violations'>
               {{#each this.privateDependencyViolations as |violation|}}
