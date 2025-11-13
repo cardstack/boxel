@@ -57,7 +57,9 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
     <article class='brand-guide'>
       <BoxelContainer @tag='header' @display='flex' class='header-section'>
         {{#if @model.markUsage.primaryMark1}}
-          <@fields.markUsage.primaryMark1 class='header-logo' />
+          <div class='header-logo-container'>
+            <img class='header-logo' src={{@model.markUsage.primaryMark1}} />
+          </div>
         {{/if}}
         <h1><@fields.title /></h1>
         {{#if @model.description}}
@@ -90,7 +92,7 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
           </FieldContainer>
           <FieldContainer @label='Secondary CTA' @vertical={{true}}>
             <div class='preview-container cta-preview-container'>
-              <Button @kind='secondary' @size='extra-small'>Sample CTA</Button>
+              <Button @kind='secondary-light' @size='extra-small'>Sample CTA</Button>
             </div>
           </FieldContainer>
           <FieldContainer @label='Disabled CTA' @vertical={{true}}>
@@ -99,6 +101,26 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
             </div>
           </FieldContainer>
         </GridContainer>
+        <FieldContainer
+          @label='Corner Radius for holding shapes'
+          @vertical={{true}}
+        >
+          <GridContainer class='ui-grid'>
+            <div class='preview-container ui-preview-container'>
+              <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+                eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut
+                enim ad minim veniam, quis nostrud exercitation ullamco laboris
+                nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor
+                in reprehenderit in voluptate velit esse cillum dolore eu fugiat
+                nulla pariatur. Excepteur sint occaecat cupidatat non proident,
+                sunt in culpa qui officia deserunt mollit anim id est laborum.
+              </p>
+            </div>
+            <div
+              class='preview-container ui-preview-container photo-container'
+            />
+          </GridContainer>
+        </FieldContainer>
       </BoxelContainer>
       <BoxelContainer @tag='section' @display='grid' class='content-section'>
         <h2>Generated CSS Variables</h2>
@@ -115,18 +137,12 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
           --brand-heading-font-weight,
           var(--boxel-font-weight-semibold)
         );
-        letter-spacing: var(--boxel-lsp-xs);
-      }
-      h1 {
         font-size: var(--brand-heading-font-size, var(--boxel-font-size-med));
         line-height: var(
           --brand-heading-line-height,
           var(--boxel-lineheight-med)
         );
-      }
-      h2 {
-        font-size: var(--boxel-font-size-med);
-        line-height: var(--boxel-lineheight-med);
+        letter-spacing: var(--boxel-lsp-xs);
       }
       p {
         margin-block: 0;
@@ -146,9 +162,21 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         background-color: var(--muted);
         color: var(--foreground);
       }
+      .header-logo-container {
+        max-width: 100%;
+        width: 450px;
+        height: auto;
+        aspect-ratio: 1.8;
+        padding: var(--boxel-sp);
+      }
       .header-logo {
         --logo-min-height: var(--brand-primary-mark-min-height);
-        margin: var(--boxel-sp);
+        height: 100%;
+        min-height: var(--logo-min-height);
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        object-position: center;
       }
       .content-section {
         gap: var(--brand-guide-spacing);
@@ -169,6 +197,9 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       .cta-grid {
         grid-template-columns: repeat(3, 1fr);
       }
+      .ui-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
       .preview-container {
         display: flex;
         align-items: center;
@@ -181,6 +212,18 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       }
       .cta-preview-container {
         min-height: 7.5rem;
+      }
+      .ui-preview-container {
+        height: 11.25rem;
+        align-items: flex-start;
+        padding: var(--boxel-sp-xxl);
+        overflow: auto;
+      }
+      .photo-container {
+        background-image: url('https://app-assets-cardstack.s3.us-east-1.amazonaws.com/%40cardstack/boxel/images/placeholders/photo-placeholder.png');
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: cover;
       }
     </style>
   </template>
@@ -203,7 +246,7 @@ export class CompoundColorField extends FieldDef {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <Swatch @label={{formatCssVarName @model.name}} @color={{@model.value}} />
+      <Swatch @label={{@model.name}} @color={{@model.value}} />
       <style scoped>
         :deep(.boxel-swatch-name) {
           font-weight: 600;
