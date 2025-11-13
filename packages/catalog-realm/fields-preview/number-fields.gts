@@ -673,8 +673,8 @@ export class NumberFieldsPreview extends CardDef {
 
         .display-column {
           padding: var(--boxel-sp-lg);
-          background: var(--boxel-purple-100);
-          border: 1px solid var(--boxel-purple-300);
+          background: var(--boxel-100);
+          border: 1px solid var(--boxel-400);
           border-radius: var(--boxel-border-radius);
         }
 

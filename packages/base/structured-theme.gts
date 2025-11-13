@@ -370,7 +370,7 @@ class Isolated extends Component<typeof StructuredTheme> {
           grid-template-columns: 1fr 1fr;
         }
         h2 {
-          font-size: var(--boxel-font-size-med);
+          font-size: var(--boxel-font-size-md);
         }
       }
     </style>

@@ -181,7 +181,7 @@ export default class ProfileEditButton extends GlimmerComponent<ProfileEditArgs>
         justify-content: space-between;
         padding: var(--boxel-sp);
         border-bottom: 1px solid var(--boxel-200);
-        background: var(--boxel-50);
+        background: var(--boxel-150);
       }
 
       .dialog-header h3 {

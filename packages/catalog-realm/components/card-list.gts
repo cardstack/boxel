@@ -37,9 +37,7 @@ export class CardList extends GlimmerComponent<CardListSignature> {
           <:response as |cards|>
             {{#each cards key='url' as |card|}}
               <li class='card-list-item'>
-                <card.component
-                  class='card'
-                />
+                <card.component class='card' />
                 {{#if (has-block 'meta')}}
                   {{yield card to='meta'}}
                 {{/if}}
@@ -69,7 +67,7 @@ export class CardList extends GlimmerComponent<CardListSignature> {
       }
       .bordered-items > .card-list-item > * {
         border-radius: var(--boxel-border-radius);
-        box-shadow: inset 0 0 0 1px var(--boxel-light-500);
+        box-shadow: inset 0 0 0 1px var(--boxel-300);
       }
     </style>
   </template>

@@ -33,7 +33,7 @@ const UserMessage: TemplateOnlyComponent<Signature> = <template>
       padding: var(--boxel-sp-sm);
       background-color: var(--boxel-light);
       color: var(--boxel-dark);
-      border-radius: var(--boxel-border-radius-xxl);
+      border-radius: var(--boxel-border-radius-2xl);
       border-top-left-radius: var(--boxel-border-radius-xs);
     }
     .is-pending {

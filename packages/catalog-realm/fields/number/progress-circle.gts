@@ -113,8 +113,8 @@ export default class ProgressCircleField extends NumberField {
         }
         .radial-mini {
           display: inline-flex;
-          width: var(--boxel-icon-xxs, 0.75rem);
-          height: var(--boxel-icon-xxs, 0.75rem);
+          width: var(--boxel-icon-2xs, 0.75rem);
+          height: var(--boxel-icon-2xs, 0.75rem);
         }
         .radial-svg {
           width: 100%;

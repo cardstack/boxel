@@ -165,8 +165,8 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
     }
     .state-indicator.failed {
       --icon-color: var(--boxel-light);
-      background-color: var(--boxel-error-400);
-      border-color: var(--boxel-error-400);
+      background-color: var(--boxel-danger);
+      border-color: var(--boxel-danger);
     }
     .state-indicator.invalid {
       --icon-color: var(--boxel-light);

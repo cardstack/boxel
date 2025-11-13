@@ -169,7 +169,7 @@ export class ProductImages extends GlimmerComponent<ProductImagesSignature> {
       }
       .thumbnails::-webkit-scrollbar-thumb {
         border-radius: 5px;
-        background: var(--boxel-purple-400);
+        background: var(--boxel-500);
       }
       .thumbnails::-webkit-scrollbar {
         height: 5px;

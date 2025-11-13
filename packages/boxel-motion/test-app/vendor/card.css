@@ -71,7 +71,7 @@
 
 .boxel-card__description {
   margin: 0;
-  color: var(--boxel-purple-400);
+  color: var(--boxel-500);
   font: var(--boxel-font-sm);
   overflow-wrap: break-word;
   word-break: break-word;
@@ -193,7 +193,7 @@
 }
 
 .boxel-card-field .field-renderer__title {
-  color: var(--boxel-purple-400);
+  color: var(--boxel-500);
   font: var(--boxel-font-xs);
   font-weight: 700;
   letter-spacing: var(--boxel-lsp-xl);
@@ -269,7 +269,7 @@
 }
 
 .card-placeholder {
-  background-color: var(--boxel-purple-200);
+  background-color: var(--boxel-400);
   border-radius: var(--boxel-border-radius);
   height: 122px;
 }

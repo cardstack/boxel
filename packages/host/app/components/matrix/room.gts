@@ -286,7 +286,7 @@ export default class Room extends Component<Signature> {
         overflow: hidden;
         position: relative;
 
-        --chat-input-area-border-radius: var(--boxel-border-radius-xxl);
+        --chat-input-area-border-radius: var(--boxel-border-radius-2xl);
       }
       .room-actions {
         position: relative;
@@ -339,7 +339,7 @@ export default class Room extends Component<Signature> {
         align-items: center;
         padding: var(--chat-input-area-bottom-padding);
         gap: var(--boxel-sp-sm);
-        background-color: var(--boxel-light-100);
+        background-color: var(--boxel-150);
         border-bottom-left-radius: var(--chat-input-area-border-radius);
         border-bottom-right-radius: var(--chat-input-area-border-radius);
       }

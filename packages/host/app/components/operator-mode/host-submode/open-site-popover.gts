@@ -85,7 +85,7 @@ export default class OpenSitePopover extends Component<OpenSitePopoverArgs> {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        border-bottom: 1px solid var(--boxel-light-200);
+        border-bottom: 1px solid var(--boxel-200);
         padding: 0.5rem 0;
       }
 
@@ -117,7 +117,7 @@ export default class OpenSitePopover extends Component<OpenSitePopoverArgs> {
 
       .no-published-message {
         text-align: center;
-        color: var(--boxel-light-600);
+        color: var(--boxel-300);
         font-style: italic;
         padding: 1rem;
         font-size: var(--boxel-font-size-xs);

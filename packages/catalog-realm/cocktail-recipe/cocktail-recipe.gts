@@ -591,7 +591,7 @@ export class CocktailRecipe extends CardDef {
           border: 1px solid #d4af37;
           border-radius: 8px;
           padding: 1.2rem;
-          color: var(--boxel-50);
+          color: var(--boxel-150);
           font-family: 'Georgia', serif;
           box-shadow: 0 4px 15px rgba(212, 175, 55, 0.2);
         }

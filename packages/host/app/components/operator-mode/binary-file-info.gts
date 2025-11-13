@@ -55,7 +55,7 @@ export default class BinaryFileInfo extends Component<Signature> {
       }
       .file-name {
         margin-top: var(--boxel-sp);
-        font: var(--boxel-font-med);
+        font: var(--boxel-font-md);
         font-weight: 600;
         width: 100%;
       }
