@@ -16,12 +16,12 @@
   --boxel-monospace-font-family:
     'Roboto Mono', 'Courier New', courier, monospace;
 
-  /* font shorthand */
+  /* font shorthand -- Note: opt for using --boxel-font-size and --boxel-lineheight */
   --boxel-font-xl: var(--boxel-font-size-xl) / var(--boxel-lineheight-xl)
     var(--boxel-font-family);
   --boxel-font-lg: var(--boxel-font-size-lg) / var(--boxel-lineheight-lg)
     var(--boxel-font-family);
-  --boxel-font-med: var(--boxel-font-size-med) / var(--boxel-lineheight-med)
+  --boxel-font-md: var(--boxel-font-size-md) / var(--boxel-lineheight-md)
     var(--boxel-font-family);
   --boxel-font: var(--boxel-font-size) / var(--boxel-lineheight)
     var(--boxel-font-family);
@@ -31,10 +31,10 @@
     var(--boxel-font-family);
 
   /* font-sizes */
-  --boxel-font-size-xxl: calc(var(--boxel-font-size) * 2.5); /* 40px */
+  --boxel-font-size-2xl: calc(var(--boxel-font-size) * 2.5); /* 40px */
   --boxel-font-size-xl: calc(var(--boxel-font-size) * 2); /* 32px */
   --boxel-font-size-lg: calc(var(--boxel-font-size) * 1.375); /* 22px */
-  --boxel-font-size-med: calc(var(--boxel-font-size) * 1.25); /* 20px */
+  --boxel-font-size-md: calc(var(--boxel-font-size) * 1.25); /* 20px */
   /* --boxel-font-size: 16px; (base - declared on line 10) */
   --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.8125); /* 13px (body) */
   --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.6875); /* 11px */
@@ -42,7 +42,7 @@
   /* line-height for corresponding font-size */
   --boxel-lineheight-xl: calc(43 / 32); /* 1.34375 */
   --boxel-lineheight-lg: calc(30 / 22); /* 1.3636 */
-  --boxel-lineheight-med: calc(28 / 20); /* 1.4 */
+  --boxel-lineheight-md: calc(28 / 20); /* 1.4 */
   --boxel-lineheight: calc(22 / 16); /* 1.375 */
   --boxel-lineheight-sm: calc(18 / 13); /* 1.3846 (body) */
   --boxel-lineheight-xs: calc(15 / 11); /* 1.3636 */
@@ -71,37 +71,37 @@
   /* letter-spacing */
   /* Note: the px conversion is using default font_size = 16px (1rem) */
   /* Formula: px = em * font_size */
-  --boxel-lsp-xxl: 0.1em; /* 1.6px */
+  --boxel-lsp-2xl: 0.1em; /* 1.6px */
   --boxel-lsp-xl: 0.05em; /* 0.8px */
   --boxel-lsp-lg: 0.035em; /* 0.56px */
   --boxel-lsp: 0.025em; /* 0.4px */
   --boxel-lsp-sm: 0.015em; /* 0.24px */
   --boxel-lsp-xs: 0.01em; /* 0.16px */
-  --boxel-lsp-xxs: 0.005em; /* 0.08px */
+  --boxel-lsp-2xs: 0.005em; /* 0.08px */
 
   /* Modular scale for spacing */
   --boxel-ratio: 1.333; /* scale (based on "Perfect Fourth" scale) */
   --boxel-sp-6xs: calc(var(--boxel-sp-5xs) / var(--boxel-ratio)); /* 2.17px */
   --boxel-sp-5xs: calc(var(--boxel-sp-4xs) / var(--boxel-ratio)); /* 2.88px */
-  --boxel-sp-4xs: calc(var(--boxel-sp-xxxs) / var(--boxel-ratio)); /* 3.827px */
-  --boxel-sp-xxxs: calc(var(--boxel-sp-xxs) / var(--boxel-ratio)); /* 5.09px */
-  --boxel-sp-xxs: calc(var(--boxel-sp-xs) / var(--boxel-ratio)); /* 6.78px */
+  --boxel-sp-4xs: calc(var(--boxel-sp-3xs) / var(--boxel-ratio)); /* 3.827px */
+  --boxel-sp-3xs: calc(var(--boxel-sp-2xs) / var(--boxel-ratio)); /* 5.09px */
+  --boxel-sp-2xs: calc(var(--boxel-sp-xs) / var(--boxel-ratio)); /* 6.78px */
   --boxel-sp-xs: calc(var(--boxel-sp-sm) / var(--boxel-ratio)); /* 9.05px */
   --boxel-sp-sm: calc(var(--boxel-sp) / var(--boxel-ratio)); /* 12px */
   --boxel-sp: var(--boxel-spacing); /* 16px */
   --boxel-sp-lg: calc(var(--boxel-sp) * var(--boxel-ratio)); /* 21.28px */
   --boxel-sp-xl: calc(var(--boxel-sp-lg) * var(--boxel-ratio)); /* 28.43px */
-  --boxel-sp-xxl: calc(var(--boxel-sp-xl) * var(--boxel-ratio)); /* 37.89px */
-  --boxel-sp-xxxl: calc(var(--boxel-sp-xxl) * var(--boxel-ratio)); /* 50.51px */
+  --boxel-sp-2xl: calc(var(--boxel-sp-xl) * var(--boxel-ratio)); /* 37.89px */
+  --boxel-sp-3xl: calc(var(--boxel-sp-2xl) * var(--boxel-ratio)); /* 50.51px */
 
   /* common icon sizes */
-  --boxel-icon-xxs: 0.75rem; /* 12px */
+  --boxel-icon-2xs: 0.75rem; /* 12px */
   --boxel-icon-xs: 1rem; /* 16px */
   --boxel-icon-sm: 1.25rem; /* 20px */
-  --boxel-icon-med: 1.875rem; /* 30px */
+  --boxel-icon-md: 1.875rem; /* 30px */
   --boxel-icon-lg: 2.5rem; /* 40px */
   --boxel-icon-xl: 3.75rem; /* 60px */
-  --boxel-icon-xxl: 5rem; /* 80px */
+  --boxel-icon-2xl: 5rem; /* 80px */
 
   /* button sizes */
   --boxel-button-mini: 1.25rem; /* 20px */
@@ -110,10 +110,6 @@
   --boxel-button-tall: 2.5rem; /* 40px */
   --boxel-button-touch: 3rem; /* 48px */
 
-  /* border-color */
-  --boxel-border-color: #d3d3d3;
-  --boxel-button-border-color: #acacac;
-
   /* border */
   --boxel-border: 1px solid var(--boxel-border-color);
   --boxel-border-dark: 1px solid var(--boxel-dark);
@@ -121,19 +117,13 @@
   --boxel-border-card: 1px solid rgba(0, 0, 0, 0.1);
 
   /* border-radius */
-  --boxel-border-radius-xxs: calc(
-    var(--boxel-border-radius-xs) - 2.5px
-  ); /* 1.5px */
-  --boxel-border-radius-xs: calc(var(--boxel-border-radius-sm) - 2px); /* 4px */
+  --boxel-border-radius-2xs: calc(var(--boxel-border-radius) - 8.5px); /*1.5px*/
+  --boxel-border-radius-xs: calc(var(--boxel-border-radius) - 6px); /* 4px */
   --boxel-border-radius-sm: calc(var(--boxel-border-radius) - 4px); /* 6px */
   --boxel-border-radius: var(--boxel-radius); /* 10px - base */
   --boxel-border-radius-lg: calc(var(--boxel-border-radius) + 2px); /* 12px */
-  --boxel-border-radius-xl: calc(
-    var(--boxel-border-radius-lg) + 3px
-  ); /* 15px */
-  --boxel-border-radius-xxl: calc(
-    var(--boxel-border-radius-xl) + 5px
-  ); /* 20px */
+  --boxel-border-radius-xl: calc(var(--boxel-border-radius) + 5px); /* 15px */
+  --boxel-border-radius-2xl: calc(var(--boxel-border-radius) + 10px); /* 20px */
 
   /* animations */
   --boxel-infinite-spin-animation: boxel-spin 6000ms linear infinite;
@@ -158,22 +148,22 @@
     var(--boxel-outline-color);
 
   /* Container sizes */
-  --boxel-xxs-container: 15.625rem; /* 250px */
+  --boxel-2xs-container: 15.625rem; /* 250px */
   --boxel-xs-container: 17.8125rem; /* 285px */
   --boxel-sm-container: 36.25rem; /* 580px */
   --boxel-md-container: 40.625rem; /* 650px */
   --boxel-lg-container: 43.75rem; /* 700px */
   --boxel-xl-container: 65rem; /* 1040px */
-  --boxel-xxl-container: 83.76rem; /* 1340px */
+  --boxel-2xl-container: 83.76rem; /* 1340px */
 
-  /* COLOR PALETTE */
-
-  /**** Revisited Colors BOXEL-UI ****/
-  --boxel-50: #f5f5f5;
+  /* BOXEL-UI Colors, in order from lightest to darkest */
   --boxel-100: #f8f7fa;
+  --boxel-150: #f4f4f4;
   --boxel-200: #e8e8e8;
+  --boxel-250: #d3d3d3;
   --boxel-300: #d1d1d1;
   --boxel-400: #afafb7;
+  --boxel-425: #acacac;
   --boxel-450: #919191;
   --boxel-500: #5a586a;
   --boxel-550: #525252;
@@ -181,6 +171,7 @@
   --boxel-650: #3b394b;
   --boxel-700: #272330;
 
+  /* Cardstack Brand Colors */
   --boxel-cyan: #00ebe5;
   --boxel-teal: #00ffba;
   --boxel-dark-teal: #00ebac;
@@ -197,47 +188,25 @@
   --boxel-blue: #0069f9;
   --boxel-navy: #281e78;
 
-  --boxel-label-color: currentColor;
-  /**** End of revisited colors ****/
-
-  /* Primary colors */
+  /* Functional colors */
   --boxel-light: #fff;
   --boxel-dark: #000;
   --boxel-dark-hover: rgba(0, 0, 0, 0.1);
   --boxel-darker-hover: rgba(0, 0, 0, 0.5);
-
   --boxel-highlight: var(--boxel-teal);
   --boxel-highlight-hover: var(--boxel-dark-teal);
-  --boxel-danger: var(
-    --boxel-red
-  ); /* formerly boxel-error-100: the latest design docs (8/16/2023) use this color for danger instead */
-  --boxel-danger-hover: #fa1521;
+  --boxel-border-color: var(--boxel-250);
 
-  /* Boxel purples */
-  --boxel-purple-100: var(--boxel-100);
-  --boxel-purple-200: var(--boxel-400); /* formerly: #b3b1b8; */
-  --boxel-purple-300: var(--boxel-400);
-  --boxel-purple-400: var(--boxel-500); /* formerly: #6b6a80; */
-  --boxel-purple-500: var(--boxel-500);
-  --boxel-purple-600: var(--boxel-600); /* Cardspace bg */
-  --boxel-purple-700: var(--boxel-700); /* formerly: #393642; */
-  --boxel-purple-750: var(--boxel-700); /* formerly: #363441; */
-  --boxel-purple-800: var(--boxel-700); /* formerly: #2e2d38; */
-  --boxel-purple-900: var(--boxel-700); /* Card Wallet bg */
-
-  /* Boxel neutrals */
-  --boxel-light-100: #f4f4f4;
-  --boxel-light-200: var(--boxel-200); /* formerly: #f0f0f0; */
-  --boxel-light-300: var(--boxel-200); /* formerly: #efefef; */
-  --boxel-light-400: var(--boxel-200);
-  --boxel-light-500: var(--boxel-300); /* formerly: #dedede; */
-  --boxel-light-600: var(--boxel-300);
+  /* Other UI colors */
+  --boxel-label-color: currentColor;
+  --boxel-button-border-color: var(--boxel-425);
 
   /* Status colors */
-  --boxel-error-100: #dc0202; /* alert - attention - error */
+  --boxel-danger: var(--boxel-red); /* alert - attention - error */
+  --boxel-danger-hover: #fa1521;
+  --boxel-error-100: #dc0202;
   --boxel-error-200: #ed0000;
   --boxel-error-300: #ff0000;
-  --boxel-error-400: #ff5050;
   --boxel-warning-100: var(--boxel-yellow); /* warning - notification */
   --boxel-warning-200: #ffba00;
   --boxel-success-100: var(--boxel-green);
@@ -254,6 +223,12 @@
   --boxel-form-control-placeholder-color: var(--boxel-400);
   --boxel-form-control-border-color: var(--boxel-border-color);
   --boxel-form-control-border-radius: var(--boxel-border-radius);
-  --boxel-form-control-dark-mode-placeholder-color: #acacac;
+  --boxel-form-control-dark-mode-placeholder-color: var(--boxel-425);
   --boxel-form-control-dark-mode-border: var(--boxel-border-flexible);
+
+  /* deprecated */
+  --boxel-sp-xxxs: var(--boxel-sp-3xs);
+  --boxel-sp-xxs: var(--boxel-sp-2xs);
+  --boxel-sp-xxl: var(--boxel-sp-2xl);
+  --boxel-sp-xxxl: var(--boxel-sp-3xl);
 }

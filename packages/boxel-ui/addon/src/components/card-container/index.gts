@@ -82,34 +82,39 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
 
       /*** code below this line is from "variables.css". values will be recalculated based on theming variable values ***/
       /* font-sizes */
-      --boxel-font-size-xxl: calc(var(--boxel-font-size) * 2.5);
+      --boxel-font-size-2xl: calc(var(--boxel-font-size) * 2.5);
       --boxel-font-size-xl: calc(var(--boxel-font-size) * 2);
       --boxel-font-size-lg: calc(var(--boxel-font-size) * 1.375);
-      --boxel-font-size-med: calc(var(--boxel-font-size) * 1.25);
+      --boxel-font-size-md: calc(var(--boxel-font-size) * 1.25);
       --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.8125);
       --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.6875);
       /* spacing */
       --boxel-sp-6xs: calc(var(--boxel-sp-5xs) / var(--boxel-ratio));
       --boxel-sp-5xs: calc(var(--boxel-sp-4xs) / var(--boxel-ratio));
-      --boxel-sp-4xs: calc(var(--boxel-sp-xxxs) / var(--boxel-ratio));
-      --boxel-sp-xxxs: calc(var(--boxel-sp-xxs) / var(--boxel-ratio));
-      --boxel-sp-xxs: calc(var(--boxel-sp-xs) / var(--boxel-ratio));
+      --boxel-sp-4xs: calc(var(--boxel-sp-3xs) / var(--boxel-ratio));
+      --boxel-sp-3xs: calc(var(--boxel-sp-2xs) / var(--boxel-ratio));
+      --boxel-sp-2xs: calc(var(--boxel-sp-xs) / var(--boxel-ratio));
       --boxel-sp-xs: calc(var(--boxel-sp-sm) / var(--boxel-ratio));
       --boxel-sp-sm: calc(var(--boxel-sp) / var(--boxel-ratio));
       --boxel-sp: var(--boxel-spacing); /* base */
       --boxel-sp-lg: calc(var(--boxel-sp) * var(--boxel-ratio));
       --boxel-sp-xl: calc(var(--boxel-sp-lg) * var(--boxel-ratio));
-      --boxel-sp-xxl: calc(var(--boxel-sp-xl) * var(--boxel-ratio));
-      --boxel-sp-xxxl: calc(var(--boxel-sp-xxl) * var(--boxel-ratio));
+      --boxel-sp-2xl: calc(var(--boxel-sp-xl) * var(--boxel-ratio));
+      --boxel-sp-3xl: calc(var(--boxel-sp-2xl) * var(--boxel-ratio));
       /* border-radius */
-      --boxel-border-radius-xxs: calc(var(--boxel-border-radius-xs) - 2.5px);
-      --boxel-border-radius-xs: calc(var(--boxel-border-radius-sm) - 3px);
-      --boxel-border-radius-sm: calc(var(--boxel-border-radius) - 3px);
+      --boxel-border-radius-2xs: calc(var(--boxel-border-radius) - 8.5px);
+      --boxel-border-radius-xs: calc(var(--boxel-border-radius) - 6px);
+      --boxel-border-radius-sm: calc(var(--boxel-border-radius) - 4px);
       --boxel-border-radius: var(--boxel-radius); /* base */
       --boxel-border-radius-lg: calc(var(--boxel-border-radius) + 2px);
-      --boxel-border-radius-xl: calc(var(--boxel-border-radius-lg) + 3px);
-      --boxel-border-radius-xxl: calc(var(--boxel-border-radius-xl) + 5px);
+      --boxel-border-radius-xl: calc(var(--boxel-border-radius) + 5px);
+      --boxel-border-radius-2xl: calc(var(--boxel-border-radius) + 10px);
       --boxel-form-control-border-radius: var(--boxel-border-radius);
+
+      --boxel-sp-xxxs: var(--boxel-sp-3xs);
+      --boxel-sp-xxs: var(--boxel-sp-2xs);
+      --boxel-sp-xxl: var(--boxel-sp-2xl);
+      --boxel-sp-xxxl: var(--boxel-sp-3xl);
 
       font-family: var(--font-family-base, var(--font-sans));
       font-size: var(--typescale-body);
