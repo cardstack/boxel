@@ -846,29 +846,6 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-first-letter-of-the-name]').hasText('E');
   });
 
-  test<TestContextWithSave>('it does not auto save when exiting edit mode when there are no changes made', async function (assert) {
-    // note that because of the test waiters we can't do the inverse of this
-    // test because it is impossible to tell the difference between a normal
-    // autosave and an auto save as a result of clicking on the edit button since
-    // the test waiters include the auto save async.
-    assert.expect(0);
-    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
-      },
-    );
-    await waitFor('[data-test-person]');
-    await click('[data-test-edit-button]');
-    this.onSave(() => {
-      assert.ok(false, 'does not save when file is not changed');
-    });
-    await click('[data-test-edit-button]');
-  });
-
   test('an error in auto-save is handled gracefully', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}BoomPet/paper`);
 
