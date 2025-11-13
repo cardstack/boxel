@@ -1,4 +1,5 @@
 import { Deferred } from './deferred';
+import camelCase from 'camelcase';
 import {
   makeCardTypeSummaryDoc,
   transformResultsToPrerenderedCardsDoc,
@@ -25,6 +26,7 @@ import {
   executableExtensions,
   hasExecutableExtension,
   isNode,
+  trimExecutableExtension,
   logger,
   fetchRealmPermissions,
   insertPermissions,
@@ -1972,10 +1974,10 @@ export class Realm {
       ) {
         continue;
       }
-      let name =
-        'name' in resource.meta.adoptsFrom
-          ? resource.meta.adoptsFrom.name
-          : 'cards';
+      let name = directoryNameForAdoptsFrom(
+        resource.meta?.adoptsFrom,
+        this.paths,
+      );
 
       let fileURL = this.paths.fileURL(
         `/${join(new URL(request.url).pathname, name, (resource.lid ?? uuidV4()) + '.json')}`,
@@ -2172,10 +2174,10 @@ export class Realm {
       ) {
         continue;
       }
-      let name =
-        'name' in resource.meta.adoptsFrom
-          ? resource.meta.adoptsFrom.name
-          : 'cards';
+      let name = directoryNameForAdoptsFrom(
+        resource.meta?.adoptsFrom,
+        this.paths,
+      );
       let fileURL =
         i === 0
           ? new URL(`${url}.json`)
@@ -3330,10 +3332,10 @@ function promoteLocalIdsToRemoteIds({
     ) {
       return;
     }
-    let name =
-      'name' in sideLoadedResource.meta.adoptsFrom
-        ? sideLoadedResource.meta.adoptsFrom.name
-        : 'cards';
+    let name = directoryNameForAdoptsFrom(
+      sideLoadedResource.meta?.adoptsFrom,
+      paths,
+    );
     relationships[field].links = {
       self: paths.fileURL(`${name}/${lid}`).href,
     };
@@ -3353,6 +3355,113 @@ function promoteLocalIdsToRemoteIds({
       }
     }
   }
+}
+
+function directoryNameForAdoptsFrom(
+  adoptsFrom: CodeRef | undefined,
+  paths: RealmPaths,
+): string {
+  return (
+    directoryNameFromResolvedRef(resolveToResolvedCodeRef(adoptsFrom), paths) ??
+    'cards'
+  );
+}
+
+function resolveToResolvedCodeRef(
+  ref: CodeRef | undefined,
+): ResolvedCodeRef | undefined {
+  if (!ref) {
+    return undefined;
+  }
+  if ('type' in ref) {
+    return resolveToResolvedCodeRef(ref.card);
+  }
+  return ref;
+}
+
+function directoryNameFromResolvedRef(
+  ref: ResolvedCodeRef | undefined,
+  paths: RealmPaths,
+): string | undefined {
+  if (!ref) {
+    return undefined;
+  }
+  if (ref.name && ref.name !== 'default') {
+    return ref.name;
+  }
+  return directoryNameFromModule(ref.module, paths);
+}
+
+function directoryNameFromModule(
+  moduleIdentifier: string,
+  paths: RealmPaths,
+): string | undefined {
+  let segment: string | undefined;
+  try {
+    segment = lastMeaningfulSegment(
+      trimExecutableExtension(new URL(moduleIdentifier)).pathname,
+    );
+  } catch {
+    try {
+      segment = lastMeaningfulSegment(
+        trimExecutableExtension(new URL(moduleIdentifier, paths.url)).pathname,
+      );
+    } catch {
+      segment = undefined;
+    }
+  }
+  if (!segment) {
+    segment = lastMeaningfulSegment(moduleIdentifier);
+  }
+  return directoryNameFromSegment(segment);
+}
+
+function lastMeaningfulSegment(pathname: string): string | undefined {
+  let normalized = pathname.replace(/\\/g, '/').replace(/\/+$/, '');
+  let segments = normalized.split('/').filter(Boolean);
+  if (!segments.length) {
+    return undefined;
+  }
+  let candidate = segments.pop()!;
+  if (candidate === 'index' && segments.length) {
+    candidate = segments.pop()!;
+  }
+  candidate = candidate.replace(/\.[^/.]+$/, '');
+  candidate = candidate.trim();
+  if (!candidate) {
+    return undefined;
+  }
+  try {
+    candidate = decodeURIComponent(candidate);
+  } catch {
+    // ignore decode errors, fall back to raw segment
+  }
+  return candidate;
+}
+
+function directoryNameFromSegment(
+  segment: string | undefined,
+): string | undefined {
+  if (!segment) {
+    return undefined;
+  }
+
+  let candidate = segment.replace(/^[^\p{L}_$]+/u, '');
+
+  if (!candidate) {
+    candidate = `Card${segment}`.replace(/^[^\p{L}_$]+/u, '');
+  }
+
+  let pascal = camelCase(candidate, { pascalCase: true }).replace(
+    /[^\p{L}\p{N}_$]+/gu,
+    '',
+  );
+
+  if (!pascal) {
+    return undefined;
+  }
+
+  return pascal;
 }
 
 function assertRealmPermissions(
