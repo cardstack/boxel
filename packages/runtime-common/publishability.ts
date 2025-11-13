@@ -51,7 +51,6 @@ export async function analyzeRealmPublishability({
     Map<string, ExternalDependencySummary>
   >();
   let memoizedChains = new Map<string, DependencyChain[]>();
-  let normalizedRealmURL = ensureTrailingSlash(sourceRealmURL);
   let realmResources = new Set<string>(resources);
 
   async function collectChains(
@@ -107,7 +106,7 @@ export async function analyzeRealmPublishability({
           dependency = canonicalDependencyUrl;
         }
 
-        if (dependencyRealmURL === normalizedRealmURL) {
+        if (dependencyRealmURL === sourceRealmURL) {
           let subchains = await collectChains(dependency, updatedAncestry);
           for (let subchain of subchains) {
             chains.push([resourceUrl, ...subchain]);
