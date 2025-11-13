@@ -1,5 +1,11 @@
 import type { Linter } from 'eslint';
-import { resolvePrettierConfig } from './prettier-config';
+import type { Task } from './index';
+
+import { jobIdentity } from '../index';
+
+import { resolvePrettierConfig } from '../prettier-config';
+
+export { lintSource };
 
 export interface LintArgs {
   source: string;
@@ -8,7 +14,26 @@ export interface LintArgs {
 
 export type LintResult = Linter.FixReport;
 
-export async function lintFix({
+const lintSource: Task<LintArgs, Pick<LintResult, 'output'>> = ({
+  reportStatus,
+  log,
+}) =>
+  async function (args) {
+    let { source: _remove, ...displayableArgs } = args;
+    let { jobInfo } = displayableArgs;
+    log.debug(
+      `${jobIdentity(jobInfo)} starting lint-source for job: ${JSON.stringify(displayableArgs)}`,
+    );
+    reportStatus(jobInfo, 'start');
+    let result = await lintFix(args);
+    log.debug(
+      `${jobIdentity(jobInfo)} completed lint-source for job: ${JSON.stringify(displayableArgs)}`,
+    );
+    reportStatus(jobInfo, 'finish');
+    return result;
+  };
+
+async function lintFix({
   source,
   filename = 'input.gts',
 }: LintArgs): Promise<Pick<LintResult, 'output'>> {
@@ -30,11 +55,11 @@ export async function lintFix({
   // Import the shared invokables configuration
   const missingInvokablesConfig = await import(
     // @ts-ignore no types for missing-invokables-config
-    /* webpackIgnore: true */ './etc/eslint/missing-invokables-config.js'
+    /* webpackIgnore: true */ '../etc/eslint/missing-invokables-config.js'
   );
   const missingCardApiImportConfig = await import(
     // @ts-ignore no types for missing-invokables-config
-    /* webpackIgnore: true */ './etc/eslint/missing-card-api-import-config.js'
+    /* webpackIgnore: true */ '../etc/eslint/missing-card-api-import-config.js'
   );
 
   const LINT_CONFIG: any = [

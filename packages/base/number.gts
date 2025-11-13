@@ -5,7 +5,7 @@ import { not } from '@cardstack/boxel-ui/helpers';
 import HashIcon from '@cardstack/boxel-icons/hash';
 import { fieldSerializer, NumberSerializer } from '@cardstack/runtime-common';
 
-function deserializeForUI(value: string | number | null): number | null {
+export function deserializeForUI(value: string | number | null): number | null {
   const validationError = NumberSerializer.validate(value);
   if (validationError) {
     return null;
@@ -14,7 +14,7 @@ function deserializeForUI(value: string | number | null): number | null {
   return NumberSerializer.deserializeSync(value);
 }
 
-function serializeForUI(val: number | null): string | undefined {
+export function serializeForUI(val: number | null): string | undefined {
   let serialized = NumberSerializer.serialize(val);
   if (serialized != null) {
     return String(serialized);

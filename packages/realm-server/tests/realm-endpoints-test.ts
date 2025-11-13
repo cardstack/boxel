@@ -267,6 +267,124 @@ module(basename(__filename), function () {
       );
     });
 
+    const transpileTestCardSource = `
+      import {
+        linksToMany,
+        field,
+        Component,
+        FieldDef,
+      } from 'https://cardstack.com/base/card-api';
+      import { Country } from './country';
+
+      export class TranspileTestField extends FieldDef {
+        static displayName = 'Trips';
+        @field countriesVisited = linksToMany(Country);
+
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <address data-test-trips-card>
+              <@fields.countriesVisited />
+            </address>
+          </template>
+        };
+      }
+    `;
+
+    test('serves transpiled .gts modules when Accept is */*', async function (assert) {
+      let modulePath = 'transpile-test.gts';
+      let authHeader = `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+
+      await testRealm.write(modulePath, transpileTestCardSource);
+
+      let response = await request
+        .get(`/${modulePath}`)
+        .set('Accept', SupportedMimeType.All)
+        .set('Authorization', authHeader);
+
+      assert.strictEqual(response.status, 200, 'module request succeeds');
+      assert.strictEqual(
+        response.headers['content-type'],
+        'text/javascript',
+        'transpiled module advertises javascript content type',
+      );
+      assert.ok(
+        response.text.includes('setComponentTemplate'),
+        'compiled output contains compiled template invocation',
+      );
+      assert.notOk(
+        response.text.includes('<template'),
+        'raw template markup is not present in compiled output',
+      );
+    });
+
+    test('module and source variants emit distinct ETags', async function (assert) {
+      let modulePath = 'transpile-etag-test.gts';
+      let authHeader = `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+
+      await testRealm.write(modulePath, transpileTestCardSource);
+
+      let sourceResponse = await request
+        .get(`/${modulePath}`)
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', authHeader);
+
+      assert.strictEqual(sourceResponse.status, 200, 'source request succeeds');
+      let sourceEtag = sourceResponse.headers['etag'];
+      assert.ok(sourceEtag, 'source variant exposes an ETag');
+
+      let moduleResponse = await request
+        .get(`/${modulePath}`)
+        .set('Accept', SupportedMimeType.All)
+        .set('Authorization', authHeader);
+
+      assert.strictEqual(moduleResponse.status, 200, 'module request succeeds');
+      let moduleEtag = moduleResponse.headers['etag'];
+      assert.ok(moduleEtag, 'module variant exposes an ETag');
+      assert.notStrictEqual(
+        moduleEtag,
+        sourceEtag,
+        'ETags differ between source and module variants',
+      );
+      assert.ok(
+        moduleResponse.text.includes('setComponentTemplate'),
+        'response body is transpiled output',
+      );
+
+      let moduleResponseIgnoringSourceEtag = await request
+        .get(`/${modulePath}`)
+        .set('Accept', SupportedMimeType.All)
+        .set('Authorization', authHeader)
+        .set('If-None-Match', sourceEtag);
+
+      assert.strictEqual(
+        moduleResponseIgnoringSourceEtag.status,
+        200,
+        'module variant ignores ETag from source response',
+      );
+      assert.strictEqual(
+        moduleResponseIgnoringSourceEtag.headers['etag'],
+        moduleEtag,
+        'module variant reuses its own ETag when revalidated',
+      );
+
+      let notModifiedModuleResponse = await request
+        .get(`/${modulePath}`)
+        .set('Accept', SupportedMimeType.All)
+        .set('Authorization', authHeader)
+        .set('If-None-Match', moduleEtag);
+
+      assert.strictEqual(
+        notModifiedModuleResponse.status,
+        304,
+        'module variant responds with 304 when If-None-Match matches module ETag',
+      );
+      assert.strictEqual(
+        notModifiedModuleResponse.headers['etag'],
+        moduleEtag,
+        '304 response echoes module variant ETag',
+      );
+    });
+
     test('returns 304 for module requests with matching ETag', async function (assert) {
       let modulePath = 'module-cache-not-modified.js';
       let authHeader = `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;

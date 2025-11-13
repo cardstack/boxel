@@ -1,30 +1,33 @@
-import Component from '@glimmer/component';
-import type { ComponentLike } from '@glint/template';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import cssUrl from 'ember-css-url';
+
+import type { Icon } from '../../icons.ts';
 
 interface Signature {
   Args: {
     description?: string;
-    iconComponent?: ComponentLike<{
-      Element: Element;
-    }>;
+    iconComponent?: Icon;
     isEmpty?: boolean;
     primary: string;
     secondary?: string;
     thumbnailURL?: string;
   };
+  Blocks: { content: []; default: []; empty: []; thumbnail: [] };
   Element: HTMLDivElement;
 }
 
-// eslint-disable-next-line ember/no-empty-glimmer-component-classes
-export default class BasicFitted extends Component<Signature> {
-  <template>
-    <div class='fitted-template' ...attributes>
-      {{#if @isEmpty}}
-        {{! empty links-to field }}
-        <div data-test-empty-field class='empty-field'></div>
-      {{else}}
-        <div class='thumbnail-section'>
+const BasicFitted: TemplateOnlyComponent<Signature> = <template>
+  <div class='fitted-template' ...attributes>
+    {{#if @isEmpty}}
+      {{! empty links-to field }}
+      <div data-test-empty-field class='empty-field'>
+        {{yield to='empty'}}
+      </div>
+    {{else}}
+      <div class='thumbnail-section'>
+        {{#if (has-block 'thumbnail')}}
+          {{yield to='thumbnail'}}
+        {{else}}
           {{#if @thumbnailURL}}
             <div
               class='card-thumbnail'
@@ -40,166 +43,200 @@ export default class BasicFitted extends Component<Signature> {
           {{else}}
             <@iconComponent data-test-card-type-icon class='card-type-icon' />
           {{/if}}
-        </div>
+        {{/if}}
+      </div>
+      {{#if (has-block 'content')}}
+        {{yield to='content'}}
+      {{else}}
         <div class='info-section'>
           <h3 class='card-title' data-test-card-title>{{@primary}}</h3>
           <h4 class='card-display-name' data-test-card-display-name>
             {{@secondary}}
           </h4>
         </div>
-        <div
-          class='card-description'
-          data-test-card-description
-        >{{@description}}</div>
       {{/if}}
-    </div>
-    <style scoped>
-      @layer {
-        .fitted-template {
-          width: 100%;
-          height: 100%;
-          display: flex;
-          gap: var(--boxel-sp-xs);
-          padding: var(--boxel-sp-xs);
-          overflow: hidden;
-        }
-        .thumbnail-section {
-          flex-shrink: 0;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          overflow: hidden;
-        }
-        .card-thumbnail {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background-color: var(--boxel-teal);
-          background-position: center;
-          background-size: cover;
-          background-repeat: no-repeat;
-          border-radius: var(--boxel-border-radius-sm);
-          width: 100%;
-          height: 100%;
-        }
-        .card-type-icon {
-          aspect-ratio: 1 / 1;
-          min-width: 32px;
-          min-height: 32px;
-          max-height: 52px;
-          max-width: 52px;
-          width: 100%;
-          height: auto;
-        }
-        .info-section {
-          width: 100%;
-          overflow: hidden;
-        }
-        .card-title {
-          display: -webkit-box;
-          -webkit-box-orient: vertical;
-          -webkit-line-clamp: 2;
-          overflow: hidden;
-          margin-block: 0;
-          font: 600 var(--boxel-font-sm);
-          letter-spacing: var(--boxel-lsp-sm);
-          line-height: 1.25;
-          text-overflow: ellipsis;
-        }
-        .card-display-name {
-          margin-top: var(--boxel-sp-4xs);
-          margin-bottom: 0;
-          color: var(--boxel-450);
-          font: 500 var(--boxel-font-xs);
-          letter-spacing: var(--boxel-lsp-xs);
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          overflow: hidden;
-        }
-        .card-description {
-          display: -webkit-box;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-          margin-block: 0;
-          font: 500 var(--boxel-font-xs);
-          letter-spacing: var(--boxel-lsp-xs);
-          text-overflow: ellipsis;
-        }
+      {{#if @description}}
+        <div class='card-description' data-test-card-description>
+          {{@description}}
+        </div>
+      {{/if}}
+
+      {{yield}}
+    {{/if}}
+  </div>
+  <style scoped>
+    @layer boxelComponentL1 {
+      :global(.fitted-template) {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs);
+        background-color: var(--card);
+        color: var(--card-foreground);
+        overflow: hidden;
+      }
+      :global(.thumbnail-section) {
+        flex-shrink: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        overflow: hidden;
+      }
+      :global(.card-thumbnail) {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: var(--accent, var(--boxel-highlight));
+        background-position: center;
+        background-size: cover;
+        background-repeat: no-repeat;
+        border-radius: var(--boxel-border-radius-sm);
+        width: 100%;
+        height: 100%;
+      }
+      :global(.card-type-icon) {
+        aspect-ratio: 1 / 1;
+        min-width: 32px;
+        min-height: 32px;
+        max-height: 52px;
+        max-width: 52px;
+        width: 100%;
+        height: auto;
+      }
+      :global(.info-section) {
+        width: 100%;
+        overflow: hidden;
+      }
+      :global(.card-title) {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        margin-block: 0;
+        font-weight: var(--boxel-font-weight-semibold);
+        font-size: var(--boxel-font-size-sm);
+        letter-spacing: var(--boxel-lsp-sm);
+        line-height: 1.25;
+        text-overflow: ellipsis;
+      }
+      :global(.card-display-name) {
+        margin-top: var(--boxel-sp-4xs);
+        margin-bottom: 0;
+        color: var(--muted-foreground, var(--boxel-450));
+        font-weight: var(--boxel-font-weight-medium);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-lineheight-xs);
+        letter-spacing: var(--boxel-lsp-xs);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      :global(.card-description) {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        margin-block: 0;
+        font-weight: var(--boxel-font-weight-medium);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-lineheight-xs);
+        letter-spacing: var(--boxel-lsp-xs);
+        text-overflow: ellipsis;
       }
 
       /* Aspect Ratio <= 1.0 (Vertical) */
+      /* Common */
+      @container fitted-card ((aspect-ratio <= 1) and (height < 180px)) {
+        :global(.card-title) {
+          font-size: var(--boxel-font-size-xs);
+        }
+      }
+
       @container fitted-card (aspect-ratio <= 1.0) {
-        .fitted-template {
+        :global(.fitted-template) {
           flex-direction: column;
         }
-        .card-description {
-          display: none;
-        }
-        .thumbnail-section {
+        :global(.thumbnail-section) {
           width: 100%;
           height: 50cqmin;
         }
-        .info-section {
+        :global(.info-section) {
           text-align: center;
         }
       }
 
-      @container fitted-card (aspect-ratio <= 1.0) and (height <= 118px) {
-        .thumbnail-section {
+      @container fitted-card (aspect-ratio <= 1.0) and (height <= 128px) {
+        :global(.thumbnail-section) {
+          height: 45cqmin;
+        }
+      }
+
+      @container fitted-card (aspect-ratio <= 1.0) and (width <= 140px) and (height <= 148px) {
+        :global(.card-description) {
           display: none;
         }
       }
+
+      @container fitted-card (aspect-ratio <= 1.0) and (width <= 100px) and (400px <= height) {
+        :global(.card-description) {
+          -webkit-line-clamp: 15;
+        }
+      }
+
       /* Vertical Tiles*/
       /* Small Tile (150 x 170) */
       @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (170px <= height) {
-        .thumbnail-section {
+        :global(.thumbnail-section) {
           min-height: 70px;
         }
-        .card-title {
-          -webkit-line-clamp: 3;
+        :global(.card-title) {
+          -webkit-line-clamp: 2;
+        }
+        :global(.card-description) {
+          display: none;
         }
       }
       /* CardsGrid Tile (170 x 250) */
-      @container fitted-card (aspect-ratio <= 1.0) and (150px < width < 250px ) and (170px < height < 275px) {
-        .thumbnail-section {
+      @container fitted-card (aspect-ratio <= 1.0) and (width = 170px) and (height = 250px) {
+        :global(.thumbnail-section) {
           height: auto;
           aspect-ratio: 1 / 1;
         }
-        .card-title {
+        :global(.card-title) {
           -webkit-line-clamp: 2;
         }
       }
       /* Tall Tile (150 x 275) */
       @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (275px <= height) {
-        .thumbnail-section {
+        :global(.thumbnail-section) {
           min-height: 85px;
         }
-        .card-title {
-          font-size: var(--boxel-font-size);
+        :global(.card-title) {
+          font-size: var(--boxel-font-size-sm);
           -webkit-line-clamp: 4;
         }
       }
       /* Large Tile (250 x 275) */
       @container fitted-card (aspect-ratio <= 1.0) and (250px <= width ) and (275px <= height) {
-        .thumbnail-section {
+        :global(.thumbnail-section) {
           min-height: 150px;
         }
-        .card-title {
+        :global(.card-title) {
           font-size: var(--boxel-font-size-sm);
           -webkit-line-clamp: 3;
         }
       }
       /* Vertical Cards */
       @container fitted-card (aspect-ratio <= 1.0) and (400px <= width) {
-        .fitted-template {
+        :global(.fitted-template) {
           padding: var(--boxel-sp);
           gap: var(--boxel-sp);
         }
-        .thumbnail-section {
+        :global(.thumbnail-section) {
           min-height: 236px;
         }
-        .card-title {
-          font-size: var(--boxel-font-size-med);
+        :global(.card-title) {
+          font-size: var(--boxel-font-size);
           -webkit-line-clamp: 4;
         }
       }
@@ -207,34 +244,36 @@ export default class BasicFitted extends Component<Signature> {
 
       /* 1.0 < Aspect Ratio (Horizontal) */
       @container fitted-card (1.0 < aspect-ratio) {
-        .card-description {
+        :global(.card-description) {
           display: none;
         }
-        .thumbnail-section {
+        :global(.thumbnail-section) {
           aspect-ratio: 1;
         }
       }
       @container fitted-card (1.0 < aspect-ratio) and (height <= 65px) {
-        .info-section {
+        :global(.info-section) {
           align-self: center;
         }
       }
       /* Badges */
       @container fitted-card (1.0 < aspect-ratio) and (width < 250px) {
-        .fitted-template {
+        :global(.fitted-template) {
           padding: var(--boxel-sp-xxxs);
         }
-        .thumbnail-section {
+        :global(.thumbnail-section) {
           display: none;
         }
       }
       /* Small Badge (150 x 40) */
       @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (height < 65px) {
-        .card-title {
+        :global(.card-title) {
           -webkit-line-clamp: 1;
-          font: 600 var(--boxel-font-xs);
+          font-weight: var(--boxel-font-weight-semibold);
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-lineheight-xs);
         }
-        .card-display-name {
+        :global(.card-display-name) {
           margin-top: 0;
         }
       }
@@ -242,7 +281,7 @@ export default class BasicFitted extends Component<Signature> {
 
       /* Large Badge (150 x 105) */
       @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (105px <= height) {
-        .card-title {
+        :global(.card-title) {
           -webkit-line-clamp: 3;
         }
       }
@@ -250,10 +289,10 @@ export default class BasicFitted extends Component<Signature> {
       /* Strips */
       /* Single Strip (250 x 40) */
       @container fitted-card (1.0 < aspect-ratio) and (250px <= width) and (height < 65px) {
-        .fitted-template {
+        :global(.fitted-template) {
           padding: var(--boxel-sp-xxxs);
         }
-        .card-display-name {
+        :global(.card-display-name) {
           display: none;
         }
       }
@@ -265,35 +304,38 @@ export default class BasicFitted extends Component<Signature> {
       /* Horizontal Tiles */
       /* Regular Tile (250 x 170) */
       @container fitted-card (1.0 < aspect-ratio) and (250px <= width < 400px) and (170px <= height) {
-        .thumbnail-section {
+        :global(.thumbnail-section) {
           height: 40%;
         }
-        .card-title {
+        :global(.card-title) {
           -webkit-line-clamp: 4;
-          font-size: var(--boxel-font-size);
+          font-size: var(--boxel-font-size-sm);
         }
       }
 
       /* Horizontal Cards */
       /* Compact Card (400 x 170) */
       @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (170px <= height) {
-        .thumbnail-section {
+        :global(.thumbnail-section) {
           height: 100%;
         }
       }
       /* Full Card (400 x 275) */
       @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (275px <= height) {
-        .fitted-template {
+        :global(.fitted-template) {
           padding: var(--boxel-sp);
           gap: var(--boxel-sp);
         }
-        .thumbnail-section {
+        :global(.thumbnail-section) {
           max-width: 44%;
         }
-        .card-title {
-          font-size: var(--boxel-font-size-med);
+        :global(.card-title) {
+          -webkit-line-clamp: 4;
+          font-size: var(--boxel-font-size);
         }
       }
-    </style>
-  </template>
-}
+    }
+  </style>
+</template>;
+
+export default BasicFitted;

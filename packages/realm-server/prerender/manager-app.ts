@@ -421,13 +421,27 @@ export function buildPrerenderManagerApp(): {
     (timer as any).unref?.();
   }
 
-  // proxy prerender
-  router.post('/prerender', async (ctxt) => {
+  async function proxyPrerenderRequest(
+    ctxt: Koa.Context,
+    pathSuffix: string,
+    label: string,
+  ) {
     try {
       // read body once
       const req = await fetchRequestFromContext(ctxt);
       const raw = await req.text().catch(() => '');
-      let body: any = raw ? JSON.parse(raw) : {};
+      let body: any = {};
+      if (raw) {
+        try {
+          body = JSON.parse(raw);
+        } catch (e) {
+          ctxt.status = 400;
+          ctxt.body = {
+            errors: [{ status: 400, message: 'Invalid JSON body' }],
+          };
+          return;
+        }
+      }
       let attrs = body?.data?.attributes || {};
       let realm: string | undefined = attrs.realm;
       if (!realm) {
@@ -446,8 +460,10 @@ export function buildPrerenderManagerApp(): {
         return;
       }
 
-      const targetURL = `${normalizeURL(target)}/prerender`;
-      log.info(`proxying prerender request for ${attrs.url} to ${targetURL}`);
+      const targetURL = `${normalizeURL(target)}/${pathSuffix}`;
+      log.info(
+        `proxying ${label} prerender request for ${attrs.url} to ${targetURL}`,
+      );
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(), proxyTimeoutMs).unref?.();
       const res = await fetch(targetURL, {
@@ -492,11 +508,19 @@ export function buildPrerenderManagerApp(): {
       const buf = Buffer.from(await res.arrayBuffer());
       ctxt.body = buf;
     } catch (e) {
-      log.error('Error in /prerender proxy:', e);
+      log.error(`Error in /${pathSuffix} proxy:`, e);
       ctxt.status = 500;
       ctxt.body = { errors: [{ status: 500, message: 'Proxy error' }] };
     }
-  });
+  }
+
+  // proxy prerender endpoints
+  router.post('/prerender-card', (ctxt) =>
+    proxyPrerenderRequest(ctxt, 'prerender-card', 'card'),
+  );
+  router.post('/prerender-module', (ctxt) =>
+    proxyPrerenderRequest(ctxt, 'prerender-module', 'module'),
+  );
 
   app
     .use((ctxt: Koa.Context, next: Koa.Next) => {

@@ -62,6 +62,7 @@ export class CopySourceResult extends CardDef {
 export class PatchCardInput extends CardDef {
   @field cardId = contains(StringField);
   @field patch = contains(JsonField);
+  @field roomId = contains(StringField);
 }
 
 export class CardIdCard extends CardDef {
@@ -169,6 +170,7 @@ export class PatchCodeCommandResult extends CardDef {
 export class PatchCodeInput extends CardDef {
   @field fileUrl = contains(StringField);
   @field codeBlocks = containsMany(StringField);
+  @field roomId = contains(StringField);
 }
 
 export class CreateAIAssistantRoomInput extends CardDef {
@@ -197,6 +199,12 @@ export class UpdateSkillActivationInput extends CardDef {
   @field roomId = contains(StringField);
   @field skillCardId = contains(StringField);
   @field isActive = contains(BooleanField);
+}
+
+export class UpdateRoomSkillsInput extends CardDef {
+  @field roomId = contains(StringField);
+  @field skillCardIdsToActivate = containsMany(StringField);
+  @field skillCardIdsToDeactivate = containsMany(StringField);
 }
 
 export class UseAiAssistantInput extends CardDef {

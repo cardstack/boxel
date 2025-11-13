@@ -34,6 +34,7 @@ export default class InputUsage extends Component {
   @tracked placeholder = 'Please enter';
   @tracked errorMessage = 'There was an unknown error.';
   @tracked helperText = '';
+  @tracked min = '';
   @tracked max = '';
   @tracked state: InputValidationState = 'initial';
   @tracked size: 'large' | 'default' = 'default';
@@ -155,6 +156,12 @@ export default class InputUsage extends Component {
           @name='helperText'
           @value={{this.helperText}}
           @onInput={{fn (mut this.helperText)}}
+        />
+        <Args.String
+          @name='min'
+          @value={{this.min}}
+          @onInput={{fn (mut this.min)}}
+          @description='Native <input> attribute, works with number, range, date, datetime-local, month, time and week types'
         />
         <Args.String
           @name='max'

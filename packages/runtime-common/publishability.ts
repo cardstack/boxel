@@ -29,7 +29,7 @@ export interface PublishabilityGraph {
   resources: string[];
   resourceEntries: Map<string, ResourceIndexEntry[]>;
   realmVisibility: Map<string, RealmVisibility>;
-  isResourceInherentlyPublic?: (resourceUrl: string) => boolean;
+  isResourceInherentlyPublic: (resourceUrl: string) => boolean;
 }
 
 type DependencyChain = string[];
@@ -51,7 +51,6 @@ export async function analyzeRealmPublishability({
     Map<string, ExternalDependencySummary>
   >();
   let memoizedChains = new Map<string, DependencyChain[]>();
-  let normalizedRealmURL = ensureTrailingSlash(sourceRealmURL);
   let realmResources = new Set<string>(resources);
 
   async function collectChains(
@@ -91,7 +90,7 @@ export async function analyzeRealmPublishability({
           continue;
         }
         // Some dependency entries are synthetic (e.g. base realm or scoped CSS)
-        if (isResourceInherentlyPublic?.(dependency)) {
+        if (isResourceInherentlyPublic(dependency)) {
           continue;
         }
 
@@ -107,7 +106,7 @@ export async function analyzeRealmPublishability({
           dependency = canonicalDependencyUrl;
         }
 
-        if (dependencyRealmURL === normalizedRealmURL) {
+        if (dependencyRealmURL === sourceRealmURL) {
           let subchains = await collectChains(dependency, updatedAncestry);
           for (let subchain of subchains) {
             chains.push([resourceUrl, ...subchain]);
@@ -118,13 +117,8 @@ export async function analyzeRealmPublishability({
         let visibility = realmVisibility.get(dependencyRealmURL) ?? 'private';
         if (visibility !== 'public') {
           chains.push([resourceUrl, dependency]);
-          continue;
         }
-
-        let subchains = await collectChains(dependency, updatedAncestry);
-        for (let subchain of subchains) {
-          chains.push([resourceUrl, ...subchain]);
-        }
+        continue;
       }
     }
 

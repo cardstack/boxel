@@ -124,12 +124,6 @@ export default class MonacoEditorModifier extends Modifier<MonacoEditorSignature
         editorDisplayOptions,
       );
 
-      // Track editor initialization for test waiters
-      if (this.waiterManager) {
-        const operationId = `monaco-editor-modifier-init-${editor.getId()}`;
-        this.waiterManager.trackEditorInit(editor, operationId);
-      }
-
       let model = editor.getModel()!;
       monacoSDK.editor.setModelLanguage(model, language);
 
@@ -150,6 +144,12 @@ export default class MonacoEditorModifier extends Modifier<MonacoEditorSignature
       this.monacoState = {
         editor,
       };
+
+      // Track editor initialization for test waiters after models and language are ready
+      if (this.waiterManager) {
+        const operationId = `monaco-editor-modifier-init-${editor.getId()}`;
+        this.waiterManager.trackEditorInit(editor, operationId);
+      }
     }
 
     registerDestructor(this, () => {

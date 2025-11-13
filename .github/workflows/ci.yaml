@@ -255,7 +255,7 @@ jobs:
     name: Matrix Client Tests
     needs: change-check
     if: needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest-8-core
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -429,11 +429,12 @@ jobs:
             "prerender-manager-test.ts",
             "queue-test.ts",
             "realm-endpoints/directory-test.ts",
-            "realm-endpoints/has-private-dependencies-test.ts",
             "realm-endpoints/info-test.ts",
             "realm-endpoints/lint-test.ts",
             "realm-endpoints/mtimes-test.ts",
             "realm-endpoints/permissions-test.ts",
+            "realm-endpoints/publishability-test.ts",
+            "realm-endpoints/resource-index-test.ts",
             "realm-endpoints/search-test.ts",
             "realm-endpoints/user-test.ts",
             "realm-endpoints/definition-test.ts",

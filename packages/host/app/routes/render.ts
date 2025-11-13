@@ -8,12 +8,12 @@ import { service } from '@ember/service';
 
 import { TrackedMap } from 'tracked-built-ins';
 
-import type { CardError } from '@cardstack/runtime-common';
 import {
   formattedError,
   baseRealm,
   SupportedMimeType,
   isCardError,
+  type CardError,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
   type RenderError,
@@ -30,6 +30,7 @@ import {
   windowErrorHandler,
   errorJsonApiToErrorEntry,
 } from '../lib/window-error-handler';
+import { createAuthErrorGuard } from '../utils/auth-error-guard';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
@@ -71,6 +72,7 @@ export default class RenderRoute extends Route<Model> {
   #modelStates = new Map<Model, ModelState>();
   #pendingReadyModels = new Set<Model>();
   #modelPromises = new Map<string, Promise<Model>>();
+  #authGuard = createAuthErrorGuard();
 
   errorHandler = (event: Event) => {
     windowErrorHandler({
@@ -111,6 +113,7 @@ export default class RenderRoute extends Route<Model> {
     this.#modelStates.clear();
     this.#pendingReadyModels.clear();
     this.#modelPromises.clear();
+    this.#authGuard.unregister();
   }
 
   beforeModel() {
@@ -118,6 +121,7 @@ export default class RenderRoute extends Route<Model> {
     // hook is run
     (globalThis as any).__lazilyLoadLinks = true;
     (globalThis as any).__boxelRenderContext = true;
+    this.#authGuard.register();
   }
 
   async model(
@@ -158,8 +162,6 @@ export default class RenderRoute extends Route<Model> {
         clearFetchCache: true,
         reason: 'render-route clearCache',
       });
-    }
-    if (parsedOptions.clearCache) {
       let resetKey = `${id}:${nonce}`;
       if (this.lastStoreResetKey !== resetKey) {
         this.store.resetCache();
@@ -169,12 +171,23 @@ export default class RenderRoute extends Route<Model> {
     // This is for host tests
     (globalThis as any).__renderInstance = undefined;
 
-    let response = await this.network.authedFetch(id, {
-      method: 'GET',
-      headers: {
-        Accept: SupportedMimeType.CardSource,
-      },
-    });
+    let response: Response;
+    try {
+      response = await this.#authGuard.race(() =>
+        this.network.authedFetch(id, {
+          method: 'GET',
+          headers: {
+            Accept: SupportedMimeType.CardSource,
+          },
+        }),
+      );
+    } catch (err: any) {
+      if (this.#authGuard.isAuthError(err)) {
+        this.#processRenderError(err);
+        throw err;
+      }
+      throw err;
+    }
 
     let realmURL = response.headers.get('x-boxel-realm-url')!;
     let lastModified = new Date(response.headers.get('last-modified')!);
