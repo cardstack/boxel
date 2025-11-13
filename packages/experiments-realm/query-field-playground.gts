@@ -9,7 +9,6 @@ import {
 import NumberField from 'https://cardstack.com/base/number';
 import StringField from 'https://cardstack.com/base/string';
 import enumField from 'https://cardstack.com/base/enum';
-import { CardContainer } from '@cardstack/boxel-ui/components';
 
 import { Friend } from './friend';
 
@@ -36,7 +35,9 @@ export class QueryFieldPlayground extends CardDef {
 
   @field nameFilter = contains(StringField);
   @field pageSize = contains(NumberField);
-  @field sortDirection = contains(enumField(StringField, { options: ['asc', 'desc'] }));
+  @field sortDirection = contains(
+    enumField(StringField, { options: ['asc', 'desc'] }),
+  );
 
   @field matchingFriends = linksToMany(Friend, {
     query: matchingFriendQuery,
@@ -139,7 +140,7 @@ export class QueryFieldPlayground extends CardDef {
             {{#if @fields.matchingFriends.length}}
               <div class='card-grid'>
                 {{#each @fields.matchingFriends as |friend index|}}
-                  <div class='friend-card' >
+                  <div class='friend-card'>
                     {{index}}
                     <friend />
                   </div>
