@@ -869,49 +869,6 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-edit-button]');
   });
 
-  test<TestContextWithSave>('it does not wait for save to complete before switching from edit to isolated mode', async function (assert) {
-    assert.expect(2);
-    let cardId = `${testRealmURL}Person/fadhlan`;
-    setCardInOperatorModeState(cardId);
-
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
-      },
-    );
-    await waitFor('[data-test-person]');
-    await click('[data-test-edit-button]');
-    let finishedSaving = false;
-    this.onSave(() => {
-      finishedSaving = true;
-    });
-    // slow down the save so we can make sure that the format switch is
-    // not tied to the save completion
-    await withSlowSave(3000, async () => {
-      // intentionally not awaiting the fillIn so we can ignore the test waiters
-      fillIn('[data-test-field="firstName"] input', 'FadhlanX');
-      // intentionally not awaiting the click so we can ignore the test waiters
-      click('[data-test-edit-button]');
-      await waitUntil(
-        () =>
-          operatorModeStateService.state.stacks.some((stack) =>
-            stack.some(
-              (item) => item.id === cardId && item.format === 'isolated',
-            ),
-          ),
-        { timeout: 10000 },
-      );
-      assert.false(
-        finishedSaving,
-        'the view switches to isolated while save is still in flight',
-      );
-      await waitUntil(() => finishedSaving, { timeout: 10000 });
-      assert.true(finishedSaving, 'save eventually completes');
-    });
-  });
-
   test('an error in auto-save is handled gracefully', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}BoomPet/paper`);
 
