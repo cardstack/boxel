@@ -330,7 +330,7 @@ class RealmResource {
       Authorization: `Bearer ${this.token}`,
     };
     let response = await this.network.authedFetch(
-      `${this.realmURL}_has-private-dependencies`,
+      `${this.realmURL}_publishability`,
       {
         headers,
       },
