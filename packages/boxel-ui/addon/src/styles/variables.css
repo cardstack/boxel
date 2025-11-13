@@ -226,6 +226,12 @@
   --boxel-form-control-dark-mode-placeholder-color: var(--boxel-425);
   --boxel-form-control-dark-mode-border: var(--boxel-border-flexible);
 
+  /* Theme defaults */
+  --radius: 0.625rem;
+  --spacing: 0.25rem;
+  --brand-spacing: 1rem;
+  --brand-radius: 0.625rem;
+
   /* deprecated */
   --boxel-sp-xxxs: var(--boxel-sp-3xs);
   --boxel-sp-xxs: var(--boxel-sp-2xs);
