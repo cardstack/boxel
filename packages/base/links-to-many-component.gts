@@ -298,7 +298,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       .sort:hover ~ :deep(.boxel-card-container) {
         box-shadow:
           0 0 0 1px var(--border, var(--boxel-300)),
-          var(--shadow-lg, var(--boxel-box-shadow));
+          var(--boxel-box-shadow);
       }
       .add-new {
         gap: var(--boxel-sp-xxxs);
