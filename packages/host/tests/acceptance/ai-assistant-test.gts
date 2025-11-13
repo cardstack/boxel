@@ -31,6 +31,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import ENV from '@cardstack/host/config/environment';
+import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import { BoxelContext } from 'https://cardstack.com/base/matrix-event';
@@ -79,6 +80,20 @@ async function selectCardFromCatalog(cardId: string) {
   await fillIn('[data-test-search-field]', cardId);
   await click(`[data-test-select="${cardId}"]`);
   await click('[data-test-card-catalog-go-button]');
+}
+
+async function waitForSessionPreparationToFinish(
+  timeout = 30_000,
+): Promise<void> {
+  const aiAssistantPanelService = getService(
+    'ai-assistant-panel-service',
+  ) as AiAssistantPanelService;
+
+  // Background tasks post messages asynchronously; wait until they are done.
+  await waitUntil(
+    () => !aiAssistantPanelService.isPreparingSession,
+    { timeout },
+  );
 }
 
 let countryDefinition = `import { field, contains, CardDef } from 'https://cardstack.com/base/card-api';
@@ -2754,6 +2769,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-new-session-settings-option="Copy File History"]');
     await click('[data-test-new-session-settings-create-button]');
     await waitFor(`[data-room-settled]`);
+    await waitForSessionPreparationToFinish();
 
     assertMessages(assert, [
       {
@@ -2827,6 +2843,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
     await click('[data-test-new-session-settings-create-button]');
     await waitFor(`[data-room-settled]`);
+    await waitForSessionPreparationToFinish();
 
     // Verify the summary message was sent to the new room
     assertMessages(assert, [
@@ -2904,6 +2921,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
     await click('[data-test-new-session-settings-create-button]');
     await waitFor(`[data-room-settled]`);
+    await waitForSessionPreparationToFinish();
 
     // Verify the summary message was sent to the new room
     assertMessages(assert, [
@@ -2949,6 +2967,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
     await click('[data-test-new-session-settings-create-button]');
     await waitFor(`[data-room-settled]`);
+    await waitForSessionPreparationToFinish();
 
     // Verify that the new session was created without the summary (graceful fallback)
     assertMessages(assert, []);
@@ -3245,6 +3264,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-new-session-settings-option="Copy File History"]');
     await click('[data-test-new-session-settings-create-button]');
     await waitFor(`[data-room-settled]`);
+    await waitForSessionPreparationToFinish();
     await waitFor('[data-test-user-message]');
 
     const thirdRoomId = matrixService.currentRoomId;

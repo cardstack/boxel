@@ -460,13 +460,11 @@ export class Loader {
         typeof exportedEntity === 'function' &&
         typeof propName === 'string'
       ) {
-        if (!this.identities.has(exportedEntity)) {
-          this.identities.set(exportedEntity, {
-            module: moduleId,
-            name: propName,
-          });
-          Loader.loaders.set(exportedEntity, this);
-        }
+        this.identities.set(exportedEntity, {
+          module: moduleId,
+          name: propName,
+        });
+        Loader.loaders.set(exportedEntity, this);
       }
     }
   }
