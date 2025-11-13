@@ -8,9 +8,16 @@ import RealmField from 'https://cardstack.com/base/realm';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import NumberField from 'https://cardstack.com/base/number';
 import { Button } from '@cardstack/boxel-ui/components';
-import { type Query } from '@cardstack/runtime-common';
+import { IconTrash } from '@cardstack/boxel-ui/icons';
+import Wand from '@cardstack/boxel-icons/wand';
+import {
+  type Query,
+  type PrerenderedCardLike,
+} from '@cardstack/runtime-common';
 import ThemeCodeRefField from './fields/theme-code-ref';
 import PaginatedCards from './components/paginated-cards';
+import { on } from '@ember/modifier';
+import { fn } from '@ember/helper';
 
 export class ThemeCreator extends CardDef {
   static displayName = 'Theme Creator';
@@ -72,7 +79,9 @@ export class ThemeCreator extends CardDef {
     }
 
     get canShowGeneratedCards(): boolean {
-      return Boolean(this.generatedCardsQuery && this.generatedCardsRealms.length);
+      return Boolean(
+        this.generatedCardsQuery && this.generatedCardsRealms.length,
+      );
     }
 
     get generatedCardsHint(): string {
@@ -86,6 +95,46 @@ export class ThemeCreator extends CardDef {
         return 'Select a theme type to preview cards.';
       }
       return 'Update the selections above to preview cards.';
+    }
+
+    get newlyGeneratedCardsQuery(): Query | undefined {
+      let ref = this.codeRefSelection;
+      if (!ref) {
+        return undefined;
+      }
+      return {
+        filter: {
+          type: {
+            module: ref.module,
+            name: ref.name,
+          },
+        },
+        sort: [
+          {
+            by: 'createdAt',
+            direction: 'desc',
+          },
+        ],
+      };
+    }
+
+    get canShowNewlyGeneratedCards(): boolean {
+      return Boolean(
+        this.newlyGeneratedCardsQuery && this.generatedCardsRealms.length,
+      );
+    }
+
+    get newlyGeneratedCardsHint(): string {
+      if (!this.selectedRealm && !this.codeRefSelection) {
+        return 'Select a realm and theme type to preview newly generated cards.';
+      }
+      if (!this.selectedRealm) {
+        return 'Select a realm to preview newly generated cards.';
+      }
+      if (!this.codeRefSelection) {
+        return 'Select a theme type to preview newly generated cards.';
+      }
+      return 'Generate themes to see newly created cards here.';
     }
 
     <template>
@@ -140,23 +189,72 @@ export class ThemeCreator extends CardDef {
 
         <section class='theme-creator__generated'>
           <div class='theme-creator__section-header'>
-            <h2>Existing Theme Cards</h2>
+            <h2>Newly Generated Theme Cards</h2>
             <p class='theme-creator__description'>
-              Preview cards of this type in the selected realm.
+              Preview newly generated theme cards in this realm.
             </p>
           </div>
 
-          <div class='theme-creator__generated-wrapper theme-creator__meta-field'>
-            {{#if this.canShowGeneratedCards}}
-              <PaginatedCards
-                @query={{this.generatedCardsQuery}}
-                @realms={{this.generatedCardsRealms}}
-                @context={{@context}}
-              />
-            {{else}}
-              <p class='theme-creator__hint'>{{this.generatedCardsHint}}</p>
-            {{/if}}
+          {{#if this.canShowNewlyGeneratedCards}}
+            <PaginatedCards
+              @query={{this.newlyGeneratedCardsQuery}}
+              @realms={{this.generatedCardsRealms}}
+              @context={{@context}}
+              as |card|
+            >
+              <div class='theme-creator__card-wrapper'>
+                <card.component />
+                <div class='theme-creator__card-actions'>
+                  <label class='theme-creator__checkbox'>
+                    <input type='checkbox' />
+                  </label>
+                  <Button @kind='secondary-light' @size='small'>
+                    <Wand width='14' height='14' />
+                  </Button>
+                  <Button @kind='destructive' @size='small'>
+                    <IconTrash width='14' height='14' />
+                  </Button>
+                </div>
+              </div>
+            </PaginatedCards>
+          {{else}}
+            <p class='theme-creator__hint'>{{this.newlyGeneratedCardsHint}}</p>
+          {{/if}}
+        </section>
+
+        <section class='theme-creator__generated'>
+          <div class='theme-creator__section-header'>
+            <h2>Existing Theme Cards</h2>
+            <p class='theme-creator__description'>
+              Preview ALL theme cards in this realm.
+            </p>
           </div>
+
+          {{#if this.canShowGeneratedCards}}
+            <PaginatedCards
+              @query={{this.generatedCardsQuery}}
+              @realms={{this.generatedCardsRealms}}
+              @context={{@context}}
+              as |card|
+            >
+              <div class='theme-creator__card-wrapper'>
+                <card.component />
+                <div class='theme-creator__card-actions'>
+                  <label class='theme-creator__checkbox'>
+                    <input type='checkbox' />
+                  </label>
+                  <Button @kind='secondary-light' @size='small'>
+                    <Wand width='14' height='14' />
+                  </Button>
+                  <Button @kind='destructive' @size='small'>
+                    <IconTrash width='14' height='14' />
+                  </Button>
+                </div>
+              </div>
+            </PaginatedCards>
+          {{else}}
+            <p class='theme-creator__hint'>{{this.generatedCardsHint}}</p>
+          {{/if}}
         </section>
       </section>
 
@@ -231,6 +329,7 @@ export class ThemeCreator extends CardDef {
           display: flex;
           flex-direction: column;
           gap: var(--boxel-sp-xxs);
+          margin-bottom: var(--boxel-sp-lg);
         }
 
         .theme-creator__section-header h2 {
@@ -244,9 +343,34 @@ export class ThemeCreator extends CardDef {
           font-size: var(--boxel-font-size-sm);
         }
 
-        .theme-creator__generated-wrapper {
+        .theme-creator__card-wrapper {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+          height: 100%;
           padding: var(--boxel-sp-sm);
-          margin-top: var(--boxel-sp-sm);
+          border: 1px solid var(--boxel-200);
+          border-radius: var(--boxel-border-radius);
+        }
+
+        .theme-creator__card-actions {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          margin-top: auto;
+        }
+
+        .theme-creator__checkbox {
+          display: flex;
+          align-items: center;
+          cursor: pointer;
+        }
+
+        .theme-creator__checkbox input[type='checkbox'] {
+          cursor: pointer;
+          width: 1.125rem;
+          height: 1.125rem;
+          margin: 0;
         }
       </style>
     </template>

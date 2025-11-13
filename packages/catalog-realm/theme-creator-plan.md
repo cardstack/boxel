@@ -73,10 +73,11 @@ export class ThemeCreatorCard extends CardDef {
 - [x] Build Visual 1 (Prompt Controls): field wiring, FieldContainer layout, generate/regenerate buttons, inline guidance.
 - [x] Configure `codeRef` field dropdown with the three generator modules + helper copy (lives alongside Visual 1 form).
 - [x] Build Visual 2 (Existing Cards Inspector): reuse/port `PaginatedCards`
+- [x] Build Visual 3 (Newly Generated Cards): `PaginatedCards` with view/edit/tweak buttons, multi-select + delete-all UX, and per-row progress indicators for in-flight generations.
+- [] Implement command integration: connect `GenerateExampleCardsCommand` invocation + result handling.
+- [] implement delete all on selected cards
   - [ ] Implement standalone view/edit buttons for each card row in the PaginatedCards list.
-- [ ] Build Visual 3 (Newly Generated Cards): `PaginatedCards` with view/edit/tweak buttons, multi-select + delete-all UX, and per-row progress indicators for in-flight generations.
 - [ ] Build Visual 4 (Generation Preview Pane): `CardPreviewPanel`, JSON tabs, status banner, history metadata.
 - [ ] Build Visual 5 (Publish Panel): embed CatalogPublisherCard with readiness indicators + publish actions.
-- [ ] Implement command integration: connect `GenerateExampleCardsCommand` invocation + result handling.
 - [ ] Extend/modify components: add multi-select delete support to `PaginatedCards` and create `CardPreviewPanel`.
 - [ ] Wire button actions + state handling (view/edit/delete/regenerate/publish) across the card.
