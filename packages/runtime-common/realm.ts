@@ -3634,7 +3634,8 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
   }
   if (
     resourceUrl.startsWith('@cardstack/boxel-icons') ||
-    resourceUrl.startsWith('@cardstack/boxel-ui')
+    resourceUrl.startsWith('@cardstack/boxel-ui') ||
+    resourceUrl.startsWith('@cardstack/boxel-host/commands')
   ) {
     return true;
   }
@@ -3650,7 +3651,8 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
   }
   if (
     parsed.hostname === 'packages' &&
-    parsed.pathname.startsWith('/@cardstack/boxel-ui')
+    (parsed.pathname.startsWith('/@cardstack/boxel-ui') ||
+      parsed.pathname.startsWith('/@cardstack/boxel-host/commands'))
   ) {
     return true;
   }

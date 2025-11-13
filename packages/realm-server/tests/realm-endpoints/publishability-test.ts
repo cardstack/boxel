@@ -103,12 +103,15 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
         'source-card.gts': `
           import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
+          import CreateAiAssistantRoomCommand from "@cardstack/boxel-host/commands/create-ai-assistant-room";
 
           // Ensure data: dependencies are ignored
           import "data:text/javascript,export%20default%200;";
 
           export class SourceCard extends CardDef {
             @field label = contains(StringField);
+
+            command = CreateAiAssistantRoomCommand;
           }
         `,
         'source-instance.json': {
