@@ -562,16 +562,9 @@ export default class Room extends Component<Signature> {
     return state;
   });
 
-  private get autoAttachedFileUrl() {
-    let url = this.operatorModeStateService.state.codePath?.href;
-    // use a task to avoid ember/no-side-effects rule violation
-    this.resetAttachedFileRemovedStateTask.perform();
-    return url;
-  }
-
-  private resetAttachedFileRemovedStateTask = task(async () => {
-    await Promise.resolve();
+  @use private autoAttachedFileUrl = resource(() => {
     this.removedAttachedFileUrls.splice(0);
+    return this.operatorModeStateService.state.codePath?.href;
   });
 
   private get autoAttachedFile() {
