@@ -5,7 +5,11 @@ import type {
   Relationship,
   ResourceID,
 } from './resource-types';
-import { buildQueryString, type Query } from './query';
+import {
+  buildQueryString,
+  type Query,
+  type QueryWithInterpolations,
+} from './query';
 
 const EMPTY_PREDICATE_KEYS = new Set([
   'eq',
@@ -20,7 +24,7 @@ export const THIS_REALM_TOKEN = '$thisRealm';
 
 export interface NormalizeQueryDefinitionParams {
   fieldDefinition: FieldDefinition;
-  queryDefinition: Query;
+  queryDefinition: QueryWithInterpolations;
   resource: LooseCardResource;
   realmURL: URL;
   fieldName: string;
@@ -38,7 +42,9 @@ export function normalizeQueryDefinition({
   realmURL,
   fieldName,
 }: NormalizeQueryDefinitionParams): NormalizedQueryDefinitionResult | null {
-  let workingQuery: Query = JSON.parse(JSON.stringify(queryDefinition));
+  let workingQuery: QueryWithInterpolations = JSON.parse(
+    JSON.stringify(queryDefinition),
+  );
   let queryAny = workingQuery as Record<string, any>;
   let aborted = false;
 
@@ -227,7 +233,7 @@ export function normalizeQueryDefinition({
     }
   }
 
-  return { query: workingQuery, realm: resolvedRealm };
+  return { query: workingQuery as Query, realm: resolvedRealm };
 }
 
 export function getValueForResourcePath(

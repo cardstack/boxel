@@ -29,6 +29,17 @@ export interface Query {
   realm?: string;
 }
 
+export interface QueryWithInterpolations {
+  filter?: Filter;
+  sort?: SortWithInterpolations;
+  page?: {
+    number?: number; // page.number is 0-based
+    size: number | string;
+    realmVersion?: number;
+  };
+  realm?: string;
+}
+
 export type CardURL = string;
 export type Filter =
   | AnyFilter
@@ -56,9 +67,23 @@ type SortExpressionWithCodeRef = {
   direction?: 'asc' | 'desc';
 };
 
-type SortExpression = SortExpressionWithoutCodeRef | SortExpressionWithCodeRef;
+type SortExpressionWithoutCodeRefWithInterpolations = {
+  by: GeneralSortField;
+  direction?: string;
+};
 
+type SortExpressionWithCodeRefWithInterpolations = {
+  by: string;
+  on?: CodeRef;
+  direction?: string;
+};
+
+type SortExpression = SortExpressionWithoutCodeRef | SortExpressionWithCodeRef;
+type SortExpressionWithInterpolations =
+  | SortExpressionWithoutCodeRefWithInterpolations
+  | SortExpressionWithCodeRefWithInterpolations;
 export type Sort = SortExpression[];
+type SortWithInterpolations = SortExpressionWithInterpolations[];
 
 // The CardTypeFilter is used when you solely want to filter for all cards that
 // adopt from some particular card type--no other predicates are included in
