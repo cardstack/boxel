@@ -2,6 +2,9 @@ import type { MatrixClient, MatrixEvent } from 'matrix-js-sdk';
 import type {
   ChatCompletionMessageToolCall,
   OpenAIPromptMessage,
+  PendingPatchSummary,
+  PatchSummaryCard,
+  PatchSummaryFile,
   PromptParts,
 } from './types';
 import { constructHistory } from './history';
@@ -13,6 +16,7 @@ import {
 import { isRecognisedDebugCommand } from './debug';
 import type {
   ActiveLLMEvent,
+  BoxelContext,
   CardMessageContent,
   CardMessageEvent,
   CodePatchResultEvent,
@@ -33,10 +37,15 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_PATCH_SUMMARY_MSGTYPE,
+  APP_BOXEL_PATCH_SUMMARY_REL_TYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   DEFAULT_LLM,
+  APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
 } from '../matrix-constants';
+import { decodeCommandRequest } from '../commands';
+import type { CommandRequest } from '../commands';
 import type { ReasoningEffort } from 'openai/resources/shared';
 import type {
   CardResource,
@@ -64,6 +73,7 @@ export async function getPromptParts(
     client,
   );
   let shouldRespond = getShouldRespond(history);
+  let pendingPatchSummary = collectPendingPatchSummary(history, aiBotUserId);
   if (!shouldRespond) {
     return {
       shouldRespond: false,
@@ -74,6 +84,7 @@ export async function getPromptParts(
       toolChoice: undefined,
       toolsSupported: undefined,
       reasoningEffort: undefined,
+      pendingPatchSummary,
     };
   }
   let skills = await getEnabledSkills(eventList, client);
@@ -99,6 +110,7 @@ export async function getPromptParts(
     toolChoice: toolChoice,
     toolsSupported,
     reasoningEffort,
+    pendingPatchSummary,
   };
 }
 
@@ -663,41 +675,7 @@ async function toResultMessages(
       },
     ),
   );
-  let codePatchBlocks = extractCodePatchBlocks(messageContent.body);
-  let codePatchResultMessages: OpenAIPromptMessage[] = [];
-  if (codePatchBlocks.length) {
-    let codePatchResultsContent = (
-      await Promise.all(
-        codePatchBlocks.map(async (_codePatchBlock, codeBlockIndex) => {
-          let codePatchResultEvent = codePatchResults.find(
-            (codePatchResultEvent) =>
-              codePatchResultEvent.content.codeBlockIndex === codeBlockIndex,
-          );
-          let content = `(The user has not applied code patch ${codeBlockIndex + 1}/.)`;
-          if (codePatchResultEvent) {
-            let status = codePatchResultEvent.content['m.relates_to']?.key;
-            if (status === 'applied') {
-              content = `(The user has successfully applied code patch ${codeBlockIndex + 1}.)`;
-            } else if (status === 'failed') {
-              content = `(The user tried to apply code patch ${codeBlockIndex + 1} but there was an error: ${codePatchResultEvent.content.failureReason})`;
-            }
-            let attachments = await buildAttachmentsMessagePart(
-              client,
-              codePatchResultEvent,
-              history,
-            );
-            content = [content, attachments].filter(Boolean).join('\n\n');
-          }
-          return content;
-        }),
-      )
-    ).join('\n');
-    codePatchResultMessages.push({
-      role: 'user',
-      content: codePatchResultsContent,
-    });
-  }
-  return [...commandResultMessages, ...codePatchResultMessages];
+  return [...commandResultMessages];
 }
 
 export async function buildPromptForModel(
@@ -818,6 +796,219 @@ export async function buildPromptForModel(
   }
 
   return messages;
+}
+
+const CARD_PATCH_COMMAND_NAMES = new Set(['patchCardInstance', 'patchFields']);
+
+function collectPendingPatchSummary(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): PendingPatchSummary | undefined {
+  for (let index = history.length - 1; index >= 0; index--) {
+    let event = history[index];
+    if (
+      event.type !== 'm.room.message' ||
+      event.sender !== aiBotUserId ||
+      event.content.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
+    ) {
+      continue;
+    }
+    let summary = buildSummaryForMessage(event as CardMessageEvent, history);
+    if (summary) {
+      return summary;
+    }
+  }
+  return undefined;
+}
+
+function buildSummaryForMessage(
+  messageEvent: CardMessageEvent,
+  history: DiscreteMatrixEvent[],
+): PendingPatchSummary | undefined {
+  let content = messageEvent.content as CardMessageContent;
+  let codePatchBlocks = extractCodePatchBlocks(content.body || '');
+  let commandRequests = (content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
+    (request) => decodeCommandRequest(request),
+  );
+  let relevantCommands = commandRequests.filter((request) =>
+    isCardPatchCommand(request.name),
+  );
+
+  if (codePatchBlocks.length === 0 && relevantCommands.length === 0) {
+    return undefined;
+  }
+
+  if (
+    history.some((event) =>
+      isPatchSummaryEventForMessage(event, messageEvent.event_id!),
+    )
+  ) {
+    return undefined;
+  }
+
+  let codePatchResults = getCodePatchResults(messageEvent, history);
+  let commandResults = getCommandResults(messageEvent, history);
+
+  let allCodePatchesResolved =
+    codePatchBlocks.length === 0 ||
+    codePatchBlocks.every((_block, index) =>
+      codePatchResults.some(
+        (result) => result.content.codeBlockIndex === index,
+      ),
+    );
+  let allRelevantCommandsResolved =
+    relevantCommands.length === 0 ||
+    relevantCommands.every((request) =>
+      commandResults.some(
+        (result) => result.content.commandRequestId === request.id,
+      ),
+    );
+
+  if (!allCodePatchesResolved || !allRelevantCommandsResolved) {
+    return undefined;
+  }
+
+  let files = gatherPatchedFiles(codePatchResults);
+  let cards = gatherPatchedCards(relevantCommands, commandResults);
+
+  if (files.length === 0 && cards.length === 0) {
+    return undefined;
+  }
+
+  return {
+    targetEventId: messageEvent.event_id!,
+    roomId: messageEvent.room_id!,
+    context: content.data?.context as BoxelContext | undefined,
+    files,
+    cards,
+  };
+}
+
+function isCardPatchCommand(name?: string) {
+  if (!name) {
+    return false;
+  }
+  return CARD_PATCH_COMMAND_NAMES.has(name);
+}
+
+function gatherPatchedFiles(
+  codePatchResults: CodePatchResultEvent[],
+): PatchSummaryFile[] {
+  let seen = new Set<string>();
+  let files: PatchSummaryFile[] = [];
+  for (let result of codePatchResults) {
+    let status = result.content['m.relates_to']?.key;
+    if (status !== 'applied') {
+      continue;
+    }
+    let attachments = result.content.data?.attachedFiles ?? [];
+    if (attachments.length === 0) {
+      let fallback = result.content.data?.context?.codeMode?.currentFile;
+      if (fallback && !seen.has(fallback)) {
+        seen.add(fallback);
+        files.push({
+          sourceUrl: fallback,
+          displayName: formatFileDisplayName(fallback),
+        });
+      }
+      continue;
+    }
+    for (let file of attachments) {
+      let sourceUrl = file.sourceUrl ?? file.url ?? file.name ?? '';
+      let key = sourceUrl || file.name || `${result.event_id}-${file.name}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      let labelSource = sourceUrl || file.name || '';
+      files.push({
+        sourceUrl: sourceUrl || labelSource,
+        displayName: formatFileDisplayName(labelSource),
+      });
+    }
+  }
+  return files;
+}
+
+function gatherPatchedCards(
+  commandRequests: Partial<CommandRequest>[],
+  commandResults: CommandResultEvent[],
+): PatchSummaryCard[] {
+  let cards: PatchSummaryCard[] = [];
+  let seen = new Set<string>();
+  for (let request of commandRequests) {
+    let result = commandResults.find(
+      (commandResult) => commandResult.content.commandRequestId === request.id,
+    );
+    if (!result) {
+      continue;
+    }
+    if (result.content['m.relates_to']?.key !== 'applied') {
+      continue;
+    }
+    let cardId = extractCardIdFromCommandRequest(request);
+    if (!cardId || seen.has(cardId)) {
+      continue;
+    }
+    seen.add(cardId);
+    cards.push({ cardId });
+  }
+  return cards;
+}
+
+function extractCardIdFromCommandRequest(
+  request: Partial<CommandRequest>,
+): string | undefined {
+  let args = request.arguments as Record<string, any> | undefined;
+  if (!args) {
+    return undefined;
+  }
+  if (typeof args.cardId === 'string') {
+    return args.cardId;
+  }
+  if (typeof args.attributes?.cardId === 'string') {
+    return args.attributes.cardId;
+  }
+  if (typeof args.attributes?.patch?.cardId === 'string') {
+    return args.attributes.patch.cardId;
+  }
+  if (typeof args.attributes?.patch?.attributes?.cardId === 'string') {
+    return args.attributes.patch.attributes.cardId;
+  }
+  return undefined;
+}
+
+function isPatchSummaryEventForMessage(
+  event: DiscreteMatrixEvent,
+  targetEventId: string,
+) {
+  if (
+    event.type !== 'm.room.message' ||
+    event.content?.msgtype !== APP_BOXEL_PATCH_SUMMARY_MSGTYPE
+  ) {
+    return false;
+  }
+  let relatesTo = event.content?.['m.relates_to'];
+  if (!relatesTo) {
+    return false;
+  }
+  return (
+    relatesTo.rel_type === APP_BOXEL_PATCH_SUMMARY_REL_TYPE &&
+    relatesTo.event_id === targetEventId
+  );
+}
+
+function formatFileDisplayName(identifier?: string) {
+  if (!identifier) {
+    return 'Updated file';
+  }
+  try {
+    let url = new URL(identifier);
+    let pathname = url.pathname.replace(/^\/+/, '');
+    return pathname || identifier;
+  } catch {
+    return identifier;
+  }
 }
 
 export const buildAttachmentsMessagePart = async (

@@ -29,6 +29,7 @@ import { type FileDef } from 'https://cardstack.com/base/file-api';
 import AiBotMessage from './aibot-message';
 import Attachments from './attachments';
 import Meta from './meta';
+import PatchSummary from './patch-summary';
 import UserMessage from './user-message';
 
 import type { ComponentLike } from '@glint/template';
@@ -63,6 +64,7 @@ interface Signature {
     retryAction?: () => void;
     waitAction?: () => void;
     hideMeta?: boolean;
+    isPatchSummary?: boolean;
   };
   Blocks: { default: [] };
 }
@@ -236,23 +238,25 @@ export default class AiAssistantMessage extends Component<Signature> {
       <div class='content' data-test-ai-message-content>
         {{#if @isFromAssistant}}
           {{#if this.hasBotMessage}}
-            <AiBotMessage
-              @monacoSDK={{@monacoSDK}}
-              @htmlParts={{@messageHTMLParts}}
-              @roomId={{@roomId}}
-              @eventId={{@eventId}}
-              @isStreaming={{@isStreaming}}
-              @isLastAssistantMessage={{@isLastAssistantMessage}}
-              @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
-              @reasoning={{if
-                @reasoningContent
-                (hash
-                  content=@reasoningContent
-                  isExpanded=this.isReasoningExpanded
-                  updateExpanded=this.updateReasoningExpanded
-                )
-              }}
-            />
+            <div class={{if @isPatchSummary 'patch-summary' undefined}}>
+              <AiBotMessage
+                @monacoSDK={{@monacoSDK}}
+                @htmlParts={{@messageHTMLParts}}
+                @roomId={{@roomId}}
+                @eventId={{@eventId}}
+                @isStreaming={{@isStreaming}}
+                @isLastAssistantMessage={{@isLastAssistantMessage}}
+                @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
+                @reasoning={{if
+                  @reasoningContent
+                  (hash
+                    content=@reasoningContent
+                    isExpanded=this.isReasoningExpanded
+                    updateExpanded=this.updateReasoningExpanded
+                  )
+                }}
+              />
+            </div>
           {{/if}}
           {{#if this.hasItems}}
             <Attachments
@@ -369,6 +373,12 @@ export default class AiAssistantMessage extends Component<Signature> {
       .credits-added {
         font-size: var(--boxel-font-size-xs);
         font-weight: bold;
+      }
+      .patch-summary {
+        border: 1px solid var(--boxel-blue-400);
+        border-radius: var(--boxel-border-radius-md);
+        padding: var(--boxel-sp-xxs);
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05) inset;
       }
     </style>
   </template>

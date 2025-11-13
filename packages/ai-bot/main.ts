@@ -13,6 +13,7 @@ import {
   MINIMUM_AI_CREDITS_TO_CONTINUE,
 } from '@cardstack/runtime-common';
 import type { PromptParts } from '@cardstack/runtime-common/ai';
+import type { PendingPatchSummary } from '@cardstack/runtime-common/ai/types';
 import {
   isRecognisedDebugCommand,
   getPromptParts,
@@ -22,6 +23,15 @@ import {
   sendPromptAsDebugMessage,
   constructHistory,
 } from '@cardstack/runtime-common/ai';
+import {
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_PATCH_SUMMARY_MSGTYPE,
+  APP_BOXEL_PATCH_SUMMARY_REL_TYPE,
+} from '@cardstack/runtime-common/matrix-constants';
+import {
+  encodeCommandRequests,
+  type CommandRequest,
+} from '@cardstack/runtime-common/commands';
 import { validateAICredits } from '@cardstack/billing/ai-billing';
 import {
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
@@ -53,6 +63,7 @@ import { debug } from 'debug';
 import { profEnabled, profTime, profNote } from './lib/profiler';
 
 let log = logger('ai-bot');
+const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
 
 let trackAiUsageCostPromises = new Map<string, Promise<void>>();
 let activeGenerations = new Map<
@@ -245,6 +256,13 @@ Common issues are:
           return;
         }
 
+        if (
+          event.getType() === 'm.room.message' &&
+          event.getContent()?.msgtype === APP_BOXEL_PATCH_SUMMARY_MSGTYPE
+        ) {
+          return;
+        }
+
         if (profEnabled()) {
           profNote(eventId, 'event:received', {
             type: event.getType(),
@@ -350,6 +368,12 @@ Common issues are:
               'history:constructPromptParts',
               async () => getPromptParts(eventList, aiBotUserId, client),
             );
+            if (promptParts.pendingPatchSummary) {
+              return await publishPatchSummary(
+                promptParts.pendingPatchSummary,
+                client,
+              );
+            }
             if (!promptParts.shouldRespond) {
               return;
             }
@@ -595,3 +619,89 @@ Common issues are:
   });
   process.exit(1);
 });
+
+async function publishPatchSummary(
+  summary: PendingPatchSummary,
+  client: MatrixClient,
+) {
+  let body = buildPatchSummaryBody(summary);
+  if (!body) {
+    return;
+  }
+  let commandRequests = buildCheckCorrectnessCommandRequests(summary);
+  let content: Record<string, unknown> = {
+    body,
+    msgtype: APP_BOXEL_PATCH_SUMMARY_MSGTYPE,
+    format: 'org.matrix.custom.html',
+    isStreamingFinished: true,
+    'm.relates_to': {
+      rel_type: APP_BOXEL_PATCH_SUMMARY_REL_TYPE,
+      event_id: summary.targetEventId,
+    },
+  };
+  if (summary.context) {
+    content.data = { context: summary.context };
+  }
+  if (commandRequests.length) {
+    content[APP_BOXEL_COMMAND_REQUESTS_KEY] =
+      encodeCommandRequests(commandRequests);
+  }
+  await client.sendEvent(summary.roomId, 'm.room.message', content);
+}
+
+function buildPatchSummaryBody(summary: PendingPatchSummary) {
+  let sections: string[] = [];
+  if (summary.files.length) {
+    sections.push(
+      [
+        'Files updated:',
+        ...summary.files.map((file) => `- ${file.sourceUrl}`),
+      ].join('\n'),
+    );
+  }
+  if (summary.cards.length) {
+    sections.push(
+      [
+        'Cards updated:',
+        ...summary.cards.map((card) => `- ${card.cardId}`),
+      ].join('\n'),
+    );
+  }
+  return sections.join('\n\n');
+}
+
+function buildCheckCorrectnessCommandRequests(
+  summary: PendingPatchSummary,
+): Partial<CommandRequest>[] {
+  let requests: Partial<CommandRequest>[] = [];
+  for (let file of summary.files) {
+    let sourceRef = file.sourceUrl || file.displayName;
+    requests.push({
+      id: `check-${uuidv4()}`,
+      name: CHECK_CORRECTNESS_COMMAND_NAME,
+      arguments: {
+        description: `Check correctness of ${file.displayName}`,
+        attributes: {
+          targetType: 'file',
+          targetRef: sourceRef,
+          fileUrl: sourceRef,
+        },
+      },
+    });
+  }
+  for (let card of summary.cards) {
+    requests.push({
+      id: `check-${uuidv4()}`,
+      name: CHECK_CORRECTNESS_COMMAND_NAME,
+      arguments: {
+        description: `Check correctness of ${card.cardId}`,
+        attributes: {
+          targetType: 'card',
+          targetRef: card.cardId,
+          cardId: card.cardId,
+        },
+      },
+    });
+  }
+  return requests;
+}

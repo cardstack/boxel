@@ -205,22 +205,25 @@ export default class RoomMessage extends Component<Signature> {
         @retryAction={{@retryAction}}
         @waitAction={{if this.streamingTimeout this.waitLonger}}
         @isPending={{@isPending}}
+        @isPatchSummary={{this.message.isPatchSummary}}
         data-test-boxel-message-from={{this.message.author.name}}
         data-test-boxel-message-instance-id={{this.message.instanceId}}
         ...attributes
       >
-        {{#each this.message.commands as |command|}}
-          <RoomMessageCommand
-            @messageCommand={{command}}
-            @roomResource={{@roomResource}}
-            @runCommand={{fn (perform this.run) command}}
-            @roomId={{@roomId}}
-            @isPending={{@isPending}}
-            @monacoSDK={{@monacoSDK}}
-            @isError={{bool this.errorMessage}}
-            @isStreaming={{@isStreaming}}
-          />
-        {{/each}}
+        {{#unless this.message.isPatchSummary}}
+          {{#each this.message.commands as |command|}}
+            <RoomMessageCommand
+              @messageCommand={{command}}
+              @roomResource={{@roomResource}}
+              @runCommand={{fn (perform this.run) command}}
+              @roomId={{@roomId}}
+              @isPending={{@isPending}}
+              @monacoSDK={{@monacoSDK}}
+              @isError={{bool this.errorMessage}}
+              @isStreaming={{@isStreaming}}
+            />
+          {{/each}}
+        {{/unless}}
       </AiAssistantMessage>
     {{/if}}
   </template>

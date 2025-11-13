@@ -173,6 +173,13 @@ export class PatchCodeInput extends CardDef {
   @field roomId = contains(StringField);
 }
 
+export class CheckCorrectnessInput extends CardDef {
+  @field targetType = contains(StringField);
+  @field targetRef = contains(StringField);
+  @field fileUrl = contains(StringField);
+  @field cardId = contains(StringField);
+}
+
 export class CreateAIAssistantRoomInput extends CardDef {
   @field name = contains(StringField);
   @field enabledSkills = linksToMany(Skill);
