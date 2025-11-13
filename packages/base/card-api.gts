@@ -1908,7 +1908,7 @@ export function containsMany<FieldT extends FieldDefConstructor>(
   options?: Options,
 ): BaseInstanceType<FieldT>[] {
   return {
-    setupField(fieldName: string, _ownerPrototype?: BaseDef) {
+    setupField(fieldName: string, _ownerPrototype: BaseDef) {
       let { computeVia, description, isUsed } = options ?? {};
       let instance = new ContainsMany({
         cardThunk: cardThunk(field),
@@ -1929,7 +1929,7 @@ export function contains<FieldT extends FieldDefConstructor>(
   options?: Options,
 ): BaseInstanceType<FieldT> {
   return {
-    setupField(fieldName: string, _ownerPrototype?: BaseDef) {
+    setupField(fieldName: string, _ownerPrototype: BaseDef) {
       let { computeVia, description, isUsed } = options ?? {};
       let instance = new Contains({
         cardThunk: cardThunk(field),
@@ -1950,7 +1950,7 @@ export function linksTo<CardT extends CardDefConstructor>(
   options?: RelationshipOptions,
 ): BaseInstanceType<CardT> {
   return {
-    setupField(fieldName: string, ownerPrototype?: BaseDef) {
+    setupField(fieldName: string, ownerPrototype: BaseDef) {
       let { computeVia, description, isUsed, query } = options ?? {};
       if (query) {
         validateRelationshipQuery(ownerPrototype, fieldName, query);
@@ -1975,7 +1975,7 @@ export function linksToMany<CardT extends CardDefConstructor>(
   options?: RelationshipOptions,
 ): BaseInstanceType<CardT>[] {
   return {
-    setupField(fieldName: string, ownerPrototype?: BaseDef) {
+    setupField(fieldName: string, ownerPrototype: BaseDef) {
       let { computeVia, description, isUsed, query } = options ?? {};
       if (query) {
         validateRelationshipQuery(ownerPrototype, fieldName, query);
