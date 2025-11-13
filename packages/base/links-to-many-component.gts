@@ -456,9 +456,8 @@ function shouldRenderEditor(
   format: Format | undefined,
   defaultFormat: Format,
   isComputed: boolean,
-  isQueryBacked: boolean,
 ) {
-  return (format ?? defaultFormat) === 'edit' && !isComputed && !isQueryBacked;
+  return (format ?? defaultFormat) === 'edit' && !isComputed;
 }
 const componentCache = initSharedState(
   'linksToManyComponentCache',
@@ -488,19 +487,11 @@ export function getLinksToManyComponent({
     arrayField.children.map((child) =>
       getBoxComponent(cardTypeFor(field, child), child, field),
     ); // Wrap the the components in a function so that the template is reactive to changes in the model (this is essentially a helper)
-  let isComputed = !!field.computeVia;
-  let isQueryBacked = !!field.queryDefinition;
+  let isComputed = !!field.computeVia || !!field.queryDefinition;
   let linksToManyComponent = class LinksToManyComponent extends GlimmerComponent<BoxComponentSignature> {
     <template>
       <DefaultFormatsConsumer as |defaultFormats|>
-        {{#if
-          (shouldRenderEditor
-            @format
-            defaultFormats.cardDef
-            isComputed
-            isQueryBacked
-          )
-        }}
+        {{#if (shouldRenderEditor @format defaultFormats.cardDef isComputed)}}
           <LinksToManyEditor
             @model={{model}}
             @arrayField={{arrayField}}
