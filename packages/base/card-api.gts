@@ -64,7 +64,7 @@ import {
   loadDocument,
   LocalPath,
   getCardMenuItems,
-  type Query as RelationshipQuery,
+  type QueryWithInterpolations,
 } from '@cardstack/runtime-common';
 import {
   beginQueryFieldEvaluation,
@@ -236,7 +236,7 @@ interface Options {
 }
 
 interface RelationshipOptions extends Options {
-  query?: RelationshipQuery;
+  query?: QueryWithInterpolations;
 }
 
 export interface CardContext<T extends CardDef = CardDef> {
@@ -266,7 +266,7 @@ export interface FieldConstructor<T> {
   description: string | undefined;
   isUsed?: true;
   isPolymorphic?: true;
-  queryDefinition?: RelationshipQuery;
+  queryDefinition?: QueryWithInterpolations;
 }
 
 type CardChangeSubscriber = (
@@ -367,7 +367,7 @@ export interface Field<
   // Optional per-usage configuration stored on the field descriptor
   configuration?: ConfigurationInput<any>;
   // Declarative relationship query definition, if provided
-  queryDefinition?: RelationshipQuery;
+  queryDefinition?: QueryWithInterpolations;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
   // use the rendering mechanism to tell if a card is used or not,
@@ -955,7 +955,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   readonly configuration?: ConfigurationInput<any>;
-  readonly queryDefinition?: RelationshipQuery;
+  readonly queryDefinition?: QueryWithInterpolations;
   constructor({
     cardThunk,
     computeVia,
@@ -1331,7 +1331,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   readonly configuration?: ConfigurationInput<any>;
-  readonly queryDefinition?: RelationshipQuery;
+  readonly queryDefinition?: QueryWithInterpolations;
   constructor({
     cardThunk,
     computeVia,

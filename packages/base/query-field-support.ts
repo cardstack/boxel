@@ -2,6 +2,7 @@ import type { BaseDef, CardDef, Field } from './card-api';
 import type {
   LooseCardResource,
   Query,
+  QueryWithInterpolations,
   Relationship,
 } from '@cardstack/runtime-common';
 import {
@@ -152,7 +153,7 @@ export function isQueryFieldEvaluationInProgress(
 export function validateRelationshipQuery(
   ownerPrototype: BaseDef | undefined,
   fieldName: string,
-  query: Query,
+  query: QueryWithInterpolations,
 ): void {
   if (typeof query !== 'object' || query == null) {
     throw new Error(`query field "${fieldName}" must provide a query object`);
