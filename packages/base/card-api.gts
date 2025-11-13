@@ -1276,7 +1276,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   }
 
   component(model: Box<CardDef>): BoxComponent {
-    let isComputed = !!this.computeVia;
+    let isComputed = !!this.computeVia || !!this.queryDefinition;
     let fieldName = this.name as keyof CardDef;
     let linksToField = this;
     let getInnerModel = () => {
@@ -1287,11 +1287,8 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       format: Format | undefined,
       defaultFormat: Format,
       isComputed: boolean,
-      isQueryBacked: boolean,
     ) {
-      return (
-        (format ?? defaultFormat) === 'edit' && !isComputed && !isQueryBacked
-      );
+      return (format ?? defaultFormat) === 'edit' && !isComputed;
     }
     function getChildFormat(
       format: Format | undefined,
@@ -1323,12 +1320,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         <CardCrudFunctionsConsumer as |cardCrudFunctions|>
           <DefaultFormatsConsumer as |defaultFormats|>
             {{#if
-              (shouldRenderEditor
-                @format
-                defaultFormats.cardDef
-                isComputed
-                (if linksToField.queryDefinition true false)
-              )
+              (shouldRenderEditor @format defaultFormats.cardDef isComputed)
             }}
               <LinksToEditor
                 @model={{(getInnerModel)}}
