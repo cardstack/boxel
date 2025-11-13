@@ -1,17 +1,17 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 import {
   FieldDef,
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import StringField from 'https://cardstack.com/base/string';
+} from 'https://cardstack.com/base/card-api';
+import NumberField from 'https://cardstack.com/base/number';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { concat } from '@ember/helper';
-import { lt, add } from '@cardstack/boxel-ui/helpers'; // ² Helpers
-import CalendarIcon from '@cardstack/boxel-icons/calendar'; // ³ Calendar icon
-import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down'; // ⁴ Chevron down icon
+import { add } from '@cardstack/boxel-ui/helpers';
+import { formatDateTime } from '@cardstack/boxel-ui/helpers';
+
+import CalendarIcon from '@cardstack/boxel-icons/calendar';
+import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down';
 
 class MonthFieldEdit extends Component<typeof MonthField> {
   months = [
@@ -32,7 +32,7 @@ class MonthFieldEdit extends Component<typeof MonthField> {
   @action
   updateValue(event: Event) {
     const target = event.target as HTMLSelectElement;
-    this.args.model.value = target.value;
+    this.args.model.value = Number(target.value);
   }
 
   <template>
@@ -49,13 +49,7 @@ class MonthFieldEdit extends Component<typeof MonthField> {
         data-test-month-select
       >
         {{#each this.months as |monthName index|}}
-          <option
-            value={{if
-              (lt (add index 1) 10)
-              (concat '0' (add index 1))
-              (add index 1)
-            }}
-          >
+          <option value={{add index 1}}>
             {{monthName}}
           </option>
         {{/each}}
@@ -133,36 +127,28 @@ class MonthFieldEdit extends Component<typeof MonthField> {
   </template>
 }
 
-// ⁵ MonthField - Independent FieldDef for month-only selection
 export class MonthField extends FieldDef {
   static displayName = 'Month';
   static icon = CalendarIcon;
 
-  @field value = contains(StringField); // ⁶ Month value (01-12)
+  @field value = contains(NumberField); // Month value (1-12)
 
-  // ⁷ Embedded format - formatted month display
   static embedded = class Embedded extends Component<typeof this> {
     get displayValue() {
       const value = this.args.model?.value;
       if (!value) return 'No month set';
 
       try {
-        const months = [
-          'January',
-          'February',
-          'March',
-          'April',
-          'May',
-          'June',
-          'July',
-          'August',
-          'September',
-          'October',
-          'November',
-          'December',
-        ];
-        const monthName = months[parseInt(value) - 1];
-        return monthName || value;
+        const monthNum = this.args.model?.value;
+        if (typeof monthNum !== 'number' || monthNum < 1 || monthNum > 12)
+          return value;
+
+        const date = new Date(2025, monthNum - 1, 1);
+        return formatDateTime(date, {
+          kind: 'month',
+          monthDisplay: 'long',
+          fallback: String(value),
+        });
       } catch {
         return value;
       }
@@ -189,29 +175,22 @@ export class MonthField extends FieldDef {
     </template>
   };
 
-  // ⁸ Atom format - compact month badge
   static atom = class Atom extends Component<typeof this> {
     get displayValue() {
       const value = this.args.model?.value;
       if (!value) return 'No month';
 
       try {
-        const months = [
-          'Jan',
-          'Feb',
-          'Mar',
-          'Apr',
-          'May',
-          'Jun',
-          'Jul',
-          'Aug',
-          'Sep',
-          'Oct',
-          'Nov',
-          'Dec',
-        ];
-        const monthName = months[parseInt(value) - 1];
-        return monthName || value;
+        const monthNum = this.args.model?.value;
+        if (typeof monthNum !== 'number' || monthNum < 1 || monthNum > 12)
+          return value;
+
+        const date = new Date(2025, monthNum - 1, 1);
+        return formatDateTime(date, {
+          kind: 'month',
+          monthDisplay: 'short',
+          fallback: String(value),
+        });
       } catch {
         return value;
       }
@@ -249,7 +228,6 @@ export class MonthField extends FieldDef {
     </template>
   };
 
-  // ⁹ Edit format - month dropdown
   static edit = MonthFieldEdit;
 }
 
