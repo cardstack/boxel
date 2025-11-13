@@ -705,13 +705,6 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     }
     return realm;
   }
-
-  async function makeRealmPublic(realmURL: string) {
-    await dbAdapter.execute(`
-      INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
-      VALUES ('${realmURL}', '*', true, false, false)
-    `);
-  }
 });
 
 async function seedRealm(realm: Realm, files: Record<string, string | object>) {
