@@ -1,6 +1,9 @@
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { type Query } from '@cardstack/runtime-common';
+import {
+  type Query,
+  type PrerenderedCardLike,
+} from '@cardstack/runtime-common';
 import { type CardContext } from 'https://cardstack.com/base/card-api';
 import { Paginator } from './paginator';
 
@@ -9,17 +12,26 @@ interface Signature {
     query?: Query;
     realms: string[];
     context?: CardContext;
+    pageSize?: number;
   };
   Blocks: {
-    default: [];
+    default: [card: PrerenderedCardLike];
   };
 }
 
 export default class PaginatedCards extends GlimmerComponent<Signature> {
   @tracked totalResults = 0;
   @tracked currentPage = 0;
-  readonly pageSize = 12;
+  readonly defaultPageSize = 12;
   private lastCriteriaSignature: string | null = null;
+
+  get pageSize(): number {
+    let size = Number(this.args.pageSize);
+    if (Number.isInteger(size) && size > 0) {
+      return size;
+    }
+    return this.defaultPageSize;
+  }
 
   get hasCards() {
     return this.totalResults > 0;
@@ -58,6 +70,7 @@ export default class PaginatedCards extends GlimmerComponent<Signature> {
       return JSON.stringify({
         query: baseQuery,
         realms: this.normalizedRealms,
+        pageSize: this.pageSize,
       });
     } catch {
       return `${Date.now()}`;
@@ -132,7 +145,10 @@ export default class PaginatedCards extends GlimmerComponent<Signature> {
 
   <template>
     {{#if this.canRenderSearch}}
-      {{#let this.paginatedQuery this.searchComponent as |paginatedQuery SearchComponent|}}
+      {{#let
+        this.paginatedQuery this.searchComponent
+        as |paginatedQuery SearchComponent|
+      }}
         {{#if paginatedQuery}}
           <SearchComponent
             @query={{paginatedQuery}}
@@ -144,15 +160,11 @@ export default class PaginatedCards extends GlimmerComponent<Signature> {
               <p class='paginated-cards__loading'>Loading cards…</p>
             </:loading>
             <:response as |cards|>
-              {{#if cards.length}}
-                <div class='paginated-cards__grid'>
-                  {{#each cards key='url' as |card|}}
-                    <card.component class='paginated-cards__card' />
-                  {{/each}}
-                </div>
-              {{else}}
-                <p class='paginated-cards__empty'>No cards found.</p>
-              {{/if}}
+              <div class='paginated-cards__grid'>
+                {{#each cards key='url' as |card|}}
+                  {{yield card}}
+                {{/each}}
+              </div>
             </:response>
             <:meta as |meta|>
               {{this.captureMeta meta}}
