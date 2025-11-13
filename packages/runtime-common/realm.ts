@@ -86,6 +86,7 @@ import {
   ensureFullMatrixUserId,
   getMatrixUsername,
 } from './matrix-client';
+import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler';
 
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
@@ -3635,7 +3636,8 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
   if (
     resourceUrl.startsWith('@cardstack/boxel-icons') ||
     resourceUrl.startsWith('@cardstack/boxel-ui') ||
-    resourceUrl.startsWith('@cardstack/boxel-host/commands')
+    resourceUrl.startsWith('@cardstack/boxel-host/commands') ||
+    resourceUrl.startsWith(PACKAGES_FAKE_ORIGIN)
   ) {
     return true;
   }
