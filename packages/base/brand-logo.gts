@@ -1,3 +1,4 @@
+import GlimmerComponent from '@glimmer/component';
 import { FieldContainer, GridContainer } from '@cardstack/boxel-ui/components';
 import {
   entriesToCssRuleMap,
@@ -37,14 +38,14 @@ class Embedded extends Component<typeof BrandLogo> {
           <p>Scales in proportion to size of logo used</p>
           <div class='preview-grid border-container'>
             <div class='preview-container'>
-              <@fields.primaryMark1
-                class='primary-mark clearance-annotation-border'
-              />
+              <div class='primary-mark clearance-annotation-border'>
+                <@fields.primaryMark1 />
+              </div>
             </div>
             <div class='preview-container'>
-              <@fields.secondaryMark1
-                class='secondary-mark clearance-annotation-border'
-              />
+              <div class='secondary-mark clearance-annotation-border'>
+                <@fields.secondaryMark1 />
+              </div>
             </div>
           </div>
         </div>
@@ -56,17 +57,17 @@ class Embedded extends Component<typeof BrandLogo> {
           <div class='preview-grid border-container'>
             <div class='preview-container'>
               <span class='annotation'><@fields.primaryMarkMinHeight /></span>
-              <@fields.primaryMark1
-                class='primary-mark height-annotation-border'
-              />
+              <div class='primary-mark height-annotation-border'>
+                <@fields.primaryMark1 />
+              </div>
             </div>
             <div class='preview-container'>
               <span class='annotation'>
                 <@fields.secondaryMarkMinHeight />
               </span>
-              <@fields.secondaryMark1
-                class='secondary-mark height-annotation-border'
-              />
+              <div class='secondary-mark height-annotation-border'>
+                <@fields.secondaryMark1 />
+              </div>
             </div>
           </div>
         </div>
@@ -79,7 +80,9 @@ class Embedded extends Component<typeof BrandLogo> {
               <p>{{f.description}}</p>
             {{/let}}
             <div class='preview-container border-container'>
-              <@fields.primaryMark1 class='primary-mark' />
+              <LogoContainer @variant='primary'>
+                <@fields.primaryMark1 />
+              </LogoContainer>
             </div>
           </div>
         </FieldContainer>
@@ -89,7 +92,9 @@ class Embedded extends Component<typeof BrandLogo> {
               <p>{{f.description}}</p>
             {{/let}}
             <div class='preview-container border-container dark-container'>
-              <@fields.primaryMark2 class='primary-mark' />
+              <LogoContainer @variant='primary'>
+                <@fields.primaryMark2 />
+              </LogoContainer>
             </div>
           </div>
         </FieldContainer>
@@ -102,7 +107,9 @@ class Embedded extends Component<typeof BrandLogo> {
               <p>{{f.description}}</p>
             {{/let}}
             <div class='preview-container border-container'>
-              <@fields.secondaryMark1 class='secondary-mark' />
+              <LogoContainer @variant='secondary'>
+                <@fields.secondaryMark1 />
+              </LogoContainer>
             </div>
           </div>
         </FieldContainer>
@@ -112,7 +119,9 @@ class Embedded extends Component<typeof BrandLogo> {
               <p>{{f.description}}</p>
             {{/let}}
             <div class='preview-container border-container dark-container'>
-              <@fields.secondaryMark2 class='secondary-mark' />
+              <LogoContainer @variant='secondary'>
+                <@fields.secondaryMark2 />
+              </LogoContainer>
             </div>
           </div>
         </FieldContainer>
@@ -125,26 +134,42 @@ class Embedded extends Component<typeof BrandLogo> {
           <div class='preview-grid border-container border-group'>
             <div class='preview-container greyscale-group'>
               {{#if @model.primaryMarkGreyscale1}}
-                <@fields.primaryMarkGreyscale1 class='primary-mark' />
+                <LogoContainer @variant='primary'>
+                  <@fields.primaryMarkGreyscale1 />
+                </LogoContainer>
               {{else}}
-                <@fields.primaryMark1 class='primary-mark grayscale' />
+                <LogoContainer @variant='primary' @isGreyscale={{true}}>
+                  <@fields.primaryMark1 />
+                </LogoContainer>
               {{/if}}
               {{#if @model.secondaryMarkGreyscale1}}
-                <@fields.secondaryMarkGreyscale1 class='secondary-mark' />
+                <LogoContainer @variant='secondary'>
+                  <@fields.secondaryMarkGreyscale1 />
+                </LogoContainer>
               {{else if @model.secondaryMark1}}
-                <@fields.secondaryMark1 class='secondary-mark grayscale' />
+                <LogoContainer @variant='secondary' @isGreyscale={{true}}>
+                  <@fields.secondaryMark1 />
+                </LogoContainer>
               {{/if}}
             </div>
             <div class='preview-container greyscale-group dark-container'>
               {{#if @model.primaryMarkGreyscale2}}
-                <@fields.primaryMarkGreyscale2 class='primary-mark' />
+                <LogoContainer @variant='primary'>
+                  <@fields.primaryMarkGreyscale2 />
+                </LogoContainer>
               {{else}}
-                <@fields.primaryMark2 class='primary-mark grayscale' />
+                <LogoContainer @variant='primary' @isGreyscale={{true}}>
+                  <@fields.primaryMark2 />
+                </LogoContainer>
               {{/if}}
               {{#if @model.secondaryMarkGreyscale2}}
-                <@fields.secondaryMarkGreyscale2 class='secondary-mark' />
+                <LogoContainer @variant='secondary'>
+                  <@fields.secondaryMarkGreyscale2 />
+                </LogoContainer>
               {{else if @model.secondaryMark2}}
-                <@fields.secondaryMark2 class='secondary-mark grayscale' />
+                <LogoContainer @variant='secondary' @isGreyscale={{true}}>
+                  <@fields.secondaryMark2 />
+                </LogoContainer>
               {{/if}}
             </div>
           </div>
@@ -158,14 +183,14 @@ class Embedded extends Component<typeof BrandLogo> {
           {{/let}}
           <div class='preview-grid border-container border-group'>
             <div class='preview-container'>
-              <div class='icon-preview-container'>
-                <@fields.socialMediaProfileIcon class='profile-icon' />
-              </div>
+              <LogoContainer @variant='profile' class='icon-preview-container'>
+                <@fields.socialMediaProfileIcon />
+              </LogoContainer>
             </div>
             <div class='preview-container'>
-              <div class='icon-preview-container'>
-                <@fields.socialMediaProfileIcon class='profile-icon' />
-              </div>
+              <LogoContainer @variant='profile' class='icon-preview-container'>
+                <@fields.socialMediaProfileIcon />
+              </LogoContainer>
               <span class='media-handle'>@username</span>
             </div>
           </div>
@@ -215,14 +240,15 @@ class Embedded extends Component<typeof BrandLogo> {
         border-radius: var(--boxel-border-radius);
       }
       .dark-container {
-        background-color: var(--foreground);
-        color: var(--background);
+        background-color: var(--foreground, var(--boxel-dark));
+        color: var(--background, var(--boxel-light));
       }
       .greyscale-group {
         justify-content: space-evenly;
         gap: var(--boxel-sp-6xs);
       }
       .clearance-annotation-border {
+        height: var(--logo-min-height);
         border-color: var(--annotation);
         border-style: solid;
         border-width: var(--mark-clearance, 0px);
@@ -234,7 +260,8 @@ class Embedded extends Component<typeof BrandLogo> {
         white-space: nowrap;
       }
       .height-annotation-border {
-        padding-left: var(--boxel-sp-xs);
+        height: var(--logo-min-height);
+        padding-left: var(--mark-clearance);
         border-left: 4px solid var(--annotation);
       }
       .primary-mark {
@@ -250,11 +277,6 @@ class Embedded extends Component<typeof BrandLogo> {
           var(--brand-secondary-mark-clearance-ratio) *
             var(--brand-secondary-mark-min-height)
         );
-      }
-      .profile-icon {
-        --logo-min-height: var(--boxel-icon-lg);
-        aspect-ratio: 1;
-        padding: 5px;
       }
       .grayscale {
         filter: grayscale(1);
@@ -278,22 +300,73 @@ export class MarkField extends URLField {
   static displayName = 'Mark URL';
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <img
-        class='mark-image'
-        src={{@model}}
-        {{! @glint-ignore }}
-        ...attributes
-      />
+      <img class='mark-image' src={{@model}} />
       <style scoped>
-        @layer {
-          .mark-image {
-            width: auto;
-            height: var(--logo-min-height, 2.5rem);
-          }
+        .mark-image {
+          min-height: var(--logo-min-height);
+          height: var(--logo-height);
+          max-width: 100%;
+          max-height: 100%;
         }
       </style>
     </template>
   };
+}
+
+export class LogoContainer extends GlimmerComponent<{
+  Args: {
+    height?: string;
+    margin?: string;
+    width?: string;
+    variant?: 'primary' | 'secondary' | 'profile';
+    isGreyscale?: boolean;
+  };
+  Element: HTMLElement;
+  Blocks: { default: [] };
+}> {
+  <template>
+    <figure
+      class='mark-container mark--{{@variant}} mark--greyscale={{@isGreyscale}}'
+      ...attributes
+    >
+      {{yield}}
+    </figure>
+    <style scoped>
+      @layer {
+        .mark-container {
+          --logo-height: var(--logo-min-height, 30px);
+          --mark-container-height: calc(
+            var(--logo-height) + 2 * var(--mark-clearance)
+          );
+          margin: 0;
+          padding: var(--mark-clearance, 5px);
+          height: var(--mark-container-height);
+        }
+        .mark--primary {
+          --logo-min-height: var(--brand-primary-mark-min-height);
+          --mark-clearance: calc(
+            var(--brand-primary-mark-clearance-ratio) *
+              var(--brand-primary-mark-min-height)
+          );
+        }
+        .mark--secondary {
+          --logo-min-height: var(--brand-secondary-mark-min-height);
+          --mark-clearance: calc(
+            var(--brand-secondary-mark-clearance-ratio) *
+              var(--brand-secondary-mark-min-height)
+          );
+        }
+        .mark--greyscale {
+          filter: grayscale(1);
+        }
+        .mark--profile {
+          --logo-min-height: var(--boxel-icon-med);
+          --mark-padding: 5px;
+          aspect-ratio: 1;
+        }
+      }
+    </style>
+  </template>
 }
 
 export default class BrandLogo extends FieldDef {
