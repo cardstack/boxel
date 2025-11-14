@@ -27,6 +27,7 @@ import {
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  setupOperatorModeStateCleanup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
@@ -46,6 +47,7 @@ module('Integration | create app module via ai-assistant', function (hooks) {
   const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
 
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

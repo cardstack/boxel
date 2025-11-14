@@ -38,6 +38,7 @@ import {
   setupOnSave,
   type TestContextWithSave,
   withSlowSave,
+  setupOperatorModeStateCleanup,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -46,6 +47,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | operator-mode', function (hooks) {
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
 
   const realmName = 'Operator Mode Workspace';
   let loader: Loader;

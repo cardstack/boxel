@@ -42,6 +42,7 @@ import {
   getMonacoContent,
   setMonacoContent,
   setupRealmServerEndpoints,
+  setupOperatorModeStateCleanup,
 } from '../../../helpers';
 import {
   CardDef,
@@ -65,6 +66,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
   let localPersistenceService: LocalPersistenceService;
 
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {

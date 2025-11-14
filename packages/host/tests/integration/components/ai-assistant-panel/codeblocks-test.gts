@@ -33,6 +33,7 @@ import {
   setupLocalIndexing,
   setupOnSave,
   getMonacoContent,
+  setupOperatorModeStateCleanup,
 } from '../../../helpers';
 import {
   CardDef,
@@ -53,6 +54,7 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
   let operatorModeStateService: OperatorModeStateService;
 
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {

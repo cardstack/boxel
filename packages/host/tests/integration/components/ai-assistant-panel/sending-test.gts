@@ -27,6 +27,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
+  setupOperatorModeStateCleanup,
 } from '../../../helpers';
 import {
   CardDef,
@@ -46,6 +47,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
   let operatorModeStateService: OperatorModeStateService;
 
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {

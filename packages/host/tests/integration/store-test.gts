@@ -48,6 +48,7 @@ import {
   setupIntegrationTestRealm,
   type TestContextWithSave,
   withSlowSave,
+  setupOperatorModeStateCleanup,
 } from '../helpers';
 import { TestRealmAdapter } from '../helpers/adapter';
 import {
@@ -67,6 +68,7 @@ import { setupRenderingTest } from '../helpers/setup';
 
 module('Integration | Store', function (hooks) {
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   setupBaseRealm(hooks);
   let api: typeof CardAPI;
   let loader: Loader;

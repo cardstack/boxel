@@ -16,6 +16,7 @@ import {
   setupLocalIndexing,
   setupOnSave,
   type TestContextWithSave,
+  setupOperatorModeStateCleanup,
 } from '../../helpers';
 import {
   BigIntegerField,
@@ -32,6 +33,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 module('Integration | text-input-validator', function (hooks) {
   let realm: Realm;
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);

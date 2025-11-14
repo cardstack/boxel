@@ -35,6 +35,7 @@ import {
   setupOnSave,
   getMonacoContent,
   setMonacoContent,
+  setupOperatorModeStateCleanup,
 } from '../../../helpers';
 import {
   CardDef,
@@ -57,6 +58,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
   let operatorModeStateService: OperatorModeStateService;
 
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {

@@ -30,6 +30,7 @@ import {
   setupLocalIndexing,
   setupOnSave,
   type TestContextWithSave,
+  setupOperatorModeStateCleanup,
 } from '../../../helpers';
 import {
   CardDef,
@@ -52,6 +53,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
   let operatorModeStateService: OperatorModeStateService;
 
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {

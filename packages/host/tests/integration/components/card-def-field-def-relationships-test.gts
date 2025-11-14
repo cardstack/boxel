@@ -19,6 +19,7 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   provideConsumeContext,
+  setupOperatorModeStateCleanup,
 } from '../../helpers';
 import {
   CardDef,
@@ -51,6 +52,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   </template>;
 
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

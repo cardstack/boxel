@@ -19,6 +19,7 @@ import {
   testRealmURL,
   setupLocalIndexing,
   setupIntegrationTestRealm,
+  setupOperatorModeStateCleanup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
@@ -28,6 +29,7 @@ const realmName = 'Local Workspace';
 
 module('Integration | card-catalog', function (hooks) {
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

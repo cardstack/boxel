@@ -78,6 +78,7 @@ export {
   testRealmInfo,
   percySnapshot,
 };
+export { setupOperatorModeStateCleanup } from './operator-mode-state';
 export * from '@cardstack/runtime-common/helpers';
 export * from './indexer';
 
@@ -431,6 +432,14 @@ export function setupLocalIndexing(hooks: NestedHooks) {
     let context = this as RenderingContextWithPrerender;
     context.__cardPrerenderElement?.remove();
     context.__cardPrerenderElement = undefined;
+    store.resetCache();
+    let renderStore = getService('render-store');
+    renderStore.resetCache();
+    let loaderService = getService('loader-service');
+    loaderService.resetLoader({
+      clearFetchCache: true,
+      reason: 'test teardown',
+    });
   });
 }
 

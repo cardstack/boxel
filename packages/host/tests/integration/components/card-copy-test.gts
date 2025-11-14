@@ -31,6 +31,7 @@ import {
   setupOnSave,
   type TestContextWithSave,
   setupIntegrationTestRealm,
+  setupOperatorModeStateCleanup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
@@ -49,6 +50,7 @@ module('Integration | card-copy', function (hooks) {
   let noop = () => {};
 
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   hooks.beforeEach(function () {
     loader = getService('loader-service').loader;
   });

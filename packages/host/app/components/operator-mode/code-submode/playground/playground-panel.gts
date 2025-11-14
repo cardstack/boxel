@@ -11,6 +11,7 @@ import { tracked, cached } from '@glimmer/tracking';
 import { restartableTask, task } from 'ember-concurrency';
 import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 import { consume, provide } from 'ember-provide-consume-context';
+import { resource, use } from 'ember-resources';
 
 import {
   BoxelSelect,
@@ -119,9 +120,18 @@ export default class PlaygroundPanel extends Component<Signature> {
   @tracked private newCardNonce = 0;
 
   @tracked private cardOptions: PrerenderedCardLike[] = [];
+  @use private moduleChangeTracker = resource(() => {
+    let moduleId = internalKeyFor(this.args.codeRef, undefined);
+    if (moduleId !== this.#currentModuleId) {
+      this.#currentModuleId = moduleId;
+      this.#creationError = false;
+    }
+    return moduleId;
+  });
 
   private fieldFormats: Format[] = ['embedded', 'fitted', 'atom', 'edit'];
   #creationError = false;
+  #currentModuleId: string | undefined;
 
   private get specQuery(): Query {
     return {
@@ -253,7 +263,9 @@ export default class PlaygroundPanel extends Component<Signature> {
     return htmlSafe(`max-width: ${maxWidth};`);
   }
   private get moduleId() {
-    return internalKeyFor(this.args.codeRef, undefined);
+    return (
+      this.moduleChangeTracker ?? internalKeyFor(this.args.codeRef, undefined)
+    );
   }
 
   private get isLoading() {
@@ -539,12 +551,12 @@ export default class PlaygroundPanel extends Component<Signature> {
     if (this.args.isFieldDef && this.specCard) {
       await this.createNewField.perform(this.specCard);
     } else {
-      let maybeId = await this.createNewCard.perform();
-      this.#creationError = typeof maybeId !== 'string';
+      await this.createNewCard.perform();
     }
   });
 
   @action private createNew() {
+    this.#creationError = false;
     this.args.isFieldDef && this.specCard
       ? this.createNewField.perform(this.specCard)
       : this.createNewCard.perform();
@@ -612,6 +624,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         realm: this.currentRealm,
       },
     );
+    this.#creationError = typeof maybeId !== 'string';
     this.persistSelections(
       // in the case of an error we still need to persist it in
       // order render the error doc
@@ -739,17 +752,20 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   private createNewWhenNoCards = (results?: PrerenderedCardLike[]) => {
     if (!results?.length) {
-      if (this.#creationError) {
-        // if we have a creation error then don't auto generate a new instance,
-        // otherwise we'll trap ourselves in a loop
-        this.#creationError = false;
+      if (
+        this.#creationError ||
+        this.cardError ||
+        this.autoGenerateInstance.isRunning ||
+        this.createNewCard.isRunning
+      ) {
         return;
       }
-
       // if expanded search returns no instances, create new instance
       afterRender(this.autoGenerateInstance.perform);
       return;
     }
+    // once instances exist we can allow future auto-generation attempts
+    this.#creationError = false;
   };
 
   <template>

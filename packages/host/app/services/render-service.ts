@@ -137,51 +137,57 @@ export default class RenderService extends Service {
     });
 
     let element = getIsolatedRenderElement(this.document);
-    let notLoaded: NotLoaded | undefined;
-    let tries = 0;
-    do {
-      notLoaded = undefined;
-      try {
-        log.debug(`rendering ${card.id} for indexing attempt #${tries}`);
-        render(component, element, this.owner, format);
-      } catch (err: any) {
-        notLoaded = err.additionalErrors?.find((e: any) =>
-          isNotLoadedError(e),
-        ) as NotLoaded | undefined;
-        if (isCardError(err) && notLoaded) {
-          let errorInstance = notLoaded?.instance;
-          if (!errorInstance) {
-            throw new Error(`bug: could not determine NotLoaded card instance`);
+    try {
+      let notLoaded: NotLoaded | undefined;
+      let tries = 0;
+      do {
+        notLoaded = undefined;
+        try {
+          log.debug(`rendering ${card.id} for indexing attempt #${tries}`);
+          render(component, element, this.owner, format);
+        } catch (err: any) {
+          notLoaded = err.additionalErrors?.find((e: any) =>
+            isNotLoadedError(e),
+          ) as NotLoaded | undefined;
+          if (isCardError(err) && notLoaded) {
+            let errorInstance = notLoaded?.instance;
+            if (!errorInstance) {
+              throw new Error(
+                `bug: could not determine NotLoaded card instance`,
+              );
+            }
+            let fieldName = notLoaded?.fieldName;
+            if (!fieldName) {
+              throw new Error(`bug: could not determine NotLoaded field`);
+            }
+            await this.resolveField({
+              card: errorInstance,
+              fieldName,
+              store,
+              visit,
+              realmPath,
+            });
+          } else {
+            throw err;
           }
-          let fieldName = notLoaded?.fieldName;
-          if (!fieldName) {
-            throw new Error(`bug: could not determine NotLoaded field`);
-          }
-          await this.resolveField({
-            card: errorInstance,
-            fieldName,
-            store,
-            visit,
-            realmPath,
-          });
-        } else {
-          throw err;
         }
+      } while (notLoaded && tries++ <= maxRenderThreshold);
+
+      // This guards against bugs that may trigger render cycles
+      if (tries > maxRenderThreshold) {
+        let error = new CardError(
+          `detected a cycle trying to render card ${card.constructor.name} (id: ${card.id})`,
+        );
+        error.additionalErrors = [notLoaded!];
+        throw error;
       }
-    } while (notLoaded && tries++ <= maxRenderThreshold);
 
-    // This guards against bugs that may trigger render cycles
-    if (tries > maxRenderThreshold) {
-      let error = new CardError(
-        `detected a cycle trying to render card ${card.constructor.name} (id: ${card.id})`,
-      );
-      error.additionalErrors = [notLoaded!];
-      throw error;
+      let serializer = new Serializer(voidMap);
+      let html = serializer.serialize(element);
+      return parseCardHtml(html);
+    } finally {
+      clearIsolatedRenderElement(element);
     }
-
-    let serializer = new Serializer(voidMap);
-    let html = serializer.serialize(element);
-    return parseCardHtml(html);
   };
 
   async renderCardComponent(
@@ -191,22 +197,30 @@ export default class RenderService extends Service {
     waitForAsync?: () => Promise<void>,
   ): Promise<string> {
     let element = getIsolatedRenderElement(this.document);
-    render(component, element, this.owner, format);
-    await waitForAsync?.();
-    // re-render after we have waited for the links to finish loading
-    render(component, element, this.owner, format);
-    let serializer = new Serializer(voidMap);
-    let html = serializer.serialize(element);
-    return parseCardHtml(html, capture);
+    try {
+      render(component, element, this.owner, format);
+      await waitForAsync?.();
+      // re-render after we have waited for the links to finish loading
+      render(component, element, this.owner, format);
+      let serializer = new Serializer(voidMap);
+      let html = serializer.serialize(element);
+      return parseCardHtml(html, capture);
+    } finally {
+      clearIsolatedRenderElement(element);
+    }
   }
 
   render = (component: ComponentLike): string => {
     let element = getIsolatedRenderElement(this.document);
-    render(component, element, this.owner);
+    try {
+      render(component, element, this.owner);
 
-    let serializer = new Serializer(voidMap);
-    let html = serializer.serialize(element);
-    return parseCardHtml(html);
+      let serializer = new Serializer(voidMap);
+      let html = serializer.serialize(element);
+      return parseCardHtml(html);
+    } finally {
+      clearIsolatedRenderElement(element);
+    }
   };
 
   // TODO delete me
@@ -353,4 +367,13 @@ export function getIsolatedRenderElement(
     }
   }
   return element;
+}
+
+function clearIsolatedRenderElement(element: SimpleElement) {
+  let child = element.firstChild;
+  while (child) {
+    let next = child.nextSibling;
+    element.removeChild(child);
+    child = next;
+  }
 }

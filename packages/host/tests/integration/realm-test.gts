@@ -2657,53 +2657,58 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let response = await handle(
-      realm,
-      new Request(`${testRealmURL}dir/driver`, {
-        method: 'PATCH',
-        headers: {
-          Accept: 'application/vnd.card+json',
-        },
-        body: JSON.stringify(
-          {
-            data: {
-              type: 'card',
-              attributes: {
-                card: {
-                  firstName: null,
-                  make: 'Mercedes Benz',
-                  model: 'C300',
-                  year: '2024',
-                },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}driver`,
-                  name: 'Driver',
-                },
-                fields: {
+    try {
+      (globalThis as any).__emulateServerPatchFailure = true;
+      let response = await handle(
+        realm,
+        new Request(`${testRealmURL}dir/driver`, {
+          method: 'PATCH',
+          headers: {
+            Accept: 'application/vnd.card+json',
+          },
+          body: JSON.stringify(
+            {
+              data: {
+                type: 'card',
+                attributes: {
                   card: {
-                    adoptsFrom: {
-                      module: `${testRealmURL}car`,
-                      name: 'Car',
+                    firstName: null,
+                    make: 'Mercedes Benz',
+                    model: 'C300',
+                    year: '2024',
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}driver`,
+                    name: 'Driver',
+                  },
+                  fields: {
+                    card: {
+                      adoptsFrom: {
+                        module: `${testRealmURL}car`,
+                        name: 'Car',
+                      },
                     },
                   },
                 },
               },
             },
-          },
-          null,
-          2,
-        ),
-      }),
-    );
+            null,
+            2,
+          ),
+        }),
+      );
 
-    assert.strictEqual(response.status, 500, '500 server error');
-    let json = await response.json();
-    assert.strictEqual(
-      json.errors[0].additionalErrors[0].errorDetail.message,
-      "field validation error: tried set instance of Car as field 'card' but it is not an instance of Person",
-    );
+      assert.strictEqual(response.status, 500, '500 server error');
+      let json = await response.json();
+      assert.strictEqual(
+        json.errors[0].additionalErrors[0].errorDetail.message,
+        "field validation error: tried set instance of Car as field 'card' but it is not an instance of Person",
+      );
+    } finally {
+      delete (globalThis as any).__emulateServerPatchFailure;
+    }
   });
 
   test('realm can serve delete card requests', async function (assert) {

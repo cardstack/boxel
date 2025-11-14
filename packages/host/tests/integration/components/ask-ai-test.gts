@@ -19,6 +19,7 @@ import {
   setupLocalIndexing,
   setupOnSave,
   assertMessages,
+  setupOperatorModeStateCleanup,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -31,6 +32,7 @@ module('Integration | ask-ai', function (hooks) {
   let operatorModeStateService: OperatorModeStateService;
 
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
