@@ -338,22 +338,26 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
 
     await fillIn('[data-test-message-field]', 'Persist attachments');
 
-    await waitUntil(() => {
-      let raw = window.localStorage.getItem(AiAssistantMessageDrafts);
-      if (!raw) {
-        return false;
-      }
-      try {
-        let parsed = JSON.parse(raw);
-        return Boolean(parsed?.[roomId]);
-      } catch (e) {
-        // Fail the test if JSON parsing fails
-        throw new Error(`Failed to parse localStorage draft: ${e.message}`);
-      }
-    }, {
-      timeout: 3000,
-      timeoutMessage: 'Timed out waiting for localStorage to contain a draft for the room',
-    });
+    await waitUntil(
+      () => {
+        let raw = window.localStorage.getItem(AiAssistantMessageDrafts);
+        if (!raw) {
+          return false;
+        }
+        try {
+          let parsed = JSON.parse(raw);
+          return Boolean(parsed?.[roomId]);
+        } catch (e: any) {
+          // Fail the test if JSON parsing fails
+          throw new Error(`Failed to parse localStorage draft: ${e.message}`);
+        }
+      },
+      {
+        timeout: 3000,
+        timeoutMessage:
+          'Timed out waiting for localStorage to contain a draft for the room',
+      },
+    );
 
     let rawDraft = window.localStorage.getItem(AiAssistantMessageDrafts);
     assert.ok(rawDraft, 'draft stored in localStorage');
