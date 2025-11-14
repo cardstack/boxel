@@ -3,8 +3,8 @@ import { sanitizeHtml } from './dompurify-runtime';
 import { escapeHtml } from './helpers/html';
 
 const DECORATIVE_BULLET_PATTERN =
-  // eslint-disable-next-line no-misleading-character-class -- we explicitly want to match pictographic symbols in addition to ASCII glyphs
-  /(^|\n)(\s*)([\p{Extended_Pictographic}★•▪●❖✦✧◉◦◾◽⬢⬡☑✔✅☑️➤➔➜➡→▶])(\s+)/gu;
+  // eslint-disable-next-line no-misleading-character-class -- match pictographic symbols plus a few geometric glyphs not covered by the Unicode class
+  /(^|\n)(\s*)([\p{Extended_Pictographic}★•▪●❖✦✧◉◦◾◽⬢⬡])(\s+)/gu;
 
 export function markedSync(
   markdown: string,
