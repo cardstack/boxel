@@ -23,7 +23,6 @@ export default class PaginatedCards extends GlimmerComponent<Signature> {
   @tracked totalResults = 0;
   @tracked currentPage = 0;
   readonly defaultPageSize = 12;
-  private lastCriteriaSignature: string | null = null;
 
   get pageSize(): number {
     let size = Number(this.args.pageSize);
@@ -56,41 +55,10 @@ export default class PaginatedCards extends GlimmerComponent<Signature> {
     return Boolean(this.args.query && this.normalizedRealms.length);
   }
 
-  private resetPagination(): void {
-    if (this.currentPage !== 0) {
-      this.currentPage = 0;
-    }
-    if (this.totalResults !== 0) {
-      this.totalResults = 0;
-    }
-  }
-
-  private buildCriteriaSignature(baseQuery: Query): string {
-    try {
-      return JSON.stringify({
-        query: baseQuery,
-        realms: this.normalizedRealms,
-        pageSize: this.pageSize,
-      });
-    } catch {
-      return `${Date.now()}`;
-    }
-  }
-
   get paginatedQuery(): Query | undefined {
     let baseQuery = this.args.query;
     if (!baseQuery) {
-      if (this.lastCriteriaSignature !== null) {
-        this.lastCriteriaSignature = null;
-        this.resetPagination();
-      }
       return undefined;
-    }
-
-    let signature = this.buildCriteriaSignature(baseQuery);
-    if (signature !== this.lastCriteriaSignature) {
-      this.lastCriteriaSignature = signature;
-      this.resetPagination();
     }
 
     return {
