@@ -487,7 +487,7 @@ export function getLinksToManyComponent({
     arrayField.children.map((child) =>
       getBoxComponent(cardTypeFor(field, child), child, field),
     ); // Wrap the the components in a function so that the template is reactive to changes in the model (this is essentially a helper)
-  let isComputed = !!field.computeVia;
+  let isComputed = !!field.computeVia || !!field.queryDefinition;
   let linksToManyComponent = class LinksToManyComponent extends GlimmerComponent<BoxComponentSignature> {
     <template>
       <DefaultFormatsConsumer as |defaultFormats|>

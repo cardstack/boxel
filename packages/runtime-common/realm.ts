@@ -117,6 +117,7 @@ import {
   fetchSessionRoom,
   upsertSessionRoom,
 } from './db-queries/session-room-queries';
+import type { WIPOptions } from './index-query-engine';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -2507,8 +2508,13 @@ export class Realm {
       throw e;
     }
 
+    let useWorkInProgressIndex = Boolean(
+      request.headers.get('X-Boxel-Building-Index'),
+    );
+
     let doc = await this.#realmIndexQueryEngine.search(cardsQuery, {
       loadLinks: true,
+      useWorkInProgressIndex,
     });
     return createResponse({
       body: JSON.stringify(doc, null, 2),
@@ -2694,9 +2700,15 @@ export class Realm {
         requestContext,
       });
     }
+    let opts: WIPOptions = {};
+    if (request.headers.get('X-Boxel-Building-Index') === 'true') {
+      opts.useWorkInProgressIndex = true;
+    }
     let { codeRef } = payload;
-    let maybeError =
-      await this.#realmIndexQueryEngine.getOwnDefinition(codeRef);
+    let maybeError = await this.#realmIndexQueryEngine.getOwnDefinition(
+      codeRef,
+      opts,
+    );
     if (!maybeError) {
       return notFound(request, requestContext);
     }

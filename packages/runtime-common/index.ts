@@ -173,6 +173,7 @@ export * from './utils';
 export * from './authorization-middleware';
 export * from './resource-types';
 export * from './query';
+export * from './query-field-utils';
 export * from './formats';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
@@ -432,6 +433,7 @@ export interface Store {
   ): Promise<T | CardErrorJSONAPI | undefined>;
   search(query: Query, realmURL?: URL): Promise<CardDef[]>;
   getSaveState(id: string): AutoSaveState | undefined;
+  refreshQueryField(card: CardDef, fieldName: string): Promise<void>;
 }
 
 export interface CardCatalogQuery extends Query {

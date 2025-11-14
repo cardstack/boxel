@@ -1,10 +1,11 @@
-import { fillIn, RenderingTestContext } from '@ember/test-helpers';
+import { fillIn, RenderingTestContext, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import formatISO from 'date-fns/formatISO';
 import parseISO from 'date-fns/parseISO';
-
 import { isAddress } from 'ethers';
+import { parse as parseQueryString } from 'qs';
+
 import { module, test } from 'qunit';
 
 import {
@@ -13,10 +14,17 @@ import {
   PermissionsContextName,
   localId,
   fields,
+  isSingleCardDocument,
   type LooseSingleCardDocument,
   type Permissions,
+  EqFilter,
+  CardTypeFilter,
+  ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
+
+import type CardService from '@cardstack/host/services/card-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
@@ -56,6 +64,7 @@ import {
   BigIntegerField,
   getQueryableValue,
   EthereumAddressField,
+  getQueryFieldState,
 } from '../../helpers/base-realm';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -3645,6 +3654,467 @@ module('Integration | serialization', function (hooks) {
     } else {
       assert.ok(false, 'Not a customer');
     }
+  });
+
+  test('query-backed relationships include canonical search links in serialized payloads', async function (assert) {
+    assert.expect(34);
+
+    class Person extends CardDef {
+      @field title = contains(StringField);
+    }
+
+    class QueryCard extends CardDef {
+      @field title = contains(StringField);
+      @field favorite = linksTo(Person, {
+        query: {
+          realm: '$thisRealm',
+          filter: {
+            eq: { title: '$this.title' },
+          },
+        },
+      });
+      @field matches = linksToMany(Person, {
+        query: {
+          realm: '$thisRealm',
+          filter: {
+            eq: { title: '$this.title' },
+          },
+          sort: [{ by: 'title', direction: 'asc' }],
+          page: { size: 5 },
+        },
+      });
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person, QueryCard },
+        'Person/target.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Target',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'query-card.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Target',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'QueryCard',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let cardService = getService('card-service') as CardService;
+    let rawDoc = await cardService.fetchJSON(`${testRealmURL}query-card`);
+    assert.ok(rawDoc, 'received document');
+    assert.ok(
+      isSingleCardDocument(rawDoc),
+      'received serialized card document',
+    );
+    if (!rawDoc || !isSingleCardDocument(rawDoc)) {
+      // eslint-disable-next-line qunit/no-early-return
+      return;
+    }
+    let doc = rawDoc;
+    let favoriteRelationship = doc.data.relationships!.favorite;
+    assert.ok(favoriteRelationship, 'favorite relationship exists');
+    let favoriteSearchLink = favoriteRelationship.links?.search;
+    assert.ok(favoriteSearchLink, 'favorite relationship exposes links.search');
+    let favoriteSearchURL = new URL(favoriteSearchLink!);
+    assert.strictEqual(
+      favoriteSearchURL.href.split('?')[0],
+      new URL('_search', testRealmURL).href,
+      'favorite search link points to canonical search endpoint',
+    );
+    let favoriteQueryParams = parseQueryString(
+      favoriteSearchURL.searchParams.toString(),
+    ) as Record<string, any>;
+    assert.strictEqual(
+      favoriteQueryParams.filter?.eq?.title,
+      'Target',
+      'favorite search link encodes interpolated filter',
+    );
+    assert.deepEqual(
+      favoriteRelationship.data,
+      { type: 'card', id: `${testRealmURL}Person/target` },
+      'favorite relationship retains resolved data entry',
+    );
+
+    let matchesRelationship = doc.data.relationships!.matches;
+    assert.ok(matchesRelationship, 'matches relationship exists');
+    assert.deepEqual(
+      matchesRelationship.data,
+      [{ type: 'card', id: `${testRealmURL}Person/target` }],
+      'matches relationship exposes aggregate data entries',
+    );
+    let matchesSearchLink = matchesRelationship.links?.search;
+    assert.ok(matchesSearchLink, 'matches relationship exposes links.search');
+    let matchesSearchURL = new URL(matchesSearchLink!);
+    assert.strictEqual(
+      matchesSearchURL.href.split('?')[0],
+      new URL('_search', testRealmURL).href,
+      'matches search link points to canonical search endpoint',
+    );
+    let matchesQueryParams = parseQueryString(
+      matchesSearchURL.searchParams.toString(),
+    ) as Record<string, any>;
+    assert.strictEqual(
+      matchesQueryParams.page?.size,
+      '5',
+      'matches search link preserves pagination',
+    );
+    assert.strictEqual(
+      matchesQueryParams.filter?.eq?.title,
+      'Target',
+      'matches search link encodes interpolated filter',
+    );
+    let firstChild = doc.data.relationships!['matches.0'];
+    assert.strictEqual(
+      firstChild?.links?.self,
+      `${testRealmURL}Person/target`,
+      'matches indexed relationship retains links to result resource',
+    );
+
+    let store = getService('store') as StoreService;
+    type QueryCardInstance = InstanceType<typeof QueryCard>;
+    let queryCardInstance = (await store.get(
+      `${testRealmURL}query-card`,
+    )) as QueryCardInstance;
+
+    let favoriteState = getQueryFieldState(queryCardInstance, 'favorite');
+    assert.ok(favoriteState, 'favorite query field state is seeded');
+    assert.strictEqual(
+      favoriteState?.searchURL,
+      favoriteSearchLink,
+      'favorite query field cache stores canonical search URL',
+    );
+    assert.deepEqual(
+      favoriteState?.relationship?.data,
+      favoriteRelationship.data,
+      'favorite query field cache stores relationship payload',
+    );
+    assert.ok(
+      favoriteState?.signature,
+      'favorite query field cache stores query signature',
+    );
+    assert.strictEqual(
+      (favoriteState?.query?.filter as EqFilter)?.eq?.title,
+      'Target',
+      'favorite query field cache stores interpolated filter',
+    );
+    assert.strictEqual(
+      (
+        (favoriteState?.query?.filter as CardTypeFilter)
+          ?.type as ResolvedCodeRef
+      )?.module,
+      favoriteQueryParams.filter?.type?.module,
+      'favorite query field cache preserves implicit type filter module',
+    );
+    assert.strictEqual(
+      favoriteState?.query?.page?.size,
+      1,
+      'favorite query field cache normalizes page size',
+    );
+    assert.strictEqual(
+      favoriteState?.realm,
+      testRealmURL,
+      'favorite query field cache records resolved realm',
+    );
+    assert.false(
+      favoriteState?.stale,
+      'favorite query field cache starts in a non-stale state',
+    );
+
+    let matchesState = getQueryFieldState(queryCardInstance, 'matches');
+    assert.ok(matchesState, 'matches query field state is seeded');
+    assert.strictEqual(
+      matchesState?.searchURL,
+      matchesSearchLink,
+      'matches query field cache stores canonical search URL',
+    );
+    assert.deepEqual(
+      matchesState?.relationship?.data,
+      matchesRelationship.data,
+      'matches query field cache stores relationship payload',
+    );
+    assert.ok(
+      matchesState?.signature,
+      'matches query field cache stores query signature',
+    );
+    assert.strictEqual(
+      (matchesState?.query?.filter as EqFilter)?.eq?.title,
+      'Target',
+      'matches query field cache stores interpolated filter',
+    );
+    assert.strictEqual(
+      ((matchesState?.query?.filter as CardTypeFilter)?.type as ResolvedCodeRef)
+        ?.module,
+      matchesQueryParams.filter?.type?.module,
+      'matches query field cache preserves implicit type filter module',
+    );
+    assert.strictEqual(
+      matchesState?.query?.page?.size,
+      5,
+      'matches query field cache normalizes page size',
+    );
+    assert.strictEqual(
+      matchesState?.query?.sort?.[0]?.by,
+      'title',
+      'matches query field cache preserves sort field',
+    );
+    assert.strictEqual(
+      matchesState?.query?.sort?.[0]?.direction,
+      'asc',
+      'matches query field cache preserves sort direction',
+    );
+    assert.strictEqual(
+      matchesState?.realm,
+      testRealmURL,
+      'matches query field cache records resolved realm',
+    );
+    assert.false(
+      matchesState?.stale,
+      'matches query field cache starts in a non-stale state',
+    );
+  });
+
+  test('query-backed fields refresh when their signature changes', async function (assert) {
+    assert.expect(6);
+
+    class Person extends CardDef {
+      @field title = contains(StringField);
+    }
+
+    class QueryCard extends CardDef {
+      @field title = contains(StringField);
+      @field favorite = linksTo(Person, {
+        query: {
+          realm: '$thisRealm',
+          filter: {
+            eq: { title: '$this.title' },
+          },
+        },
+      });
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person, QueryCard },
+        'Person/target.json': {
+          data: {
+            type: 'card',
+            attributes: { title: 'Target' },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'Person/backup.json': {
+          data: {
+            type: 'card',
+            attributes: { title: 'Backup' },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'query-card.json': {
+          data: {
+            type: 'card',
+            attributes: { title: 'Target' },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'QueryCard',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let store = getService('store') as StoreService;
+    type QueryCardInstance = InstanceType<typeof QueryCard>;
+    let queryCard = (await store.get(
+      `${testRealmURL}query-card`,
+    )) as QueryCardInstance;
+
+    assert.strictEqual(
+      queryCard.favorite?.id,
+      `${testRealmURL}Person/target`,
+      'initial favorite is Target',
+    );
+
+    let initialState = getQueryFieldState(queryCard, 'favorite');
+    assert.ok(initialState?.signature, 'initial signature is captured');
+
+    queryCard.title = 'Backup';
+
+    assert.strictEqual(
+      getQueryFieldState(queryCard, 'favorite')?.signature,
+      initialState?.signature,
+      'signature stays the same until field is accessed again',
+    );
+
+    // Accessing the field triggers the coordinator to recompute the query
+    queryCard.favorite;
+
+    await waitUntil(() => {
+      return (
+        getQueryFieldState(queryCard, 'favorite')?.signature !==
+        initialState?.signature
+      );
+    });
+
+    assert.notStrictEqual(
+      getQueryFieldState(queryCard, 'favorite')?.signature,
+      initialState?.signature,
+      'signature updates after recompute',
+    );
+
+    assert.strictEqual(
+      queryCard.favorite?.id,
+      `${testRealmURL}Person/backup`,
+      'favorite updates after the query reruns',
+    );
+
+    assert.strictEqual(
+      getQueryFieldState(queryCard, 'favorite')?.relationship?.links?.self,
+      `${testRealmURL}Person/backup`,
+      'query field state reflects refreshed relationship data',
+    );
+  });
+
+  test('store.refreshQueryField forces a refresh with the latest results', async function (assert) {
+    assert.expect(5);
+
+    class Person extends CardDef {
+      @field title = contains(StringField);
+    }
+
+    class QueryCard extends CardDef {
+      @field title = contains(StringField);
+      @field matches = linksToMany(Person, {
+        query: {
+          filter: {
+            eq: { title: '$this.title' },
+          },
+        },
+      });
+    }
+
+    let refreshRealmSetupResult = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person, QueryCard },
+        'Person/target.json': {
+          data: {
+            type: 'card',
+            attributes: { title: 'Target' },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'query-card.json': {
+          data: {
+            type: 'card',
+            attributes: { title: 'Target' },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'QueryCard',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let integrationRealm = refreshRealmSetupResult.realm;
+    let store = getService('store') as StoreService;
+    type QueryCardInstance = InstanceType<typeof QueryCard>;
+    let queryCard = (await store.get(
+      `${testRealmURL}query-card`,
+    )) as QueryCardInstance;
+
+    assert.strictEqual(
+      queryCard.matches.length,
+      1,
+      'initial matches include the original person',
+    );
+
+    let initialState = getQueryFieldState(queryCard, 'matches');
+    let initialRelationship = initialState?.relationship;
+    let initialCount = Array.isArray(initialRelationship?.data)
+      ? initialRelationship!.data.length
+      : 0;
+    assert.strictEqual(
+      initialCount,
+      1,
+      'query field state tracks initial relationship entries',
+    );
+
+    let newPerson = new Person({ title: 'Target' });
+    await saveCard(newPerson, `${testRealmURL}Person/second`, loader);
+    await waitUntil(async () => {
+      let instance = await integrationRealm.realmIndexQueryEngine.instance(
+        new URL(`${testRealmURL}Person/second`),
+      );
+      return instance?.type === 'instance';
+    });
+
+    await store.refreshQueryField(queryCard, 'matches');
+
+    await waitUntil(() => {
+      let matchesState = getQueryFieldState(queryCard, 'matches');
+      let refreshedData = matchesState?.relationship?.data;
+      return Array.isArray(refreshedData) && refreshedData.length === 2;
+    });
+
+    assert.ok(
+      getQueryFieldState(queryCard, 'matches')?.signature,
+      'manual refresh records a new signature',
+    );
+
+    assert.strictEqual(
+      queryCard.matches.length,
+      2,
+      'manual refresh loads the latest results',
+    );
+
+    let refreshedIds = queryCard.matches.map((card) => card?.id).sort();
+    assert.deepEqual(
+      refreshedIds,
+      [`${testRealmURL}Person/second`, `${testRealmURL}Person/target`].sort(),
+      'matches include the newly saved person',
+    );
   });
 
   test('can serialize polymorphic containsMany fields nested within a field', async function (assert) {

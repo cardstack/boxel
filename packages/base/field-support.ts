@@ -22,6 +22,7 @@ import { initSharedState } from './shared-state';
 import { flatMap } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import type { ConfigurationInput, FieldConfiguration } from './card-api';
+import { markQueryFieldStaleInternal } from './query-field-support';
 
 export interface NotLoadedValue {
   type: 'not-loaded';
@@ -211,9 +212,9 @@ export function resolveFieldConfiguration(
     if (!input) return undefined;
     try {
       if (typeof input === 'function') {
-        return (input as (this: Readonly<T>) => FieldConfiguration | undefined).call(
-          instance as unknown as T,
-        );
+        return (
+          input as (this: Readonly<T>) => FieldConfiguration | undefined
+        ).call(instance as unknown as T);
       } else {
         return input as FieldConfiguration;
       }
@@ -254,6 +255,13 @@ export function getFieldDescription(
     fieldDescriptions.set(cardOrFieldKlass, descriptionsMap);
   }
   return descriptionsMap.get(fieldName);
+}
+
+export function markQueryFieldStale(
+  instance: BaseDef,
+  fieldName: string,
+): boolean {
+  return markQueryFieldStaleInternal(instance, fieldName, notifyCardTracking);
 }
 
 export function getFieldOverrides<T extends BaseDef>(

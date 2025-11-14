@@ -64,8 +64,19 @@ import {
   loadDocument,
   LocalPath,
   getCardMenuItems,
+  type QueryWithInterpolations,
 } from '@cardstack/runtime-common';
-
+import {
+  beginQueryFieldEvaluation,
+  getQueryFieldState,
+  notifyQueryFieldAccess,
+  registerQueryFieldCoordinator,
+  seedQueryFieldState,
+  setQueryFieldState,
+  validateRelationshipQuery,
+  type QueryFieldAccessPayload,
+  type QueryFieldCoordinator,
+} from './query-field-support';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
 import DefaultFittedTemplate from './default-templates/fitted';
@@ -82,7 +93,6 @@ import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 import ImportIcon from '@cardstack/boxel-icons/import';
-// normalizeEnumOptions used by enum moved to packages/base/enum.gts
 
 import {
   callSerializeHook,
@@ -115,6 +125,7 @@ import {
   notifyCardTracking,
   peekAtField,
   relationshipMeta,
+  markQueryFieldStale,
   setFieldDescription,
   type NotLoadedValue,
 } from './field-support';
@@ -132,6 +143,7 @@ interface CardOrFieldTypeIconSignature {
 export type CardOrFieldTypeIcon = ComponentLike<CardOrFieldTypeIconSignature>;
 
 export {
+  beginQueryFieldEvaluation,
   deserialize,
   getCardMeta,
   getFieldDescription,
@@ -143,14 +155,20 @@ export {
   meta,
   primitive,
   realmURL,
+  registerQueryFieldCoordinator,
   relativeTo,
   relationshipMeta,
   serialize,
   serializeCard,
+  getQueryFieldState,
+  setQueryFieldState,
+  markQueryFieldStale,
   type BoxComponent,
   type DeserializeOpts,
   type GetCardMenuItemParams,
   type JSONAPISingleResourceDocument,
+  type QueryFieldAccessPayload,
+  type QueryFieldCoordinator,
   type ResourceID,
   type SerializeOpts,
 };
@@ -217,6 +235,10 @@ interface Options {
   configuration?: ConfigurationInput<any>;
 }
 
+interface RelationshipOptions extends Options {
+  query?: QueryWithInterpolations;
+}
+
 export interface CardContext<T extends CardDef = CardDef> {
   commandContext?: CommandContext;
   cardComponentModifier?: typeof Modifier<{
@@ -244,6 +266,7 @@ export interface FieldConstructor<T> {
   description: string | undefined;
   isUsed?: true;
   isPolymorphic?: true;
+  queryDefinition?: QueryWithInterpolations;
 }
 
 type CardChangeSubscriber = (
@@ -343,6 +366,8 @@ export interface Field<
   description: undefined | string;
   // Optional per-usage configuration stored on the field descriptor
   configuration?: ConfigurationInput<any>;
+  // Declarative relationship query definition, if provided
+  queryDefinition?: QueryWithInterpolations;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
   // use the rendering mechanism to tell if a card is used or not,
@@ -930,6 +955,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   readonly configuration?: ConfigurationInput<any>;
+  readonly queryDefinition?: QueryWithInterpolations;
   constructor({
     cardThunk,
     computeVia,
@@ -937,6 +963,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     description,
     isUsed,
     isPolymorphic,
+    queryDefinition,
   }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
@@ -944,6 +971,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     this.description = description;
     this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
+    this.queryDefinition = queryDefinition;
   }
 
   get card(): CardT {
@@ -954,6 +982,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     let deserialized = getDataBucket(instance);
     // this establishes that our field should rerender when cardTracking for this card changes
     entangleWithCardTracking(instance);
+    notifyQueryFieldAccess(instance, this);
     let maybeNotLoaded = deserialized.get(this.name);
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance, this, maybeNotLoaded.reference);
@@ -982,6 +1011,12 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     visited: Set<string>,
     opts?: SerializeOpts,
   ) {
+    if (this.queryDefinition) {
+      let docMeta = (doc.data.meta = doc.data.meta ?? {});
+      let queryMeta = (docMeta as any).queryFields ?? {};
+      (docMeta as any).queryFields = queryMeta;
+      queryMeta[this.name] = JSON.parse(JSON.stringify(this.queryDefinition));
+    }
     if (isNotLoadedValue(value)) {
       return {
         relationships: {
@@ -1212,7 +1247,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   }
 
   component(model: Box<CardDef>): BoxComponent {
-    let isComputed = !!this.computeVia;
+    let isComputed = !!this.computeVia || !!this.queryDefinition;
     let fieldName = this.name as keyof CardDef;
     let linksToField = this;
     let getInnerModel = () => {
@@ -1296,6 +1331,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   readonly configuration?: ConfigurationInput<any>;
+  readonly queryDefinition?: QueryWithInterpolations;
   constructor({
     cardThunk,
     computeVia,
@@ -1303,6 +1339,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     description,
     isUsed,
     isPolymorphic,
+    queryDefinition,
   }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
@@ -1310,6 +1347,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     this.description = description;
     this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
+    this.queryDefinition = queryDefinition;
   }
 
   get card(): FieldT {
@@ -1318,6 +1356,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
   getter(instance: CardDef): BaseInstanceType<FieldT> {
     entangleWithCardTracking(instance);
+    notifyQueryFieldAccess(instance, this);
 
     if (this.computeVia) {
       // For computed LinksToMany fields, use the main getter function
@@ -1438,6 +1477,12 @@ class LinksToMany<FieldT extends CardDefConstructor>
     visited: Set<string>,
     opts?: SerializeOpts,
   ) {
+    if (this.queryDefinition) {
+      let docMeta = (doc.data.meta = doc.data.meta ?? {});
+      let queryMeta = (docMeta as any).queryFields ?? {};
+      (docMeta as any).queryFields = queryMeta;
+      queryMeta[this.name] = JSON.parse(JSON.stringify(this.queryDefinition));
+    }
     // Check for skip-serialization marker for computed fields that can't be computed
     if (
       values &&
@@ -1849,7 +1894,7 @@ export const field = function (
   key: string | symbol,
   { initializer }: { initializer(): any },
 ) {
-  let descriptor = initializer().setupField(key);
+  let descriptor = initializer().setupField(key, target as BaseDef);
   if (descriptor[fieldDescription]) {
     setFieldDescription(
       target.constructor,
@@ -1866,7 +1911,7 @@ export function containsMany<FieldT extends FieldDefConstructor>(
   options?: Options,
 ): BaseInstanceType<FieldT>[] {
   return {
-    setupField(fieldName: string) {
+    setupField(fieldName: string, _ownerPrototype: BaseDef) {
       let { computeVia, description, isUsed } = options ?? {};
       let instance = new ContainsMany({
         cardThunk: cardThunk(field),
@@ -1887,7 +1932,7 @@ export function contains<FieldT extends FieldDefConstructor>(
   options?: Options,
 ): BaseInstanceType<FieldT> {
   return {
-    setupField(fieldName: string) {
+    setupField(fieldName: string, _ownerPrototype: BaseDef) {
       let { computeVia, description, isUsed } = options ?? {};
       let instance = new Contains({
         cardThunk: cardThunk(field),
@@ -1905,17 +1950,21 @@ contains[fieldType] = 'contains' as FieldType;
 
 export function linksTo<CardT extends CardDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
-  options?: Options,
+  options?: RelationshipOptions,
 ): BaseInstanceType<CardT> {
   return {
-    setupField(fieldName: string) {
-      let { computeVia, description, isUsed } = options ?? {};
+    setupField(fieldName: string, ownerPrototype: BaseDef) {
+      let { computeVia, description, isUsed, query } = options ?? {};
+      if (query) {
+        validateRelationshipQuery(ownerPrototype, fieldName, query);
+      }
       let instance = new LinksTo({
         cardThunk: cardThunk(cardOrThunk),
         computeVia,
         name: fieldName,
         description,
         isUsed,
+        queryDefinition: query,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
@@ -1926,17 +1975,21 @@ linksTo[fieldType] = 'linksTo' as FieldType;
 
 export function linksToMany<CardT extends CardDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
-  options?: Options,
+  options?: RelationshipOptions,
 ): BaseInstanceType<CardT>[] {
   return {
-    setupField(fieldName: string) {
-      let { computeVia, description, isUsed } = options ?? {};
+    setupField(fieldName: string, ownerPrototype: BaseDef) {
+      let { computeVia, description, isUsed, query } = options ?? {};
+      if (query) {
+        validateRelationshipQuery(ownerPrototype, fieldName, query);
+      }
       let instance = new LinksToMany({
         cardThunk: cardThunk(cardOrThunk),
         computeVia,
         name: fieldName,
         description,
         isUsed,
+        queryDefinition: query,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
@@ -3088,6 +3141,10 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       // saved will throw
       instance[isSavedInstance] = true;
     }
+  }
+
+  if (isCardInstance(instance)) {
+    seedQueryFieldState(instance as CardDef, resource);
   }
 
   // now we make the instance "live" after it's all constructed
