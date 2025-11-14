@@ -255,9 +255,7 @@ export class RealmIndexQueryEngine {
     for (let [fieldName, fieldDefinition] of Object.entries(
       definition.fields,
     )) {
-      let metaQuery =
-        (resource.meta as any)?.queryFields?.[fieldName] ?? undefined;
-      let queryDefinition = this.getQueryDefinition(fieldDefinition, metaQuery);
+      let queryDefinition = this.getQueryDefinition(fieldDefinition);
 
       if (
         fieldName.includes('.') ||
@@ -378,13 +376,9 @@ export class RealmIndexQueryEngine {
 
   private getQueryDefinition(
     fieldDefinition: FieldDefinition,
-    metaQuery: unknown,
   ): Query | undefined {
     if (fieldDefinition.query && typeof fieldDefinition.query === 'object') {
       return fieldDefinition.query as Query;
-    }
-    if (metaQuery && typeof metaQuery === 'object') {
-      return metaQuery as Query;
     }
     return undefined;
   }

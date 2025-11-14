@@ -1,4 +1,12 @@
-import { click, findAll, settled, waitFor } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  find,
+  findAll,
+  settled,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -8,6 +16,7 @@ import type { Loader } from '@cardstack/runtime-common';
 import { testRealmURLToUsername } from '@cardstack/runtime-common/helpers/const';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
+import type CardService from '@cardstack/host/services/card-service';
 import type NetworkService from '@cardstack/host/services/network';
 
 import {
@@ -75,6 +84,9 @@ module(
         });
         static isolated = class Isolated extends Component<typeof QueryCard> {
           <template>
+            <div data-test-inline-title>
+              <@fields.title @format='edit' />
+            </div>
             <div data-test-favorite>
               {{#if @model.favorite}}
                 {{@model.favorite.name}}
@@ -122,6 +134,12 @@ module(
           stacks: [[{ id: QUERY_CARD_URL, format: 'isolated' }]],
         });
         await settled();
+
+        assert.strictEqual(
+          searchCount,
+          0,
+          'no search requests before editing',
+        );
 
         let cardSelector = `[data-test-stack-card="${QUERY_CARD_URL}"]`;
         assert.dom(cardSelector).exists('query card is open in operator mode');
@@ -242,6 +260,105 @@ module(
         );
       } finally {
         network.virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('query-backed fields refresh again when local inputs change while a fetch is in flight', async function (assert) {
+      assert.expect(6);
+      let cardService = getService('card-service') as CardService;
+      let originalFetchJSON = cardService.fetchJSON;
+
+      let searchCount = 0;
+      let firstSearchDeferred:
+        | { promise: Promise<void>; resolve: () => void }
+        | undefined;
+
+      function makeDeferred(): { promise: Promise<void>; resolve: () => void } {
+        let resolve!: () => void;
+        let promise = new Promise<void>((res) => {
+          resolve = res;
+        });
+        return { promise, resolve };
+      }
+
+      cardService.fetchJSON = async function (
+        ...args: Parameters<CardService['fetchJSON']>
+      ) {
+        let [href] = args;
+        if (typeof href === 'string' && href.endsWith('/_search')) {
+          searchCount++;
+          console.log('[intercepted _search]', href);
+          if (!firstSearchDeferred) {
+            firstSearchDeferred = makeDeferred();
+            await firstSearchDeferred.promise;
+          }
+        }
+        return await originalFetchJSON.apply(this, args);
+      };
+
+      try {
+        await visitOperatorMode({
+          stacks: [[{ id: QUERY_CARD_URL, format: 'isolated' }]],
+        });
+        await settled();
+
+        let cardSelector = `[data-test-stack-card="${QUERY_CARD_URL}"]`;
+        await waitFor(`${cardSelector} [data-test-field="title"] input`);
+
+        let titleSelector = `${cardSelector} [data-test-field="title"] input`;
+        let titleInput =
+          document.querySelector<HTMLInputElement>(titleSelector);
+        assert.strictEqual(
+          titleInput?.value,
+          'Target',
+          'precondition reflects initial title',
+        );
+
+        await fillIn(titleSelector, 'Not Target');
+        await waitUntil(() => searchCount === 1, {
+          timeout: 2000,
+          timeoutMessage: 'first search never started',
+        });
+
+        await fillIn(titleSelector, 'Target');
+        await settled();
+
+        assert.strictEqual(
+          searchCount,
+          1,
+          'second edit waited for in-flight refresh to finish',
+        );
+
+        firstSearchDeferred?.resolve();
+        firstSearchDeferred = undefined;
+
+        await waitUntil(() => searchCount >= 2, {
+          timeout: 2000,
+          timeoutMessage: 'second search never triggered',
+        });
+        assert.ok(
+          searchCount >= 2,
+          'second search triggered after in-flight refresh completed',
+        );
+
+        let finalValue =
+          document.querySelector<HTMLInputElement>(titleSelector)?.value;
+        assert.strictEqual(finalValue, 'Target', 'title input reflects last edit');
+        assert
+          .dom(`${cardSelector} [data-test-favorite]`)
+          .includesText(
+            'Target',
+            'linksTo field displays the latest query results',
+          );
+        assert.deepEqual(
+          findAll(`${cardSelector} [data-test-match]`).map((el) =>
+            el.textContent?.trim(),
+          ),
+          ['Target'],
+          'linksToMany reflects the latest query signature',
+        );
+      } finally {
+        cardService.fetchJSON = originalFetchJSON;
       }
     });
   },
