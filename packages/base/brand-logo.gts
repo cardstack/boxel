@@ -1,6 +1,8 @@
+import { concat } from '@ember/helper';
 import GlimmerComponent from '@glimmer/component';
 import { FieldContainer, GridContainer } from '@cardstack/boxel-ui/components';
 import {
+  cn,
   entriesToCssRuleMap,
   type CssRuleMap,
 } from '@cardstack/boxel-ui/helpers';
@@ -22,6 +24,17 @@ import {
   type CssVariableFieldEntry,
 } from './structured-theme-variables';
 import URLField from './url';
+
+const DEFAULT_LOGO_MIN_HEIGHT = '40px';
+const DEFAULT_LOGO_CLEARANCE_RATIO = 0.25;
+const LOGO_MIN_HEIGHT_FIELDS = new Set([
+  'primaryMarkMinHeight',
+  'secondaryMarkMinHeight',
+]);
+const LOGO_CLEARANCE_FIELDS: Record<string, string> = {
+  primaryMarkClearanceRatio: '--brand-primary-mark-min-height',
+  secondaryMarkClearanceRatio: '--brand-secondary-mark-min-height',
+};
 
 const getFieldValue = (model?: Partial<BrandLogo>, fieldName?: string) => {
   if (!model || !fieldName) {
@@ -56,14 +69,24 @@ class Embedded extends Component<typeof BrandLogo> {
           <p>For screen use</p>
           <div class='preview-grid border-container'>
             <div class='preview-container'>
-              <span class='annotation'><@fields.primaryMarkMinHeight /></span>
+              <span class='annotation'>
+                {{#if @model.primaryMarkMinHeight}}
+                  <@fields.primaryMarkMinHeight />
+                {{else}}
+                  {{DEFAULT_LOGO_MIN_HEIGHT}}
+                {{/if}}
+              </span>
               <div class='primary-mark height-annotation-border'>
                 <@fields.primaryMark1 />
               </div>
             </div>
             <div class='preview-container'>
               <span class='annotation'>
-                <@fields.secondaryMarkMinHeight />
+                {{#if @model.secondaryMarkMinHeight}}
+                  <@fields.secondaryMarkMinHeight />
+                {{else}}
+                  {{DEFAULT_LOGO_MIN_HEIGHT}}
+                {{/if}}
               </span>
               <div class='secondary-mark height-annotation-border'>
                 <@fields.secondaryMark1 />
@@ -93,7 +116,11 @@ class Embedded extends Component<typeof BrandLogo> {
             {{/let}}
             <div class='preview-container border-container dark-container'>
               <LogoContainer @variant='primary'>
-                <@fields.primaryMark2 />
+                {{#if @model.primaryMark2}}
+                  <@fields.primaryMark2 />
+                {{else if @model.primaryMark1}}
+                  <@fields.primaryMark1 />
+                {{/if}}
               </LogoContainer>
             </div>
           </div>
@@ -120,7 +147,11 @@ class Embedded extends Component<typeof BrandLogo> {
             {{/let}}
             <div class='preview-container border-container dark-container'>
               <LogoContainer @variant='secondary'>
-                <@fields.secondaryMark2 />
+                {{#if @model.secondaryMark2}}
+                  <@fields.secondaryMark2 />
+                {{else if @model.secondaryMark1}}
+                  <@fields.secondaryMark1 />
+                {{/if}}
               </LogoContainer>
             </div>
           </div>
@@ -203,6 +234,7 @@ class Embedded extends Component<typeof BrandLogo> {
         margin-block: 0;
       }
       .mark-usage-embedded {
+        --logo-min-height: 40px;
         --annotation: rgba(255 0 0 / 0.15);
         --annotation-foreground: rgb(255 0 0);
         --container-border: 1px solid var(--border, var(--boxel-400));
@@ -261,7 +293,7 @@ class Embedded extends Component<typeof BrandLogo> {
       }
       .height-annotation-border {
         height: var(--logo-min-height);
-        padding-left: var(--mark-clearance);
+        padding-left: var(--mark-clearance, var(--boxel-sp-xs));
         border-left: 4px solid var(--annotation);
       }
       .primary-mark {
@@ -303,7 +335,7 @@ export class MarkField extends URLField {
       <img class='mark-image' src={{@model}} />
       <style scoped>
         .mark-image {
-          min-height: var(--logo-min-height);
+          min-height: var(--logo-min-height, 40px);
           max-width: 100%;
           max-height: 100%;
         }
@@ -325,7 +357,11 @@ export class LogoContainer extends GlimmerComponent<{
 }> {
   <template>
     <figure
-      class='mark-container mark--{{@variant}} mark--greyscale={{@isGreyscale}}'
+      class={{cn
+        'mark-container'
+        (if @variant (concat 'mark--' @variant))
+        mark--greyscale=@isGreyscale
+      }}
       ...attributes
     >
       {{yield}}
@@ -333,12 +369,12 @@ export class LogoContainer extends GlimmerComponent<{
     <style scoped>
       @layer {
         .mark-container {
-          --logo-height: var(--logo-min-height, 30px);
+          --logo-height: var(--logo-min-height, 40px);
           --mark-container-height: calc(
-            var(--logo-height) + 2 * var(--mark-clearance, 0)
+            var(--logo-height) + 2 * var(--mark-clearance, 0px)
           );
           margin: 0;
-          padding: var(--mark-clearance, 0);
+          padding: var(--mark-clearance, 0px);
           height: var(--mark-container-height);
         }
         .mark--primary {
@@ -425,6 +461,25 @@ export default class BrandLogo extends FieldDef {
     for (let fieldName of fieldNames) {
       let cssVariableName = `--brand-${dasherize(fieldName)}`;
       let value = (this as CssVariableField)?.[fieldName];
+      if (
+        (value == null || value === '') &&
+        LOGO_MIN_HEIGHT_FIELDS.has(fieldName)
+      ) {
+        value = DEFAULT_LOGO_MIN_HEIGHT;
+      } else if (
+        (value == null || value === '') &&
+        fieldName in LOGO_CLEARANCE_FIELDS
+      ) {
+        value = DEFAULT_LOGO_CLEARANCE_RATIO;
+      } else if (!value && this.primaryMark1 && fieldName === 'primaryMark2') {
+        value = (this as CssVariableField)?.primaryMark1;
+      } else if (
+        !value &&
+        this.secondaryMark1 &&
+        fieldName === 'secondaryMark2'
+      ) {
+        value = (this as CssVariableField)?.secondaryMark1;
+      }
       cssVariableFields.push({
         fieldName,
         cssVariableName,
