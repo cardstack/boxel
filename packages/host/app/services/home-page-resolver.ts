@@ -24,6 +24,13 @@ export default class HomePageResolverService extends Service {
 
   private inflight = new Map<string, Promise<string | null>>();
 
+  /**
+   * Resolves the home page for a given URL.
+   *
+   * @param {string} url - The URL to resolve the home page for.
+   * @returns {Promise<HomePageResolution | null>} A promise that resolves to a HomePageResolution object containing the realm URL and card ID,
+   *   or `null` if the URL cannot be parsed, the realm cannot be identified, the local path is not a home page, or the home page card cannot be loaded.
+   */
   async resolve(url: string): Promise<HomePageResolution | null> {
     let parsedURL = this.safeParseURL(url);
     if (!parsedURL) {

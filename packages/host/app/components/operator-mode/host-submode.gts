@@ -317,7 +317,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
       }
 
       .loading-text {
-        color: #fff;
+        color: var(--boxel-light);
         font-size: 12px;
         font-weight: 600;
       }
