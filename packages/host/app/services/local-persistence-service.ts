@@ -21,7 +21,7 @@ type StoredMessageDraft = {
   message?: string;
   attachedCardIds?: string[];
   attachedFiles?: StoredFileDraft[];
-  createdAt: number;
+  updatedAt: number;
 };
 
 type DraftUpdate = {
@@ -144,7 +144,10 @@ export default class LocalPersistenceService extends Service {
     }
 
     let message = (value as { message?: unknown }).message;
-    let createdAt = Number((value as { createdAt?: unknown }).createdAt);
+    let updatedAt = Number(
+      (value as { updatedAt?: unknown }).updatedAt ??
+        (value as { createdAt?: unknown }).createdAt,
+    );
     let attachedCardIds = (value as { attachedCardIds?: unknown })
       .attachedCardIds;
     let attachedFiles = (value as { attachedFiles?: unknown }).attachedFiles;
@@ -161,8 +164,8 @@ export default class LocalPersistenceService extends Service {
           .filter(Boolean) as StoredFileDraft[])
       : undefined;
 
-    if (!Number.isFinite(createdAt)) {
-      createdAt = now;
+    if (!Number.isFinite(updatedAt)) {
+      updatedAt = now;
     }
 
     if (
@@ -170,7 +173,7 @@ export default class LocalPersistenceService extends Service {
         message: sanitizedMessage,
         attachedCardIds: sanitizedCards,
         attachedFiles: sanitizedFiles,
-        createdAt,
+        updatedAt,
       })
     ) {
       return;
@@ -180,7 +183,7 @@ export default class LocalPersistenceService extends Service {
       message: sanitizedMessage,
       attachedCardIds: sanitizedCards,
       attachedFiles: sanitizedFiles,
-      createdAt,
+      updatedAt,
     } satisfies StoredMessageDraft;
   }
 
@@ -214,11 +217,11 @@ export default class LocalPersistenceService extends Service {
       if (!draft) {
         return false;
       }
-      let createdAt = Number(draft?.createdAt);
-      if (!Number.isFinite(createdAt)) {
+      let updatedAt = Number(draft?.updatedAt);
+      if (!Number.isFinite(updatedAt)) {
         return false;
       }
-      if (now - createdAt > ONE_WEEK_MS) {
+      if (now - updatedAt > ONE_WEEK_MS) {
         return false;
       }
 
@@ -248,7 +251,10 @@ export default class LocalPersistenceService extends Service {
       message: existing?.message,
       attachedCardIds: existing?.attachedCardIds,
       attachedFiles: existing?.attachedFiles,
-      createdAt: existing?.createdAt ?? Date.now(),
+      updatedAt:
+        existing?.updatedAt ??
+        Number((existing as { createdAt?: number })?.createdAt) ??
+        Date.now(),
     };
 
     if ('message' in updates) {
@@ -264,7 +270,7 @@ export default class LocalPersistenceService extends Service {
     if (this.isDraftEmpty(next)) {
       delete drafts[roomId];
     } else {
-      next.createdAt = Date.now();
+      next.updatedAt = Date.now();
       drafts[roomId] = next;
     }
 
