@@ -28,29 +28,11 @@ import BrandTypography from './brand-typography';
 import BrandFunctionalPalette from './brand-functional-palette';
 import BrandLogo, { LogoContainer } from './brand-logo';
 import CSSValueField from './css-value';
-import ThemeVarField, { dasherize } from './structured-theme-variables';
-
-const rootToBrandVariableMapping: Record<string, string> = {
-  '--primary': '--brand-primary',
-  '--secondary': '--brand-secondary',
-  '--muted': '--brand-neutral',
-  '--accent': '--brand-accent',
-  '--background': '--brand-light',
-  '--foreground': '--brand-dark',
-  '--border': '--brand-border',
-  '--primary-foreground': '--brand-primary-foreground',
-  '--secondary-foreground': '--brand-secondary-foreground',
-  '--muted-foreground': '--brand-neutral-foreground',
-  '--accent-foreground': '--brand-accent-foreground',
-  '--radius': '--brand-radius',
-};
-
-const brandForegroundMapping: string[] = [
-  '--brand-primary-foreground',
-  '--brand-secondary-foreground',
-  '--brand-neutral-foreground',
-  '--brand-accent-foreground',
-];
+import {
+  dasherize,
+  type CssVariableField,
+  type CssVariableFieldEntry,
+} from './structured-theme-variables';
 
 class BrandGuideIsolated extends Component<typeof BrandGuide> {
   <template>
@@ -244,6 +226,65 @@ const formatCssVarName = (name?: string) => {
   return varName;
 };
 
+type ThemeMode = 'light' | 'dark';
+
+const DEFAULT_LIGHT_BACKGROUND = '#ffffff';
+const DEFAULT_DARK_BACKGROUND = '#0f172a';
+const DEFAULT_SPACING = '0.25rem';
+const DEFAULT_RADIUS = '0.5rem';
+const DEFAULT_DESTRUCTIVE = '#dc2626';
+const DEFAULT_DESTRUCTIVE_FOREGROUND = '#ffffff';
+
+const isHexColor = (value?: string) => {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value.trim());
+};
+
+const contrastColor = (value?: string, fallback?: string) => {
+  if (value && isHexColor(value) && getContrastColor) {
+    return getContrastColor(
+      value,
+      'var(--boxel-dark, #0f172a)',
+      'var(--boxel-light, #fdfdfc)',
+      { isSmallText: true },
+    );
+  }
+  return fallback;
+};
+
+const mixColor = (color?: string, mixWith?: string, percent = 0) => {
+  if (!color || !mixWith || percent <= 0) {
+    return color;
+  }
+  return `color-mix(in oklch, ${color}, ${mixWith} ${percent}%)`;
+};
+
+const lightenColor = (color?: string, percent = 10) =>
+  mixColor(color, 'white', percent);
+
+const darkenColor = (color?: string, percent = 10) =>
+  mixColor(color, 'black', percent);
+
+const cssRuleMapFromRecord = (record?: CssVariableField) => {
+  if (!entriesToCssRuleMap || !record) {
+    return;
+  }
+  let entries: CssVariableFieldEntry[] = Object.entries(record)
+    .filter(([, value]) => value != null && value !== '')
+    .map(([fieldName, value]) => ({
+      fieldName,
+      cssVariableName: `--${dasherize(fieldName)}`,
+      name: `--${dasherize(fieldName)}`,
+      value,
+    }));
+  if (!entries.length) {
+    return;
+  }
+  return entriesToCssRuleMap(entries);
+};
+
 export class CompoundColorField extends FieldDef {
   static displayName = 'Color';
   @field name = contains(StringField);
@@ -279,77 +320,21 @@ export default class BrandGuide extends StyleReference {
     }
   }
 
-  private calculateCombinedRules(
-    cssVars?: ThemeVarField,
-  ): Map<string, string> | undefined {
-    let rootRules = cssVars?.cssRuleMap;
-    let functionalRules = this.functionalPalette?.cssRuleMap;
-    let combinedRules = rootRules
-      ? new Map<string, string>(rootRules)
-      : new Map<string, string>();
+  private calculateBrandRules(): Map<string, string> | undefined {
+    let brandRules = new Map<string, string>();
 
-    let darkColor =
-      functionalRules?.get('--brand-dark') ?? 'var(--boxel-dark, #000000)';
-    let lightColor =
-      functionalRules?.get('--brand-light') ?? 'var(--boxel-light, #ffffff)';
-
-    for (let [rootName, brandName] of Object.entries(
-      rootToBrandVariableMapping,
-    )) {
-      let rootValue = rootRules?.get(rootName);
-      let paletteBrandValue = functionalRules?.get(brandName);
-      let brandValue = paletteBrandValue ?? rootValue;
-
-      if (!brandValue) {
-        continue;
-      }
-
-      combinedRules.set(brandName, brandValue);
-      combinedRules.set(rootName, `var(${brandName})`);
-
-      let foregroundName = `${rootName}-foreground`;
-      let brandForegroundName = `${brandName}-foreground`;
-
-      if (!brandForegroundMapping.includes(brandForegroundName)) {
-        continue;
-      }
-
-      let hasForegroundOverride =
-        functionalRules?.has(brandForegroundName) ?? false;
-
-      if (!hasForegroundOverride) {
-        hasForegroundOverride = combinedRules.has(brandForegroundName);
-      }
-
-      if (!hasForegroundOverride) {
-        let foregroundValue = getContrastColor(
-          brandValue,
-          darkColor,
-          lightColor,
-        );
-        if (foregroundValue) {
-          combinedRules.set(brandForegroundName, foregroundValue);
-        }
-      }
-
-      if (combinedRules.has(brandForegroundName)) {
-        combinedRules.set(foregroundName, `var(${brandForegroundName})`);
-      }
-    }
-
-    this.appendRules(functionalRules, combinedRules);
+    this.appendRules(this.functionalPalette?.cssRuleMap, brandRules);
 
     if (this.cornerRadius) {
-      combinedRules.set('--brand-radius', this.cornerRadius);
+      brandRules.set('--brand-radius', this.cornerRadius);
     }
 
     if (this.spacing) {
-      combinedRules.set('--brand-spacing', this.spacing);
-      combinedRules.set('--spacing', `calc(var(--brand-spacing) / 4)`);
+      brandRules.set('--brand-spacing', this.spacing);
     }
 
-    this.appendRules(this.typography?.cssRuleMap, combinedRules);
-    this.appendRules(this.markUsage?.cssRuleMap, combinedRules);
+    this.appendRules(this.typography?.cssRuleMap, brandRules);
+    this.appendRules(this.markUsage?.cssRuleMap, brandRules);
 
     if (entriesToCssRuleMap && this.brandColorPalette?.length) {
       let paletteRules = entriesToCssRuleMap(this.brandColorPalette);
@@ -357,15 +342,144 @@ export default class BrandGuide extends StyleReference {
         if (!name || !value) {
           continue;
         }
-        combinedRules.set(formatCssVarName(name), value);
+        brandRules.set(formatCssVarName(name), value);
       }
     }
 
-    if (!combinedRules.size) {
+    if (!brandRules.size) {
       return;
     }
 
-    return combinedRules;
+    return brandRules;
+  }
+
+  private generateThemeVariables(
+    mode: ThemeMode,
+  ): CssVariableField | undefined {
+    let palette = this.functionalPalette;
+    let typography = this.typography;
+    let values: CssVariableField = {};
+    let setValue = (key: string, value?: string | null) => {
+      if (value) {
+        values[key] = value;
+      }
+    };
+
+    let background =
+      mode === 'light'
+        ? palette?.light ?? DEFAULT_LIGHT_BACKGROUND
+        : palette?.dark ?? DEFAULT_DARK_BACKGROUND;
+    let foreground =
+      mode === 'light'
+        ? palette?.dark ?? DEFAULT_DARK_BACKGROUND
+        : palette?.light ?? DEFAULT_LIGHT_BACKGROUND;
+
+    let neutralSurface =
+      palette?.neutral ??
+      (mode === 'light'
+        ? darkenColor(background, 8)
+        : lightenColor(background, 14));
+
+    let popoverSurface =
+      mode === 'light'
+        ? darkenColor(neutralSurface, 4) ?? neutralSurface
+        : lightenColor(neutralSurface, 10) ?? neutralSurface;
+
+    let primary = palette?.primary ?? palette?.accent;
+    let secondary = palette?.secondary ?? palette?.accent;
+    let accent = palette?.accent ?? secondary;
+    let muted =
+      neutralSurface ??
+      (mode === 'light'
+        ? lightenColor(background, 4)
+        : darkenColor(background, 6));
+    let border =
+      palette?.border ??
+      (mode === 'light' ? darkenColor(muted, 15) : lightenColor(muted, 18));
+    let ring = primary;
+
+    setValue('background', background);
+    setValue('foreground', foreground);
+    setValue('card', neutralSurface);
+    setValue('cardForeground', contrastColor(neutralSurface, foreground));
+    setValue('popover', popoverSurface);
+    setValue('popoverForeground', contrastColor(popoverSurface, foreground));
+    setValue('primary', primary);
+    setValue(
+      'primaryForeground',
+      contrastColor(primary, DEFAULT_LIGHT_BACKGROUND),
+    );
+    setValue('secondary', secondary);
+    setValue('secondaryForeground', contrastColor(secondary, foreground));
+    setValue('accent', accent);
+    setValue('accentForeground', contrastColor(accent, foreground));
+    setValue('muted', muted);
+    setValue('mutedForeground', contrastColor(muted, foreground));
+    setValue('border', border);
+    setValue('input', border);
+    setValue('ring', ring);
+    setValue('destructive', DEFAULT_DESTRUCTIVE);
+    setValue('destructiveForeground', DEFAULT_DESTRUCTIVE_FOREGROUND);
+
+    let sidebar =
+      mode === 'light'
+        ? palette?.neutral ?? neutralSurface
+        : darkenColor(background, 8) ?? palette?.neutral ?? neutralSurface;
+    setValue('sidebar', sidebar);
+    setValue('sidebarForeground', contrastColor(sidebar, foreground));
+    setValue('sidebarPrimary', primary);
+    setValue(
+      'sidebarPrimaryForeground',
+      contrastColor(primary, DEFAULT_LIGHT_BACKGROUND),
+    );
+    setValue('sidebarAccent', secondary);
+    setValue('sidebarAccentForeground', contrastColor(secondary, foreground));
+    setValue('sidebarBorder', border);
+    setValue('sidebarRing', ring);
+
+    let chartSources = this.brandColorPalette ?? [];
+    for (let index = 0; index < 5; index++) {
+      let chartColor = chartSources[index]?.value;
+      setValue(`chart${index + 1}`, chartColor);
+    }
+
+    let fontSans =
+      typography?.body?.fontFamily ?? typography?.heading?.fontFamily;
+    let fontSerif = typography?.heading?.fontFamily;
+    let fontMono = typography?.body?.fontFamily;
+
+    if (fontSans) {
+      setValue('fontSans', fontSans);
+    }
+    if (fontSerif) {
+      setValue('fontSerif', fontSerif);
+    }
+    if (fontMono) {
+      setValue('fontMono', fontMono);
+    }
+    setValue('radius', this.cornerRadius ?? DEFAULT_RADIUS);
+    setValue(
+      'spacing',
+      this.spacing ? `calc(${this.spacing} / 4}` : DEFAULT_SPACING,
+    );
+
+    return Object.keys(values).length ? values : undefined;
+  }
+
+  get generatedRootThemeVariables(): CssVariableField | undefined {
+    return this.generateThemeVariables('light');
+  }
+
+  get generatedDarkThemeVariables(): CssVariableField | undefined {
+    return this.generateThemeVariables('dark');
+  }
+
+  private get generatedRootCssRuleMap() {
+    return cssRuleMapFromRecord(this.generatedRootThemeVariables);
+  }
+
+  private get generatedDarkCssRuleMap() {
+    return cssRuleMapFromRecord(this.generatedDarkThemeVariables);
   }
 
   // Color Palettes
@@ -382,13 +496,46 @@ export default class BrandGuide extends StyleReference {
       if (!generateCssVariables || !buildCssGroups) {
         return;
       }
-      let combinedRootRules = this.calculateCombinedRules(this.rootVariables);
-      if (!combinedRootRules) {
+      let rootRules = this.rootVariables?.cssRuleMap?.size
+        ? this.rootVariables?.cssRuleMap
+        : this.generatedRootCssRuleMap;
+      let darkRules =
+        this.darkModeVariables?.cssRuleMap ?? this.generatedDarkCssRuleMap;
+      let brandRules = this.calculateBrandRules();
+      let sections: string[] = [];
+
+      if (rootRules?.size) {
+        let shadcnCss = generateCssVariables(
+          buildCssGroups([{ selector: ':root', rules: rootRules }]),
+        );
+        if (shadcnCss) {
+          sections.push(shadcnCss);
+        }
+      }
+
+      if (darkRules?.size) {
+        let darkCss = generateCssVariables(
+          buildCssGroups([{ selector: '.dark', rules: darkRules }]),
+        );
+        if (darkCss) {
+          sections.push(darkCss);
+        }
+      }
+
+      if (brandRules?.size) {
+        let brandCss = generateCssVariables(
+          buildCssGroups([{ selector: ':root', rules: brandRules }]),
+        );
+        if (brandCss) {
+          sections.push(`/* Brand Variables */\n${brandCss}`);
+        }
+      }
+
+      if (!sections.length) {
         return;
       }
-      return generateCssVariables(
-        buildCssGroups([{ selector: ':root', rules: combinedRootRules }]),
-      );
+
+      return sections.join('\n\n');
     },
   });
 

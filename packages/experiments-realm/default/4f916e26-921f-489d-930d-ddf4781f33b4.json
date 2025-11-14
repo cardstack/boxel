@@ -1,0 +1,178 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/brand-guide"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "spacing": null,
+      "cardInfo": {
+        "notes": null,
+        "title": "Walmart",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "markUsage": {
+        "primaryMark1": "https://cdn.brandfetch.io/idoGsFQrHx/theme/dark/logo.svg?c=1bxid64Mup7aczewSAYMX&t=1761183718064",
+        "primaryMark2": "https://cdn.brandfetch.io/idoGsFQrHx/theme/light/logo.svg?c=1bxid64Mup7aczewSAYMX&t=1756891476083",
+        "secondaryMark1": "https://cdn.brandfetch.io/idoGsFQrHx/w/400/h/400/theme/dark/icon.jpeg?c=1bxid64Mup7aczewSAYMX&t=1736912992509",
+        "secondaryMark2": null,
+        "primaryMarkMinHeight": null,
+        "primaryMarkGreyscale1": "https://cdn.brandfetch.io/idoGsFQrHx/theme/dark/idBGALhUoT.svg?c=1bxid64Mup7aczewSAYMX&t=1761183717528",
+        "primaryMarkGreyscale2": "https://cdn.brandfetch.io/idoGsFQrHx/theme/light/logo.svg?c=1bxid64Mup7aczewSAYMX&t=1756891476083",
+        "secondaryMarkMinHeight": null,
+        "socialMediaProfileIcon": "https://cdn.brandfetch.io/idoGsFQrHx/theme/dark/symbol.svg?c=1bxid64Mup7aczewSAYMX&t=1736913006306",
+        "secondaryMarkGreyscale1": null,
+        "secondaryMarkGreyscale2": null,
+        "primaryMarkClearanceRatio": null,
+        "secondaryMarkClearanceRatio": null
+      },
+      "styleName": null,
+      "visualDNA": null,
+      "cssImports": [],
+      "typography": {
+        "body": {
+          "fontSize": null,
+          "fontFamily": null,
+          "fontWeight": null,
+          "lineHeight": null
+        },
+        "heading": {
+          "fontSize": null,
+          "fontFamily": null,
+          "fontWeight": null,
+          "lineHeight": null
+        }
+      },
+      "cornerRadius": null,
+      "inspirations": [],
+      "rootVariables": {
+        "card": null,
+        "ring": null,
+        "input": null,
+        "muted": null,
+        "accent": null,
+        "border": null,
+        "chart1": null,
+        "chart2": null,
+        "chart3": null,
+        "chart4": null,
+        "chart5": null,
+        "radius": null,
+        "shadow": null,
+        "popover": null,
+        "primary": null,
+        "sidebar": null,
+        "spacing": null,
+        "fontMono": null,
+        "fontSans": null,
+        "shadowLg": null,
+        "shadowMd": null,
+        "shadowSm": null,
+        "shadowXl": null,
+        "shadowXs": null,
+        "fontSerif": null,
+        "secondary": null,
+        "shadow2xl": null,
+        "shadow2xs": null,
+        "background": null,
+        "foreground": null,
+        "destructive": null,
+        "sidebarRing": null,
+        "sidebarAccent": null,
+        "sidebarBorder": null,
+        "cardForeground": null,
+        "sidebarPrimary": null,
+        "trackingNormal": null,
+        "mutedForeground": null,
+        "accentForeground": null,
+        "popoverForeground": null,
+        "primaryForeground": null,
+        "sidebarForeground": null,
+        "secondaryForeground": null,
+        "destructiveForeground": null,
+        "sidebarAccentForeground": null,
+        "sidebarPrimaryForeground": null
+      },
+      "wallpaperImages": [],
+      "brandColorPalette": [
+        {
+          "name": "Lightning Yellow",
+          "value": "#FFC220"
+        },
+        {
+          "name": "Science Blue",
+          "value": "#0053E2"
+        },
+        {
+          "name": "Endeavour",
+          "value": "#004F9A"
+        },
+        {
+          "name": "White",
+          "value": "#FFFFFF"
+        }
+      ],
+      "darkModeVariables": {
+        "card": null,
+        "ring": null,
+        "input": null,
+        "muted": null,
+        "accent": null,
+        "border": null,
+        "chart1": null,
+        "chart2": null,
+        "chart3": null,
+        "chart4": null,
+        "chart5": null,
+        "radius": null,
+        "shadow": null,
+        "popover": null,
+        "primary": null,
+        "sidebar": null,
+        "spacing": null,
+        "fontMono": null,
+        "fontSans": null,
+        "shadowLg": null,
+        "shadowMd": null,
+        "shadowSm": null,
+        "shadowXl": null,
+        "shadowXs": null,
+        "fontSerif": null,
+        "secondary": null,
+        "shadow2xl": null,
+        "shadow2xs": null,
+        "background": null,
+        "foreground": null,
+        "destructive": null,
+        "sidebarRing": null,
+        "sidebarAccent": null,
+        "sidebarBorder": null,
+        "cardForeground": null,
+        "sidebarPrimary": null,
+        "trackingNormal": null,
+        "mutedForeground": null,
+        "accentForeground": null,
+        "popoverForeground": null,
+        "primaryForeground": null,
+        "sidebarForeground": null,
+        "secondaryForeground": null,
+        "destructiveForeground": null,
+        "sidebarAccentForeground": null,
+        "sidebarPrimaryForeground": null
+      },
+      "functionalPalette": {
+        "dark": "#000000",
+        "light": "#FFFFFF",
+        "accent": null,
+        "border": null,
+        "neutral": null,
+        "primary": "#0053E2",
+        "secondary": "#FFC220"
+      }
+    }
+  }
+}
