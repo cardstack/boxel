@@ -3931,6 +3931,13 @@ module('Integration | card-basics', function (hooks) {
       assert.strictEqual(
         getFieldDescription(Person, 'hometown'),
         'The place where the person was born',
+        'getFieldDescription works for class',
+      );
+
+      assert.strictEqual(
+        getFieldDescription(new Person(), 'hometown'),
+        'The place where the person was born',
+        'getFieldDescription works for instance',
       );
     });
 
