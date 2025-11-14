@@ -460,6 +460,7 @@ export default class Room extends Component<Signature> {
   });
   private removedAttachedCardIds = new TrackedArray<string>();
   private removedAttachedFileUrls: string[] = [];
+  private lastAutoAttachedFileUrl: string | undefined;
   private getConversationScrollability: (() => boolean) | undefined;
   private scrollConversationToBottom: (() => void) | undefined;
   private roomScrollState: WeakMap<
@@ -541,7 +542,15 @@ export default class Room extends Component<Signature> {
 
     let autoAttachedFileUrl = this.autoAttachedFileUrl;
     let manuallyAttachedFiles = this.filesToAttach;
-    let removedFileUrls = this.removedAttachedFileUrls;
+
+    let removedFileUrls: string[];
+    if (autoAttachedFileUrl !== this.lastAutoAttachedFileUrl) {
+      this.removedAttachedFileUrls.splice(0);
+      removedFileUrls = this.removedAttachedFileUrls;
+      this.lastAutoAttachedFileUrl = autoAttachedFileUrl;
+    } else {
+      removedFileUrls = this.removedAttachedFileUrls;
+    }
 
     let isManuallyAttached = manuallyAttachedFiles.some(
       (file) => file.sourceUrl === autoAttachedFileUrl,
@@ -562,10 +571,9 @@ export default class Room extends Component<Signature> {
     return state;
   });
 
-  @use private autoAttachedFileUrl = resource(() => {
-    this.removedAttachedFileUrls.splice(0);
+  private get autoAttachedFileUrl() {
     return this.operatorModeStateService.state.codePath?.href;
-  });
+  }
 
   private get autoAttachedFile() {
     return this.operatorModeStateService.state.submode === Submodes.Code
