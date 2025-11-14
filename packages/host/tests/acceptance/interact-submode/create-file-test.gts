@@ -1,4 +1,4 @@
-import { click } from '@ember/test-helpers';
+import { click, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -14,6 +14,7 @@ import {
   visitOperatorMode,
   setupAuthEndpoints,
   setupUserSubscription,
+  type TestContextWithSave,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
@@ -405,6 +406,39 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
     await click(`[data-test-boxel-menu-item-text="Author"]`); // create another Author card
     await assertCardCreated(assert, 'Author', testRealmURL, 0, 2);
     assert.dom(`[data-test-stack-card-index]`).exists({ count: 3 });
+  });
+
+  test<TestContextWithSave>('creates default-export instances under module directories', async function (assert) {
+    removeRecentCards();
+    setRecentCards([[`${testRealmURL}Pet/mango`]]);
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+    });
+
+    let savedPath: string | undefined;
+    this.onSave((url) => {
+      let href = url instanceof URL ? url.href : String(url);
+      try {
+        savedPath = new URL(href).pathname;
+      } catch {
+        savedPath = href;
+      }
+    });
+
+    await click('[data-test-new-file-button]');
+    await click(`[data-test-boxel-menu-item-text="Pet"]`);
+    await assertCardCreated(assert, 'Pet', testRealmURL, 0, 1);
+
+    await waitUntil(() => Boolean(savedPath));
+    assert.true(
+      savedPath?.includes('/Pet/'),
+      'instance file path uses the module-derived directory name',
+    );
+    assert.false(
+      savedPath?.includes('/default/'),
+      'instance file path never falls back to a literal default directory',
+    );
   });
 
   test('can create instance (with recent-card type from different realm - has permissions to both)', async function (assert) {
