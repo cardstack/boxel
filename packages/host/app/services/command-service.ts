@@ -225,12 +225,13 @@ export default class CommandService extends Service {
         // Auto-execute if LLM mode is 'act' AND the command came after the LLM mode was set to 'act',
         // or if requiresApproval is false
         let shouldAutoExecute = false;
-        let isPatchSummary = message.isPatchSummary;
+        let isCheckCorrectnessCommand =
+          messageCommand.name === CHECK_CORRECTNESS_COMMAND_NAME;
 
         if (
-          !isPatchSummary &&
-          (messageCommand.requiresApproval === false ||
-            activeModeAtMessageTime === 'act')
+          isCheckCorrectnessCommand ||
+          messageCommand.requiresApproval === false ||
+          activeModeAtMessageTime === 'act'
         ) {
           shouldAutoExecute = true;
         }

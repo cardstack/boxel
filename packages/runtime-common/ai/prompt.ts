@@ -167,7 +167,117 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
         );
       });
     });
-  return allCommandsHaveResults && allCodePatchesHaveResults;
+  if (!allCommandsHaveResults || !allCodePatchesHaveResults) {
+    return false;
+  }
+  if (!allCheckCorrectnessCommandsHaveResults(history)) {
+    return false;
+  }
+  return true;
+}
+
+function allCheckCorrectnessCommandsHaveResults(
+  history: DiscreteMatrixEvent[],
+): boolean {
+  let lastEventWithCheckCorrectnessRequests = findLast(history, (event) => {
+    return getCheckCorrectnessCommandRequests(event).length > 0;
+  });
+
+  if (!lastEventWithCheckCorrectnessRequests) {
+    return true;
+  }
+
+  let checkCommandRequests = getCheckCorrectnessCommandRequests(
+    lastEventWithCheckCorrectnessRequests,
+  );
+  if (checkCommandRequests.length === 0) {
+    return true;
+  }
+
+  let startIndex = history.indexOf(lastEventWithCheckCorrectnessRequests);
+  let subsequentEvents = history.slice(startIndex + 1);
+  return checkCommandRequests.every((request) => {
+    return subsequentEvents.some((event) =>
+      isTerminalCommandResultEventFor(event, request.id!),
+    );
+  });
+}
+
+function shouldPromptCheckCorrectnessSummary(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+) {
+  let lastEvent = history[history.length - 1];
+  if (!isCommandResultEvent(lastEvent)) {
+    return false;
+  }
+  if (!isCheckCorrectnessCommandResultEvent(lastEvent, history)) {
+    return false;
+  }
+  let lastNonResultIndex = findLastIndex(
+    history,
+    (event) => !isCommandOrCodePatchResult(event),
+  );
+  if (lastNonResultIndex === -1) {
+    return true;
+  }
+  let lastNonResultEvent = history[lastNonResultIndex];
+  return lastNonResultEvent.sender === aiBotUserId;
+}
+
+function getCheckCorrectnessCommandRequests(
+  event: DiscreteMatrixEvent,
+): CommandRequest[] {
+  if (!event || event.type !== 'm.room.message') {
+    return [];
+  }
+  let encodedRequests =
+    (event.content as CardMessageContent)[APP_BOXEL_COMMAND_REQUESTS_KEY] ??
+    [];
+  if (!Array.isArray(encodedRequests)) {
+    return [];
+  }
+  let commandRequests: CommandRequest[] = [];
+  for (let encodedRequest of encodedRequests) {
+    let decoded = decodeCommandRequestSafe(
+      encodedRequest as Partial<EncodedCommandRequest>,
+    );
+    if (
+      decoded?.id &&
+      decoded.name === CHECK_CORRECTNESS_COMMAND_NAME
+    ) {
+      commandRequests.push(decoded);
+    }
+  }
+  return commandRequests;
+}
+
+function decodeCommandRequestSafe(
+  request: Partial<EncodedCommandRequest>,
+): CommandRequest | undefined {
+  try {
+    return decodeCommandRequest(request);
+  } catch {
+    return undefined;
+  }
+}
+
+function isTerminalCommandResultEventFor(
+  event: DiscreteMatrixEvent,
+  commandRequestId: string,
+): boolean {
+  if (
+    event.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE ||
+    event.content.commandRequestId !== commandRequestId
+  ) {
+    return false;
+  }
+  let status = event.content['m.relates_to']?.key;
+  return (
+    status === 'applied' ||
+    status === 'failed' ||
+    status === 'invalid'
+  );
 }
 
 async function getEnabledSkills(
@@ -594,6 +704,27 @@ function getCommandResults(
   return commandResultEvents;
 }
 
+function isCheckCorrectnessCommandResultEvent(
+  commandResultEvent: CommandResultEvent,
+  history: DiscreteMatrixEvent[],
+) {
+  let sourceEventId = commandResultEvent.content['m.relates_to']?.event_id;
+  if (!sourceEventId) {
+    return false;
+  }
+  let sourceEvent = history.find((event) => event.event_id === sourceEventId);
+  if (!sourceEvent) {
+    return false;
+  }
+  let checkRequests = getCheckCorrectnessCommandRequests(sourceEvent);
+  if (checkRequests.length === 0) {
+    return false;
+  }
+  return checkRequests.some(
+    (request) => request.id === commandResultEvent.content.commandRequestId,
+  );
+}
+
 function getCodePatchResults(
   cardMessageEvent: CardMessageEvent,
   history: DiscreteMatrixEvent[],
@@ -634,21 +765,34 @@ async function toResultMessages(
   history: DiscreteMatrixEvent[],
 ): Promise<OpenAIPromptMessage[]> {
   const messageContent = event.content as CardMessageContent;
-  let commandResultMessages = await Promise.all(
-    (messageContent[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
-      async (commandRequest: Partial<EncodedCommandRequest>) => {
-        let content = 'pending';
-        let commandResult = commandResults.find(
-          (commandResult) =>
-            (commandResult.content.msgtype ===
-              APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
-              commandResult.content.msgtype ===
-                APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE) &&
-            commandResult.content.commandRequestId === commandRequest.id,
-        );
-        if (commandResult) {
+  let commandResultMessages = (
+    await Promise.all(
+      (messageContent[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
+        async (commandRequest: Partial<EncodedCommandRequest>) => {
+          let decodedCommandRequest = decodeCommandRequestSafe(
+            commandRequest,
+          );
+          let commandResult = commandResults.find(
+            (commandResult) =>
+              (commandResult.content.msgtype ===
+                APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
+                commandResult.content.msgtype ===
+                  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE) &&
+              commandResult.content.commandRequestId === commandRequest.id,
+          );
+          if (!commandResult) {
+            return undefined;
+          }
+          let content: string;
           let status = commandResult.content['m.relates_to']?.key;
-          if (
+          let isCheckCorrectnessRequest =
+            decodedCommandRequest?.name === CHECK_CORRECTNESS_COMMAND_NAME;
+          if (isCheckCorrectnessRequest) {
+            content = buildCheckCorrectnessResultContent(
+              decodedCommandRequest,
+              commandResult,
+            );
+          } else if (
             commandResult.content.msgtype ===
               APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE &&
             commandResult.content.data.card
@@ -666,16 +810,129 @@ async function toResultMessages(
             history,
           );
           content = [content, attachments].filter(Boolean).join('\n\n');
-        }
-        return {
-          role: 'tool',
-          tool_call_id: commandRequest.id,
-          content,
-        } as OpenAIPromptMessage;
-      },
-    ),
-  );
+          return {
+            role: 'tool',
+            tool_call_id: commandRequest.id,
+            content,
+          } as OpenAIPromptMessage;
+        },
+      ),
+    )
+  ).filter((message): message is OpenAIPromptMessage => Boolean(message));
   return [...commandResultMessages];
+}
+
+function buildCheckCorrectnessResultContent(
+  request?: CommandRequest,
+  commandResult?: CommandResultEvent,
+) {
+  let targetDescription = describeCheckCorrectnessTarget(request);
+  if (!commandResult) {
+    return `Check correctness for ${targetDescription} is still pending.`;
+  }
+  let status = commandResult.content['m.relates_to']?.key ?? 'unknown';
+  let resultCard = extractCorrectnessResultCard(commandResult);
+  if (status === 'applied' && resultCard) {
+    return formatCorrectnessResultSummary(targetDescription, resultCard);
+  }
+  if (status === 'applied') {
+    return `Check correctness passed for ${targetDescription}.`;
+  }
+  let failureReason = commandResult.content.failureReason;
+  if (failureReason) {
+    return `Check correctness was marked as ${status} for ${targetDescription}: ${failureReason}`;
+  }
+  if (resultCard) {
+    return formatCorrectnessResultSummary(targetDescription, resultCard, status);
+  }
+  return `Check correctness was marked as ${status} for ${targetDescription}.`;
+}
+
+function describeCheckCorrectnessTarget(request?: CommandRequest) {
+  if (!request) {
+    return 'the requested target';
+  }
+  let args = (request.arguments as Record<string, any>) ?? {};
+  let attributes = (args.attributes as Record<string, any>) ?? {};
+  let targetType =
+    attributes.targetType ??
+    args.targetType ??
+    attributes.target_type ??
+    args.target_type;
+  let targetRef =
+    attributes.targetRef ??
+    args.targetRef ??
+    attributes.fileUrl ??
+    args.fileUrl ??
+    attributes.cardId ??
+    args.cardId;
+  if (targetType && targetRef) {
+    return `${targetType} "${targetRef}"`;
+  }
+  if (targetRef) {
+    return `"${targetRef}"`;
+  }
+  if (args.description) {
+    return args.description;
+  }
+  return 'the requested target';
+}
+
+type CorrectnessResultSummary = {
+  correct: boolean;
+  errors: string[];
+  warnings: string[];
+};
+
+function extractCorrectnessResultCard(
+  commandResult?: CommandResultEvent,
+): CorrectnessResultSummary | undefined {
+  let cardPayload = commandResult?.content?.data?.card;
+  if (!cardPayload) {
+    return undefined;
+  }
+  let cardContent = cardPayload.content ?? cardPayload;
+  let parsed:
+    | {
+        data?: { attributes?: { correct?: boolean; errors?: string[]; warnings?: string[] } };
+      }
+    | undefined;
+  try {
+    parsed = typeof cardContent === 'string' ? JSON.parse(cardContent) : cardContent;
+  } catch (error) {
+    getLog().error('Unable to parse correctness result card', error);
+    return undefined;
+  }
+  let attributes = parsed?.data?.attributes ?? {};
+  return {
+    correct: Boolean(attributes.correct),
+    errors: Array.isArray(attributes.errors) ? attributes.errors : [],
+    warnings: Array.isArray(attributes.warnings) ? attributes.warnings : [],
+  };
+}
+
+function formatCorrectnessResultSummary(
+  targetDescription: string,
+  result: CorrectnessResultSummary,
+  status: string = 'applied',
+) {
+  let sections: string[] = [];
+  sections.push(
+    result.correct && status === 'applied'
+      ? `Check correctness passed for ${targetDescription}.`
+      : `Check correctness was marked as ${status} for ${targetDescription}.`,
+  );
+  let errorLines = result.errors.filter((entry) => typeof entry === 'string' && entry.trim().length);
+  if (errorLines.length) {
+    sections.push(`Errors:\n${errorLines.map((line) => `- ${line}`).join('\n')}`);
+  }
+  let warningLines = result.warnings.filter(
+    (entry) => typeof entry === 'string' && entry.trim().length,
+  );
+  if (warningLines.length) {
+    sections.push(`Warnings:\n${warningLines.map((line) => `- ${line}`).join('\n')}`);
+  }
+  return sections.join('\n\n');
 }
 
 export async function buildPromptForModel(
@@ -752,6 +1009,13 @@ export async function buildPromptForModel(
       }
     }
   }
+  if (shouldPromptCheckCorrectnessSummary(history, aiBotUserId)) {
+    historicalMessages.push({
+      role: 'user',
+      content:
+        'The automated correctness checks have finished. Summarize their results for me based on the tool output above.',
+    });
+  }
   let systemMessage = `${SYSTEM_MESSAGE}\n`;
   if (skillCards.length) {
     systemMessage += SKILL_INSTRUCTIONS_MESSAGE;
@@ -799,6 +1063,7 @@ export async function buildPromptForModel(
 }
 
 const CARD_PATCH_COMMAND_NAMES = new Set(['patchCardInstance', 'patchFields']);
+const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
 
 function collectPendingPatchSummary(
   history: DiscreteMatrixEvent[],

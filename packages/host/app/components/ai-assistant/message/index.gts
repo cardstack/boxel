@@ -10,7 +10,7 @@ import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
 
 import { Alert } from '@cardstack/boxel-ui/components';
-import { cn } from '@cardstack/boxel-ui/helpers';
+import { and, cn } from '@cardstack/boxel-ui/helpers';
 
 import {
   MINIMUM_AI_CREDITS_TO_CONTINUE,
@@ -19,6 +19,7 @@ import {
 
 import { type HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
 import { type Message } from '@cardstack/host/lib/matrix-classes/message';
+import type MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -29,7 +30,6 @@ import { type FileDef } from 'https://cardstack.com/base/file-api';
 import AiBotMessage from './aibot-message';
 import Attachments from './attachments';
 import Meta from './meta';
-import PatchSummary from './patch-summary';
 import UserMessage from './user-message';
 
 import type { ComponentLike } from '@glint/template';
@@ -65,6 +65,7 @@ interface Signature {
     waitAction?: () => void;
     hideMeta?: boolean;
     isPatchSummary?: boolean;
+    commands?: MessageCommand[];
   };
   Blocks: { default: [] };
 }
@@ -238,10 +239,11 @@ export default class AiAssistantMessage extends Component<Signature> {
       <div class='content' data-test-ai-message-content>
         {{#if @isFromAssistant}}
           {{#if this.hasBotMessage}}
-            <div class={{if @isPatchSummary 'patch-summary' undefined}}>
+            <div class={{if @isPatchSummary 'patch-summary-wrapper' undefined}}>
               <AiBotMessage
                 @monacoSDK={{@monacoSDK}}
                 @htmlParts={{@messageHTMLParts}}
+                @messageHTML={{@messageHTML}}
                 @roomId={{@roomId}}
                 @eventId={{@eventId}}
                 @isStreaming={{@isStreaming}}
@@ -255,7 +257,13 @@ export default class AiAssistantMessage extends Component<Signature> {
                     updateExpanded=this.updateReasoningExpanded
                   )
                 }}
-              />
+                @isPatchSummary={{@isPatchSummary}}
+                @commands={{@commands}}
+              >
+                {{#if @isPatchSummary}}
+                  {{yield}}
+                {{/if}}
+              </AiBotMessage>
             </div>
           {{/if}}
           {{#if this.hasItems}}
@@ -276,7 +284,9 @@ export default class AiAssistantMessage extends Component<Signature> {
           </UserMessage>
         {{/if}}
 
-        {{yield}}
+        {{#unless (and @isFromAssistant @isPatchSummary)}}
+          {{yield}}
+        {{/unless}}
 
         {{#if this.errorMessages.length}}
           {{#if this.isOutOfCreditsErrorMessage}}
@@ -374,11 +384,8 @@ export default class AiAssistantMessage extends Component<Signature> {
         font-size: var(--boxel-font-size-xs);
         font-weight: bold;
       }
-      .patch-summary {
-        border: 1px solid var(--boxel-blue-400);
-        border-radius: var(--boxel-border-radius-md);
-        padding: var(--boxel-sp-xxs);
-        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05) inset;
+      .patch-summary-wrapper {
+        width: 100%;
       }
     </style>
   </template>

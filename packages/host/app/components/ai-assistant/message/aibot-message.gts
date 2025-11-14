@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import type { SafeString } from '@ember/template';
 
 import { Alert } from '@cardstack/boxel-ui/components';
 import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
@@ -22,6 +23,7 @@ import {
 
 import { type Message as MatrixMessage } from '@cardstack/host/lib/matrix-classes/message';
 import type MessageCodePatchResult from '@cardstack/host/lib/matrix-classes/message-code-patch-result';
+import type MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 
 import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-parsing';
 
@@ -35,23 +37,30 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
+import PatchSummary from './patch-summary';
 import Message from './text-content';
 
 interface Signature {
   Element: HTMLDivElement;
   Args: {
+    messageHTML?: SafeString | string | null;
     htmlParts?: HtmlTagGroup[];
     roomId: string;
     eventId: string;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
     isLastAssistantMessage: boolean;
+    isPatchSummary?: boolean;
+    commands?: MessageCommand[];
     userMessageThisMessageIsRespondingTo?: MatrixMessage;
     reasoning?: {
       content: string | null;
       isExpanded: boolean;
       updateExpanded: (ev: MouseEvent | KeyboardEvent) => void;
     };
+  };
+  Blocks: {
+    default: [];
   };
 }
 
@@ -74,68 +83,74 @@ export default class FormattedAiBotMessage extends Component<Signature> {
 
   <template>
     <Message class='ai-bot-message'>
-      {{#if @reasoning}}
-        <div class='reasoning-content'>
-          {{#if (eq 'Thinking...' @reasoning.content)}}
-            Thinking...
-          {{else}}
-            <details
-              open={{@reasoning.isExpanded}}
-              {{on 'click' @reasoning.updateExpanded}}
-              data-test-reasoning
-            >
-              <summary>
-                Thinking...
-              </summary>
-              {{sanitizedHtml (markdownToHtml @reasoning.content)}}
-            </details>
-          {{/if}}
-        </div>
-      {{/if}}
-      {{! We are splitting the html into parts so that we can target the
-      code blocks (<pre> tags) and apply Monaco editor to them. Here is an
-      example of the html argument:
-
-      <p>Here is some code for you.</p>
-      <pre data-codeblock="javascript">const x = 1;</pre>
-      <p>I hope you like this code. But here is some more!</p>
-      <pre data-codeblock="javascript">const y = 2;</pre>
-      <p>Feel free to use it in your project.</p>
-
-      A drawback of this approach is that we can't render monaco editors for
-      code blocks that are nested inside other elements. We should make sure
-      our skills teach the model to respond with code blocks that are not nested
-      inside other elements.
-      }}
-      {{#each @htmlParts key='@index' as |htmlPart index|}}
-        {{#if (isHtmlPreTagGroup htmlPart)}}
-          <HtmlGroupCodeBlock
-            @codeData={{htmlPart.codeData}}
-            @codePatchResult={{this.commandService.getCodePatchResult
-              htmlPart.codeData
-            }}
-            @onPatchCode={{fn
-              this.commandService.patchCode
-              htmlPart.codeData.roomId
-              htmlPart.codeData.fileUrl
-              (array htmlPart.codeData)
-            }}
-            @monacoSDK={{@monacoSDK}}
-            @isLastAssistantMessage={{@isLastAssistantMessage}}
-            @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
-            @index={{this.preTagGroupIndex index}}
-            @codePatchStatus={{this.codePatchStatus htmlPart.codeData}}
-          />
-        {{else}}
-          {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
-            {{wrapLastTextNodeInStreamingTextSpan
-              (sanitizedHtml htmlPart.content)
-            }}
-          {{else}}
-            {{sanitizedHtml htmlPart.content}}
-          {{/if}}
+      {{#if @isPatchSummary}}
+        <PatchSummary @body={{@messageHTML}} @commands={{@commands}}>
+          {{yield}}
+        </PatchSummary>
+      {{else}}
+        {{#if @reasoning}}
+          <div class='reasoning-content'>
+            {{#if (eq 'Thinking...' @reasoning.content)}}
+              Thinking...
+            {{else}}
+              <details
+                open={{@reasoning.isExpanded}}
+                {{on 'click' @reasoning.updateExpanded}}
+                data-test-reasoning
+              >
+                <summary>
+                  Thinking...
+                </summary>
+                {{sanitizedHtml (markdownToHtml @reasoning.content)}}
+              </details>
+            {{/if}}
+          </div>
         {{/if}}
-      {{/each}}
+        {{! We are splitting the html into parts so that we can target the
+        code blocks (<pre> tags) and apply Monaco editor to them. Here is an
+        example of the html argument:
+
+        <p>Here is some code for you.</p>
+        <pre data-codeblock="javascript">const x = 1;</pre>
+        <p>I hope you like this code. But here is some more!</p>
+        <pre data-codeblock="javascript">const y = 2;</pre>
+        <p>Feel free to use it in your project.</p>
+
+        A drawback of this approach is that we can't render monaco editors for
+        code blocks that are nested inside other elements. We should make sure
+        our skills teach the model to respond with code blocks that are not nested
+        inside other elements.
+        }}
+        {{#each @htmlParts key='@index' as |htmlPart index|}}
+          {{#if (isHtmlPreTagGroup htmlPart)}}
+            <HtmlGroupCodeBlock
+              @codeData={{htmlPart.codeData}}
+              @codePatchResult={{this.commandService.getCodePatchResult
+                htmlPart.codeData
+              }}
+              @onPatchCode={{fn
+                this.commandService.patchCode
+                htmlPart.codeData.roomId
+                htmlPart.codeData.fileUrl
+                (array htmlPart.codeData)
+              }}
+              @monacoSDK={{@monacoSDK}}
+              @isLastAssistantMessage={{@isLastAssistantMessage}}
+              @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
+              @index={{this.preTagGroupIndex index}}
+              @codePatchStatus={{this.codePatchStatus htmlPart.codeData}}
+            />
+          {{else}}
+            {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
+              {{wrapLastTextNodeInStreamingTextSpan
+                (sanitizedHtml htmlPart.content)
+              }}
+            {{else}}
+              {{sanitizedHtml htmlPart.content}}
+            {{/if}}
+          {{/if}}
+        {{/each}}
+      {{/if}}
     </Message>
 
     <style scoped>

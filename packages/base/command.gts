@@ -180,6 +180,12 @@ export class CheckCorrectnessInput extends CardDef {
   @field cardId = contains(StringField);
 }
 
+export class CorrectnessResultCard extends CardDef {
+  @field correct = contains(BooleanField);
+  @field errors = containsMany(StringField);
+  @field warnings = containsMany(StringField);
+}
+
 export class CreateAIAssistantRoomInput extends CardDef {
   @field name = contains(StringField);
   @field enabledSkills = linksToMany(Skill);
