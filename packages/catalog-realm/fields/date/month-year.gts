@@ -1,14 +1,14 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 import {
   FieldDef,
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
+} from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event'; // ² Calendar event icon
+import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event';
+import { formatDateTime } from '@cardstack/boxel-ui/helpers';
 
 class MonthYearFieldEdit extends Component<typeof MonthYearField> {
   @action
@@ -21,9 +21,9 @@ class MonthYearFieldEdit extends Component<typeof MonthYearField> {
     if (!this.args.model?.value) return '';
     try {
       const date = new Date(this.args.model.value + '-01');
-      return date.toLocaleDateString('en-US', {
-        month: 'long',
-        year: 'numeric',
+      return formatDateTime(date, {
+        kind: 'monthYear',
+        fallback: this.args.model.value,
       });
     } catch {
       return '';
@@ -118,14 +118,12 @@ class MonthYearFieldEdit extends Component<typeof MonthYearField> {
   </template>
 }
 
-// ³ MonthYearField - Independent FieldDef for month-year selection
 export class MonthYearField extends FieldDef {
   static displayName = 'Month-Year';
   static icon = CalendarEventIcon;
 
-  @field value = contains(StringField); // ⁴ Month-year value (YYYY-MM format)
+  @field value = contains(StringField);
 
-  // ⁵ Embedded format - formatted month-year display
   static embedded = class Embedded extends Component<typeof this> {
     get displayValue() {
       const value = this.args.model?.value;
@@ -133,9 +131,9 @@ export class MonthYearField extends FieldDef {
 
       try {
         const date = new Date(value + '-01');
-        return date.toLocaleDateString('en-US', {
-          month: 'long',
-          year: 'numeric',
+        return formatDateTime(date, {
+          kind: 'monthYear',
+          fallback: value,
         });
       } catch {
         return value;
@@ -163,7 +161,6 @@ export class MonthYearField extends FieldDef {
     </template>
   };
 
-  // ⁶ Atom format - compact month-year badge
   static atom = class Atom extends Component<typeof this> {
     get displayValue() {
       const value = this.args.model?.value;
@@ -171,9 +168,9 @@ export class MonthYearField extends FieldDef {
 
       try {
         const date = new Date(value + '-01');
-        return date.toLocaleDateString('en-US', {
-          month: 'short',
-          year: 'numeric',
+        return formatDateTime(date, {
+          kind: 'monthYear',
+          fallback: value,
         });
       } catch {
         return value;
@@ -212,7 +209,6 @@ export class MonthYearField extends FieldDef {
     </template>
   };
 
-  // ⁷ Edit format - month-year input
   static edit = MonthYearFieldEdit;
 }
 
