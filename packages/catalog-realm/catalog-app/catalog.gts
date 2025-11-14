@@ -104,6 +104,16 @@ class Isolated extends Component<typeof Catalog> {
     return {
       filter: {
         on: {
+          // TODO double check this works in actual app...
+
+          // the published module URL looks like:
+          //   https://<realm>/catalog-app/catalog
+          // So when we run:
+          //   new URL('../listing/listing', import.meta.url)
+          // the browser-style URL resolver goes “one level up”
+          // from …/catalog-app/catalog to …/catalog-app/,
+          // then appends listing/listing. We end up with:
+          //   https://<realm>/catalog-app/listing/listing
           module: new URL('../listing/listing', import.meta.url).href,
           name:
             this.activeTabId === 'showcase'
@@ -442,7 +452,6 @@ class Isolated extends Component<typeof Catalog> {
                     data-test-showcase-view
                   />
                 {{else}}
-                  {{log 'Catalog realmHrefs' this.realmHrefs}}
                   <ListView
                     @query={{this.query}}
                     @realms={{this.realmHrefs}}
