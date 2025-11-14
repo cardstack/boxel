@@ -1,7 +1,6 @@
 import { service } from '@ember/service';
 
 import {
-  ensureExtension,
   isCardInstance,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -20,6 +19,13 @@ import { prettifyPrompts } from '../utils/prettify-prompts';
 
 import OneShotLlmRequestCommand from './one-shot-llm-request';
 import SendAiAssistantMessageCommand from './send-ai-assistant-message';
+import {
+  buildAttachedFileURLs,
+  buildExamplePrompt,
+  ONE_SHOT_SYSTEM_PROMPT,
+  parseExamplePayloadFromOutput,
+} from './example-card-helpers';
+export { AskAiForCardJsonCommand } from './ask-ai-for-card-json';
 
 import type AiAssistantPanelService from '../services/ai-assistant-panel-service';
 import type CardService from '../services/card-service';
@@ -27,37 +33,6 @@ import type MatrixService from '../services/matrix-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
-const ONE_SHOT_SYSTEM_PROMPT = `You are Boxel's sample data assistant. When given a card definition you return JSON that can seed a new instance.
-
-Rules:
-- Always respond with valid JSON.
-- Respond with a single JSON object representing the generated example.
-- Do not include prose, code fences, or wrapper structures such as arrays.
-- Each example should include realistic values for the card's required fields.`;
-
-const buildExamplePrompt = (count = 1, codeRef?: { name?: string }) => {
-  let lines = [
-    count === 1
-      ? 'Generate a single additional instance of the specified card definition, populated with sample data.'
-      : `Generate ${count} additional instances of the specified card definition, populated with sample data.`,
-    'Provide realistic, distinct values so the new instance is unique from existing examples.',
-    'Respond ONLY with the JSON object for the example—no prose, code fences, or wrapper structures.',
-  ];
-  if (codeRef?.name) {
-    lines.push(`Card definition name: ${codeRef.name}`);
-  }
-  return lines.join(' ');
-};
-
-function buildAttachedFileURLs(modulePath?: string) {
-  if (!modulePath) {
-    return [];
-  }
-  let cardModuleURL = ensureExtension(modulePath, {
-    default: '.gts',
-  });
-  return cardModuleURL ? [cardModuleURL] : [];
-}
 
 export default class GenerateExampleCardsCommand extends HostBaseCommand<
   typeof BaseCommandModule.CreateInstancesInput,
@@ -224,85 +199,6 @@ export class GenerateExampleCardsOneShotCommand extends HostBaseCommand<
     const { CreateInstanceResult } = commandModule;
     return new CreateInstanceResult({ createdCard });
   }
-
-}
-
-export class AskAiForCardJsonCommand extends HostBaseCommand<
-  typeof BaseCommandModule.AskAiForCardJsonInput,
-  typeof BaseCommandModule.GenerateExamplePayloadResult
-> {
-  @service declare private cardService: CardService;
-
-  static actionVerb = 'Request Payload';
-
-  async getInputType() {
-    let commandModule = await this.loadCommandModule();
-    const { AskAiForCardJsonInput } = commandModule;
-    return AskAiForCardJsonInput;
-  }
-
-  protected async run(
-    input: BaseCommandModule.AskAiForCardJsonInput,
-  ): Promise<BaseCommandModule.GenerateExamplePayloadResult> {
-    if (!input.codeRef) {
-      throw new Error('codeRef is required');
-    }
-
-    const promptSections = [
-      buildExamplePrompt(1, input.codeRef),
-    ];
-
-    let customPrompt =
-      typeof input.prompt === 'string' && input.prompt.trim().length
-        ? input.prompt.trim()
-        : null;
-    if (customPrompt) {
-      promptSections.push(customPrompt);
-    }
-
-    const exampleCard = input.exampleCard as CardDef | undefined;
-    if (exampleCard && isCardInstance(exampleCard)) {
-      try {
-        const serialized = await this.cardService.serializeCard(exampleCard);
-        promptSections.push(
-          `Existing example card JSON:\n${JSON.stringify(serialized?.data, null, 2)}`,
-        );
-      } catch (error) {
-        console.warn('Failed to serialize example card for payload request', {
-          error,
-        });
-      }
-    }
-
-    const userPrompt = promptSections.join('\n\n');
-    const llmModel = input.llmModel || 'anthropic/claude-3-haiku';
-    const attachedFileURLs = input.codeRef.module
-      ? buildAttachedFileURLs(input.codeRef.module)
-      : [];
-
-    const oneShot = new OneShotLlmRequestCommand(this.commandContext);
-    const llmResult = await oneShot.execute({
-      codeRef: input.codeRef,
-      systemPrompt: ONE_SHOT_SYSTEM_PROMPT,
-      userPrompt,
-      llmModel,
-      attachedFileURLs: attachedFileURLs.length
-        ? attachedFileURLs
-        : undefined,
-    });
-
-    const { payload } = parseExamplePayloadFromOutput(llmResult.output);
-    if (!payload) {
-      throw new Error('LLM response did not include a usable JSON payload');
-    }
-
-    let commandModule = await this.loadCommandModule();
-    const { GenerateExamplePayloadResult } = commandModule;
-    return new GenerateExamplePayloadResult({
-      payload,
-      rawOutput: llmResult.output ?? undefined,
-    });
-  }
 }
 
 export class CreateExampleCardCommand extends HostBaseCommand<
@@ -364,147 +260,6 @@ export class CreateExampleCardCommand extends HostBaseCommand<
       createdCard,
     });
   }
-}
-
-function parseExamplePayloadFromOutput(output?: string | null): {
-  payload?: Record<string, unknown>;
-} {
-  if (!output) {
-    return {};
-  }
-  const jsonString = extractJsonString(output);
-  if (!jsonString) {
-    return {};
-  }
-  try {
-    const parsed = JSON.parse(jsonString);
-    const payload = coerceExamplePayload(parsed);
-    if (!payload) {
-      return {};
-    }
-    return { payload };
-  } catch (error) {
-    console.warn('Failed to parse JSON from LLM output', { error });
-    return {};
-  }
-}
-
-function coerceExamplePayload(
-  value: unknown,
-): Record<string, unknown> | undefined {
-  if (!value) {
-    return undefined;
-  }
-  if (Array.isArray(value)) {
-    const first = value.find((item) => item && typeof item === 'object');
-    return first ? { ...(first as Record<string, unknown>) } : undefined;
-  }
-  if (typeof value === 'object') {
-    const record = value as Record<string, unknown>;
-    if (Array.isArray(record.examples)) {
-      const first = record.examples.find(
-        (item) => item && typeof item === 'object',
-      );
-      return first ? { ...(first as Record<string, unknown>) } : undefined;
-    }
-    if (record.example && typeof record.example === 'object') {
-      return { ...(record.example as Record<string, unknown>) };
-    }
-    return { ...record };
-  }
-  return undefined;
-}
-
-function extractJsonString(output: string): string | undefined {
-  let text = stripCodeFences(output);
-  if (!text) {
-    return undefined;
-  }
-  if (isJsonParsable(text)) {
-    return text;
-  }
-  return findJsonSubstring(text);
-}
-
-function stripCodeFences(text: string): string {
-  let trimmed = String(text).trim();
-  if (trimmed.startsWith('```')) {
-    trimmed = trimmed
-      .replace(/^```[a-zA-Z0-9-]*\n?/, '')
-      .replace(/```$/, '')
-      .trim();
-  }
-  return trimmed;
-}
-
-function isJsonParsable(text: string): boolean {
-  try {
-    JSON.parse(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function findJsonSubstring(text: string): string | undefined {
-  let index = 0;
-  while (index < text.length) {
-    const start = findNextJsonStart(text, index);
-    if (start === -1) {
-      return undefined;
-    }
-    const candidate = extractBalancedJson(text, start);
-    if (candidate) {
-      return candidate;
-    }
-    index = start + 1;
-  }
-  return undefined;
-}
-
-function findNextJsonStart(text: string, fromIndex: number): number {
-  let brace = text.indexOf('{', fromIndex);
-  let bracket = text.indexOf('[', fromIndex);
-  if (brace === -1) return bracket;
-  if (bracket === -1) return brace;
-  return Math.min(brace, bracket);
-}
-
-function extractBalancedJson(text: string, start: number): string | undefined {
-  const openChar = text[start];
-  const closeChar = openChar === '{' ? '}' : ']';
-  let depth = 0;
-  let inString = false;
-  let escape = false;
-  for (let i = start; i < text.length; i++) {
-    const ch = text[i];
-    if (inString) {
-      if (escape) {
-        escape = false;
-      } else if (ch === '\\') {
-        escape = true;
-      } else if (ch === '"') {
-        inString = false;
-      }
-      continue;
-    }
-    if (ch === '"') {
-      inString = true;
-      continue;
-    }
-    if (ch === openChar) {
-      depth++;
-    } else if (ch === closeChar) {
-      depth--;
-      if (depth === 0) {
-        const candidate = text.slice(start, i + 1);
-        if (isJsonParsable(candidate)) {
-          return candidate;
-        }
-      }
-    }
-  }
-  return undefined;
 }
 
 async function createExampleInstanceFromPayload(opts: {
