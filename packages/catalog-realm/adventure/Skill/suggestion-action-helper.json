@@ -1,0 +1,38 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Skill",
+        "module": "https://cardstack.com/base/skill"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": "Suggest Action Helper",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "commands": [
+        {
+          "codeRef": {
+            "name": "SuggestAction",
+            "module": "../../multiple-choice/multiple-choice"
+          },
+          "requiresApproval": false
+        }
+      ],
+      "description": "Provides interactive multiple-choice options for user decisions",
+      "instructions": "# Suggest Action Skill\n\nThis skill allows you to present users with multiple-choice options that they can click to respond.\n\n## When to Use\n\nUse the Suggest Action command when you want to:\n- Offer the user a set of predefined response options\n- Get quick feedback or decisions from the user\n- Provide interactive choices in the conversation\n- Create polls or simple decision trees\n\n## How to Use\n\n1. Invoke the command with an array of option strings and the current roomId\n2. The command creates a MultipleChoice card with clickable buttons\n3. IMPORTANT: Do NOT send any summary or message after creating the multiple choice card\n4. Wait silently for the user to click an option\n5. When the user clicks an option, it sends that text as a message to the room\n6. You can then process the user's response and continue the conversation\n\n## Example Usage\n\n\nUser: \"Should I proceed with this action?\"\n\nAI: [Executes SuggestAction with options and roomId]\n[AI waits silently - no summary, no additional message]\n\nUser clicks \"Tell me more first\"\n\nAI: [Now responds] \"I'd be happy to provide more details...\"\n\n\n## Best Practices\n\n- Keep options clear and concise (2-5 words each)\n- Limit to 3-5 options for best UX\n- Make options mutually exclusive\n- Use action-oriented language\n- Consider the user's context when crafting options\n- Always include the roomId from context when invoking the command\n- Never send a message after presenting the choices - just wait\n\n## Technical Details\n\n- Command input: Array of strings (the options) + roomId\n- Command output: MultipleChoice card instance\n- User clicks send messages back to the room\n- Handles errors gracefully with user feedback\n- The roomId is required for the message sending to work"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
