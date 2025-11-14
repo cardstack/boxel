@@ -157,7 +157,6 @@ export {
 
 export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
 export const fieldDecorator = Symbol.for('cardstack-field-decorator');
-export const fieldType = Symbol.for('cardstack-field-type');
 export const queryableValue = Symbol.for('cardstack-queryable-value');
 export const formatQuery = Symbol.for('cardstack-format-query');
 export const realmInfo = Symbol.for('cardstack-realm-info');
@@ -165,23 +164,33 @@ export const emptyValue = Symbol.for('cardstack-empty-value');
 // intentionally not exporting this so that the outside world
 // cannot mark a card as being saved
 const isSavedInstance = Symbol.for('cardstack-is-saved-instance');
-const fieldDescription = Symbol.for('cardstack-field-description');
 
 export type BaseInstanceType<T extends BaseDefConstructor> = T extends {
   [primitive]: infer P;
 }
   ? P
   : InstanceType<T>;
+
+// this is expressing the idea that the fields of a
+// card may contain undefined, but even when that's
+// true all the symbols and the `constructor` property
+// can still be relied on.
+type PartialFields<T> = {
+  [Property in keyof T]: Property extends symbol
+    ? T[Property]
+    : Property extends 'constructor'
+    ? T[Property]
+    : T[Property] | undefined;
+};
+
 export type PartialBaseInstanceType<T extends BaseDefConstructor> = T extends {
   [primitive]: infer P;
 }
   ? P | null
-  : Partial<
-      InstanceType<T> & {
-        [fields]: Record<string, BaseDefConstructor>;
-        [fieldsUntracked]: Record<string, BaseDefConstructor>;
-      }
-    >;
+  : PartialFields<InstanceType<T>> & {
+      [fields]: Record<string, BaseDefConstructor>;
+      [fieldsUntracked]: Record<string, BaseDefConstructor>;
+    };
 export type FieldsTypeFor<T extends BaseDef> = {
   [Field in keyof T]: BoxComponent &
     (T[Field] extends ArrayLike<unknown>
@@ -241,7 +250,6 @@ export interface FieldConstructor<T> {
   cardThunk: () => T;
   computeVia: undefined | (() => unknown);
   name: string;
-  description: string | undefined;
   isUsed?: true;
   isPolymorphic?: true;
 }
@@ -340,7 +348,6 @@ export interface Field<
   name: string;
   fieldType: FieldType;
   computeVia: undefined | (() => unknown);
-  description: undefined | string;
   // Optional per-usage configuration stored on the field descriptor
   configuration?: ConfigurationInput<any>;
   // there exists cards that we only ever run in the host without
@@ -422,14 +429,12 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     cardThunk,
     computeVia,
     name,
-    description,
     isUsed,
     isPolymorphic,
   }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
     this.name = name;
-    this.description = description;
     this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
   }
@@ -734,14 +739,12 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     cardThunk,
     computeVia,
     name,
-    description,
     isUsed,
     isPolymorphic,
   }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
     this.name = name;
-    this.description = description;
     this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
   }
@@ -934,14 +937,12 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     cardThunk,
     computeVia,
     name,
-    description,
     isUsed,
     isPolymorphic,
   }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
     this.name = name;
-    this.description = description;
     this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
   }
@@ -1292,7 +1293,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
   private cardThunk: () => FieldT;
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
-  readonly description: string | undefined;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   readonly configuration?: ConfigurationInput<any>;
@@ -1300,14 +1300,12 @@ class LinksToMany<FieldT extends CardDefConstructor>
     cardThunk,
     computeVia,
     name,
-    description,
     isUsed,
     isPolymorphic,
   }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
     this.name = name;
-    this.description = description;
     this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
   }
@@ -1842,6 +1840,15 @@ function fieldComponent(
   return getBoxComponent(card, innerModel, field);
 }
 
+interface InternalFieldInitializer {
+  setupField(name: string): {
+    enumerable?: boolean;
+    get(): unknown;
+    set(value: unknown): void;
+  };
+  description: string | undefined;
+}
+
 // our decorators are implemented by Babel, not TypeScript, so they have a
 // different signature than Typescript thinks they do.
 export const field = function (
@@ -1849,13 +1856,15 @@ export const field = function (
   key: string | symbol,
   { initializer }: { initializer(): any },
 ) {
-  let descriptor = initializer().setupField(key);
-  if (descriptor[fieldDescription]) {
-    setFieldDescription(
-      target.constructor,
-      key as string,
-      descriptor[fieldDescription],
+  if (typeof key === 'symbol') {
+    throw new Error(
+      `the @field decorator only supports string field names, not symbols`,
     );
+  }
+  let init = initializer() as InternalFieldInitializer;
+  let descriptor = init.setupField(key);
+  if (init.description) {
+    setFieldDescription(target.constructor, key as string, init.description);
   }
   return descriptor;
 } as unknown as PropertyDecorator;
@@ -1867,20 +1876,19 @@ export function containsMany<FieldT extends FieldDefConstructor>(
 ): BaseInstanceType<FieldT>[] {
   return {
     setupField(fieldName: string) {
-      let { computeVia, description, isUsed } = options ?? {};
+      let { computeVia, isUsed } = options ?? {};
       let instance = new ContainsMany({
         cardThunk: cardThunk(field),
         computeVia,
         name: fieldName,
-        description,
         isUsed,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
     },
-  } as any;
+    description: options?.description,
+  } satisfies InternalFieldInitializer as any;
 }
-containsMany[fieldType] = 'contains-many' as FieldType;
 
 export function contains<FieldT extends FieldDefConstructor>(
   field: FieldT,
@@ -1888,20 +1896,19 @@ export function contains<FieldT extends FieldDefConstructor>(
 ): BaseInstanceType<FieldT> {
   return {
     setupField(fieldName: string) {
-      let { computeVia, description, isUsed } = options ?? {};
+      let { computeVia, isUsed } = options ?? {};
       let instance = new Contains({
         cardThunk: cardThunk(field),
         computeVia,
         name: fieldName,
-        description,
         isUsed,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
     },
-  } as any;
+    description: options?.description,
+  } satisfies InternalFieldInitializer as any;
 }
-contains[fieldType] = 'contains' as FieldType;
 
 export function linksTo<CardT extends CardDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
@@ -1909,20 +1916,19 @@ export function linksTo<CardT extends CardDefConstructor>(
 ): BaseInstanceType<CardT> {
   return {
     setupField(fieldName: string) {
-      let { computeVia, description, isUsed } = options ?? {};
+      let { computeVia, isUsed } = options ?? {};
       let instance = new LinksTo({
         cardThunk: cardThunk(cardOrThunk),
         computeVia,
         name: fieldName,
-        description,
         isUsed,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
     },
-  } as any;
+    description: options?.description,
+  } satisfies InternalFieldInitializer as any;
 }
-linksTo[fieldType] = 'linksTo' as FieldType;
 
 export function linksToMany<CardT extends CardDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
@@ -1930,20 +1936,19 @@ export function linksToMany<CardT extends CardDefConstructor>(
 ): BaseInstanceType<CardT>[] {
   return {
     setupField(fieldName: string) {
-      let { computeVia, description, isUsed } = options ?? {};
+      let { computeVia, isUsed } = options ?? {};
       let instance = new LinksToMany({
         cardThunk: cardThunk(cardOrThunk),
         computeVia,
         name: fieldName,
-        description,
         isUsed,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
     },
-  } as any;
+    description: options?.description,
+  } satisfies InternalFieldInitializer as any;
 }
-linksToMany[fieldType] = 'linksToMany' as FieldType;
 
 // (moved below BaseDef & FieldDef declarations)
 
@@ -3164,9 +3169,6 @@ function makeDescriptor<
       }
       setField(this, field, value);
     };
-  }
-  if (field.description) {
-    (descriptor as any)[fieldDescription] = field.description;
   }
   (descriptor.get as any)[isField] = field;
   return descriptor;

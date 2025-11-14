@@ -362,6 +362,32 @@ class DateTimePreviewIsolated extends Component<typeof DateTimePreview> {
             </div>
           </div>
 
+          {{! ⁴³ DateField Format Examples }}
+          <div class='component-card'>
+            <div class='component-info'>
+              <h3>DateField - Tiny Preset</h3>
+              <p>Compact date display</p>
+              <code class='config'>configuration: &#123; preset: 'tiny' &#125;</code>
+              <span class='use-case'>Grids • Lists • Mobile Views</span>
+            </div>
+            <div class='component-demo'>
+              <@fields.appointmentDateCompact @format='embedded' />
+            </div>
+          </div>
+
+          <div class='component-card'>
+            <div class='component-info'>
+              <h3>DateField - Custom Format</h3>
+              <p>Day.js format string</p>
+              <code class='config'>configuration: &#123; format: 'MMM D, YYYY'
+                &#125;</code>
+              <span class='use-case'>Custom Displays • Reports</span>
+            </div>
+            <div class='component-demo'>
+              <@fields.appointmentDateCustom @format='embedded' />
+            </div>
+          </div>
+
           <div class='component-card'>
             <div class='component-info'>
               <h3>TimeField</h3>
@@ -374,6 +400,32 @@ class DateTimePreviewIsolated extends Component<typeof DateTimePreview> {
             </div>
           </div>
 
+          {{! ⁴⁴ TimeField Format Examples }}
+          <div class='component-card'>
+            <div class='component-info'>
+              <h3>TimeField - 24-Hour Format</h3>
+              <p>Military time display</p>
+              <code class='config'>configuration: &#123; hourCycle: 'h23' &#125;</code>
+              <span class='use-case'>International • Military • Technical</span>
+            </div>
+            <div class='component-demo'>
+              <@fields.meetingTime24Hour @format='embedded' />
+            </div>
+          </div>
+
+          <div class='component-card'>
+            <div class='component-info'>
+              <h3>TimeField - Long Style</h3>
+              <p>Includes timezone info</p>
+              <code class='config'>configuration: &#123; timeStyle: 'long'
+                &#125;</code>
+              <span class='use-case'>International Meetings • Timezones</span>
+            </div>
+            <div class='component-demo'>
+              <@fields.meetingTimeLong @format='embedded' />
+            </div>
+          </div>
+
           <div class='component-card'>
             <div class='component-info'>
               <h3>DatetimeField</h3>
@@ -383,6 +435,32 @@ class DateTimePreviewIsolated extends Component<typeof DateTimePreview> {
             </div>
             <div class='component-demo'>
               <@fields.eventDateTime @format='edit' />
+            </div>
+          </div>
+
+          {{! ⁴⁵ DatetimeField Format Examples }}
+          <div class='component-card'>
+            <div class='component-info'>
+              <h3>DatetimeField - Short Preset</h3>
+              <p>Compact datetime display</p>
+              <code class='config'>configuration: &#123; preset: 'short' &#125;</code>
+              <span class='use-case'>Mobile • Condensed Views</span>
+            </div>
+            <div class='component-demo'>
+              <@fields.eventDateTimeShort @format='embedded' />
+            </div>
+          </div>
+
+          <div class='component-card'>
+            <div class='component-info'>
+              <h3>DatetimeField - Custom Format</h3>
+              <p>Custom Day.js pattern</p>
+              <code class='config'>configuration: &#123; format: 'ddd, MMM D
+                [at] h:mm A' &#125;</code>
+              <span class='use-case'>Friendly Displays • Invitations</span>
+            </div>
+            <div class='component-demo'>
+              <@fields.eventDateTimeCustom @format='embedded' />
             </div>
           </div>
         </div>
@@ -1085,11 +1163,53 @@ export class DateTimePreview extends CardDef {
   // ²⁹ Single date picker
   @field appointmentDate = contains(DateField);
 
+  // ³⁷ Date with tiny preset (compact display)
+  @field appointmentDateCompact = contains(DateField, {
+    configuration: {
+      preset: 'tiny',
+    },
+  });
+
+  // ³⁸ Date with custom format
+  @field appointmentDateCustom = contains(DateField, {
+    configuration: {
+      format: 'MMM D, YYYY',
+    },
+  });
+
   // ³⁰ Time picker
   @field meetingTime = contains(TimeField);
 
+  // ³⁹ Time with 24-hour format
+  @field meetingTime24Hour = contains(TimeField, {
+    configuration: {
+      hourCycle: 'h23',
+    },
+  });
+
+  // ⁴⁰ Time with long style (includes timezone)
+  @field meetingTimeLong = contains(TimeField, {
+    configuration: {
+      timeStyle: 'long',
+    },
+  });
+
   // ³¹ DateTime picker
   @field eventDateTime = contains(DatetimeField);
+
+  // ⁴¹ DateTime with short preset
+  @field eventDateTimeShort = contains(DatetimeField, {
+    configuration: {
+      preset: 'short',
+    },
+  });
+
+  // ⁴² DateTime with custom format
+  @field eventDateTimeCustom = contains(DatetimeField, {
+    configuration: {
+      format: 'ddd, MMM D [at] h:mm A',
+    },
+  });
 
   // ⁹ INDEPENDENT SPECIALIZED FIELDS - Now separate FieldDef types
 

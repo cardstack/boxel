@@ -17,8 +17,10 @@ import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
+import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { AiAssistantMessageDrafts } from '@cardstack/host/utils/local-storage-keys';
 
 import {
   percySnapshot,
@@ -289,5 +291,102 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     assert
       .dom('[data-test-message-field]')
       .hasValue('This is 1st sentence \n\nThis is 2nd sentence');
+  });
+
+  test('draft attachments persist across panel reopen without duplicating auto attachments', async function (assert) {
+    window.localStorage.removeItem(AiAssistantMessageDrafts);
+
+    operatorModeStateService.restore({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: Submodes.Code,
+      codePath: `${testRealmURL}person.gts`,
+      aiAssistantOpen: false,
+    });
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    let roomId = await openAiAssistant();
+    await waitFor('[data-test-autoattached-file]');
+
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-card-btn]');
+    await fillIn('[data-test-search-field]', 'Fadhlan');
+    await click(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-card-catalog-go-button]');
+
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-file-btn]');
+    await click('[data-test-file="person.gts"]');
+    await click('[data-test-choose-file-modal-add-button]');
+
+    await fillIn('[data-test-message-field]', 'Persist attachments');
+
+    await waitUntil(
+      () => {
+        let raw = window.localStorage.getItem(AiAssistantMessageDrafts);
+        if (!raw) {
+          return false;
+        }
+        try {
+          let parsed = JSON.parse(raw);
+          return Boolean(parsed?.[roomId]);
+        } catch (e: any) {
+          // Fail the test if JSON parsing fails
+          throw new Error(`Failed to parse localStorage draft: ${e.message}`);
+        }
+      },
+      {
+        timeout: 3000,
+        timeoutMessage:
+          'Timed out waiting for localStorage to contain a draft for the room',
+      },
+    );
+
+    let rawDraft = window.localStorage.getItem(AiAssistantMessageDrafts);
+    assert.ok(rawDraft, 'draft stored in localStorage');
+    let parsedDraft = rawDraft ? JSON.parse(rawDraft) : undefined;
+    let draftForRoom = parsedDraft?.[roomId];
+    assert.deepEqual(draftForRoom?.attachedCardIds, [
+      `${testRealmURL}Person/fadhlan`,
+    ]);
+    assert.strictEqual(
+      draftForRoom?.attachedFiles?.[0]?.sourceUrl,
+      `${testRealmURL}person.gts`,
+    );
+
+    await click('[data-test-close-ai-assistant]');
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-settled]');
+    await waitFor(`[data-test-attached-card="${testRealmURL}Person/fadhlan"]`);
+
+    assert.dom('[data-test-message-field]').hasValue('Persist attachments');
+    assert
+      .dom(`[data-test-attached-card="${testRealmURL}Person/fadhlan"]`)
+      .exists({ count: 1 });
+    assert
+      .dom(
+        `[data-test-autoattached-card][data-test-attached-card="${testRealmURL}Person/fadhlan"]`,
+      )
+      .doesNotExist();
+    assert.dom('[data-test-attached-file]').exists({ count: 1 });
+    assert
+      .dom(
+        `[data-test-autoattached-file][data-test-attached-file="${testRealmURL}person.gts"]`,
+      )
+      .doesNotExist();
   });
 });
