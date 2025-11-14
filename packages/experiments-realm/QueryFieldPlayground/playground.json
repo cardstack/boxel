@@ -4,42 +4,6 @@
       "adoptsFrom": {
         "name": "QueryFieldPlayground",
         "module": "../query-field-playground"
-      },
-      "queryFields": {
-        "featuredFriend": {
-          "page": {
-            "size": "$this.pageSize"
-          },
-          "sort": [
-            {
-              "by": "firstName",
-              "direction": "$this.sortDirection"
-            }
-          ],
-          "realm": "$thisRealm",
-          "filter": {
-            "contains": {
-              "firstName": "$this.nameFilter"
-            }
-          }
-        },
-        "matchingFriends": {
-          "page": {
-            "size": "$this.pageSize"
-          },
-          "sort": [
-            {
-              "by": "firstName",
-              "direction": "$this.sortDirection"
-            }
-          ],
-          "realm": "$thisRealm",
-          "filter": {
-            "contains": {
-              "firstName": "$this.nameFilter"
-            }
-          }
-        }
       }
     },
     "type": "card",

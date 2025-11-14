@@ -3636,7 +3636,7 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('query-backed relationships include canonical search links in serialized payloads', async function (assert) {
-    assert.expect(34);
+    assert.expect(38);
 
     class Person extends CardDef {
       @field title = contains(StringField);
@@ -3659,6 +3659,15 @@ module('Integration | serialization', function (hooks) {
             eq: { title: '$this.title' },
           },
           sort: [{ by: 'title', direction: 'asc' }],
+          page: { size: 5 },
+        },
+      });
+      @field emptyMatches = linksToMany(Person, {
+        query: {
+          realm: '$thisRealm',
+          filter: {
+            eq: { title: 'Missing' },
+          },
           page: { size: 5 },
         },
       });
@@ -3768,6 +3777,25 @@ module('Integration | serialization', function (hooks) {
       firstChild?.links?.self,
       `${testRealmURL}Person/target`,
       'matches indexed relationship retains links to result resource',
+    );
+
+    let emptyMatchesRelationship = doc.data.relationships!.emptyMatches;
+    assert.ok(emptyMatchesRelationship, 'emptyMatches relationship exists');
+    assert.deepEqual(
+      emptyMatchesRelationship.data,
+      [],
+      'emptyMatches relationship encodes an empty data array when the realm returned no results',
+    );
+    let emptyMatchesSearchLink = emptyMatchesRelationship.links?.search;
+    assert.ok(
+      emptyMatchesSearchLink,
+      'emptyMatches relationship still exposes links.search when no matches were returned',
+    );
+    let emptyMatchesSearchURL = new URL(emptyMatchesSearchLink!);
+    assert.strictEqual(
+      emptyMatchesSearchURL.href.split('?')[0],
+      new URL('_search', testRealmURL).href,
+      'emptyMatches search link points to canonical search endpoint',
     );
 
     let store = getService('store') as StoreService;

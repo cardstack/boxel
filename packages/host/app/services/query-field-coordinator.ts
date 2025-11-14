@@ -180,6 +180,7 @@ export default class QueryFieldCoordinatorService
     let normalizedQuery = normalizeQueryForSignature(normalized.query);
     let signature = querySignature(normalizedQuery);
     let currentState = api.getQueryFieldState(instance, field.name);
+    console.log('[refresh signature]', field.name, signature, currentState?.signature);
     if (
       !opts.force &&
       currentState &&
@@ -307,27 +308,16 @@ export default class QueryFieldCoordinatorService
     field: Field,
     relationships: Record<string, Relationship>,
   ): LooseCardResource {
-    let metaSource = instance[meta] as CardResourceMeta & {
-      queryFields?: Record<string, unknown>;
-    };
+    let metaSource = instance[meta] as CardResourceMeta | undefined;
     if (!metaSource?.adoptsFrom) {
       throw new Error(
         `cannot refresh query field "${field.name}" without card identity`,
       );
     }
-    let queryMeta = JSON.parse(JSON.stringify(field.queryDefinition ?? {}));
-    let existingQueryFields = metaSource.queryFields ?? {};
-    let updatedMeta = {
-      ...metaSource,
-      queryFields: {
-        ...existingQueryFields,
-        [field.name]: queryMeta,
-      },
-    } as CardResourceMeta;
     return {
       type: 'card',
       ...(instance.id ? { id: instance.id } : { lid: instance[localId] }),
-      meta: updatedMeta,
+      meta: { ...metaSource },
       relationships,
     };
   }

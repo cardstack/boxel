@@ -16,6 +16,7 @@ import {
   THIS_REALM_TOKEN,
 } from '@cardstack/runtime-common';
 import { initSharedState } from './shared-state';
+import { getFields } from './field-support';
 
 export interface QueryFieldAccessPayload {
   instance: CardDef;
@@ -218,57 +219,58 @@ export function seedQueryFieldState(
   instance: CardDef,
   resource: LooseCardResource,
 ): void {
-  let queryFieldsMeta =
-    ((resource.meta as any)?.queryFields as Record<string, unknown>) ?? {};
+  let queryFieldEntries = Object.entries(
+    getFields(instance, { includeComputeds: true }),
+  ).filter(([, field]) => 'queryDefinition' in field && field.queryDefinition);
+  let queryFieldNames = queryFieldEntries.map(([fieldName]) => fieldName);
+  let queryFieldNameSet = new Set(queryFieldNames);
 
   for (let existingField of getQueryFieldStateKeys(instance)) {
-    if (!(existingField in queryFieldsMeta)) {
+    if (!queryFieldNameSet.has(existingField)) {
       setQueryFieldState(instance, existingField, undefined);
     }
   }
 
-  for (let [fieldName] of Object.entries(queryFieldsMeta)) {
-    let field = getField(instance, fieldName);
-    if (!field || !('queryDefinition' in field) || !field.queryDefinition) {
-      setQueryFieldState(instance, fieldName, undefined);
-      continue;
-    }
-
+  for (let fieldName of queryFieldNames) {
     let relationship = resource.relationships?.[fieldName];
     if (!relationship) {
       setQueryFieldState(instance, fieldName, undefined);
       continue;
     }
 
+    let searchURL = relationship.links?.search ?? null;
+    if (!searchURL || typeof searchURL !== 'string') {
+      setQueryFieldState(instance, fieldName, undefined);
+      continue;
+    }
+
+
     let relationshipClone = cloneRelationship(relationship);
-    let searchURL = relationshipClone?.links?.search ?? null;
     let realmFromSearch = realmHrefFromSearchURL(searchURL);
     let normalizedQuery: Query | undefined;
     let signature: string | undefined;
 
-    if (typeof searchURL === 'string' && searchURL.length > 0) {
-      let queryString: string | undefined;
-      try {
-        let url = new URL(searchURL);
-        queryString =
-          url.search && url.search.startsWith('?')
-            ? url.search.slice(1)
-            : url.search;
-      } catch {
-        if (searchURL.startsWith('?')) {
-          queryString = searchURL.slice(1);
-        }
+    let queryString: string | undefined;
+    try {
+      let url = new URL(searchURL);
+      queryString =
+        url.search && url.search.startsWith('?')
+          ? url.search.slice(1)
+          : url.search;
+    } catch {
+      if (searchURL.startsWith('?')) {
+        queryString = searchURL.slice(1);
       }
-      if (queryString) {
-        try {
-          let parsed = parseQuery(queryString);
-          assertQuery(parsed);
-          normalizedQuery = normalizeQueryForSignature(parsed as Query);
-          signature = querySignature(normalizedQuery);
-        } catch {
-          normalizedQuery = undefined;
-          signature = undefined;
-        }
+    }
+    if (queryString) {
+      try {
+        let parsed = parseQuery(queryString);
+        assertQuery(parsed);
+        normalizedQuery = normalizeQueryForSignature(parsed as Query);
+        signature = querySignature(normalizedQuery);
+      } catch {
+        normalizedQuery = undefined;
+        signature = undefined;
       }
     }
 
@@ -280,6 +282,7 @@ export function seedQueryFieldState(
       realm: realmFromSearch ?? null,
       stale: false,
     });
+    console.log('[seed signature]', fieldName, signature);
   }
 }
 
