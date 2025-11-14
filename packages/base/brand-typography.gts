@@ -14,6 +14,11 @@ import {
   type CssVariableFieldEntry,
 } from './structured-theme-variables';
 
+const DEFAULT_HEADING_FONT_SIZE = '20px';
+const DEFAULT_BODY_FONT_SIZE = '13px';
+const DEFAULT_FONT_FAMILY = 'Poppins';
+const DEFAULT_FONT_WEIGHT = 'regular';
+
 class Embedded extends Component<typeof BrandTypography> {
   <template>
     <GridContainer class='preview-grid'>
@@ -80,11 +85,13 @@ class TypographyEmbedded extends Component<typeof TypographyField> {
   private get styles() {
     let { fontFamily, fontSize, fontWeight, lineHeight } = this.args.model;
     let styles = [];
-    if (fontFamily) {
-      styles.push(`font-family: ${fontFamily}`);
+    let fontFamilyValue = fontFamily?.trim() || this.defaultFontFamily;
+    if (fontFamilyValue) {
+      styles.push(`font-family: ${fontFamilyValue}`);
     }
-    if (fontSize) {
-      styles.push(`font-size: ${fontSize}`);
+    let fontSizeValue = fontSize?.trim() || this.defaultFontSize;
+    if (fontSizeValue) {
+      styles.push(`font-size: ${fontSizeValue}`);
     }
     if (fontWeight) {
       styles.push(`font-weight: ${fontWeight}`);
@@ -96,47 +103,62 @@ class TypographyEmbedded extends Component<typeof TypographyField> {
   }
 
   private get styleSummary() {
-    const defaultFontSize = '13px';
-    const defaultFontWeight = 'regular';
-    const defaultFontFamily = 'Poppins';
-
     let { fontFamily, fontSize, fontWeight } = this.args.model;
+    let summaryFontFamily =
+      fontFamily?.split(',')?.[0]?.trim()?.replace(/'/g, '') ??
+      this.defaultFontFamily;
+    let trimmedFontSize = fontSize?.trim();
+    let summaryFontSize =
+      trimmedFontSize && trimmedFontSize.length
+        ? trimmedFontSize
+        : this.defaultFontSize;
+    let summaryFontWeight = this.normalizedFontWeight(fontWeight);
 
-    switch (fontWeight) {
+    return sanitizeHtmlSafe(
+      `${summaryFontFamily} ${summaryFontSize}, ${summaryFontWeight}`,
+    );
+  }
+
+  private get defaultFontSize() {
+    return this.args.fieldName === 'heading'
+      ? DEFAULT_HEADING_FONT_SIZE
+      : DEFAULT_BODY_FONT_SIZE;
+  }
+
+  private get defaultFontFamily() {
+    return DEFAULT_FONT_FAMILY;
+  }
+
+  private get defaultFontWeight() {
+    return DEFAULT_FONT_WEIGHT;
+  }
+
+  private normalizedFontWeight(weight?: string) {
+    if (!weight) {
+      return this.defaultFontWeight;
+    }
+    switch (weight) {
       case '300':
       case 'light':
-        fontWeight = 'light';
-        break;
+        return 'light';
       case '400':
       case 'normal':
-        fontWeight = 'regular';
-        break;
+        return 'regular';
       case '500':
       case 'medium':
-        fontWeight = 'medium';
-        break;
+        return 'medium';
       case '600':
       case 'semibold':
-        fontWeight = 'semibold';
-        break;
+        return 'semibold';
       case '700':
       case 'bold':
-        fontWeight = 'bold';
-        break;
+        return 'bold';
       case '800':
       case 'extrabold':
-        fontWeight = 'extrabold';
-        break;
+        return 'extrabold';
       default:
-        fontWeight;
+        return weight;
     }
-
-    fontFamily =
-      fontFamily?.split(',')?.[0]?.replace(/'/g, '') ?? defaultFontFamily;
-    fontSize = fontSize?.length ? fontSize : defaultFontSize;
-    fontWeight = fontWeight?.length ? fontWeight : defaultFontWeight;
-
-    return sanitizeHtmlSafe(`${fontFamily} ${fontSize}, ${fontWeight}`);
   }
 }
 
@@ -190,15 +212,23 @@ export default class BrandTypography extends FieldDef {
     let headingFields = this.heading?.fieldEntries;
     if (headingFields) {
       for (let { name, value } of headingFields) {
-        if (name && value) {
-          let cssVariableName = `--brand-heading-${dasherize(name)}`;
-          cssVariableFields.push({
-            fieldName: name,
-            cssVariableName,
-            name: cssVariableName,
-            value,
-          });
+        if (!name) {
+          continue;
         }
+        let resolvedValue = value;
+        if (name === 'fontSize' && (!resolvedValue || resolvedValue.trim() === '')) {
+          resolvedValue = DEFAULT_HEADING_FONT_SIZE;
+        }
+        if (!resolvedValue) {
+          continue;
+        }
+        let cssVariableName = `--brand-heading-${dasherize(name)}`;
+        cssVariableFields.push({
+          fieldName: name,
+          cssVariableName,
+          name: cssVariableName,
+          value: resolvedValue,
+        });
       }
     }
 
