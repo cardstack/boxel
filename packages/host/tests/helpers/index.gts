@@ -432,9 +432,10 @@ export function setupLocalIndexing(hooks: NestedHooks) {
     let context = this as RenderingContextWithPrerender;
     context.__cardPrerenderElement?.remove();
     context.__cardPrerenderElement = undefined;
-    store.resetCache();
+    // reference counts should balance out automatically as components are destroyed
+    store.resetCache({ preserveReferences: true });
     let renderStore = getService('render-store');
-    renderStore.resetCache();
+    renderStore.resetCache({ preserveReferences: true });
     let loaderService = getService('loader-service');
     loaderService.resetLoader({
       clearFetchCache: true,

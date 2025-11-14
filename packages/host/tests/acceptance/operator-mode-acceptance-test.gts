@@ -659,7 +659,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click('[data-test-toggle-details]');
     assert
       .dom('[data-test-error-details]')
-      .includesText(`missing file ${testRealmURL}Person/missing-link.json`);
+      .includesText(`Person/missing-link.json not found`);
   });
 
   test('can visit a card via canonical URL from second realm', async function (assert) {

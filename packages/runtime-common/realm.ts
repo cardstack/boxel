@@ -1463,6 +1463,11 @@ export class Realm {
     if (fileRef[Symbol.for('shimmed-module')]) {
       let response = createResponse({
         requestContext,
+        init: {
+          headers: {
+            'X-Boxel-Canonical-Path': fileRef.path,
+          },
+        },
       }) as ResponseWithNodeStream;
       (response as any)[Symbol.for('shimmed-module')] =
         fileRef[Symbol.for('shimmed-module')];
@@ -1478,6 +1483,7 @@ export class Realm {
       if (fileRef.lastModified != null) {
         headers['last-modified'] = formatRFC7231(fileRef.lastModified * 1000);
       }
+      headers['X-Boxel-Canonical-Path'] = fileRef.path;
       return {
         kind: 'not-modified',
         canonicalPath: fileRef.path,
@@ -1512,6 +1518,7 @@ export class Realm {
     if (fileRef.lastModified != null) {
       headers['last-modified'] = formatRFC7231(fileRef.lastModified * 1000);
     }
+    headers['X-Boxel-Canonical-Path'] = fileRef.path;
 
     return {
       kind: 'module',
