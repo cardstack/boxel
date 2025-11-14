@@ -96,7 +96,8 @@ let {
 
 log.info(`starting worker with pid ${process.pid} and priority ${priority}`);
 let useHeadlessChromePrerender =
-  process.env.USE_HEADLESS_CHROME_INDEXING === 'true' && Boolean(prerendererUrl);
+  process.env.USE_HEADLESS_CHROME_INDEXING === 'true' &&
+  Boolean(prerendererUrl);
 let prerenderer: Prerenderer;
 if (useHeadlessChromePrerender && prerendererUrl) {
   (globalThis as any).__useHeadlessChromePrerender = true;
