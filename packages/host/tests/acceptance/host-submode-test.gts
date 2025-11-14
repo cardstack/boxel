@@ -9,6 +9,8 @@ import {
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { TrackedObject } from 'tracked-built-ins';
+
 import { Deferred, baseRealm } from '@cardstack/runtime-common';
 
 import {
@@ -22,8 +24,6 @@ import {
 } from '../helpers';
 
 import { CardsGrid, setupBaseRealm } from '../helpers/base-realm';
-
-import { TrackedObject } from 'tracked-built-ins';
 
 import { viewCardDemoCardSource } from '../helpers/cards/view-card-demo';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -685,7 +685,9 @@ module('Acceptance | host submode', function (hooks) {
           });
 
           await click('[data-test-publish-realm-button]');
-          assert.dom('[data-test-last-published-at]').containsText('3 days ago');
+          assert
+            .dom('[data-test-last-published-at]')
+            .containsText('3 days ago');
           assert.dom('[data-test-unpublish-button]').exists();
           assert.dom('[data-test-open-site-button]').exists();
           await click('[data-test-unpublish-button]');
@@ -863,8 +865,8 @@ module('Acceptance | host submode', function (hooks) {
         let now = Date.now();
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
-            'http://testuser.localhost:4201/test/': now,
-            'https://another-domain.com/realm/': now - 1000,
+            'http://testuser.localhost:4201/test/': String(now),
+            'https://another-domain.com/realm/': String(now - 1000),
           },
         });
 
@@ -877,7 +879,10 @@ module('Acceptance | host submode', function (hooks) {
           // Check that the main button has the correct href
           assert
             .dom('[data-test-open-site-button]')
-            .hasAttribute('href', 'http://testuser.localhost:4201/test/Person/1')
+            .hasAttribute(
+              'href',
+              'http://testuser.localhost:4201/test/Person/1',
+            )
             .hasAttribute('target', '_blank');
 
           await triggerEvent('[data-test-open-site-button]', 'mouseenter');
@@ -897,7 +902,9 @@ module('Acceptance | host submode', function (hooks) {
           assert.dom('[data-test-published-realm-item]').exists({ count: 2 });
 
           assert
-            .dom('[data-test-published-realm-item] [data-test-open-site-button]')
+            .dom(
+              '[data-test-published-realm-item] [data-test-open-site-button]',
+            )
             .exists({ count: 2 });
 
           assert
@@ -916,7 +923,10 @@ module('Acceptance | host submode', function (hooks) {
             .dom(
               '[data-test-published-realm-item="http://testuser.localhost:4201/test/Person/1"] [data-test-open-site-button]',
             )
-            .hasAttribute('href', 'http://testuser.localhost:4201/test/Person/1')
+            .hasAttribute(
+              'href',
+              'http://testuser.localhost:4201/test/Person/1',
+            )
             .hasAttribute('target', '_blank');
 
           assert
@@ -1204,7 +1214,6 @@ module('Acceptance | host submode', function (hooks) {
             .hasAttribute('href', 'http://my-custom-site.localhost:4201/')
             .hasAttribute('target', '_blank');
         } finally {
-          restoreRealmInfo();
           realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
         }
       });

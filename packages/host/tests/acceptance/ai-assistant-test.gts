@@ -90,10 +90,9 @@ async function waitForSessionPreparationToFinish(
   ) as AiAssistantPanelService;
 
   // Background tasks post messages asynchronously; wait until they are done.
-  await waitUntil(
-    () => !aiAssistantPanelService.isPreparingSession,
-    { timeout },
-  );
+  await waitUntil(() => !aiAssistantPanelService.isPreparingSession, {
+    timeout,
+  });
 }
 
 let countryDefinition = `import { field, contains, CardDef } from 'https://cardstack.com/base/card-api';

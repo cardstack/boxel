@@ -13,7 +13,6 @@ import {
   baseRealm,
   SupportedMimeType,
   isCardError,
-  type CardError,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
   type RenderError,
@@ -35,7 +34,9 @@ import {
   RenderCardTypeTracker,
   deriveCardTypeFromDoc,
   withCardType,
-} from '../utils/render-error-card-type';
+  coerceRenderError,
+  normalizeRenderError,
+} from '../utils/render-error';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
@@ -473,6 +474,7 @@ export default class RenderRoute extends Route<Model> {
       error,
       transition,
       cardType,
+      context,
     );
     let signature = this.#makeErrorSignature(serializedError, context);
     if (signature === this.lastRenderErrorSignature) {
@@ -492,56 +494,56 @@ export default class RenderRoute extends Route<Model> {
     error: any,
     transition?: Transition,
     cardType?: string,
+    context?: { cardId?: string; nonce?: string },
   ): string {
-    try {
-      let cardError: CardError = JSON.parse(error.message);
-      return JSON.stringify(
-        this.#stripLastKnownGoodHtml(
-          withCardType(
-            {
-              type: 'error',
-              error: cardError,
-            },
-            cardType,
-          ),
-        ),
-        null,
-        2,
+    let normalizationContext = {
+      cardId: context?.cardId,
+      normalizeCardId: (id: string) => this.#normalizeCardId(id),
+    };
+    let coerceFromMessage =
+      typeof error?.message === 'string'
+        ? coerceRenderError(error.message)
+        : undefined;
+    let coerceFromValue = coerceFromMessage ?? coerceRenderError(error);
+    if (coerceFromValue) {
+      let normalized = normalizeRenderError(
+        coerceFromValue,
+        normalizationContext,
       );
-    } catch (_e) {
-      let current: Transition['to'] | null = transition?.to;
-      let id: string | undefined;
-      do {
-        id = current?.params?.id as string | undefined;
-        if (!id) {
-          current = current?.parent;
-        }
-      } while (current && !id);
-      if (isCardError(error)) {
-        return JSON.stringify(
-          this.#stripLastKnownGoodHtml(
-            withCardType(
-              {
-                type: 'error',
-                error: serializableError(error),
-              },
-              cardType,
-            ),
-          ),
-          null,
-          2,
-        );
-      }
-      let errorJSONAPI = formattedError(id, error).errors[0];
-      let errorPayload = errorJsonApiToErrorEntry(errorJSONAPI);
-      return JSON.stringify(
-        this.#stripLastKnownGoodHtml(
-          withCardType(errorPayload as RenderError, cardType),
-        ),
-        null,
-        2,
-      );
+      let withType = withCardType(normalized, cardType);
+      return JSON.stringify(this.#stripLastKnownGoodHtml(withType), null, 2);
     }
+    let current: Transition['to'] | null = transition?.to;
+    let id: string | undefined;
+    do {
+      id = current?.params?.id as string | undefined;
+      if (!id) {
+        current = current?.parent;
+      }
+    } while (current && !id);
+    if (isCardError(error)) {
+      let normalized = normalizeRenderError(
+        {
+          type: 'error',
+          error: serializableError(error),
+        },
+        normalizationContext,
+      );
+      let withType = withCardType(normalized, cardType);
+      return JSON.stringify(this.#stripLastKnownGoodHtml(withType), null, 2);
+    }
+    let errorJSONAPI = formattedError(id, error).errors[0];
+    let errorPayload = normalizeRenderError(
+      errorJsonApiToErrorEntry(errorJSONAPI) as RenderError,
+      normalizationContext,
+    );
+    return JSON.stringify(
+      this.#stripLastKnownGoodHtml(
+        withCardType(errorPayload as RenderError, cardType),
+      ),
+      null,
+      2,
+    );
   }
 
   #stripLastKnownGoodHtml<T>(value: T): T {

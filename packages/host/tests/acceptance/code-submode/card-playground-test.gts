@@ -1655,7 +1655,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await click('[data-test-toggle-details]');
       assert
         .dom('[data-test-error-details]')
-        .includesText('Stack trace: No stack trace');
+        .includesText('Boom! at [cardstack-serialize]');
     });
 
     test('it renders error info when creating new instance causes error after file was created in realm', async function (assert) {
@@ -1929,7 +1929,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-format-chooser]').doesNotExist();
 
       await click('[data-test-toggle-details]');
-      assert.dom('[data-test-error-details]').containsText('missing file');
+      assert
+        .dom('[data-test-error-details]')
+        .containsText('Person/missing-link.json not found');
       assert.dom('[data-test-error-stack]').exists();
 
       // fix error
@@ -2013,10 +2015,8 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .dom('[data-test-boxel-card-header-title]')
         .containsText('Card Error: Link Not Found');
       assert
-        .dom('[data-test-card-error]')
-        .containsText(
-          `Card "${testRealmURL}Person/chef-mike" contains a missing link.`,
-        );
+        .dom('[data-test-error-message]')
+        .containsText(`missing file ${testRealmURL}Pet/missing-pet.json`);
     });
   });
 });

@@ -47,7 +47,9 @@ import {
   type CardRenderContext,
   deriveCardTypeFromDoc,
   withCardType,
-} from '../utils/render-error-card-type';
+  coerceRenderError,
+  normalizeRenderError,
+} from '../utils/render-error';
 
 import type LoaderService from '../services/loader-service';
 import type LocalIndexer from '../services/local-indexer';
@@ -443,10 +445,13 @@ export default class CardPrerender extends Component {
     }
     let context = this.#currentContext ?? this.#contextFromDom();
     let cardType = context ? this.#cardTypeTracker.get(context) : undefined;
-    let renderErrorPayload = this.#coerceRenderError(reason);
+    let renderErrorPayload = coerceRenderError(reason);
     if (renderErrorPayload) {
+      let normalized = normalizeRenderError(renderErrorPayload, {
+        cardId: context?.cardId,
+      });
       this.#renderErrorPayload = JSON.stringify(
-        withCardType(renderErrorPayload, cardType),
+        withCardType(normalized, cardType),
       );
       return;
     }
@@ -462,34 +467,6 @@ export default class CardPrerender extends Component {
       }
     }
   };
-
-  #coerceRenderError(reason: unknown): RenderError | undefined {
-    if (typeof reason === 'string') {
-      try {
-        let parsed = JSON.parse(reason);
-        if (this.#isRenderErrorLike(parsed)) {
-          return parsed as RenderError;
-        }
-      } catch {
-        return undefined;
-      }
-    } else if (
-      reason &&
-      typeof reason === 'object' &&
-      this.#isRenderErrorLike(reason)
-    ) {
-      return JSON.parse(JSON.stringify(reason));
-    }
-    return undefined;
-  }
-
-  #isRenderErrorLike(value: unknown): value is RenderError {
-    return (
-      !!value &&
-      typeof value === 'object' &&
-      'error' in (value as Record<string, unknown>)
-    );
-  }
 
   #contextFromDom(): CardRenderContext | undefined {
     if (typeof document === 'undefined') {

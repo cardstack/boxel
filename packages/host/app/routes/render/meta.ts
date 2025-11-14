@@ -26,7 +26,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 
-import { friendlyCardType } from '../../utils/render-error-card-type';
+import { friendlyCardType } from '../../utils/render-error';
 
 import type { Model as ParentModel } from '../render';
 
