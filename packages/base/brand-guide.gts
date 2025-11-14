@@ -26,7 +26,7 @@ import {
 
 import BrandTypography from './brand-typography';
 import BrandFunctionalPalette from './brand-functional-palette';
-import BrandLogo from './brand-logo';
+import BrandLogo, { LogoContainer } from './brand-logo';
 import CSSValueField from './css-value';
 import ThemeVarField, { dasherize } from './structured-theme-variables';
 
@@ -58,7 +58,9 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       <BoxelContainer @tag='header' @display='flex' class='header-section'>
         {{#if @model.markUsage.primaryMark1}}
           <div class='header-logo-container'>
-            <img class='header-logo' src={{@model.markUsage.primaryMark1}} />
+            <LogoContainer @variant='primary' class='header-logo'>
+              <@fields.markUsage.primaryMark1 />
+            </LogoContainer>
           </div>
         {{/if}}
         <h1><@fields.title /></h1>
@@ -158,7 +160,7 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        gap: 0;
+        gap: var(--boxel-sp-xxxs);
         background-color: var(--muted);
         color: var(--foreground);
       }
@@ -167,14 +169,17 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         width: 450px;
         height: auto;
         aspect-ratio: 1.8;
-        padding: var(--boxel-sp);
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       .header-logo {
-        --logo-min-height: var(--brand-primary-mark-min-height);
-        height: 100%;
-        min-height: var(--logo-min-height);
-        max-width: 100%;
-        max-height: 100%;
+        width: 100%;
+        height: auto;
+      }
+      .header-logo-container :deep(img) {
+        width: 100%;
+        height: auto;
         object-fit: contain;
         object-position: center;
       }

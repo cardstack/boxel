@@ -304,7 +304,6 @@ export class MarkField extends URLField {
       <style scoped>
         .mark-image {
           min-height: var(--logo-min-height);
-          height: var(--logo-height);
           max-width: 100%;
           max-height: 100%;
         }
@@ -336,10 +335,10 @@ export class LogoContainer extends GlimmerComponent<{
         .mark-container {
           --logo-height: var(--logo-min-height, 30px);
           --mark-container-height: calc(
-            var(--logo-height) + 2 * var(--mark-clearance)
+            var(--logo-height) + 2 * var(--mark-clearance, 0)
           );
           margin: 0;
-          padding: var(--mark-clearance, 5px);
+          padding: var(--mark-clearance, 0);
           height: var(--mark-container-height);
         }
         .mark--primary {
@@ -361,7 +360,7 @@ export class LogoContainer extends GlimmerComponent<{
         }
         .mark--profile {
           --logo-min-height: var(--boxel-icon-med);
-          --mark-padding: 5px;
+          --mark-clearance: 5px;
           aspect-ratio: 1;
         }
       }
