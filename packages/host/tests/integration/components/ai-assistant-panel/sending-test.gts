@@ -314,7 +314,6 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
