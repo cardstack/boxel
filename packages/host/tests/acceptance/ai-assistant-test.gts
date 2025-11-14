@@ -2769,6 +2769,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-new-session-settings-create-button]');
     await waitFor(`[data-room-settled]`);
     await waitForSessionPreparationToFinish();
+    await waitUntil(() => {
+      // Wait until the informational message for the cloned session appears.
+      return document.querySelectorAll('[data-test-message-idx]').length === 1;
+    });
 
     assertMessages(assert, [
       {

@@ -369,6 +369,7 @@ export async function createRealm({
       secretSeed: realmSecretSeed,
       realmServerMatrixUsername: testRealmServerMatrixUsername,
       prerenderer,
+      useHeadlessChromePrerender: Boolean(usePrerenderer),
     });
   }
   let realmServerMatrixClient = new MatrixClient({
@@ -450,6 +451,7 @@ export async function runBaseRealmServer(
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
+    useHeadlessChromePrerender: Boolean(usePrerenderer),
   });
   let { realm: testBaseRealm } = await createRealm({
     dir: basePath,
@@ -537,6 +539,7 @@ export async function runTestRealmServer({
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
+    useHeadlessChromePrerender: Boolean(usePrerenderer),
   });
   await worker.run();
   let { realm: testRealm, adapter: testRealmAdapter } = await createRealm({

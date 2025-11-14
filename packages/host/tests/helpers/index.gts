@@ -710,6 +710,7 @@ async function setupTestRealm({
     secretSeed: testRealmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer: localIndexer.prerenderer,
+    useHeadlessChromePrerender: usePrerenderer,
   });
 
   realm = new Realm({

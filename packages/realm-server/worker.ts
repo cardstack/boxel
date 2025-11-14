@@ -95,8 +95,10 @@ let {
   .parseSync();
 
 log.info(`starting worker with pid ${process.pid} and priority ${priority}`);
+let useHeadlessChromePrerender =
+  process.env.USE_HEADLESS_CHROME_INDEXING === 'true' && Boolean(prerendererUrl);
 let prerenderer: Prerenderer;
-if (process.env.USE_HEADLESS_CHROME_INDEXING === 'true' && prerendererUrl) {
+if (useHeadlessChromePrerender && prerendererUrl) {
   (globalThis as any).__useHeadlessChromePrerender = true;
   log.info(`Using prerender server ${prerendererUrl}`);
   prerenderer = createRemotePrerenderer(prerendererUrl);
@@ -158,6 +160,7 @@ let autoMigrate = migrateDB || undefined;
     dbAdapter,
     queuePublisher: new PgQueuePublisher(dbAdapter),
     prerenderer,
+    useHeadlessChromePrerender,
   });
 
   await worker.run();
