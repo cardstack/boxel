@@ -55,14 +55,6 @@ export default class Card extends Route {
   @service private declare router: RouterService;
   @service private declare store: StoreService;
   @service private declare homePageResolver: HomePageResolver;
-  @service declare fastboot: {
-    isFastBoot: boolean;
-    request?: {
-      protocol?: string;
-      host?: string;
-      path?: string;
-    };
-  };
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
 
@@ -110,18 +102,6 @@ export default class Card extends Route {
   }
 
   private currentURL(transition: Transition): string | undefined {
-    if (this.fastboot.isFastBoot) {
-      let { protocol, host, path } = this.fastboot.request ?? {};
-      if (!host || !path) {
-        return;
-      }
-      let normalizedProtocol = protocol ?? 'http:';
-      if (!normalizedProtocol.endsWith(':')) {
-        normalizedProtocol = `${normalizedProtocol}:`;
-      }
-      return `${normalizedProtocol}//${host}${path}`;
-    }
-
     return `${this.hostModeService.hostModeOrigin}/${
       transition.to?.params?.path ?? ''
     }`;
