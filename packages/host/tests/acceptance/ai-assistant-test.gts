@@ -2452,7 +2452,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       aiAssistantOpen: true,
     });
 
-    await waitFor(`[data-room-settled]`);
+    await waitFor(`[data-test-room-settled]`);
     await click('[data-test-module-inspector-view="spec"]');
     await waitFor('[data-test-spec-selector-item-path]');
 
