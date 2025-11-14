@@ -37,7 +37,6 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
-import PatchSummary from './patch-summary';
 import Message from './text-content';
 
 interface Signature {
@@ -84,9 +83,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
   <template>
     <Message class='ai-bot-message'>
       {{#if @isPatchSummary}}
-        <PatchSummary @body={{@messageHTML}} @commands={{@commands}}>
-          {{yield}}
-        </PatchSummary>
+        {{yield}}
       {{else}}
         {{#if @reasoning}}
           <div class='reasoning-content'>

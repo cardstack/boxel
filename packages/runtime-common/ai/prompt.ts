@@ -232,8 +232,7 @@ function getCheckCorrectnessCommandRequests(
     return [];
   }
   let encodedRequests =
-    (event.content as CardMessageContent)[APP_BOXEL_COMMAND_REQUESTS_KEY] ??
-    [];
+    (event.content as CardMessageContent)[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? [];
   if (!Array.isArray(encodedRequests)) {
     return [];
   }
@@ -242,10 +241,7 @@ function getCheckCorrectnessCommandRequests(
     let decoded = decodeCommandRequestSafe(
       encodedRequest as Partial<EncodedCommandRequest>,
     );
-    if (
-      decoded?.id &&
-      decoded.name === CHECK_CORRECTNESS_COMMAND_NAME
-    ) {
+    if (decoded?.id && decoded.name === CHECK_CORRECTNESS_COMMAND_NAME) {
       commandRequests.push(decoded);
     }
   }
@@ -273,11 +269,7 @@ function isTerminalCommandResultEventFor(
     return false;
   }
   let status = event.content['m.relates_to']?.key;
-  return (
-    status === 'applied' ||
-    status === 'failed' ||
-    status === 'invalid'
-  );
+  return status === 'applied' || status === 'failed' || status === 'invalid';
 }
 
 async function getEnabledSkills(
@@ -769,9 +761,7 @@ async function toResultMessages(
     await Promise.all(
       (messageContent[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
         async (commandRequest: Partial<EncodedCommandRequest>) => {
-          let decodedCommandRequest = decodeCommandRequestSafe(
-            commandRequest,
-          );
+          let decodedCommandRequest = decodeCommandRequestSafe(commandRequest);
           let commandResult = commandResults.find(
             (commandResult) =>
               (commandResult.content.msgtype ===
@@ -843,7 +833,11 @@ function buildCheckCorrectnessResultContent(
     return `Check correctness was marked as ${status} for ${targetDescription}: ${failureReason}`;
   }
   if (resultCard) {
-    return formatCorrectnessResultSummary(targetDescription, resultCard, status);
+    return formatCorrectnessResultSummary(
+      targetDescription,
+      resultCard,
+      status,
+    );
   }
   return `Check correctness was marked as ${status} for ${targetDescription}.`;
 }
@@ -894,11 +888,18 @@ function extractCorrectnessResultCard(
   let cardContent = cardPayload.content ?? cardPayload;
   let parsed:
     | {
-        data?: { attributes?: { correct?: boolean; errors?: string[]; warnings?: string[] } };
+        data?: {
+          attributes?: {
+            correct?: boolean;
+            errors?: string[];
+            warnings?: string[];
+          };
+        };
       }
     | undefined;
   try {
-    parsed = typeof cardContent === 'string' ? JSON.parse(cardContent) : cardContent;
+    parsed =
+      typeof cardContent === 'string' ? JSON.parse(cardContent) : cardContent;
   } catch (error) {
     getLog().error('Unable to parse correctness result card', error);
     return undefined;
@@ -922,17 +923,27 @@ function formatCorrectnessResultSummary(
       ? `Check correctness passed for ${targetDescription}.`
       : `Check correctness was marked as ${status} for ${targetDescription}.`,
   );
-  let errorLines = result.errors.filter((entry) => typeof entry === 'string' && entry.trim().length);
+  let errorLines = result.errors.filter(
+    (entry) => typeof entry === 'string' && entry.trim().length,
+  );
   if (errorLines.length) {
-    sections.push(`Errors:\n${errorLines.map((line) => `- ${line}`).join('\n')}`);
+    sections.push(
+      `Errors:\n${errorLines.map((line) => `- ${line}`).join('\n')}`,
+    );
   }
   let warningLines = result.warnings.filter(
     (entry) => typeof entry === 'string' && entry.trim().length,
   );
   if (warningLines.length) {
-    sections.push(`Warnings:\n${warningLines.map((line) => `- ${line}`).join('\n')}`);
+    sections.push(
+      `Warnings:\n${warningLines.map((line) => `- ${line}`).join('\n')}`,
+    );
   }
-  return sections.join('\n\n');
+  let summary = sections.join('\n\n');
+  if (errorLines.length) {
+    summary += `\n\Before proposing fixes, make sure to re-fetch the files that have errors so that you can see their updated content.`;
+  }
+  return summary;
 }
 
 export async function buildPromptForModel(
