@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Site Configuration",
+      "description": "Realm site configuration card; set its home field to pick an alternate home page card for your realm",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/site-config",
+        "name": "SiteConfig"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
