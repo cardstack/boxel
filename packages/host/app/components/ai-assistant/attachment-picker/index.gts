@@ -110,10 +110,18 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
   private get files() {
     let files = this.args.filesToAttach ?? [];
 
-    if (this.args.autoAttachedFile) {
-      files = [...new Set([this.args.autoAttachedFile, ...files])];
+    if (!this.args.autoAttachedFile) {
+      return files;
     }
 
-    return files;
+    if (
+      files.some(
+        (file) => file.sourceUrl === this.args.autoAttachedFile?.sourceUrl,
+      )
+    ) {
+      return files;
+    }
+
+    return [this.args.autoAttachedFile, ...files];
   }
 }
