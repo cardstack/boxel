@@ -36,6 +36,7 @@ import {
   insertPermissions,
   unixTime,
   RealmAction,
+  type RenderError,
 } from '@cardstack/runtime-common';
 import { getCreatedTime } from '@cardstack/runtime-common/file-meta';
 import {
@@ -53,8 +54,12 @@ import ENV from '@cardstack/host/config/environment';
 import { render as renderIntoElement } from '@cardstack/host/lib/isolated-render';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 import { RealmServerTokenClaims } from '@cardstack/host/services/realm-server';
-
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
+
+import {
+  coerceRenderError,
+  normalizeRenderError,
+} from '@cardstack/host/utils/render-error';
 
 import {
   type CardStore,
@@ -265,7 +270,10 @@ export async function capturePrerenderResult(
     ''
   ).trim();
   if (errorText.length > 0) {
-    return { status: 'error', value: errorText };
+    return {
+      status: 'error',
+      value: normalizeCapturedErrorText(errorText),
+    };
   }
   if (!container) {
     throw new Error(
@@ -280,10 +288,62 @@ export async function capturePrerenderResult(
   if (status === 'error' || status === 'unusable') {
     return {
       status: 'error',
-      value: container.innerHTML!.replace(/}[^}]*$/, '}'),
+      value: normalizeCapturedErrorText(
+        container.innerHTML!.replace(/}[^}]*$/, '}'),
+      ),
     };
   }
   return { status: 'ready', value: container.children[0][capture]! };
+}
+
+function normalizeCapturedErrorText(errorText: string): string {
+  let normalized = formatCapturedRenderError(errorText);
+  return normalized ?? errorText;
+}
+
+function formatCapturedRenderError(errorText: string): string | undefined {
+  let renderError = coerceRenderError(errorText);
+  if (!renderError) {
+    return undefined;
+  }
+  let normalized = flattenNestedRenderError(normalizeRenderError(renderError));
+  return JSON.stringify(normalized, null, 2);
+}
+
+function flattenNestedRenderError(renderError: RenderError): RenderError {
+  let cloned = JSON.parse(JSON.stringify(renderError)) as RenderError;
+  let nested =
+    extractNestedErrorPayload(cloned.error.message) ??
+    extractNestedErrorPayload(cloned.error.title);
+  if (!nested) {
+    return cloned;
+  }
+  cloned.error = {
+    ...cloned.error,
+    ...nested,
+  };
+  return cloned;
+}
+
+function extractNestedErrorPayload(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  let trimmed = value.trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+    return undefined;
+  }
+  try {
+    let nested = JSON.parse(trimmed);
+    if (nested && typeof nested === 'object' && 'message' in nested) {
+      return nested as Record<string, unknown>;
+    }
+  } catch (_err) {
+    return undefined;
+  }
+  return undefined;
 }
 
 export function captureModuleResult(): {
