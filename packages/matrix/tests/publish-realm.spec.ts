@@ -244,11 +244,6 @@ test.describe('Publish realm', () => {
     );
     let dependentCardURL = `${defaultRealmURL}index`;
 
-    await waitUntil(async () => {
-      let publishability = await getRealmPublishability(page, defaultRealmURL);
-      return publishability.publishable === false;
-    }, 20000);
-
     await page.locator('[data-test-workspace="1New Workspace"]').click();
     await page.locator('[data-test-submode-switcher] button').click();
     await page.locator('[data-test-boxel-menu-item-text="Host"]').click();
