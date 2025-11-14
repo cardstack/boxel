@@ -460,7 +460,7 @@ export default class BrandGuide extends StyleReference {
     setValue('radius', this.cornerRadius ?? DEFAULT_RADIUS);
     setValue(
       'spacing',
-      this.spacing ? `calc(${this.spacing} / 4}` : DEFAULT_SPACING,
+      this.spacing ? `calc(var(--brand-spacing) / 4)` : DEFAULT_SPACING,
     );
 
     return Object.keys(values).length ? values : undefined;
@@ -496,11 +496,14 @@ export default class BrandGuide extends StyleReference {
       if (!generateCssVariables || !buildCssGroups) {
         return;
       }
-      let rootRules = this.rootVariables?.cssRuleMap?.size
-        ? this.rootVariables?.cssRuleMap
+      let rootRuleMap = this.rootVariables?.cssRuleMap;
+      let darkRuleMap = this.darkModeVariables?.cssRuleMap;
+      let rootRules = rootRuleMap?.size
+        ? rootRuleMap
         : this.generatedRootCssRuleMap;
-      let darkRules =
-        this.darkModeVariables?.cssRuleMap ?? this.generatedDarkCssRuleMap;
+      let darkRules = darkRuleMap?.size
+        ? darkRuleMap
+        : this.generatedDarkCssRuleMap;
       let brandRules = this.calculateBrandRules();
       let sections: string[] = [];
 
