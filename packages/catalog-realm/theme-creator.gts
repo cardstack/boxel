@@ -27,6 +27,565 @@ import { task } from 'ember-concurrency';
 import type { TaskInstance } from 'ember-concurrency';
 import { tracked } from '@glimmer/tracking';
 
+
+const STRUCTURED_THEME_VARIABLES = [
+  '--background',
+  '--foreground',
+  '--card',
+  '--card-foreground',
+  '--popover',
+  '--popover-foreground',
+  '--primary',
+  '--primary-foreground',
+  '--secondary',
+  '--secondary-foreground',
+  '--muted',
+  '--muted-foreground',
+  '--accent',
+  '--accent-foreground',
+  '--destructive',
+  '--destructive-foreground',
+  '--border',
+  '--input',
+  '--ring',
+  '--chart-1',
+  '--chart-2',
+  '--chart-3',
+  '--chart-4',
+  '--chart-5',
+  '--sidebar',
+  '--sidebar-foreground',
+  '--sidebar-primary',
+  '--sidebar-primary-foreground',
+  '--sidebar-accent',
+  '--sidebar-accent-foreground',
+  '--sidebar-border',
+  '--sidebar-ring',
+  '--font-sans',
+  '--font-serif',
+  '--font-mono',
+  '--radius',
+  '--spacing',
+  '--tracking-normal',
+] as const;
+
+const BOXEL_THEME_VARIABLES = [
+  '--color-background',
+  '--color-foreground',
+  '--color-card',
+  '--color-card-foreground',
+  '--color-popover',
+  '--color-popover-foreground',
+  '--color-primary',
+  '--color-primary-foreground',
+  '--color-secondary',
+  '--color-secondary-foreground',
+  '--color-muted',
+  '--color-muted-foreground',
+  '--color-accent',
+  '--color-accent-foreground',
+  '--color-destructive',
+  '--color-destructive-foreground',
+  '--color-border',
+  '--color-input',
+  '--color-ring',
+  '--color-sidebar',
+  '--color-sidebar-foreground',
+  '--color-sidebar-primary',
+  '--color-sidebar-primary-foreground',
+  '--color-sidebar-accent',
+  '--color-sidebar-accent-foreground',
+  '--color-sidebar-border',
+  '--color-sidebar-ring',
+  '--radius-sm',
+  '--radius-md',
+  '--radius-lg',
+  '--radius-xl',
+  '--shadow-2xs',
+  '--shadow-xs',
+  '--shadow-sm',
+  '--shadow',
+  '--shadow-md',
+  '--shadow-lg',
+  '--shadow-xl',
+  '--shadow-2xl',
+] as const;
+
+const STRUCTURED_THEME_VARIABLE_SUMMARY =
+  STRUCTURED_THEME_VARIABLES.join(', ');
+const BOXEL_THEME_VARIABLE_SUMMARY = BOXEL_THEME_VARIABLES.join(', ');
+
+const STYLE_REFERENCE_CSS = String.raw`:root {
+--typescale-body: 16px;
+  /* == VINTAGE LUXURY THEME == */
+  /* Sepia tones, serif heads, collage layout, gold-foil touches, patina textures */
+  
+  /* BASE PALETTE - Warm Heritage Tones */
+  --background: oklch(0.98 0.01 85); /* Warm cream, not stark white */
+  --foreground: oklch(0.25 0.02 45); /* Rich sepia brown */
+  --card: oklch(0.985 0.008 80); /* Subtle warm card background */
+  --card-foreground: oklch(0.25 0.02 45);
+  --popover: oklch(0.985 0.008 80);
+  --popover-foreground: oklch(0.25 0.02 45);
+  
+  /* PRIMARY - Heritage Gold Accent */
+  --primary: oklch(0.45 0.08 70); /* Burnished gold/bronze */
+  --primary-foreground: oklch(0.98 0.01 85); /* Cream on gold */
+  
+  /* SECONDARY - Aged Parchment */
+  --secondary: oklch(0.94 0.015 75); /* Warm ivory */
+  --secondary-foreground: oklch(0.35 0.02 50);
+  
+  /* MUTED - Vintage Paper */
+  --muted: oklch(0.92 0.02 70); /* Aged paper tone */
+  --muted-foreground: oklch(0.48 0.015 55); /* Faded ink */
+  
+  /* ACCENT - Antique Brass */
+  --accent: oklch(0.52 0.06 65); /* Warm brass accent */
+  --accent-foreground: oklch(0.98 0.01 85);
+  
+  /* DESTRUCTIVE - Vintage Burgundy */
+  --destructive: oklch(0.42 0.15 25); /* Deep wine red */
+  --destructive-foreground: oklch(0.98 0.01 85);
+  
+  /* BORDERS - Antique Patina */
+  --border: oklch(0.85 0.02 60); /* Subtle warm gray */
+  --input: oklch(0.82 0.025 65); /* Slightly deeper for inputs */
+  --ring: oklch(0.45 0.08 70); /* Gold focus rings */
+  
+  /* CHARTS - Heritage Color Story */
+  --chart-1: oklch(0.45 0.08 70); /* Burnished gold */
+  --chart-2: oklch(0.52 0.12 45); /* Warm brown */
+  --chart-3: oklch(0.42 0.15 25); /* Deep burgundy */
+  --chart-4: oklch(0.38 0.04 80); /* Antique brass */
+  --chart-5: oklch(0.65 0.06 65); /* Warm taupe */
+  
+  /* SIDEBAR - Library Study Aesthetic */
+  --sidebar: oklch(0.96 0.012 80); /* Warm off-white */
+  --sidebar-foreground: oklch(0.25 0.02 45);
+  --sidebar-primary: oklch(0.45 0.08 70);
+  --sidebar-primary-foreground: oklch(0.98 0.01 85);
+  --sidebar-accent: oklch(0.94 0.015 75);
+  --sidebar-accent-foreground: oklch(0.35 0.02 50);
+  --sidebar-border: oklch(0.88 0.02 65);
+  --sidebar-ring: oklch(0.45 0.08 70);
+  
+  /* TYPOGRAPHY - Classical Heritage Hierarchy */
+  --font-sans: 'Inter', 'Segoe UI', 'Roboto', system-ui, sans-serif; /* Clean for body */
+  --font-serif: 'Playfair Display', 'Georgia', 'Crimson Text', serif; /* Elegant for headlines */
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Monaco', monospace;
+  
+  /* GEOMETRY - Refined Luxury Curves */
+  --radius: 0.75rem; /* More generous than standard */
+  
+  /* SPACING - Aristocratic Generosity */
+  --spacing: 0.375rem; /* More spacious than standard */
+  
+  /* TEXT - Classical Letter Spacing */
+  --tracking-normal: 0.01em; /* Subtle letterspacing for elegance */
+  
+  /* SHADOWS - Soft Luxury Depth */
+  --shadow-2xs: 0 1px 3px 0px oklch(0.25 0.02 45 / 0.08);
+  --shadow-xs: 0 2px 4px 0px oklch(0.25 0.02 45 / 0.08);
+  --shadow-sm: 0 2px 6px 0px oklch(0.25 0.02 45 / 0.10), 0 1px 3px -1px oklch(0.25 0.02 45 / 0.08);
+  --shadow: 0 3px 8px 0px oklch(0.25 0.02 45 / 0.10), 0 2px 4px -2px oklch(0.25 0.02 45 / 0.08);
+  --shadow-md: 0 4px 12px 0px oklch(0.25 0.02 45 / 0.12), 0 2px 6px -2px oklch(0.25 0.02 45 / 0.08);
+  --shadow-lg: 0 6px 16px 0px oklch(0.25 0.02 45 / 0.12), 0 4px 8px -2px oklch(0.25 0.02 45 / 0.08);
+  --shadow-xl: 0 8px 24px 0px oklch(0.25 0.02 45 / 0.14), 0 6px 12px -2px oklch(0.25 0.02 45 / 0.08);
+  --shadow-2xl: 0 12px 32px 0px oklch(0.25 0.02 45 / 0.16);
+}
+
+.dark {
+  /* == DARK MODE VINTAGE LUXURY == */
+  /* Evening library, candlelight, leather-bound volumes */
+  
+  /* BASE PALETTE - Rich Evening Tones */
+  --background: oklch(0.12 0.015 35); /* Deep warm charcoal */
+  --foreground: oklch(0.88 0.02 75); /* Warm ivory */
+  --card: oklch(0.15 0.02 40); /* Slightly lighter charcoal */
+  --card-foreground: oklch(0.88 0.02 75);
+  --popover: oklch(0.18 0.02 45);
+  --popover-foreground: oklch(0.88 0.02 75);
+  
+  /* PRIMARY - Candlelight Gold */
+  --primary: oklch(0.68 0.12 75); /* Brighter gold for dark backgrounds */
+  --primary-foreground: oklch(0.12 0.015 35);
+  
+  /* SECONDARY - Rich Velvet */
+  --secondary: oklch(0.22 0.02 42); /* Deep warm gray */
+  --secondary-foreground: oklch(0.85 0.02 75);
+  
+  /* MUTED - Aged Leather */
+  --muted: oklch(0.25 0.025 45); /* Rich brown undertones */
+  --muted-foreground: oklch(0.72 0.02 70);
+  
+  /* ACCENT - Amber Glow */
+  --accent: oklch(0.58 0.08 65); /* Warm amber for dark mode */
+  --accent-foreground: oklch(0.12 0.015 35);
+  
+  /* DESTRUCTIVE - Dark Wine */
+  --destructive: oklch(0.55 0.18 25); /* Brighter wine for visibility */
+  --destructive-foreground: oklch(0.88 0.02 75);
+  
+  /* BORDERS - Antique Bronze */
+  --border: oklch(0.35 0.025 50); /* Warm dark borders */
+  --input: oklch(0.38 0.03 52);
+  --ring: oklch(0.68 0.12 75); /* Gold focus rings */
+  
+  /* CHARTS - Evening Heritage Palette */
+  --chart-1: oklch(0.68 0.12 75); /* Candlelight gold */
+  --chart-2: oklch(0.58 0.08 65); /* Warm amber */
+  --chart-3: oklch(0.55 0.18 25); /* Dark wine */
+  --chart-4: oklch(0.48 0.06 55); /* Antique bronze */
+  --chart-5: oklch(0.42 0.04 48); /* Rich taupe */
+  
+  /* SIDEBAR - Evening Study */
+  --sidebar: oklch(0.10 0.015 32); /* Deepest warm black */
+  --sidebar-foreground: oklch(0.88 0.02 75);
+  --sidebar-primary: oklch(0.68 0.12 75);
+  --sidebar-primary-foreground: oklch(0.10 0.015 32);
+  --sidebar-accent: oklch(0.22 0.02 42);
+  --sidebar-accent-foreground: oklch(0.85 0.02 75);
+  --sidebar-border: oklch(0.32 0.025 48);
+  --sidebar-ring: oklch(0.68 0.12 75);
+  
+  /* TYPOGRAPHY - Same Classical Fonts */
+  --font-sans: 'Inter', 'Segoe UI', 'Roboto', system-ui, sans-serif;
+  --font-serif: 'Playfair Display', 'Georgia', 'Crimson Text', serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Monaco', monospace;
+  
+  /* GEOMETRY & SPACING - Consistent Luxury */
+  --radius: 0.75rem;
+  --spacing: 0.375rem;
+  --tracking-normal: 0.01em;
+  
+  /* SHADOWS - Warm Candlelight Depth */
+  --shadow-2xs: 0 1px 3px 0px oklch(0.05 0.01 30 / 0.15);
+  --shadow-xs: 0 2px 4px 0px oklch(0.05 0.01 30 / 0.18);
+  --shadow-sm: 0 2px 6px 0px oklch(0.05 0.01 30 / 0.20), 0 1px 3px -1px oklch(0.05 0.01 30 / 0.15);
+  --shadow: 0 3px 8px 0px oklch(0.05 0.01 30 / 0.22), 0 2px 4px -2px oklch(0.05 0.01 30 / 0.15);
+  --shadow-md: 0 4px 12px 0px oklch(0.05 0.01 30 / 0.24), 0 2px 6px -2px oklch(0.05 0.01 30 / 0.15);
+  --shadow-lg: 0 6px 16px 0px oklch(0.05 0.01 30 / 0.26), 0 4px 8px -2px oklch(0.05 0.01 30 / 0.15);
+  --shadow-xl: 0 8px 24px 0px oklch(0.05 0.01 30 / 0.28), 0 6px 12px -2px oklch(0.05 0.01 30 / 0.15);
+  --shadow-2xl: 0 12px 32px 0px oklch(0.05 0.01 30 / 0.32);
+}`;
+
+const STRUCTURED_THEME_CSS = String.raw`:root {
+  --background: #ffffff;
+  --foreground: #111418;
+  --card: #f8f9fb;
+  --card-foreground: #111418;
+  --popover: #ffffff;
+  --popover-foreground: #111418;
+  --primary: #5c6ac4;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f6ff;
+  --secondary-foreground: #1f2a48;
+  --muted: #eef1f6;
+  --muted-foreground: #4c5567;
+  --accent: #f5eafb;
+  --accent-foreground: #5f2861;
+  --destructive: #e23e57;
+  --destructive-foreground: #ffffff;
+  --border: #e1e6ef;
+  --input: #d8deea;
+  --ring: #7f8cf1;
+  --chart-1: #5c6ac4;
+  --chart-2: #4dc9b1;
+  --chart-3: #ffb347;
+}
+
+.dark {
+  --background: #101322;
+  --foreground: #f7f7fb;
+  --card: #181b2e;
+  --card-foreground: #f7f7fb;
+  --popover: #181b2e;
+  --popover-foreground: #f7f7fb;
+  --primary: #99a5ff;
+  --primary-foreground: #111418;
+  --secondary: #23273c;
+  --secondary-foreground: #f2f2fc;
+  --muted: #23273c;
+  --muted-foreground: #b7bdd5;
+  --accent: #3a2f4e;
+  --accent-foreground: #f2e8ff;
+  --destructive: #ff6b81;
+  --destructive-foreground: #1a1d2c;
+  --border: #292e45;
+  --input: #2f3450;
+  --ring: #99a5ff;
+  --chart-1: #99a5ff;
+  --chart-2: #52d5bc;
+  --chart-3: #ffc857;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-sidebar: var(--background);
+  --color-sidebar-foreground: var(--foreground);
+  --color-sidebar-primary: var(--primary);
+  --color-sidebar-primary-foreground: var(--primary-foreground);
+  --radius-sm: calc(var(--radius, 0.5rem) - 4px);
+  --radius-md: var(--radius, 0.5rem);
+  --radius-lg: calc(var(--radius, 0.5rem) + 4px);
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', monospace;
+}`;
+
+const STRUCTURED_THEME_ROOT_VARIABLES = JSON.stringify(
+  {
+    background: '#ffffff',
+    foreground: '#111418',
+    card: '#f8f9fb',
+    cardForeground: '#111418',
+    popover: '#ffffff',
+    popoverForeground: '#111418',
+    primary: '#5c6ac4',
+    primaryForeground: '#ffffff',
+    secondary: '#f3f6ff',
+    secondaryForeground: '#1f2a48',
+    muted: '#eef1f6',
+    mutedForeground: '#4c5567',
+    accent: '#f5eafb',
+    accentForeground: '#5f2861',
+    destructive: '#e23e57',
+    destructiveForeground: '#ffffff',
+    border: '#e1e6ef',
+    input: '#d8deea',
+    ring: '#7f8cf1',
+    chart1: '#5c6ac4',
+    chart2: '#4dc9b1',
+    chart3: '#ffb347',
+    chart4: '#eef1f6',
+    chart5: '#d5e1ff',
+    sidebar: '#ffffff',
+    sidebarForeground: '#111418',
+    sidebarPrimary: '#5c6ac4',
+    sidebarPrimaryForeground: '#ffffff',
+    sidebarAccent: '#f3f6ff',
+    sidebarAccentForeground: '#1f2a48',
+    sidebarBorder: '#e1e6ef',
+    sidebarRing: '#7f8cf1',
+    fontSans: "'Inter', system-ui, sans-serif",
+    fontSerif: "'Playfair Display', serif",
+    fontMono: "'JetBrains Mono', 'SFMono-Regular', monospace",
+    radius: '0.5rem',
+    spacing: '0.25rem',
+    trackingNormal: '0.02em',
+    shadow2xs: '0 0.5px 1px rgba(17, 20, 24, 0.05)',
+    shadowXs: '0 1px 2px rgba(17, 20, 24, 0.06)',
+    shadowSm: '0 1px 3px rgba(17, 20, 24, 0.08)',
+    shadow: '0 2px 6px rgba(17, 20, 24, 0.08)',
+    shadowMd: '0 4px 10px rgba(17, 20, 24, 0.1)',
+    shadowLg: '0 8px 16px rgba(17, 20, 24, 0.12)',
+    shadowXl: '0 12px 24px rgba(17, 20, 24, 0.14)',
+    shadow2xl: '0 18px 30px rgba(17, 20, 24, 0.18)',
+  },
+  null,
+  2,
+);
+
+const STYLE_REFERENCE_SAMPLE_JSON = JSON.stringify(
+  {
+    data: {
+      type: 'card',
+      attributes: {
+        styleName: 'Vintage Luxury',
+        visualDNA:
+          'Sepia tones, serif heads, collage layout, gold-foil touches, patina textures',
+        cardInfo: {
+          title: 'Vintage Luxury Style Reference',
+          description:
+            'A refined palette inspired by heritage leather, velvet lounges, and gilded accents.',
+          thumbnailURL:
+            'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=640&auto=format',
+        },
+        inspirations: ['Gucci Vault', 'Burberry Archive', 'Hermès Heritage'],
+        wallpaperImages: [
+          'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=1920&auto=format',
+          'https://images.pexels.com/photos/4792382/pexels-photo-4792382.jpeg?w=1920&auto=compress',
+        ],
+        cssImports: [
+          'https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap',
+          'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&display=swap',
+          'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400&display=swap',
+        ],
+        rootVariables: JSON.parse(STRUCTURED_THEME_ROOT_VARIABLES),
+        darkModeVariables: JSON.parse(STRUCTURED_THEME_ROOT_VARIABLES),
+        cssVariables: STYLE_REFERENCE_CSS,
+      },
+    },
+  },
+  null,
+  2,
+);
+
+const STRUCTURED_THEME_SAMPLE_JSON = JSON.stringify(
+  {
+    data: {
+      type: 'card',
+      attributes: {
+        cardInfo: {
+          title: 'Luminous Modern Structured Theme',
+          description:
+            'A flexible system blending crisp neutrals with lavender highlights for product-heavy dashboards.',
+          thumbnailURL:
+            'https://images.unsplash.com/photo-1529333166437-7750a6dd5a70?w=640&auto=format',
+        },
+        rootVariables: JSON.parse(STRUCTURED_THEME_ROOT_VARIABLES),
+        darkModeVariables: JSON.parse(STRUCTURED_THEME_ROOT_VARIABLES),
+        cssVariables: STRUCTURED_THEME_CSS,
+        cssImports: ['https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap'],
+      },
+    },
+  },
+  null,
+  2,
+);
+
+const BRAND_GUIDE_ROOT_VARIABLES = JSON.stringify(
+  {
+    card: '#FFFFFF',
+    ring: '#0051BA',
+    input: '#DFDFDF',
+    muted: null,
+    accent: null,
+    border: null,
+    chart1: '#0051BA',
+    chart2: '#FFDB00',
+    chart3: '#484848',
+    chart4: '#DFDFDF',
+    chart5: '#F5F5F5',
+    radius: '2px',
+    shadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+    popover: '#FFFFFF',
+    primary: null,
+    sidebar: '#F5F5F5',
+    spacing: '4px',
+    fontMono: "'Courier New', monospace",
+    fontSans: "'Noto IKEA', 'Noto Sans', sans-serif",
+    shadowLg: '0 10px 15px rgba(0, 0, 0, 0.1)',
+    shadowMd: '0 4px 6px rgba(0, 0, 0, 0.1)',
+    shadowSm: '0 1px 2px rgba(0, 0, 0, 0.05)',
+    shadowXl: '0 20px 25px rgba(0, 0, 0, 0.15)',
+    shadowXs: '0 1px 1.5px rgba(0, 0, 0, 0.04)',
+    fontSerif: "Georgia, 'Times New Roman', serif",
+    secondary: null,
+    shadow2xl: '0 25px 50px rgba(0, 0, 0, 0.25)',
+    shadow2xs: '0 0.5px 1px rgba(0, 0, 0, 0.03)',
+    background: '#FFFFFF',
+    foreground: null,
+    destructive: '#DC2626',
+    sidebarRing: '#0051BA',
+    sidebarAccent: '#FFDB00',
+    sidebarBorder: '#DFDFDF',
+    cardForeground: '#111111',
+    sidebarPrimary: '#0051BA',
+    trackingNormal: '0',
+    mutedForeground: null,
+    accentForeground: null,
+    popoverForeground: '#111111',
+    primaryForeground: null,
+    sidebarForeground: '#111111',
+    secondaryForeground: null,
+    destructiveForeground: '#FFFFFF',
+    sidebarAccentForeground: '#111111',
+    sidebarPrimaryForeground: '#FFFFFF',
+  },
+  null,
+  2,
+);
+
+const BRAND_GUIDE_SAMPLE_JSON = JSON.stringify(
+  {
+    data: {
+      type: 'card',
+      attributes: {
+        styleName: 'Democratic Design',
+        visualDNA:
+          "IKEA's design language combines bold primary colors with clear typography and generous white space.",
+        inspirations: [
+          'Scandinavian minimalism',
+          'Functional simplicity',
+          'Accessible modernism',
+        ],
+        markUsage: {
+          primaryMark1:
+            'https://cdn.brandfetch.io/idLsXYVLUs/theme/dark/logo.svg',
+          primaryMarkMinHeight: '40px',
+          primaryMarkClearanceRatio: '0.5',
+          socialMediaProfileIcon:
+            'https://cdn.brandfetch.io/idLsXYVLUs/theme/dark/logo.svg',
+        },
+        typography: {
+          heading: {
+            fontFamily: "'Noto Sans', sans-serif",
+            fontWeight: '700',
+            fontSize: '28px',
+          },
+          body: {
+            fontFamily: "'Noto Sans', sans-serif",
+            fontWeight: '400',
+            fontSize: '14px',
+          },
+        },
+        cardInfo: {
+          title: 'IKEA Brand Guide',
+          description: 'A democratic design system built around bold blue/yellow contrasts.',
+          thumbnailURL:
+            'https://images.unsplash.com/photo-1503602642458-232111445657?w=640&auto=format',
+        },
+        rootVariables: JSON.parse(BRAND_GUIDE_ROOT_VARIABLES),
+        darkModeVariables: JSON.parse(BRAND_GUIDE_ROOT_VARIABLES),
+        brandColorPalette: [
+          { name: 'IKEA Blue', value: '#0051BA' },
+          { name: 'IKEA Yellow', value: '#FFDB00' },
+          { name: 'Warm Grey', value: '#F5F5F5' },
+          { name: 'Cool Grey', value: '#DFDFDF' },
+          { name: 'Dark Grey', value: '#484848' },
+        ],
+        functionalPalette: {
+          primary: '#0051BA',
+          secondary: '#FFDB00',
+          accent: '#F5F5F5',
+          neutral: '#DFDFDF',
+          light: '#FFFFFF',
+          dark: '#111111',
+          border: '#DFDFDF',
+        },
+        wallpaperImages: [
+          'https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=1920',
+          'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=1920',
+        ],
+      },
+    },
+  },
+  null,
+  2,
+);
+
 class Isolated extends Component<typeof ThemeCreator> {
   get canGenerate() {
     return Boolean(this.args.model.realm && this.args.model.codeRef);
@@ -95,6 +654,86 @@ class Isolated extends Component<typeof ThemeCreator> {
       return 'Select a theme type to preview cards.';
     }
     return 'Update the selections above to preview cards.';
+  }
+
+  private moduleMatches(
+    codeRef: { module?: string | URL | null } | null,
+    fragment: string,
+  ): boolean {
+    let moduleSpecifier = codeRef?.module;
+    if (!moduleSpecifier) {
+      return false;
+    }
+    let moduleString =
+      typeof moduleSpecifier === 'string'
+        ? moduleSpecifier
+        : moduleSpecifier.toString();
+    return moduleString.includes(fragment);
+  }
+
+  get structuredThemeGuidance(): string {
+    return [
+      'Structured Theme guidance: return JSON whose `cssVariables` field contains CSS defining both a light `:root` block and a `.dark` block so palettes work in light and dark contexts.',
+      `Populate tokens such as ${STRUCTURED_THEME_VARIABLE_SUMMARY} with OKLCH or Hex values, and keep typography, spacing, radius, chart, sidebar, and shadow tokens cohesive.`,
+      'Also include `rootVariables` and `darkModeVariables` objects mirroring those values so downstream tooling can diff individual tokens without parsing raw CSS.',
+      'Append an `@theme inline` section that maps your structured variables to Boxel theme tokens so host apps can consume them consistently.',
+      `Reference Boxel slots like ${BOXEL_THEME_VARIABLE_SUMMARY} and preserve AA-level contrast across states.`,
+      'Add remote fonts to `cssImports` and always use `var(--token, fallback)` when referencing custom properties inside the CSS payload.',
+      'Sample serialized JSON:',
+      STRUCTURED_THEME_SAMPLE_JSON,
+    ].join('\n');
+  }
+
+  get styleReferenceGuidance(): string {
+    return [
+      'Style Reference guidance: populate `styleName`, `visualDNA`, and `cardInfo.description` with short narratives, provide 4‑6 concise `inspirations`, and include at least two high-quality `wallpaperImages` URLs that reinforce the palette.',
+      'Tie inspirations to materials, typography, or emotions so the assistant understands the desired mood.',
+      'Return both `rootVariables`/`darkModeVariables` objects (token → value maps) and a `cssVariables` string that includes `:root`, `.dark`, and any `@theme inline` mappings so downstream tooling can diff tokens while still having raw CSS.',
+      'Sample serialized JSON:',
+      STYLE_REFERENCE_SAMPLE_JSON,
+      this.structuredThemeGuidance,
+    ].join('\n\n');
+  }
+
+  get brandGuideGuidance(): string {
+    return [
+      'Brand Guide guidance: capture the brand’s primary/secondary marks, clearance ratios, and social icons inside `markUsage`, describe the tone via `styleName`, `visualDNA`, and `brandColorPalette`, and provide wall imagery that reflects the system.',
+      'Fill `typography` with heading/body stacks, `brandColorPalette` with named swatches, and `functionalPalette` with semantic colors (dark/light/primary/accent/border).',
+      'Provide `rootVariables` and `darkModeVariables` objects along with a `cssVariables` string so editors can tweak individual tokens while previewing the compiled CSS.',
+      'Sample serialized JSON:',
+      BRAND_GUIDE_SAMPLE_JSON,
+      this.structuredThemeGuidance,
+    ].join('\n\n');
+  }
+
+  get themeGuidance(): string {
+    return [
+      'Theme guidance: return JSON whose `cssVariables` string declares a cohesive design system. Include a comprehensive `:root` block and, when appropriate, a `.dark` block to maintain parity across modes.',
+      `Focus on the foundational tokens (${STRUCTURED_THEME_VARIABLE_SUMMARY}) and ensure every value has a coherent fallback.`,
+      'Provide the same values inside both `rootVariables` and `darkModeVariables` objects so editors can surface and tweak individual tokens without parsing raw CSS.',
+      'Append an `@theme inline` section if you map those tokens directly into Boxel theme slots; otherwise keep the CSS limited to the variables you introduced.',
+      'List any required fonts or asset imports under `cssImports` and maintain accessible contrast throughout.',
+      'Sample serialized JSON:',
+      STRUCTURED_THEME_SAMPLE_JSON,
+    ].join('\n');
+  }
+
+  promptGuidanceFor(
+    codeRef: { module?: string | URL | null } | null,
+  ): string {
+    if (this.moduleMatches(codeRef, 'style-reference')) {
+      return this.styleReferenceGuidance;
+    }
+    if (this.moduleMatches(codeRef, 'brand-guide')) {
+      return this.brandGuideGuidance;
+    }
+    if (this.moduleMatches(codeRef, 'structured-theme')) {
+      return this.structuredThemeGuidance;
+    }
+    if (this.moduleMatches(codeRef, '/theme')) {
+      return this.themeGuidance;
+    }
+    return this.structuredThemeGuidance;
   }
 
   @tracked generationRuns: Array<{
@@ -207,16 +846,42 @@ class Isolated extends Component<typeof ThemeCreator> {
       return;
     }
 
-    let prompt =
+    let userPrompt =
       typeof this.args.model.prompt === 'string'
         ? this.args.model.prompt.trim()
         : null;
+    let promptSections: string[] = [];
+    if (userPrompt?.length) {
+      promptSections.push(userPrompt);
+    }
+    let guidancePrompt = this.promptGuidanceFor(codeRef).trim();
+    if (guidancePrompt.length) {
+      promptSections.push(guidancePrompt);
+    }
+    let combinedPrompt = promptSections.join('\n\n');
+
+    try {
+      console.debug(
+        'ThemeCreator payload prompt',
+        JSON.stringify(
+          {
+            scope: 'ThemeCreator:AskPayload',
+            guidance: guidancePrompt,
+            prompt: combinedPrompt,
+          },
+          null,
+          2,
+        ),
+      );
+    } catch {
+      // ignore logging issues
+    }
 
     let askCommand = new AskAiForCardJsonCommand(commandContext);
     let payloadResult = await askCommand.execute({
       codeRef,
       realm,
-      prompt: prompt ?? undefined,
+      prompt: combinedPrompt || undefined,
     });
 
     let createCommand = new CreateExampleCardCommand(commandContext);
