@@ -719,96 +719,109 @@ async function setupTestRealm({
   mockMatrixUtils: MockUtils;
   usePrerenderer: boolean;
 }) {
+  let hadHeadlessFlag = Object.prototype.hasOwnProperty.call(
+    globalThis,
+    '__useHeadlessChromePrerender',
+  );
+  let previousHeadlessFlag = (globalThis as any).__useHeadlessChromePrerender;
   // default to all tests using headless chrome
   if (usePrerenderer) {
     (globalThis as any).__useHeadlessChromePrerender = true;
   } else {
     delete (globalThis as any).__useHeadlessChromePrerender;
   }
-  let owner = (getContext() as TestContext).owner;
-  let { virtualNetwork } = getService('network');
-  let { queue } = getService('queue');
+  try {
+    let owner = (getContext() as TestContext).owner;
+    let { virtualNetwork } = getService('network');
+    let { queue } = getService('queue');
 
-  realmURL = realmURL ?? testRealmURL;
+    realmURL = realmURL ?? testRealmURL;
 
-  if (isAcceptanceTest) {
-    await visit('/acceptance-test-setup');
-  } else {
-    // We use a rendered component to facilitate our indexing (this emulates
-    // the work that the Fastboot renderer is doing), which means that the
-    // `setupRenderingTest(hooks)` from ember-qunit must be used in your tests.
-    await makeRenderer();
-  }
+    if (isAcceptanceTest) {
+      await visit('/acceptance-test-setup');
+    } else {
+      // We use a rendered component to facilitate our indexing (this emulates
+      // the work that the Fastboot renderer is doing), which means that the
+      // `setupRenderingTest(hooks)` from ember-qunit must be used in your tests.
+      await makeRenderer();
+    }
 
-  let localIndexer = owner.lookup(
-    'service:local-indexer',
-  ) as unknown as MockLocalIndexer;
-  let realm: Realm;
+    let localIndexer = owner.lookup(
+      'service:local-indexer',
+    ) as unknown as MockLocalIndexer;
+    let realm: Realm;
 
-  let adapter = new TestRealmAdapter(
-    contents,
-    new URL(realmURL),
-    mockMatrixUtils,
-    owner,
-  );
-  let indexRunner: IndexRunner = async (optsId) => {
-    let { registerRunner, indexWriter } = runnerOptsMgr.getOptions(optsId);
-    await localIndexer.configureRunner(registerRunner, adapter, indexWriter);
-  };
+    let adapter = new TestRealmAdapter(
+      contents,
+      new URL(realmURL),
+      mockMatrixUtils,
+      owner,
+    );
+    let indexRunner: IndexRunner = async (optsId) => {
+      let { registerRunner, indexWriter } = runnerOptsMgr.getOptions(optsId);
+      await localIndexer.configureRunner(registerRunner, adapter, indexWriter);
+    };
 
-  let dbAdapter = await getDbAdapter();
-  await insertPermissions(dbAdapter, new URL(realmURL), permissions);
-  let worker = new Worker({
-    indexWriter: new IndexWriter(dbAdapter),
-    queue,
-    dbAdapter,
-    queuePublisher: queue,
-    runnerOptsManager: runnerOptsMgr,
-    indexRunner,
-    virtualNetwork,
-    matrixURL: baseTestMatrix.url,
-    secretSeed: testRealmSecretSeed,
-    realmServerMatrixUsername: testRealmServerMatrixUsername,
-    prerenderer: localIndexer.prerenderer,
-    useHeadlessChromePrerender: usePrerenderer,
-  });
-
-  realm = new Realm({
-    url: realmURL,
-    adapter,
-    matrix: {
-      ...baseTestMatrix,
-      username: testRealmURLToUsername(realmURL),
-    },
-    secretSeed: testRealmSecretSeed,
-    virtualNetwork,
-    dbAdapter,
-    queue,
-    realmServerMatrixClient: new MatrixClient({
+    let dbAdapter = await getDbAdapter();
+    await insertPermissions(dbAdapter, new URL(realmURL), permissions);
+    let worker = new Worker({
+      indexWriter: new IndexWriter(dbAdapter),
+      queue,
+      dbAdapter,
+      queuePublisher: queue,
+      runnerOptsManager: runnerOptsMgr,
+      indexRunner,
+      virtualNetwork,
       matrixURL: baseTestMatrix.url,
-      username: testRealmServerMatrixUsername,
-      seed: testRealmSecretSeed,
-    }),
-  });
+      secretSeed: testRealmSecretSeed,
+      realmServerMatrixUsername: testRealmServerMatrixUsername,
+      prerenderer: localIndexer.prerenderer,
+      useHeadlessChromePrerender: usePrerenderer,
+    });
 
-  // we use this to run cards that were added to the test filesystem
-  adapter.setLoader(
-    new Loader(realm.__fetchForTesting, virtualNetwork.resolveImport),
-  );
+    realm = new Realm({
+      url: realmURL,
+      adapter,
+      matrix: {
+        ...baseTestMatrix,
+        username: testRealmURLToUsername(realmURL),
+      },
+      secretSeed: testRealmSecretSeed,
+      virtualNetwork,
+      dbAdapter,
+      queue,
+      realmServerMatrixClient: new MatrixClient({
+        matrixURL: baseTestMatrix.url,
+        username: testRealmServerMatrixUsername,
+        seed: testRealmSecretSeed,
+      }),
+    });
 
-  // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
-  virtualNetwork.mount(realm.maybeHandle);
-  await mockMatrixUtils.start();
-  await adapter.ready;
-  await worker.run();
-  await realm.start();
+    // we use this to run cards that were added to the test filesystem
+    adapter.setLoader(
+      new Loader(realm.__fetchForTesting, virtualNetwork.resolveImport),
+    );
 
-  let realmServer = getService('realm-server');
-  if (!realmServer.availableRealmURLs.includes(realmURL)) {
-    realmServer.setAvailableRealmURLs([realmURL]);
+    // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
+    virtualNetwork.mount(realm.maybeHandle);
+    await mockMatrixUtils.start();
+    await adapter.ready;
+    await worker.run();
+    await realm.start();
+
+    let realmServer = getService('realm-server');
+    if (!realmServer.availableRealmURLs.includes(realmURL)) {
+      realmServer.setAvailableRealmURLs([realmURL]);
+    }
+
+    return { realm, adapter };
+  } finally {
+    if (hadHeadlessFlag) {
+      (globalThis as any).__useHeadlessChromePrerender = previousHeadlessFlag;
+    } else {
+      delete (globalThis as any).__useHeadlessChromePrerender;
+    }
   }
-
-  return { realm, adapter };
 }
 
 export function setupAuthEndpoints(
