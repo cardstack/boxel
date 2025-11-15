@@ -176,9 +176,6 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   addInstanceOrError(id: string, instanceOrError: CardDef | CardErrorJSONAPI) {
     this.setItem(id, instanceOrError);
-    if (!isCardInstance(instanceOrError)) {
-      this.#idResolver.removeByRemoteId(id);
-    }
   }
 
   getInstanceOrError(id: string) {
@@ -227,14 +224,31 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   reset() {
     this.#cards.clear();
-    this.#cardErrors.clear();
+    this.#clearEphemeralErrors(this.#cardErrors);
     this.#nonTrackedCards.clear();
-    this.#nonTrackedCardErrors.clear();
+    this.#clearEphemeralErrors(this.#nonTrackedCardErrors);
     this.#gcCandidates.clear();
     this.#docsInFlight.clear();
     this.#inFlight.clear();
     this.#loadGeneration = 0;
     this.#idResolver.reset();
+  }
+
+  #clearEphemeralErrors(bucket: Map<string, CardErrorJSONAPI>) {
+    for (let id of [...bucket.keys()]) {
+      let error = bucket.get(id);
+      if (!error) {
+        bucket.delete(id);
+        continue;
+      }
+      if (!this.#shouldPreserveError(error)) {
+        bucket.delete(id);
+      }
+    }
+  }
+
+  #shouldPreserveError(error: CardErrorJSONAPI): boolean {
+    return Boolean(error.meta?.remoteId);
   }
 
   get gcCandidates() {
@@ -429,6 +443,9 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     }
     let instance = isCardInstance(item) ? item : undefined;
     let error = !isCardInstance(item) ? item : undefined;
+    if (error && !isLocalId(id) && error.id && isLocalId(error.id)) {
+      this.#idResolver.addIdPair(error.id, id);
+    }
     let localId = isLocalId(id) ? id : undefined;
     let remoteIds = !isLocalId(id) ? [id] : [];
     if (localId) {

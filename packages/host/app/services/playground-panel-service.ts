@@ -63,6 +63,7 @@ export default class PlaygroundPanelService extends Service {
     format: Format,
     fieldIndex: number | undefined,
   ) => {
+    this.syncSelectionsWithStorage();
     let url = this.operatorModeStateService.codePathString;
 
     this.playgroundSelections[moduleId] = {
@@ -159,6 +160,7 @@ export default class PlaygroundPanelService extends Service {
   };
 
   removeSelectionsByCardId = (cardId: string) => {
+    this.syncSelectionsWithStorage();
     let foundItems = Object.entries(this.playgroundSelections).filter(
       ([_key, val]) => this.store.isSameId(val.cardId, cardId),
     );

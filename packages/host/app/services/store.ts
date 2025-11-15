@@ -711,7 +711,14 @@ export default class StoreService extends Service implements StoreInterface {
         continue;
       }
       if (isLocalId(id)) {
-        for (let remoteId of this.store.getRemoteIds(id)) {
+        let remoteIdsForLocal = this.store.getRemoteIds(id);
+        if (remoteIdsForLocal.length === 0) {
+          let error = this.store.getError(id);
+          if (error?.meta?.remoteId) {
+            remoteIdsForLocal = [error.meta.remoteId];
+          }
+        }
+        for (let remoteId of remoteIdsForLocal) {
           remoteIds.add(remoteId);
         }
       } else {
@@ -1192,6 +1199,10 @@ export default class StoreService extends Service implements StoreInterface {
         );
         let cardError = errorResponse.errors[0];
         this.setIdentityContext(cardError);
+        let remoteId = cardError.meta?.remoteId;
+        if (remoteId && (!cardError.id || isLocalId(cardError.id))) {
+          this.store.addInstanceOrError(remoteId, cardError);
+        }
         return cardError;
       } finally {
         deferred.fulfill();

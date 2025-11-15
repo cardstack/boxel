@@ -207,6 +207,91 @@ const petCard = `import { contains, containsMany, field, CardDef, Component, Fie
   }
 `;
 
+const clone = <T,>(obj: T): T => JSON.parse(JSON.stringify(obj)) as T;
+
+const commentSpec2 = {
+  data: {
+    type: 'card',
+    attributes: {
+      ref: {
+        name: 'Comment',
+        module: '../blog-post',
+      },
+      specType: 'field',
+      containedExamples: [
+        {
+          title: 'Spec 2 Example 1',
+        },
+      ],
+      title: 'Comment spec II',
+    },
+    meta: {
+      fields: {
+        containedExamples: [
+          {
+            adoptsFrom: {
+              module: '../blog-post',
+              name: 'Comment',
+            },
+          },
+        ],
+      },
+      adoptsFrom: {
+        module: 'https://cardstack.com/base/spec',
+        name: 'Spec',
+      },
+    },
+  },
+};
+
+const commentSpec1 = {
+  data: {
+    type: 'card',
+    attributes: {
+      ref: {
+        name: 'Comment',
+        module: '../blog-post',
+      },
+      specType: 'field',
+      containedExamples: [
+        {
+          title: 'Terrible product',
+          name: 'Marco',
+          message: 'I would give 0 stars if I could. Do not buy!',
+        },
+        {
+          title: 'Needs better packaging',
+          name: 'Harry',
+          message: 'Arrived broken',
+        },
+      ],
+      title: 'Comment spec',
+    },
+    meta: {
+      fields: {
+        containedExamples: [
+          {
+            adoptsFrom: {
+              module: '../blog-post',
+              name: 'Comment',
+            },
+          },
+          {
+            adoptsFrom: {
+              module: '../blog-post',
+              name: 'Comment',
+            },
+          },
+        ],
+      },
+      adoptsFrom: {
+        module: 'https://cardstack.com/base/spec',
+        name: 'Spec',
+      },
+    },
+  },
+};
+
 module('Acceptance | code-submode | field playground', function (_hooks) {
   module('single realm', function (hooks) {
     let realm: Realm;
@@ -274,87 +359,8 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
               },
             },
           },
-          'Spec/comment-2.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                ref: {
-                  name: 'Comment',
-                  module: '../blog-post',
-                },
-                specType: 'field',
-                containedExamples: [
-                  {
-                    title: 'Spec 2 Example 1',
-                  },
-                ],
-                title: 'Comment spec II',
-              },
-              meta: {
-                fields: {
-                  containedExamples: [
-                    {
-                      adoptsFrom: {
-                        module: '../blog-post',
-                        name: 'Comment',
-                      },
-                    },
-                  ],
-                },
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/spec',
-                  name: 'Spec',
-                },
-              },
-            },
-          },
-          'Spec/comment-1.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                ref: {
-                  name: 'Comment',
-                  module: '../blog-post',
-                },
-                specType: 'field',
-                containedExamples: [
-                  {
-                    title: 'Terrible product',
-                    name: 'Marco',
-                    message: 'I would give 0 stars if I could. Do not buy!',
-                  },
-                  {
-                    title: 'Needs better packaging',
-                    name: 'Harry',
-                    message: 'Arrived broken',
-                  },
-                ],
-                title: 'Comment spec',
-              },
-              meta: {
-                fields: {
-                  containedExamples: [
-                    {
-                      adoptsFrom: {
-                        module: '../blog-post',
-                        name: 'Comment',
-                      },
-                    },
-                    {
-                      adoptsFrom: {
-                        module: '../blog-post',
-                        name: 'Comment',
-                      },
-                    },
-                  ],
-                },
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/spec',
-                  name: 'Spec',
-                },
-              },
-            },
-          },
+          'Spec/comment-2.json': clone(commentSpec2),
+          'Spec/comment-1.json': clone(commentSpec1),
           'Spec/full-name.json': {
             data: {
               type: 'card',
@@ -477,6 +483,8 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
           },
         },
       }));
+      await realm.delete('Spec/comment-1.json');
+      await realm.write('Spec/comment-1.json', JSON.stringify(commentSpec1));
       setRecentFiles([
         [testRealmURL, 'blog-post.gts'],
         [testRealmURL, 'author.gts'],

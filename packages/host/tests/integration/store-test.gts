@@ -551,6 +551,14 @@ module('Integration | Store', function (hooks) {
         timeout: 5_000,
       });
 
+      await waitUntil(
+        () => {
+          let card = storeService.peek(instance[localId]);
+          return Boolean(card && isCardInstance(card));
+        },
+        { timeout: 5_000 },
+      );
+
       let peek = storeService.peek(instance[localId])!;
       assert.strictEqual(
         (peek as any).name,
