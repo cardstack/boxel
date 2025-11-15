@@ -157,6 +157,7 @@ export interface QueryResultsMeta {
 export const generalSortFields: Record<string, string> = {
   lastModified: 'last_modified',
   createdAt: 'resource_created_at',
+  cardURL: 'url COLLATE "POSIX"',
 };
 
 export function isValidPrerenderedHtmlFormat(
