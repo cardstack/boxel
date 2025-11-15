@@ -61,7 +61,7 @@ class Isolated extends Component<typeof StyleReference> {
       h2 {
         margin-top: 0;
         margin-bottom: var(--boxel-sp);
-        font-size: var(--boxel-font-size-med);
+        font-size: var(--boxel-font-size-md);
         font-weight: 500;
       }
       ul {
@@ -87,7 +87,7 @@ class Isolated extends Component<typeof StyleReference> {
         text-align: center;
       }
       .visual-dna {
-        font-size: var(--boxel-font-size-med);
+        font-size: var(--boxel-font-size-md);
         color: var(--muted-foreground);
         max-width: 600px;
         margin: 0 auto;

@@ -71,11 +71,11 @@ export class CommandField extends FieldDef {
         }
         .command-data {
           flex-grow: 1;
-          border-left: var(--boxel-sp-4xs) solid var(--boxel-purple-300);
+          border-left: var(--boxel-sp-4xs) solid var(--boxel-400);
           padding-left: var(--boxel-sp-xxs);
         }
         .icon {
-          color: var(--boxel-purple-300);
+          color: var(--boxel-400);
           margin-top: var(--boxel-sp-xxs);
           width: 30px;
           height: 30px;

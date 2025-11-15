@@ -253,7 +253,7 @@ export class WelcomeToBoxel extends CardDef {
         }
 
         .welcome-title {
-          font-size: var(--boxel-font-size-xxl);
+          font-size: var(--boxel-font-size-2xl);
           font-weight: normal;
           color: var(--boxel-light);
           font-stretch: normal;

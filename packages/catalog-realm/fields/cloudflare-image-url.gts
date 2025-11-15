@@ -211,7 +211,7 @@ class Edit extends Component<typeof CloudflareImageUrlField> {
         display: grid;
         gap: var(--boxel-sp);
         padding: var(--boxel-sp-xs);
-        background: var(--boxel-50);
+        background: var(--boxel-150);
         border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius);
       }
@@ -261,7 +261,7 @@ class Edit extends Component<typeof CloudflareImageUrlField> {
       .result {
         padding: var(--boxel-sp);
         background: var(--boxel-purple);
-        color: var(--boxel-50);
+        color: var(--boxel-150);
         border-radius: var(--boxel-border-radius);
       }
       .result__url {

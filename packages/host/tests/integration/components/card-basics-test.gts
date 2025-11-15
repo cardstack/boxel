@@ -4165,7 +4165,7 @@ function fittedViewDriver() {
             /* this is how a border would appear around a card.
              note that a card is not supposed to draw its own border
           */
-            box-shadow: 0 0 0 1px var(--boxel-light-500);
+            box-shadow: 0 0 0 1px var(--boxel-300);
             overflow: hidden;
             border-radius: var(--boxel-border-radius);
           }
