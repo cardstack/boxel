@@ -23,6 +23,7 @@ import {
   AskAiForCardJsonCommand,
   CreateExampleCardCommand,
 } from '@cardstack/boxel-host/commands/generate-example-cards';
+import NotificationBubble from './components/notification-bubble';
 import { task } from 'ember-concurrency';
 import type { TaskInstance } from 'ember-concurrency';
 import { tracked } from '@glimmer/tracking';
@@ -815,6 +816,27 @@ class Isolated extends Component<typeof ThemeCreator> {
     }
   };
 
+  errorMessageFor = (instance?: TaskInstance<CardDef | undefined> | null): string => {
+    let error = instance?.error;
+    if (!error) {
+      return 'Theme generation failed. Try again.';
+    }
+    if (typeof error === 'string') {
+      return error;
+    }
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+    if (typeof error === 'object') {
+      try {
+        return JSON.stringify(error);
+      } catch {
+        return '[unserializable error]';
+      }
+    }
+    return String(error);
+  };
+
   get variantCount(): number {
     let count = Number(this.args.model.numberOfVariants);
     if (!Number.isFinite(count) || count < 1) {
@@ -1005,6 +1027,12 @@ class Isolated extends Component<typeof ThemeCreator> {
                   {{/if}}
                 </div>
                 <div class='theme-creator__progress-actions'>
+                  {{#if run.instance.isError}}
+                    <NotificationBubble
+                      @type='error'
+                      @message={{this.errorMessageFor run.instance}}
+                    />
+                  {{/if}}
                   <span class='theme-creator__progress-status'>
                     <StatusIndicator
                       @state={{if
@@ -1037,6 +1065,12 @@ class Isolated extends Component<typeof ThemeCreator> {
             as |card|
           >
             <div class='theme-creator__card-wrapper'>
+              {{#if card.isError}}
+                <NotificationBubble
+                  @type='error'
+                  @message='Failed to load this card preview.'
+                />
+              {{/if}}
               <card.component />
               <div class='theme-creator__card-actions'>
                 <Button @kind='secondary-light' @size='small'>
