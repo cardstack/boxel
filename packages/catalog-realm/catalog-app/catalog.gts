@@ -104,8 +104,6 @@ class Isolated extends Component<typeof Catalog> {
     return {
       filter: {
         on: {
-          // TODO double check this works in actual app...
-
           // the published module URL looks like:
           //   https://<realm>/catalog-app/catalog
           // So when we run:
