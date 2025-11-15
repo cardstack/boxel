@@ -46,10 +46,12 @@ export default class PlaygroundPanelService extends Service {
       url?: string;
     }
   >();
+  private storageSnapshot: string | null = null;
   constructor(owner: Owner) {
     super(owner);
     let selections = window.localStorage.getItem(PlaygroundSelections);
 
+    this.storageSnapshot = selections;
     this.playgroundSelections = new TrackedObject(
       selections?.length ? JSON.parse(selections) : {},
     );
@@ -139,19 +141,20 @@ export default class PlaygroundPanelService extends Service {
   });
 
   setStorage = () => {
-    window.localStorage.setItem(
-      PlaygroundSelections,
-      JSON.stringify(this.resolvedSelections),
-    );
+    let serialized = JSON.stringify(this.resolvedSelections);
+    window.localStorage.setItem(PlaygroundSelections, serialized);
+    this.storageSnapshot = serialized;
   };
 
   resetSelections = () => {
     this.playgroundSelections = new TrackedObject({});
     this.selectionsForNewInstances.clear();
     window.localStorage.removeItem(PlaygroundSelections);
+    this.storageSnapshot = null;
   };
 
   getSelection = (moduleId: string) => {
+    this.syncSelectionsWithStorage();
     return this.playgroundSelections[moduleId];
   };
 
@@ -173,6 +176,17 @@ export default class PlaygroundPanelService extends Service {
       return;
     }
     return JSON.parse(selections)?.[moduleId];
+  }
+
+  private syncSelectionsWithStorage() {
+    let latest = window.localStorage.getItem(PlaygroundSelections);
+    if (latest === this.storageSnapshot) {
+      return;
+    }
+    this.storageSnapshot = latest;
+    this.playgroundSelections = new TrackedObject(
+      latest?.length ? JSON.parse(latest) : {},
+    );
   }
 }
 
