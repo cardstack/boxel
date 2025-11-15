@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "realm": "http://localhost:4201/experiments/",
-      "prompt": "",
+      "prompt": "guava pink",
       "codeRef": {
         "name": "default",
         "module": "https://cardstack.com/base/style-reference"
@@ -20,7 +20,7 @@
         "description": null,
         "thumbnailURL": null
       },
-      "numberOfVariants": null
+      "numberOfVariants": 3
     },
     "relationships": {
       "cardInfo.theme": {
