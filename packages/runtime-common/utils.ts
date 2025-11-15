@@ -38,7 +38,7 @@ export function simpleHash(str: string) {
 }
 
 export function jobIdentity(jobInfo?: JobInfo): string {
-  if (!jobInfo) {
+  if (!jobInfo || jobInfo.jobId < 0 || jobInfo.reservationId < 0) {
     return `[no job identity]`;
   }
   return `[job: ${jobInfo.jobId}.${jobInfo.reservationId}]`;

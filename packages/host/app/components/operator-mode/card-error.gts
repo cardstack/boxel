@@ -52,7 +52,7 @@ export default class CardErrorComponent extends Component<Signature> {
       />
     {{/unless}}
 
-    <div class='card-error' data-test-card-error>
+    <div class='card-error' data-test-card-error={{this.id}}>
       {{#if this.lastKnownGoodHtml}}
         <this.lastKnownGoodHtml />
       {{else}}
@@ -136,6 +136,10 @@ export default class CardErrorComponent extends Component<Signature> {
   </template>
 
   @service private declare loaderService: LoaderService;
+
+  private get id() {
+    return this.args.error.id;
+  }
 
   private get errorTitle() {
     if (this.args.title) {

@@ -628,6 +628,14 @@ export class IndexRunner {
         );
         renderError.error.deps = [...new Set(renderError.error.deps)];
 
+        if (renderError.cardType) {
+          renderError.searchData = {
+            ...(renderError.searchData ?? {}),
+            _cardType:
+              renderError.searchData?._cardType ?? renderError.cardType,
+          };
+        }
+
         this.#log.warn(
           `${jobIdentity(this.#jobInfo)} encountered error indexing card instance ${path}: ${renderError.error.message}`,
         );

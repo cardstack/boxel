@@ -26,7 +26,6 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import LocalPersistenceService from '@cardstack/host/services/local-persistence-service';
@@ -43,6 +42,7 @@ import {
   getMonacoContent,
   setMonacoContent,
   setupRealmServerEndpoints,
+  setupOperatorModeStateCleanup,
 } from '../../../helpers';
 import {
   CardDef,
@@ -66,6 +66,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
   let localPersistenceService: LocalPersistenceService;
 
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
@@ -303,7 +304,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -318,7 +318,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
         class TestDriver extends GlimmerComponent {
           <template>
             <OperatorMode @onClose={{noop}} />
-            <CardPrerender />
           </template>
         },
       );
@@ -403,7 +402,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -735,7 +733,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
+
           <div class='invisible' data-test-throw-room-error />
           <style scoped>
             .invisible {
@@ -995,7 +993,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );

@@ -9,6 +9,8 @@ import {
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { TrackedObject } from 'tracked-built-ins';
+
 import { Deferred, baseRealm } from '@cardstack/runtime-common';
 
 import {
@@ -47,6 +49,28 @@ const personCardSource = `
     };
   }
 `;
+
+function withUpdatedTestRealmInfo(
+  updates: Partial<typeof testRealmInfo>,
+): () => void {
+  let realmService = getService('realm') as any;
+  let realmResource = realmService.realms.get(testRealmURL);
+  if (!realmResource) {
+    throw new Error('Test realm resource is not registered');
+  }
+
+  let previousInfo = realmResource.info;
+  let baseInfo = previousInfo ? { ...previousInfo } : { ...testRealmInfo };
+
+  realmResource.info = new TrackedObject({
+    ...baseInfo,
+    ...updates,
+  });
+
+  return () => {
+    realmResource.info = previousInfo;
+  };
+}
 
 module('Acceptance | host submode', function (hooks) {
   setupApplicationTest(hooks);
@@ -645,57 +669,40 @@ module('Acceptance | host submode', function (hooks) {
       });
 
       test('can unpublish realm', async function (assert) {
-        let mockRealmInfoResponse = async (request: Request) => {
-          console.log(request.url);
-          if (!request.url.includes('test') || !request.url.includes('_info')) {
-            return null;
-          }
-
-          return new Response(
-            JSON.stringify({
-              data: {
-                type: 'realm-info',
-                id: testRealmURL,
-                attributes: {
-                  ...testRealmInfo,
-                  lastPublishedAt: {
-                    ['http://testuser.localhost:4201/test/']: (
-                      new Date().getTime() -
-                      3 * 24 * 60 * 60 * 1000
-                    ).toString(), //3 days ago,
-                  },
-                },
-              },
-            }),
-            {
-              headers: {
-                'Content-Type': 'application/vnd.api+json',
-              },
-            },
-          );
-        };
-        getService('network').mount(mockRealmInfoResponse, { prepend: true });
-
-        await visitOperatorMode({
-          submode: 'host',
-          trail: [`${testRealmURL}Person/1.json`],
+        let restoreRealmInfo = withUpdatedTestRealmInfo({
+          lastPublishedAt: {
+            ['http://testuser.localhost:4201/test/']: (
+              new Date().getTime() -
+              3 * 24 * 60 * 60 * 1000
+            ).toString(),
+          },
         });
 
-        await click('[data-test-publish-realm-button]');
-        assert.dom('[data-test-last-published-at]').containsText('3 days ago');
-        assert.dom('[data-test-unpublish-button]').exists();
-        assert.dom('[data-test-open-site-button]').exists();
-        await click('[data-test-unpublish-button]');
-        assert.dom('[data-test-unpublish-button]').hasText('Unpublishing…');
-        unpublishDeferred.fulfill();
-        await waitUntil(() => {
-          return !document.querySelector('[data-test-unpublish-button]');
-        });
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
 
-        assert.dom('[data-test-last-published-at]').doesNotExist();
-        assert.dom('[data-test-unpublish-button]').doesNotExist();
-        assert.dom('[data-test-open-site-button]').doesNotExist();
-        getService('network').resetState();
+          await click('[data-test-publish-realm-button]');
+          assert
+            .dom('[data-test-last-published-at]')
+            .containsText('3 days ago');
+          assert.dom('[data-test-unpublish-button]').exists();
+          assert.dom('[data-test-open-site-button]').exists();
+          await click('[data-test-unpublish-button]');
+          assert.dom('[data-test-unpublish-button]').hasText('Unpublishing…');
+          unpublishDeferred.fulfill();
+          await waitUntil(() => {
+            return !document.querySelector('[data-test-unpublish-button]');
+          });
+
+          assert.dom('[data-test-last-published-at]').doesNotExist();
+          assert.dom('[data-test-unpublish-button]').doesNotExist();
+          assert.dom('[data-test-open-site-button]').doesNotExist();
+        } finally {
+          restoreRealmInfo();
+        }
       });
 
       test('open site button only appears when realm is published', async function (assert) {
@@ -855,95 +862,82 @@ module('Acceptance | host submode', function (hooks) {
       });
 
       test('open site popover shows published realms and opens them correctly', async function (assert) {
-        // Mock realm info with published state
-        let mockRealmInfoResponse = async (request: Request) => {
-          if (!request.url.includes('test') || !request.url.includes('_info')) {
-            return null;
-          }
-
-          let now = Date.now();
-
-          return new Response(
-            JSON.stringify({
-              data: {
-                type: 'realm-info',
-                id: testRealmURL,
-                attributes: {
-                  ...testRealmInfo,
-                  lastPublishedAt: {
-                    'http://testuser.localhost:4201/test/': now,
-                    'https://another-domain.com/realm/': now - 1000,
-                  },
-                },
-              },
-            }),
-            {
-              headers: {
-                'Content-Type': 'application/vnd.api+json',
-              },
-            },
-          );
-        };
-        getService('network').mount(mockRealmInfoResponse, { prepend: true });
-
-        await visitOperatorMode({
-          submode: 'host',
-          trail: [`${testRealmURL}Person/1.json`],
+        let now = Date.now();
+        let restoreRealmInfo = withUpdatedTestRealmInfo({
+          lastPublishedAt: {
+            'http://testuser.localhost:4201/test/': String(now),
+            'https://another-domain.com/realm/': String(now - 1000),
+          },
         });
 
-        // Check that the main button has the correct href
-        assert
-          .dom('[data-test-open-site-button]')
-          .hasAttribute('href', 'http://testuser.localhost:4201/test/Person/1')
-          .hasAttribute('target', '_blank');
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
 
-        await triggerEvent('[data-test-open-site-button]', 'mouseenter');
-        await waitFor('[data-test-tooltip-content]');
-        assert
-          .dom('[data-test-tooltip-content]')
-          .hasText(
-            'Open Site in a New Tab (Shift+Click for options)',
-            'Tooltip shows correct text when menu is closed',
-          );
+          // Check that the main button has the correct href
+          assert
+            .dom('[data-test-open-site-button]')
+            .hasAttribute(
+              'href',
+              'http://testuser.localhost:4201/test/Person/1',
+            )
+            .hasAttribute('target', '_blank');
 
-        assert.dom('[data-test-open-site-popover]').doesNotExist();
+          await triggerEvent('[data-test-open-site-button]', 'mouseenter');
+          await waitFor('[data-test-tooltip-content]');
+          assert
+            .dom('[data-test-tooltip-content]')
+            .hasText(
+              'Open Site in a New Tab (Shift+Click for options)',
+              'Tooltip shows correct text when menu is closed',
+            );
 
-        await click('[data-test-open-site-button]', { shiftKey: true });
+          assert.dom('[data-test-open-site-popover]').doesNotExist();
 
-        assert.dom('[data-test-open-site-popover]').exists();
-        assert.dom('[data-test-published-realm-item]').exists({ count: 2 });
+          await click('[data-test-open-site-button]', { shiftKey: true });
 
-        assert
-          .dom('[data-test-published-realm-item] [data-test-open-site-button]')
-          .exists({ count: 2 });
+          assert.dom('[data-test-open-site-popover]').exists();
+          assert.dom('[data-test-published-realm-item]').exists({ count: 2 });
 
-        assert
-          .dom(
-            '[data-test-published-realm-item="http://testuser.localhost:4201/test/Person/1"]',
-          )
-          .exists();
-        assert
-          .dom(
-            '[data-test-published-realm-item="https://another-domain.com/realm/Person/1"]',
-          )
-          .exists();
+          assert
+            .dom(
+              '[data-test-published-realm-item] [data-test-open-site-button]',
+            )
+            .exists({ count: 2 });
 
-        // Check that popover buttons have correct href attributes
-        assert
-          .dom(
-            '[data-test-published-realm-item="http://testuser.localhost:4201/test/Person/1"] [data-test-open-site-button]',
-          )
-          .hasAttribute('href', 'http://testuser.localhost:4201/test/Person/1')
-          .hasAttribute('target', '_blank');
+          assert
+            .dom(
+              '[data-test-published-realm-item="http://testuser.localhost:4201/test/Person/1"]',
+            )
+            .exists();
+          assert
+            .dom(
+              '[data-test-published-realm-item="https://another-domain.com/realm/Person/1"]',
+            )
+            .exists();
 
-        assert
-          .dom(
-            '[data-test-published-realm-item="https://another-domain.com/realm/Person/1"] [data-test-open-site-button]',
-          )
-          .hasAttribute('href', 'https://another-domain.com/realm/Person/1')
-          .hasAttribute('target', '_blank');
+          // Check that popover buttons have correct href attributes
+          assert
+            .dom(
+              '[data-test-published-realm-item="http://testuser.localhost:4201/test/Person/1"] [data-test-open-site-button]',
+            )
+            .hasAttribute(
+              'href',
+              'http://testuser.localhost:4201/test/Person/1',
+            )
+            .hasAttribute('target', '_blank');
 
-        getService('network').resetState();
+          assert
+            .dom(
+              '[data-test-published-realm-item="https://another-domain.com/realm/Person/1"] [data-test-open-site-button]',
+            )
+            .hasAttribute('href', 'https://another-domain.com/realm/Person/1')
+            .hasAttribute('target', '_blank');
+        } finally {
+          restoreRealmInfo();
+        }
       });
 
       test('claimed custom site name displays details and reverts after unclaim', async function (assert) {
@@ -1235,35 +1229,14 @@ module('Acceptance | host submode', function (hooks) {
           sourceRealmURL: testRealmURL,
         });
 
-        let mockRealmInfoResponse = async (request: Request) => {
-          if (!request.url.includes('test') || !request.url.includes('_info')) {
-            return null;
-          }
-
-          return new Response(
-            JSON.stringify({
-              data: {
-                type: 'realm-info',
-                id: testRealmURL,
-                attributes: {
-                  ...testRealmInfo,
-                  lastPublishedAt: {
-                    ['http://my-custom-site.localhost:4201/']: (
-                      new Date().getTime() -
-                      2 * 24 * 60 * 60 * 1000
-                    ).toString(), //2 days ago
-                  },
-                },
-              },
-            }),
-            {
-              headers: {
-                'Content-Type': 'application/vnd.api+json',
-              },
-            },
-          );
-        };
-        getService('network').mount(mockRealmInfoResponse, { prepend: true });
+        let restoreRealmInfo = withUpdatedTestRealmInfo({
+          lastPublishedAt: {
+            ['http://my-custom-site.localhost:4201/']: (
+              new Date().getTime() -
+              2 * 24 * 60 * 60 * 1000
+            ).toString(),
+          },
+        });
 
         try {
           await visitOperatorMode({
@@ -1308,8 +1281,8 @@ module('Acceptance | host submode', function (hooks) {
             )
             .containsText('Not published yet');
         } finally {
+          restoreRealmInfo();
           realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
-          getService('network').resetState();
         }
       });
     });

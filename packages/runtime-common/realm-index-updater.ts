@@ -219,7 +219,12 @@ export function isIgnored(
   if (url.href === realmURL.href) {
     return false; // you can't ignore the entire realm
   }
-  if (url.href === realmURL.href + '.realm.json') {
+  if (
+    [
+      `${realmURL.href}.realm.json`,
+      `${realmURL.href}.template-lintrc.js`,
+    ].includes(url.href)
+  ) {
     return true;
   }
   if (ignoreMap.size === 0) {

@@ -17,7 +17,11 @@ import { module, test } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
 
-import { baseRealm, Deferred } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  Deferred,
+  type ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 
@@ -874,18 +878,21 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       if (typeof json === 'string') {
         throw new Error(`expected json save data`);
       }
-      id = url.href;
-      assert.strictEqual(
-        json.data.attributes?.name,
-        'Van Gogh',
-        'the name field is correct',
-      );
-      assert.deepEqual(json.data.meta.adoptsFrom, {
-        module: '../pet',
-        name: 'Pet',
-      });
-      assert.strictEqual(json.data.meta.realmURL, testRealmURL);
-      deferred.fulfill();
+      if ((json.data.meta.adoptsFrom as ResolvedCodeRef)?.name === 'Pet') {
+        id = url.href;
+        assert.strictEqual(
+          json.data.attributes?.name,
+          'Van Gogh',
+          'the name field is correct',
+        );
+        assert.deepEqual(json.data.meta.adoptsFrom, {
+          module: '../pet',
+          name: 'Pet',
+        });
+        assert.strictEqual(json.data.meta.realmURL, testRealmURL);
+        this.unregisterOnSave?.();
+        deferred.fulfill();
+      }
     });
     await click('[data-test-duplicate-card-instance]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });

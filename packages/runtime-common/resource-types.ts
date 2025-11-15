@@ -83,7 +83,7 @@ export interface PrerenderedCardResource {
       data: { id: string }[];
     };
   };
-  meta: Meta & {};
+  meta: Partial<Meta>;
   links?: {
     self?: string;
   };

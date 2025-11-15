@@ -8,7 +8,6 @@ import { module, test } from 'qunit';
 
 import { type Realm } from '@cardstack/runtime-common';
 
-import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import {
@@ -17,6 +16,7 @@ import {
   setupLocalIndexing,
   setupOnSave,
   type TestContextWithSave,
+  setupOperatorModeStateCleanup,
 } from '../../helpers';
 import {
   BigIntegerField,
@@ -33,6 +33,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 module('Integration | text-input-validator', function (hooks) {
   let realm: Realm;
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
@@ -74,7 +75,6 @@ module('Integration | text-input-validator', function (hooks) {
         noop = () => {};
         <template>
           <OperatorMode @onClose={{this.noop}} />
-          <CardPrerender />
         </template>
       },
     );

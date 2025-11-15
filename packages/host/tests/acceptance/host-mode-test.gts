@@ -64,7 +64,12 @@ module('Acceptance | host mode tests', function (hooks) {
   let { setActiveRealms, setExpiresInSec, createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(function (this) {
-    getOwner(this)!.register('service:host-mode-service', StubHostModeService);
+    let owner = getOwner(this)!;
+    let ownerWithUnregister = owner as {
+      unregister?: (fullName: string) => void;
+    };
+    ownerWithUnregister.unregister?.('service:host-mode-service');
+    owner.register('service:host-mode-service', StubHostModeService);
   });
 
   hooks.beforeEach(async function () {
@@ -403,7 +408,12 @@ module('Acceptance | host mode tests', function (hooks) {
 
   module('with a custom subdomain', function (hooks) {
     hooks.beforeEach(function (this) {
-      getOwner(this)!.register(
+      let owner = getOwner(this)!;
+      let ownerWithUnregister = owner as {
+        unregister?: (fullName: string) => void;
+      };
+      ownerWithUnregister.unregister?.('service:host-mode-service');
+      owner.register(
         'service:host-mode-service',
         StubCustomSubdomainHostModeService,
       );

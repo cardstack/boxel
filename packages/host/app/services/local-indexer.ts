@@ -24,6 +24,9 @@ export default class LocalIndexer extends Service {
     _incremental: (args: IncrementalArgs) => Promise<IncrementalResult>,
     prerenderer: Prerenderer,
   ) {
+    if (this.#prerenderer) {
+      return;
+    }
     this.#prerenderer = prerenderer;
   }
   get adapter(): TestRealmAdapter {

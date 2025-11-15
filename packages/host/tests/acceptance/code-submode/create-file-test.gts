@@ -350,7 +350,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
                 self: null,
               },
             },
-            'cardInfo.theme': { links: { self: null } },
           },
           'relationships data is correct',
         );

@@ -25,7 +25,11 @@ import type { Realm } from '@cardstack/runtime-common/realm';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
-import { ModuleInspectorSelections } from '@cardstack/host/utils/local-storage-keys';
+import {
+  ModuleInspectorSelections,
+  PlaygroundSelections,
+  SpecSelection,
+} from '@cardstack/host/utils/local-storage-keys';
 
 import {
   getMonacoContent,
@@ -41,6 +45,10 @@ import {
   assertMessages,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import {
+  removePlaygroundSelections,
+  removeSpecSelection,
+} from '../helpers/playground';
 import { setupApplicationTest } from '../helpers/setup';
 
 const indexCardSource = `
@@ -437,6 +445,11 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
       setupUserSubscription();
       setupAuthEndpoints();
+      removePlaygroundSelections();
+      removeSpecSelection();
+      window.localStorage.removeItem(ModuleInspectorSelections);
+      window.localStorage.removeItem(PlaygroundSelections);
+      window.localStorage.removeItem(SpecSelection);
 
       let realmServerService = getService('realm-server');
       personalRealmURL = `${realmServerService.url}testuser/personal/`;
@@ -1002,28 +1015,35 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       assert.dom('[data-test-ai-assistant-panel]').exists();
       let roomId = mockMatrixUtils.getRoomIds().pop()!;
-      await fillIn(
-        '[data-test-message-field]',
-        `Please try to fix the problem`,
-      );
-      await click('[data-test-send-message-btn]');
+      let instanceId = document
+        .querySelector('[data-test-card-error]')
+        ?.getAttribute('data-test-card-error');
+      if (!instanceId) {
+        assert.ok(false, 'could not find instance ID for the instance error');
+      } else {
+        await fillIn(
+          '[data-test-message-field]',
+          `Please try to fix the problem`,
+        );
+        await click('[data-test-send-message-btn]');
 
-      assertMessages(assert, [
-        {
-          from: 'testuser',
-          message: `Please try to fix the problem`,
-          files: [
-            {
-              name: 'broken-country.gts',
-              sourceUrl: `${testRealmURL}broken-country.gts`,
-            },
-            {
-              name: 'broken-country',
-              sourceUrl: `${testRealmURL}BrokenCountry/broken-country.json`,
-            },
-          ],
-        },
-      ]);
+        assertMessages(assert, [
+          {
+            from: 'testuser',
+            message: `Please try to fix the problem`,
+            files: [
+              {
+                name: 'broken-country.gts',
+                sourceUrl: `${testRealmURL}broken-country.gts`,
+              },
+              {
+                name: instanceId.split('/').pop()!,
+                sourceUrl: `${instanceId}.json`,
+              },
+            ],
+          },
+        ]);
+      }
       let matrixEvents = mockMatrixUtils.getRoomEvents(roomId);
       let lastEvent = matrixEvents[matrixEvents.length - 1];
       let aiContext = JSON.parse(lastEvent.content.data).context;

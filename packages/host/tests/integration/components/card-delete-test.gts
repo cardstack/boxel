@@ -9,7 +9,6 @@ import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 
-import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
@@ -22,6 +21,7 @@ import {
   setupLocalIndexing,
   setupOnSave,
   setupIntegrationTestRealm,
+  setupOperatorModeStateCleanup,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -58,6 +58,7 @@ module('Integration | card-delete', function (hooks) {
     return card;
   }
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
@@ -186,7 +187,6 @@ module('Integration | card-delete', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -227,7 +227,6 @@ module('Integration | card-delete', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -267,7 +266,6 @@ module('Integration | card-delete', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -314,7 +312,6 @@ module('Integration | card-delete', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -364,7 +361,6 @@ module('Integration | card-delete', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -422,7 +418,6 @@ module('Integration | card-delete', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -474,7 +469,6 @@ module('Integration | card-delete', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -542,7 +536,6 @@ module('Integration | card-delete', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -595,7 +588,6 @@ module('Integration | card-delete', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );

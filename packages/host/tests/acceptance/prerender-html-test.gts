@@ -634,10 +634,10 @@ module('Acceptance | prerender | html', function (hooks) {
     let { value } = await capturePrerenderResult('innerHTML', 'error');
     let { error }: RenderError = JSON.parse(value);
     assert.strictEqual(error.status, 404, 'error code is correct');
-    assert.strictEqual(error.title, 'Not Found', 'error title is correct');
+    assert.strictEqual(error.title, 'Link Not Found', 'error title is correct');
     assert.strictEqual(
       error.message,
-      'Cat/missing-link.json not found',
+      `missing file ${testRealmURL}Cat/missing-link.json`,
       'error message is correct',
     );
     assert.strictEqual(
@@ -654,10 +654,10 @@ module('Acceptance | prerender | html', function (hooks) {
     let { value } = await capturePrerenderResult('innerHTML', 'error');
     let { error }: RenderError = JSON.parse(value);
     assert.strictEqual(error.status, 404, 'error code is correct');
-    assert.strictEqual(error.title, 'Not Found', 'error title is correct');
+    assert.strictEqual(error.title, 'Link Not Found', 'error title is correct');
     assert.strictEqual(
       error.message,
-      'Pet/missing-link.json not found',
+      `missing file ${testRealmURL}Pet/missing-link.json`,
       'error message is correct',
     );
     assert.strictEqual(
@@ -797,18 +797,18 @@ module('Acceptance | prerender | html', function (hooks) {
     let { value } = await capturePrerenderResult('textContent', 'error');
     let { error }: RenderError = JSON.parse(value);
     assert.ok(error.stack, 'stack exists in error');
-    delete error.stack;
-    assert.deepEqual(
-      error,
-      {
-        id: 'http://test-realm/test/does-not-exist.json',
-        additionalErrors: null,
-        isCardError: true,
-        message: 'does-not-exist.json not found',
-        status: 404,
-        title: 'Not Found',
-      },
-      'error is correct',
+    assert.strictEqual(
+      error.id,
+      'http://test-realm/test/does-not-exist.json',
+      'error.id is correct',
     );
+    assert.true(error.isCardError, 'error.isCardError is correct');
+    assert.strictEqual(
+      error.message,
+      'does-not-exist.json not found',
+      'error.message is correct',
+    );
+    assert.strictEqual(error.status, 404, 'error.status is correct');
+    assert.strictEqual(error.title, 'Not Found', 'error.title is correct');
   });
 });

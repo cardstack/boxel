@@ -9,7 +9,6 @@ import { module, test } from 'qunit';
 
 import {
   baseRealm,
-  NotLoaded,
   PermissionsContextName,
   localId,
   fields,
@@ -301,7 +300,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `../test-cards`,
             name: 'Person',
           },
         },
@@ -1059,17 +1058,7 @@ module('Integration | serialization', function (hooks) {
       undefined,
     );
 
-    try {
-      hassan.pet;
-      throw new Error(`expected error not thrown`);
-    } catch (err: any) {
-      assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
-      assert.strictEqual(
-        err.message,
-        'The field Person.pet refers to the card instance http://test-realm/test/Pet/mango which is not loaded',
-        'NotLoaded error describes field not loaded',
-      );
-    }
+    hassan.pet; // should no longer throw NotLoaded errors
 
     let relationship = relationshipMeta(hassan, 'pet');
     if (Array.isArray(relationship)) {
@@ -3006,17 +2995,7 @@ module('Integration | serialization', function (hooks) {
         undefined,
       );
 
-      try {
-        card.friendPet;
-        throw new Error(`expected error not thrown`);
-      } catch (err: any) {
-        assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
-        assert.strictEqual(
-          err.message,
-          `The field Person.friendPet refers to the card instance ${testRealmURL}Person/hassan which is not loaded`,
-          'NotLoaded error describes field not loaded',
-        );
-      }
+      card.friendPet; // Should no longer throw NotLoaded error
       let friendRel = relationshipMeta(card, 'friend');
       assert.deepEqual(friendRel, {
         type: 'not-loaded',
@@ -3025,8 +3004,8 @@ module('Integration | serialization', function (hooks) {
 
       let friendPetRel = relationshipMeta(card, 'friendPet');
       assert.deepEqual(friendPetRel, {
-        type: 'not-loaded',
-        reference: `${testRealmURL}Person/hassan`,
+        type: 'loaded',
+        card: null,
       });
     });
   });
@@ -4670,7 +4649,7 @@ module('Integration | serialization', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
+            module: `../test-cards`,
             name: 'Person',
           },
         },
@@ -5440,16 +5419,7 @@ module('Integration | serialization', function (hooks) {
         undefined,
       );
 
-      try {
-        hassan.pets;
-        throw new Error(`expected error not thrown`);
-      } catch (err: any) {
-        assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
-        assert.strictEqual(
-          err.message,
-          `The field Person.pets refers to the card instances in array ["${testRealmURL}Pet/vanGogh"] which are not loaded`,
-        );
-      }
+      hassan.pets; // no longer throws NotLoaded
 
       let relationships = relationshipMeta(hassan, 'pets');
       if (!Array.isArray(relationships)) {
@@ -6115,41 +6085,9 @@ module('Integration | serialization', function (hooks) {
         undefined,
       );
 
-      try {
-        card.friend;
-        throw new Error(`expected error not thrown`);
-      } catch (err: any) {
-        assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
-        assert.strictEqual(
-          err.message,
-          `The field Person.friend refers to the card instance ${testRealmURL}Friend/hassan which is not loaded`,
-          'NotLoaded error describes field not loaded',
-        );
-      }
-
-      try {
-        card.friendPets;
-        throw new Error(`expected error not thrown`);
-      } catch (err: any) {
-        assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
-        assert.strictEqual(
-          err.message,
-          `The field Person.friendPets refers to the card instance ${testRealmURL}Friend/hassan which is not loaded`,
-          'NotLoaded error describes field not loaded',
-        );
-      }
-
-      try {
-        card.ownPets;
-        throw new Error(`expected error not thrown`);
-      } catch (err: any) {
-        assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
-        assert.strictEqual(
-          err.message,
-          `The field Person.ownPets refers to the card instances in array ["${testRealmURL}Pet/vanGogh"] which are not loaded`,
-          'NotLoaded error describes field not loaded',
-        );
-      }
+      card.friend; // No longer throws NotLoaded
+      card.friendPets; // No longer throws NotLoaded
+      card.ownPets; // No longer throws NotLoaded
 
       let relationships = relationshipMeta(card, 'ownPets');
       if (!Array.isArray(relationships)) {
@@ -6180,6 +6118,7 @@ module('Integration | serialization', function (hooks) {
       });
       assert.deepEqual(serialized.data.relationships, {
         friend: { links: { self: `${testRealmURL}Friend/hassan` } },
+        friendPets: { links: { self: null } },
         'ownPets.0': {
           links: { self: `${testRealmURL}Pet/mango` },
           data: { type: 'card', id: `${testRealmURL}Pet/mango` },

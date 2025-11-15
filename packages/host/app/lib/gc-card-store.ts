@@ -227,7 +227,9 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   reset() {
     this.#cards.clear();
+    this.#cardErrors.clear();
     this.#nonTrackedCards.clear();
+    this.#nonTrackedCardErrors.clear();
     this.#gcCandidates.clear();
     this.#docsInFlight.clear();
     this.#inFlight.clear();

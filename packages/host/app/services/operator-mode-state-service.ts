@@ -293,8 +293,15 @@ export default class OperatorModeStateService extends Service {
 
   trimItemsFromStack(item: StackItem) {
     let stackIndex = item.stackIndex;
-    let itemIndex = this._state.stacks[stackIndex].indexOf(item);
-    this._state.stacks[stackIndex].splice(itemIndex); // Remove anything above the item
+    let stack = this._state.stacks[stackIndex];
+    if (!stack) {
+      return;
+    }
+    let itemIndex = stack.indexOf(item);
+    if (itemIndex === -1) {
+      return;
+    }
+    stack.splice(itemIndex); // Remove anything above the item
 
     // If the resulting stack is now empty, remove it
     if (this.stackIsEmpty(stackIndex) && this._state.stacks.length >= 1) {

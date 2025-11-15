@@ -25,6 +25,7 @@ import {
   getPlaygroundSelections,
   openFileInPlayground,
   removePlaygroundSelections,
+  removeSpecSelection,
   selectDeclaration,
   selectFormat,
   setPlaygroundSelections,
@@ -483,6 +484,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         [testRealmURL, 'Author/jane-doe.json'],
       ]);
       removePlaygroundSelections();
+      removeSpecSelection();
 
       setActiveRealms([testRealmURL]);
       setRealmPermissions({
@@ -981,23 +983,30 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     });
 
     test('editing compound field instance live updates the preview', async function (assert) {
-      const updatedCommentField = `import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
-
-      export class Comment extends FieldDef {
-        static displayName = 'Comment';
-        @field title = contains(StringField);
-        @field name = contains(StringField);
-        @field message = contains(StringField);
-
-        static embedded = class Embedded extends Component<typeof this> {
+      const originalEmbeddedBlock = `    static embedded = class Embedded extends Component<typeof this> {
+      <template>
+        <div data-test-embedded-comment>
+          <h4 data-test-embedded-comment-title><@fields.title /></h4>
+          <p><@fields.message /> - by <@fields.name /></p>
+        </div>
+      </template>
+    }
+`;
+      const updatedEmbeddedBlock = `    static embedded = class Embedded extends Component<typeof this> {
       <template>
         <div data-test-embedded-comment>
           <p><@fields.message /> - by <@fields.name /></p>
         </div>
       </template>
+    }
+`;
+      const updatedCommentField = blogPostCard.replace(
+        originalEmbeddedBlock,
+        updatedEmbeddedBlock,
+      );
+      if (updatedCommentField === blogPostCard) {
+        throw new Error('failed to apply updated comment template');
       }
-    }`;
       await openFileInPlayground('blog-post.gts', testRealmURL, {
         declaration: 'Comment',
       });

@@ -67,9 +67,14 @@ export default class URLBarResource extends Resource<Args> {
   }
 
   onBlur() {
-    this.value = this.url;
+    // Capture currently typed value before mutating tracked state to avoid
+    // reading from `url`, which depends on `isEditing`, while we are about to
+    // update `isEditing`.
+    let updatedValue = this.lastEditedValue ?? this.value;
+
     this.isEditing = false;
     this.isFocused = false;
+    this.value = updatedValue;
   }
 
   validate(url: string | null) {
