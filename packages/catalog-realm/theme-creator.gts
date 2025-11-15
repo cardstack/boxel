@@ -433,7 +433,6 @@ const STYLE_REFERENCE_SAMPLE_JSON = JSON.stringify(
         ],
         rootVariables: JSON.parse(STRUCTURED_THEME_ROOT_VARIABLES),
         darkModeVariables: JSON.parse(STRUCTURED_THEME_ROOT_VARIABLES),
-        cssVariables: STYLE_REFERENCE_CSS,
       },
     },
   },
@@ -455,7 +454,6 @@ const STRUCTURED_THEME_SAMPLE_JSON = JSON.stringify(
         },
         rootVariables: JSON.parse(STRUCTURED_THEME_ROOT_VARIABLES),
         darkModeVariables: JSON.parse(STRUCTURED_THEME_ROOT_VARIABLES),
-        cssVariables: STRUCTURED_THEME_CSS,
         cssImports: [
           'https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap',
         ],
