@@ -27,7 +27,6 @@ import { task } from 'ember-concurrency';
 import type { TaskInstance } from 'ember-concurrency';
 import { tracked } from '@glimmer/tracking';
 
-
 const STRUCTURED_THEME_VARIABLES = [
   '--background',
   '--foreground',
@@ -111,8 +110,7 @@ const BOXEL_THEME_VARIABLES = [
   '--shadow-2xl',
 ] as const;
 
-const STRUCTURED_THEME_VARIABLE_SUMMARY =
-  STRUCTURED_THEME_VARIABLES.join(', ');
+const STRUCTURED_THEME_VARIABLE_SUMMARY = STRUCTURED_THEME_VARIABLES.join(', ');
 const BOXEL_THEME_VARIABLE_SUMMARY = BOXEL_THEME_VARIABLES.join(', ');
 
 const STYLE_REFERENCE_CSS = String.raw`:root {
@@ -457,7 +455,9 @@ const STRUCTURED_THEME_SAMPLE_JSON = JSON.stringify(
         rootVariables: JSON.parse(STRUCTURED_THEME_ROOT_VARIABLES),
         darkModeVariables: JSON.parse(STRUCTURED_THEME_ROOT_VARIABLES),
         cssVariables: STRUCTURED_THEME_CSS,
-        cssImports: ['https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap'],
+        cssImports: [
+          'https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap',
+        ],
       },
     },
   },
@@ -553,7 +553,8 @@ const BRAND_GUIDE_SAMPLE_JSON = JSON.stringify(
         },
         cardInfo: {
           title: 'IKEA Brand Guide',
-          description: 'A democratic design system built around bold blue/yellow contrasts.',
+          description:
+            'A democratic design system built around bold blue/yellow contrasts.',
           thumbnailURL:
             'https://images.unsplash.com/photo-1503602642458-232111445657?w=640&auto=format',
         },
@@ -718,9 +719,7 @@ class Isolated extends Component<typeof ThemeCreator> {
     ].join('\n');
   }
 
-  promptGuidanceFor(
-    codeRef: { module?: string | URL | null } | null,
-  ): string {
+  promptGuidanceFor(codeRef: { module?: string | URL | null } | null): string {
     if (this.moduleMatches(codeRef, 'style-reference')) {
       return this.styleReferenceGuidance;
     }
