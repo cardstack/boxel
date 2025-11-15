@@ -8,6 +8,7 @@ import {
   field,
   linksTo,
   linksToMany,
+  getComponent,
 } from './card-api';
 import CodeRefField, { AbsoluteCodeRefField } from './code-ref';
 import BooleanField from './boolean';
@@ -32,6 +33,10 @@ export class SaveCardInput extends CardDef {
   @field card = linksTo(CardDef);
   @field realm = contains(StringField);
   @field localDir = contains(StringField);
+}
+
+export class SaveCardResult extends CardDef {
+  @field card = linksTo(CardDef);
 }
 
 export class CopyCardToRealmInput extends CardDef {
@@ -115,8 +120,25 @@ export class CreateInstancesInput extends CardDef {
   @field exampleCard = linksTo(CardDef);
 }
 
+export class AskAiForCardJsonInput extends CreateInstancesInput {
+  @field prompt = contains(MarkdownField);
+  @field llmModel = contains(StringField);
+}
+
 export class CreateInstanceResult extends CardDef {
   @field createdCard = linksTo(CardDef);
+}
+
+export class GenerateExamplePayloadResult extends CardDef {
+  @field payload = contains(JsonField);
+  @field rawOutput = contains(StringField);
+}
+
+export class CreateExampleCardInput extends CardDef {
+  @field codeRef = contains(CodeRefField);
+  @field realm = contains(StringField);
+  @field payload = contains(JsonField);
+  @field serializedPayload = contains(StringField);
 }
 
 export class GenerateListingExampleInput extends CardDef {
@@ -124,6 +146,35 @@ export class GenerateListingExampleInput extends CardDef {
   @field realm = contains(StringField);
   @field referenceExample = linksTo(CardDef);
 }
+
+export class GenerateThemeInput extends CardDef {
+  @field styleName = contains(StringField);
+  @field visualDNA = contains(StringField);
+  @field inspirations = containsMany(StringField);
+  @field existingStyles = containsMany(StringField);
+  @field targetRealm = contains(StringField);
+  @field slug = contains(StringField);
+  @field themeType = contains(StringField); // 'style-reference' | 'structured-theme' | 'brand-guide'
+  @field llmModel = contains(StringField);
+}
+
+export class GenerateThemeResult extends CardDef {
+  @field themeCard = linksTo(CardDef);
+}
+
+export class GenerateCardsBulkInput extends CardDef {
+  @field codeRef = contains(CodeRefField);
+  @field count = contains(NumberField);
+  @field targetRealm = contains(StringField);
+  @field localDir = contains(StringField);
+  @field llmModel = contains(StringField);
+  @field prompt = contains(StringField);
+}
+
+export class GenerateCardsBulkResult extends CardDef {
+  @field cards = linksToMany(CardDef);
+}
+
 export class UpdateCodePathWithSelectionInput extends CardDef {
   @field codeRef = contains(CodeRefField);
   @field localName = contains(StringField);
@@ -409,6 +460,56 @@ export class CreateSpecsInput extends CardDef {
 export class CreateSpecsResult extends CardDef {
   @field newSpecs = linksToMany(Spec);
   @field specs = linksToMany(Spec);
+
+  static fitted = class Fitted extends Component<typeof CreateSpecsResult> {
+    get specs(): Spec[] {
+      return this.args.model?.specs ?? [];
+    }
+
+    <template>
+      <div class='create-specs-result'>
+        {{#if this.specs.length}}
+          <ul class='create-specs-result__list'>
+            {{#each this.specs as |spec|}}
+              {{#let (getComponent spec) as |SpecComponent|}}
+                {{#if SpecComponent}}
+                  <li class='create-specs-result__item'>
+                    <SpecComponent @format='fitted' />
+                  </li>
+                {{/if}}
+              {{/let}}
+            {{/each}}
+          </ul>
+        {{else}}
+          <p class='create-specs-result__empty'>
+            No specs were returned.
+          </p>
+        {{/if}}
+      </div>
+
+      <style scoped>
+        .create-specs-result__list {
+          display: grid;
+          gap: var(--boxel-sp-md);
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .create-specs-result__item {
+          border: 1px solid var(--boxel-200);
+          border-radius: var(--boxel-border-radius);
+          background: var(--boxel-0);
+          padding: var(--boxel-sp-md);
+        }
+
+        .create-specs-result__empty {
+          margin: 0;
+          color: var(--boxel-500);
+        }
+      </style>
+    </template>
+  };
 }
 
 export class PatchFieldsInput extends CardDef {
@@ -465,6 +566,80 @@ export class PatchFieldsOutput extends CardDef {
 
 export class GenerateReadmeSpecResult extends CardDef {
   @field readme = contains(MarkdownField);
+  @field spec = linksTo(Spec);
+
+  static fitted = class Fitted extends Component<
+    typeof GenerateReadmeSpecResult
+  > {
+    get spec(): Spec | null {
+      return (this.args.model?.spec ?? null) as Spec | null;
+    }
+
+    get readme(): string | null {
+      let readme = this.args.model?.readme as string | undefined;
+      return typeof readme === 'string' && readme.trim().length > 0
+        ? readme
+        : null;
+    }
+
+    <template>
+      <div class='generate-readme-result'>
+        {{#if this.spec}}
+          {{#let (getComponent this.spec) as |SpecComponent|}}
+            {{#if SpecComponent}}
+              <div class='generate-readme-result__spec'>
+                <SpecComponent @format='fitted' />
+              </div>
+            {{/if}}
+          {{/let}}
+        {{/if}}
+
+        {{#if this.readme}}
+          <section class='generate-readme-result__readme'>
+            <h2>Generated README</h2>
+            <pre>{{this.readme}}</pre>
+          </section>
+        {{/if}}
+      </div>
+
+      <style scoped>
+        .generate-readme-result {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-lg);
+        }
+
+        .generate-readme-result__spec {
+          border: 1px solid var(--boxel-200);
+          border-radius: var(--boxel-border-radius);
+          background: var(--boxel-0);
+          padding: var(--boxel-sp-md);
+        }
+
+        .generate-readme-result__readme {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-sm);
+        }
+
+        .generate-readme-result__readme > h2 {
+          margin: 0;
+          font-size: var(--boxel-font-size-md);
+          font-weight: 600;
+          color: var(--boxel-700);
+        }
+
+        .generate-readme-result__readme > pre {
+          margin: 0;
+          padding: var(--boxel-sp-md);
+          border: 1px solid var(--boxel-200);
+          border-radius: var(--boxel-border-radius);
+          background: var(--boxel-0);
+          white-space: pre-wrap;
+        }
+      </style>
+    </template>
+  };
 }
 
 export class GenerateReadmeSpecInput extends CardDef {

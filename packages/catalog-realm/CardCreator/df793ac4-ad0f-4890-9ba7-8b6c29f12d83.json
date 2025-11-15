@@ -1,0 +1,89 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardCreator",
+        "module": "../card-generation/card-creator"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "steps": [
+        {
+          "stepId": "ask-ai-for-payload",
+          "label": "Fetch sample payload",
+          "description": "Ask the AI model to propose example data.",
+          "commandRef": {
+            "module": "@cardstack/boxel-host/commands/generate-example-cards",
+            "name": "AskAiForCardJsonCommand"
+          },
+          "format": "isolated",
+          "codeRef": null,
+          "targetRealm": null
+        },
+        {
+          "stepId": "writing-card",
+          "label": "Writing Card",
+          "description": "Inspect the new card saved to the selected realm.",
+          "commandRef": {
+            "module": "@cardstack/boxel-host/commands/generate-example-cards",
+            "name": "CreateExampleCardCommand"
+          },
+          "format": "isolated",
+          "codeRef": null,
+          "targetRealm": null
+        }
+      ],
+      "prompt": "",
+      "codeRef": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": "Syle Reference Creator",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "localDir": "StyleReference",
+      "targetRealmUrl": "http://localhost:4201/catalog/"
+    },
+    "relationships": {
+      "llmModel": {
+        "links": {
+          "self": "../ModelConfiguration/anthropic-claude-sonnet-45"
+        }
+      },
+      "exampleCard": {
+        "links": {
+          "self": "http://localhost:4201/experiments/StyleReference/default/2dbbcab3-2819-4aed-9e25-beda1e20940e"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "steps.0.input": {
+        "links": {
+          "self": "../CreateInstancesInput/2f7cb08a-ed85-4358-b113-d96bfc420958"
+        }
+      },
+      "steps.0.output": {
+        "links": {
+          "self": "../GenerateExamplePayloadResult/13d96bfc-4209-4818-b066-c8136db326c6"
+        }
+      },
+      "steps.1.input": {
+        "links": {
+          "self": "../CreateExampleCardInput/d96bfc42-0958-4870-a6c8-136db326c693"
+        }
+      },
+      "steps.1.output": {
+        "links": {
+          "self": "../CreateInstanceResult/fc420958-1870-46c8-936d-b326c6933f4c"
+        }
+      }
+    }
+  }
+}

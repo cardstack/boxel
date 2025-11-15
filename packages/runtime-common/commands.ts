@@ -21,10 +21,12 @@ export interface CommandContext {
   [CommandContextStamp]: boolean;
 }
 
+export type CommandInvocationStatus = 'idle' | 'pending' | 'success' | 'error';
+
 export interface CommandInvocation<CardResultType extends CardDefConstructor> {
   value: CardInstance<CardResultType> | null;
   error: Error | null;
-  status: 'pending' | 'success' | 'error';
+  status: CommandInvocationStatus;
   readonly isSuccess: boolean;
   readonly isLoading: boolean;
 }
