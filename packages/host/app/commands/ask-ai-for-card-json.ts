@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { isCardInstance } from '@cardstack/runtime-common';
+import { isCardInstance, logger } from '@cardstack/runtime-common';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
@@ -16,6 +16,9 @@ import {
 } from './example-card-helpers';
 
 import type CardService from '../services/card-service';
+import { prettifyPrompts } from '../utils/prettify-prompts';
+
+const log = logger('commands:ask-ai-for-card-json');
 
 export class AskAiForCardJsonCommand extends HostBaseCommand<
   typeof BaseCommandModule.AskAiForCardJsonInput,
@@ -69,6 +72,18 @@ export class AskAiForCardJsonCommand extends HostBaseCommand<
       : [];
 
     const oneShot = new OneShotLlmRequestCommand(this.commandContext);
+    log.debug('Requesting payload from LLM', {
+      model: llmModel,
+      hasExampleCard: Boolean(exampleCard),
+      codeRef: input.codeRef,
+    });
+    log.debug(
+      prettifyPrompts({
+        scope: 'AskAiForCardJson',
+        systemPrompt: ONE_SHOT_SYSTEM_PROMPT,
+        userPrompt,
+      }),
+    );
     const llmResult = await oneShot.execute({
       codeRef: input.codeRef,
       systemPrompt: ONE_SHOT_SYSTEM_PROMPT,
@@ -81,14 +96,16 @@ export class AskAiForCardJsonCommand extends HostBaseCommand<
     if (!payload) {
       throw new Error('LLM response did not include a usable JSON payload');
     }
-    try {
-      console.debug(
-        'AskAiForCardJsonCommand received JSON payload',
-        JSON.stringify(payload, null, 2),
-      );
-    } catch {
-      // ignore stringify issues
-    }
+    log.debug('Received payload from LLM', {
+      payloadPreview: (() => {
+        try {
+          return JSON.stringify(payload, null, 2);
+        } catch {
+          return '[unserializable payload]';
+        }
+      })(),
+      rawOutputPresent: Boolean(llmResult.output),
+    });
 
     let commandModule = await this.loadCommandModule();
     const { GenerateExamplePayloadResult } = commandModule;
