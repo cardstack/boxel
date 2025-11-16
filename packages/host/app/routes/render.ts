@@ -6,6 +6,8 @@ import type Transition from '@ember/routing/transition';
 import { join, scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 
+import { isTesting } from '@embroider/macros';
+
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
@@ -440,6 +442,11 @@ export default class RenderRoute extends Route<Model> {
 
   @action
   error(error: any, transition: Transition) {
+    if (isTesting()) {
+      // don't hijack routing in the host tests
+      return false;
+    }
+
     transition.abort();
     this.handleRenderError(error, transition);
     return false;
