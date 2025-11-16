@@ -2670,18 +2670,28 @@ function lazilyLoadLink(
         let isMissingFile =
           typeof error?.message === 'string' &&
           /not found/i.test(error.message);
+        let payloadError: {
+          title: string;
+          status: number;
+          message: string;
+          stack?: string;
+          deps?: string[];
+        } = {
+          title: isMissingFile
+            ? 'Link Not Found'
+            : error?.message ?? 'Card Error',
+          status: isMissingFile ? 404 : (error as any)?.status ?? 500,
+          message: isMissingFile
+            ? `missing file ${reference}.json`
+            : error?.message ?? String(e),
+          stack: error?.stack,
+        };
+        if (isCardError(error) && error.deps?.length) {
+          payloadError.deps = [...new Set(error.deps)];
+        }
         let payload = JSON.stringify({
           type: 'error',
-          error: {
-            title: isMissingFile
-              ? 'Link Not Found'
-              : error?.message ?? 'Card Error',
-            status: isMissingFile ? 404 : (error as any)?.status ?? 500,
-            message: isMissingFile
-              ? `missing file ${reference}.json`
-              : error?.message ?? String(e),
-            stack: error?.stack,
-          },
+          error: payloadError,
         });
         // We use a custom event for render errors--otherwise QUnit will report a "global error"
         // when we use a promise rejection to signal to the prerender that there was an error
