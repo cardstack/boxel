@@ -359,8 +359,8 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
               },
             },
           },
-          'Spec/comment-2.json': clone(commentSpec2),
-          'Spec/comment-1.json': clone(commentSpec1),
+          'Spec/comment-alt.json': clone(commentSpec2),
+          'Spec/comment-main.json': clone(commentSpec1),
           'Spec/full-name.json': {
             data: {
               type: 'card',
@@ -483,8 +483,8 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
           },
         },
       }));
-      await realm.delete('Spec/comment-1.json');
-      await realm.write('Spec/comment-1.json', JSON.stringify(commentSpec1));
+      await realm.delete('Spec/comment-main.json');
+      await realm.write('Spec/comment-main.json', JSON.stringify(commentSpec1));
       setRecentFiles([
         [testRealmURL, 'blog-post.gts'],
         [testRealmURL, 'author.gts'],
@@ -639,7 +639,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       let selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-1`,
+        cardId: `${testRealmURL}Spec/comment-main`,
         format: 'embedded',
         fieldIndex: 0,
         url: `${testRealmURL}blog-post.gts`,
@@ -648,23 +648,23 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       await toggleSpecPanel();
       assert
         .dom(
-          `[data-test-card="${testRealmURL}Spec/comment-1"] [data-test-boxel-input-id="spec-title"]`,
+          `[data-test-card="${testRealmURL}Spec/comment-main"] [data-test-boxel-input-id="spec-title"]`,
         )
         .hasValue('Comment spec');
       assert
         .dom('[data-test-spec-selector] [data-test-spec-selector-item-path]')
-        .containsText('Spec/comment-1');
+        .containsText('Spec/comment-main');
       await click('[data-test-spec-selector] > div');
       assert
         .dom('[data-option-index="1"] [data-test-spec-selector-item-path]')
-        .hasText('Spec/comment-2');
+        .hasText('Spec/comment-alt');
       await click('[data-option-index="1"]');
       assert
         .dom('[data-test-spec-selector] [data-test-spec-selector-item-path]')
-        .containsText('Spec/comment-2');
+        .containsText('Spec/comment-alt');
       assert
         .dom(
-          `[data-test-card="${testRealmURL}Spec/comment-2"] [data-test-boxel-input-id="spec-title"]`,
+          `[data-test-card="${testRealmURL}Spec/comment-alt"] [data-test-boxel-input-id="spec-title"]`,
         )
         .hasValue('Comment spec II');
 
@@ -678,7 +678,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-2`,
+        cardId: `${testRealmURL}Spec/comment-alt`,
         format: 'embedded',
         fieldIndex: 0,
         url: `${testRealmURL}blog-post.gts`,
@@ -698,7 +698,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       let selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-1`,
+        cardId: `${testRealmURL}Spec/comment-main`,
         format: 'embedded',
         fieldIndex: 0,
         url: `${testRealmURL}blog-post.gts`,
@@ -722,7 +722,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-1`,
+        cardId: `${testRealmURL}Spec/comment-main`,
         format: 'embedded',
         fieldIndex: 1,
         url: `${testRealmURL}blog-post.gts`,
@@ -732,7 +732,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     test('preview the next available example if the previously selected one has been deleted', async function (assert) {
       setPlaygroundSelections({
         [`${testRealmURL}blog-post/Comment`]: {
-          cardId: `${testRealmURL}Spec/comment-1`,
+          cardId: `${testRealmURL}Spec/comment-main`,
           format: 'embedded',
           fieldIndex: 1,
         },
@@ -833,7 +833,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       let selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-1`,
+        cardId: `${testRealmURL}Spec/comment-main`,
         format: 'embedded',
         fieldIndex: 0,
         url: `${testRealmURL}blog-post.gts`,
@@ -846,7 +846,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-1`,
+        cardId: `${testRealmURL}Spec/comment-main`,
         format: 'edit',
         fieldIndex: 2,
         url: `${testRealmURL}blog-post.gts`,
