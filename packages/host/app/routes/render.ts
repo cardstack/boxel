@@ -442,7 +442,7 @@ export default class RenderRoute extends Route<Model> {
 
   @action
   error(error: any, transition: Transition) {
-    if (isTesting()) {
+    if (isTesting() && !(globalThis as any).__doNotSuppressRenderRouteError) {
       // don't hijack routing in the host tests
       return false;
     }

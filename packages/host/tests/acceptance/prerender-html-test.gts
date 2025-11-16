@@ -45,6 +45,7 @@ module('Acceptance | prerender | html', function (hooks) {
     // circularity, so to speed up the tests we prune the definitions object as we don't
     // really care about it.
     (globalThis as any).__boxel_definitions_recursing_depth = 0;
+    (globalThis as any).__doNotSuppressRenderRouteError = true;
     let loader = getService('loader-service').loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
@@ -520,6 +521,7 @@ module('Acceptance | prerender | html', function (hooks) {
     delete (globalThis as any).__lazilyLoadLinks;
     delete (globalThis as any).__boxelRenderContext;
     delete (globalThis as any).__boxel_definitions_recursing_depth;
+    delete (globalThis as any).__doNotSuppressRenderRouteError;
   });
 
   test('prerender isolated html', async function (assert) {
