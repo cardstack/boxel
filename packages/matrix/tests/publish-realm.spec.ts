@@ -131,16 +131,19 @@ test.describe('Publish realm', () => {
   test('it warns when private dependencies would cause host mode errors', async ({
     page,
   }) => {
+    await clearLocalStorage(page, serverIndexUrl);
+
     user = await createSubscribedUserAndLogin(
       page,
       'publish-realm',
       serverIndexUrl,
     );
 
-    await clearLocalStorage(page, serverIndexUrl);
+    let serverURL = new URL(serverIndexUrl);
+    let publishedRealmBase = `${serverURL.protocol}//${serverURL.host}/${user.username}`;
 
-    let defaultRealmURL = new URL('user1/new-workspace/', serverIndexUrl).href;
-    let privateRealmURL = new URL('user1/secret-realm/', serverIndexUrl).href;
+    let defaultRealmURL = `${publishedRealmBase}/new-workspace/`;
+    let privateRealmURL = `${publishedRealmBase}/secret-realm/`;
 
     await createRealm(page, 'new-workspace', '1New Workspace');
     await createRealm(page, 'secret-realm', 'Secret Realm');
