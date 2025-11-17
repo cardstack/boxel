@@ -1,7 +1,6 @@
 import {
   click,
   fillIn,
-  find,
   findAll,
   settled,
   waitFor,
@@ -136,7 +135,7 @@ module(
         await settled();
 
         assert.strictEqual(
-          searchCount,
+          interceptedSearchRequests.length,
           0,
           'no search requests before editing',
         );
@@ -321,7 +320,6 @@ module(
         });
 
         await fillIn(titleSelector, 'Target');
-        await settled();
 
         assert.strictEqual(
           searchCount,
@@ -343,7 +341,11 @@ module(
 
         let finalValue =
           document.querySelector<HTMLInputElement>(titleSelector)?.value;
-        assert.strictEqual(finalValue, 'Target', 'title input reflects last edit');
+        assert.strictEqual(
+          finalValue,
+          'Target',
+          'title input reflects last edit',
+        );
         assert
           .dom(`${cardSelector} [data-test-favorite]`)
           .includesText(
