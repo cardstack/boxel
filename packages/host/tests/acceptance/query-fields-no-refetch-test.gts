@@ -114,7 +114,7 @@ module(
     });
 
     test('host does not re-fetch query-backed relationships', async function (assert) {
-      assert.expect(8);
+      assert.expect(9);
       let network = getService('network') as NetworkService;
 
       let interceptedSearchRequests: string[] = [];
