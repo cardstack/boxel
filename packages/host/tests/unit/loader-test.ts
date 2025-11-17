@@ -223,4 +223,27 @@ module('Unit | loader', function (hooks) {
     assert.strictEqual(checkImportMeta(), `${testRealmURL}foo.js`);
     assert.strictEqual(myLoader(), loader, 'the loader instance is correct');
   });
+
+  test('identify preserves original module for reexports', function (assert) {
+    let throwIfFetch = new Loader(async () => {
+      throw new Error(
+        'fetch should not be invoked during shimmed module tests',
+      );
+    });
+
+    class StringField {}
+
+    throwIfFetch.shimModule(`${baseRealm.url}card-api.gts`, {
+      StringField,
+    });
+
+    throwIfFetch.shimModule(`${baseRealm.url}string.ts`, {
+      default: StringField,
+    });
+
+    assert.deepEqual(Loader.identify(StringField), {
+      module: `${baseRealm.url}card-api`,
+      name: 'StringField',
+    });
+  });
 });

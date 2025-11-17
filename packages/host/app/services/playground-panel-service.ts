@@ -46,10 +46,12 @@ export default class PlaygroundPanelService extends Service {
       url?: string;
     }
   >();
+  private storageSnapshot: string | null = null;
   constructor(owner: Owner) {
     super(owner);
     let selections = window.localStorage.getItem(PlaygroundSelections);
 
+    this.storageSnapshot = selections;
     this.playgroundSelections = new TrackedObject(
       selections?.length ? JSON.parse(selections) : {},
     );
@@ -61,6 +63,7 @@ export default class PlaygroundPanelService extends Service {
     format: Format,
     fieldIndex: number | undefined,
   ) => {
+    this.syncSelectionsWithStorage();
     let url = this.operatorModeStateService.codePathString;
 
     this.playgroundSelections[moduleId] = {
@@ -139,17 +142,25 @@ export default class PlaygroundPanelService extends Service {
   });
 
   setStorage = () => {
-    window.localStorage.setItem(
-      PlaygroundSelections,
-      JSON.stringify(this.resolvedSelections),
-    );
+    let serialized = JSON.stringify(this.resolvedSelections);
+    window.localStorage.setItem(PlaygroundSelections, serialized);
+    this.storageSnapshot = serialized;
+  };
+
+  resetSelections = () => {
+    this.playgroundSelections = new TrackedObject({});
+    this.selectionsForNewInstances.clear();
+    window.localStorage.removeItem(PlaygroundSelections);
+    this.storageSnapshot = null;
   };
 
   getSelection = (moduleId: string) => {
+    this.syncSelectionsWithStorage();
     return this.playgroundSelections[moduleId];
   };
 
   removeSelectionsByCardId = (cardId: string) => {
+    this.syncSelectionsWithStorage();
     let foundItems = Object.entries(this.playgroundSelections).filter(
       ([_key, val]) => this.store.isSameId(val.cardId, cardId),
     );
@@ -167,6 +178,17 @@ export default class PlaygroundPanelService extends Service {
       return;
     }
     return JSON.parse(selections)?.[moduleId];
+  }
+
+  private syncSelectionsWithStorage() {
+    let latest = window.localStorage.getItem(PlaygroundSelections);
+    if (latest === this.storageSnapshot) {
+      return;
+    }
+    this.storageSnapshot = latest;
+    this.playgroundSelections = new TrackedObject(
+      latest?.length ? JSON.parse(latest) : {},
+    );
   }
 }
 

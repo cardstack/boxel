@@ -588,4 +588,8 @@ export function isLocalId(id: string) {
   return !id.startsWith('http');
 }
 
+export function isBrowserTestEnv() {
+  return typeof window !== 'undefined' && Boolean((globalThis as any).QUnit);
+}
+
 export * from './prerendered-card-search';

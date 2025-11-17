@@ -835,7 +835,7 @@ module(basename(__filename), function () {
         assert.ok(response.error, 'error present for missing link');
         assert.strictEqual(
           response.error?.error.message,
-          `missing-owner.json not found`,
+          `missing file ${realmURL1}missing-owner.json`,
         );
         assert.strictEqual(response.error?.error.status, 404);
         assert.false(

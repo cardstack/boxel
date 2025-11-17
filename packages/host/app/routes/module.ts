@@ -40,7 +40,7 @@ import { createAuthErrorGuard } from '../utils/auth-error-guard';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
-import type StoreService from '../services/store';
+import type RenderStoreService from '../services/render-store';
 
 export type Model = {
   id: string;
@@ -73,7 +73,7 @@ type TypesWithErrors =
 
 export default class ModuleRoute extends Route<Model> {
   @service declare router: RouterService;
-  @service declare store: StoreService;
+  @service('render-store') declare store: RenderStoreService;
   @service declare loaderService: LoaderService;
   @service declare private network: NetworkService;
 
