@@ -48,9 +48,13 @@ export class Age extends GlimmerComponent<AgeSignature> {
 
       // If less than 1 year old, calculate months
       if (years === 0) {
-        let months = monthDiff;
+        let months = today.getMonth() - birth.getMonth();
         if (today.getDate() < birth.getDate()) {
           months--;
+        }
+        // Handle negative months (birth date in previous calendar year)
+        if (months < 0) {
+          months += 12;
         }
         return { years: 0, months };
       }
@@ -115,7 +119,7 @@ export class Age extends GlimmerComponent<AgeSignature> {
     }
   }
 
- <template>
+  <template>
     <div class='age-calculator' data-test-age-calculator>
       {{#if this.isFutureDate}}
         <div class='age-error'>Invalid birth date (future date not allowed)</div>
@@ -123,9 +127,13 @@ export class Age extends GlimmerComponent<AgeSignature> {
         <div class='age-display'>
           <div class='age-value'>
             {{#if (eq this.age.years 0)}}
-              {{this.age.months}} {{if (eq this.age.months 1) "month" "months"}} old
+              {{this.age.months}}
+              {{if (eq this.age.months 1) 'month' 'months'}}
+              old
             {{else}}
-              {{this.age.years}} {{if (eq this.age.years 1) "year" "years"}} old
+              {{this.age.years}}
+              {{if (eq this.age.years 1) 'year' 'years'}}
+              old
             {{/if}}
           </div>
           <div class='age-meta'>
@@ -134,7 +142,7 @@ export class Age extends GlimmerComponent<AgeSignature> {
             {{#if (and this.nextBirthday (Number this.showNextBirthday))}}
               * • Next birthday in
               {{this.nextBirthday}}
-              {{if (eq this.nextBirthday 1) "day" "days"}}
+              {{if (eq this.nextBirthday 1) 'day' 'days'}}
             {{/if}}
           </div>
         </div>
