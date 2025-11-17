@@ -954,21 +954,21 @@ export default class PublishRealmModal extends Component<Signature> {
         margin-bottom: var(--boxel-sp);
         padding: var(--boxel-sp-sm);
         border: 1px solid var(--boxel-warning-200);
-        background-color: rgba(255, 186, 0, 0.12);
+        background-color: rgb(from var(--boxel-warning-200) r g b / 12%);
         border-radius: var(--boxel-border-radius-lg);
         font-size: var(--boxel-font-size-sm);
       }
 
       .publish-warning.error {
         border-color: var(--boxel-error-200);
-        background-color: rgba(220, 38, 38, 0.08);
+        background-color: rgb(from var(--boxel-error-200) r g b / 8%);
         color: var(--boxel-error-200);
       }
 
       .publish-warning.info {
-        border-color: var(--boxel-300, #cfd2d7);
-        background-color: var(--boxel-050, rgba(0, 0, 0, 0.03));
-        color: var(--boxel-500, #5f6c80);
+        border-color: var(--boxel-300);
+        background-color: var(--boxel-50);
+        color: var(--boxel-500);
         align-items: center;
         gap: var(--boxel-sp-xxs);
       }
