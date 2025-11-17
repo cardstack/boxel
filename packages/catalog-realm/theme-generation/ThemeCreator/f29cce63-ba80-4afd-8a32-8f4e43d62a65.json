@@ -1,0 +1,38 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "ThemeCreator",
+        "module": "../theme-creator"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "realm": "http://localhost:4201/catalog/",
+      "prompt": "make something yellow",
+      "codeRef": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": "Generating new themes with AI",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "numberOfVariants": 1
+    },
+    "relationships": {
+      "skillCards.0": {
+        "links": {
+          "self": "../Skill/theme-design"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
