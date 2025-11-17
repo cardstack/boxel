@@ -12,6 +12,10 @@ import type { Skill } from 'https://cardstack.com/base/skill';
 import HostBaseCommand from '../lib/host-base-command';
 
 import { prettifyPrompts } from '../utils/prettify-prompts';
+import {
+  prettifyMessages,
+  type SimpleMessage,
+} from '../utils/prettify-messages';
 
 import ReadTextFileCommand from './read-text-file';
 import SendRequestViaProxyCommand from './send-request-via-proxy';
@@ -20,6 +24,45 @@ import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
+
+const formatOutputForLog = (output: unknown): string | null => {
+  if (output == null) {
+    return null;
+  }
+  const asString =
+    typeof output === 'string'
+      ? output
+      : (() => {
+          try {
+            return JSON.stringify(output);
+          } catch {
+            return String(output);
+          }
+        })();
+
+  // Try to parse a JSON string (optionally wrapped in fences) and pretty print it
+  const sanitize = (text: string) =>
+    text
+      .trim()
+      .replace(/^```[a-zA-Z0-9]*\n?/m, '')
+      .replace(/```$/, '');
+
+  try {
+    let parsed: unknown = JSON.parse(sanitize(asString));
+    // If the parsed value is itself a JSON-encoded string, parse one more time
+    if (typeof parsed === 'string') {
+      try {
+        parsed = JSON.parse(parsed);
+      } catch {
+        // keep the string as-is
+      }
+    }
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    // Fallback to a truncated string preview if it isn't valid JSON
+    return asString.slice(0, 2000);
+  }
+};
 
 export default class OneShotLlmRequestCommand extends HostBaseCommand<
   typeof BaseCommandModule.OneShotLLMRequestInput,
@@ -118,12 +161,22 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
         );
       }
 
-      // Build system prompt with skill cards if provided
+      let skillInstructions =
+        loadedSkillCards.length > 0
+          ? `Available Skills:\n${skillCardsToMessage(loadedSkillCards)}`
+          : '';
+
       let systemPrompt = input.systemPrompt;
-      if (loadedSkillCards.length > 0) {
-        systemPrompt += '\n\nAvailable Skills:\n';
-        systemPrompt += skillCardsToMessage(loadedSkillCards);
-      }
+
+      const fileSection = `${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : ''}${attachedFilesContent ? attachedFilesContent : ''}${!fileContent && !attachedFilesContent ? 'No file content available.' : ''}`;
+
+      let userContent = [
+        input.userPrompt,
+        skillInstructions,
+        fileSection,
+      ]
+        .filter((section) => section && section.trim().length > 0)
+        .join('\n\n');
 
       const generationMessages = [
         {
@@ -132,14 +185,23 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
         },
         {
           role: 'user' as const,
-          content: `${input.userPrompt}
-
-${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : ''}${attachedFilesContent ? attachedFilesContent : ''}${!fileContent && !attachedFilesContent ? 'No file content available.' : ''}`,
+          content: userContent,
         },
       ];
+      oneShotLogger.debug(
+        prettifyMessages(
+          generationMessages.map((message) => ({
+            role: message.role,
+            content:
+              typeof message.content === 'string'
+                ? message.content
+                : String(message.content),
+          })),
+        ),
+      );
       oneShotLogger.debug('prepared messages', {
         systemPromptLength: systemPrompt.length,
-        userPromptLength: input.userPrompt.length,
+        userPromptLength: userContent.length,
         fileContentIncluded: !!fileContent,
         attachedFilesCount: input.attachedFileURLs?.length || 0,
         skillCards: loadedSkillCards.map((c) => c.id),
@@ -171,9 +233,7 @@ ${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : ''}${attachedFilesContent ? a
         usage: responseData.usage || null,
       });
       const output = responseData.choices?.[0]?.message?.content || null;
-      oneShotLogger.debug('llm request complete', {
-        outputPreview: output ? String(output).slice(0, 120) : null,
-      });
+      oneShotLogger.debug('llm request complete', output);
 
       return new OneShotLLMRequestResult({
         output: output,
