@@ -66,7 +66,7 @@ export default class PatchCardInstanceCommand extends HostBaseCommand<
         attributes: input.patch.attributes,
         relationships: input.patch.relationships,
       },
-      { clientRequestId },
+      { doNotWaitForPersist: true, clientRequestId },
     );
   }
 

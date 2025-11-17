@@ -25,8 +25,54 @@ import type NetworkService from '../services/network';
 const log = logger('resource:file');
 const realmEventsLogger = logger('realm:events');
 
-const utf8 = new TextDecoder();
-const encoder = new TextEncoder();
+type TextDecoderCtor = typeof TextDecoder;
+type TextEncoderCtor = typeof TextEncoder;
+type BufferLike = {
+  from(
+    input: ArrayBuffer | ArrayBufferView | string,
+    encoding?: string,
+  ): { toString(encoding?: string): string; length: number };
+  byteLength?(input: string, encoding?: string): number;
+};
+
+const TextDecoderImpl = (
+  globalThis as typeof globalThis & { TextDecoder?: TextDecoderCtor }
+).TextDecoder;
+const TextEncoderImpl = (
+  globalThis as typeof globalThis & { TextEncoder?: TextEncoderCtor }
+).TextEncoder;
+const BufferImpl = (
+  globalThis as typeof globalThis & {
+    Buffer?: BufferLike;
+  }
+).Buffer;
+
+const utf8Decoder = TextDecoderImpl ? new TextDecoderImpl() : undefined;
+const utf8Encoder = TextEncoderImpl ? new TextEncoderImpl() : undefined;
+
+function decodeUtf8(buffer: ArrayBuffer): string {
+  if (utf8Decoder) {
+    return utf8Decoder.decode(buffer);
+  }
+  if (BufferImpl) {
+    // Buffer handles ArrayBuffer and ArrayBufferView inputs in Node environments
+    return BufferImpl.from(buffer).toString('utf8');
+  }
+  throw new Error('No UTF-8 decoder available in this environment');
+}
+
+function utf8ByteLength(content: string): number {
+  if (utf8Encoder) {
+    return utf8Encoder.encode(content).byteLength;
+  }
+  if (BufferImpl) {
+    if (typeof BufferImpl.byteLength === 'function') {
+      return BufferImpl.byteLength(content, 'utf8');
+    }
+    return BufferImpl.from(content, 'utf8').length;
+  }
+  return content.length;
+}
 
 interface Args {
   named: {
@@ -60,7 +106,11 @@ export interface Ready {
   size: number; // size in bytes
   write(
     content: string,
-    opts?: { flushLoader?: boolean; saveType?: SaveType },
+    opts?: {
+      flushLoader?: boolean;
+      saveType?: SaveType;
+      clientRequestId?: string;
+    },
   ): Promise<void>;
   lastModifiedAsDate?: Date;
   isBinary?: boolean;
@@ -184,7 +234,7 @@ class _FileResource extends Resource<Args> {
 
     let buffer = await response.arrayBuffer();
     let size = buffer.byteLength;
-    let content = utf8.decode(buffer);
+    let content = decodeUtf8(buffer);
 
     let self = this;
     let rawName = response.url.split('/').pop();
@@ -199,7 +249,11 @@ class _FileResource extends Resource<Args> {
       url: response.url,
       write(
         content: string,
-        opts?: { flushLoader?: boolean; saveType?: SaveType },
+        opts?: {
+          flushLoader?: boolean;
+          saveType?: SaveType;
+          clientRequestId?: string;
+        },
       ) {
         self.writing = self.writeTask
           .unlinked() // If the component which performs this task from within another task is destroyed, for example the "add field" modal, we want this task to continue running
@@ -272,13 +326,20 @@ class _FileResource extends Resource<Args> {
     async (
       state: Ready,
       content: string,
-      opts?: { flushLoader?: boolean; saveType?: SaveType },
+      opts?: {
+        flushLoader?: boolean;
+        saveType?: SaveType;
+        clientRequestId?: string;
+      },
     ) => {
       let response = await this.cardService.saveSource(
         new URL(this._url),
         content,
         opts?.saveType ?? 'editor',
-        { resetLoader: opts?.flushLoader },
+        {
+          resetLoader: opts?.flushLoader,
+          clientRequestId: opts?.clientRequestId,
+        },
       );
       if (this.innerState.state === 'not-found') {
         // TODO think about the "unauthorized" scenario
@@ -286,7 +347,7 @@ class _FileResource extends Resource<Args> {
           'this should be impossible--we are creating the specified path',
         );
       }
-      let size = encoder.encode(content).byteLength;
+      let size = utf8ByteLength(content);
 
       this.updateState({
         state: 'ready',

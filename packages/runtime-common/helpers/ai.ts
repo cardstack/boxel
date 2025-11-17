@@ -395,8 +395,9 @@ function generateJsonSchemaForContainsFields(
       schema.properties[fieldName] = fieldSchemaForSingleItem;
     }
 
-    if (field.description) {
-      schema.properties[fieldName].description = field.description;
+    let desc = cardApi.getFieldDescription(def, fieldName);
+    if (desc) {
+      schema.properties[fieldName].description = desc;
     }
     if (requiredFields.includes(fieldName)) {
       includedRequiredFields.push(fieldName);
@@ -500,7 +501,7 @@ function generateRelationshipFieldsInfo(
       relationships.push({
         flatFieldName,
         fieldType: fValue.fieldType,
-        description: fValue.description,
+        description: cardApi.getFieldDescription(def, fName),
       });
     } else {
       relationships = generateRelationshipFieldsInfo(

@@ -155,10 +155,14 @@ export default class PatchFieldsCommand extends HostBaseCommand<
       // Only apply changes if at least some fields were updated successfully
       if (successfulUpdates.length > 0) {
         // Apply the updated data node (attributes and relationships)
-        const result = await this.store.patch(input.cardId, {
-          attributes: workingData.attributes,
-          relationships: workingData.relationships,
-        });
+        const result = await this.store.patch(
+          input.cardId,
+          {
+            attributes: workingData.attributes,
+            relationships: workingData.relationships,
+          },
+          { doNotWaitForPersist: true },
+        );
 
         if (result && 'errors' in result) {
           // Store operation failed - mark all attempted updates as failed
