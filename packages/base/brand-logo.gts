@@ -221,8 +221,8 @@ class Embedded extends Component<typeof BrandLogo> {
         border-radius: var(--boxel-border-radius);
       }
       .dark-container {
-        background-color: var(--foreground);
-        color: var(--background);
+        background-color: var(--foreground, var(--boxel-dark));
+        color: var(--background, var(--boxel-light));
       }
       .greyscale-group {
         justify-content: space-evenly;

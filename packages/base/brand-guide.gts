@@ -203,7 +203,7 @@ export class CompoundColorField extends FieldDef {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <Swatch @label={{formatCssVarName @model.name}} @color={{@model.value}} />
+      <Swatch @label={{@model.name}} @color={{@model.value}} />
       <style scoped>
         :deep(.boxel-swatch-name) {
           font-weight: 600;
