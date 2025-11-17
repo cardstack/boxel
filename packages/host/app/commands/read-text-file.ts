@@ -1,5 +1,6 @@
 import { service } from '@ember/service';
 
+import { SupportedMimeType } from '@cardstack/runtime-common';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -29,7 +30,9 @@ export default class ReadTextFileCommand extends HostBaseCommand<
     let url = input.realm
       ? new URL(input.path, input.realm)
       : new URL(input.path);
-    let response = await this.network.authedFetch(url);
+    let response = await this.network.authedFetch(url, {
+      headers: { Accept: SupportedMimeType.CardSource },
+    });
 
     let { FileContents } = await this.loadCommandModule();
     if (response.ok) {
