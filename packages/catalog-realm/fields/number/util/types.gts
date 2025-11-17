@@ -65,7 +65,6 @@ export interface StatConfig
   min: number; // Required
   max: number; // Required
   label?: string;
-  placeholder?: string;
   subtitle?: string;
   icon?: typeof IconComponent;
 }
@@ -117,7 +116,6 @@ export interface BadgeNotificationConfig
   min: number; // Required
   max: number; // Required
   label?: string;
-  placeholder?: string;
   icon?: typeof IconComponent;
 }
 
@@ -129,7 +127,6 @@ export interface BadgeMetricConfig
   min: number; // Required
   max: number; // Required
   label?: string;
-  placeholder?: string;
   icon?: typeof IconComponent;
 }
 
@@ -141,6 +138,4 @@ export interface BadgeCounterConfig
   min: number; // Required
   max: number; // Required
   label?: string;
-  placeholder?: string;
-  icon?: typeof IconComponent;
 }
