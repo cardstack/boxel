@@ -3,7 +3,7 @@
     "meta": {
       "adoptsFrom": {
         "name": "DateTimePreview",
-        "module": "../fields-preview/date-time"
+        "module": "../date-time"
       }
     },
     "type": "card",
