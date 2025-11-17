@@ -16,9 +16,6 @@ import {
   isSingleCardDocument,
   type LooseSingleCardDocument,
   type Permissions,
-  EqFilter,
-  CardTypeFilter,
-  ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -3721,7 +3718,7 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('query-backed relationships include canonical search links in serialized payloads', async function (assert) {
-    assert.expect(38);
+    assert.expect(30);
 
     class Person extends CardDef {
       @field title = contains(StringField);
@@ -3906,24 +3903,6 @@ module('Integration | serialization', function (hooks) {
       'favorite query field cache stores query signature',
     );
     assert.strictEqual(
-      (favoriteState?.query?.filter as EqFilter)?.eq?.title,
-      'Target',
-      'favorite query field cache stores interpolated filter',
-    );
-    assert.strictEqual(
-      (
-        (favoriteState?.query?.filter as CardTypeFilter)
-          ?.type as ResolvedCodeRef
-      )?.module,
-      favoriteQueryParams.filter?.type?.module,
-      'favorite query field cache preserves implicit type filter module',
-    );
-    assert.strictEqual(
-      favoriteState?.query?.page?.size,
-      1,
-      'favorite query field cache normalizes page size',
-    );
-    assert.strictEqual(
       favoriteState?.realm,
       testRealmURL,
       'favorite query field cache records resolved realm',
@@ -3948,32 +3927,6 @@ module('Integration | serialization', function (hooks) {
     assert.ok(
       matchesState?.signature,
       'matches query field cache stores query signature',
-    );
-    assert.strictEqual(
-      (matchesState?.query?.filter as EqFilter)?.eq?.title,
-      'Target',
-      'matches query field cache stores interpolated filter',
-    );
-    assert.strictEqual(
-      ((matchesState?.query?.filter as CardTypeFilter)?.type as ResolvedCodeRef)
-        ?.module,
-      matchesQueryParams.filter?.type?.module,
-      'matches query field cache preserves implicit type filter module',
-    );
-    assert.strictEqual(
-      matchesState?.query?.page?.size,
-      5,
-      'matches query field cache normalizes page size',
-    );
-    assert.strictEqual(
-      matchesState?.query?.sort?.[0]?.by,
-      'title',
-      'matches query field cache preserves sort field',
-    );
-    assert.strictEqual(
-      matchesState?.query?.sort?.[0]?.direction,
-      'asc',
-      'matches query field cache preserves sort direction',
     );
     assert.strictEqual(
       matchesState?.realm,

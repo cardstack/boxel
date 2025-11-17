@@ -104,7 +104,7 @@ module('Unit | query field schema', function (hooks) {
 
         void Person;
       },
-      /query field "shirts" references unknown path "\$this\.closet\.hanging\.missingField" on Shirt/,
+      /query field "shirts" references unknown path "\$this\.closet\.hanging\.missingField" on HangerField/,
       'validation error reports nested card context',
     );
   });

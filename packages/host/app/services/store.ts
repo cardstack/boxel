@@ -39,6 +39,7 @@ import {
   type AutoSaveState,
   type CardDocument,
   type SingleCardDocument,
+  type CardResource,
   type CardResourceMeta,
   type LooseSingleCardDocument,
   type LooseCardResource,
@@ -53,6 +54,10 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
+import LiveQuery, {
+  type LiveQueryCreationOptions,
+  type LiveQuerySearchArgs,
+} from '../store/live-query';
 
 import {
   enableRenderTimerStub,
@@ -69,7 +74,6 @@ import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type NetworkService from './network';
 import type OperatorModeStateService from './operator-mode-state-service';
-import type QueryFieldCoordinatorService from './query-field-coordinator';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
@@ -95,7 +99,6 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private reset: ResetService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realmServer: RealmServerService;
-  @service declare private queryFieldCoordinator: QueryFieldCoordinatorService;
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
   private referenceCount: ReferenceCount = new Map();
   private newReferencePromises: Promise<void>[] = [];
@@ -114,15 +117,19 @@ export default class StoreService extends Service implements StoreInterface {
   private onSaveSubscriber: CardSaveSubscriber | undefined;
   private autoSaveQueues = new Map<string, { isImmediate?: true }[]>();
   private autoSavePromises = new Map<string, Promise<void>>();
+  private liveQueryRegistry = new Set<LiveQuery>();
+  private liveQueryRealmMap = new Map<string, Set<LiveQuery>>();
+  private liveQueryRealmAssignments = new WeakMap<
+    LiveQuery,
+    string | undefined
+  >();
+  private fieldLiveQueries = new WeakMap<CardDef, Map<string, LiveQuery>>();
 
   constructor(owner: Owner) {
     super(owner);
-    this.store = new CardStore(this.referenceCount, this.network.authedFetch);
+    this.store = this.createCardStore();
     this.reset.register(this);
     this.ready = this.setup();
-    // Ensure the query field coordinator service instantiates early so it can
-    // register itself with the card API for automatic refresh handling.
-    this.queryFieldCoordinator;
     registerDestructor(this, () => {
       clearInterval(this.gcInterval);
     });
@@ -158,8 +165,9 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightCardLoads = new Map();
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
-    this.store = new CardStore(this.referenceCount, this.network.authedFetch);
+    this.store = this.createCardStore();
     this.ready = this.setup();
+    this.resetLiveQueryState();
   }
 
   async ensureSetupComplete(): Promise<void> {
@@ -178,7 +186,8 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightCardLoads = new Map();
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
-    this.store = new CardStore(this.referenceCount, this.network.authedFetch);
+    this.store = this.createCardStore();
+    this.resetLiveQueryState();
   }
 
   dropReference(id: string | undefined) {
@@ -530,6 +539,83 @@ export default class StoreService extends Service implements StoreInterface {
     ).filter(Boolean) as CardDef[];
   }
 
+  createLiveQuery<T extends CardDef = CardDef>(
+    options: LiveQueryCreationOptions<T>,
+  ): LiveQuery<T> {
+    let liveQuery!: LiveQuery<T>;
+    let fetchRecords = async (args: LiveQuerySearchArgs) => {
+      let records = await this.fetchLiveQueryRecords(args);
+      this.registerLiveQueryRealm(liveQuery, args.realmHref);
+      return records as T[];
+    };
+    liveQuery = new LiveQuery({
+      ...options,
+      fetchRecords,
+    });
+    this.liveQueryRegistry.add(liveQuery);
+    if (options.seedRealmHref) {
+      this.registerLiveQueryRealm(liveQuery, options.seedRealmHref);
+    }
+    return liveQuery;
+  }
+
+  ensureFieldLiveQuery<T extends CardDef = CardDef>(
+    instance: CardDef,
+    fieldName: string,
+    options: LiveQueryCreationOptions<T>,
+  ): LiveQuery<T> {
+    let byField = this.fieldLiveQueries.get(instance);
+    if (!byField) {
+      byField = new Map();
+      this.fieldLiveQueries.set(instance, byField);
+    }
+    let existing = byField.get(fieldName) as LiveQuery<T> | undefined;
+    if (existing) {
+      return existing;
+    }
+    let liveQuery = this.createLiveQuery<T>({
+      ...options,
+      owner: { instance, fieldName },
+    });
+    byField.set(fieldName, liveQuery);
+    return liveQuery;
+  }
+
+  destroyLiveQueries(instance: CardDef): void {
+    let byField = this.fieldLiveQueries.get(instance);
+    if (!byField) {
+      return;
+    }
+    for (let liveQuery of byField.values()) {
+      this.teardownLiveQuery(liveQuery);
+    }
+    this.fieldLiveQueries.delete(instance);
+  }
+
+  markLiveQueriesStaleForRealm(realmHref: string): void {
+    let normalized = this.normalizeRealmHref(realmHref);
+    let tracked = this.liveQueryRealmMap.get(normalized);
+    if (!tracked || tracked.size === 0) {
+      return;
+    }
+    for (let liveQuery of Array.from(tracked)) {
+      if (liveQuery.isDestroyed) {
+        tracked.delete(liveQuery);
+        continue;
+      }
+      let marked = liveQuery.markStale();
+      if (!marked) {
+        continue;
+      }
+      void liveQuery.refresh({ force: true }).catch((error) => {
+        storeLogger.warn('live query refresh failed', error);
+      });
+    }
+    if (tracked.size === 0) {
+      this.liveQueryRealmMap.delete(normalized);
+    }
+  }
+
   getSaveState(id: string): AutoSaveState | undefined {
     return this.autoSaveStates.get(id);
   }
@@ -659,7 +745,7 @@ export default class StoreService extends Service implements StoreInterface {
     if (instance) {
       if (this.cardApiCache && instance) {
         if (isCardInstance(instance)) {
-          this.queryFieldCoordinator.unregisterInstance(instance);
+          this.destroyLiveQueries(instance);
         }
         this.cardApiCache?.unsubscribeFromChanges(
           instance,
@@ -689,7 +775,31 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
-  private handleInvalidations = (event: RealmEventContent) => {
+  private resetLiveQueryState() {
+    for (let liveQuery of Array.from(this.liveQueryRegistry)) {
+      this.teardownLiveQuery(liveQuery);
+    }
+    this.liveQueryRegistry.clear();
+    this.liveQueryRealmMap.clear();
+    this.liveQueryRealmAssignments = new WeakMap();
+    this.fieldLiveQueries = new WeakMap();
+  }
+
+  private createCardStore(): CardStore {
+    return new CardStore(this.referenceCount, this.network.authedFetch, {
+      createLiveQuery: (options) => this.createLiveQuery(options),
+      ensureFieldLiveQuery: (instance, fieldName, options) =>
+        this.ensureFieldLiveQuery(instance, fieldName, options),
+      destroyLiveQueries: (instance) => this.destroyLiveQueries(instance),
+      markLiveQueriesStaleForRealm: (realmHref) =>
+        this.markLiveQueriesStaleForRealm(realmHref),
+    });
+  }
+
+  private handleInvalidations = (
+    event: RealmEventContent,
+    realmHref?: string,
+  ) => {
     if (event.eventName !== 'index') {
       return;
     }
@@ -771,6 +881,9 @@ export default class StoreService extends Service implements StoreInterface {
           `ignoring invalidation ${invalidation} because we did not previously try to load it`,
         );
       }
+    }
+    if (realmHref) {
+      this.markLiveQueriesStaleForRealm(realmHref);
     }
   };
 
@@ -1370,9 +1483,8 @@ export default class StoreService extends Service implements StoreInterface {
     let subscription = this.subscriptions.get(realm);
     if (!subscription) {
       this.subscriptions.set(realm, {
-        unsubscribe: this.messageService.subscribe(
-          realm,
-          this.handleInvalidations,
+        unsubscribe: this.messageService.subscribe(realm, (event) =>
+          this.handleInvalidations(event, realm),
         ),
       });
     }
@@ -1424,6 +1536,112 @@ export default class StoreService extends Service implements StoreInterface {
       idOrDoc: new URL(id, relativeTo).href,
     });
     return isCardInstance(instance) ? instance : undefined;
+  }
+
+  private async fetchLiveQueryRecords({
+    searchURL,
+    realmHref,
+  }: LiveQuerySearchArgs): Promise<CardDef[]> {
+    let json = await this.cardService.fetchJSON(searchURL);
+    if (!isCardCollectionDocument(json)) {
+      throw new Error(
+        `live query expected a collection document for ${searchURL} but received ${JSON.stringify(
+          json,
+        )}`,
+      );
+    }
+    let deduped = this.dedupeCardResources(json.data);
+    let defaultRelativeTo = realmHref ? new URL(realmHref) : undefined;
+    let instances: CardDef[] = [];
+    for (let doc of deduped) {
+      try {
+        let relativeTo = doc.id ? new URL(doc.id) : defaultRelativeTo;
+        let instance = await this.getInstance({
+          idOrDoc: { data: doc },
+          relativeTo,
+        });
+        if (isCardInstance(instance)) {
+          instances.push(instance);
+        }
+      } catch (error) {
+        storeLogger.warn(
+          `Skipping ${
+            doc.id
+          } because an error occurred while hydrating live query result for ${searchURL}`,
+          error,
+        );
+      }
+    }
+    return instances;
+  }
+
+  private dedupeCardResources(cards: CardResource[]): CardResource[] {
+    let seen = new Set<string>();
+    let deduped: CardResource[] = [];
+    for (let card of cards) {
+      if (!card?.id || seen.has(card.id)) {
+        continue;
+      }
+      seen.add(card.id);
+      deduped.push(card);
+    }
+    return deduped;
+  }
+
+  private registerLiveQueryRealm(
+    liveQuery: LiveQuery,
+    realmHref?: string,
+  ): void {
+    let normalized = realmHref ? this.normalizeRealmHref(realmHref) : undefined;
+    let previous = this.liveQueryRealmAssignments.get(liveQuery);
+    if (previous === normalized) {
+      return;
+    }
+    if (previous) {
+      this.removeLiveQueryFromRealm(liveQuery, previous);
+    }
+    if (!normalized) {
+      this.liveQueryRealmAssignments.set(liveQuery, undefined);
+      return;
+    }
+    let tracked = this.liveQueryRealmMap.get(normalized);
+    if (!tracked) {
+      tracked = new Set();
+      this.liveQueryRealmMap.set(normalized, tracked);
+    }
+    tracked.add(liveQuery);
+    this.liveQueryRealmAssignments.set(liveQuery, normalized);
+  }
+
+  private removeLiveQueryFromRealm(liveQuery: LiveQuery, realm: string): void {
+    let tracked = this.liveQueryRealmMap.get(realm);
+    if (!tracked) {
+      return;
+    }
+    tracked.delete(liveQuery);
+    if (tracked.size === 0) {
+      this.liveQueryRealmMap.delete(realm);
+    }
+  }
+
+  private teardownLiveQuery(liveQuery: LiveQuery): void {
+    let realm = this.liveQueryRealmAssignments.get(liveQuery);
+    if (realm) {
+      this.removeLiveQueryFromRealm(liveQuery, realm);
+    }
+    this.liveQueryRealmAssignments.delete(liveQuery);
+    this.liveQueryRegistry.delete(liveQuery);
+    liveQuery.destroy();
+  }
+
+  private normalizeRealmHref(realmHref: string): string {
+    let url = new URL(realmHref);
+    if (!url.pathname.endsWith('/')) {
+      url.pathname = `${url.pathname}/`;
+    }
+    url.search = '';
+    url.hash = '';
+    return url.href;
   }
 
   private async withTestWaiters<T>(cb: () => Promise<T>) {

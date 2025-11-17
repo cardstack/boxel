@@ -12,13 +12,32 @@ import {
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
 
-import type { CardDef, CardStore } from 'https://cardstack.com/base/card-api';
+import type {
+  CardDef,
+  CardStore,
+  StoreLiveQuery,
+  StoreLiveQueryOptions,
+  StoreLiveQueryStatus,
+} from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 export type ReferenceCount = Map<string, number>;
 
 type LocalId = string;
 type InstanceGraph = Map<LocalId, Set<LocalId>>;
+
+type LiveQueryHooks = {
+  createLiveQuery<T extends CardDef = CardDef>(
+    options: StoreLiveQueryOptions<T>,
+  ): StoreLiveQuery<T>;
+  ensureFieldLiveQuery<T extends CardDef = CardDef>(
+    instance: CardDef,
+    fieldName: string,
+    options: StoreLiveQueryOptions<T>,
+  ): StoreLiveQuery<T>;
+  destroyLiveQueries(instance: CardDef): void;
+  markLiveQueriesStaleForRealm(realmHref: string): void;
+};
 
 // we use this 2 way mapping between local ID and remote ID because if we end up
 // trying to search thru all the entries in a single direction Map to find the
@@ -102,9 +121,16 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   #docsInFlight: Map<string, Promise<SingleCardDocument | CardError>> =
     new Map();
 
-  constructor(referenceCount: ReferenceCount, fetch: typeof globalThis.fetch) {
+  #liveQueryHooks: LiveQueryHooks | undefined;
+
+  constructor(
+    referenceCount: ReferenceCount,
+    fetch: typeof globalThis.fetch,
+    liveQueryHooks?: LiveQueryHooks,
+  ) {
     this.#referenceCount = referenceCount;
     this.#fetch = fetch;
+    this.#liveQueryHooks = liveQueryHooks;
   }
 
   get(id: string): CardDef | undefined {
@@ -529,6 +555,51 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       );
     }
     return dependencyGraph;
+  }
+
+  createLiveQuery<T extends CardDef = CardDef>(
+    options: StoreLiveQueryOptions<T>,
+  ): StoreLiveQuery<T> {
+    return (
+      this.#liveQueryHooks?.createLiveQuery(options) ?? new NullLiveQuery<T>()
+    );
+  }
+
+  ensureFieldLiveQuery<T extends CardDef = CardDef>(
+    instance: CardDef,
+    fieldName: string,
+    options: StoreLiveQueryOptions<T>,
+  ): StoreLiveQuery<T> {
+    return (
+      this.#liveQueryHooks?.ensureFieldLiveQuery(
+        instance,
+        fieldName,
+        options,
+      ) ?? new NullLiveQuery<T>()
+    );
+  }
+
+  destroyLiveQueries(instance: CardDef): void {
+    this.#liveQueryHooks?.destroyLiveQueries(instance);
+  }
+
+  markLiveQueriesStaleForRealm(realmHref: string): void {
+    this.#liveQueryHooks?.markLiveQueriesStaleForRealm(realmHref);
+  }
+}
+
+class NullLiveQuery<T extends CardDef = CardDef> implements StoreLiveQuery<T> {
+  readonly records: T[] = [];
+  readonly record: T | null = null;
+  readonly status = 'idle' as StoreLiveQueryStatus;
+  readonly error: unknown = undefined;
+  readonly searchURL: string | undefined = undefined;
+  readonly realmHref: string | undefined = undefined;
+  async refresh(): Promise<void> {
+    /* no-op */
+  }
+  destroy(): void {
+    /* no-op */
   }
 }
 

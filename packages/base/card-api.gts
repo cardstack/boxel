@@ -67,15 +67,11 @@ import {
   type QueryWithInterpolations,
 } from '@cardstack/runtime-common';
 import {
-  beginQueryFieldEvaluation,
+  ensureQueryFieldLiveQuery,
   getQueryFieldState,
-  notifyQueryFieldAccess,
-  registerQueryFieldCoordinator,
   seedQueryFieldState,
   setQueryFieldState,
   validateRelationshipQuery,
-  type QueryFieldAccessPayload,
-  type QueryFieldCoordinator,
 } from './query-field-support';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
@@ -149,7 +145,6 @@ interface CardOrFieldTypeIconSignature {
 export type CardOrFieldTypeIcon = ComponentLike<CardOrFieldTypeIconSignature>;
 
 export {
-  beginQueryFieldEvaluation,
   deserialize,
   getCardMeta,
   getFieldDescription,
@@ -161,7 +156,6 @@ export {
   meta,
   primitive,
   realmURL,
-  registerQueryFieldCoordinator,
   relativeTo,
   relationshipMeta,
   serialize,
@@ -169,12 +163,11 @@ export {
   getQueryFieldState,
   setQueryFieldState,
   markQueryFieldStale,
+  ensureQueryFieldLiveQuery,
   type BoxComponent,
   type DeserializeOpts,
   type GetCardMenuItemParams,
   type JSONAPISingleResourceDocument,
-  type QueryFieldAccessPayload,
-  type QueryFieldCoordinator,
   type ResourceID,
   type SerializeOpts,
 };
@@ -363,6 +356,31 @@ export async function flushLogs() {
   await logger.flush();
 }
 
+export type StoreLiveQueryStatus = 'idle' | 'loading' | 'ready' | 'error';
+
+export interface StoreLiveQuery<T extends CardDef = CardDef> {
+  readonly records: T[];
+  readonly record: T | null;
+  readonly status: StoreLiveQueryStatus;
+  readonly error?: unknown;
+  readonly searchURL?: string;
+  readonly realmHref?: string;
+  refresh(opts?: { force?: boolean }): Promise<void>;
+  destroy(): void;
+}
+
+export interface StoreLiveQueryOptions<T extends CardDef = CardDef> {
+  getSearchURL: () =>
+    | { realmHref: string; searchURL: string }
+    | undefined;
+  seedRecords?: T[];
+  seedRealmHref?: string;
+  seedSearchURL?: string;
+  autoRefresh?: boolean;
+  onRefreshStart?: () => void;
+  onRefreshEnd?: (result: { error?: unknown }) => void;
+}
+
 export interface CardStore {
   get(url: string): CardDef | undefined;
   set(url: string, instance: CardDef): void;
@@ -371,6 +389,16 @@ export interface CardStore {
   loadDocument(url: string): Promise<SingleCardDocument | CardError>;
   trackLoad(load: Promise<unknown>): void;
   loaded(): Promise<void>;
+  createLiveQuery<T extends CardDef = CardDef>(
+    options: StoreLiveQueryOptions<T>,
+  ): StoreLiveQuery<T>;
+  ensureFieldLiveQuery<T extends CardDef = CardDef>(
+    instance: CardDef,
+    fieldName: string,
+    options: StoreLiveQueryOptions<T>,
+  ): StoreLiveQuery<T>;
+  destroyLiveQueries(instance: CardDef): void;
+  markLiveQueriesStaleForRealm(realmHref: string): void;
 }
 
 export interface Field<
@@ -1002,9 +1030,44 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
 
   getter(instance: CardDef): BaseInstanceType<CardT> | undefined {
     let deserialized = getDataBucket(instance);
-    // this establishes that our field should rerender when cardTracking for this card changes
     entangleWithCardTracking(instance);
-    notifyQueryFieldAccess(instance, this);
+
+    if (this.queryDefinition && !this.computeVia) {
+      let hasStoredValue =
+        typeof (deserialized as Map<string, unknown>).has === 'function'
+          ? (deserialized as Map<string, unknown>).has(this.name)
+          : deserialized.get(this.name) !== undefined;
+      let storedValue = hasStoredValue
+        ? deserialized.get(this.name)
+        : undefined;
+      if (isNotLoadedValue(storedValue)) {
+        storedValue = undefined;
+      }
+      let seedRecords: CardDef[] | undefined;
+      if (hasStoredValue && storedValue !== undefined) {
+        seedRecords = storedValue == null ? [] : [storedValue as CardDef];
+      }
+      let liveQuery = ensureQueryFieldLiveQuery(
+        getStore(instance),
+        instance,
+        this,
+        seedRecords,
+      );
+      if (liveQuery) {
+        let next = liveQuery.records[0] as BaseInstanceType<CardT> | undefined;
+        deserialized.set(this.name, next ?? null);
+        return next;
+      }
+      if (seedRecords) {
+        let next = seedRecords[0] as BaseInstanceType<CardT> | undefined;
+        deserialized.set(this.name, next ?? null);
+        return next;
+      }
+      deserialized.set(this.name, null);
+      return undefined;
+    }
+
+    // fallback to legacy behavior
     let maybeNotLoaded = deserialized.get(this.name);
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance, this, maybeNotLoaded.reference);
@@ -1391,15 +1454,45 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
   getter(instance: CardDef): BaseInstanceType<FieldT> {
     entangleWithCardTracking(instance);
-    notifyQueryFieldAccess(instance, this);
-
     if (this.computeVia) {
-      // For computed LinksToMany fields, use the main getter function
       return getter(instance, this);
     }
 
-    // For non-computed LinksToMany fields, handle directly
     let deserialized = getDataBucket(instance);
+
+    if (this.queryDefinition) {
+      let hasStoredValue =
+        typeof (deserialized as Map<string, unknown>).has === 'function'
+          ? (deserialized as Map<string, unknown>).has(this.name)
+          : deserialized.get(this.name) !== undefined;
+      let storedValue = hasStoredValue
+        ? deserialized.get(this.name)
+        : undefined;
+      let seedRecords: CardDef[] | undefined;
+      if (hasStoredValue && Array.isArray(storedValue)) {
+        seedRecords = storedValue.filter(
+          (entry) => !isNotLoadedValue(entry),
+        ) as CardDef[];
+      }
+      let liveQuery = ensureQueryFieldLiveQuery(
+        getStore(instance),
+        instance,
+        this,
+        seedRecords,
+      );
+      if (liveQuery) {
+        deserialized.set(this.name, liveQuery.records);
+        return liveQuery.records as BaseInstanceType<FieldT>;
+      }
+      if (Array.isArray(storedValue)) {
+        return storedValue as BaseInstanceType<FieldT>;
+      }
+      let fallback = this.emptyValue(instance);
+      deserialized.set(this.name, fallback);
+      return fallback as BaseInstanceType<FieldT>;
+    }
+
+    // Non-query fields
     let value = deserialized.get(this.name);
 
     if (!value) {
@@ -1407,19 +1500,16 @@ class LinksToMany<FieldT extends CardDefConstructor>
       deserialized.set(this.name, value);
     }
 
-    // Handle the case where the field was set to a single NotLoadedValue during deserialization
     if (isNotLoadedValue(value)) {
       if (!(globalThis as any).__lazilyLoadLinks) {
         throw new NotLoaded(instance, value.reference, field.name);
       }
-      // TODO figure out this test case...
       value = this.emptyValue(instance);
       deserialized.set(this.name, value);
       lazilyLoadLink(instance, this, value.reference, { value });
       return this.emptyValue(instance) as BaseInstanceType<FieldT>;
     }
 
-    // Ensure we have an array - if not, something went wrong during deserialization
     if (!Array.isArray(value)) {
       throw new Error(
         `LinksToMany field '${
@@ -1428,7 +1518,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
       );
     }
 
-    // Check if the returned array contains any NotLoadedValues
     let notLoadedRefs: string[] = [];
     for (let entry of value) {
       if (isNotLoadedValue(entry)) {
@@ -1436,31 +1525,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
       }
     }
     if (notLoadedRefs.length > 0) {
-      // Important: we intentionally leave the NotLoadedValue sentinels inside the
-      // WatchedArray so the lazy loader can swap them out in place once the linked
-      // cards finish loading. Because the array identity never changes, Glimmer’s
-      // tracking sees the mutation and re-renders when lazilyLoadLink replaces each
-      // sentinel with a CardDef instance. Callers should treat these entries as
-      // placeholders (e.g. check for constructor.getComponent) rather than assuming
-      // every element is immediately renderable. Ideally the .value refactor can
-      // iron out this kink.
-      // TODO
-      // Codex has offered a couple interim solutions to ease the burden on card
-      // authors around this:
-      // We can wrap the guard in a reusable helper/component so card authors don’t
-      // have to think about the sentinel:
-      //
-      // - Helper – export something like `has-card-component` (just checks
-      //   `value?.constructor?.getComponent`) from card-api. Then in templates
-      //   they write: `{{#if (has-card-component card)}}…{{/if}}` or
-      //   `{{#each (filter-loadable cards) as |c|}}`.
-      //
-      // - Component – provide a `LoadableCard` component that takes a card instance
-      //   and renders the correct `CardContainer` only when the component is ready;
-      //   otherwise it renders nothing or a skeleton. Card authors use
-      //   `<LoadableCard @card={{card}}/>` instead of calling `getComponent`
-      //   themselves.
-
       if (!(globalThis as any).__lazilyLoadLinks) {
         throw new NotLoaded(instance, notLoadedRefs, this.name);
       }
@@ -3749,6 +3813,7 @@ class FallbackCardStore implements CardStore {
   #instances: Map<string, CardDef> = new Map();
   #inFlight: Set<Promise<unknown>> = new Set();
   #loadGeneration = 0; // mirrors host store tracking to detect new loads
+  #liveQuery = new NullLiveQuery();
 
   get(id: string) {
     id = id.replace(/\.json$/, '');
@@ -3795,5 +3860,34 @@ class FallbackCardStore implements CardStore {
     let promise = loadDocument(fetch, url);
     this.trackLoad(promise);
     return await promise;
+  }
+  createLiveQuery<T extends CardDef = CardDef>(
+    _options?: StoreLiveQueryOptions<T>,
+  ): StoreLiveQuery<T> {
+    return this.#liveQuery as StoreLiveQuery<T>;
+  }
+  ensureFieldLiveQuery<T extends CardDef = CardDef>(
+    _instance: CardDef,
+    _fieldName: string,
+    _options?: StoreLiveQueryOptions<T>,
+  ): StoreLiveQuery<T> {
+    return this.#liveQuery as StoreLiveQuery<T>;
+  }
+  destroyLiveQueries(): void {}
+  markLiveQueriesStaleForRealm(): void {}
+}
+
+class NullLiveQuery implements StoreLiveQuery<CardDef> {
+  readonly records: CardDef[] = [];
+  readonly status: StoreLiveQueryStatus = 'idle';
+  readonly record: CardDef | null = null;
+  readonly error: unknown = undefined;
+  readonly searchURL: string | undefined = undefined;
+  readonly realmHref: string | undefined = undefined;
+  async refresh(): Promise<void> {
+    /* no-op */
+  }
+  destroy(): void {
+    /* no-op */
   }
 }
