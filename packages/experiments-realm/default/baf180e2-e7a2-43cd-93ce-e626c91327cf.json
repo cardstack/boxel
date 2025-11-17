@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "spacing": "1rem",
+      "spacing": "0.25rem",
       "cardInfo": {
         "notes": null,
         "title": "Cardstack",

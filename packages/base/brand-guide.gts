@@ -95,7 +95,9 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
     <article class='brand-guide'>
       <BoxelContainer @tag='header' @display='flex' class='header-section'>
         {{#if @model.markUsage.primaryMark1}}
-          <@fields.markUsage.primaryMark1 class='header-logo' />
+          <figure class='header-logo-container'>
+            <@fields.markUsage.primaryMark1 class='header-logo' />
+          </figure>
         {{/if}}
         <h1><@fields.title /></h1>
         {{#if @model.description}}
@@ -204,9 +206,18 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         background-color: var(--muted);
         color: var(--foreground);
       }
+      .header-logo-container {
+        display: flex;
+        margin: 0;
+        width: 100%;
+        max-width: 28.125rem;
+        aspect-ratio: 1.8;
+      }
       .header-logo {
         --logo-min-height: var(--brand-primary-mark-min-height);
-        margin: var(--boxel-sp);
+        padding: var(--boxel-sp);
+        height: auto;
+        width: 100%;
       }
       .content-section {
         gap: var(--brand-guide-spacing);
