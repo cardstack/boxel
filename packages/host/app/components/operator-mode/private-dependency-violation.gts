@@ -63,7 +63,6 @@ export default class PrivateDependencyViolationComponent extends Component<Signa
 
       .realm {
         background: rgba(0, 0, 0, 0.04);
-        border: 1px solid var(--boxel-150);
         border-radius: var(--boxel-border-radius-xs);
         color: var(--boxel-550);
         padding: 2px var(--boxel-sp-xxs);
