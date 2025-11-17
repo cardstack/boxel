@@ -645,8 +645,7 @@ export class RealmIndexQueryEngine {
         if (
           foundLinks ||
           omit.includes(relationshipId.href) ||
-          (relationshipId &&
-            included.find((i) => i.id === relationshipId!.href))
+          included.find((i) => i.id === relationshipId!.href)
         ) {
           resource.relationships![fieldName].data = {
             type: 'card',
