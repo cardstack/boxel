@@ -420,7 +420,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                         </:content>
                       </Tooltip>
 
-                      {{#if (this.canManipulateField field)}}
+                      {{#if @allowFieldManipulation}}
                         <ContextMenuButton
                           @toggleSettings={{fn this.toggleEditFieldModal field}}
                           @toggleRemoveModal={{fn
@@ -566,15 +566,6 @@ export default class CardSchemaEditor extends Component<Signature> {
 
   isLinkedField(field: FieldOfType) {
     return field.type === 'linksTo' || field.type === 'linksToMany';
-  }
-
-  @action
-  canManipulateField(field: FieldOfType) {
-    return (
-      this.args.allowFieldManipulation &&
-      !field.isComputed &&
-      !field.isQueryField
-    );
   }
 
   @action
