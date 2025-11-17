@@ -136,18 +136,12 @@ export function normalizeQueryDefinition({
     }
   }
 
-  let realmsList: any = queryAny.realm ?? queryAny.realms ?? THIS_REALM_TOKEN;
-  if (Array.isArray(realmsList) && realmsList.length > 1) {
-    throw new Error(
-      `query field "${fieldName}" only supports a single realm but received multiple entries`,
-    );
-  }
-  let interpolatedRealm = interpolateNode(realmsList, 'realm');
+  let specifiedRealm: any = queryAny.realm ?? THIS_REALM_TOKEN;
+  let interpolatedRealm = interpolateNode(specifiedRealm, 'realm');
   if (interpolatedRealm !== undefined) {
-    realmsList = interpolatedRealm;
+    specifiedRealm = interpolatedRealm;
   }
   delete queryAny.realm;
-  delete queryAny.realms;
 
   if (aborted) {
     return null;
@@ -196,7 +190,7 @@ export function normalizeQueryDefinition({
     return value;
   };
 
-  let resolvedRealm = resolveRealm(realmsList);
+  let resolvedRealm = resolveRealm(specifiedRealm);
 
   let targetRef = codeRefWithAbsoluteURL(
     fieldDefinition.fieldOrCard,
