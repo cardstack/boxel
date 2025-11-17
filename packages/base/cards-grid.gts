@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
+import { modifier } from 'ember-modifier';
 import { TrackedArray } from 'tracked-built-ins';
 
 import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
@@ -50,6 +51,7 @@ const [_CardView, StripView, GridView] = VIEW_OPTIONS;
 class Isolated extends Component<typeof CardsGrid> {
   <template>
     <CardsGridLayout
+      {{this.setupRealmSubscription this.primaryRealm}}
       @format='fitted'
       @context={{@context}}
       @query={{this.query}}
@@ -125,13 +127,13 @@ class Isolated extends Component<typeof CardsGrid> {
   @tracked private activeFilter: FilterOption = this.filterOptions[0];
   @tracked private activeSort: SortOption = this.sortOptions[0];
 
+  #unsubscribeFromRealm: (() => void) | undefined;
+  #subscribedRealm: string | undefined;
+
   constructor(owner: any, args: any) {
     super(owner, args);
-    this.loadFilterList.perform();
     this.loadHighlightsCards.perform();
-    let unsubscribe = subscribeToRealm(this.realms[0], this.refreshFilterList);
-
-    registerDestructor(this, unsubscribe);
+    registerDestructor(this, () => this.teardownRealmSubscription());
   }
 
   @action private createNew() {
@@ -151,6 +153,38 @@ class Isolated extends Component<typeof CardsGrid> {
   private get realms(): string[] {
     return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
   }
+
+  private get primaryRealm(): string | undefined {
+    return this.realms[0];
+  }
+
+  private teardownRealmSubscription() {
+    this.#unsubscribeFromRealm?.();
+    this.#unsubscribeFromRealm = undefined;
+    this.#subscribedRealm = undefined;
+  }
+
+  setupRealmSubscription = modifier(
+    (_element, [realm]: [string | undefined]) => {
+      if (!realm) {
+        this.teardownRealmSubscription();
+        return;
+      }
+      if (realm !== this.#subscribedRealm) {
+        this.teardownRealmSubscription();
+        this.#subscribedRealm = realm;
+        this.#unsubscribeFromRealm = subscribeToRealm(
+          realm,
+          this.refreshFilterList,
+        );
+        this.loadFilterList.perform();
+      }
+
+      return () => {
+        this.teardownRealmSubscription();
+      };
+    },
+  );
 
   @action private onChangeFilter(filter: FilterOption) {
     this.activeFilter = filter;
@@ -208,7 +242,11 @@ class Isolated extends Component<typeof CardsGrid> {
   });
 
   private loadFilterList = restartableTask(async () => {
-    let response = await fetch(`${this.realms[0]}_types`, {
+    let realm = this.primaryRealm;
+    if (!realm) {
+      return;
+    }
+    let response = await fetch(`${realm}_types`, {
       headers: {
         Accept: SupportedMimeType.CardTypeSummary,
       },

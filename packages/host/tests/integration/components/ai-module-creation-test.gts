@@ -15,7 +15,6 @@ import {
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import ENV from '@cardstack/host/config/environment';
 
@@ -28,6 +27,7 @@ import {
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  setupOperatorModeStateCleanup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
@@ -47,6 +47,7 @@ module('Integration | create app module via ai-assistant', function (hooks) {
   const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
 
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -100,7 +101,6 @@ module('Integration | create app module via ai-assistant', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );

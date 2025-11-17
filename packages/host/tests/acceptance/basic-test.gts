@@ -119,6 +119,7 @@ module('Acceptance | basic tests', function (hooks) {
 
   test('glimmer-scoped-css smoke test', async function (assert) {
     await visit('/');
+    await click('[data-test-workspace="Unnamed Workspace"]');
 
     const cardContainerElement = find('[data-test-boxel-card-container]');
 

@@ -73,8 +73,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
-    // in browser context this is a function
-    (globalThis as any).__useHeadlessChromePrerender = () => true;
+    (globalThis as any).__useHeadlessChromePrerender = true;
     onError = function (event: Event) {
       let localIndexer = getService('local-indexer');
       windowErrorHandler({
@@ -306,7 +305,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
       if (mango?.type === 'error') {
         assert.deepEqual(
           mango.error.errorDetail.message,
-          `Person/owner.json not found`,
+          `missing file ${testRealmURL}Person/owner.json`,
         );
         assert.deepEqual(mango.error.errorDetail.deps, [
           `${testRealmURL}Person/owner.json`,
@@ -3050,7 +3049,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
           friend: {
             id: `${testRealmURL}Friend/vanGogh`,
           },
-          cardInfo: {},
+          cardInfo: { theme: null },
         },
         cardInfo: { theme: null },
       });
@@ -3227,7 +3226,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
             id: `${testRealmURL}Friend/hassan`,
           },
           description: 'Dog friend',
-          cardInfo: {},
+          cardInfo: { theme: null },
         },
         title: 'Hassan',
         cardInfo: { theme: null },
@@ -3655,14 +3654,14 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
               firstName: 'Mango',
               title: 'Mango',
               friends: [{ id: hassanID }],
-              cardInfo: {},
+              cardInfo: { theme: null },
             },
             {
               id: vanGoghID,
               firstName: 'Van Gogh',
               friends: [{ id: hassanID }],
               title: 'Van Gogh',
-              cardInfo: {},
+              cardInfo: { theme: null },
             },
           ],
           cardInfo: { theme: null },
@@ -3810,7 +3809,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
                       id: hassanID,
                     },
                   ],
-                  cardInfo: {},
+                  cardInfo: { theme: null },
                 },
               ],
               cardInfo: { theme: null },

@@ -98,6 +98,7 @@ export class Loader {
   private modules = new Map<string, Module>();
 
   private moduleShims = new Map<string, Record<string, any>>();
+  private moduleCanonicalURLs = new Map<string, string>();
   private identities = new WeakMap<
     Function,
     { module: string; name: string }
@@ -131,6 +132,7 @@ export class Loader {
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
     moduleIdentifier = this.resolveImport(moduleIdentifier);
     this.captureIdentitiesOfModuleExports(module, moduleIdentifier);
+    this.setCanonicalModuleURL(moduleIdentifier, moduleIdentifier);
 
     this.moduleShims.set(moduleIdentifier, module);
 
@@ -449,6 +451,20 @@ export class Loader {
     this.modules.set(trimModuleIdentifier(moduleIdentifier), module);
   }
 
+  private setCanonicalModuleURL(
+    moduleIdentifier: string,
+    canonicalURL: string,
+  ) {
+    this.moduleCanonicalURLs.set(
+      trimModuleIdentifier(moduleIdentifier),
+      canonicalURL,
+    );
+  }
+
+  private getCanonicalModuleURL(moduleIdentifier: string): string | undefined {
+    return this.moduleCanonicalURLs.get(trimModuleIdentifier(moduleIdentifier));
+  }
+
   private captureIdentitiesOfModuleExports(
     module: any,
     moduleIdentifier: string,
@@ -458,15 +474,14 @@ export class Loader {
       let exportedEntity = module[propName];
       if (
         typeof exportedEntity === 'function' &&
-        typeof propName === 'string'
+        typeof propName === 'string' &&
+        !this.identities.has(exportedEntity)
       ) {
-        if (!this.identities.has(exportedEntity)) {
-          this.identities.set(exportedEntity, {
-            module: moduleId,
-            name: propName,
-          });
-          Loader.loaders.set(exportedEntity, this);
-        }
+        this.identities.set(exportedEntity, {
+          module: moduleId,
+          name: propName,
+        });
+        Loader.loaders.set(exportedEntity, this);
       }
     }
   }
@@ -499,8 +514,8 @@ export class Loader {
     this.setModule(moduleIdentifier, module);
 
     let loaded:
-      | { type: 'source'; source: string }
-      | { type: 'shimmed'; module: Record<string, unknown> };
+      | { type: 'source'; source: string; url: string }
+      | { type: 'shimmed'; module: Record<string, unknown>; url: string };
 
     try {
       loaded = await this.load(moduleURL);
@@ -513,6 +528,12 @@ export class Loader {
       module.deferred.fulfill();
       throw exception;
     }
+
+    let canonicalURL =
+      loaded.url ||
+      this.getCanonicalModuleURL(moduleIdentifier) ||
+      moduleIdentifier;
+    this.setCanonicalModuleURL(moduleIdentifier, canonicalURL);
 
     if (loaded.type === 'shimmed') {
       this.captureIdentitiesOfModuleExports(loaded.module, moduleIdentifier);
@@ -629,7 +650,12 @@ export class Loader {
           case 'exports':
             return privateModuleInstance;
           case '__import_meta__':
-            return { url: moduleIdentifier, loader: this };
+            return {
+              url:
+                this.getCanonicalModuleURL(moduleIdentifier) ??
+                moduleIdentifier,
+              loader: this,
+            };
           case 'completing-dep':
           case 'dep': {
             let depModule = this.getModule(entry.moduleURL.href);
@@ -665,8 +691,8 @@ export class Loader {
   private async load(
     moduleURL: URL,
   ): Promise<
-    | { type: 'source'; source: string }
-    | { type: 'shimmed'; module: Record<string, unknown> }
+    | { type: 'source'; source: string; url: string }
+    | { type: 'shimmed'; module: Record<string, unknown>; url: string }
   > {
     let response: MaybeCachedResponse;
     try {
@@ -683,15 +709,21 @@ export class Loader {
       throw error;
     }
 
+    let canonicalPath = response.headers.get('X-Boxel-Canonical-Path');
+    let canonicalURL = canonicalPath
+      ? new URL(canonicalPath, moduleURL).href
+      : response.url || moduleURL.href;
+
     if (Symbol.for('shimmed-module') in response) {
       return {
         type: 'shimmed',
         module: (response as any)[Symbol.for('shimmed-module')],
+        url: canonicalURL,
       };
     }
     let source = await response.text();
     response.cacheResponse?.(source);
-    return { type: 'source', source };
+    return { type: 'source', source, url: canonicalURL };
   }
 }
 
