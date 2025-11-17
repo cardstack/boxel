@@ -25,8 +25,8 @@ import { not } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
-import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
 import PrivateDependencyViolationComponent from '@cardstack/host/components/operator-mode/private-dependency-violation';
+import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
 
 import config from '@cardstack/host/config/environment';
 

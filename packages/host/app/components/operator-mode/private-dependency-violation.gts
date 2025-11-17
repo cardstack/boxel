@@ -1,6 +1,8 @@
 import Component from '@glimmer/component';
-import type { PrivateDependencyViolation } from '@cardstack/host/services/realm';
+
 import pluralize from 'pluralize';
+
+import type { PrivateDependencyViolation } from '@cardstack/host/services/realm';
 
 interface Signature {
   Element: HTMLLIElement;
