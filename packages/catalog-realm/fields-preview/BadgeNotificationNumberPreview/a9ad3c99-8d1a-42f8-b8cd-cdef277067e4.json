@@ -1,0 +1,27 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "BadgeNotificationNumberPreview",
+        "module": "../number/badge-notification-number"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "badgeNotificationNumber": 9
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

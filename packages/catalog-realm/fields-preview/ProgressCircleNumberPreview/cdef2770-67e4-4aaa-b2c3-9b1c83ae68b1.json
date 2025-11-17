@@ -1,0 +1,27 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "ProgressCircleNumberPreview",
+        "module": "../number/progress-circle-number"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "progressCircleNumber": 100
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
