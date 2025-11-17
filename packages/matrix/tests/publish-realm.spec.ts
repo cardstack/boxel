@@ -242,7 +242,7 @@ test.describe('Publish realm', () => {
         2,
       ),
     );
-    let dependentCardURL = `${defaultRealmURL}index`;
+    let dependentCardURL = `${defaultRealmURL}index.json`;
 
     await page.locator('[data-test-workspace="1New Workspace"]').click();
     await page.locator('[data-test-submode-switcher] button').click();
