@@ -160,7 +160,7 @@ test.describe('Publish realm', () => {
     await page.bringToFront();
   });
 
-  test('it warns when private dependencies would break publishing', async ({
+  test('it warns when private dependencies would cause host mode errors', async ({
     page,
   }) => {
     await clearLocalStorage(page, serverIndexUrl);
