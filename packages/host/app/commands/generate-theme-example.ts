@@ -1,21 +1,23 @@
 import { service } from '@ember/service';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+
 import HostBaseCommand from '../lib/host-base-command';
-import OneShotLlmRequestCommand from './one-shot-llm-request';
+
+import { skillCardURL } from '../lib/utils';
+
 import {
   buildAttachedFileURLs,
   buildExamplePrompt,
   ONE_SHOT_SYSTEM_PROMPT,
   parseExamplePayloadFromOutput,
 } from './example-card-helpers';
-import { skillCardURL } from '../lib/utils';
+import { createExampleInstanceFromPayload } from './generate-example-cards';
+import OneShotLlmRequestCommand from './one-shot-llm-request';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
-
-import { createExampleInstanceFromPayload } from './generate-example-cards';
 
 export default class GenerateThemeExampleCommand extends HostBaseCommand<
   typeof BaseCommandModule.GenerateThemeExampleInput,
