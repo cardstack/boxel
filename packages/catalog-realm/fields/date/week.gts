@@ -18,12 +18,6 @@ class WeekFieldEdit extends Component<typeof WeekField> {
     this.args.model.value = target.value;
   }
 
-  get weekDisplay() {
-    if (!this.args.model?.value) return '';
-    const [year, week] = this.args.model.value.split('-W');
-    return `Week ${week} of ${year}`;
-  }
-
   <template>
     <div class='week-wrapper'>
       <div class='input-wrapper'>
@@ -40,9 +34,7 @@ class WeekFieldEdit extends Component<typeof WeekField> {
           data-test-week-input
         />
       </div>
-      {{#if this.weekDisplay}}
-        <p class='display-value'>{{this.weekDisplay}}</p>
-      {{/if}}
+
     </div>
 
     <style scoped>
@@ -89,12 +81,6 @@ class WeekFieldEdit extends Component<typeof WeekField> {
         outline: none;
         border-color: var(--ring, #3b82f6);
         box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-      }
-
-      .display-value {
-        font-size: 0.75rem;
-        color: var(--muted-foreground, #9ca3af);
-        margin: 0;
       }
 
       .sr-only {
