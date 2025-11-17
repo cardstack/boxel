@@ -47,10 +47,6 @@ export default class PrivateDependencyViolationComponent extends Component<Signa
         overflow-wrap: anywhere;
       }
 
-      .violation:first-child {
-        border-top: none;
-      }
-
       .resource {
         font-weight: var(--boxel-font-weight-bold);
       }
