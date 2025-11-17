@@ -5,8 +5,6 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import { skillCardURL } from '../lib/utils';
-
 import {
   buildAttachedFileURLs,
   buildExamplePrompt,
@@ -15,6 +13,7 @@ import {
 } from './example-card-helpers';
 import { createExampleInstanceFromPayload } from './generate-example-cards';
 import OneShotLlmRequestCommand from './one-shot-llm-request';
+import { skillCardURL } from '../lib/utils';
 
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
@@ -59,12 +58,23 @@ export default class GenerateThemeExampleCommand extends HostBaseCommand<
     const attachedFileURLs = input.codeRef.module
       ? buildAttachedFileURLs(input.codeRef.module)
       : [];
+    let themeDesignSkillId: string | undefined;
+    try {
+      themeDesignSkillId = new URL(
+        'theme-generation/Skill/theme-design',
+        realm,
+      ).href;
+    } catch {
+      themeDesignSkillId = undefined;
+    }
     const skillCardIds = Array.from(
       new Set(
         [
-          skillCardURL('theme-design'),
+          themeDesignSkillId,
           ...(Array.isArray(input.skillCardIds) ? input.skillCardIds : []),
-        ].filter(Boolean),
+        ].filter(
+          (id): id is string => typeof id === 'string' && id.trim().length > 0,
+        ),
       ),
     );
 
