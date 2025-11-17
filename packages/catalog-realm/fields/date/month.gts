@@ -7,7 +7,7 @@ import {
 import NumberField from 'https://cardstack.com/base/number';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { add } from '@cardstack/boxel-ui/helpers';
+import { add, eq } from '@cardstack/boxel-ui/helpers';
 import { formatDateTime } from '@cardstack/boxel-ui/helpers';
 
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
@@ -49,7 +49,10 @@ class MonthFieldEdit extends Component<typeof MonthField> {
         data-test-month-select
       >
         {{#each this.months as |monthName index|}}
-          <option value={{add index 1}}>
+          <option
+            value={{add index 1}}
+            selected={{eq @model.value (add index 1)}}
+          >
             {{monthName}}
           </option>
         {{/each}}

@@ -4,18 +4,18 @@ import {
   field,
   contains,
 } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import StringField from 'https://cardstack.com/base/string';
+import NumberField from 'https://cardstack.com/base/number';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { array, concat } from '@ember/helper';
-import { add, lt } from '@cardstack/boxel-ui/helpers'; // ² Helpers
+import { array } from '@ember/helper';
+import { add, eq } from '@cardstack/boxel-ui/helpers'; // ² Helpers
 import GiftIcon from '@cardstack/boxel-icons/gift'; // ³ Gift icon
 import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down'; // ⁴ Chevron down icon
 
 class MonthDayFieldEdit extends Component<typeof MonthDayField> {
-  @tracked month = '01';
-  @tracked day = '01';
+  @tracked month = 1;
+  @tracked day = 1;
 
   months = [
     'January',
@@ -35,36 +35,33 @@ class MonthDayFieldEdit extends Component<typeof MonthDayField> {
   constructor(owner: any, args: any) {
     super(owner, args);
     // ¹¹ Initialize from model or set defaults
-    this.month = this.args.model?.month || '01';
-    this.day = this.args.model?.day || '01';
+    this.month = this.args.model?.month || 1;
+    this.day = this.args.model?.day || 1;
   }
 
   @action
   updateMonth(event: Event) {
     const target = event.target as HTMLSelectElement;
-    this.month = target.value;
-    this.args.model.month = target.value;
+    this.month = Number(target.value);
+    this.args.model.month = Number(target.value);
   }
 
   @action
   updateDay(event: Event) {
     const target = event.target as HTMLSelectElement;
-    this.day = target.value;
-    this.args.model.day = target.value;
+    this.day = Number(target.value);
+    this.args.model.day = Number(target.value);
   }
 
   get displayValue() {
-    const monthName = this.months[parseInt(this.month) - 1];
-    return `${monthName} ${parseInt(this.day)}`;
+    const monthName = this.months[this.month - 1];
+    return `${monthName} ${this.day}`;
   }
 
   <template>
     <div class='month-day-edit'>
       <div class='month-day-inputs'>
         <div class='select-wrapper month-select'>
-          <div class='input-icon'>
-            <GiftIcon class='icon' />
-          </div>
           <label for='month-select' class='sr-only'>Month</label>
           <select
             id='month-select'
@@ -75,11 +72,8 @@ class MonthDayFieldEdit extends Component<typeof MonthDayField> {
           >
             {{#each this.months as |monthName index|}}
               <option
-                value={{if
-                  (lt (add index 1) 10)
-                  (concat '0' (add index 1))
-                  (add index 1)
-                }}
+                value={{add index 1}}
+                selected={{eq this.month (add index 1)}}
               >
                 {{monthName}}
               </option>
@@ -134,7 +128,7 @@ class MonthDayFieldEdit extends Component<typeof MonthDayField> {
               )
               as |dayNum|
             }}
-              <option value={{if (lt dayNum 10) (concat '0' dayNum) dayNum}}>
+              <option value={{dayNum}} selected={{eq this.day dayNum}}>
                 {{dayNum}}
               </option>
             {{/each}}
@@ -144,7 +138,6 @@ class MonthDayFieldEdit extends Component<typeof MonthDayField> {
           </div>
         </div>
       </div>
-      <p class='month-day-display'>Birthday: {{this.displayValue}}</p>
     </div>
 
     <style scoped>
@@ -169,17 +162,6 @@ class MonthDayFieldEdit extends Component<typeof MonthDayField> {
 
       .day-select {
         width: 6rem;
-      }
-
-      .input-icon {
-        position: absolute;
-        left: 0.75rem;
-        top: 50%;
-        transform: translateY(-50%);
-        pointer-events: none;
-        display: flex;
-        align-items: center;
-        color: var(--muted-foreground, #9ca3af);
       }
 
       .select-icon {
@@ -212,10 +194,6 @@ class MonthDayFieldEdit extends Component<typeof MonthDayField> {
         transition: all 0.15s ease;
       }
 
-      .month-select .month-day-select {
-        padding-left: 2.5rem;
-      }
-
       .month-day-select:focus {
         outline: none;
         border-color: var(--ring, #3b82f6);
@@ -243,15 +221,13 @@ class MonthDayFieldEdit extends Component<typeof MonthDayField> {
   </template>
 }
 
-// ⁵ MonthDayField - Independent FieldDef for birthdays and anniversaries
 export class MonthDayField extends FieldDef {
   static displayName = 'Month-Day';
   static icon = GiftIcon;
 
-  @field month = contains(StringField); // ⁶ Month component (01-12)
-  @field day = contains(StringField); // ⁷ Day component (01-31)
+  @field month = contains(NumberField); // ⁶ Month component (1-12)
+  @field day = contains(NumberField); // ⁷ Day component (1-31)
 
-  // ⁸ Embedded format - formatted month-day display
   static embedded = class Embedded extends Component<typeof this> {
     get displayValue() {
       const month = this.args.model?.month;
@@ -274,8 +250,8 @@ export class MonthDayField extends FieldDef {
           'November',
           'December',
         ];
-        const monthName = months[parseInt(month) - 1];
-        return `${monthName} ${parseInt(day)}`;
+        const monthName = months[month - 1];
+        return `${monthName} ${day}`;
       } catch {
         return `${month}-${day}`;
       }
@@ -302,7 +278,6 @@ export class MonthDayField extends FieldDef {
     </template>
   };
 
-  // ⁹ Atom format - compact birthday badge
   static atom = class Atom extends Component<typeof this> {
     get displayValue() {
       const month = this.args.model?.month;
@@ -325,8 +300,8 @@ export class MonthDayField extends FieldDef {
           'Nov',
           'Dec',
         ];
-        const monthName = months[parseInt(month) - 1];
-        return `${monthName} ${parseInt(day)}`;
+        const monthName = months[month - 1];
+        return `${monthName} ${day}`;
       } catch {
         return `${month}-${day}`;
       }
@@ -364,7 +339,6 @@ export class MonthDayField extends FieldDef {
     </template>
   };
 
-  // ¹⁰ Edit format - month and day dropdowns
   static edit = MonthDayFieldEdit;
 }
 

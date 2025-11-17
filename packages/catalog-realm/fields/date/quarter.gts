@@ -8,6 +8,7 @@ import NumberField from 'https://cardstack.com/base/number';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
+import { eq } from '@cardstack/boxel-ui/helpers';
 import CalendarStatsIcon from '@cardstack/boxel-icons/calendar-stats';
 import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down';
 
@@ -55,10 +56,10 @@ class QuarterFieldEdit extends Component<typeof QuarterField> {
             class='quarter-select-input'
             data-test-quarter-select
           >
-            <option value='1'>Q1 (Jan-Mar)</option>
-            <option value='2'>Q2 (Apr-Jun)</option>
-            <option value='3'>Q3 (Jul-Sep)</option>
-            <option value='4'>Q4 (Oct-Dec)</option>
+            <option value='1' selected={{eq this.quarter 1}}>Q1 (Jan-Mar)</option>
+            <option value='2' selected={{eq this.quarter 2}}>Q2 (Apr-Jun)</option>
+            <option value='3' selected={{eq this.quarter 3}}>Q3 (Jul-Sep)</option>
+            <option value='4' selected={{eq this.quarter 4}}>Q4 (Oct-Dec)</option>
           </select>
           <div class='select-icon'>
             <ChevronDownIcon class='icon' />
@@ -74,7 +75,10 @@ class QuarterFieldEdit extends Component<typeof QuarterField> {
             data-test-quarter-year-select
           >
             {{#each this.years as |yearValue|}}
-              <option value={{yearValue}}>{{yearValue}}</option>
+              <option
+                value={{yearValue}}
+                selected={{eq this.year yearValue}}
+              >{{yearValue}}</option>
             {{/each}}
           </select>
           <div class='select-icon'>
@@ -82,7 +86,6 @@ class QuarterFieldEdit extends Component<typeof QuarterField> {
           </div>
         </div>
       </div>
-      <p class='quarter-display'>Period: Q{{this.quarter}} {{this.year}}</p>
     </div>
 
     <style scoped>
@@ -151,12 +154,6 @@ class QuarterFieldEdit extends Component<typeof QuarterField> {
         outline: none;
         border-color: var(--ring, #3b82f6);
         box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-      }
-
-      .quarter-display {
-        font-size: 0.75rem;
-        color: var(--muted-foreground, #9ca3af);
-        margin: 0;
       }
 
       .sr-only {
