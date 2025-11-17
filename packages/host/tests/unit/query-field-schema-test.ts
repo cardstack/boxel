@@ -5,7 +5,9 @@ import type { Query } from '@cardstack/runtime-common/query';
 
 import {
   CardDef,
+  FieldDef,
   contains,
+  containsMany,
   field,
   linksTo,
   linksToMany,
@@ -73,6 +75,110 @@ module('Unit | query field schema', function (hooks) {
       },
       /query field "shirts" references unknown path "\$this\.missingField" on Person/,
       'validation error includes field name and card context',
+    );
+  });
+
+  test('referencing nested fields validates each segment', function (assert) {
+    class HangerField extends FieldDef {
+      @field label = contains(StringField);
+    }
+
+    class ClosetField extends FieldDef {
+      @field hanging = contains(HangerField);
+    }
+
+    class Shirt extends CardDef {}
+
+    assert.throws(
+      () => {
+        class Person extends CardDef {
+          @field closet = contains(ClosetField);
+          @field shirts = linksToMany(Shirt, {
+            query: {
+              filter: {
+                eq: { label: '$this.closet.hanging.missingField' },
+              },
+            },
+          });
+        }
+
+        void Person;
+      },
+      /query field "shirts" references unknown path "\$this\.closet\.hanging\.missingField" on Shirt/,
+      'validation error reports nested card context',
+    );
+  });
+
+  test('dereferencing containsMany paths requires numeric indexes', function (assert) {
+    class ShirtField extends FieldDef {
+      @field label = contains(StringField);
+    }
+
+    class WardrobeField extends FieldDef {
+      @field shirts = containsMany(ShirtField);
+    }
+
+    class Shirt extends CardDef {}
+
+    assert.throws(
+      () => {
+        class Person extends CardDef {
+          @field wardrobe = contains(WardrobeField);
+          @field shirts = linksToMany(Shirt, {
+            query: {
+              filter: {
+                eq: { label: '$this.wardrobe.shirts.label' },
+              },
+            },
+          });
+        }
+
+        void Person;
+      },
+      /query field "shirts" must use a numeric index when referencing "\$this\.wardrobe\.shirts\.label"/,
+      'validation error requires indexes for containsMany dereferences',
+    );
+
+    class Person extends CardDef {
+      @field wardrobe = contains(WardrobeField);
+      @field shirts = linksToMany(Shirt, {
+        query: {
+          filter: {
+            eq: { label: '$this.wardrobe.shirts.0.label' },
+          },
+        },
+      });
+    }
+
+    assert.ok(
+      getField(Person, 'shirts'),
+      'query passes validation when using numeric index',
+    );
+  });
+
+  test('dereferencing relationship fields is allowed during validation', function (assert) {
+    class Friend extends CardDef {
+      @field name = contains(StringField);
+    }
+
+    class Shirt extends CardDef {
+      @field label = contains(StringField);
+    }
+
+    class Person extends CardDef {
+      @field favoriteFriend = linksTo(Friend);
+      @field shirts = linksToMany(Shirt, {
+        query: {
+          filter: {
+            eq: { label: '$this.favoriteFriend.name' },
+          },
+        },
+      });
+    }
+
+    assert.ok(
+      getField(Person, 'shirts'),
+      'query passes validation when referencing relationship fields',
     );
   });
 });

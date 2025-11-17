@@ -172,16 +172,88 @@ export function validateRelationshipQuery(
       typeof token === 'string' &&
       token.startsWith(THIS_INTERPOLATION_PREFIX)
     ) {
-      let path = token.slice(THIS_INTERPOLATION_PREFIX.length);
-      let [head] = path.split('.');
-      let referencedField = getField(ownerClass, head, { untracked: true });
-      if (!referencedField) {
-        let ownerName = ownerClass.name ?? 'Card';
+      validateInterpolationPath(ownerClass, fieldName, token);
+    }
+  }
+}
+
+const NUMERIC_SEGMENT = /^\d+$/;
+
+function validateInterpolationPath(
+  ownerClass: typeof BaseDef,
+  fieldName: string,
+  token: string,
+): void {
+  let path = token.slice(THIS_INTERPOLATION_PREFIX.length);
+  if (!path) {
+    let ownerName = ownerClass.name ?? 'Card';
+    throw new Error(
+      `query field "${fieldName}" references unknown path "${token}" on ${ownerName}`,
+    );
+  }
+
+  let segments = path.split('.');
+  let currentCard: typeof BaseDef | undefined = ownerClass;
+  let awaitingContainsManyIndex = false;
+
+  for (let i = 0; i < segments.length; i++) {
+    let segment = segments[i];
+    if (!segment) {
+      throw new Error(
+        `query field "${fieldName}" references unknown path "${token}" on ${
+          currentCard?.name ?? 'Card'
+        }`,
+      );
+    }
+
+    if (awaitingContainsManyIndex) {
+      if (!NUMERIC_SEGMENT.test(segment)) {
         throw new Error(
-          `query field "${fieldName}" references unknown path "${token}" on ${ownerName}`,
+          `query field "${fieldName}" must use a numeric index when referencing "${token}" on ${
+            currentCard?.name ?? 'Card'
+          }`,
         );
       }
+      awaitingContainsManyIndex = false;
+      continue;
     }
+
+    if (segment === 'id') {
+      if (i < segments.length - 1) {
+        throw new Error(
+          `query field "${fieldName}" cannot dereference "id" within "${token}"`,
+        );
+      }
+      continue;
+    }
+
+    if (!currentCard) {
+      throw new Error(
+        `query field "${fieldName}" references unknown path "${token}" on Card`,
+      );
+    }
+
+    let referencedField = getField(currentCard, segment, { untracked: true });
+    if (!referencedField) {
+      throw new Error(
+        `query field "${fieldName}" references unknown path "${token}" on ${
+          currentCard?.name ?? 'Card'
+        }`,
+      );
+    }
+
+    if (
+      referencedField.fieldType === 'containsMany' &&
+      i < segments.length - 1
+    ) {
+      awaitingContainsManyIndex = true;
+    }
+
+    // we intentionally stop validating when a path walks into linksTo/linksToMany:
+    // interpolation resolves against the owning card's serialized attributes, so we
+    // cannot guarantee relationship-derived values exist at compile time even though
+    // the schema allows those paths syntactically.
+    currentCard = referencedField.card as typeof BaseDef;
   }
 }
 
