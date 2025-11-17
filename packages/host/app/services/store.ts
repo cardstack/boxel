@@ -530,10 +530,6 @@ export default class StoreService extends Service implements StoreInterface {
     ).filter(Boolean) as CardDef[];
   }
 
-  async refreshQueryField(card: CardDef, fieldName: string): Promise<void> {
-    await this.queryFieldCoordinator.refreshQueryField(card, fieldName);
-  }
-
   getSaveState(id: string): AutoSaveState | undefined {
     return this.autoSaveStates.get(id);
   }

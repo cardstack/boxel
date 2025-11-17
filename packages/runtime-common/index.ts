@@ -429,7 +429,6 @@ export interface Store {
   ): Promise<T | CardErrorJSONAPI | undefined>;
   search(query: Query, realmURL?: URL): Promise<CardDef[]>;
   getSaveState(id: string): AutoSaveState | undefined;
-  refreshQueryField(card: CardDef, fieldName: string): Promise<void>;
 }
 
 export interface CardCatalogQuery extends Query {

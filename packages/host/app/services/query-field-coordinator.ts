@@ -73,21 +73,6 @@ export default class QueryFieldCoordinatorService
     void this.#scheduleRefresh(payload, { force: false });
   }
 
-  async refreshQueryField(card: CardDef, fieldName: string): Promise<void> {
-    let api = await this.#getCardAPI();
-    let fields = api.getFields(card) as Record<string, Field>;
-    let field = fields[fieldName];
-    if (!field || !field.queryDefinition) {
-      throw new Error(
-        `field "${fieldName}" on ${card.constructor.name} is not a query-backed field`,
-      );
-    }
-    await this.#scheduleRefresh(
-      { instance: card, fieldName, field },
-      { force: true, awaitCompletion: true },
-    );
-  }
-
   #scheduleRefresh(
     payload: QueryFieldAccessPayload,
     opts: RefreshOptions,
