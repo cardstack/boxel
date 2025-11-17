@@ -26,6 +26,7 @@ import { IconX } from '@cardstack/boxel-ui/icons';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
+import PrivateDependencyViolationComponent from '@cardstack/host/components/operator-mode/private-dependency-violation';
 
 import config from '@cardstack/host/config/environment';
 
@@ -573,50 +574,29 @@ export default class PublishRealmModal extends Component<Signature> {
       </:header>
       <:content>
         {{#if this.privateDependencyCheckError}}
-          <div
-            class='publish-warning publish-warning--error'
-            data-test-private-dependency-error
-          >
+          <div class='publish-warning error' data-test-private-dependency-error>
             {{this.privateDependencyCheckError}}
           </div>
         {{else if this.shouldShowPrivateDependencyWarning}}
           <div class='publish-warning' data-test-private-dependency-warning>
-            <div class='publish-warning__message'>
+            <div>
               Publishing may result in errors because it depends on private
               workspaces.
             </div>
-            <ul class='publish-warning__violations'>
+            <ul class='violation-list'>
               {{#each this.privateDependencyViolations as |violation|}}
-                <li
-                  class='publish-warning__violation'
-                  data-test-private-dependency-resource={{violation.resource}}
-                >
-                  <span class='publish-warning__resource'>
-                    {{violation.resource}}
-                  </span>
-                  {{#if (this.hasPrivateRealmDependencies violation)}}
-                    <div class='publish-warning__realms'>
-                      Private workspaces:
-                      {{#each
-                        (this.privateRealmURLsForViolation violation)
-                        as |realmURL|
-                      }}
-                        <span
-                          class='publish-warning__realm'
-                          data-test-private-dependency-realm={{realmURL}}
-                        >
-                          {{realmURL}}
-                        </span>
-                      {{/each}}
-                    </div>
-                  {{/if}}
-                </li>
+                <PrivateDependencyViolationComponent
+                  @violation={{violation}}
+                  @privateRealmURLs={{this.privateRealmURLsForViolation
+                    violation
+                  }}
+                />
               {{/each}}
             </ul>
           </div>
         {{else if this.isCheckingPrivateDependencies}}
           <div
-            class='publish-warning publish-warning--info'
+            class='publish-warning info'
             data-test-private-dependency-loading
           >
             <LoadingIndicator />
@@ -985,13 +965,13 @@ export default class PublishRealmModal extends Component<Signature> {
         font-size: var(--boxel-font-size-sm);
       }
 
-      .publish-warning--error {
+      .publish-warning.error {
         border-color: var(--boxel-error-200);
         background-color: rgba(220, 38, 38, 0.08);
         color: var(--boxel-error-200);
       }
 
-      .publish-warning--info {
+      .publish-warning.info {
         border-color: var(--boxel-300, #cfd2d7);
         background-color: var(--boxel-050, rgba(0, 0, 0, 0.03));
         color: var(--boxel-500, #5f6c80);
@@ -999,38 +979,13 @@ export default class PublishRealmModal extends Component<Signature> {
         gap: var(--boxel-sp-xxs);
       }
 
-      .publish-warning__violations {
+      .violation-list {
         list-style: none;
         margin: 0;
         padding: 0;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
-      }
-
-      .publish-warning__violation {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xxxs);
-        word-break: break-word;
-        overflow-wrap: anywhere;
-      }
-
-      .publish-warning__resource {
-        font-weight: 600;
-      }
-
-      .publish-warning__realms {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--boxel-sp-xxxs);
-        font-size: var(--boxel-font-size-xs);
-      }
-
-      .publish-warning__realm {
-        background-color: rgba(0, 0, 0, 0.05);
-        padding: 0 var(--boxel-sp-xxxs);
-        border-radius: var(--boxel-border-radius-xs);
       }
 
       .domain-options {
