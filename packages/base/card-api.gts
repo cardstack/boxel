@@ -1892,6 +1892,12 @@ export const field = function (
   if (typeof key === 'symbol') {
     throw new Error(
       `the @field decorator only supports string field names, not symbols`,
+    );
+  }
+  if (!(target instanceof BaseDef)) {
+    throw new Error(
+      `the @field decorator can only be used inside classes that extend BaseDef`,
+    );
   }
   let init = initializer() as InternalFieldInitializer;
   let descriptor = init.setupField(key, target as BaseDef);
