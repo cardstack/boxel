@@ -83,7 +83,7 @@ module('Integration | commands | read-text-file', function (hooks) {
 
     assert.strictEqual(
       result.content,
-      `import Component from '@glimmer/component';\nexport default class TestComponent extends Component {}`,
+      `import Component from '@glimmer/component';\n\nexport default class TestComponent extends Component {}`,
     );
   });
 
