@@ -115,12 +115,15 @@ class Embedded extends Component<typeof ThemeVarField> {
           font-style: italic;
         }
         .copy-button {
-          color: var(--primary);
+          color: var(--foreground);
           opacity: 0;
         }
         .code-preview:focus-within .copy-button,
         .code-preview:hover .copy-button {
           opacity: 1;
+        }
+        .code-preview:focus-within .copy-button {
+          color: var(--muted-foreground);
         }
       }
     </style>

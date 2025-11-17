@@ -1,3 +1,4 @@
+import { tracked } from '@glimmer/tracking';
 import {
   Component,
   CSSField,
@@ -11,6 +12,8 @@ import {
 import ColorField from './color';
 import StyleReference from './style-reference';
 import {
+  Accordion,
+  CopyButton,
   BoxelContainer,
   Swatch,
   Button,
@@ -160,9 +163,47 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
           </GridContainer>
         </FieldContainer>
       </BoxelContainer>
-      <BoxelContainer @tag='section' @display='grid' class='content-section'>
-        <h2>Generated CSS Variables</h2>
-        <@fields.cssVariables />
+      <BoxelContainer
+        @tag='section'
+        @display='grid'
+        class='content-section accordion-section'
+      >
+        <Accordion as |A|>
+          <A.Item
+            @isOpen={{this.isGeneratedCSSVisible}}
+            @onClick={{this.toggleGeneratedCSS}}
+            @id='generated-css-content'
+          >
+            <:title><span class='accordion-title'>Generated CSS Variables</span></:title>
+            <:content>
+              <div class='accordion-content generated-css-content'>
+                <CopyButton
+                  class='copy-css-variables-button'
+                  @textToCopy={{@model.cssVariables}}
+                />
+                <div class='generated-css'>
+                  <@fields.cssVariables />
+                </div>
+              </div>
+            </:content>
+          </A.Item>
+          <A.Item
+            @isOpen={{this.areCSSImportsVisible}}
+            @onClick={{this.toggleCSSImports}}
+            @id='css-imports-content'
+          >
+            <:title><span class='accordion-title'>CSS Imports</span></:title>
+            <:content>
+              <div class='accordion-content'>
+                {{#if @model.cssImports}}
+                  <@fields.cssImports />
+                {{else}}
+                  <em>None</em>
+                {{/if}}
+              </div>
+            </:content>
+          </A.Item>
+        </Accordion>
       </BoxelContainer>
     </article>
 
@@ -266,8 +307,51 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         background-repeat: no-repeat;
         background-size: cover;
       }
+
+      .accordion-section {
+        padding-inline: 0;
+      }
+      .accordion-title {
+        font-size: var(--boxel-font-size-med);
+        line-height: var(--boxel-lineheight-med);
+        font-weight: var(--boxel-font-weight-medium);
+      }
+      :deep(.boxel-accordion-item) {
+        padding-inline: var(--boxel-container-padding, var(--boxel-sp));
+      }
+      .accordion-content {
+        padding-bottom: var(--boxel-sp);
+      }
+      .generated-css-content {
+        position: relative;
+      }
+      .copy-css-variables-button {
+        position: absolute;
+        top: var(--boxel-sp-xs);
+        right: var(--boxel-sp-xs);
+        opacity: 0.5;
+      }
+      .copy-css-variables-button:hover {
+        opacity: 1;
+      }
+      .generated-css {
+        height: 50cqmin;
+        border-radius: var(--radius);
+        overflow: auto;
+      }
     </style>
   </template>
+
+  @tracked areCSSImportsVisible = false;
+  @tracked isGeneratedCSSVisible = false;
+
+  private toggleCSSImports = () => {
+    this.areCSSImportsVisible = !this.areCSSImportsVisible;
+  };
+
+  private toggleGeneratedCSS = () => {
+    this.isGeneratedCSSVisible = !this.isGeneratedCSSVisible;
+  };
 }
 
 const formatCssVarName = (name?: string) => {
