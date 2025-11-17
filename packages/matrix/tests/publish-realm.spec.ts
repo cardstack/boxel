@@ -9,11 +9,12 @@ import {
   postNewCard,
 } from '../helpers';
 
+let serverIndexUrl = new URL(appURL).origin;
+
 test.describe('Publish realm', () => {
   let user: { username: string; password: string; credentials: any };
 
   async function openPublishRealmModal(page: Page) {
-    let serverIndexUrl = new URL(appURL).origin;
     await clearLocalStorage(page, serverIndexUrl);
 
     user = await createSubscribedUserAndLogin(
@@ -130,8 +131,6 @@ test.describe('Publish realm', () => {
   test('it warns when private dependencies would cause host mode errors', async ({
     page,
   }) => {
-    let serverIndexUrl = new URL(appURL).origin;
-
     user = await createSubscribedUserAndLogin(
       page,
       'publish-realm',
