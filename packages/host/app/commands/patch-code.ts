@@ -5,14 +5,16 @@ import { hasExecutableExtension } from '@cardstack/runtime-common';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
-
 import { parseSearchReplace } from '../lib/search-replace-block-parsing';
+import { isReady } from '../resources/file';
 
 import ApplySearchReplaceBlockCommand from './apply-search-replace-block';
 import LintAndFixCommand from './lint-and-fix';
 
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
+import type MonacoService from '../services/monaco-service';
+import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 
 interface FileInfo {
@@ -27,6 +29,8 @@ export default class PatchCodeCommand extends HostBaseCommand<
 > {
   @service declare private cardService: CardService;
   @service declare private realm: RealmService;
+  @service declare private monacoService: MonacoService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private commandService: CommandService;
 
   description = `Apply code changes to file and then apply lint fixes`;
@@ -68,15 +72,22 @@ export default class PatchCodeCommand extends HostBaseCommand<
           roomId,
         );
 
-      await this.cardService.saveSource(
-        new URL(finalFileUrl),
-        patchedCode,
-        'bot-patch',
-        {
-          resetLoader: hasExecutableExtension(finalFileUrl),
+      if (
+        !(await this.trySaveThroughOpenFile(
+          finalFileUrl,
+          patchedCode,
           clientRequestId,
-        },
-      );
+        ))
+      ) {
+        this.cardService
+          .saveSource(new URL(finalFileUrl), patchedCode, 'bot-patch', {
+            resetLoader: hasExecutableExtension(finalFileUrl),
+            clientRequestId,
+          })
+          .catch((error: unknown) => {
+            console.error('PatchCodeCommand: failed to save source', error);
+          });
+      }
     }
 
     let commandModule = await this.loadCommandModule();
@@ -92,6 +103,43 @@ export default class PatchCodeCommand extends HostBaseCommand<
         });
       }),
     });
+  }
+
+  private async trySaveThroughOpenFile(
+    targetFileUrl: string,
+    content: string,
+    clientRequestId?: string,
+  ): Promise<boolean> {
+    try {
+      let openFileResource = this.operatorModeStateService.openFile?.current;
+      if (!isReady(openFileResource)) {
+        return false;
+      }
+      let normalizedOpenUrl = new URL(openFileResource.url).href;
+      let normalizedTarget = new URL(targetFileUrl).href;
+      if (normalizedOpenUrl !== normalizedTarget) {
+        return false;
+      }
+      void openFileResource
+        .write(content, {
+          flushLoader: hasExecutableExtension(targetFileUrl),
+          saveType: 'bot-patch',
+          clientRequestId,
+        })
+        .catch((error: unknown) => {
+          console.error(
+            'PatchCodeCommand: failed to write through FileResource',
+            error,
+          );
+        });
+      return true;
+    } catch (error) {
+      console.error(
+        'PatchCodeCommand: unable to save through FileResource',
+        error,
+      );
+      return false;
+    }
   }
 
   private async getFileInfo(fileUrl: string): Promise<FileInfo> {

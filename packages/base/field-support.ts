@@ -211,9 +211,9 @@ export function resolveFieldConfiguration(
     if (!input) return undefined;
     try {
       if (typeof input === 'function') {
-        return (input as (this: Readonly<T>) => FieldConfiguration | undefined).call(
-          instance as unknown as T,
-        );
+        return (
+          input as (this: Readonly<T>) => FieldConfiguration | undefined
+        ).call(instance as unknown as T);
       } else {
         return input as FieldConfiguration;
       }
@@ -245,13 +245,19 @@ export function resolveFieldConfiguration(
 }
 
 export function getFieldDescription(
-  cardOrFieldKlass: typeof BaseDef,
+  card: BaseDef | typeof BaseDef,
   fieldName: string,
 ): string | undefined {
-  let descriptionsMap = fieldDescriptions.get(cardOrFieldKlass);
+  let klass: typeof BaseDef;
+  if (isCardOrField(card)) {
+    klass = card.constructor;
+  } else {
+    klass = card;
+  }
+  let descriptionsMap = fieldDescriptions.get(klass);
   if (!descriptionsMap) {
     descriptionsMap = new Map();
-    fieldDescriptions.set(cardOrFieldKlass, descriptionsMap);
+    fieldDescriptions.set(klass, descriptionsMap);
   }
   return descriptionsMap.get(fieldName);
 }

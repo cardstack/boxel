@@ -2545,6 +2545,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.3.0
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.11.5
       '@types/uuid':
         specifier: 'catalog:'
         version: 9.0.8
@@ -2554,6 +2557,9 @@ importers:
       jsonwebtoken:
         specifier: 'catalog:'
         version: 9.0.2
+      pg:
+        specifier: 'catalog:'
+        version: 8.11.5
       start-server-and-test:
         specifier: 'catalog:'
         version: 1.14.0

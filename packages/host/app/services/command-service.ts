@@ -396,7 +396,7 @@ export default class CommandService extends Service {
             attributes: payload?.attributes?.patch?.attributes,
             relationships: payload?.attributes?.patch?.relationships,
           },
-          { clientRequestId },
+          { doNotWaitForPersist: true, clientRequestId },
         );
       } else {
         // Unrecognized command. This can happen if a programmatically-provided command is no longer available due to a browser refresh.

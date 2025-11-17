@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-import { registerUser } from '../docker/synapse';
+import { expect, test } from './fixtures';
+import type { Page } from '@playwright/test';
 import {
   login,
   logout,
@@ -10,43 +10,21 @@ import {
   sendMessage,
   reloadAndOpenAiAssistant,
   isInRoom,
-  registerRealmUsers,
-  setupUserSubscribed,
-  clearLocalStorage,
-  setSkillsRedirect,
   showAllCards,
-  setupPermissions,
+  createSubscribedUser,
+  createSubscribedUserAndLogin,
+  createRealm,
 } from '../helpers';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-} from '../docker/synapse';
-import {
-  appURL,
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
+import { appURL } from '../helpers/isolated-realm-server';
+import { randomUUID } from 'crypto';
 
 test.describe('Skills', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
-  test.beforeEach(async ({ page }) => {
-    test.setTimeout(120_000);
-    await setSkillsRedirect(page);
-    synapse = await synapseStart();
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
-    await registerUser(synapse, 'user1', 'pass');
-    await registerUser(synapse, 'user2', 'pass');
-    await clearLocalStorage(page, appURL);
-    await setupUserSubscribed('@user1:localhost', realmServer);
-    await setupUserSubscribed('@user2:localhost', realmServer);
-    await setupPermissions('@user1:localhost', `${appURL}/`, realmServer);
-  });
-  test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-    await realmServer.stop();
+  let firstUser: { username: string; password: string; credentials: any };
+  let secondUser: { username: string; password: string; credentials: any };
+
+  test.beforeEach(async () => {
+    firstUser = await createSubscribedUser('user-1');
+    secondUser = await createSubscribedUser('user-2');
   });
 
   async function attachSkill(
@@ -81,9 +59,10 @@ test.describe('Skills', () => {
   const skillCard1 = `${appURL}/skill-pirate-speak`;
   const skillCard2 = `${appURL}/skill-seo`;
   const skillCard3 = `${appURL}/skill-card-title-editing`;
+  const serverIndexUrl = new URL(appURL).origin;
 
   test(`it can attach skill cards and toggle activation`, async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, firstUser.username, firstUser.password, { url: appURL });
     await getRoomId(page);
     await expect(page.locator('[data-test-new-session]')).toHaveCount(1);
     await expect(page.locator('[data-test-skill-menu]')).toHaveCount(1);
@@ -162,7 +141,7 @@ test.describe('Skills', () => {
   test('it will attach code editing skills in code mode by default', async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, firstUser.username, firstUser.password, { url: appURL });
     await page.locator(`[data-test-room-settled]`).waitFor();
 
     await page.locator('[data-test-submode-switcher] button').click();
@@ -189,7 +168,7 @@ test.describe('Skills', () => {
   test(`room skills state does not leak when switching rooms`, async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, firstUser.username, firstUser.password, { url: appURL });
     let room1 = await getRoomId(page);
 
     await attachSkill(page, skillCard1, true);
@@ -242,28 +221,32 @@ test.describe('Skills', () => {
   });
 
   test(`can attach more skills during chat`, async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, firstUser.username, firstUser.password, { url: appURL });
     let room1 = await getRoomId(page);
     await attachSkill(page, skillCard2, true);
     await sendMessage(page, room1, 'Message 1');
-    await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
+    await assertMessages(page, [
+      { from: firstUser.username, message: 'Message 1' },
+    ]);
     await attachSkill(page, skillCard1);
     await attachSkill(page, skillCard3);
     await sendMessage(page, room1, 'Message 2');
     await assertMessages(page, [
-      { from: 'user1', message: 'Message 1' },
-      { from: 'user1', message: 'Message 2' },
+      { from: firstUser.username, message: 'Message 1' },
+      { from: firstUser.username, message: 'Message 2' },
     ]);
   });
 
   test(`can disable all skills`, async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, firstUser.username, firstUser.password, { url: appURL });
     let room1 = await getRoomId(page);
     await attachSkill(page, skillCard1, true);
     await attachSkill(page, skillCard2);
     await page.locator('[data-test-pill-menu-button]').click();
     await sendMessage(page, room1, 'Message 1');
-    await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
+    await assertMessages(page, [
+      { from: firstUser.username, message: 'Message 1' },
+    ]);
 
     expect(page.locator('[data-test-active-skills-count]')).toHaveText(
       '3 Skills',
@@ -289,16 +272,16 @@ test.describe('Skills', () => {
     await page.locator('[data-test-pill-menu-button]').click();
     await sendMessage(page, room1, 'Message 2');
     await assertMessages(page, [
-      { from: 'user1', message: 'Message 1' },
-      { from: 'user1', message: 'Message 2' },
+      { from: firstUser.username, message: 'Message 1' },
+      { from: firstUser.username, message: 'Message 2' },
     ]);
-    expect(page.locator('[data-test-active-skills-count]')).toHaveText(
+    await expect(page.locator('[data-test-active-skills-count]')).toHaveText(
       '0 Skills',
     );
   });
 
   test(`previously disabled skills can be enabled`, async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, firstUser.username, firstUser.password, { url: appURL });
     let room1 = await getRoomId(page);
     await attachSkill(page, skillCard1, true);
     await attachSkill(page, skillCard2);
@@ -308,7 +291,9 @@ test.describe('Skills', () => {
     ).toHaveCount(1);
     await page.locator('[data-test-pill-menu-button]').click();
     await sendMessage(page, room1, 'Message 1');
-    await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
+    await assertMessages(page, [
+      { from: firstUser.username, message: 'Message 1' },
+    ]);
 
     await page.locator('[data-test-skill-menu]').hover();
     await page
@@ -320,15 +305,15 @@ test.describe('Skills', () => {
     ).toHaveCount(1);
     await sendMessage(page, room1, 'Message 2');
     await assertMessages(page, [
-      { from: 'user1', message: 'Message 1' },
-      { from: 'user1', message: 'Message 2' },
+      { from: firstUser.username, message: 'Message 1' },
+      { from: firstUser.username, message: 'Message 2' },
     ]);
   });
 
   test(`skills are persisted per room and do not leak between different users`, async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, firstUser.username, firstUser.password, { url: appURL });
     let room1 = await getRoomId(page);
     await attachSkill(page, skillCard1, true);
     await attachSkill(page, skillCard2);
@@ -344,7 +329,9 @@ test.describe('Skills', () => {
     );
 
     await logout(page);
-    await login(page, 'user2', 'pass', { url: appURL });
+    await login(page, secondUser.username, secondUser.password, {
+      url: appURL,
+    });
     await getRoomId(page);
     await expect(page.locator('[data-test-active-skills-count]')).toContainText(
       '1 Skill',
@@ -355,7 +342,7 @@ test.describe('Skills', () => {
     );
 
     await logout(page);
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, firstUser.username, firstUser.password, { url: appURL });
     await openRoom(page, room1);
     await expect(page.locator('[data-test-active-skills-count]')).toContainText(
       '2 Skills',
@@ -365,7 +352,15 @@ test.describe('Skills', () => {
   test('ensure that the skill card from boxel index is not overwritten by the skill card from matrix store', async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    const { username } = await createSubscribedUserAndLogin(
+      page,
+      'skills-overwrite',
+      serverIndexUrl,
+    );
+    const realmName = `skills-${randomUUID()}`;
+    await createRealm(page, realmName);
+    const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
+    await page.goto(realmURL);
     await showAllCards(page);
 
     // create a skill card
