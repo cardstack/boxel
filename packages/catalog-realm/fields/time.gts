@@ -1,22 +1,23 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 import {
   FieldDef,
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
+} from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { eq } from '@cardstack/boxel-ui/helpers'; // ² Helpers
-import ClockIcon from '@cardstack/boxel-icons/clock'; // ³ Clock icon
-import { TimeSlots } from './components/time-slots'; // ⁴ Import TimeSlots component
+import { eq } from '@cardstack/boxel-ui/helpers';
+import { formatDateTime } from '@cardstack/boxel-ui/helpers';
 
-// Configuration interface
+import ClockIcon from '@cardstack/boxel-icons/clock';
+import { TimeSlots } from './components/time-slots';
+
 interface TimeConfiguration {
-  // ⁵ Configuration type
   presentation?: 'standard' | 'timeSlots';
+  hourCycle?: 'h11' | 'h12' | 'h23' | 'h24';
+  timeStyle?: 'short' | 'medium' | 'long';
   timeSlotsOptions?: {
     availableSlots?: string[];
   };
@@ -114,14 +115,12 @@ class TimeFieldEdit extends Component<typeof TimeField> {
   </template>
 }
 
-// ⁶ TimeField - Independent FieldDef for single time values with presentation support
 export class TimeField extends FieldDef {
   static displayName = 'Time';
   static icon = ClockIcon;
 
-  @field value = contains(StringField); // ⁸ Time string (HH:MM format)
+  @field value = contains(StringField); // Time string (HH:MM format)
 
-  // ⁹ Embedded format - routes to presentation or displays value
   static embedded = class Embedded extends Component<typeof this> {
     get config(): TimeConfiguration | undefined {
       return this.args.configuration as TimeConfiguration | undefined;
@@ -136,38 +135,22 @@ export class TimeField extends FieldDef {
       if (!time) return 'No time set';
 
       try {
-        // ¹⁰ Handle both 24-hour (HH:MM) and 12-hour (HH:MM AM/PM) formats
-        let hours: number;
-        let minutes: number;
+        const [hours, minutes] = time.split(':').map(Number);
+        if (isNaN(hours) || isNaN(minutes)) return time;
 
-        if (time.includes('AM') || time.includes('PM')) {
-          // Parse 12-hour format: "02:00 PM"
-          const isPM = time.includes('PM');
-          const timeOnly = time.replace(/\s*(AM|PM)/i, '').trim();
-          const [h, m] = timeOnly.split(':').map(Number);
+        const today = new Date();
+        today.setHours(hours, minutes, 0, 0);
 
-          if (isNaN(h) || isNaN(m)) {
-            return time; // Return as-is if invalid
-          }
+        const hourCycle = this.config?.hourCycle;
+        const timeStyle = this.config?.timeStyle;
 
-          // Convert to 24-hour
-          hours = isPM ? (h === 12 ? 12 : h + 12) : h === 12 ? 0 : h;
-          minutes = m;
-        } else {
-          // Parse 24-hour format: "14:00"
-          const parts = time.split(':').map(Number);
-          if (parts.length !== 2 || isNaN(parts[0]) || isNaN(parts[1])) {
-            return time; // Return as-is if invalid
-          }
-          [hours, minutes] = parts;
-        }
-
-        // Display in 12-hour format
-        const period = hours >= 12 ? 'PM' : 'AM';
-        const displayHours = hours % 12 || 12;
-        return `${displayHours}:${minutes
-          .toString()
-          .padStart(2, '0')} ${period}`;
+        return formatDateTime(today, {
+          kind: 'time',
+          hour12: hourCycle ? undefined : true, // hour12 conflicts with hourCycle
+          hourCycle: hourCycle,
+          timeStyle: timeStyle,
+          fallback: time,
+        });
       } catch {
         return time;
       }
@@ -198,44 +181,23 @@ export class TimeField extends FieldDef {
     </template>
   };
 
-  // ¹¹ Atom format - compact time badge
   static atom = class Atom extends Component<typeof this> {
     get displayValue() {
       const time = this.args.model?.value;
       if (!time) return 'No time';
 
       try {
-        // ¹² Handle both 24-hour (HH:MM) and 12-hour (HH:MM AM/PM) formats
-        let hours: number;
-        let minutes: number;
+        const [hours, minutes] = time.split(':').map(Number);
+        if (isNaN(hours) || isNaN(minutes)) return time;
 
-        if (time.includes('AM') || time.includes('PM')) {
-          // Parse 12-hour format
-          const isPM = time.includes('PM');
-          const timeOnly = time.replace(/\s*(AM|PM)/i, '').trim();
-          const [h, m] = timeOnly.split(':').map(Number);
+        const today = new Date();
+        today.setHours(hours, minutes, 0, 0);
 
-          if (isNaN(h) || isNaN(m)) {
-            return time;
-          }
-
-          hours = isPM ? (h === 12 ? 12 : h + 12) : h === 12 ? 0 : h;
-          minutes = m;
-        } else {
-          // Parse 24-hour format
-          const parts = time.split(':').map(Number);
-          if (parts.length !== 2 || isNaN(parts[0]) || isNaN(parts[1])) {
-            return time;
-          }
-          [hours, minutes] = parts;
-        }
-
-        // Display in 12-hour format
-        const period = hours >= 12 ? 'PM' : 'AM';
-        const displayHours = hours % 12 || 12;
-        return `${displayHours}:${minutes
-          .toString()
-          .padStart(2, '0')} ${period}`;
+        return formatDateTime(today, {
+          kind: 'time',
+          hour12: true,
+          fallback: time,
+        });
       } catch {
         return time;
       }
@@ -273,7 +235,6 @@ export class TimeField extends FieldDef {
     </template>
   };
 
-  // ¹³ Edit format - time input
   static edit = TimeFieldEdit;
 }
 
