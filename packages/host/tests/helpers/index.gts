@@ -104,6 +104,8 @@ type TestRealmRecord = {
 const TEST_REALM_REGISTRY = '__cardstack_testRealmRegistry';
 
 function getTestRealmRegistry(): Map<string, TestRealmRecord> {
+  // We track test realms globally so helpers like persistDocumentToTestRealm can
+  // locate the correct realm/adapter for a card URL during test runs.
   let registry = (globalThis as any)[TEST_REALM_REGISTRY] as
     | Map<string, TestRealmRecord>
     | undefined;
