@@ -1,8 +1,6 @@
 import { service } from '@ember/service';
 
 import { isCardInstance, logger } from '@cardstack/runtime-common';
-import { skillCardsToMessage } from '@cardstack/runtime-common/ai/prompt';
-
 // Conventional module-scoped logger (pattern used elsewhere like store & realm events)
 const oneShotLogger = logger('llm:oneshot');
 
@@ -121,7 +119,7 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
 
       let skillInstructions =
         loadedSkillCards.length > 0
-          ? `Available Skills:\n${skillCardsToMessage(loadedSkillCards)}`
+          ? `Available Skills:\n${skillsToMessage(loadedSkillCards)}`
           : '';
 
       let systemPrompt = input.systemPrompt;
@@ -198,3 +196,15 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
     }
   }
 }
+
+const skillsToMessage = (cards: Skill[]) => {
+  return cards
+    .map((card) => {
+      let instructions =
+        typeof (card as any).instructions === 'string'
+          ? (card as any).instructions.trim()
+          : '';
+      return `Skill (id: ${card.id}):\n${instructions || '[no instructions]'}`;
+    })
+    .join('\n\n');
+};
