@@ -1,3 +1,5 @@
+import { click, fillIn, select } from '@ember/test-helpers';
+
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -274,7 +276,7 @@ module('Integration | date-time fields', function (hooks) {
 
     await renderField(
       MonthFieldClass,
-      buildField(MonthFieldClass, { value: '05' }),
+      buildField(MonthFieldClass, { value: 5 }),
     );
     assert.dom('[data-test-month-embedded]').hasText('May');
 
@@ -288,7 +290,7 @@ module('Integration | date-time fields', function (hooks) {
       WeekFieldClass,
       buildField(WeekFieldClass, { value: '2025-W20' }),
     );
-    assert.dom('[data-test-week-embedded]').hasText('Week 20 of 2025');
+    assert.dom('[data-test-week-embedded]').hasText('week 20, 2025');
 
     await renderField(
       QuarterFieldClass,
@@ -360,5 +362,258 @@ module('Integration | date-time fields', function (hooks) {
       { timeSlotsOptions: { availableSlots: ['09:00', '10:00'] } },
     );
     assert.dom('[data-test-time-slots]').exists();
+  });
+
+  test('missing values render placeholders in embedded and atom modes', async function (assert) {
+    await renderField(DateFieldClass, undefined);
+    assert.dom('[data-test-date-embedded]').hasText('No date set');
+
+    await renderField(DateFieldClass, undefined, 'atom');
+    assert.dom('[data-test-date-atom]').hasTextContaining('No date');
+
+    await renderField(TimeFieldClass, buildField(TimeFieldClass, {}));
+    assert.dom('[data-test-time-embedded]').hasText('No time set');
+
+    await renderField(TimeFieldClass, buildField(TimeFieldClass, {}), 'atom');
+    assert.dom('[data-test-time-atom]').hasTextContaining('No time');
+
+    await renderField(DatetimeFieldClass, undefined);
+    assert
+      .dom('[data-test-datetime-embedded]')
+      .hasTextContaining('No date/time set');
+
+    await renderField(DatetimeFieldClass, undefined, 'atom');
+    assert.dom('[data-test-datetime-atom]').hasTextContaining('No date/time');
+  });
+
+  test('datetime supports custom format and invalid fallback', async function (assert) {
+    await renderConfiguredField(
+      DatetimeFieldClass,
+      '2024-05-01T14:30:00',
+      'standard',
+      { format: 'YYYY-MM-DD HH:mm' },
+    );
+    assert
+      .dom('[data-test-datetime-embedded]')
+      .hasTextContaining('2024-05-01 14:30');
+
+    await renderConfiguredField(DatetimeFieldClass, 'not-a-date', 'standard');
+    assert.dom('[data-test-datetime-embedded]').hasTextContaining('Invalid');
+  });
+
+  test('date field supports preset and custom format', async function (assert) {
+    await renderConfiguredField(DateFieldClass, '2024-05-01', 'standard', {
+      format: 'YYYY/MM/DD',
+    });
+    assert.dom('[data-test-date-embedded]').hasText('2024/05/01');
+
+    await renderConfiguredField(DateFieldClass, '2024-05-01', 'standard', {
+      preset: 'short',
+    });
+    assert.dom('[data-test-date-embedded]').hasText('5/1/24');
+  });
+
+  test('time formatting respects hourCycle/timeStyle options', async function (assert) {
+    await renderConfiguredField(
+      TimeFieldClass,
+      buildField(TimeFieldClass, { value: '14:00' }),
+      'standard',
+      { hourCycle: 'h24', timeStyle: 'short' },
+    );
+    assert.dom('[data-test-time-embedded]').hasTextContaining('14');
+    assert.dom('[data-test-time-embedded]').doesNotContainText('PM');
+  });
+
+  test('open-ended ranges render friendly phrases (date/time ranges)', async function (assert) {
+    await renderField(
+      DateRangeFieldClass,
+      buildField(DateRangeFieldClass, { start: '2024-05-01' }),
+    );
+    assert.dom('[data-test-date-range-embedded]').hasText('From 2024-05-01');
+
+    await renderField(
+      DateRangeFieldClass,
+      buildField(DateRangeFieldClass, { end: '2024-05-10' }),
+    );
+    assert.dom('[data-test-date-range-embedded]').hasText('Until 2024-05-10');
+
+    await renderField(DateRangeFieldClass, buildField(DateRangeFieldClass, {}));
+    assert.dom('[data-test-date-range-embedded]').hasText('No date range set');
+
+    await renderField(
+      TimeRangeFieldClass,
+      buildField(TimeRangeFieldClass, {
+        start: buildField(TimeFieldClass, { value: '09:00' }),
+      }),
+    );
+    assert.dom('[data-test-time-range-embedded]').hasText('From 09:00');
+
+    await renderField(
+      TimeRangeFieldClass,
+      buildField(TimeRangeFieldClass, {
+        end: buildField(TimeFieldClass, { value: '17:00' }),
+      }),
+    );
+    assert.dom('[data-test-time-range-embedded]').hasText('Until 17:00');
+
+    await renderField(TimeRangeFieldClass, buildField(TimeRangeFieldClass, {}));
+    assert.dom('[data-test-time-range-embedded]').hasText('No time range set');
+  });
+
+  test('atom mode renders compact badges', async function (assert) {
+    await renderField(
+      DateRangeFieldClass,
+      buildField(DateRangeFieldClass, {
+        start: '2024-05-01',
+        end: '2024-05-10',
+      }),
+      'atom',
+    );
+    assert
+      .dom('[data-test-date-range-atom]')
+      .hasTextContaining('5/1/24 - 5/10/24');
+
+    await renderField(
+      DurationFieldClass,
+      buildField(DurationFieldClass, {
+        hours: 1,
+        minutes: 5,
+        seconds: 0,
+      }),
+      'atom',
+    );
+    assert.dom('[data-test-duration-atom]').hasText('1h 5m');
+
+    await renderField(
+      MonthYearFieldClass,
+      buildField(MonthYearFieldClass, {
+        value: '2025-05',
+      }),
+      'atom',
+    );
+    assert.dom('[data-test-month-year-atom]').hasTextContaining('May 2025');
+
+    await renderField(WeekFieldClass, buildField(WeekFieldClass, {}), 'atom');
+    assert.dom('[data-test-week-atom]').hasTextContaining('No week');
+
+    await renderField(MonthFieldClass, buildField(MonthFieldClass, {}), 'atom');
+    assert.dom('[data-test-month-atom]').hasTextContaining('No month');
+
+    await renderField(YearFieldClass, buildField(YearFieldClass, {}), 'atom');
+    assert.dom('[data-test-year-atom]').hasTextContaining('No year');
+
+    await renderField(
+      MonthDayFieldClass,
+      buildField(MonthDayFieldClass, {}),
+      'atom',
+    );
+    assert.dom('[data-test-month-day-atom]').hasTextContaining('No date');
+  });
+
+  test('edit mode interactions: time range duration and duration validation', async function (assert) {
+    await renderField(
+      TimeRangeFieldClass,
+      buildField(TimeRangeFieldClass, {
+        start: buildField(TimeFieldClass, { value: '09:00' }),
+        end: buildField(TimeFieldClass, { value: '10:00' }),
+      }),
+      'edit',
+    );
+    await fillIn('[data-test-time-range-start]', '09:30');
+    await fillIn('[data-test-time-range-end]', '11:15');
+    assert
+      .dom('[data-test-field-container]')
+      .hasTextContaining('Duration: 1h 45m');
+
+    await renderField(
+      DurationFieldClass,
+      buildField(DurationFieldClass, { hours: 0, minutes: 0, seconds: 0 }),
+      'edit',
+    );
+    await fillIn('[data-test-duration-minutes]', '61');
+    assert
+      .dom('[data-test-validation-error]')
+      .hasTextContaining('Minutes must be between 0-59');
+    await fillIn('[data-test-duration-minutes]', '15');
+    assert.dom('[data-test-validation-error]').doesNotExist();
+    assert.dom('[data-test-field-container]').hasTextContaining('15.0 minutes');
+  });
+
+  test('edit mode interactions: month/day selects update preview', async function (assert) {
+    await renderField(
+      MonthDayFieldClass,
+      buildField(MonthDayFieldClass, { month: '01', day: '01' }),
+      'edit',
+    );
+    await select('[data-test-month-select]', '05');
+    await select('[data-test-day-select]', '15');
+    assert
+      .dom('[data-test-field-container]')
+      .hasTextContaining('Birthday: May 15');
+  });
+
+  test('presentation content reflects configuration', async function (assert) {
+    await renderConfiguredField(
+      DatetimeFieldClass,
+      '2999-01-01T00:00:00Z',
+      'countdown',
+      { countdownOptions: { label: 'Launch', showControls: true } },
+    );
+    assert.dom('[data-test-countdown]').exists();
+    assert.dom('[data-test-countdown]').hasTextContaining('Launch');
+    assert.dom('[data-test-countdown-toggle]').exists();
+    assert.dom('[data-test-countdown-reset]').exists();
+
+    await renderConfiguredField(
+      DatetimeFieldClass,
+      '2020-01-01T00:00:00Z',
+      'timeAgo',
+      { timeAgoOptions: { eventLabel: 'Last Activity' } },
+    );
+    assert.dom('[data-test-relative-time]').exists();
+    assert.dom('[data-test-relative-time]').hasTextContaining('Last Activity');
+    assert.dom('[data-test-relative-time]').hasTextContaining('ago');
+
+    await renderConfiguredField(
+      DatetimeFieldClass,
+      '2024-06-01T10:00:00Z',
+      'timeline',
+      { timelineOptions: { eventName: 'Order Placed', status: 'complete' } },
+    );
+    assert.dom('[data-test-timeline-event]').hasTextContaining('Order Placed');
+
+    await renderConfiguredField(
+      DatetimeFieldClass,
+      '2000-01-01T00:00:00Z',
+      'expirationWarning',
+      { expirationOptions: { itemName: 'API Token' } },
+    );
+    assert.dom('[data-test-expiration-warning]').exists();
+    assert.dom('[data-test-expiration-warning]').hasTextContaining('API Token');
+    assert.dom('[data-test-expiration-warning]').hasTextContaining('Expired');
+
+    await renderConfiguredField(
+      DateRangeFieldClass,
+      buildField(DateRangeFieldClass, {
+        start: '2024-05-06',
+        end: '2024-05-10',
+      }),
+      'businessDays',
+    );
+    assert.dom('[data-test-business-days]').exists();
+    assert.dom('[data-test-business-days]').hasTextContaining('Calendar Days:');
+    assert.dom('[data-test-business-days]').hasTextContaining('Business Days:');
+
+    await renderConfiguredField(
+      TimeFieldClass,
+      buildField(TimeFieldClass, { value: '09:00' }),
+      'timeSlots',
+      { timeSlotsOptions: { availableSlots: ['09:00 AM', '10:00 AM'] } },
+    );
+    assert.dom('[data-test-time-slots]').exists();
+    await click('[data-test-slot="10:00 AM"]');
+    assert
+      .dom('[data-test-time-slots]')
+      .hasTextContaining('Selected: 10:00 AM');
   });
 });

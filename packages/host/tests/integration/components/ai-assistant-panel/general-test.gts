@@ -455,19 +455,76 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     assert.deepEqual(newInstanceIds, instanceIds);
   });
 
-  test('it can render a markdown message from ai bot', async function (assert) {
+  test('it converts decorative star bullets into markdown lists', async function (assert) {
     let roomId = await renderAiAssistantPanel();
+    let bulletMessage =
+      "Here are 4 points for you:\n\n★ First point - You're currently at the workspace chooser, ready to select from your available workspaces\n★ Second point - You have 7 personal workspaces and 3 catalog workspaces available to explore\n★ Third point - To get started, you can navigate to any workspace and open a card to begin working\n★ Fourth point - I'm here to help you with card creation, editing, code generation, or any questions you have about Boxel\n\nIs there anything specific you'd like to do in one of your workspaces?";
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: "# Beagles: Loyal Companions\n\nEnergetic and friendly, beagles are wonderful family pets. They _love_ company and always crave playtime.\n\nTheir keen noses lead adventures, unraveling scents. Always curious, they're the perfect mix of independence and affection.",
+      body: bulletMessage,
       msgtype: 'm.text',
     });
-    await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
-    assert.dom('[data-test-message-idx="0"] h1').containsText('Beagles');
-    assert.dom('[data-test-message-idx="0"]').doesNotContainText('# Beagles');
-    assert.dom('[data-test-message-idx="0"] p').exists({ count: 2 });
-    assert.dom('[data-test-message-idx="0"] em').hasText('love');
-    assert.dom('[data-test-message-idx="0"]').doesNotContainText('_love_');
+
+    await waitFor(
+      `[data-test-room="${roomId}"] [data-test-message-idx="0"] ul`,
+    );
+
+    assert.dom('[data-test-message-idx="0"] ul li').exists({ count: 4 });
+    assert
+      .dom('[data-test-message-idx="0"] ul li:nth-child(1)')
+      .includesText(
+        "First point - You're currently at the workspace chooser, ready to select from your available workspaces",
+      );
+    assert
+      .dom('[data-test-message-idx="0"] ul li:nth-child(2)')
+      .includesText(
+        'Second point - You have 7 personal workspaces and 3 catalog workspaces available to explore',
+      );
+    assert
+      .dom('[data-test-message-idx="0"] ul li:nth-child(3)')
+      .includesText(
+        'Third point - To get started, you can navigate to any workspace and open a card to begin working',
+      );
+    assert
+      .dom('[data-test-message-idx="0"] ul li:nth-child(4)')
+      .includesText(
+        "Fourth point - I'm here to help you with card creation, editing, code generation, or any questions you have about Boxel",
+      );
+    assert
+      .dom('[data-test-message-idx="0"] ul li:nth-child(1)')
+      .includesText('★ First point');
+  });
+
+  test('it converts various decorative bullets in a single message', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let multiBulletMessage =
+      'Decorative bullets:\n\n★ First milestone complete\n✅ Review workspace permissions\n➤ Share it with your team once ready\n❖ Investigate matrix connection\n◉ Update host fixtures';
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: multiBulletMessage,
+      msgtype: 'm.text',
+    });
+
+    await waitFor(
+      `[data-test-room="${roomId}"] [data-test-message-idx="0"] ul`,
+    );
+
+    let expectedItems = [
+      '★ First milestone complete',
+      '✅ Review workspace permissions',
+      '➤ Share it with your team once ready',
+      '❖ Investigate matrix connection',
+      '◉ Update host fixtures',
+    ];
+
+    assert
+      .dom('[data-test-message-idx="0"] ul li')
+      .exists({ count: expectedItems.length });
+    expectedItems.forEach((text, idx) => {
+      assert
+        .dom(`[data-test-message-idx="0"] ul li:nth-child(${idx + 1})`)
+        .includesText(text);
+    });
   });
 
   test('it displays the streaming indicator when ai bot message is in progress (streaming words)', async function (assert) {

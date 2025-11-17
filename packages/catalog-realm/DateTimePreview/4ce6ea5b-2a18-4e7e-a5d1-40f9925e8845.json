@@ -22,7 +22,7 @@
         "value": "2025-W47"
       },
       "payPeriod": {
-        "value": "2025-12"
+        "value": "2025-06"
       },
       "publishIn": {
         "unit": null,
@@ -38,7 +38,7 @@
       "orderPlaced": "2025-11-06T13:18:00.000Z",
       "tokenExpiry": "2025-11-23T13:20:00.000Z",
       "billingMonth": {
-        "value": "07"
+        "value": 1
       },
       "taskDuration": {
         "hours": 10,
@@ -69,8 +69,11 @@
         "value": 2028
       },
       "appointmentDate": "2025-11-28",
+      "meetingTimeLong": {
+        "value": "09:15"
+      },
       "playgroundMonth": {
-        "value": "04"
+        "value": 4
       },
       "appointmentSlots": {
         "value": "13:00"
@@ -91,6 +94,10 @@
         "monthOfYear": null,
         "occurrences": null
       },
+      "meetingTime24Hour": {
+        "value": "14:30"
+      },
+      "eventDateTimeShort": "2025-11-25T15:30:00.000Z",
       "playgroundDatetime": "2025-11-22T05:19:00.000Z",
       "playgroundDuration": {
         "hours": null,
@@ -101,6 +108,7 @@
         "end": null,
         "start": null
       },
+      "eventDateTimeCustom": "2025-12-01T18:00:00.000Z",
       "playgroundDateRange": {
         "end": null,
         "start": null
@@ -117,6 +125,8 @@
           "value": null
         }
       },
+      "appointmentDateCustom": "2025-12-15",
+      "appointmentDateCompact": "2025-11-28",
       "playgroundPresentation": "standard",
       "playgroundRelativeTime": {
         "unit": null,

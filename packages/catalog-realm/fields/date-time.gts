@@ -2,6 +2,7 @@ import { Component } from 'https://cardstack.com/base/card-api';
 import BaseDatetimeField from 'https://cardstack.com/base/datetime';
 import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event';
 import { eq } from '@cardstack/boxel-ui/helpers';
+import { formatDateTime } from '@cardstack/boxel-ui/helpers';
 
 import { Countdown } from './components/countdown';
 import { Timeline } from './components/timeline';
@@ -15,6 +16,8 @@ interface DateTimeConfiguration {
     | 'timeAgo'
     | 'timeline'
     | 'expirationWarning';
+  preset?: 'tiny' | 'short' | 'medium' | 'long';
+  format?: string; // Custom Day.js format string
   countdownOptions?: {
     label?: string;
     showControls?: boolean;
@@ -58,13 +61,15 @@ export class DatetimeField extends BaseDatetimeField {
 
       try {
         const date = new Date(String(this.datetimeValue));
-        return date.toLocaleString('en-US', {
-          weekday: 'short',
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
+
+        const preset = this.config?.preset || 'medium';
+        const customFormat = this.config?.format;
+
+        return formatDateTime(date, {
+          kind: 'datetime',
+          preset: customFormat ? undefined : preset,
+          format: customFormat,
+          fallback: 'Invalid date/time',
         });
       } catch {
         return String(this.datetimeValue);
@@ -112,11 +117,10 @@ export class DatetimeField extends BaseDatetimeField {
 
       try {
         const date = new Date(String(this.args.model));
-        return date.toLocaleString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
+        return formatDateTime(date, {
+          kind: 'datetime',
+          preset: 'short',
+          fallback: 'Invalid date',
         });
       } catch {
         return String(this.args.model);
