@@ -494,6 +494,13 @@ class Isolated extends Component<typeof ThemeCreator> {
             festival kit”).
           </p>
           <@fields.prompt @format='edit' />
+          <div class='theme-creator__meta-field'>
+            <label class='theme-creator__label'>LLM model</label>
+            <p class='theme-creator__description'>
+              Choose the model used for theme generation.
+            </p>
+            <@fields.llmModel @format='edit' />
+          </div>
         </div>
 
         <aside class='theme-creator__meta-pane'>
@@ -519,14 +526,6 @@ class Isolated extends Component<typeof ThemeCreator> {
               How many different generations to produce in one run.
             </p>
             <@fields.numberOfVariants @format='edit' />
-          </div>
-
-          <div class='theme-creator__meta-field'>
-            <label class='theme-creator__label'>LLM model</label>
-            <p class='theme-creator__description'>
-              Choose the model used for theme generation.
-            </p>
-            <@fields.llmModel @format='edit' />
           </div>
         </aside>
       </div>
