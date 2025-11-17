@@ -117,9 +117,12 @@ export class DatetimeField extends BaseDatetimeField {
 
       try {
         const date = new Date(String(this.args.model));
+        const preset = this.args.configuration?.preset || 'short';
+        const customFormat = this.args.configuration?.format;
         return formatDateTime(date, {
           kind: 'datetime',
-          preset: 'short',
+          preset: customFormat ? undefined : preset,
+          format: customFormat,
           fallback: 'Invalid date',
         });
       } catch {

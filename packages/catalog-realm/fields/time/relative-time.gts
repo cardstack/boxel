@@ -1,17 +1,16 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 import {
   FieldDef,
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
+} from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import ClockIcon from '@cardstack/boxel-icons/clock'; // ² Clock icon
-import { BoxelSelect } from '@cardstack/boxel-ui/components'; // ³ BoxelSelect component
+import ClockIcon from '@cardstack/boxel-icons/clock';
+import { BoxelSelect } from '@cardstack/boxel-ui/components';
 
 class RelativeTimeFieldEdit extends Component<typeof RelativeTimeField> {
   @tracked amount = 2;
@@ -89,7 +88,6 @@ class RelativeTimeFieldEdit extends Component<typeof RelativeTimeField> {
           {{option.label}}
         </BoxelSelect>
       </div>
-      <p class='relative-time-display'>In {{this.amount}} {{this.unit}}</p>
     </div>
 
     <style scoped>
@@ -127,12 +125,6 @@ class RelativeTimeFieldEdit extends Component<typeof RelativeTimeField> {
         flex: 1;
       }
 
-      .relative-time-display {
-        font-size: 0.75rem;
-        color: var(--muted-foreground, #9ca3af);
-        margin: 0;
-      }
-
       .sr-only {
         position: absolute;
         width: 1px;
@@ -148,15 +140,13 @@ class RelativeTimeFieldEdit extends Component<typeof RelativeTimeField> {
   </template>
 }
 
-// ⁴ RelativeTimeField - Independent FieldDef for time offsets
 export class RelativeTimeField extends FieldDef {
   static displayName = 'Relative Time';
   static icon = ClockIcon;
 
-  @field amount = contains(NumberField); // ⁵ Amount value (e.g., 3)
-  @field unit = contains(StringField); // ⁶ Unit value (minutes, hours, days, weeks, months)
+  @field amount = contains(NumberField);
+  @field unit = contains(StringField);
 
-  // ⁷ Embedded format - formatted relative time display
   static embedded = class Embedded extends Component<typeof this> {
     get displayValue() {
       const amount = this.args.model?.amount;
@@ -188,7 +178,6 @@ export class RelativeTimeField extends FieldDef {
     </template>
   };
 
-  // ⁸ Atom format - compact badge
   static atom = class Atom extends Component<typeof this> {
     get displayValue() {
       const amount = this.args.model?.amount;
@@ -196,7 +185,6 @@ export class RelativeTimeField extends FieldDef {
 
       if (amount == null || !unit) return 'No offset';
 
-      // Abbreviate units for compact display
       const unitMap: Record<string, string> = {
         minutes: 'min',
         hours: 'hrs',
@@ -241,7 +229,6 @@ export class RelativeTimeField extends FieldDef {
     </template>
   };
 
-  // ⁹ Edit format - amount and unit inputs with BoxelSelect
   static edit = RelativeTimeFieldEdit;
 }
 
