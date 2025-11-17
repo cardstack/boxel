@@ -10,7 +10,6 @@ import {
 } from '@cardstack/runtime-common';
 import { type Loader } from '@cardstack/runtime-common/loader';
 
-import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import {
@@ -20,6 +19,7 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   provideConsumeContext,
+  setupOperatorModeStateCleanup,
 } from '../../helpers';
 import {
   CardDef,
@@ -49,10 +49,10 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   const noop = () => {};
   const OperatorModeComponent = <template>
     <OperatorMode @onClose={{noop}} />
-    <CardPrerender />
   </template>;
 
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

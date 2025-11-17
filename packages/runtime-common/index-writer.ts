@@ -94,6 +94,7 @@ export interface ErrorEntry {
   error: SerializedError;
   types?: string[];
   searchData?: Record<string, any>;
+  cardType?: string;
 }
 
 interface ModuleEntry {
