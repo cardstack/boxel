@@ -49,7 +49,6 @@ interface Signature {
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
     isLastAssistantMessage: boolean;
-    isCodePatchCorrectness?: boolean;
     commands?: MessageCommand[];
     userMessageThisMessageIsRespondingTo?: MatrixMessage;
     reasoning?: {
@@ -82,28 +81,25 @@ export default class FormattedAiBotMessage extends Component<Signature> {
 
   <template>
     <Message class='ai-bot-message'>
-      {{#if @isCodePatchCorrectness}}
-        {{yield}}
-      {{else}}
-        {{#if @reasoning}}
-          <div class='reasoning-content'>
-            {{#if (eq 'Thinking...' @reasoning.content)}}
-              Thinking...
-            {{else}}
-              <details
-                open={{@reasoning.isExpanded}}
-                {{on 'click' @reasoning.updateExpanded}}
-                data-test-reasoning
-              >
-                <summary>
-                  Thinking...
-                </summary>
-                {{sanitizedHtml (markdownToHtml @reasoning.content)}}
-              </details>
-            {{/if}}
-          </div>
-        {{/if}}
-        {{! We are splitting the html into parts so that we can target the
+      {{#if @reasoning}}
+        <div class='reasoning-content'>
+          {{#if (eq 'Thinking...' @reasoning.content)}}
+            Thinking...
+          {{else}}
+            <details
+              open={{@reasoning.isExpanded}}
+              {{on 'click' @reasoning.updateExpanded}}
+              data-test-reasoning
+            >
+              <summary>
+                Thinking...
+              </summary>
+              {{sanitizedHtml (markdownToHtml @reasoning.content)}}
+            </details>
+          {{/if}}
+        </div>
+      {{/if}}
+      {{! We are splitting the html into parts so that we can target the
         code blocks (<pre> tags) and apply Monaco editor to them. Here is an
         example of the html argument:
 
@@ -118,36 +114,35 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         our skills teach the model to respond with code blocks that are not nested
         inside other elements.
         }}
-        {{#each @htmlParts key='@index' as |htmlPart index|}}
-          {{#if (isHtmlPreTagGroup htmlPart)}}
-            <HtmlGroupCodeBlock
-              @codeData={{htmlPart.codeData}}
-              @codePatchResult={{this.commandService.getCodePatchResult
-                htmlPart.codeData
-              }}
-              @onPatchCode={{fn
-                this.commandService.patchCode
-                htmlPart.codeData.roomId
-                htmlPart.codeData.fileUrl
-                (array htmlPart.codeData)
-              }}
-              @monacoSDK={{@monacoSDK}}
-              @isLastAssistantMessage={{@isLastAssistantMessage}}
-              @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
-              @index={{this.preTagGroupIndex index}}
-              @codePatchStatus={{this.codePatchStatus htmlPart.codeData}}
-            />
+      {{#each @htmlParts key='@index' as |htmlPart index|}}
+        {{#if (isHtmlPreTagGroup htmlPart)}}
+          <HtmlGroupCodeBlock
+            @codeData={{htmlPart.codeData}}
+            @codePatchResult={{this.commandService.getCodePatchResult
+              htmlPart.codeData
+            }}
+            @onPatchCode={{fn
+              this.commandService.patchCode
+              htmlPart.codeData.roomId
+              htmlPart.codeData.fileUrl
+              (array htmlPart.codeData)
+            }}
+            @monacoSDK={{@monacoSDK}}
+            @isLastAssistantMessage={{@isLastAssistantMessage}}
+            @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
+            @index={{this.preTagGroupIndex index}}
+            @codePatchStatus={{this.codePatchStatus htmlPart.codeData}}
+          />
+        {{else}}
+          {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
+            {{wrapLastTextNodeInStreamingTextSpan
+              (sanitizedHtml htmlPart.content)
+            }}
           {{else}}
-            {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
-              {{wrapLastTextNodeInStreamingTextSpan
-                (sanitizedHtml htmlPart.content)
-              }}
-            {{else}}
-              {{sanitizedHtml htmlPart.content}}
-            {{/if}}
+            {{sanitizedHtml htmlPart.content}}
           {{/if}}
-        {{/each}}
-      {{/if}}
+        {{/if}}
+      {{/each}}
     </Message>
 
     <style scoped>

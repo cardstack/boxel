@@ -10,7 +10,7 @@ import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
 
 import { Alert } from '@cardstack/boxel-ui/components';
-import { and, cn } from '@cardstack/boxel-ui/helpers';
+import { cn } from '@cardstack/boxel-ui/helpers';
 
 import {
   MINIMUM_AI_CREDITS_TO_CONTINUE,
@@ -239,32 +239,25 @@ export default class AiAssistantMessage extends Component<Signature> {
       <div class='content' data-test-ai-message-content>
         {{#if @isFromAssistant}}
           {{#if this.hasBotMessage}}
-            <div class={{if @isCodePatchCorrectness 'code-patch-correctness-wrapper' undefined}}>
-              <AiBotMessage
-                @monacoSDK={{@monacoSDK}}
-                @htmlParts={{@messageHTMLParts}}
-                @messageHTML={{@messageHTML}}
-                @roomId={{@roomId}}
-                @eventId={{@eventId}}
-                @isStreaming={{@isStreaming}}
-                @isLastAssistantMessage={{@isLastAssistantMessage}}
-                @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
-                @reasoning={{if
-                  @reasoningContent
-                  (hash
-                    content=@reasoningContent
-                    isExpanded=this.isReasoningExpanded
-                    updateExpanded=this.updateReasoningExpanded
-                  )
-                }}
-                @isCodePatchCorrectness={{@isCodePatchCorrectness}}
-                @commands={{@commands}}
-              >
-                {{#if @isCodePatchCorrectness}}
-                  {{yield}}
-                {{/if}}
-              </AiBotMessage>
-            </div>
+            <AiBotMessage
+              @monacoSDK={{@monacoSDK}}
+              @htmlParts={{@messageHTMLParts}}
+              @messageHTML={{@messageHTML}}
+              @roomId={{@roomId}}
+              @eventId={{@eventId}}
+              @isStreaming={{@isStreaming}}
+              @isLastAssistantMessage={{@isLastAssistantMessage}}
+              @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
+              @reasoning={{if
+                @reasoningContent
+                (hash
+                  content=@reasoningContent
+                  isExpanded=this.isReasoningExpanded
+                  updateExpanded=this.updateReasoningExpanded
+                )
+              }}
+              @commands={{@commands}}
+            />
           {{/if}}
           {{#if this.hasItems}}
             <Attachments
@@ -284,9 +277,7 @@ export default class AiAssistantMessage extends Component<Signature> {
           </UserMessage>
         {{/if}}
 
-        {{#unless (and @isFromAssistant @isCodePatchCorrectness)}}
-          {{yield}}
-        {{/unless}}
+        {{yield}}
 
         {{#if this.errorMessages.length}}
           {{#if this.isOutOfCreditsErrorMessage}}
@@ -383,9 +374,6 @@ export default class AiAssistantMessage extends Component<Signature> {
       .credits-added {
         font-size: var(--boxel-font-size-xs);
         font-weight: bold;
-      }
-      .code-patch-correctness-wrapper {
-        width: 100%;
       }
     </style>
   </template>

@@ -42,7 +42,6 @@ import {
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   DEFAULT_LLM,
-  APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
 } from '../matrix-constants';
 import { decodeCommandRequest } from '../commands';
 import type { CommandRequest } from '../commands';
@@ -67,8 +66,8 @@ if (typeof globalThis !== 'undefined') {
       maybeProcess.env.ENABLE_AI_PATCHING_CORRECTNESS_CHECKS;
   }
   if (aiPatchingCorrectnessFlag === undefined) {
-    aiPatchingCorrectnessFlag = (globalThis as any)?.ENV?.
-      ENABLE_AI_PATCHING_CORRECTNESS_CHECKS;
+    aiPatchingCorrectnessFlag = (globalThis as any)?.ENV
+      ?.ENABLE_AI_PATCHING_CORRECTNESS_CHECKS;
   }
 }
 const AI_PATCHING_CORRECTNESS_CHECKS_ENABLED =
@@ -270,7 +269,11 @@ function decodeCommandRequestSafe(
   request: Partial<EncodedCommandRequest>,
 ): CommandRequest | undefined {
   try {
-    return decodeCommandRequest(request);
+    let decoded = decodeCommandRequest(request);
+    if (decoded.id && decoded.name && decoded.arguments !== undefined) {
+      return decoded as CommandRequest;
+    }
+    return undefined;
   } catch {
     return undefined;
   }
@@ -936,7 +939,14 @@ type CorrectnessResultSummary = {
 function extractCorrectnessResultCard(
   commandResult?: CommandResultEvent,
 ): CorrectnessResultSummary | undefined {
-  let cardPayload = commandResult?.content?.data?.card;
+  if (
+    !commandResult ||
+    commandResult.content.msgtype !==
+      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+  ) {
+    return undefined;
+  }
+  let cardPayload = commandResult.content.data.card;
   if (!cardPayload) {
     return undefined;
   }

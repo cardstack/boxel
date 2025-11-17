@@ -2,6 +2,7 @@ import './instrument';
 import './setup-logger'; // This should be first
 import type { MatrixEvent } from 'matrix-js-sdk';
 import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
+import type { RoomMessageEventContent } from 'matrix-js-sdk/lib/@types/events';
 import { SlidingSync, type MSC3575List } from 'matrix-js-sdk/lib/sliding-sync';
 import OpenAI from 'openai';
 import {
@@ -637,20 +638,21 @@ async function publishCodePatchCorrectnessMessage(
   summary: PendingCodePatchCorrectnessCheck,
   client: MatrixClient,
 ) {
-  let body = buildCodePatchCorrectnessBody(summary);
-  if (!body) {
-    return;
-  }
+  let body = '';
   let commandRequests = buildCheckCorrectnessCommandRequests(summary);
-  let content: Record<string, unknown> = {
+  let baseContent = {
     body,
     msgtype: APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
     format: 'org.matrix.custom.html',
-    isStreamingFinished: true,
     'm.relates_to': {
       rel_type: APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
       event_id: summary.targetEventId,
     },
+  } as unknown as RoomMessageEventContent;
+
+  let content: RoomMessageEventContent & Record<string, unknown> = {
+    ...baseContent,
+    isStreamingFinished: true,
   };
   if (summary.context) {
     content.data = { context: summary.context };
@@ -660,29 +662,6 @@ async function publishCodePatchCorrectnessMessage(
       encodeCommandRequests(commandRequests);
   }
   await client.sendEvent(summary.roomId, 'm.room.message', content);
-}
-
-function buildCodePatchCorrectnessBody(
-  summary: PendingCodePatchCorrectnessCheck,
-) {
-  let sections: string[] = [];
-  if (summary.files.length) {
-    sections.push(
-      [
-        'Files updated:',
-        ...summary.files.map((file) => `- ${file.sourceUrl}`),
-      ].join('\n'),
-    );
-  }
-  if (summary.cards.length) {
-    sections.push(
-      [
-        'Cards updated:',
-        ...summary.cards.map((card) => `- ${card.cardId}`),
-      ].join('\n'),
-    );
-  }
-  return sections.join('\n\n');
 }
 
 function buildCheckCorrectnessCommandRequests(
@@ -722,19 +701,11 @@ function buildCheckCorrectnessCommandRequests(
 }
 
 function ensureLegacyPatchSummaryPrompt(promptParts: PromptParts) {
-  let summary = promptParts.pendingCodePatchCorrectness;
-  if (!summary) {
+  if (!promptParts.pendingCodePatchCorrectness) {
     return;
   }
 
-  let body = buildCodePatchCorrectnessBody(summary);
-  if (!body) {
-    return;
-  }
-
-  let instruction = `Briefly summarize the recent code changes for the user:
-
-${body}`;
+  let instruction = `Briefly summarize the recent code changes for the user. Max 1-2 sentences.`;
 
   promptParts.messages = promptParts.messages ?? [];
   promptParts.messages.push({

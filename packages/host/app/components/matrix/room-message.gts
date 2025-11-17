@@ -4,7 +4,6 @@ import { service } from '@ember/service';
 
 import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
-import config from '@cardstack/host/config/environment';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -77,17 +76,6 @@ export default class RoomMessage extends Component<Signature> {
       () => this.message.attachedCardIds ?? [],
     );
   };
-
-  private get isCodePatchCorrectnessFeatureEnabled() {
-    return Boolean(config.featureFlags?.AI_PATCHING_CORRECTNESS_CHECKS);
-  }
-
-  private get isCodePatchCorrectnessMessage() {
-    return (
-      this.isCodePatchCorrectnessFeatureEnabled &&
-      this.message.isCodePatchCorrectness
-    );
-  }
 
   private get message() {
     return this.args.roomResource.messages[this.args.index];
@@ -217,7 +205,6 @@ export default class RoomMessage extends Component<Signature> {
         @retryAction={{@retryAction}}
         @waitAction={{if this.streamingTimeout this.waitLonger}}
         @isPending={{@isPending}}
-        @isCodePatchCorrectness={{this.isCodePatchCorrectnessMessage}}
         @commands={{this.message.commands}}
         data-test-boxel-message-from={{this.message.author.name}}
         data-test-boxel-message-instance-id={{this.message.instanceId}}

@@ -32,7 +32,6 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { Alert, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers';
-import config from '@cardstack/host/config/environment';
 
 import {
   type getCard,
@@ -492,10 +491,6 @@ export default class Room extends Component<Signature> {
     registerDestructor(this, () => {
       this.scrollState().messageVisibilityObserver.disconnect();
     });
-  }
-
-  private get isCodePatchCorrectnessFeatureEnabled() {
-    return Boolean(config.featureFlags?.AI_PATCHING_CORRECTNESS_CHECKS);
   }
 
   private scrollState() {
@@ -1192,10 +1187,8 @@ export default class Room extends Component<Signature> {
   @cached
   private get readyCommands() {
     let lastMessage = this.messages[this.messages.length - 1];
-    let isCodePatchCorrectnessMessage =
-      lastMessage?.isCodePatchCorrectness &&
-      this.isCodePatchCorrectnessFeatureEnabled;
-    if (!lastMessage || !lastMessage.commands || isCodePatchCorrectnessMessage) {
+
+    if (!lastMessage || !lastMessage.commands) {
       return [];
     }
     return lastMessage.commands.filter(

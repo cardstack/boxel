@@ -4,7 +4,6 @@ const fs = require('fs');
 const path = require('path');
 
 let sqlSchema = fs.readFileSync(getLatestSchemaFile(), 'utf8');
-let enableAIPatchingCorrectnessChecks = true; // process.env.ENABLE_AI_PATCHING_CORRECTNESS_CHECKS === 'true';
 
 module.exports = function (environment) {
   const ENV = {
@@ -57,7 +56,6 @@ module.exports = function (environment) {
       process.env.RESOLVED_SKILLS_REALM_URL || 'http://localhost:4201/skills/',
     featureFlags: {
       SHOW_ASK_AI: process.env.SHOW_ASK_AI === 'true' || false,
-      AI_PATCHING_CORRECTNESS_CHECKS: enableAIPatchingCorrectnessChecks,
     },
   };
 
@@ -92,7 +90,6 @@ module.exports = function (environment) {
     ENV.sqlSchema = sqlSchema;
     ENV.featureFlags = {
       SHOW_ASK_AI: true,
-      AI_PATCHING_CORRECTNESS_CHECKS: enableAIPatchingCorrectnessChecks,
     };
 
     ENV.defaultSystemCardId =
