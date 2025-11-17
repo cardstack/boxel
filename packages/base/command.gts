@@ -123,6 +123,7 @@ export class CreateInstancesInput extends CardDef {
 export class AskAiForCardJsonInput extends CreateInstancesInput {
   @field prompt = contains(MarkdownField);
   @field llmModel = contains(StringField);
+  @field skillCardIds = containsMany(StringField);
 }
 
 export class CreateInstanceResult extends CardDef {

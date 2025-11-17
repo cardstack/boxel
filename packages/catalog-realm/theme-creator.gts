@@ -2,13 +2,16 @@ import {
   CardDef,
   Component,
   contains,
+  containsMany,
   field,
+  linksToMany,
   realmInfo,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
 import RealmField from 'https://cardstack.com/base/realm';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import NumberField from 'https://cardstack.com/base/number';
+import { Skill } from 'https://cardstack.com/base/skill';
 import { Button, RealmIcon } from '@cardstack/boxel-ui/components';
 import { copyCardURLToClipboard } from '@cardstack/boxel-ui/helpers';
 import StatusIndicator from './components/status-indicator';
@@ -118,7 +121,7 @@ class Isolated extends Component<typeof ThemeCreator> {
     return moduleString.includes(fragment);
   }
 
-  get structuredThemeGuidance(): string {
+  get structuredThemeGuidancePrompt(): string {
     return [
       // 'Structured Theme guidance: produce JSON matching the template, with `cssVariables` that include :root, .dark, and an `@theme inline` mapping back to Boxel tokens.',
       // 'Keep palette, typography, spacing, radius, chart, sidebar, and shadow tokens cohesive across light/dark with OKLCH or Hex values that meet AA contrast.',
@@ -138,7 +141,7 @@ class Isolated extends Component<typeof ThemeCreator> {
       STYLE_REFERENCE_TEMPLATE,
       '',
       'Structured Theme details:',
-      this.structuredThemeGuidance,
+      this.structuredThemeGuidancePrompt,
     ].join('\n');
   }
 
@@ -163,13 +166,13 @@ class Isolated extends Component<typeof ThemeCreator> {
       return this.brandGuideGuidance;
     }
     if (this.moduleMatches(codeRef, 'structured-theme')) {
-      return this.structuredThemeGuidance;
+      return this.structuredThemeGuidancePrompt;
     }
     console.error('No prompt guidance');
     return;
   }
 
-  themeTypeIntent(
+  themePrompt(
     codeRef: { module?: string | URL | null } | null,
   ): string | null {
     if (this.moduleMatches(codeRef, 'brand-guide')) {
@@ -322,7 +325,7 @@ class Isolated extends Component<typeof ThemeCreator> {
         ? this.args.model.prompt.trim()
         : null;
     let promptSections: string[] = [];
-    let intent = this.themeTypeIntent(codeRef);
+    let intent = this.themePrompt(codeRef);
     if (intent) {
       promptSections.push(`Intent:\n${intent}`);
     }
@@ -334,6 +337,19 @@ class Isolated extends Component<typeof ThemeCreator> {
       promptSections.push(`Guidance:\n${guidancePrompt}`);
     }
     let combinedPrompt = promptSections.join('\n\n');
+    let skillCardIds =
+      Array.isArray(this.args.model.skillCards) &&
+      this.args.model.skillCards.length
+        ? this.args.model.skillCards
+            .map((card: Skill | string | null | undefined) => {
+              if (typeof card === 'string') {
+                return card.trim();
+              }
+              let id = card?.id;
+              return typeof id === 'string' ? id.trim() : null;
+            })
+            .filter((id): id is string => Boolean(id && id.length))
+        : undefined;
 
     try {
       console.debug(
@@ -357,6 +373,7 @@ class Isolated extends Component<typeof ThemeCreator> {
       codeRef,
       realm,
       prompt: combinedPrompt || undefined,
+      skillCardIds,
     });
 
     let createCommand = new CreateExampleCardCommand(commandContext);
@@ -709,6 +726,7 @@ export class ThemeCreator extends CardDef {
   @field prompt = contains(MarkdownField);
   @field realm = contains(RealmField);
   @field codeRef = contains(ThemeCodeRefField);
+  @field skillCards = linksToMany(Skill);
   @field numberOfVariants = contains(NumberField);
 
   static isolated = Isolated;
