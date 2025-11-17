@@ -122,12 +122,6 @@ export default class PublishRealmModal extends Component<Signature> {
     );
   };
 
-  private hasPrivateRealmDependencies = (
-    violation: PrivateDependencyViolation,
-  ): boolean => {
-    return this.privateRealmURLsForViolation(violation).length > 0;
-  };
-
   get lastPublishedTime() {
     return this.getFormattedLastPublishedTime(this.subdirectoryRealmUrl);
   }
