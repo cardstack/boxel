@@ -36,12 +36,10 @@ export default class PrivateDependencyViolationComponent extends Component<Signa
 
     <style scoped>
       .violation {
-        color: var(--boxel-500);
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xxxs);
         padding: var(--boxel-sp-xxs) 0;
-        border-top: 1px solid var(--boxel-150);
         font-size: var(--boxel-font-size-sm);
         word-break: break-word;
         overflow-wrap: anywhere;
