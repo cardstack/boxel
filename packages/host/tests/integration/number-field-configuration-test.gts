@@ -216,7 +216,7 @@ module('Integration | number field configuration', function (hooks) {
   });
 
   // Number Input Tests
-  test('number input with prefix/suffix formatting', async function (assert) {
+  test('basic number field without type shows raw value (no formatting)', async function (assert) {
     await renderConfiguredField(100.5, {
       prefix: '$',
       suffix: ' USD',
@@ -226,12 +226,20 @@ module('Integration | number field configuration', function (hooks) {
     assert
       .dom('[data-test-field-container]')
       .hasTextContaining(
-        '$100.50 USD',
-        'Number field shows prefix/suffix formatting',
+        '100.5',
+        'Basic number field ignores prefix/suffix/decimals without type',
       );
+
+    assert
+      .dom('[data-test-field-container]')
+      .doesNotContainText('$', 'Basic number field does not apply prefix');
+
+    assert
+      .dom('[data-test-field-container]')
+      .doesNotContainText('USD', 'Basic number field does not apply suffix');
   });
 
-  test('number input respects decimals configuration', async function (assert) {
+  test('basic number field without type shows raw decimals', async function (assert) {
     await renderConfiguredField(5.5, {
       decimals: 3,
     });
@@ -239,8 +247,8 @@ module('Integration | number field configuration', function (hooks) {
     assert
       .dom('[data-test-field-container]')
       .hasTextContaining(
-        '5.500',
-        'Number field shows correct decimal places (0.000)',
+        '5.5',
+        'Basic number field ignores decimals config without type',
       );
   });
 
