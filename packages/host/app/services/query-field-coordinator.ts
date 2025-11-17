@@ -12,7 +12,6 @@ import {
   meta,
   normalizeQueryDefinition,
   normalizeQueryForSignature,
-  querySignature,
   realmURL as realmURLSymbol,
   type CardResource,
   type CardResourceMeta,
@@ -178,14 +177,13 @@ export default class QueryFieldCoordinatorService
     }
     this.#registerFieldRealm(instance, field.name, normalized.realm);
     let normalizedQuery = normalizeQueryForSignature(normalized.query);
-    let signature = querySignature(normalizedQuery);
+    let searchURL = buildQuerySearchURL(normalized.realm, normalizedQuery);
     let currentState = api.getQueryFieldState(instance, field.name);
-    console.log('[refresh signature]', field.name, signature, currentState?.signature);
     if (
       !opts.force &&
       currentState &&
       !currentState.stale &&
-      currentState.signature === signature
+      currentState.signature === searchURL
     ) {
       return;
     }
@@ -196,8 +194,8 @@ export default class QueryFieldCoordinatorService
     await this.#applyResults({
       payload,
       normalizedQuery,
-      signature,
-      searchURL: buildQuerySearchURL(normalized.realm, normalized.query),
+      signature: searchURL,
+      searchURL,
       results: cards,
       included,
       realmHref: normalized.realm,

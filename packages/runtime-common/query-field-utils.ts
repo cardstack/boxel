@@ -7,6 +7,7 @@ import type {
 } from './resource-types';
 import {
   buildQueryString,
+  normalizeQueryForSignature,
   type Query,
   type QueryWithInterpolations,
 } from './query';
@@ -270,7 +271,8 @@ export function getValueForResourcePath(
 export function buildQuerySearchURL(realmHref: string, query: Query): string {
   let baseHref = realmHref.endsWith('/') ? realmHref : `${realmHref}/`;
   let searchURL = new URL('./_search', baseHref);
-  searchURL.search = buildQueryString(query);
+  let normalizedQuery = normalizeQueryForSignature(query);
+  searchURL.search = buildQueryString(normalizedQuery);
   return searchURL.href;
 }
 
