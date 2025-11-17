@@ -7,16 +7,17 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import OneShotLlmRequestCommand from './one-shot-llm-request';
+import { prettifyPrompts } from '../utils/prettify-prompts';
+
 import {
   buildAttachedFileURLs,
   buildExamplePrompt,
   ONE_SHOT_SYSTEM_PROMPT,
   parseExamplePayloadFromOutput,
 } from './example-card-helpers';
+import OneShotLlmRequestCommand from './one-shot-llm-request';
 
 import type CardService from '../services/card-service';
-import { prettifyPrompts } from '../utils/prettify-prompts';
 
 const log = logger('commands:ask-ai-for-card-json');
 
@@ -73,7 +74,8 @@ export class AskAiForCardJsonCommand extends HostBaseCommand<
     const skillCardIds =
       Array.isArray(input.skillCardIds) && input.skillCardIds.length
         ? input.skillCardIds.filter(
-            (id): id is string => typeof id === 'string' && id.trim().length > 0,
+            (id): id is string =>
+              typeof id === 'string' && id.trim().length > 0,
           )
         : undefined;
 

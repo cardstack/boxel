@@ -9,7 +9,10 @@ export function prettifyMessages(messages: SimpleMessage[]): string {
   parts.push(header);
   messages.forEach((message, index) => {
     let label = `-- Message ${index + 1} (${message.role}) --`;
-    let content = typeof message.content === 'string' ? message.content : String(message.content);
+    let content =
+      typeof message.content === 'string'
+        ? message.content
+        : String(message.content);
     parts.push(label);
     parts.push(content.trimEnd());
   });
