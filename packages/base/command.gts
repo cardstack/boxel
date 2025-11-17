@@ -130,10 +130,12 @@ export class CreateInstanceResult extends CardDef {
   @field createdCard = linksTo(CardDef);
 }
 
-export class CreateExampleCardInput extends CardDef {
+export class GenerateThemeExampleInput extends CardDef {
   @field codeRef = contains(CodeRefField);
   @field realm = contains(StringField);
-  @field payload = contains(JsonField);
+  @field prompt = contains(MarkdownField);
+  @field llmModel = contains(StringField);
+  @field skillCardIds = containsMany(StringField);
   @field localDir = contains(StringField);
 }
 

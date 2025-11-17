@@ -25,7 +25,6 @@ import {
 } from './example-card-helpers';
 import OneShotLlmRequestCommand from './one-shot-llm-request';
 import SendAiAssistantMessageCommand from './send-ai-assistant-message';
-export { AskAiForCardJsonCommand } from './ask-ai-for-card-json';
 
 import type AiAssistantPanelService from '../services/ai-assistant-panel-service';
 import type CardService from '../services/card-service';
@@ -200,59 +199,7 @@ export class GenerateExampleCardsOneShotCommand extends HostBaseCommand<
   }
 }
 
-export class CreateExampleCardCommand extends HostBaseCommand<
-  typeof BaseCommandModule.CreateExampleCardInput,
-  typeof BaseCommandModule.CreateInstanceResult
-> {
-  @service declare private store: StoreService;
-  @service declare private realm: RealmService;
-
-  static actionVerb = 'Create Example Card';
-
-  async getInputType() {
-    let commandModule = await this.loadCommandModule();
-    const { CreateExampleCardInput } = commandModule;
-    return CreateExampleCardInput;
-  }
-
-  protected async run(
-    input: BaseCommandModule.CreateExampleCardInput,
-  ): Promise<BaseCommandModule.CreateInstanceResult> {
-    if (!input.codeRef) {
-      throw new Error('codeRef is required to create a card');
-    }
-    const realm = input.realm || this.realm.defaultWritableRealm?.path;
-    if (!realm) {
-      throw new Error('realm is required to create a card');
-    }
-
-    let examplePayload = input.payload;
-    if (!examplePayload || typeof examplePayload !== 'object') {
-      throw new Error('payload is required to create a card');
-    }
-
-    const createdCard = await createExampleInstanceFromPayload({
-      codeRef: input.codeRef,
-      examplePayload: examplePayload as Record<string, unknown>,
-      realm,
-      store: this.store,
-      defaultRealm: this.realm.defaultWritableRealm?.path,
-      localDir: input.localDir ?? null,
-    });
-
-    if (!createdCard) {
-      throw new Error('Failed to create example card');
-    }
-
-    let commandModule = await this.loadCommandModule();
-    const { CreateInstanceResult } = commandModule;
-    return new CreateInstanceResult({
-      createdCard,
-    });
-  }
-}
-
-async function createExampleInstanceFromPayload(opts: {
+export async function createExampleInstanceFromPayload(opts: {
   codeRef: BaseCommandModule.CreateInstancesInput['codeRef'];
   examplePayload: Record<string, unknown>;
   realm: string | undefined;

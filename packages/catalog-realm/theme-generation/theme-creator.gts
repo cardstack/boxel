@@ -31,10 +31,7 @@ import { fn } from '@ember/helper';
 import { task } from 'ember-concurrency';
 import type { TaskInstance } from 'ember-concurrency';
 import { tracked } from '@glimmer/tracking';
-import {
-  AskAiForCardJsonCommand,
-  CreateExampleCardCommand,
-} from '@cardstack/boxel-host/commands/generate-example-cards';
+import GenerateThemeExampleCommand from '@cardstack/boxel-host/commands/generate-theme-example';
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
 import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
 
@@ -386,19 +383,13 @@ class Isolated extends Component<typeof ThemeCreator> {
       // ignore logging issues
     }
 
-    let askCommand = new AskAiForCardJsonCommand(commandContext);
-    let payloadResult = await askCommand.execute({
-      codeRef,
-      realm,
-      prompt: combinedPrompt || undefined,
-      skillCardIds,
-    });
-
-    let createCommand = new CreateExampleCardCommand(commandContext);
+    let createCommand = new GenerateThemeExampleCommand(commandContext);
     let result = await createCommand.execute({
       codeRef,
       realm,
-      payload: payloadResult.payload,
+      prompt: combinedPrompt || undefined,
+      llmModel: 'anthropic/claude-3-haiku',
+      skillCardIds,
     });
     let created = result.createdCard;
     if (created?.id) {
