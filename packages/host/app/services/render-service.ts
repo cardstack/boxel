@@ -27,6 +27,7 @@ import { isNotLoadedError } from '@cardstack/runtime-common/not-loaded';
 import config from '@cardstack/host/config/environment';
 
 import type {
+  BaseDef,
   CardDef,
   Format,
   CardStore,
@@ -48,6 +49,10 @@ const log = logger('renderer');
 const ELEMENT_NODE_TYPE = 1;
 const { environment } = config;
 
+type NotLoadedWithDependency = NotLoaded & {
+  dependencyFieldName?: string;
+  dependencyInstance?: BaseDef;
+};
 export class CardStoreWithErrors implements CardStore {
   #cards = new Map<string, CardDef>();
   #fetch: typeof globalThis.fetch;
@@ -160,6 +165,7 @@ export default class RenderService extends Service {
           await this.resolveField({
             card: errorInstance,
             fieldName,
+            notLoaded: notLoaded as NotLoadedWithDependency,
             store,
             visit,
             realmPath,
@@ -207,25 +213,41 @@ export default class RenderService extends Service {
 
   // TODO delete me
   private async resolveField(
-    params: Omit<RenderCardParams, 'format'> & { fieldName: string },
+    params: Omit<RenderCardParams, 'format'> & {
+      fieldName: string;
+      notLoaded: NotLoadedWithDependency;
+    },
   ): Promise<void> {
-    let { card, visit, store, realmPath, fieldName } = params;
+    let { card, visit, store, realmPath, fieldName, notLoaded } = params;
     let api = await this.loaderService.loader.import<typeof CardAPI>(
       `${baseRealm.url}card-api`,
     );
     try {
-      await api.getIfReady(card, fieldName as keyof CardDef);
+      let dependencyInstance =
+        (notLoaded.dependencyInstance as BaseDef | undefined) ?? undefined;
+      let fieldToResolve = fieldName;
+      let instanceToResolve: BaseDef = card;
+      // Only follow dependency-specific resolution when the dependency belongs
+      // to the card that is currently rendering. Otherwise we fall back to the
+      // legacy behaviour so that cyclic links keep using the async lazy loader.
+      if (dependencyInstance === card) {
+        instanceToResolve = dependencyInstance;
+        if (notLoaded.dependencyFieldName) {
+          fieldToResolve = notLoaded.dependencyFieldName as typeof fieldName;
+        }
+      }
+      await api.getIfReady(instanceToResolve as any, fieldToResolve as any);
     } catch (error: any) {
       let errors = Array.isArray(error) ? error : [error];
       for (let err of errors) {
-        let notLoaded = err.additionalErrors?.find((e: any) =>
+        let unresolved = err.additionalErrors?.find((e: any) =>
           isNotLoadedError(e),
-        ) as NotLoaded | undefined;
-        if (isCardError(err) && err.status !== 500 && notLoaded) {
+        ) as NotLoadedWithDependency | undefined;
+        if (isCardError(err) && err.status !== 500 && unresolved) {
           let links =
-            typeof notLoaded.reference === 'string'
-              ? [notLoaded.reference]
-              : notLoaded.reference;
+            typeof unresolved.reference === 'string'
+              ? [unresolved.reference]
+              : unresolved.reference;
           for (let link of links) {
             if (store.errors.has(link)) {
               throw err; // the linked card was already found to be in an error state
@@ -234,9 +256,11 @@ export default class RenderService extends Service {
             if (realmPath.inRealm(linkURL)) {
               await visit(linkURL, store);
             } else {
-              // in this case the instance we are linked to is a missing instance
-              // in an external realm.
-              throw err;
+              let doc = await store.loadDocument(linkURL.href);
+              if (isCardError(doc)) {
+                store.errors.add(link);
+                throw doc;
+              }
             }
           }
         } else {
