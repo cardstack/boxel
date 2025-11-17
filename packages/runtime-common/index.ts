@@ -1,16 +1,10 @@
-import type { CardResource, Meta } from './resource-types';
+import type { CardResource, LooseCardResource, Meta } from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './index-structure';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import type { ErrorEntry } from './index-writer';
-
-// a card resource but with optional "id" and "type" props
-export type LooseCardResource = Omit<CardResource, 'id' | 'type'> & {
-  type?: 'card';
-  id?: string;
-};
 
 export interface LooseSingleCardDocument {
   data: LooseCardResource;
