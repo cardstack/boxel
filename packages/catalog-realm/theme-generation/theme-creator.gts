@@ -2,7 +2,6 @@ import {
   CardDef,
   Component,
   contains,
-  containsMany,
   field,
   linksToMany,
   realmInfo,
@@ -12,11 +11,7 @@ import RealmField from 'https://cardstack.com/base/realm';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import NumberField from 'https://cardstack.com/base/number';
 import { Skill } from 'https://cardstack.com/base/skill';
-import {
-  Button,
-  RealmIcon,
-  LoadingIndicator,
-} from '@cardstack/boxel-ui/components';
+import { Button, RealmIcon } from '@cardstack/boxel-ui/components';
 import { copyCardURLToClipboard } from '@cardstack/boxel-ui/helpers';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 import Wand from '@cardstack/boxel-icons/wand';
@@ -176,7 +171,7 @@ class Isolated extends Component<typeof ThemeCreator> {
       return this.structuredThemeGuidancePrompt;
     }
     console.error('No prompt guidance');
-    return;
+    return '';
   }
 
   themePrompt(codeRef: { module?: string | URL | null } | null): string | null {
@@ -276,8 +271,12 @@ class Isolated extends Component<typeof ThemeCreator> {
     if (!id) {
       return;
     }
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      return;
+    }
     try {
-      new SwitchSubmodeCommand(this.args.context?.commandContext).execute({
+      new SwitchSubmodeCommand(commandContext).execute({
         submode: 'code',
         codePath: id,
       });
@@ -401,7 +400,15 @@ class Isolated extends Component<typeof ThemeCreator> {
       realm,
       payload: payloadResult.payload,
     });
-    return result.createdCard;
+    let created = result.createdCard;
+    if (created?.id) {
+      try {
+        this.args.viewCard?.(new URL(created.id), 'isolated');
+      } catch (error) {
+        console.error('Failed to view created card', error);
+      }
+    }
+    return created;
   });
 
   patchThemeTask = task(async (card: CardDef | null | string | undefined) => {
@@ -435,7 +442,11 @@ class Isolated extends Component<typeof ThemeCreator> {
     ].join('\n');
 
     if (cardId) {
-      this.args.viewCard?.(cardId, 'isolated');
+      try {
+        this.args.viewCard?.(new URL(cardId), 'isolated');
+      } catch (error) {
+        console.error('Failed to view card', error);
+      }
     }
 
     let useAssistant = new UseAiAssistantCommand(commandContext);
