@@ -119,75 +119,97 @@ module(basename(__filename), function () {
         .get('/_types')
         .set('Accept', 'application/json');
       let iconHTML =
-        '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-captions" viewbox="0 0 24 24"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4m4 0h2M7 11h2m4 0h4"></path></svg>';
+        '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-captions" viewBox="0 0 24 24"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4m4 0h2M7 11h2m4 0h4"></path></svg>';
+      let chessIconHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-rectangle-ellipsis" viewBox="0 0 24 24"><rect width="20" height="12" x="2" y="6" rx="2"></rect><path d="M12 12h.01M17 12h.01M7 12h.01"></path></svg>';
+      let sortCardTypeSummaries = (summaries: any[]) =>
+        [...summaries].sort((a, b) => {
+          let aName = a.attributes.displayName;
+          let bName = b.attributes.displayName;
+          if (aName === bName) {
+            return a.id.localeCompare(b.id);
+          }
+          return aName.localeCompare(bName);
+        });
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      assert.deepEqual(response.body, {
-        data: [
-          {
-            type: 'card-type-summary',
-            id: 'http://127.0.0.1:4444/family_photo_card/FamilyPhotoCard',
-            attributes: {
-              displayName: 'Family Photo Card',
-              total: 2,
-              iconHTML,
-            },
+      let expectedData = [
+        {
+          type: 'card-type-summary',
+          id: `${testRealm.url}chess-gallery/ChessGallery`,
+          attributes: {
+            displayName: 'Chess Gallery',
+            total: 3,
+            iconHTML: chessIconHTML,
           },
-          {
-            type: 'card-type-summary',
-            id: `${testRealm.url}friend/Friend`,
-            attributes: {
-              displayName: 'Friend',
-              total: 2,
-              iconHTML,
-            },
+        },
+        {
+          type: 'card-type-summary',
+          id: 'http://127.0.0.1:4444/family_photo_card/FamilyPhotoCard',
+          attributes: {
+            displayName: 'Family Photo Card',
+            total: 2,
+            iconHTML,
           },
-          {
-            type: 'card-type-summary',
-            id: `${testRealm.url}friend-with-used-link/FriendWithUsedLink`,
-            attributes: {
-              displayName: 'FriendWithUsedLink',
-              total: 2,
-              iconHTML,
-            },
+        },
+        {
+          type: 'card-type-summary',
+          id: `${testRealm.url}friend/Friend`,
+          attributes: {
+            displayName: 'Friend',
+            total: 2,
+            iconHTML,
           },
-          {
-            type: 'card-type-summary',
-            id: `${testRealm.url}home/Home`,
-            attributes: {
-              displayName: 'Home',
-              total: 1,
-              iconHTML,
-            },
+        },
+        {
+          type: 'card-type-summary',
+          id: `${testRealm.url}friend-with-used-link/FriendWithUsedLink`,
+          attributes: {
+            displayName: 'FriendWithUsedLink',
+            total: 2,
+            iconHTML,
           },
-          {
-            type: 'card-type-summary',
-            id: `${testRealm.url}person/Person`,
-            attributes: {
-              displayName: 'Person',
-              total: 3,
-              iconHTML,
-            },
+        },
+        {
+          type: 'card-type-summary',
+          id: `${testRealm.url}home/Home`,
+          attributes: {
+            displayName: 'Home',
+            total: 1,
+            iconHTML,
           },
-          {
-            type: 'card-type-summary',
-            id: 'http://127.0.0.1:4444/person-with-error/PersonCard',
-            attributes: {
-              displayName: 'Person',
-              total: 4,
-              iconHTML,
-            },
+        },
+        {
+          type: 'card-type-summary',
+          id: `${testRealm.url}person/Person`,
+          attributes: {
+            displayName: 'Person',
+            total: 3,
+            iconHTML,
           },
-          {
-            type: 'card-type-summary',
-            id: `${testRealm.url}timers-card/TimersCard`,
-            attributes: {
-              displayName: 'TimersCard',
-              total: 1,
-              iconHTML,
-            },
+        },
+        {
+          type: 'card-type-summary',
+          id: 'http://127.0.0.1:4444/person-with-error/PersonCard',
+          attributes: {
+            displayName: 'Person',
+            total: 4,
+            iconHTML,
           },
-        ],
-      });
+        },
+        {
+          type: 'card-type-summary',
+          id: `${testRealm.url}timers-card/TimersCard`,
+          attributes: {
+            displayName: 'TimersCard',
+            total: 1,
+            iconHTML,
+          },
+        },
+      ];
+      assert.deepEqual(
+        sortCardTypeSummaries(response.body.data),
+        sortCardTypeSummaries(expectedData),
+      );
     });
   });
 });
