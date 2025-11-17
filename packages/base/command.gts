@@ -115,8 +115,26 @@ export class CreateInstancesInput extends CardDef {
   @field exampleCard = linksTo(CardDef);
 }
 
+export class AskAiForCardJsonInput extends CreateInstancesInput {
+  @field prompt = contains(MarkdownField);
+  @field llmModel = contains(StringField);
+  @field skillCardIds = containsMany(StringField);
+}
+
+export class AskAiForCardJsonResult extends CardDef {
+  @field payload = contains(JsonField);
+  @field rawOutput = contains(StringField);
+}
+
 export class CreateInstanceResult extends CardDef {
   @field createdCard = linksTo(CardDef);
+}
+
+export class CreateExampleCardInput extends CardDef {
+  @field codeRef = contains(CodeRefField);
+  @field realm = contains(StringField);
+  @field payload = contains(JsonField);
+  @field localDir = contains(StringField);
 }
 
 export class GenerateListingExampleInput extends CardDef {
