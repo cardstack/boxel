@@ -11,12 +11,14 @@ import RealmField from 'https://cardstack.com/base/realm';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import NumberField from 'https://cardstack.com/base/number';
 import { Skill } from 'https://cardstack.com/base/skill';
+import LLMModelField from 'https://cardstack.com/base/llm-model';
 import { Button, RealmIcon } from '@cardstack/boxel-ui/components';
 import { copyCardURLToClipboard } from '@cardstack/boxel-ui/helpers';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 import Wand from '@cardstack/boxel-icons/wand';
 import Eye from '@cardstack/boxel-icons/eye';
 import { type Query } from '@cardstack/runtime-common';
+const DEFAULT_LLM = 'anthropic/claude-3.5-sonnet';
 import {
   BRAND_GUIDE_TEMPLATE,
   STRUCTURED_THEME_TEMPLATE,
@@ -383,12 +385,18 @@ class Isolated extends Component<typeof ThemeCreator> {
       // ignore logging issues
     }
 
+    let llmModel =
+      typeof this.args.model.llmModel === 'string' &&
+      this.args.model.llmModel.trim().length
+        ? this.args.model.llmModel.trim()
+        : DEFAULT_LLM;
+
     let createCommand = new GenerateThemeExampleCommand(commandContext);
     let result = await createCommand.execute({
       codeRef,
       realm,
       prompt: combinedPrompt || undefined,
-      llmModel: 'anthropic/claude-3-haiku',
+      llmModel,
       skillCardIds,
     });
     let created = result.createdCard;
@@ -511,6 +519,14 @@ class Isolated extends Component<typeof ThemeCreator> {
               How many different generations to produce in one run.
             </p>
             <@fields.numberOfVariants @format='edit' />
+          </div>
+
+          <div class='theme-creator__meta-field'>
+            <label class='theme-creator__label'>LLM model</label>
+            <p class='theme-creator__description'>
+              Choose the model used for theme generation.
+            </p>
+            <@fields.llmModel @format='edit' />
           </div>
         </aside>
       </div>
@@ -837,6 +853,7 @@ export class ThemeCreator extends CardDef {
   @field codeRef = contains(ThemeCodeRefField);
   @field skillCards = linksToMany(Skill);
   @field numberOfVariants = contains(NumberField);
+  @field llmModel = contains(LLMModelField);
 
   static isolated = Isolated;
 }
