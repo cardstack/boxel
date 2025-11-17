@@ -1,5 +1,6 @@
 import Component from '@glimmer/component';
 import type { PrivateDependencyViolation } from '@cardstack/host/services/realm';
+import pluralize from 'pluralize';
 
 interface Signature {
   Element: HTMLLIElement;
@@ -22,7 +23,8 @@ export default class PrivateDependencyViolationComponent extends Component<Signa
       <span class='resource'>{{@violation.resource}}</span>
       {{#if this.hasPrivateRealmDependencies}}
         <div class='realm-list'>
-          Private workspaces:
+          Private
+          {{pluralize 'workspace' @privateRealmURLs.length}}:
           {{#each @privateRealmURLs as |realmURL|}}
             <span class='realm' data-test-private-dependency-realm={{realmURL}}>
               {{realmURL}}
