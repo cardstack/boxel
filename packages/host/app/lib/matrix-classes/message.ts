@@ -49,7 +49,7 @@ interface RoomMessageOptional {
   hasContinuation?: boolean;
   continuationOf?: string | null;
   agentId?: string;
-  isPatchSummary?: boolean;
+  isCodePatchCorrectness?: boolean;
 }
 
 export class Message implements RoomMessageInterface {
@@ -73,7 +73,7 @@ export class Message implements RoomMessageInterface {
   errorMessage?: string;
   clientGeneratedId?: string;
   isDebugMessage?: boolean;
-  isPatchSummary?: boolean;
+  isCodePatchCorrectness?: boolean;
 
   author: RoomMember;
   status: EventStatus | null;
@@ -103,7 +103,7 @@ export class Message implements RoomMessageInterface {
     this._commands = new TrackedArray<MessageCommand>();
     this.codePatchResults = new TrackedArray<MessageCodePatchResult>();
     this.instanceId = guidFor(this);
-    this.isPatchSummary = false;
+    this.isCodePatchCorrectness = false;
   }
 
   get isRetryable() {

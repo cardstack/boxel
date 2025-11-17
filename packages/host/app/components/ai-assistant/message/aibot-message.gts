@@ -49,7 +49,7 @@ interface Signature {
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
     isLastAssistantMessage: boolean;
-    isPatchSummary?: boolean;
+    isCodePatchCorrectness?: boolean;
     commands?: MessageCommand[];
     userMessageThisMessageIsRespondingTo?: MatrixMessage;
     reasoning?: {
@@ -82,7 +82,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
 
   <template>
     <Message class='ai-bot-message'>
-      {{#if @isPatchSummary}}
+      {{#if @isCodePatchCorrectness}}
         {{yield}}
       {{else}}
         {{#if @reasoning}}

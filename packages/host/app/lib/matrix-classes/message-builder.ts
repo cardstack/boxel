@@ -27,7 +27,7 @@ import {
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
-  APP_BOXEL_PATCH_SUMMARY_MSGTYPE,
+  APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type { RoomSkill } from '@cardstack/host/resources/room';
@@ -160,11 +160,11 @@ export default class MessageBuilder {
     let { event } = this;
     let message = this.coreMessageArgs;
     message.errorMessage = this.errorMessage;
-    message.isPatchSummary =
-      event.content.msgtype === APP_BOXEL_PATCH_SUMMARY_MSGTYPE;
+    message.isCodePatchCorrectness =
+      event.content.msgtype === APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE;
     if (
       event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE ||
-      event.content.msgtype === APP_BOXEL_PATCH_SUMMARY_MSGTYPE
+      event.content.msgtype === APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE
     ) {
       message.clientGeneratedId = this.clientGeneratedId;
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
@@ -419,7 +419,7 @@ export function isCardMessageEvent(
   }
   return (
     matrixEvent.content?.msgtype === APP_BOXEL_MESSAGE_MSGTYPE ||
-    matrixEvent.content?.msgtype === APP_BOXEL_PATCH_SUMMARY_MSGTYPE
+    matrixEvent.content?.msgtype === APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE
   );
 }
 

@@ -64,7 +64,7 @@ interface Signature {
     retryAction?: () => void;
     waitAction?: () => void;
     hideMeta?: boolean;
-    isPatchSummary?: boolean;
+    isCodePatchCorrectness?: boolean;
     commands?: MessageCommand[];
   };
   Blocks: { default: [] };
@@ -239,7 +239,7 @@ export default class AiAssistantMessage extends Component<Signature> {
       <div class='content' data-test-ai-message-content>
         {{#if @isFromAssistant}}
           {{#if this.hasBotMessage}}
-            <div class={{if @isPatchSummary 'patch-summary-wrapper' undefined}}>
+            <div class={{if @isCodePatchCorrectness 'code-patch-correctness-wrapper' undefined}}>
               <AiBotMessage
                 @monacoSDK={{@monacoSDK}}
                 @htmlParts={{@messageHTMLParts}}
@@ -257,10 +257,10 @@ export default class AiAssistantMessage extends Component<Signature> {
                     updateExpanded=this.updateReasoningExpanded
                   )
                 }}
-                @isPatchSummary={{@isPatchSummary}}
+                @isCodePatchCorrectness={{@isCodePatchCorrectness}}
                 @commands={{@commands}}
               >
-                {{#if @isPatchSummary}}
+                {{#if @isCodePatchCorrectness}}
                   {{yield}}
                 {{/if}}
               </AiBotMessage>
@@ -284,7 +284,7 @@ export default class AiAssistantMessage extends Component<Signature> {
           </UserMessage>
         {{/if}}
 
-        {{#unless (and @isFromAssistant @isPatchSummary)}}
+        {{#unless (and @isFromAssistant @isCodePatchCorrectness)}}
           {{yield}}
         {{/unless}}
 
@@ -384,7 +384,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         font-size: var(--boxel-font-size-xs);
         font-weight: bold;
       }
-      .patch-summary-wrapper {
+      .code-patch-correctness-wrapper {
         width: 100%;
       }
     </style>

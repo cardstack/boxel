@@ -1,5 +1,5 @@
 import { logger } from '@cardstack/runtime-common';
-import { APP_BOXEL_PATCH_SUMMARY_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+import { APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 import { isCommandOrCodePatchResult } from '@cardstack/runtime-common/ai';
 
 import * as Sentry from '@sentry/node';
@@ -28,7 +28,7 @@ export class Responder {
     // If it's a message, we should respond unless it's a card fragment
     if (event.getType() === 'm.room.message') {
       let content = event.getContent?.();
-      if (content?.msgtype === APP_BOXEL_PATCH_SUMMARY_MSGTYPE) {
+      if (content?.msgtype === APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE) {
         return false;
       }
       return true;

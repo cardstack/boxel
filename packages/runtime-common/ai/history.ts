@@ -19,7 +19,7 @@ import {
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_PATCH_SUMMARY_MSGTYPE,
+  APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '../matrix-constants';
 
@@ -89,7 +89,7 @@ export async function constructHistory(
     if (
       event.type === 'm.room.message' &&
       (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE ||
-        event.content.msgtype === APP_BOXEL_PATCH_SUMMARY_MSGTYPE)
+        event.content.msgtype === APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE)
     ) {
       // Content types here must be CardMessageContent
       // as we have already filtered for APP_BOXEL_MESSAGE_MSGTYPE
@@ -174,7 +174,7 @@ function parseContentData(event: IRoomEvent) {
 async function downloadAttachments(event: IRoomEvent, client: MatrixClient) {
   if (
     event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE ||
-    event.content.msgtype === APP_BOXEL_PATCH_SUMMARY_MSGTYPE
+    event.content.msgtype === APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE
   ) {
     let { attachedCards } = event.content.data ?? {};
     if (attachedCards && attachedCards.length > 0) {

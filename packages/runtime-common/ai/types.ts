@@ -25,7 +25,7 @@ export interface PromptParts {
   reasoningEffort?: ReasoningEffort;
   shouldRespond: boolean;
   history: DiscreteMatrixEvent[];
-  pendingPatchSummary?: PendingPatchSummary;
+  pendingCodePatchCorrectness?: PendingCodePatchCorrectnessCheck;
 }
 
 export interface OpenAIPromptMessage {
@@ -41,21 +41,21 @@ export interface RelevantCards {
   attachedCards: LooseCardResource[];
 }
 
-export interface PatchSummaryFile {
+export interface CodePatchCorrectnessFile {
   sourceUrl: string;
   displayName: string;
 }
 
-export interface PatchSummaryCard {
+export interface CodePatchCorrectnessCard {
   cardId: string;
 }
 
-export interface PendingPatchSummary {
+export interface PendingCodePatchCorrectnessCheck {
   targetEventId: string;
   roomId: string;
   context?: BoxelContext;
-  files: PatchSummaryFile[];
-  cards: PatchSummaryCard[];
+  files: CodePatchCorrectnessFile[];
+  cards: CodePatchCorrectnessCard[];
 }
 
 export class HistoryConstructionError extends Error {

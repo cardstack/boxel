@@ -13,7 +13,7 @@ import {
   MINIMUM_AI_CREDITS_TO_CONTINUE,
 } from '@cardstack/runtime-common';
 import type { PromptParts } from '@cardstack/runtime-common/ai';
-import type { PendingPatchSummary } from '@cardstack/runtime-common/ai/types';
+import type { PendingCodePatchCorrectnessCheck } from '@cardstack/runtime-common/ai/types';
 import {
   isRecognisedDebugCommand,
   getPromptParts,
@@ -25,8 +25,8 @@ import {
 } from '@cardstack/runtime-common/ai';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
-  APP_BOXEL_PATCH_SUMMARY_MSGTYPE,
-  APP_BOXEL_PATCH_SUMMARY_REL_TYPE,
+  APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
+  APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import {
   encodeCommandRequests,
@@ -64,6 +64,8 @@ import { profEnabled, profTime, profNote } from './lib/profiler';
 
 let log = logger('ai-bot');
 const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
+const AI_PATCHING_CORRECTNESS_FEATURE_ENABLED =
+  process.env.ENABLE_AI_PATCHING_CORRECTNESS_CHECKS === 'true';
 
 let trackAiUsageCostPromises = new Map<string, Promise<void>>();
 let activeGenerations = new Map<
@@ -258,7 +260,8 @@ Common issues are:
 
         if (
           event.getType() === 'm.room.message' &&
-          event.getContent()?.msgtype === APP_BOXEL_PATCH_SUMMARY_MSGTYPE
+          event.getContent()?.msgtype ===
+            APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE
         ) {
           return;
         }
@@ -368,11 +371,21 @@ Common issues are:
               'history:constructPromptParts',
               async () => getPromptParts(eventList, aiBotUserId, client),
             );
-            if (promptParts.pendingPatchSummary) {
-              return await publishPatchSummary(
-                promptParts.pendingPatchSummary,
+            if (
+              AI_PATCHING_CORRECTNESS_FEATURE_ENABLED &&
+              promptParts.pendingCodePatchCorrectness
+            ) {
+              return await publishCodePatchCorrectnessMessage(
+                promptParts.pendingCodePatchCorrectness,
                 client,
               );
+            }
+
+            if (
+              !AI_PATCHING_CORRECTNESS_FEATURE_ENABLED &&
+              promptParts.pendingCodePatchCorrectness
+            ) {
+              ensureLegacyPatchSummaryPrompt(promptParts);
             }
             if (!promptParts.shouldRespond) {
               return;
@@ -620,22 +633,22 @@ Common issues are:
   process.exit(1);
 });
 
-async function publishPatchSummary(
-  summary: PendingPatchSummary,
+async function publishCodePatchCorrectnessMessage(
+  summary: PendingCodePatchCorrectnessCheck,
   client: MatrixClient,
 ) {
-  let body = buildPatchSummaryBody(summary);
+  let body = buildCodePatchCorrectnessBody(summary);
   if (!body) {
     return;
   }
   let commandRequests = buildCheckCorrectnessCommandRequests(summary);
   let content: Record<string, unknown> = {
     body,
-    msgtype: APP_BOXEL_PATCH_SUMMARY_MSGTYPE,
+    msgtype: APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
     format: 'org.matrix.custom.html',
     isStreamingFinished: true,
     'm.relates_to': {
-      rel_type: APP_BOXEL_PATCH_SUMMARY_REL_TYPE,
+      rel_type: APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
       event_id: summary.targetEventId,
     },
   };
@@ -649,7 +662,9 @@ async function publishPatchSummary(
   await client.sendEvent(summary.roomId, 'm.room.message', content);
 }
 
-function buildPatchSummaryBody(summary: PendingPatchSummary) {
+function buildCodePatchCorrectnessBody(
+  summary: PendingCodePatchCorrectnessCheck,
+) {
   let sections: string[] = [];
   if (summary.files.length) {
     sections.push(
@@ -671,7 +686,7 @@ function buildPatchSummaryBody(summary: PendingPatchSummary) {
 }
 
 function buildCheckCorrectnessCommandRequests(
-  summary: PendingPatchSummary,
+  summary: PendingCodePatchCorrectnessCheck,
 ): Partial<CommandRequest>[] {
   let requests: Partial<CommandRequest>[] = [];
   for (let file of summary.files) {
@@ -704,4 +719,27 @@ function buildCheckCorrectnessCommandRequests(
     });
   }
   return requests;
+}
+
+function ensureLegacyPatchSummaryPrompt(promptParts: PromptParts) {
+  let summary = promptParts.pendingCodePatchCorrectness;
+  if (!summary) {
+    return;
+  }
+
+  let body = buildCodePatchCorrectnessBody(summary);
+  if (!body) {
+    return;
+  }
+
+  let instruction = `Briefly summarize the recent code changes for the user:
+
+${body}`;
+
+  promptParts.messages = promptParts.messages ?? [];
+  promptParts.messages.push({
+    role: 'user',
+    content: instruction,
+  });
+  promptParts.shouldRespond = true;
 }

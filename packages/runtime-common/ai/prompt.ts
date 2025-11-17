@@ -2,9 +2,9 @@ import type { MatrixClient, MatrixEvent } from 'matrix-js-sdk';
 import type {
   ChatCompletionMessageToolCall,
   OpenAIPromptMessage,
-  PendingPatchSummary,
-  PatchSummaryCard,
-  PatchSummaryFile,
+  PendingCodePatchCorrectnessCheck,
+  CodePatchCorrectnessCard,
+  CodePatchCorrectnessFile,
   PromptParts,
 } from './types';
 import { constructHistory } from './history';
@@ -37,8 +37,8 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_PATCH_SUMMARY_MSGTYPE,
-  APP_BOXEL_PATCH_SUMMARY_REL_TYPE,
+  APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
+  APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   DEFAULT_LLM,
@@ -59,6 +59,21 @@ import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants';
 import { humanReadable } from '../code-ref';
 import { SEARCH_MARKER, REPLACE_MARKER, SEPARATOR_MARKER } from '../constants';
 
+let aiPatchingCorrectnessFlag: string | boolean | undefined;
+if (typeof globalThis !== 'undefined') {
+  let maybeProcess = (globalThis as any).process;
+  if (maybeProcess?.env) {
+    aiPatchingCorrectnessFlag =
+      maybeProcess.env.ENABLE_AI_PATCHING_CORRECTNESS_CHECKS;
+  }
+  if (aiPatchingCorrectnessFlag === undefined) {
+    aiPatchingCorrectnessFlag = (globalThis as any)?.ENV?.
+      ENABLE_AI_PATCHING_CORRECTNESS_CHECKS;
+  }
+}
+const AI_PATCHING_CORRECTNESS_CHECKS_ENABLED =
+  aiPatchingCorrectnessFlag === 'true' || aiPatchingCorrectnessFlag === true;
+
 function getLog() {
   return logger('ai-bot:prompt');
 }
@@ -73,7 +88,10 @@ export async function getPromptParts(
     client,
   );
   let shouldRespond = getShouldRespond(history);
-  let pendingPatchSummary = collectPendingPatchSummary(history, aiBotUserId);
+  let pendingCodePatchCorrectness = collectPendingCodePatchCorrectnessCheck(
+    history,
+    aiBotUserId,
+  );
   if (!shouldRespond) {
     return {
       shouldRespond: false,
@@ -84,7 +102,7 @@ export async function getPromptParts(
       toolChoice: undefined,
       toolsSupported: undefined,
       reasoningEffort: undefined,
-      pendingPatchSummary,
+      pendingCodePatchCorrectness,
     };
   }
   let skills = await getEnabledSkills(eventList, client);
@@ -110,7 +128,7 @@ export async function getPromptParts(
     toolChoice: toolChoice,
     toolsSupported,
     reasoningEffort,
-    pendingPatchSummary,
+    pendingCodePatchCorrectness,
   };
 }
 
@@ -809,7 +827,44 @@ async function toResultMessages(
       ),
     )
   ).filter((message): message is OpenAIPromptMessage => Boolean(message));
-  return [...commandResultMessages];
+  let codePatchResultMessages: OpenAIPromptMessage[] = [];
+  if (!AI_PATCHING_CORRECTNESS_CHECKS_ENABLED) {
+    let codePatchBlocks = extractCodePatchBlocks(messageContent.body || '');
+    if (codePatchBlocks.length) {
+      let codePatchResultsContent = (
+        await Promise.all(
+          codePatchBlocks.map(async (_codePatchBlock, codeBlockIndex) => {
+            let codePatchResultEvent = codePatchResults.find(
+              (codePatchResultEvent) =>
+                codePatchResultEvent.content.codeBlockIndex === codeBlockIndex,
+            );
+            let content = `(The user has not applied code patch ${codeBlockIndex + 1}.)`;
+            if (codePatchResultEvent) {
+              let status = codePatchResultEvent.content['m.relates_to']?.key;
+              if (status === 'applied') {
+                content = `(The user has successfully applied code patch ${codeBlockIndex + 1}.)`;
+              } else if (status === 'failed') {
+                content = `(The user tried to apply code patch ${codeBlockIndex + 1} but there was an error: ${codePatchResultEvent.content.failureReason})`;
+              }
+              let attachments = await buildAttachmentsMessagePart(
+                client,
+                codePatchResultEvent,
+                history,
+              );
+              content = [content, attachments].filter(Boolean).join('\n\n');
+            }
+            return content;
+          }),
+        )
+      ).join('\n');
+      codePatchResultMessages.push({
+        role: 'user',
+        content: codePatchResultsContent,
+      });
+    }
+  }
+
+  return [...commandResultMessages, ...codePatchResultMessages];
 }
 
 function buildCheckCorrectnessResultContent(
@@ -1020,7 +1075,10 @@ export async function buildPromptForModel(
       }
     }
   }
-  if (shouldPromptCheckCorrectnessSummary(history, aiBotUserId)) {
+  if (
+    !AI_PATCHING_CORRECTNESS_CHECKS_ENABLED &&
+    shouldPromptCheckCorrectnessSummary(history, aiBotUserId)
+  ) {
     historicalMessages.push({
       role: 'user',
       content:
@@ -1076,10 +1134,10 @@ export async function buildPromptForModel(
 const CARD_PATCH_COMMAND_NAMES = new Set(['patchCardInstance', 'patchFields']);
 const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
 
-function collectPendingPatchSummary(
+function collectPendingCodePatchCorrectnessCheck(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-): PendingPatchSummary | undefined {
+): PendingCodePatchCorrectnessCheck | undefined {
   for (let index = history.length - 1; index >= 0; index--) {
     let event = history[index];
     if (
@@ -1089,18 +1147,21 @@ function collectPendingPatchSummary(
     ) {
       continue;
     }
-    let summary = buildSummaryForMessage(event as CardMessageEvent, history);
-    if (summary) {
-      return summary;
+    let correctnessCheck = buildCodePatchCorrectnessMessage(
+      event as CardMessageEvent,
+      history,
+    );
+    if (correctnessCheck) {
+      return correctnessCheck;
     }
   }
   return undefined;
 }
 
-function buildSummaryForMessage(
+function buildCodePatchCorrectnessMessage(
   messageEvent: CardMessageEvent,
   history: DiscreteMatrixEvent[],
-): PendingPatchSummary | undefined {
+): PendingCodePatchCorrectnessCheck | undefined {
   let content = messageEvent.content as CardMessageContent;
   let codePatchBlocks = extractCodePatchBlocks(content.body || '');
   let commandRequests = (content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
@@ -1116,7 +1177,7 @@ function buildSummaryForMessage(
 
   if (
     history.some((event) =>
-      isPatchSummaryEventForMessage(event, messageEvent.event_id!),
+      isCodePatchCorrectnessEventForMessage(event, messageEvent.event_id!),
     )
   ) {
     return undefined;
@@ -1169,9 +1230,9 @@ function isCardPatchCommand(name?: string) {
 
 function gatherPatchedFiles(
   codePatchResults: CodePatchResultEvent[],
-): PatchSummaryFile[] {
+): CodePatchCorrectnessFile[] {
   let seen = new Set<string>();
-  let files: PatchSummaryFile[] = [];
+  let files: CodePatchCorrectnessFile[] = [];
   for (let result of codePatchResults) {
     let status = result.content['m.relates_to']?.key;
     if (status !== 'applied') {
@@ -1209,8 +1270,8 @@ function gatherPatchedFiles(
 function gatherPatchedCards(
   commandRequests: Partial<CommandRequest>[],
   commandResults: CommandResultEvent[],
-): PatchSummaryCard[] {
-  let cards: PatchSummaryCard[] = [];
+): CodePatchCorrectnessCard[] {
+  let cards: CodePatchCorrectnessCard[] = [];
   let seen = new Set<string>();
   for (let request of commandRequests) {
     let result = commandResults.find(
@@ -1254,13 +1315,13 @@ function extractCardIdFromCommandRequest(
   return undefined;
 }
 
-function isPatchSummaryEventForMessage(
+function isCodePatchCorrectnessEventForMessage(
   event: DiscreteMatrixEvent,
   targetEventId: string,
 ) {
   if (
     event.type !== 'm.room.message' ||
-    event.content?.msgtype !== APP_BOXEL_PATCH_SUMMARY_MSGTYPE
+    event.content?.msgtype !== APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE
   ) {
     return false;
   }
@@ -1269,7 +1330,7 @@ function isPatchSummaryEventForMessage(
     return false;
   }
   return (
-    relatesTo.rel_type === APP_BOXEL_PATCH_SUMMARY_REL_TYPE &&
+    relatesTo.rel_type === APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE &&
     relatesTo.event_id === targetEventId
   );
 }

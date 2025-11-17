@@ -24,6 +24,7 @@ import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 import CheckCorrectnessCommand from '@cardstack/host/commands/check-correctness';
+import config from '@cardstack/host/config/environment';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
@@ -44,6 +45,9 @@ import type { IEvent } from 'matrix-js-sdk';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
 const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
+const AI_PATCHING_CORRECTNESS_FEATURE_ENABLED = Boolean(
+  config.featureFlags?.AI_PATCHING_CORRECTNESS_CHECKS,
+);
 
 type GenericCommand = Command<
   typeof CardDef | undefined,
@@ -226,6 +230,7 @@ export default class CommandService extends Service {
         // or if requiresApproval is false
         let shouldAutoExecute = false;
         let isCheckCorrectnessCommand =
+          AI_PATCHING_CORRECTNESS_FEATURE_ENABLED &&
           messageCommand.name === CHECK_CORRECTNESS_COMMAND_NAME;
 
         if (
@@ -376,6 +381,7 @@ export default class CommandService extends Service {
 
       if (
         !commandToRun &&
+        AI_PATCHING_CORRECTNESS_FEATURE_ENABLED &&
         command.name === CHECK_CORRECTNESS_COMMAND_NAME
       ) {
         commandToRun = new CheckCorrectnessCommand(this.commandContext);
@@ -463,7 +469,10 @@ export default class CommandService extends Service {
     let commandCodeRef = command.codeRef;
     let commandInstance: GenericCommand | undefined;
 
-    if (command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
+    if (
+      AI_PATCHING_CORRECTNESS_FEATURE_ENABLED &&
+      command.name === CHECK_CORRECTNESS_COMMAND_NAME
+    ) {
       commandInstance = new CheckCorrectnessCommand(this.commandContext);
     } else if (!commandCodeRef) {
       error = `No command for the name "${command.name}" was found`;
