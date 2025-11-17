@@ -534,13 +534,6 @@ export function normalizeQueryForSignature(query: Query): Query {
   return cloned;
 }
 
-export function querySignature(query: Query | undefined): string | undefined {
-  if (!query) {
-    return undefined;
-  }
-  return JSON.stringify(sortKeysDeep(query));
-}
-
 export function sortKeysDeep<T>(value: T): T {
   if (Array.isArray(value)) {
     return value.map((item) => sortKeysDeep(item)) as unknown as T;

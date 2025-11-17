@@ -11,7 +11,6 @@ import {
   getField,
   normalizeQueryForSignature,
   parseQuery,
-  querySignature,
   THIS_INTERPOLATION_PREFIX,
   THIS_REALM_TOKEN,
 } from '@cardstack/runtime-common';
@@ -248,7 +247,7 @@ export function seedQueryFieldState(
     let relationshipClone = cloneRelationship(relationship);
     let realmFromSearch = realmHrefFromSearchURL(searchURL);
     let normalizedQuery: Query | undefined;
-    let signature: string | undefined;
+    let signature: string | undefined = searchURL;
 
     let queryString: string | undefined;
     try {
@@ -267,7 +266,6 @@ export function seedQueryFieldState(
         let parsed = parseQuery(queryString);
         assertQuery(parsed);
         normalizedQuery = normalizeQueryForSignature(parsed as Query);
-        signature = querySignature(normalizedQuery);
       } catch {
         normalizedQuery = undefined;
         signature = undefined;
@@ -282,7 +280,6 @@ export function seedQueryFieldState(
       realm: realmFromSearch ?? null,
       stale: false,
     });
-    console.log('[seed signature]', fieldName, signature);
   }
 }
 
