@@ -120,12 +120,10 @@ class Isolated extends Component<typeof ThemeCreator> {
 
   get structuredThemeGuidance(): string {
     return [
-      'Structured Theme guidance: return JSON whose `cssVariables` field contains CSS defining both a light `:root` block and a `.dark` block so palettes work in light and dark contexts.',
-      `Populate tokens such as ${STRUCTURED_THEME_VARIABLE_SUMMARY} with OKLCH or Hex values, and keep typography, spacing, radius, chart, sidebar, and shadow tokens cohesive.`,
-      'Also include `rootVariables` and `darkModeVariables` objects mirroring those values so downstream tooling can diff individual tokens without parsing raw CSS.',
-      'Append an `@theme inline` section that maps your structured variables to Boxel theme tokens so host apps can consume them consistently.',
-      `Reference Boxel slots like ${BOXEL_THEME_VARIABLE_SUMMARY} and preserve AA-level contrast across states.`,
-      'Add remote fonts to `cssImports` and always use `var(--token, fallback)` when referencing custom properties inside the CSS payload.',
+      // 'Structured Theme guidance: produce JSON matching the template, with `cssVariables` that include :root, .dark, and an `@theme inline` mapping back to Boxel tokens.',
+      // 'Keep palette, typography, spacing, radius, chart, sidebar, and shadow tokens cohesive across light/dark with OKLCH or Hex values that meet AA contrast.',
+      // 'Mirror those values in `rootVariables` and `darkModeVariables` so tooling can diff tokens without parsing CSS.',
+      // 'Use `var(--token, fallback)` when referencing custom properties and add remote fonts via `cssImports` as needed.',
       'Sample serialized JSON:',
       STRUCTURED_THEME_TEMPLATE,
     ].join('\n');
@@ -133,22 +131,28 @@ class Isolated extends Component<typeof ThemeCreator> {
 
   get styleReferenceGuidance(): string {
     return [
-      'Style Reference guidance: populate `styleName`, `visualDNA`, and `cardInfo.description` with short narratives, provide 4‑6 concise `inspirations`, and include at least two high-quality `wallpaperImages` URLs that reinforce the palette.',
-      'Tie inspirations to materials, typography, or emotions so the assistant understands the desired mood.',
-      'Return both `rootVariables`/`darkModeVariables` objects (token → value maps) and a `cssVariables` string that includes `:root`, `.dark`, and any `@theme inline` mappings so downstream tooling can diff tokens while still having raw CSS.',
+      // 'Style Reference guidance: keep `styleName`, `visualDNA`, and `cardInfo.description` concise, and align inspirations/wallpaper images to the intended vibe.',
+      // 'Maintain cohesive light/dark palettes, typography, spacing, radius, and shadows with OKLCH or Hex values that satisfy AA contrast.',
+      // 'Emit `cssVariables` with :root, .dark, and `@theme inline` mappings that match the variable maps; prefer `var(--token, fallback)` and include remote fonts in `cssImports`.',
       'Sample serialized JSON:',
       STYLE_REFERENCE_TEMPLATE,
-    ].join('\n\n');
+      '',
+      'Structured Theme details:',
+      this.structuredThemeGuidance,
+    ].join('\n');
   }
 
   get brandGuideGuidance(): string {
     return [
-      'Brand Guide guidance: capture the brand’s primary/secondary marks, clearance ratios, and social icons inside `markUsage`, describe the tone via `styleName`, `visualDNA`, and `brandColorPalette`, and provide wall imagery that reflects the system.',
-      'Fill `typography` with heading/body stacks, `brandColorPalette` with named swatches, and `functionalPalette` with semantic colors (dark/light/primary/accent/border).',
-      'Provide `rootVariables` and `darkModeVariables` objects along with a `cssVariables` string so editors can tweak individual tokens while previewing the compiled CSS.',
+      // 'Brand Guide guidance: convey brand essence through `styleName`, `visualDNA`, and `cardInfo.description`, with inspirations and wall imagery that reinforce the system.',
+      // 'Populate marks, typography, palette, and semantic colors per the template using cohesive OKLCH or Hex values that preserve AA contrast across light/dark.',
+      // 'Emit `cssVariables` covering :root, .dark, and `@theme inline` mappings that mirror the variable maps; use `var(--token, fallback)` and capture fonts inside `cssImports`.',
       'Sample serialized JSON:',
       BRAND_GUIDE_TEMPLATE,
-    ].join('\n\n');
+      '',
+      'Style Reference details:',
+      this.styleReferenceGuidance,
+    ].join('\n');
   }
 
   promptGuidanceFor(codeRef: { module?: string | URL | null } | null): string {
@@ -163,6 +167,21 @@ class Isolated extends Component<typeof ThemeCreator> {
     }
     console.error('No prompt guidance');
     return;
+  }
+
+  themeTypeIntent(
+    codeRef: { module?: string | URL | null } | null,
+  ): string | null {
+    if (this.moduleMatches(codeRef, 'brand-guide')) {
+      return 'Generate a theme. This is a brand guide theme.';
+    }
+    if (this.moduleMatches(codeRef, 'style-reference')) {
+      return 'Generate a theme. This is a style reference theme.';
+    }
+    if (this.moduleMatches(codeRef, 'structured-theme')) {
+      return 'Generate a theme. This is a structured theme.';
+    }
+    return null;
   }
 
   @tracked generationRuns: Array<{
@@ -303,12 +322,16 @@ class Isolated extends Component<typeof ThemeCreator> {
         ? this.args.model.prompt.trim()
         : null;
     let promptSections: string[] = [];
+    let intent = this.themeTypeIntent(codeRef);
+    if (intent) {
+      promptSections.push(`Intent:\n${intent}`);
+    }
     if (userPrompt?.length) {
-      promptSections.push(userPrompt);
+      promptSections.push(`User request:\n${userPrompt}`);
     }
     let guidancePrompt = this.promptGuidanceFor(codeRef).trim();
     if (guidancePrompt.length) {
-      promptSections.push(guidancePrompt);
+      promptSections.push(`Guidance:\n${guidancePrompt}`);
     }
     let combinedPrompt = promptSections.join('\n\n');
 
