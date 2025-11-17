@@ -31,6 +31,8 @@ import type {
   Format,
   CardStore,
   BoxComponent,
+  StoreLiveQuery,
+  StoreLiveQueryOptions,
 } from 'https://cardstack.com/base/card-api';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -54,6 +56,7 @@ export class CardStoreWithErrors implements CardStore {
   #inFlight: Promise<unknown>[] = [];
   #docsInFlight: Map<string, Promise<SingleCardDocument | CardError>> =
     new Map();
+  #liveQuery = new NullLiveQuery();
 
   constructor(fetch: typeof globalThis.fetch) {
     this.#fetch = fetch;
@@ -94,6 +97,20 @@ export class CardStoreWithErrors implements CardStore {
   async loaded() {
     await Promise.allSettled(this.#inFlight);
   }
+  createLiveQuery<T extends CardDef = CardDef>(
+    _options?: StoreLiveQueryOptions<T>,
+  ): StoreLiveQuery<T> {
+    return this.#liveQuery as StoreLiveQuery<T>;
+  }
+  ensureFieldLiveQuery<T extends CardDef = CardDef>(
+    _instance: CardDef,
+    _fieldName: string,
+    _options?: StoreLiveQueryOptions<T>,
+  ): StoreLiveQuery<T> {
+    return this.#liveQuery as StoreLiveQuery<T>;
+  }
+  destroyLiveQueries(): void {}
+  markLiveQueriesStaleForRealm(): void {}
 }
 
 export interface RenderCardParams {
@@ -262,6 +279,21 @@ export default class RenderService extends Service {
         }
       }
     }
+  }
+}
+
+class NullLiveQuery implements StoreLiveQuery<CardDef> {
+  readonly records: CardDef[] = [];
+  readonly record: CardDef | null = null;
+  readonly status = 'idle' as const;
+  readonly error: unknown = undefined;
+  readonly searchURL: string | undefined = undefined;
+  readonly realmHref: string | undefined = undefined;
+  async refresh(): Promise<void> {
+    /* no-op */
+  }
+  destroy(): void {
+    /* no-op */
   }
 }
 

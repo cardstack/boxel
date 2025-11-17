@@ -1,27 +1,29 @@
-import type { BaseDef, CardDef, Field } from './card-api';
+import type { BaseDef, CardDef, CardStore, Field } from './card-api';
 import type {
   LooseCardResource,
   Query,
   QueryWithInterpolations,
   Relationship,
+  ResourceID,
 } from '@cardstack/runtime-common';
 import {
   assertQuery,
   cloneRelationship,
   getField,
+  identifyCard,
   normalizeQueryForSignature,
   parseQuery,
   THIS_INTERPOLATION_PREFIX,
   THIS_REALM_TOKEN,
+  realmURL as realmURLSymbol,
+  localId as localIdSymbol,
 } from '@cardstack/runtime-common';
+import { buildQuerySearchURL, normalizeQueryDefinition } from '@cardstack/runtime-common';
+import type { FieldDefinition } from '@cardstack/runtime-common/index-structure';
+import type { StoreLiveQuery, StoreLiveQueryOptions } from './card-api';
+import { serializeCard } from './card-serialization';
 import { initSharedState } from './shared-state';
 import { getFields } from './field-support';
-
-export interface QueryFieldAccessPayload {
-  instance: CardDef;
-  fieldName: string;
-  field: Field;
-}
 
 interface QueryFieldState {
   signature?: string;
@@ -32,33 +34,6 @@ interface QueryFieldState {
   stale?: boolean;
 }
 
-export interface QueryFieldCoordinator {
-  handleQueryFieldAccess(payload: QueryFieldAccessPayload): void;
-}
-
-let queryFieldCoordinator: QueryFieldCoordinator | undefined;
-
-export function registerQueryFieldCoordinator(
-  coordinator: QueryFieldCoordinator | undefined,
-) {
-  queryFieldCoordinator = coordinator;
-}
-
-export function notifyQueryFieldAccess(instance: CardDef, field: Field) {
-  if (!field.queryDefinition || !queryFieldCoordinator) {
-    return;
-  }
-  if (isQueryFieldEvaluationInProgress(instance, field.name)) {
-    return;
-  }
-  queryFieldCoordinator.handleQueryFieldAccess({
-    instance,
-    fieldName: field.name,
-    field,
-  });
-}
-
-const queryFieldEvaluationGuards = new WeakMap<BaseDef, Map<string, number>>();
 const queryFieldStates = initSharedState(
   'queryFieldStates',
   () => new WeakMap<BaseDef, Map<string, QueryFieldState>>(),
@@ -95,35 +70,43 @@ export function getQueryFieldState(
   return queryFieldStates.get(instance)?.get(fieldName);
 }
 
-function getQueryFieldStateKeys(instance: BaseDef): string[] {
-  return Array.from(queryFieldStates.get(instance)?.keys() ?? []);
+export function ensureQueryFieldLiveQuery(
+  store: CardStore,
+  instance: CardDef,
+  field: Field,
+  seedRecords?: CardDef[],
+): StoreLiveQuery<CardDef> | undefined {
+  if (!field.queryDefinition) {
+    return undefined;
+  }
+  let fieldDefinition = buildFieldDefinition(field);
+  if (!fieldDefinition) {
+    return undefined;
+  }
+  let cachedState = getQueryFieldState(instance, field.name);
+  let liveQuery: StoreLiveQuery<CardDef>;
+  let options: StoreLiveQueryOptions<CardDef> = {
+    getSearchURL: () => resolveSearchURL(instance, field, fieldDefinition),
+    seedRecords,
+    seedRealmHref: cachedState?.realm ?? undefined,
+    seedSearchURL: cachedState?.searchURL ?? undefined,
+    onRefreshEnd: () => {
+      if (liveQuery) {
+        syncQueryFieldState(instance, field, liveQuery);
+      }
+    },
+  };
+  liveQuery = store.ensureFieldLiveQuery<CardDef>(
+    instance,
+    field.name,
+    options,
+  );
+  syncQueryFieldState(instance, field, liveQuery);
+  return liveQuery;
 }
 
-export function beginQueryFieldEvaluation(
-  instance: BaseDef,
-  fieldName: string,
-): () => void {
-  let guards = queryFieldEvaluationGuards.get(instance);
-  if (!guards) {
-    guards = new Map();
-    queryFieldEvaluationGuards.set(instance, guards);
-  }
-  let current = guards.get(fieldName) ?? 0;
-  guards.set(fieldName, current + 1);
-  return () => {
-    let existing = guards?.get(fieldName);
-    if (existing === undefined) {
-      return;
-    }
-    if (existing <= 1) {
-      guards?.delete(fieldName);
-      if (guards && guards.size === 0) {
-        queryFieldEvaluationGuards.delete(instance);
-      }
-    } else {
-      guards?.set(fieldName, existing - 1);
-    }
-  };
+function getQueryFieldStateKeys(instance: BaseDef): string[] {
+  return Array.from(queryFieldStates.get(instance)?.keys() ?? []);
 }
 
 export function markQueryFieldStaleInternal(
@@ -141,13 +124,6 @@ export function markQueryFieldStaleInternal(
   });
   notifyCardTracking(instance);
   return true;
-}
-
-export function isQueryFieldEvaluationInProgress(
-  instance: BaseDef,
-  fieldName: string,
-): boolean {
-  return (queryFieldEvaluationGuards.get(instance)?.get(fieldName) ?? 0) > 0;
 }
 
 export function validateRelationshipQuery(
@@ -372,6 +348,127 @@ function realmHrefFromSearchURL(searchURL?: string | null): string | undefined {
     }
   } catch {
     return undefined;
+  }
+  return undefined;
+}
+
+function resolveSearchURL(
+  instance: CardDef,
+  field: Field,
+  fieldDefinition: FieldDefinition,
+): { realmHref: string; searchURL: string } | undefined {
+  try {
+    let serialized = serializeCard(instance, {
+      includeComputeds: true,
+      includeUnrenderedFields: true,
+      useAbsoluteURL: true,
+    });
+    let resource = serialized.data as LooseCardResource;
+    let realmURL = instance[realmURLSymbol]
+      ? new URL(instance[realmURLSymbol].href)
+      : resource.meta?.realmURL
+      ? new URL(resource.meta.realmURL)
+      : instance.id
+      ? new URL(instance.id)
+      : undefined;
+    if (!realmURL) {
+      return undefined;
+    }
+    let normalized = normalizeQueryDefinition({
+      fieldDefinition,
+      queryDefinition: field.queryDefinition!,
+      resource,
+      realmURL,
+      fieldName: field.name,
+    });
+    if (!normalized) {
+      return undefined;
+    }
+    return {
+      realmHref: normalized.realm,
+      searchURL: buildQuerySearchURL(normalized.realm, normalized.query),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function buildFieldDefinition(field: Field): FieldDefinition | undefined {
+  let ref = identifyCard(field.card);
+  if (!ref) {
+    return undefined;
+  }
+  return {
+    type: field.fieldType,
+    isPrimitive: false,
+    isComputed: !!field.computeVia,
+    fieldOrCard: ref,
+  };
+}
+
+function syncQueryFieldState(
+  instance: CardDef,
+  field: Field,
+  liveQuery: StoreLiveQuery<CardDef>,
+): void {
+  if (!liveQuery) {
+    return;
+  }
+  if (!liveQuery.searchURL && liveQuery.records.length === 0) {
+    setQueryFieldState(instance, field.name, undefined);
+    return;
+  }
+  let relationship = buildRelationshipFromRecords(
+    field,
+    liveQuery.records,
+    liveQuery.searchURL ?? undefined,
+  );
+  setQueryFieldState(instance, field.name, {
+    searchURL: liveQuery.searchURL ?? null,
+    signature: liveQuery.searchURL ?? undefined,
+    relationship,
+    realm: liveQuery.realmHref ?? null,
+    stale: false,
+  });
+}
+
+function buildRelationshipFromRecords(
+  field: Field,
+  records: CardDef[],
+  searchURL?: string,
+): Relationship {
+  let links: Record<string, string | null> = {};
+  if (searchURL) {
+    links.search = searchURL;
+  }
+  if (field.fieldType === 'linksTo') {
+    let first = records[0];
+    links.self = first?.id ?? null;
+    let data = first ? recordToResource(first) ?? null : null;
+    return {
+      links,
+      data,
+    };
+  }
+  if (!('self' in links)) {
+    links.self = null;
+  }
+  let data = records
+    .map((record) => recordToResource(record))
+    .filter((entry): entry is ResourceID => !!entry);
+  return {
+    links,
+    data,
+  };
+}
+
+function recordToResource(card: CardDef): ResourceID | undefined {
+  if (card.id) {
+    return { type: 'card', id: card.id };
+  }
+  let lid = card[localIdSymbol];
+  if (lid) {
+    return { type: 'card', lid };
   }
   return undefined;
 }
