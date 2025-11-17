@@ -128,6 +128,7 @@ class Isolated extends Component<typeof StructuredTheme> {
             @kind='primary'
             @size='small'
             {{on 'click' this.toggleCssTextarea}}
+            data-test-import-css-button
           >
             Import CSS
           </BoxelButton>
@@ -192,7 +193,7 @@ class Isolated extends Component<typeof StructuredTheme> {
                   class='copy-css-variables-button'
                   @textToCopy={{@model.cssVariables}}
                 />
-                <div class='generated-css'>
+                <div class='generated-css' data-test-css-vars>
                   <@fields.cssVariables />
                 </div>
               </div>
