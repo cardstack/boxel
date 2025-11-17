@@ -52,6 +52,7 @@ import * as UpdatePlaygroundSelectionCommandModule from './update-playground-sel
 import * as UpdateRoomSkillsCommandModule from './update-room-skills';
 import * as CommandUtilsModule from './utils';
 import * as WriteTextFileCommandModule from './write-text-file';
+import * as GenerateThemeExampleCommandModule from './generate-theme-example';
 
 import type HostBaseCommand from '../lib/host-base-command';
 
@@ -87,6 +88,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/create-specs',
     CreateSpecCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/generate-theme-example',
+    GenerateThemeExampleCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-events-from-room',
