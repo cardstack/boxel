@@ -9,7 +9,11 @@ import {
   getMonacoContent,
   waitUntil,
   createSubscribedUserAndLogin,
+  getMatrixTestContext,
+  testHost,
 } from '../helpers';
+import { join } from 'path';
+import { readFile, writeFile } from 'fs/promises';
 
 test.describe('Live Cards', () => {
   const serverIndexUrl = new URL(appURL).origin;
@@ -158,6 +162,50 @@ test.describe('Live Cards', () => {
     await postCardSource(page, realmURL, 'hello.gts', '// hi');
 
     await expect(page.locator('[data-test-file="hello.gts"]')).toHaveCount(1);
+  });
+
+  test('serves updated source after direct filesystem change', async ({
+    page,
+  }) => {
+    let { realmPath } = getMatrixTestContext();
+    if (!realmPath) {
+      throw new Error('realmPath missing from MATRIX_TEST_CONTEXT');
+    }
+    let filePath = join(realmPath, 'mango.json');
+
+    let originalText = await readFile(filePath, 'utf8');
+    let parsed = JSON.parse(originalText);
+    let newFirstName = `Mango-${Date.now()}`;
+    parsed.data.attributes.firstName = newFirstName;
+
+    let headers = { accept: 'application/vnd.card+source' };
+
+    // Warm the source cache with the current file contents
+    let initial = await page.request.get(`${testHost}/mango.json`, { headers });
+    expect(initial.ok()).toBe(true);
+    let initialBody = await initial.json();
+    expect(initialBody.data.attributes.firstName).not.toBe(newFirstName);
+
+    await writeFile(filePath, JSON.stringify(parsed, null, 2));
+
+    try {
+      await expect
+        .poll(
+          async () => {
+            let response = await page.request.get(`${testHost}/mango.json`, {
+              headers,
+            });
+            expect(response.ok()).toBe(true);
+            let body = await response.json();
+            return body.data.attributes.firstName;
+          },
+          { timeout: 10_000 },
+        )
+        .toBe(newFirstName);
+    } finally {
+      // restore original content so other tests see the initial state
+      await writeFile(filePath, originalText);
+    }
   });
 
   test('updating a card in code mode edit updates its source', async ({
