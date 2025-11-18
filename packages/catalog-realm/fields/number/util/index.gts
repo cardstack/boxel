@@ -7,8 +7,6 @@ import BadgeNotificationField from '../badge-notification';
 import BadgeMetricField from '../badge-metric';
 import BadgeCounterField from '../badge-counter';
 import ScoreField from '../score';
-import ProgressBarField from '../progress-bar';
-import ProgressCircleField from '../progress-circle';
 import GaugeField from '../gauge';
 
 import {
@@ -23,8 +21,6 @@ import {
   BadgeMetricConfig,
   BadgeCounterConfig,
   ScoreConfig,
-  ProgressBarConfig,
-  ProgressCircleConfig,
   GaugeConfig,
 } from './types';
 
@@ -115,8 +111,6 @@ export type FieldConfigMap = {
   'badge-metric': BadgeMetricConfig;
   'badge-counter': BadgeCounterConfig;
   score: ScoreConfig;
-  'progress-bar': ProgressBarConfig;
-  'progress-circle': ProgressCircleConfig;
   gauge: GaugeConfig;
 };
 
@@ -131,8 +125,6 @@ const FIELD_TYPE_MAP: Record<keyof FieldConfigMap, any> = {
   'badge-metric': BadgeMetricField,
   'badge-counter': BadgeCounterField,
   score: ScoreField,
-  'progress-bar': ProgressBarField,
-  'progress-circle': ProgressCircleField,
   gauge: GaugeField,
 };
 

@@ -2,8 +2,8 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "ProgressCircleNumberPreview",
-        "module": "../number/progress-circle-number"
+        "name": "PercentageNumberPreview",
+        "module": "../fields-preview/number/percentage-number"
       }
     },
     "type": "card",
@@ -14,12 +14,15 @@
         "description": null,
         "thumbnailURL": null
       },
-      "progressCircleNumber": 100
+      "solidBar": 100,
+      "gradientBar": 50,
+      "solidCircle": 50,
+      "gradientCircle": 100
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": null
+          "self": "../Theme/b5b23e66-3b36-44a2-9625-8b50e170115d"
         }
       }
     }

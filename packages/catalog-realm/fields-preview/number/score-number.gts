@@ -13,23 +13,26 @@ import { getField } from '@cardstack/runtime-common';
 
 export class ScoreNumberPreview extends CardDef {
   /**
-   * Score Field - Score display with customizable range and formatting
-   * 
+   * Score Field - Visual score with segmented bar and tier labels
+   *
+   * Displays scores with context, tiers, and percentile rankings.
+   * Perfect for credit scores, game ratings, test results, and achievements.
+   *
    * Accepted configuration options:
    * - type: 'score' - REQUIRED to use score rendering
    * - min: number - REQUIRED minimum value
    * - max: number - REQUIRED maximum value
+   * - label?: string - Custom label (default: 'Score')
    * - decimals?: number - Number of decimal places
-   * - prefix?: string - Text before the number
-   * - suffix?: string - Text after the number
    */
   @field scoreNumber = contains(NumberField, {
     configuration: {
       presentation: {
         type: 'score',
         decimals: 0,
-        min: 0,
-        max: 1000,
+        min: 300,
+        max: 850,
+        label: 'Credit Score',
       },
     },
   });

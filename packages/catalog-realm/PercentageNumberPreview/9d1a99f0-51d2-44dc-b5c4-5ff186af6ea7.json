@@ -3,7 +3,7 @@
     "meta": {
       "adoptsFrom": {
         "name": "PercentageNumberPreview",
-        "module": "../number/percentage-number"
+        "module": "../fields-preview/number/percentage-number"
       }
     },
     "type": "card",
@@ -14,7 +14,10 @@
         "description": null,
         "thumbnailURL": null
       },
-      "percentageNumber": 100
+      "solidBar": null,
+      "gradientBar": 80,
+      "solidCircle": null,
+      "gradientCircle": 20
     },
     "relationships": {
       "cardInfo.theme": {

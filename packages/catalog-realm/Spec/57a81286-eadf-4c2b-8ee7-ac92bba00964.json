@@ -13,7 +13,7 @@
         "module": "../fields/number/quantity"
       },
       "title": "Quantity Field",
-      "readMe": null,
+      "readMe": "A field for displaying quantities, inventory levels, or stock counts with visual progress indication.\n\n**Features:**\n- Gradient progress bar showing quantity relative to max\n- Dynamic color coding based on stock levels\n- Unit display support (e.g., \"50 units\")\n- Configurable min/max range\n- Decimal precision control\n\n**Color Thresholds:**\n- 0-25%: Red (Low stock)\n- 25-50%: Orange (Medium-low)\n- 50-75%: Yellow (Medium)\n- 75-100%: Green (Well stocked)\n\n**Embedded View:**\n- Compact card with quantity, unit, and progress bar\n- Color-coded visual feedback\n\n**Atom View:**\n- Minimal display with value and unit\n- Small progress indicator",
       "cardInfo": {
         "notes": null,
         "title": null,

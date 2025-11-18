@@ -22,15 +22,13 @@ export class BasicNumberPreview extends CardDef {
    * specify a type and use one of the specialized number field configurations:
    * - type: 'slider' - See SliderNumberPreview
    * - type: 'rating' - See RatingNumberPreview
-   * - type: 'percentage' - See PercentageNumberPreview
+   * - type: 'percentage' - See PercentageNumberPreview (supports visualStyle: 'bar' or 'circle')
    * - type: 'stat' - See StatNumberPreview
    * - type: 'gauge' - See GaugeNumberPreview
    * - type: 'badge-notification' - See BadgeNotificationNumberPreview
    * - type: 'badge-metric' - See BadgeMetricNumberPreview
    * - type: 'badge-counter' - See BadgeCounterNumberPreview
    * - type: 'score' - See ScoreNumberPreview
-   * - type: 'progress-bar' - See ProgressBarNumberPreview
-   * - type: 'progress-circle' - See ProgressCircleNumberPreview
    * - type: 'quantity' - See QuantityNumberPreview
    */
   @field basicNumber = contains(NumberField);

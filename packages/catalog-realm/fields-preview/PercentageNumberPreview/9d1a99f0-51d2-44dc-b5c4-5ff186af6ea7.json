@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "gradientBar": null,
+      "solidBar": null,
+      "solidCircle": null,
+      "customSizeBar": null,
+      "customSizeCircle": null,
+      "gradientCircle": null,
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../number/percentage-number",
+        "name": "PercentageNumberPreview"
+      }
+    }
+  }
+}

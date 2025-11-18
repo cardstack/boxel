@@ -14,7 +14,7 @@
         "description": null,
         "thumbnailURL": null
       },
-      "gaugeNumber": 0
+      "gaugeNumber": 300
     },
     "relationships": {
       "cardInfo.theme": {

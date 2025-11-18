@@ -13,23 +13,82 @@ import { getField } from '@cardstack/runtime-common';
 
 export class PercentageNumberPreview extends CardDef {
   /**
-   * Percentage Field - Percentage with visual bar representation
+   * Percentage Field - Consolidated progress display with multiple visual styles
    *
-   * Accepted configuration options:
-   * - type: 'percentage' - REQUIRED to use percentage rendering
+   * Consolidates old progress-bar and progress-circle into one field type.
+   *
+   * Configuration options:
+   * - type: 'percentage' - REQUIRED
    * - min: number - REQUIRED minimum value
    * - max: number - REQUIRED maximum value
+   * - visualStyle?: 'bar' | 'circle' - Visual presentation (default: 'bar')
+   * - barStyle?: 'gradient' | 'solid' - Bar appearance (when visualStyle: 'bar')
+   * - label?: string - Custom label text
+   * - showRange?: boolean - Show min-max range
+   * - valueFormat?: 'percentage' | 'fraction' - Display as "75%" or "75 / 100"
    * - decimals?: number - Number of decimal places
-   * - prefix?: string - Text before the number
-   * - suffix?: string - Text after the number
+   *
+   * Size control via CSS custom properties in scoped styles:
+   * - --progress-bar-height: Control bar height (e.g., '1.5rem', '12px')
+   * - --progress-circle-size: Circle diameter (e.g., '160px', '80px')
+   * - --progress-circle-stroke-width: Circle stroke (e.g., 4, 8, 12)
+   * - --progress-circle-value-size: Internal text size
+   * - --progress-circle-max-size: Max label text size
    */
-  @field percentageNumber = contains(NumberField, {
+
+  @field solidBar = contains(NumberField, {
     configuration: {
       presentation: {
         type: 'percentage',
         min: 0,
-        max: 200,
-        decimals: 2,
+        max: 100,
+        visualStyle: 'bar',
+        barStyle: 'solid',
+        label: 'Upload',
+        valueFormat: 'fraction',
+        showRange: true,
+      },
+    },
+  });
+
+  @field gradientBar = contains(NumberField, {
+    configuration: {
+      presentation: {
+        type: 'percentage',
+        min: 0,
+        max: 100,
+        visualStyle: 'bar',
+        barStyle: 'gradient',
+        label: 'Completion',
+        showRange: false,
+      },
+    },
+  });
+
+  @field solidCircle = contains(NumberField, {
+    configuration: {
+      presentation: {
+        type: 'percentage',
+        min: 0,
+        max: 100,
+        visualStyle: 'circle',
+        barStyle: 'solid',
+        label: 'Progress',
+        valueFormat: 'percentage',
+      },
+    },
+  });
+
+  @field gradientCircle = contains(NumberField, {
+    configuration: {
+      presentation: {
+        type: 'percentage',
+        min: 0,
+        max: 100,
+        visualStyle: 'circle',
+        barStyle: 'gradient',
+        label: 'Progress',
+        valueFormat: 'fraction',
       },
     },
   });
@@ -39,21 +98,72 @@ export class PercentageNumberPreview extends CardDef {
     <template>
       <section class='fields'>
         <FieldContainer
-          @label='Percentage Number Field'
-          @icon={{this.getFieldIcon 'percentageNumber'}}
+          @label='Percentage - Progress Bar (visualStyle: bar, barStyle: solid)'
+          @icon={{this.getFieldIcon 'solidBar'}}
         >
           <div class='field-formats'>
             <FieldContainer @vertical={{true}} @label='Edit'>
-              <@fields.percentageNumber @format='edit' />
+              <@fields.solidBar @format='edit' />
             </FieldContainer>
             <FieldContainer @vertical={{true}} @label='Atom'>
-              <@fields.percentageNumber @format='atom' />
+              <@fields.solidBar @format='atom' />
             </FieldContainer>
             <FieldContainer @vertical={{true}} @label='Embedded'>
-              <@fields.percentageNumber @format='embedded' />
+              <@fields.solidBar @format='embedded' />
             </FieldContainer>
           </div>
         </FieldContainer>
+
+        <FieldContainer
+          @label='Percentage - Progress Bar (visualStyle: bar, barStyle: gradient)'
+          @icon={{this.getFieldIcon 'gradientBar'}}
+        >
+          <div class='field-formats'>
+            <FieldContainer @vertical={{true}} @label='Edit'>
+              <@fields.gradientBar @format='edit' />
+            </FieldContainer>
+            <FieldContainer @vertical={{true}} @label='Atom'>
+              <@fields.gradientBar @format='atom' />
+            </FieldContainer>
+            <FieldContainer @vertical={{true}} @label='Embedded'>
+              <@fields.gradientBar @format='embedded' />
+            </FieldContainer>
+          </div>
+        </FieldContainer>
+        <FieldContainer
+          @label='Percentage - Progress Circle (visualStyle: circle, barStyle: gradient)'
+          @icon={{this.getFieldIcon 'circle'}}
+        >
+          <div class='field-formats'>
+            <FieldContainer @vertical={{true}} @label='Edit'>
+              <@fields.solidCircle @format='edit' />
+            </FieldContainer>
+            <FieldContainer @vertical={{true}} @label='Atom'>
+              <@fields.solidCircle @format='atom' />
+            </FieldContainer>
+            <FieldContainer @vertical={{true}} @label='Embedded'>
+              <@fields.solidCircle @format='embedded' />
+            </FieldContainer>
+          </div>
+        </FieldContainer>
+
+        <FieldContainer
+          @label='Gradient Circle (visualStyle: circle, barStyle: gradient)'
+          @icon={{this.getFieldIcon 'gradientCircle'}}
+        >
+          <div class='field-formats'>
+            <FieldContainer @vertical={{true}} @label='Edit'>
+              <@fields.gradientCircle @format='edit' />
+            </FieldContainer>
+            <FieldContainer @vertical={{true}} @label='Atom'>
+              <@fields.gradientCircle @format='atom' />
+            </FieldContainer>
+            <FieldContainer @vertical={{true}} @label='Embedded'>
+              <@fields.gradientCircle @format='embedded' />
+            </FieldContainer>
+          </div>
+        </FieldContainer>
+
       </section>
       <style scoped>
         .fields {

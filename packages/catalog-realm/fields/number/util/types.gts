@@ -48,6 +48,19 @@ export interface QuantityConfig
   max: number; // Required
 }
 
+/**
+ * Consolidated Percentage Config - supports bar and circle visual styles
+ * Consolidates functionality from old progress-bar and progress-circle types
+ *
+ * Components support @showValue arg (default: true) - set to false to show only shape without internal text
+ *
+ * Size control: Use CSS custom properties in scoped styles
+ * - --progress-bar-height: Control bar height (e.g., '1rem', '12px')
+ * - --progress-circle-size: Control circle diameter (e.g., '160px', '80px')
+ * - --progress-circle-stroke-width: Control circle stroke (e.g., 4, 8, 12)
+ * - --progress-circle-value-size: Control internal text size
+ * - --progress-circle-max-size: Control max label text size
+ */
 export interface PercentageConfig
   extends NumberDisplayConfig,
     NumericFormattingConfig,
@@ -55,6 +68,11 @@ export interface PercentageConfig
   type: 'percentage'; // Required
   min: number; // Required
   max: number; // Required
+  visualStyle?: 'bar' | 'circle'; // Visual presentation style (default: 'bar')
+  barStyle?: 'gradient' | 'solid'; // Bar appearance (for visualStyle: 'bar')
+  label?: string; // Custom label text
+  showRange?: boolean; // Show min-max range display
+  valueFormat?: 'percentage' | 'fraction'; // "75%" vs "75 / 100"
 }
 
 export interface StatConfig
@@ -76,23 +94,7 @@ export interface ScoreConfig
   type: 'score'; // Required
   min: number; // Required
   max: number; // Required
-}
-
-export interface ProgressBarConfig
-  extends NumberDisplayConfig,
-    NumericRangeConfig {
-  type: 'progress-bar'; // Required
-  min: number; // Required
-  max: number; // Required
-  label?: string;
-}
-
-export interface ProgressCircleConfig
-  extends NumberDisplayConfig,
-    NumericRangeConfig {
-  type: 'progress-circle'; // Required
-  min: number; // Required
-  max: number; // Required
+  label?: string; // Custom label (default: 'Score')
 }
 
 export interface GaugeConfig

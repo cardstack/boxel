@@ -2,7 +2,7 @@
 import { Component } from 'https://cardstack.com/base/card-api';
 import { on } from '@ember/modifier';
 import { lte, gte } from '@cardstack/boxel-ui/helpers';
-import GradientProgressBar from './components/gradient-progress-bar';
+import ProgressBarComponent from './components/progress-bar';
 
 import NumberField, {
   deserializeForUI,
@@ -221,11 +221,10 @@ export default class QuantityField extends NumberField {
           <span>Min {{this.config.min}}</span>
           <span>Max {{this.config.max}}</span>
         </div>
-        <GradientProgressBar
+        <ProgressBarComponent
           @value={{this.numericValue}}
           @max={{this.config.max}}
-          @height='0.4rem'
-          @useGradient={{true}}
+          @style='gradient'
         />
       </div>
 
