@@ -49,8 +49,8 @@ const contrastColor = (value?: string, fallback?: string) => {
   if (value && isHexColor(value) && getContrastColor) {
     return getContrastColor(
       value,
-      'var(--boxel-dark, #0f172a)',
-      'var(--boxel-light, #fdfdfc)',
+      'var(--brand-dark, #000000)',
+      'var(--brand-light, #ffffff)',
       { isSmallText: true },
     );
   }
@@ -65,15 +65,15 @@ const mixColor = (color?: string, mixWith?: string, percent = 0) => {
 };
 
 const lightenColor = (color?: string, percent = 10) =>
-  mixColor(color, 'white', percent);
+  mixColor(color, '#ffffff', percent);
 
 const darkenColor = (color?: string, percent = 10) =>
-  mixColor(color, 'black', percent);
+  mixColor(color, '#000000', percent);
 
 const DEFAULT_SPACING = '0.25rem';
-const DEFAULT_RADIUS = '0.5rem';
-const DEFAULT_DESTRUCTIVE = '#dc2626';
-const DEFAULT_DESTRUCTIVE_FOREGROUND = '#ffffff';
+const DEFAULT_RADIUS = '0.625rem';
+const DEFAULT_DESTRUCTIVE = '#ff5050';
+const DEFAULT_DESTRUCTIVE_FOREGROUND = '#f4f4f4';
 
 const cssRuleMapFromRecord = (record?: CssVariableField) => {
   if (!entriesToCssRuleMap || !record) {
@@ -515,7 +515,7 @@ export default class BrandGuide extends StyleReference {
     setValue('muted', muted);
     setValue('mutedForeground', contrastColor(muted, foreground));
     setValue('border', border);
-    setValue('input', border);
+    setValue('input', background);
     setValue('ring', ring);
     setValue('destructive', DEFAULT_DESTRUCTIVE);
     setValue('destructiveForeground', DEFAULT_DESTRUCTIVE_FOREGROUND);

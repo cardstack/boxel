@@ -249,6 +249,9 @@
   --boxel-layer-modal-default: 1500;
   --boxel-layer-modal-urgent: 2000;
 
+  /* theming defaults */
+  --spacing: 0.25rem;
+
   /* Form control appearance */
   --boxel-form-control-height: 2.5rem; /* 40px */
   --boxel-form-control-placeholder-color: var(--boxel-400);
