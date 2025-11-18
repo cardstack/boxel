@@ -434,6 +434,33 @@ export default class BrandGuide extends StyleReference {
     return brandRules;
   }
 
+  private mergeRuleMaps(
+    base?: Map<string, string>,
+    overrides?: Map<string, string>,
+  ): Map<string, string> | undefined {
+    if (!base?.size && !overrides?.size) {
+      return;
+    }
+    let merged = new Map<string, string>();
+    if (base?.size) {
+      for (let [name, value] of base.entries()) {
+        if (!name || !value) {
+          continue;
+        }
+        merged.set(name, value);
+      }
+    }
+    if (overrides?.size) {
+      for (let [name, value] of overrides.entries()) {
+        if (!name || !value) {
+          continue;
+        }
+        merged.set(name, value);
+      }
+    }
+    return merged.size ? merged : undefined;
+  }
+
   private generateThemeVariables(
     mode: 'light' | 'dark' = 'light',
   ): CssVariableField | undefined {
@@ -547,14 +574,21 @@ export default class BrandGuide extends StyleReference {
       if (!generateCssVariables || !buildCssGroups) {
         return;
       }
+      let generatedRootValues = this.generateThemeVariables('light');
+      let generatedDarkValues = this.generateThemeVariables('dark');
+
+      let rootGeneratedRules = cssRuleMapFromRecord(generatedRootValues);
+      let darkGeneratedRules = cssRuleMapFromRecord(generatedDarkValues);
+
       let rootRuleMap = this.rootVariables?.cssRuleMap;
       let darkRuleMap = this.darkModeVariables?.cssRuleMap;
-      let rootRules = rootRuleMap?.size
-        ? rootRuleMap
-        : this.generatedRootCssRuleMap;
-      let darkRules = darkRuleMap?.size
-        ? darkRuleMap
-        : this.generatedDarkCssRuleMap;
+
+      let rootRules =
+        this.mergeRuleMaps(rootGeneratedRules, rootRuleMap) ??
+        this.generatedRootCssRuleMap;
+      let darkRules =
+        this.mergeRuleMaps(darkGeneratedRules, darkRuleMap) ??
+        this.generatedDarkCssRuleMap;
       let brandRules = this.calculateBrandRules();
       let sections: string[] = [];
 
