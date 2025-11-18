@@ -25,7 +25,7 @@ export interface PromptParts {
   reasoningEffort?: ReasoningEffort;
   shouldRespond: boolean;
   history: DiscreteMatrixEvent[];
-  pendingCodePatchCorrectness?: PendingCodePatchCorrectnessCheck;
+  pendingCodePatchCorrectnessChecks?: PendingCodePatchCorrectnessCheck;
 }
 
 export interface OpenAIPromptMessage {

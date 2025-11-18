@@ -6,7 +6,11 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   DEFAULT_LLM,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -3960,6 +3964,375 @@ Attached Files (files with newer versions don't show their content):
       `.trim(),
       ),
       'Code patch result should include attached files',
+    );
+  });
+
+  test('getPromptParts surfaces pending code patch correctness summary after patches', async function () {
+    const roomId = 'room-checks';
+    const aiMessageId = 'ai-message';
+    const cardId = 'http://localhost/cards/Profile/1';
+    const patchedFileSource =
+      'http://localhost/files/src/components/button.gts';
+
+    const eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: 'user-message',
+        origin_server_ts: 1,
+        room_id: roomId,
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Please update the profile card and button styles.',
+          format: 'org.matrix.custom.html',
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/test',
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'user-message',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: aiMessageId,
+        origin_server_ts: 2,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: `Updating the file...
+${patchedFileSource}
+╔═══ SEARCH ════╗
+old content
+╠═══════════════╣
+new content
+╚═══ REPLACE ═══╝
+`,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/test',
+              tools: [],
+              functions: [],
+            },
+          },
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: 'patch-card',
+              name: 'patchCardInstance',
+              arguments: JSON.stringify({
+                description: 'Update the profile card',
+                attributes: {
+                  cardId,
+                  patch: { attributes: { name: 'Updated Name' } },
+                },
+              }),
+            },
+          ],
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: aiMessageId,
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+        event_id: 'patch-result',
+        origin_server_ts: 3,
+        room_id: roomId,
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+          },
+          codeBlockIndex: 0,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: patchedFileSource,
+                url: patchedFileSource,
+                name: 'button.gts',
+                contentType: 'text/plain',
+              },
+            ],
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'patch-result',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        event_id: 'command-result',
+        origin_server_ts: 4,
+        room_id: roomId,
+        sender: '@admin:localhost',
+        content: {
+          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          },
+          commandRequestId: 'patch-card',
+          data: {
+            card: {
+              url: 'mxc://mock-server/profile-card',
+              sourceUrl: 'http://mock/card',
+              name: 'ProfileCard',
+              contentType: 'application/vnd.card+json',
+              content: JSON.stringify({ data: { id: cardId } }),
+            },
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'command-result',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const { pendingCodePatchCorrectnessChecks } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.ok(
+      pendingCodePatchCorrectnessChecks,
+      'Should collect pending code patch correctness info',
+    );
+    assert.strictEqual(
+      pendingCodePatchCorrectnessChecks?.targetEventId,
+      aiMessageId,
+      'Summary should target the AI message with patches',
+    );
+    assert.strictEqual(
+      pendingCodePatchCorrectnessChecks?.roomId,
+      roomId,
+      'Summary should include the room id',
+    );
+    assert.deepEqual(
+      pendingCodePatchCorrectnessChecks?.files,
+      [
+        {
+          sourceUrl: patchedFileSource,
+          displayName: 'files/src/components/button.gts',
+        },
+      ],
+      'Patched files should be surfaced',
+    );
+    assert.deepEqual(
+      pendingCodePatchCorrectnessChecks?.cards,
+      [{ cardId }],
+      'Patched cards should be surfaced',
+    );
+  });
+
+  test('getPromptParts toggles correctness summary and patch result prompts based on autoCorrectnessChecksEnabled option', async function () {
+    const roomId = '!room:localhost';
+    const aiMessageId = '$ai-msg';
+    const eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '$user-msg',
+        room_id: roomId,
+        sender: '@user:localhost',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Please fix the file and run correctness checks.',
+          format: 'org.matrix.custom.html',
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+          isStreamingFinished: true,
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: '$user-msg',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: aiMessageId,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        origin_server_ts: 2,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: `Applying patch...
+http://localhost/example.gts
+╔═══ SEARCH ════╗
+old
+╠═══════════════╣
+new
+╚═══ REPLACE ═══╝
+`,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: 'check-1',
+              name: 'checkCorrectness',
+              arguments: JSON.stringify({
+                description: 'Check file correctness',
+                attributes: {
+                  targetType: 'file',
+                  targetRef: 'http://localhost/example.gts',
+                  fileUrl: 'http://localhost/example.gts',
+                },
+              }),
+            },
+          ],
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: aiMessageId,
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+        event_id: '$patch-result',
+        room_id: roomId,
+        sender: '@user:localhost',
+        origin_server_ts: 3,
+        content: {
+          msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+          codeBlockIndex: 0,
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+          },
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+              submode: 'code',
+            },
+            attachedFiles: [],
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: '$patch-result',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        event_id: '$command-result',
+        room_id: roomId,
+        sender: '@command:localhost',
+        origin_server_ts: 4,
+        content: {
+          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: 'check-1',
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          },
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+            attachedFiles: [],
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: '$command-result',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const summaryMessage =
+      'The automated correctness checks have finished. Summarize their results for me based on the tool output above.';
+
+    const promptPartsWithAutoCorrectnessChecksDisabled = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+      { autoCorrectnessChecksEnabled: false },
+    );
+    let disabledUserMessages =
+      promptPartsWithAutoCorrectnessChecksDisabled.messages?.filter(
+        (message) => message.role === 'user',
+      ) ?? [];
+    assert.true(
+      disabledUserMessages.some(
+        (message) => message.content === summaryMessage,
+      ),
+      'When disabled the automated summary should be included',
+    );
+    assert.true(
+      disabledUserMessages.some((message) =>
+        message.content?.includes(
+          'The user has successfully applied code patch 1.',
+        ),
+      ),
+      'When disabled the code patch result message should be included',
+    );
+
+    const promptPartsWithAutoCorrectnessChecksEnabled = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+      { autoCorrectnessChecksEnabled: true },
+    );
+    let enabledUserMessages =
+      promptPartsWithAutoCorrectnessChecksEnabled.messages?.filter(
+        (message) => message.role === 'user',
+      ) ?? [];
+    assert.false(
+      enabledUserMessages.some((message) => message.content === summaryMessage),
+      'When enabled the summary should be omitted',
+    );
+    assert.false(
+      enabledUserMessages.some((message) =>
+        message.content?.includes(
+          'The user has successfully applied code patch 1.',
+        ),
+      ),
+      'When enabled the legacy code patch result message should be omitted',
     );
   });
 });

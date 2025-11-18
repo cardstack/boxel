@@ -22,8 +22,8 @@ import {
 
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 
-import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 import CheckCorrectnessCommand from '@cardstack/host/commands/check-correctness';
+import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';

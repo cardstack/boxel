@@ -2,7 +2,6 @@ import './instrument';
 import './setup-logger'; // This should be first
 import type { MatrixEvent } from 'matrix-js-sdk';
 import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
-import type { RoomMessageEventContent } from 'matrix-js-sdk/lib/@types/events';
 import { SlidingSync, type MSC3575List } from 'matrix-js-sdk/lib/sliding-sync';
 import OpenAI from 'openai';
 import {
@@ -14,7 +13,6 @@ import {
   MINIMUM_AI_CREDITS_TO_CONTINUE,
 } from '@cardstack/runtime-common';
 import type { PromptParts } from '@cardstack/runtime-common/ai';
-import type { PendingCodePatchCorrectnessCheck } from '@cardstack/runtime-common/ai/types';
 import {
   isRecognisedDebugCommand,
   getPromptParts,
@@ -24,20 +22,12 @@ import {
   sendPromptAsDebugMessage,
   constructHistory,
 } from '@cardstack/runtime-common/ai';
-import {
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
-  APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
-  APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
-} from '@cardstack/runtime-common/matrix-constants';
-import {
-  encodeCommandRequests,
-  type CommandRequest,
-} from '@cardstack/runtime-common/commands';
 import { validateAICredits } from '@cardstack/billing/ai-billing';
 import {
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
   SLIDING_SYNC_LIST_TIMELINE_LIMIT,
   SLIDING_SYNC_TIMEOUT,
+  APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { handleDebugCommands } from './lib/debug';
@@ -62,10 +52,13 @@ import { isShuttingDown, setActiveGenerations } from './lib/shutdown';
 import type { MatrixClient } from 'matrix-js-sdk';
 import { debug } from 'debug';
 import { profEnabled, profTime, profNote } from './lib/profiler';
+import {
+  ensureLegacyPatchSummaryPrompt,
+  publishCodePatchCorrectnessMessage,
+} from './lib/code-patch-correctness';
 
 let log = logger('ai-bot');
-const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
-const AI_PATCHING_CORRECTNESS_FEATURE_ENABLED =
+const AI_PATCHING_CORRECTNESS_CHECKS_ENABLED =
   process.env.ENABLE_AI_PATCHING_CORRECTNESS_CHECKS === 'true';
 
 let trackAiUsageCostPromises = new Map<string, Promise<void>>();
@@ -373,20 +366,20 @@ Common issues are:
               async () => getPromptParts(eventList, aiBotUserId, client),
             );
             if (
-              AI_PATCHING_CORRECTNESS_FEATURE_ENABLED &&
-              promptParts.pendingCodePatchCorrectness
+              AI_PATCHING_CORRECTNESS_CHECKS_ENABLED &&
+              promptParts.pendingCodePatchCorrectnessChecks
             ) {
               return await publishCodePatchCorrectnessMessage(
-                promptParts.pendingCodePatchCorrectness,
+                promptParts.pendingCodePatchCorrectnessChecks,
                 client,
               );
             }
 
             if (
-              !AI_PATCHING_CORRECTNESS_FEATURE_ENABLED &&
-              promptParts.pendingCodePatchCorrectness
+              !AI_PATCHING_CORRECTNESS_CHECKS_ENABLED &&
+              promptParts.pendingCodePatchCorrectnessChecks
             ) {
-              ensureLegacyPatchSummaryPrompt(promptParts);
+              ensureLegacyPatchSummaryPrompt(promptParts); // TODO: Remove this after the feature flag is removed
             }
             if (!promptParts.shouldRespond) {
               return;
@@ -633,84 +626,3 @@ Common issues are:
   });
   process.exit(1);
 });
-
-async function publishCodePatchCorrectnessMessage(
-  summary: PendingCodePatchCorrectnessCheck,
-  client: MatrixClient,
-) {
-  let body = '';
-  let commandRequests = buildCheckCorrectnessCommandRequests(summary);
-  let baseContent = {
-    body,
-    msgtype: APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
-    format: 'org.matrix.custom.html',
-    'm.relates_to': {
-      rel_type: APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
-      event_id: summary.targetEventId,
-    },
-  } as unknown as RoomMessageEventContent;
-
-  let content: RoomMessageEventContent & Record<string, unknown> = {
-    ...baseContent,
-    isStreamingFinished: true,
-  };
-  if (summary.context) {
-    content.data = { context: summary.context };
-  }
-  if (commandRequests.length) {
-    content[APP_BOXEL_COMMAND_REQUESTS_KEY] =
-      encodeCommandRequests(commandRequests);
-  }
-  await client.sendEvent(summary.roomId, 'm.room.message', content);
-}
-
-function buildCheckCorrectnessCommandRequests(
-  summary: PendingCodePatchCorrectnessCheck,
-): Partial<CommandRequest>[] {
-  let requests: Partial<CommandRequest>[] = [];
-  for (let file of summary.files) {
-    let sourceRef = file.sourceUrl || file.displayName;
-    requests.push({
-      id: `check-${uuidv4()}`,
-      name: CHECK_CORRECTNESS_COMMAND_NAME,
-      arguments: {
-        description: `Check correctness of ${file.displayName}`,
-        attributes: {
-          targetType: 'file',
-          targetRef: sourceRef,
-          fileUrl: sourceRef,
-        },
-      },
-    });
-  }
-  for (let card of summary.cards) {
-    requests.push({
-      id: `check-${uuidv4()}`,
-      name: CHECK_CORRECTNESS_COMMAND_NAME,
-      arguments: {
-        description: `Check correctness of ${card.cardId}`,
-        attributes: {
-          targetType: 'card',
-          targetRef: card.cardId,
-          cardId: card.cardId,
-        },
-      },
-    });
-  }
-  return requests;
-}
-
-function ensureLegacyPatchSummaryPrompt(promptParts: PromptParts) {
-  if (!promptParts.pendingCodePatchCorrectness) {
-    return;
-  }
-
-  let instruction = `Briefly summarize the recent code changes for the user. Max 1-2 sentences.`;
-
-  promptParts.messages = promptParts.messages ?? [];
-  promptParts.messages.push({
-    role: 'user',
-    content: instruction,
-  });
-  promptParts.shouldRespond = true;
-}
