@@ -87,7 +87,7 @@ export function ensureLegacyPatchSummaryPrompt(promptParts: PromptParts) {
     return;
   }
 
-  let instruction = `Briefly summarize the recent code changes for the user. Max 1-2 sentences.`;
+  let instruction = `Briefly summarize the most recent code changes or card patches for the user - list the files and cards that were patched.`;
 
   promptParts.messages = promptParts.messages ?? [];
   promptParts.messages.push({

@@ -1010,7 +1010,7 @@ function formatCorrectnessResultSummary(
   }
   let summary = sections.join('\n\n');
   if (errorLines.length) {
-    summary += `\n\Before proposing fixes, make sure to re-fetch the files that have errors so that you can see their updated content.`;
+    summary += `\nBefore proposing fixes, make sure to re-fetch the files that have errors so that you can see their updated content.`;
   }
   return summary;
 }
