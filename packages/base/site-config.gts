@@ -21,7 +21,7 @@ export class SiteConfig extends CardDef {
     }
     menuItems = [
       {
-        label: 'Set as my site config',
+        label: 'Set as site home',
         action: async () => {
           await new SetSiteConfigCommand(params.commandContext).execute({
             cardId: this.id,

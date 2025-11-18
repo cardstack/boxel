@@ -353,7 +353,7 @@ module('Acceptance | site config home page', function (hooks) {
           `[data-test-stack-card="${testRealmURL}SiteConfig/custom"]`,
         );
         await click('[data-test-more-options-button]');
-        await click('[data-test-boxel-menu-item-text="Set as my site config"]');
+        await click('[data-test-boxel-menu-item-text="Set as site home"]');
 
         let siteDoc: any;
         await waitUntil(async () => {
@@ -438,7 +438,7 @@ module('Acceptance | site config home page', function (hooks) {
           `[data-test-stack-card="${testRealmURL}SiteConfig/custom"]`,
         );
         await click('[data-test-more-options-button]');
-        await click('[data-test-boxel-menu-item-text="Set as my site config"]');
+        await click('[data-test-boxel-menu-item-text="Set as site home"]');
 
         let siteDoc: any;
         await waitUntil(async () => {
@@ -480,7 +480,7 @@ module('Acceptance | site config home page', function (hooks) {
       await waitFor(`[data-test-stack-card="${testRealmURL}site"]`);
       await click('[data-test-more-options-button]');
       assert
-        .dom('[data-test-boxel-menu-item-text="Set as my site config"]')
+        .dom('[data-test-boxel-menu-item-text="Set as site home"]')
         .doesNotExist();
     });
   });
