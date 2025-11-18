@@ -757,8 +757,8 @@ export class Realm {
       return errors;
     }
     for (let operation of operations) {
-      if (operation.op !== 'add') {
-        let detail = `You tried to use an unsupported operation type: '${operation.op}'. Only 'add' operations are currently supported`;
+      if (operation.op !== 'add' && operation.op !== 'update') {
+        let detail = `You tried to use an unsupported operation type: '${operation.op}'. Only 'add' and 'update' operations are currently supported`;
         errors.push({
           title,
           detail,
@@ -793,21 +793,33 @@ export class Realm {
   private async checkBeforeAtomicWrite(
     operations: AtomicOperation[],
   ): Promise<ErrorDetails[]> {
-    let promises = [];
-    for (let { href } of operations) {
-      let localPath = this.paths.local(new URL(href, this.paths.url));
-      promises.push(this.#adapter.exists(localPath));
-    }
-    let booleanFlags = await Promise.all(promises);
-    return operations
-      .filter((_, i) => booleanFlags[i])
-      .map(({ href }) => {
-        return {
+    let existenceChecks = await Promise.all(
+      operations.map(({ href }) => {
+        let localPath = this.paths.local(new URL(href, this.paths.url));
+        return this.#adapter.exists(localPath);
+      }),
+    );
+
+    let errors: ErrorDetails[] = [];
+
+    for (let [index, operation] of operations.entries()) {
+      let exists = existenceChecks[index];
+      if (operation.op === 'add' && exists) {
+        errors.push({
           title: 'Resource already exists',
-          detail: `Resource ${href} already exists`,
+          detail: `Resource ${operation.href} already exists`,
           status: 409,
-        };
-      });
+        });
+      } else if (operation.op === 'update' && !exists) {
+        errors.push({
+          title: 'Resource does not exist',
+          detail: `Resource ${operation.href} does not exist`,
+          status: 404,
+        });
+      }
+    }
+
+    return errors;
   }
 
   private lowestStatusCode(errors: ErrorDetails[]): number {
