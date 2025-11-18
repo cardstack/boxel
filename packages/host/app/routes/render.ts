@@ -39,6 +39,7 @@ import {
   coerceRenderError,
   normalizeRenderError,
 } from '../utils/render-error';
+import { enableRenderTimerStub } from '../utils/render-timer-stub';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
@@ -82,6 +83,7 @@ export default class RenderRoute extends Route<Model> {
   #pendingReadyModels = new Set<Model>();
   #modelPromises = new Map<string, Promise<Model>>();
   #authGuard = createAuthErrorGuard();
+  #restoreRenderTimers: (() => void) | undefined;
 
   errorHandler = (event: Event) => {
     windowErrorHandler({
@@ -124,6 +126,8 @@ export default class RenderRoute extends Route<Model> {
     this.#modelPromises.clear();
     this.#authGuard.unregister();
     this.#cardTypeTracker.clear();
+    this.#restoreRenderTimers?.();
+    this.#restoreRenderTimers = undefined;
   }
 
   beforeModel() {
@@ -132,6 +136,9 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__lazilyLoadLinks = true;
     (globalThis as any).__boxelRenderContext = true;
     this.#authGuard.register();
+    if (!isTesting()) {
+      this.#restoreRenderTimers = enableRenderTimerStub();
+    }
   }
 
   async model(
