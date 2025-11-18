@@ -177,10 +177,12 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
             <:title><span class='accordion-title'>Generated CSS Variables</span></:title>
             <:content>
               <div class='accordion-content generated-css-content'>
-                <CopyButton
-                  class='copy-css-variables-button'
-                  @textToCopy={{@model.cssVariables}}
-                />
+                {{#if @model.cssVariables.length}}
+                  <CopyButton
+                    class='copy-css-variables-button'
+                    @textToCopy={{@model.cssVariables}}
+                  />
+                {{/if}}
                 <div class='generated-css'>
                   <@fields.cssVariables />
                 </div>
@@ -335,7 +337,7 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         opacity: 1;
       }
       .generated-css {
-        height: 50cqmin;
+        max-height: 50cqmin;
         border-radius: var(--radius);
         overflow: auto;
       }

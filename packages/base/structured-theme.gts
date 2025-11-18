@@ -189,10 +189,12 @@ class Isolated extends Component<typeof StructuredTheme> {
             <:title><span class='section-title'>CSS Variables</span></:title>
             <:content>
               <div class='section-content generated-css-content'>
-                <CopyButton
-                  class='copy-css-variables-button'
-                  @textToCopy={{@model.cssVariables}}
-                />
+                {{#if @model.cssVariables.length}}
+                  <CopyButton
+                    class='copy-css-variables-button'
+                    @textToCopy={{@model.cssVariables}}
+                  />
+                {{/if}}
                 <div class='generated-css' data-test-css-vars>
                   <@fields.cssVariables />
                 </div>
@@ -285,7 +287,7 @@ class Isolated extends Component<typeof StructuredTheme> {
         opacity: 1;
       }
       .generated-css {
-        height: 50cqmin;
+        max-height: 50cqmin;
         border-radius: var(--radius);
         overflow: auto;
       }
