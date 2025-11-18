@@ -147,6 +147,13 @@ export default class RoomMessageCommand extends Component<Signature> {
     return toMenuItems(menuItems);
   }
 
+  private get commandResultCardForRendering(): CardDef {
+    if (!this.commandResultCard.card) {
+      throw new Error('Command result card is not available');
+    }
+    return this.commandResultCard.card;
+  }
+
   @cached
   private get failedCommandState() {
     let commandRequest = this.args.messageCommand
@@ -222,13 +229,13 @@ export default class RoomMessageCommand extends Component<Signature> {
           >
             <CardHeader
               @cardTypeDisplayName={{this.headerTitle}}
-              @cardTypeIcon={{cardTypeIcon this.commandResultCard.card}}
+              @cardTypeIcon={{cardTypeIcon this.commandResultCardForRendering}}
               @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
               class='command-result-card-header'
               data-test-command-result-header
             />
             <CardRenderer
-              @card={{this.commandResultCard.card}}
+              @card={{this.commandResultCardForRendering}}
               @format='embedded'
               @displayContainer={{false}}
               data-test-boxel-command-result
