@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import Service from '@ember/service';
 import {
   type TestContext,
@@ -27,13 +28,15 @@ import {
   type TokenClaims,
   type RunnerRegistration,
   type IndexRunner,
-  type IndexResults,
   type Prerenderer,
-  type FromScratchArgsWithPermissions,
-  type IncrementalArgsWithPermissions,
+  type FromScratchArgs,
+  type IncrementalArgs,
+  type FromScratchResult,
+  type IncrementalResult,
   insertPermissions,
   unixTime,
   RealmAction,
+  type RenderError,
 } from '@cardstack/runtime-common';
 import { getCreatedTime } from '@cardstack/runtime-common/file-meta';
 import {
@@ -48,11 +51,15 @@ import { Realm } from '@cardstack/runtime-common/realm';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
+import { render as renderIntoElement } from '@cardstack/host/lib/isolated-render';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
-
 import { RealmServerTokenClaims } from '@cardstack/host/services/realm-server';
-
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
+
+import {
+  coerceRenderError,
+  normalizeRenderError,
+} from '@cardstack/host/utils/render-error';
 
 import {
   type CardStore,
@@ -64,8 +71,10 @@ import { TestRealmAdapter } from './adapter';
 import { testRealmServerMatrixUsername } from './mock-matrix';
 import { getRoomIdForRealmAndUser, type MockUtils } from './mock-matrix/_utils';
 import percySnapshot from './percy-snapshot';
-import { renderComponent } from './render-component';
+
 import visitOperatorMode from './visit-operator-mode';
+
+import type { SimpleElement } from '@simple-dom/interface';
 
 export {
   visitOperatorMode,
@@ -74,6 +83,7 @@ export {
   testRealmInfo,
   percySnapshot,
 };
+export { setupOperatorModeStateCleanup } from './operator-mode-state';
 export * from '@cardstack/runtime-common/helpers';
 export * from './indexer';
 
@@ -260,7 +270,10 @@ export async function capturePrerenderResult(
     ''
   ).trim();
   if (errorText.length > 0) {
-    return { status: 'error', value: errorText };
+    return {
+      status: 'error',
+      value: normalizeCapturedErrorText(errorText),
+    };
   }
   if (!container) {
     throw new Error(
@@ -275,10 +288,62 @@ export async function capturePrerenderResult(
   if (status === 'error' || status === 'unusable') {
     return {
       status: 'error',
-      value: container.innerHTML!.replace(/}[^}]*$/, '}'),
+      value: normalizeCapturedErrorText(
+        container.innerHTML!.replace(/}[^}]*$/, '}'),
+      ),
     };
   }
   return { status: 'ready', value: container.children[0][capture]! };
+}
+
+function normalizeCapturedErrorText(errorText: string): string {
+  let normalized = formatCapturedRenderError(errorText);
+  return normalized ?? errorText;
+}
+
+function formatCapturedRenderError(errorText: string): string | undefined {
+  let renderError = coerceRenderError(errorText);
+  if (!renderError) {
+    return undefined;
+  }
+  let normalized = flattenNestedRenderError(normalizeRenderError(renderError));
+  return JSON.stringify(normalized, null, 2);
+}
+
+function flattenNestedRenderError(renderError: RenderError): RenderError {
+  let cloned = JSON.parse(JSON.stringify(renderError)) as RenderError;
+  let nested =
+    extractNestedErrorPayload(cloned.error.message) ??
+    extractNestedErrorPayload(cloned.error.title);
+  if (!nested) {
+    return cloned;
+  }
+  cloned.error = {
+    ...cloned.error,
+    ...nested,
+  };
+  return cloned;
+}
+
+function extractNestedErrorPayload(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  let trimmed = value.trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+    return undefined;
+  }
+  try {
+    let nested = JSON.parse(trimmed);
+    if (nested && typeof nested === 'object' && 'message' in nested) {
+      return nested as Record<string, unknown>;
+    }
+  } catch (_err) {
+    return undefined;
+  }
+  return undefined;
 }
 
 export function captureModuleResult(): {
@@ -308,14 +373,34 @@ export function captureModuleResult(): {
   return { status, model, raw };
 }
 
+type RenderingContextWithPrerender = TestContext & {
+  owner: Owner;
+  __cardPrerenderElement?: HTMLElement;
+};
+
 async function makeRenderer() {
-  // This emulates the application.hbs
-  await renderComponent(
-    class TestDriver extends GlimmerComponent {
+  let context = getContext() as RenderingContextWithPrerender;
+  let owner = context.owner;
+  if (!owner) {
+    throw new Error('makeRenderer: missing test owner');
+  }
+
+  let element = context.__cardPrerenderElement;
+  if (!element) {
+    element = document.createElement('div');
+    element.dataset.testCardPrerenderRoot = 'true';
+    document.body.appendChild(element);
+    context.__cardPrerenderElement = element;
+  }
+
+  renderIntoElement(
+    class CardPrerenderHost extends GlimmerComponent {
       <template>
         <CardPrerender />
       </template>
     },
+    element as unknown as SimpleElement,
+    owner,
   );
 }
 
@@ -327,20 +412,19 @@ class MockLocalIndexer extends Service {
   #indexWriter: IndexWriter | undefined;
   #prerenderer: Prerenderer | undefined;
   #fromScratch:
-    | ((args: FromScratchArgsWithPermissions) => Promise<IndexResults>)
+    | ((args: FromScratchArgs) => Promise<FromScratchResult>)
     | undefined;
   #incremental:
-    | ((args: IncrementalArgsWithPermissions) => Promise<IndexResults>)
+    | ((args: IncrementalArgs) => Promise<IncrementalResult>)
     | undefined;
   setup(
-    fromScratch: (
-      args: FromScratchArgsWithPermissions,
-    ) => Promise<IndexResults>,
-    incremental: (
-      args: IncrementalArgsWithPermissions,
-    ) => Promise<IndexResults>,
+    fromScratch: (args: FromScratchArgs) => Promise<FromScratchResult>,
+    incremental: (args: IncrementalArgs) => Promise<IncrementalResult>,
     prerenderer: Prerenderer,
   ) {
+    if (this.#prerenderer) {
+      return;
+    }
     this.#fromScratch = fromScratch;
     this.#incremental = incremental;
     this.#prerenderer = prerenderer;
@@ -405,6 +489,18 @@ export function setupLocalIndexing(hooks: NestedHooks) {
     let store = getService('store');
     await store.flushSaves();
     await store.loaded();
+    let context = this as RenderingContextWithPrerender;
+    context.__cardPrerenderElement?.remove();
+    context.__cardPrerenderElement = undefined;
+    // reference counts should balance out automatically as components are destroyed
+    store.resetCache({ preserveReferences: true });
+    let renderStore = getService('render-store');
+    renderStore.resetCache({ preserveReferences: true });
+    let loaderService = getService('loader-service');
+    loaderService.resetLoader({
+      clearFetchCache: true,
+      reason: 'test teardown',
+    });
   });
 }
 
@@ -555,11 +651,13 @@ export async function setupAcceptanceTestRealm({
   realmURL,
   permissions,
   mockMatrixUtils,
+  usePrerenderer = true,
 }: {
   contents: RealmContents;
   realmURL?: string;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
+  usePrerenderer?: boolean;
 }) {
   setupAuthEndpoints();
   return await setupTestRealm({
@@ -568,6 +666,7 @@ export async function setupAcceptanceTestRealm({
     isAcceptanceTest: true,
     permissions,
     mockMatrixUtils,
+    usePrerenderer,
   });
 }
 
@@ -576,11 +675,13 @@ export async function setupIntegrationTestRealm({
   realmURL,
   permissions,
   mockMatrixUtils,
+  usePrerenderer = true,
 }: {
   contents: RealmContents;
   realmURL?: string;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
+  usePrerenderer?: boolean;
 }) {
   setupAuthEndpoints();
   return await setupTestRealm({
@@ -589,6 +690,7 @@ export async function setupIntegrationTestRealm({
     isAcceptanceTest: false,
     permissions: permissions as RealmPermissions,
     mockMatrixUtils,
+    usePrerenderer,
   });
 }
 
@@ -608,96 +710,118 @@ async function setupTestRealm({
   isAcceptanceTest,
   permissions = { '*': ['read', 'write'] },
   mockMatrixUtils,
+  usePrerenderer,
 }: {
   contents: RealmContents;
   realmURL?: string;
   isAcceptanceTest?: boolean;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
+  usePrerenderer: boolean;
 }) {
-  let owner = (getContext() as TestContext).owner;
-  let { virtualNetwork } = getService('network');
-  let { queue } = getService('queue');
-
-  realmURL = realmURL ?? testRealmURL;
-
-  if (isAcceptanceTest) {
-    await visit('/acceptance-test-setup');
+  let hadHeadlessFlag = Object.prototype.hasOwnProperty.call(
+    globalThis,
+    '__useHeadlessChromePrerender',
+  );
+  let previousHeadlessFlag = (globalThis as any).__useHeadlessChromePrerender;
+  // default to all tests using headless chrome
+  if (usePrerenderer) {
+    (globalThis as any).__useHeadlessChromePrerender = true;
   } else {
-    // We use a rendered component to facilitate our indexing (this emulates
-    // the work that the Fastboot renderer is doing), which means that the
-    // `setupRenderingTest(hooks)` from ember-qunit must be used in your tests.
-    await makeRenderer();
+    delete (globalThis as any).__useHeadlessChromePrerender;
   }
+  try {
+    let owner = (getContext() as TestContext).owner;
+    let { virtualNetwork } = getService('network');
+    let { queue } = getService('queue');
 
-  let localIndexer = owner.lookup(
-    'service:local-indexer',
-  ) as unknown as MockLocalIndexer;
-  let realm: Realm;
+    realmURL = realmURL ?? testRealmURL;
 
-  let adapter = new TestRealmAdapter(
-    contents,
-    new URL(realmURL),
-    mockMatrixUtils,
-    owner,
-  );
-  let indexRunner: IndexRunner = async (optsId) => {
-    let { registerRunner, indexWriter } = runnerOptsMgr.getOptions(optsId);
-    await localIndexer.configureRunner(registerRunner, adapter, indexWriter);
-  };
+    if (isAcceptanceTest) {
+      await visit('/acceptance-test-setup');
+    } else {
+      // We use a rendered component to facilitate our indexing (this emulates
+      // the work that the Fastboot renderer is doing), which means that the
+      // `setupRenderingTest(hooks)` from ember-qunit must be used in your tests.
+      await makeRenderer();
+    }
 
-  let dbAdapter = await getDbAdapter();
-  await insertPermissions(dbAdapter, new URL(realmURL), permissions);
-  let worker = new Worker({
-    indexWriter: new IndexWriter(dbAdapter),
-    queue,
-    dbAdapter,
-    queuePublisher: queue,
-    runnerOptsManager: runnerOptsMgr,
-    indexRunner,
-    virtualNetwork,
-    matrixURL: baseTestMatrix.url,
-    secretSeed: testRealmSecretSeed,
-    realmServerMatrixUsername: testRealmServerMatrixUsername,
-    prerenderer: localIndexer.prerenderer,
-  });
+    let localIndexer = owner.lookup(
+      'service:local-indexer',
+    ) as unknown as MockLocalIndexer;
+    let realm: Realm;
 
-  realm = new Realm({
-    url: realmURL,
-    adapter,
-    matrix: {
-      ...baseTestMatrix,
-      username: testRealmURLToUsername(realmURL),
-    },
-    secretSeed: testRealmSecretSeed,
-    virtualNetwork,
-    dbAdapter,
-    queue,
-    realmServerMatrixClient: new MatrixClient({
+    let adapter = new TestRealmAdapter(
+      contents,
+      new URL(realmURL),
+      mockMatrixUtils,
+      owner,
+    );
+    let indexRunner: IndexRunner = async (optsId) => {
+      let { registerRunner, indexWriter } = runnerOptsMgr.getOptions(optsId);
+      await localIndexer.configureRunner(registerRunner, adapter, indexWriter);
+    };
+
+    let dbAdapter = await getDbAdapter();
+    await insertPermissions(dbAdapter, new URL(realmURL), permissions);
+    let worker = new Worker({
+      indexWriter: new IndexWriter(dbAdapter),
+      queue,
+      dbAdapter,
+      queuePublisher: queue,
+      runnerOptsManager: runnerOptsMgr,
+      indexRunner,
+      virtualNetwork,
       matrixURL: baseTestMatrix.url,
-      username: testRealmServerMatrixUsername,
-      seed: testRealmSecretSeed,
-    }),
-  });
+      secretSeed: testRealmSecretSeed,
+      realmServerMatrixUsername: testRealmServerMatrixUsername,
+      prerenderer: localIndexer.prerenderer,
+      useHeadlessChromePrerender: usePrerenderer,
+    });
 
-  // we use this to run cards that were added to the test filesystem
-  adapter.setLoader(
-    new Loader(realm.__fetchForTesting, virtualNetwork.resolveImport),
-  );
+    realm = new Realm({
+      url: realmURL,
+      adapter,
+      matrix: {
+        ...baseTestMatrix,
+        username: testRealmURLToUsername(realmURL),
+      },
+      secretSeed: testRealmSecretSeed,
+      virtualNetwork,
+      dbAdapter,
+      queue,
+      realmServerMatrixClient: new MatrixClient({
+        matrixURL: baseTestMatrix.url,
+        username: testRealmServerMatrixUsername,
+        seed: testRealmSecretSeed,
+      }),
+    });
 
-  // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
-  virtualNetwork.mount(realm.maybeHandle);
-  await mockMatrixUtils.start();
-  await adapter.ready;
-  await worker.run();
-  await realm.start();
+    // we use this to run cards that were added to the test filesystem
+    adapter.setLoader(
+      new Loader(realm.__fetchForTesting, virtualNetwork.resolveImport),
+    );
 
-  let realmServer = getService('realm-server');
-  if (!realmServer.availableRealmURLs.includes(realmURL)) {
-    realmServer.setAvailableRealmURLs([realmURL]);
+    // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
+    virtualNetwork.mount(realm.maybeHandle);
+    await mockMatrixUtils.start();
+    await adapter.ready;
+    await worker.run();
+    await realm.start();
+
+    let realmServer = getService('realm-server');
+    if (!realmServer.availableRealmURLs.includes(realmURL)) {
+      realmServer.setAvailableRealmURLs([realmURL]);
+    }
+
+    return { realm, adapter };
+  } finally {
+    if (hadHeadlessFlag) {
+      (globalThis as any).__useHeadlessChromePrerender = previousHeadlessFlag;
+    } else {
+      delete (globalThis as any).__useHeadlessChromePrerender;
+    }
   }
-
-  return { realm, adapter };
 }
 
 export function setupAuthEndpoints(

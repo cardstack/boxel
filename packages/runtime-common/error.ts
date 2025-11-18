@@ -42,6 +42,7 @@ export interface CardErrorJSONAPI {
     stack: string | null;
     isCreationError?: true;
     responseHeaders?: { [header: string]: string };
+    remoteId?: string;
   };
   additionalErrors?: (CardError | SearchResultError['error'] | Error)[] | null;
 }
@@ -61,6 +62,8 @@ export function formattedError(
     let message: string | undefined;
     let additionalError = err.additionalErrors?.[0];
 
+    let remoteId = err?.id;
+
     if (additionalError && 'errorDetail' in additionalError) {
       cardError = additionalError.errorDetail;
       let { lastKnownGoodHtml, scopedCssUrls, cardTitle } = additionalError;
@@ -69,6 +72,7 @@ export function formattedError(
         scopedCssUrls,
         stack: cardError.stack ?? err.stack ?? error?.stack ?? null,
         cardTitle,
+        ...(remoteId ? { remoteId } : {}),
       };
     } else if (isCardError(additionalError)) {
       cardError = additionalError;
@@ -76,6 +80,8 @@ export function formattedError(
       message = additionalError?.message;
       cardError = err;
     }
+
+    remoteId = remoteId ?? cardError?.id;
 
     return {
       errors: [
@@ -94,6 +100,7 @@ export function formattedError(
             stack: cardError.stack ?? err.stack ?? error?.stack ?? null,
             cardTitle: null,
             ...(cardError.id ? { isCreationError: true } : {}),
+            ...(remoteId ? { remoteId } : {}),
           },
           additionalErrors: cardError.additionalErrors,
         },
@@ -129,6 +136,7 @@ export function formattedError(
           cardTitle: null,
           ...(err?.id ? { isCreationError: true } : {}),
           ...(responseHeaders ? { responseHeaders } : {}),
+          ...(err?.id ? { remoteId: err.id } : {}),
         },
       },
     ],

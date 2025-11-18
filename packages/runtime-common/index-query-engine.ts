@@ -141,7 +141,7 @@ interface WIPOptions {
 export interface PrerenderedCard {
   url: string;
   html: string | null;
-  usedRenderType: ResolvedCodeRef;
+  usedRenderType?: ResolvedCodeRef;
   isError?: true;
 }
 
@@ -157,6 +157,7 @@ export interface QueryResultsMeta {
 export const generalSortFields: Record<string, string> = {
   lastModified: 'last_modified',
   createdAt: 'resource_created_at',
+  cardURL: 'url COLLATE "POSIX"',
 };
 
 export function isValidPrerenderedHtmlFormat(
@@ -557,7 +558,7 @@ export class IndexQueryEngine {
       meta: QueryResultsMeta;
       results: (Partial<BoxelIndexTable> & {
         html: string | null;
-        used_render_type: string;
+        used_render_type: string | null;
       })[];
     };
 
@@ -569,20 +570,30 @@ export class IndexQueryEngine {
     let scopedCssUrls = new Set<string>(); // Use a set for deduplication
 
     let prerenderedCards = results.map((card) => {
-      card.deps!.forEach((dep: string) => {
+      (card.deps ?? []).forEach((dep: string) => {
         if (isScopedCSSRequest(dep)) {
           scopedCssUrls.add(dep);
         }
       });
 
-      let moduleNameSeparatorIndex = card.used_render_type.lastIndexOf('/');
+      let usedRenderType: ResolvedCodeRef | undefined;
+      if (card.used_render_type) {
+        let moduleNameSeparatorIndex = card.used_render_type.lastIndexOf('/');
+        if (moduleNameSeparatorIndex > -1) {
+          usedRenderType = {
+            module: card.used_render_type.substring(
+              0,
+              moduleNameSeparatorIndex,
+            ),
+            name: card.used_render_type.substring(moduleNameSeparatorIndex + 1),
+          };
+        }
+      }
+
       return {
         url: card.url!,
         html: card.html,
-        usedRenderType: {
-          module: card.used_render_type.substring(0, moduleNameSeparatorIndex),
-          name: card.used_render_type.substring(moduleNameSeparatorIndex + 1),
-        },
+        ...(usedRenderType ? { usedRenderType } : {}),
         ...(card.type === 'error' ? { isError: true as const } : {}),
       };
     });

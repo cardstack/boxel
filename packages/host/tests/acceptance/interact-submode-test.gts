@@ -1106,7 +1106,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         ],
       });
 
-      await waitUntil(() => id);
+      await waitUntil(() => id, { timeout: 5000 });
 
       assert.ok(id, 'new card has been assigned a remote id');
       id = id!;

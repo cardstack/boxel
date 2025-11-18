@@ -50,6 +50,7 @@ export interface RenderError extends ErrorEntry {
 
 export interface ModuleDefinitionResult {
   type: 'definition';
+  moduleURL: string; // node resolution w/o extension
   definition: Definition;
   types: string[];
 }
@@ -66,7 +67,7 @@ export interface ModulePrerenderModel {
   error?: ErrorEntry;
 }
 
-export interface ModulePrerenderResponse extends ModulePrerenderModel {}
+export interface ModuleRenderResponse extends ModulePrerenderModel {}
 
 export type ModulePrerenderArgs = {
   realm: string;
@@ -80,7 +81,7 @@ export type PrerenderCardArgs = ModulePrerenderArgs;
 
 export interface Prerenderer {
   prerenderCard(args: PrerenderCardArgs): Promise<RenderResponse>;
-  prerenderModule(args: ModulePrerenderArgs): Promise<ModulePrerenderResponse>;
+  prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
@@ -584,6 +585,10 @@ export function unixTime(epochTimeMs: number) {
 
 export function isLocalId(id: string) {
   return !id.startsWith('http');
+}
+
+export function isBrowserTestEnv() {
+  return typeof window !== 'undefined' && Boolean((globalThis as any).QUnit);
 }
 
 export * from './prerendered-card-search';

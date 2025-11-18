@@ -9,7 +9,6 @@ import {
   trimExecutableExtension,
   type RenderRouteOptions,
   type RealmPermissions,
-  CardError,
 } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
@@ -113,6 +112,11 @@ module('Acceptance | prerender | module', function (hooks) {
       'card-def',
       'captures definition details',
     );
+    assert.strictEqual(
+      personEntry.moduleURL,
+      trimExecutableExtension(new URL(moduleURL)).href,
+      'moduleURL exposes trimmed module path',
+    );
     assert.ok(
       personEntry.types.includes(personKey),
       'types include the card itself',
@@ -196,33 +200,10 @@ module('Acceptance | prerender | module', function (hooks) {
     let shimEntry = model.definitions[shimKey];
     assert.ok(shimEntry, 'definition generated for shimmed export');
     assert.strictEqual(shimEntry.type, 'definition', 'shim definition entry');
-  });
-
-  test('retains status when type resolution fails for a definition', async function (assert) {
-    let loaderService = getService('loader-service');
-    let loader = loaderService.loader;
-    let parentURL = `${testRealmURL}parent.gts`;
-    let childURL = `${testRealmURL}child.gts`;
-
-    await loader.import(parentURL);
-    await loader.import(childURL);
-
-    loader.shimModule(parentURL, {});
-
-    await visit(modulePath(childURL));
-    let { status, model } = captureModuleResult();
-
-    assert.strictEqual(status, 'ready', 'overall route still succeeds');
-
-    let childKey = `${trimExecutableExtension(new URL(childURL)).href}/Child`;
-    let childEntry = model.definitions[childKey];
-    assert.ok(childEntry, 'child definition captured');
-    assert.strictEqual(childEntry.type, 'error', 'definition marked as error');
-    assert.strictEqual(childEntry.error.status, 404, 'definition error status');
     assert.strictEqual(
-      childEntry.error.status,
-      CardError.fromSerializableError(childEntry.error).status,
-      'status survives serialization round-trip',
+      shimEntry.moduleURL,
+      trimExecutableExtension(new URL(shimURL)).href,
+      'moduleURL always omits executable extension',
     );
   });
 

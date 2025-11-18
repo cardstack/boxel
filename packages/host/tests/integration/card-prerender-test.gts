@@ -187,15 +187,7 @@ module('Integration | card-prerender', function (hooks) {
       if (entry?.type === 'instance') {
         assert.strictEqual(
           cleanWhiteSpace(stripScopedCSSAttributes(entry!.isolatedHtml!)),
-          cleanWhiteSpace(`<div
-            class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card isolated-format display-container-true"
-            data-test-boxel-card-container
-            style
-            data-test-card="http://test-realm/test/Pet/mango"
-            data-test-card-format="isolated"
-            data-test-field-component-card>
-              <h3> Mango </h3>
-          </div>`),
+          cleanWhiteSpace(`<h3> Mango </h3>`),
           'the pre-rendered HTML is correct',
         );
       } else {
@@ -209,15 +201,7 @@ module('Integration | card-prerender', function (hooks) {
       if (entry?.type === 'instance') {
         assert.strictEqual(
           cleanWhiteSpace(stripScopedCSSAttributes(entry!.isolatedHtml!)),
-          cleanWhiteSpace(`<div
-            class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card isolated-format display-container-true"
-            data-test-boxel-card-container
-            style
-            data-test-card="http://test-realm/test/Pet/vangogh"
-            data-test-card-format="isolated"
-            data-test-field-component-card>
-              <h3> Van Gogh </h3>
-            </div>`),
+          cleanWhiteSpace(`<h3> Van Gogh </h3>`),
           'the pre-rendered HTML is correct',
         );
       } else {

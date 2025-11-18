@@ -99,6 +99,7 @@ export default class StoreService extends Service implements StoreInterface {
     new Map();
   private inflightCardMutations: Map<string, Promise<void>> = new Map();
   private store: CardStore;
+  protected isRenderStore = false;
 
   // This is used for tests
   private onSaveSubscriber: CardSaveSubscriber | undefined;
@@ -113,6 +114,12 @@ export default class StoreService extends Service implements StoreInterface {
     registerDestructor(this, () => {
       clearInterval(this.gcInterval);
     });
+  }
+
+  protected renderContextBlocksPersistence() {
+    return (
+      this.isRenderStore && Boolean((globalThis as any).__boxelRenderContext)
+    );
   }
 
   // used for tests only!
@@ -142,9 +149,11 @@ export default class StoreService extends Service implements StoreInterface {
     this.ready = this.setup();
   }
 
-  resetCache() {
+  resetCache(opts?: { preserveReferences?: boolean }) {
     storeLogger.debug('resetting store cache');
-    this.referenceCount = new Map();
+    if (!opts?.preserveReferences) {
+      this.referenceCount = new Map();
+    }
     this.autoSaveStates = new TrackedMap();
     this.newReferencePromises = [];
     this.inflightGetCards = new Map();
@@ -291,7 +300,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.setIdentityContext(instance);
     await this.startAutoSaving(instance);
 
-    if ((globalThis as any).__boxelRenderContext) {
+    if (this.renderContextBlocksPersistence()) {
       return instance;
     }
 
@@ -348,9 +357,38 @@ export default class StoreService extends Service implements StoreInterface {
   async patch<T extends CardDef = CardDef>(
     id: string,
     patch: PatchData,
-    opts?: { doNotPersist?: true; clientRequestId?: string },
+    opts?: { doNotPersist?: true },
+  ): Promise<T | CardErrorJSONAPI | undefined>;
+  async patch<T extends CardDef = CardDef>(
+    id: string,
+    patch: PatchData,
+    opts?: { doNotWaitForPersist?: true },
+  ): Promise<T | CardErrorJSONAPI | undefined>;
+  async patch<T extends CardDef = CardDef>(
+    id: string,
+    patch: PatchData,
+    opts?: { doNotPersist?: true; doNotWaitForPersist?: true },
+  ): Promise<T | CardErrorJSONAPI | undefined>;
+  async patch<T extends CardDef = CardDef>(
+    id: string,
+    patch: PatchData,
+    opts?: { clientRequestId?: string },
+  ): Promise<T | CardErrorJSONAPI | undefined>;
+  async patch<T extends CardDef = CardDef>(
+    id: string,
+    patch: PatchData,
+    opts?: { doNotWaitForPersist?: true; clientRequestId?: string },
+  ): Promise<T | CardErrorJSONAPI | undefined>;
+  async patch<T extends CardDef = CardDef>(
+    id: string,
+    patch: PatchData,
+    opts?: {
+      doNotPersist?: true;
+      doNotWaitForPersist?: true;
+      clientRequestId?: string;
+    },
   ): Promise<T | CardErrorJSONAPI | undefined> {
-    if ((globalThis as any).__boxelRenderContext) {
+    if (this.renderContextBlocksPersistence()) {
       return;
     }
     // eslint-disable-next-line ember/classic-decorator-no-classic-methods
@@ -399,14 +437,22 @@ export default class StoreService extends Service implements StoreInterface {
     }
     let api = await this.cardService.getAPI();
     await api.updateFromSerialized(instance, doc, this.store);
+    let shouldPersist = !opts?.doNotPersist;
+    let shouldAwaitPersist = shouldPersist && !opts?.doNotWaitForPersist;
+    let persistedResult: CardDef | CardErrorJSONAPI | undefined = instance;
+
     if (opts?.doNotPersist) {
       await this.startAutoSaving(instance);
-    } else {
-      await this.persistAndUpdate(instance, {
+    } else if (shouldPersist) {
+      let persistPromise = this.persistAndUpdate(instance, {
         clientRequestId: opts?.clientRequestId,
       });
+      if (shouldAwaitPersist) {
+        persistedResult = await persistPromise;
+      }
     }
-    return instance as T | CardErrorJSONAPI;
+
+    return persistedResult as T | CardErrorJSONAPI;
   }
 
   async search(query: Query, realmURL?: URL): Promise<CardDef[]> {
@@ -665,7 +711,14 @@ export default class StoreService extends Service implements StoreInterface {
         continue;
       }
       if (isLocalId(id)) {
-        for (let remoteId of this.store.getRemoteIds(id)) {
+        let remoteIdsForLocal = this.store.getRemoteIds(id);
+        if (remoteIdsForLocal.length === 0) {
+          let error = this.store.getError(id);
+          if (error?.meta?.remoteId) {
+            remoteIdsForLocal = [error.meta.remoteId];
+          }
+        }
+        for (let remoteId of remoteIdsForLocal) {
           remoteIds.add(remoteId);
         }
       } else {
@@ -779,7 +832,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     try {
       if (!id) {
-        if (!(globalThis as any).__boxelRenderContext) {
+        if (!this.renderContextBlocksPersistence()) {
           // this is a new card so instantiate it and save it
           let doc = idOrDoc as LooseSingleCardDocument;
           let newInstance = await this.createFromSerialized(
@@ -823,7 +876,7 @@ export default class StoreService extends Service implements StoreInterface {
         | undefined;
       if (!doc) {
         let json: CardDocument | undefined;
-        if ((globalThis as any).__boxelRenderContext) {
+        if (this.isRenderStore && (globalThis as any).__boxelRenderContext) {
           let result = await this.cardService.getSource(new URL(`${url}.json`));
           if (result.status === 200) {
             json = JSON.parse(result.content);
@@ -994,7 +1047,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private async saveInstance(instance: CardDef, opts?: { isImmediate?: true }) {
-    if ((globalThis as any).__boxelRenderContext) {
+    if (this.renderContextBlocksPersistence()) {
       // we skip saving when rendering cards in headless chrome
       return;
     }
@@ -1146,6 +1199,10 @@ export default class StoreService extends Service implements StoreInterface {
         );
         let cardError = errorResponse.errors[0];
         this.setIdentityContext(cardError);
+        let remoteId = cardError.meta?.remoteId;
+        if (remoteId && (!cardError.id || isLocalId(cardError.id))) {
+          this.store.addInstanceOrError(remoteId, cardError);
+        }
         return cardError;
       } finally {
         deferred.fulfill();

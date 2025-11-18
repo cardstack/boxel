@@ -53,6 +53,7 @@ import {
   userInitiatedPriority,
   userIdFromUsername,
   isCardDocumentString,
+  isBrowserTestEnv,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -1462,6 +1463,11 @@ export class Realm {
     if (fileRef[Symbol.for('shimmed-module')]) {
       let response = createResponse({
         requestContext,
+        init: {
+          headers: {
+            'X-Boxel-Canonical-Path': fileRef.path,
+          },
+        },
       }) as ResponseWithNodeStream;
       (response as any)[Symbol.for('shimmed-module')] =
         fileRef[Symbol.for('shimmed-module')];
@@ -1477,6 +1483,7 @@ export class Realm {
       if (fileRef.lastModified != null) {
         headers['last-modified'] = formatRFC7231(fileRef.lastModified * 1000);
       }
+      headers['X-Boxel-Canonical-Path'] = fileRef.path;
       return {
         kind: 'not-modified',
         canonicalPath: fileRef.path,
@@ -1511,6 +1518,7 @@ export class Realm {
     if (fileRef.lastModified != null) {
       headers['last-modified'] = formatRFC7231(fileRef.lastModified * 1000);
     }
+    headers['X-Boxel-Canonical-Path'] = fileRef.path;
 
     return {
       kind: 'module',
@@ -1622,7 +1630,7 @@ export class Realm {
     let authorizationString = request.headers.get('Authorization');
     if (!authorizationString) {
       this.#log.warn(
-        `auth failed for ${request.method} ${request.url} missing auth header`,
+        `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) missing auth header`,
       );
       throw new AuthenticationError(
         AuthenticationErrorMessages.MissingAuthHeader,
@@ -1663,7 +1671,7 @@ export class Realm {
           JSON.stringify(userPermissions.sort())
       ) {
         this.#log.warn(
-          `auth failed for ${request.method} ${request.url}, for user ${user} token permissions do not match realm permissions for user. token permissions: ${JSON.stringify(token.permissions?.sort())}, user's realm permissions: ${JSON.stringify(userPermissions.sort())}`,
+          `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), for user ${user} token permissions do not match realm permissions for user. token permissions: ${JSON.stringify(token.permissions?.sort())}, user's realm permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
         throw new AuthenticationError(
           AuthenticationErrorMessages.PermissionMismatch,
@@ -1672,7 +1680,7 @@ export class Realm {
 
       if (!(await realmPermissionChecker.can(user, requiredPermission))) {
         this.#log.warn(
-          `auth failed for ${request.method} ${request.url}, for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
+          `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
         throw new AuthorizationError(
           'Insufficient permissions to perform this action',
@@ -1681,13 +1689,13 @@ export class Realm {
     } catch (e: any) {
       if (e instanceof TokenExpiredError) {
         this.#log.warn(
-          `JWT verification failed for ${request.method} ${request.url} with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
+          `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
       if (e instanceof JsonWebTokenError) {
         this.#log.warn(
-          `JWT verification failed for ${request.method} ${request.url} with token string ${tokenString}. ${e.message}`,
+          `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }
@@ -2067,6 +2075,7 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    let primarySerialization: LooseSingleCardDocument | undefined;
     let localPath = this.paths.local(new URL(request.url));
     if (localPath.startsWith('_')) {
       return methodNotAllowed(request, requestContext);
@@ -2216,6 +2225,9 @@ export class Realm {
       }
       let path = this.paths.local(fileURL);
       files.set(path, JSON.stringify(fileSerialization, null, 2));
+      if (i === 0) {
+        primarySerialization = fileSerialization;
+      }
     }
     let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
@@ -2226,22 +2238,41 @@ export class Realm {
         loadLinks: true,
       },
     );
+    let doc: SingleCardDocument;
     if (!entry || entry?.type === 'error') {
-      return systemError({
-        requestContext,
-        message: `Unable to index card: can't find patched instance, ${instanceURL} in index`,
-        id: instanceURL,
-        additionalError: entry
-          ? CardError.fromSerializableError(entry.error)
-          : undefined,
+      if (
+        primarySerialization &&
+        isBrowserTestEnv() &&
+        !(globalThis as any).__emulateServerPatchFailure
+      ) {
+        doc = merge({}, primarySerialization, {
+          data: {
+            id: instanceURL,
+            links: { self: instanceURL },
+            meta: {
+              ...(primarySerialization.data.meta ?? {}),
+              lastModified,
+            },
+          },
+        }) as SingleCardDocument;
+      } else {
+        return systemError({
+          requestContext,
+          message: `Unable to index card: can't find patched instance, ${instanceURL} in index`,
+          id: instanceURL,
+          additionalError: entry
+            ? CardError.fromSerializableError(entry.error)
+            : undefined,
+        });
+      }
+    } else {
+      doc = merge({}, entry.doc, {
+        data: {
+          links: { self: instanceURL },
+          meta: { lastModified },
+        },
       });
     }
-    let doc: SingleCardDocument = merge({}, entry.doc, {
-      data: {
-        links: { self: instanceURL },
-        meta: { lastModified },
-      },
-    });
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {

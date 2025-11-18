@@ -1,9 +1,12 @@
-import { expect, test } from '@playwright/test';
-import { Credentials, putEvent, registerUser } from '../docker/synapse';
+import { expect, test } from './fixtures';
+import type { Page } from '@playwright/test';
+
+import { Credentials, putEvent } from '../docker/synapse';
 import {
   login,
   logout,
   createRoom,
+  createSubscribedUserAndLogin,
   getRoomId,
   openRoom,
   assertMessages,
@@ -11,46 +14,28 @@ import {
   sendMessage,
   reloadAndOpenAiAssistant,
   isInRoom,
-  registerRealmUsers,
   selectCardFromCatalog,
   getRoomEvents,
   setupTwoStackItems,
   showAllCards,
-  setupUserSubscribed,
-  setSkillsRedirect,
 } from '../helpers';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-} from '../docker/synapse';
-import {
-  appURL,
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
+import { appURL } from '../helpers/isolated-realm-server';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '../helpers/matrix-constants';
 
 test.describe('Room messages', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
-  let userCred: Credentials;
-  test.beforeEach(async ({ page }) => {
-    await setSkillsRedirect(page);
-    test.setTimeout(120_000);
-    synapse = await synapseStart();
-    await registerRealmUsers(synapse);
-    userCred = await registerUser(synapse, 'user1', 'pass');
-    realmServer = await startRealmServer();
-    await setupUserSubscribed('@user1:localhost', realmServer);
-  });
-  test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-    await realmServer.stop();
-  });
-
   test(`it can send a message in a room`, async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    // TODO: Split up this test (CS-9722).
+    // This tests multiple different behaviours beyond just sending a message.
+    // There are tests for:
+    // - sending messages with a button
+    // - sending messages with Enter key
+    // - handling whitespace only messages (not sending them)
+    // - persisting messages across reloads
+    // - ensuring room state doesn't leak between users
+    const { username, password } = await createSubscribedUserAndLogin(
+      page,
+      'send-message',
+    );
     let room1 = await getRoomId(page);
     await expect(page.locator('[data-test-new-session]')).toHaveCount(1);
     await expect(page.locator('[data-test-message-field]')).toHaveValue('');
@@ -58,6 +43,7 @@ test.describe('Room messages', () => {
     await expect(page.locator('[data-test-send-message-btn]')).toBeDisabled();
     await assertMessages(page, []);
 
+    // Whitespace only messages are not sent
     await page.locator('[data-test-message-field]').click();
     await expect(page.locator('[data-test-send-message-btn]')).toBeDisabled();
     await page.keyboard.press('Enter');
@@ -68,6 +54,7 @@ test.describe('Room messages', () => {
     await page.keyboard.press('Enter');
     await assertMessages(page, []);
 
+    // Text messages are sent
     await writeMessage(page, room1, 'Message 1');
     await expect(
       page.locator(`[data-test-message-field="${room1}"]`),
@@ -76,17 +63,20 @@ test.describe('Room messages', () => {
 
     await expect(page.locator('[data-test-message-field]')).toHaveValue('');
     await expect(page.locator('[data-test-new-session]')).toHaveCount(0);
-    await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
+    await assertMessages(page, [{ from: username, message: 'Message 1' }]);
 
+    // Enter can send a message
     await writeMessage(page, room1, 'Message 2');
     await page.keyboard.press('Shift+Enter');
     await page.keyboard.type('!');
-    await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
-
+    await assertMessages(page, [{ from: username, message: 'Message 1' }]);
+    // Must wait for the send message button to appear, otherwise we hit
+    // enter when the previous message is still sending.
+    await expect(page.locator('[data-test-send-message-btn]')).toBeEnabled();
     await page.keyboard.press('Enter');
     const messages = [
-      { from: 'user1', message: 'Message 1' },
-      { from: 'user1', message: 'Message 2\n\n!' },
+      { from: username, message: 'Message 1' },
+      { from: username, message: 'Message 2\n\n!' },
     ];
     await assertMessages(page, messages);
 
@@ -98,7 +88,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, messages);
 
     await logout(page);
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, username, password, { url: appURL });
     await openRoom(page, room1);
     await assertMessages(page, messages);
 
@@ -117,7 +107,10 @@ test.describe('Room messages', () => {
     // generally the matrix server paginates after 10 messages
     const totalMessageCount = 20;
 
-    await login(page, 'user1', 'pass', { url: appURL });
+    const { username, password } = await createSubscribedUserAndLogin(
+      page,
+      'load-events',
+    );
     let room1 = await getRoomId(page);
 
     for (let i = 1; i <= totalMessageCount; i++) {
@@ -125,7 +118,7 @@ test.describe('Room messages', () => {
     }
     await logout(page);
 
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, username, password, { url: appURL });
     await openRoom(page, room1);
 
     await expect(page.locator('[data-test-message-idx]')).toHaveCount(
@@ -136,12 +129,12 @@ test.describe('Room messages', () => {
   test(`it can send a markdown message, and escape html tags`, async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    const { username } = await createSubscribedUserAndLogin(page, 'markdown');
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'message with _style_');
     await assertMessages(page, [
       {
-        from: 'user1',
+        from: username,
         message: 'message with style',
       },
     ]);
@@ -160,7 +153,7 @@ test.describe('Room messages', () => {
   });
 
   test(`it can create a room specific pending message`, async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await createSubscribedUserAndLogin(page, 'pending-message');
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'Hello');
     let room2 = await createRoom(page);
@@ -195,16 +188,15 @@ test.describe('Room messages', () => {
 
   test('can add a card to a markdown message', async ({ page }) => {
     const testCard = `${appURL}/hassan`;
-    await login(page, 'user1', 'pass', { url: appURL });
+    const { username } = await createSubscribedUserAndLogin(
+      page,
+      'add-card-markdown',
+    );
     await page.locator(`[data-test-room-settled]`).waitFor();
 
     await page.locator('[data-test-attach-button]').click();
     await page.locator('[data-test-attach-card-btn]').click();
-    await page
-      .locator(
-        `[data-test-realm="Test Workspace A"] [data-test-show-more-cards]`,
-      )
-      .click();
+    await page.locator(`[data-test-search-field]`).fill(testCard);
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(
@@ -216,7 +208,7 @@ test.describe('Room messages', () => {
 
     await assertMessages(page, [
       {
-        from: 'user1',
+        from: username,
         message: 'This is my card',
         cards: [
           {
@@ -236,16 +228,13 @@ test.describe('Room messages', () => {
     page,
   }) => {
     const testCard = `${appURL}/mango-puppy`; // this is a 153KB card
-    await login(page, 'user1', 'pass', { url: appURL });
+    const { username, password, credentials } =
+      await createSubscribedUserAndLogin(page, 'strip-base64');
     await page.locator(`[data-test-room-settled]`).waitFor();
     await page.locator('[data-test-attach-button]').click();
     await page.locator('[data-test-attach-card-btn]').click();
 
-    await page
-      .locator(
-        `[data-test-realm="Test Workspace A"] [data-test-show-more-cards]`,
-      )
-      .click();
+    await page.locator(`[data-test-search-field]`).fill('Mango the Puppy');
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(
@@ -258,19 +247,19 @@ test.describe('Room messages', () => {
     await page.locator('[data-test-send-message-btn]').click();
     await assertMessages(page, [
       {
-        from: 'user1',
+        from: username,
         message: 'This is a card without base64',
         cards: [{ id: testCard, title: 'Mango the Puppy' }],
       },
     ]);
 
-    let messages = await getRoomEvents();
+    let messages = await getRoomEvents(username, password);
     let message = messages[messages.length - 1];
     let messageData = JSON.parse(message.content.data);
     let cardText = await (
       await fetch(messageData.attachedCards[0].url, {
         headers: {
-          Authorization: `Bearer ${userCred.accessToken}`,
+          Authorization: `Bearer ${credentials.accessToken}`,
         },
       })
     ).text();
@@ -282,19 +271,22 @@ test.describe('Room messages', () => {
 
   test('can send only a card as a message', async ({ page }) => {
     const testCard = `${appURL}/hassan`;
-    await login(page, 'user1', 'pass', { url: appURL });
+    const { username } = await createSubscribedUserAndLogin(page, 'card-only');
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, undefined, [testCard]);
     await assertMessages(page, [
       {
-        from: 'user1',
+        from: username,
         cards: [{ id: testCard, title: 'Hassan' }],
       },
     ]);
   });
 
   test('currently viewed file is auto-attached', async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    const { username, password } = await createSubscribedUserAndLogin(
+      page,
+      'auto-attach-file',
+    );
     await showAllCards(page);
     const testCard = `${appURL}/hassan`;
     await page.locator(`[data-test-cards-grid-item="${testCard}"]`).click();
@@ -320,7 +312,7 @@ test.describe('Room messages', () => {
     await page.locator('[data-test-send-message-btn]').click();
     await assertMessages(page, [
       {
-        from: 'user1',
+        from: username,
         message: 'Are there any computed fields in person.gts?',
         files: [
           {
@@ -331,7 +323,7 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    let messages = await getRoomEvents();
+    let messages = await getRoomEvents(username, password);
     let lastMessage = messages[messages.length - 1];
     let attachedFiles = JSON.parse(lastMessage.content.data).attachedFiles;
     expect(attachedFiles.length).toStrictEqual(1);
@@ -346,7 +338,10 @@ test.describe('Room messages', () => {
   });
 
   test('ensure attached files are sent with the message', async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    const { username, password } = await createSubscribedUserAndLogin(
+      page,
+      'ensure-files',
+    );
     await showAllCards(page);
     const testCard = `${appURL}/hassan`;
     await page.locator(`[data-test-cards-grid-item="${testCard}"]`).click();
@@ -386,7 +381,7 @@ test.describe('Room messages', () => {
     await page.locator('[data-test-send-message-btn]').click();
     await assertMessages(page, [
       {
-        from: 'user1',
+        from: username,
         message: 'Are there any computed fields in person.gts?',
         files: [
           {
@@ -401,7 +396,7 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    let messages = await getRoomEvents();
+    let messages = await getRoomEvents(username, password);
     let lastMessage = messages[messages.length - 1];
 
     let attachedCards = JSON.parse(lastMessage.content.data).attachedCards;
@@ -420,14 +415,17 @@ test.describe('Room messages', () => {
 
   test('can send cards with types unsupported by matrix', async ({ page }) => {
     const testCard = `${appURL}/type-examples`;
-    await login(page, 'user1', 'pass', { url: appURL });
+    const { username } = await createSubscribedUserAndLogin(
+      page,
+      'unsupported-type',
+    );
     let room1 = await getRoomId(page);
 
     // Send a card that contains a type that matrix doesn't support
     await sendMessage(page, room1, undefined, [testCard]);
     await assertMessages(page, [
       {
-        from: 'user1',
+        from: username,
         cards: [{ id: testCard, title: 'Type Examples' }],
       },
     ]);
@@ -436,7 +434,10 @@ test.describe('Room messages', () => {
   test('can remove a card from a pending message', async ({ page }) => {
     const testCard = `${appURL}/hassan`;
     const testCard2 = `${appURL}/mango`;
-    await login(page, 'user1', 'pass', { url: appURL });
+    const { username } = await createSubscribedUserAndLogin(
+      page,
+      'remove-card',
+    );
     await page.locator(`[data-test-room-settled]`).waitFor();
 
     await selectCardFromCatalog(page, testCard);
@@ -476,12 +477,12 @@ test.describe('Room messages', () => {
 
     await assertMessages(page, [
       {
-        from: 'user1',
+        from: username,
         message: '1 card',
         cards: [{ id: testCard2, title: 'Mango' }],
       },
       {
-        from: 'user1',
+        from: username,
         message: 'no card',
       },
     ]);
@@ -492,18 +493,21 @@ test.describe('Room messages', () => {
 
     const testCard1 = `${appURL}/hassan`;
     const testCard2 = `${appURL}/mango`;
+    const { username, password } = await createSubscribedUserAndLogin(
+      page,
+      'render-multiple',
+    );
     const message1 = {
-      from: 'user1',
+      from: username,
       message: 'message 1',
       cards: [{ id: testCard1, title: 'Hassan' }],
     };
     const message2 = {
-      from: 'user1',
+      from: username,
       message: 'message 2',
       cards: [{ id: testCard2, title: 'Mango' }],
     };
 
-    await login(page, 'user1', 'pass', { url: appURL });
     let room1 = await getRoomId(page);
 
     await sendMessage(page, room1, 'message 1', [testCard1]);
@@ -517,7 +521,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, [message1, message2]);
 
     await logout(page);
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, username, password, { url: appURL });
     await openRoom(page, room1);
     await assertMessages(page, [message1, message2]);
   });
@@ -525,8 +529,12 @@ test.describe('Room messages', () => {
   test('can send multiple cards in a message', async ({ page }) => {
     const testCard1 = `${appURL}/hassan`;
     const testCard2 = `${appURL}/mango`;
+    const { username, password } = await createSubscribedUserAndLogin(
+      page,
+      'multi-card',
+    );
     const message = {
-      from: 'user1',
+      from: username,
       message: 'message 1',
       cards: [
         { id: testCard1, title: 'Hassan' },
@@ -534,7 +542,6 @@ test.describe('Room messages', () => {
       ],
     };
 
-    await login(page, 'user1', 'pass', { url: appURL });
     let room1 = await getRoomId(page);
 
     await selectCardFromCatalog(page, testCard1);
@@ -547,7 +554,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, [message]);
 
     await logout(page);
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, username, password, { url: appURL });
     await openRoom(page, room1);
     await assertMessages(page, [message]);
   });
@@ -557,7 +564,10 @@ test.describe('Room messages', () => {
     const testCard2 = `${appURL}/mango`;
     const testCard3 = `${appURL}/type-examples`;
 
-    await login(page, 'user1', 'pass', { url: appURL });
+    const { username } = await createSubscribedUserAndLogin(
+      page,
+      'no-duplicate-cards',
+    );
     await page.locator(`[data-test-room-settled]`).waitFor();
 
     await selectCardFromCatalog(page, testCard2);
@@ -569,7 +579,7 @@ test.describe('Room messages', () => {
     await page.locator('[data-test-send-message-btn]').click();
     await assertMessages(page, [
       {
-        from: 'user1',
+        from: username,
         cards: [
           { id: testCard2, title: 'Mango' },
           { id: testCard1, title: 'Hassan' },
@@ -588,7 +598,7 @@ test.describe('Room messages', () => {
     const testCard4 = `${appURL}/fadhlan`;
     const testCard5 = `${appURL}/van-gogh`;
 
-    await login(page, 'user1', 'pass', { url: appURL });
+    await createSubscribedUserAndLogin(page, 'view-all');
     await page.locator(`[data-test-room-settled]`).waitFor();
 
     await selectCardFromCatalog(page, testCard1);
@@ -610,14 +620,25 @@ test.describe('Room messages', () => {
   });
 
   test.describe('auto-attachment of cards in matrix room', () => {
-    test.beforeEach(async ({ page }) => {
-      await setSkillsRedirect(page);
-      await login(page, 'user1', 'pass', { url: appURL });
+    async function setupAutoAttachmentUser(
+      page: Page,
+      prefix: string,
+    ): Promise<{
+      username: string;
+      password: string;
+      credentials: Credentials;
+    }> {
+      const user = await createSubscribedUserAndLogin(page, prefix);
       await getRoomId(page);
       await showAllCards(page);
-    });
+      return user;
+    }
 
     test('displays auto-attached card (1 stack)', async ({ page }) => {
+      const { username } = await setupAutoAttachmentUser(
+        page,
+        'auto-one-stack',
+      );
       const testCard1 = `${appURL}/hassan`;
       await page
         .locator(
@@ -632,12 +653,16 @@ test.describe('Room messages', () => {
       await page.locator('[data-test-send-message-btn]').click();
       await assertMessages(page, [
         {
-          from: 'user1',
+          from: username,
           cards: [{ id: testCard1, title: 'Hassan' }],
         },
       ]);
     });
     test('manually attached card is not auto-attached', async ({ page }) => {
+      const { username } = await setupAutoAttachmentUser(
+        page,
+        'manual-not-auto',
+      );
       const testCard1 = `${appURL}/hassan`;
       await selectCardFromCatalog(page, testCard1);
       await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
@@ -646,7 +671,7 @@ test.describe('Room messages', () => {
       await page.locator('[data-test-send-message-btn]').click();
       await assertMessages(page, [
         {
-          from: 'user1',
+          from: username,
           cards: [{ id: testCard1, title: 'Hassan' }],
         },
       ]);
@@ -655,6 +680,10 @@ test.describe('Room messages', () => {
     test('manually attached card overwrites auto-attached card', async ({
       page,
     }) => {
+      const { username } = await setupAutoAttachmentUser(
+        page,
+        'manual-overwrites-auto',
+      );
       const testCard1 = `${appURL}/hassan`;
       await page
         .locator(
@@ -672,12 +701,13 @@ test.describe('Room messages', () => {
       await page.locator('[data-test-send-message-btn]').click();
       await assertMessages(page, [
         {
-          from: 'user1',
+          from: username,
           cards: [{ id: testCard1, title: 'Hassan' }],
         },
       ]);
     });
     test('does not auto-attach index card', async ({ page }) => {
+      await setupAutoAttachmentUser(page, 'no-index-auto');
       const indexCard = `${appURL}/index`;
       await expect(
         page.locator(`[data-test-stack-card="${indexCard}"]`),
@@ -688,9 +718,12 @@ test.describe('Room messages', () => {
     test('replaces auto-attached card when drilling down (1 stack)', async ({
       page,
     }) => {
+      const { username } = await setupAutoAttachmentUser(
+        page,
+        'auto-replace-one-stack',
+      );
       const testCard1 = `${appURL}/jersey`;
       const embeddedCard = `${appURL}/justin`;
-      await showAllCards(page);
       await expect(
         page.locator(
           `[data-test-stack-item-content] [data-test-cards-grid-item="${testCard1}"]`,
@@ -718,7 +751,7 @@ test.describe('Room messages', () => {
       await page.locator('[data-test-send-message-btn]').click();
       await assertMessages(page, [
         {
-          from: 'user1',
+          from: username,
           cards: [{ id: embeddedCard, title: 'Justin T' }],
         },
       ]);
@@ -727,6 +760,7 @@ test.describe('Room messages', () => {
     test('auto-attached card will get auto-remove when closing a stack', async ({
       page,
     }) => {
+      await setupAutoAttachmentUser(page, 'auto-remove-when-closing');
       const testCard1 = `${appURL}/hassan`;
       await page
         .locator(
@@ -748,6 +782,7 @@ test.describe('Room messages', () => {
     });
 
     test('can manually remove auto-attached card', async ({ page }) => {
+      await setupAutoAttachmentUser(page, 'manual-remove-auto');
       const testCard1 = `${appURL}/hassan`;
       await page
         .locator(
@@ -773,6 +808,10 @@ test.describe('Room messages', () => {
     test('re-opening previously removed auto-attached card will auto attach again', async ({
       page,
     }) => {
+      const { username } = await setupAutoAttachmentUser(
+        page,
+        'reopen-auto-attach',
+      );
       const testCard1 = `${appURL}/hassan`;
       await page
         .locator(
@@ -808,7 +847,7 @@ test.describe('Room messages', () => {
       await page.locator('[data-test-send-message-btn]').click();
       await assertMessages(page, [
         {
-          from: 'user1',
+          from: username,
           cards: [{ id: testCard1, title: 'Hassan' }],
         },
       ]);
@@ -817,6 +856,10 @@ test.describe('Room messages', () => {
     test('(2 stack) displays both top cards as auto-attached ', async ({
       page,
     }) => {
+      const { username } = await setupAutoAttachmentUser(
+        page,
+        'auto-two-stack',
+      );
       const testCard1 = `${appURL}/hassan`;
       const testCard2 = `${appURL}/mango`;
       await setupTwoStackItems(page, testCard1, testCard2);
@@ -838,7 +881,7 @@ test.describe('Room messages', () => {
       await page.locator('[data-test-send-message-btn]').click();
       await assertMessages(page, [
         {
-          from: 'user1',
+          from: username,
           cards: [
             { id: testCard1, title: 'Hassan' },
             { id: testCard2, title: 'Mango' },
@@ -850,6 +893,10 @@ test.describe('Room messages', () => {
     test('(2 stack) if both top cards are the same, only one auto-attached pill', async ({
       page,
     }) => {
+      const { username } = await setupAutoAttachmentUser(
+        page,
+        'auto-two-stack-same',
+      );
       const testCard1 = `${appURL}/hassan`;
       await setupTwoStackItems(page, testCard1, testCard1);
       await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
@@ -863,7 +910,7 @@ test.describe('Room messages', () => {
       await page.locator('[data-test-send-message-btn]').click();
       await assertMessages(page, [
         {
-          from: 'user1',
+          from: username,
           cards: [{ id: testCard1, title: 'Hassan' }],
         },
       ]);
@@ -873,7 +920,10 @@ test.describe('Room messages', () => {
   test('ai panel stays open when last card is closed and workspace chooser is opened', async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    const { username } = await createSubscribedUserAndLogin(
+      page,
+      'ai-panel-open',
+    );
     await page
       .locator('[data-test-stack-card] [data-test-close-button]')
       .click();
@@ -887,7 +937,7 @@ test.describe('Room messages', () => {
 
     await assertMessages(page, [
       {
-        from: 'user1',
+        from: username,
         message: 'Sending message with no card open',
         cards: [],
       },
@@ -897,7 +947,10 @@ test.describe('Room messages', () => {
   test('attaches a card in a conversation multiple times', async ({ page }) => {
     const testCard = `${appURL}/hassan`;
 
-    await login(page, 'user1', 'pass', { url: appURL });
+    const { username, password } = await createSubscribedUserAndLogin(
+      page,
+      'attach-multiple',
+    );
     await page.locator(`[data-test-room-settled]`).waitFor();
     await showAllCards(page);
 
@@ -909,17 +962,17 @@ test.describe('Room messages', () => {
 
     await assertMessages(page, [
       {
-        from: 'user1',
+        from: username,
         message: 'Message - 1',
         cards: [{ id: testCard, title: 'Hassan' }],
       },
       {
-        from: 'user1',
+        from: username,
         message: 'Message - 2',
         cards: [{ id: testCard, title: 'Hassan' }],
       },
       {
-        from: 'user1',
+        from: username,
         message: 'Message - 3',
         cards: [{ id: testCard, title: 'Hassan' }],
       },
@@ -927,7 +980,7 @@ test.describe('Room messages', () => {
 
     // There should only be one card fragments event for multiple message events
     // if the card remains unchanged and is attached multiple times.
-    let events = await getRoomEvents();
+    let events = await getRoomEvents(username, password);
     let messageEvents = events.filter(
       (e) =>
         e.type === 'm.room.message' &&
@@ -937,7 +990,7 @@ test.describe('Room messages', () => {
   });
 
   test('it escapes html code sent by the user', async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await createSubscribedUserAndLogin(page, 'escape-html');
     await page
       .locator('[data-test-message-field]')
       .fill('<h1>Hello, world!</h1><script>alert("Hello, world!")</script>');
@@ -956,7 +1009,7 @@ test.describe('Room messages', () => {
   });
 
   test('displays error message if message is too large', async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await createSubscribedUserAndLogin(page, 'message-too-large');
 
     await page.locator('[data-test-message-field]').fill('a'.repeat(65000));
     await page.locator('[data-test-send-message-btn]').click();
@@ -975,11 +1028,14 @@ test.describe('Room messages', () => {
   test('filters out messages with m.replace when loading room history', async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    const { username, credentials } = await createSubscribedUserAndLogin(
+      page,
+      'filter-m-replace',
+    );
     let room1 = await getRoomId(page);
 
     let event1 = await putEvent(
-      userCred.accessToken,
+      credentials.accessToken,
       room1,
       'm.room.message',
       '1',
@@ -993,13 +1049,13 @@ test.describe('Room messages', () => {
 
     await assertMessages(page, [
       {
-        from: 'user1',
+        from: username,
         message: 'Initial streaming message',
       },
     ]);
 
     let replaceEvent1 = await putEvent(
-      userCred.accessToken,
+      credentials.accessToken,
       room1,
       'm.room.message',
       '2',
@@ -1017,14 +1073,14 @@ test.describe('Room messages', () => {
 
     await assertMessages(page, [
       {
-        from: 'user1',
+        from: username,
         message:
           'Initial streaming message, additional text from replacement event 1',
       },
     ]);
 
     let replaceEvent2 = await putEvent(
-      userCred.accessToken,
+      credentials.accessToken,
       room1,
       'm.room.message',
       '3',
@@ -1042,7 +1098,7 @@ test.describe('Room messages', () => {
 
     await assertMessages(page, [
       {
-        from: 'user1',
+        from: username,
         message:
           'Initial streaming message, additional text from replacement event 1, additional text from replacement event 2',
       },
@@ -1063,7 +1119,7 @@ test.describe('Room messages', () => {
 
     await assertMessages(page, [
       {
-        from: 'user1',
+        from: username,
         message:
           'Initial streaming message, additional text from replacement event 1, additional text from replacement event 2',
       },

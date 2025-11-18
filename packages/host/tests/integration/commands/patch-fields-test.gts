@@ -1,3 +1,5 @@
+import { waitUntil } from '@ember/test-helpers';
+
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -9,6 +11,9 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  setupOnSave,
+  withSlowSave,
+  type TestContextWithSave,
 } from '../../helpers';
 import {
   CardDef,
@@ -31,6 +36,7 @@ module('Integration | Command | patch-fields', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
+  setupOnSave(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, { autostart: true });
 
   let commandService: CommandService;
@@ -149,6 +155,91 @@ module('Integration | Command | patch-fields', function (hooks) {
       },
     });
     store = getService('store');
+  });
+
+  module('Optimistic persistence behavior', function () {
+    test<TestContextWithSave>('patches do not await persistence', async function (assert) {
+      assert.expect(6);
+
+      let patchFieldsCommand = new PatchFieldsCommand(
+        commandService.commandContext,
+        {
+          cardType: AuthorDef,
+        },
+      );
+      let cardId = `${testRealmURL}Author/john`;
+      let store = getService('store');
+
+      let saves = 0;
+      this.onSave((url) => {
+        if (url.href === cardId) {
+          saves++;
+        }
+      });
+
+      let patchOptions: Parameters<StoreService['patch']>[2];
+      let originalPatch = store.patch;
+      store.patch = async function (
+        this: StoreService,
+        id,
+        patch,
+        opts: {
+          doNotPersist?: true;
+          doNotWaitForPersist?: true;
+          clientRequestId?: string;
+        },
+      ) {
+        patchOptions = opts;
+        return await originalPatch.call(this, id, patch, opts);
+      };
+
+      try {
+        await withSlowSave(100, async () => {
+          let result = await patchFieldsCommand.execute({
+            cardId,
+            fieldUpdates: {
+              firstName: 'Jane Optimistic',
+            },
+          });
+
+          assert.true(result.success, 'command succeeds');
+
+          let localCard = store.peek(cardId);
+          assert.ok(localCard, 'local card is present');
+          if (isCard(localCard)) {
+            assert.strictEqual(
+              (localCard as any).firstName,
+              'Jane Optimistic',
+              'local card updated immediately',
+            );
+          } else {
+            assert.ok(false, 'local card should be a card instance');
+          }
+
+          assert.strictEqual(saves, 0, 'no persistence yet');
+        });
+      } finally {
+        store.patch = originalPatch;
+      }
+
+      assert.true(
+        patchOptions?.doNotWaitForPersist,
+        'store.patch receives doNotWaitForPersist option',
+      );
+
+      await waitUntil(() => saves > 0);
+
+      let persistedCard = await store.get(cardId);
+      if (isCard(persistedCard)) {
+        assert.strictEqual(
+          (persistedCard as any).firstName,
+          'Jane Optimistic',
+          'change persists after background save completes',
+        );
+      } else {
+        assert.ok(false, 'persisted card should exist');
+      }
+    });
   });
 
   module('Simple Field Update Tests', function () {

@@ -23,10 +23,17 @@
       "lastTimestamp": null,
       "lastTurnNumber": null,
       "customAdventure": {
-        "tags": [],
+        "tags": [
+          "noir",
+          "mystery",
+          "gritty"
+        ],
         "title": null,
         "description": null,
-        "imageStyles": []
+        "imageStyles": [
+          "film-noir",
+          "black-and-white"
+        ]
       },
       "lastImagePrompt": null,
       "lastIsPlayerTurn": false,
@@ -40,6 +47,11 @@
         }
       },
       "selectedScenario": {
+        "links": {
+          "self": null
+        }
+      },
+      "lastChoiceOffered": {
         "links": {
           "self": null
         }
@@ -62,6 +74,11 @@
       "linkedScenarios.3": {
         "links": {
           "self": "../AdventureScenario/example-scenario-undersea-kingdom"
+        }
+      },
+      "linkedScenarios.4": {
+        "links": {
+          "self": "../AdventureScenario/example-scenario-time-traveler"
         }
       },
       "lastCloudflareImage": {

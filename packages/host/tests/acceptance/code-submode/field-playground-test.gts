@@ -25,6 +25,7 @@ import {
   getPlaygroundSelections,
   openFileInPlayground,
   removePlaygroundSelections,
+  removeSpecSelection,
   selectDeclaration,
   selectFormat,
   setPlaygroundSelections,
@@ -206,6 +207,91 @@ const petCard = `import { contains, containsMany, field, CardDef, Component, Fie
   }
 `;
 
+const clone = <T,>(obj: T): T => JSON.parse(JSON.stringify(obj)) as T;
+
+const commentSpec2 = {
+  data: {
+    type: 'card',
+    attributes: {
+      ref: {
+        name: 'Comment',
+        module: '../blog-post',
+      },
+      specType: 'field',
+      containedExamples: [
+        {
+          title: 'Spec 2 Example 1',
+        },
+      ],
+      title: 'Comment spec II',
+    },
+    meta: {
+      fields: {
+        containedExamples: [
+          {
+            adoptsFrom: {
+              module: '../blog-post',
+              name: 'Comment',
+            },
+          },
+        ],
+      },
+      adoptsFrom: {
+        module: 'https://cardstack.com/base/spec',
+        name: 'Spec',
+      },
+    },
+  },
+};
+
+const commentSpec1 = {
+  data: {
+    type: 'card',
+    attributes: {
+      ref: {
+        name: 'Comment',
+        module: '../blog-post',
+      },
+      specType: 'field',
+      containedExamples: [
+        {
+          title: 'Terrible product',
+          name: 'Marco',
+          message: 'I would give 0 stars if I could. Do not buy!',
+        },
+        {
+          title: 'Needs better packaging',
+          name: 'Harry',
+          message: 'Arrived broken',
+        },
+      ],
+      title: 'Comment spec',
+    },
+    meta: {
+      fields: {
+        containedExamples: [
+          {
+            adoptsFrom: {
+              module: '../blog-post',
+              name: 'Comment',
+            },
+          },
+          {
+            adoptsFrom: {
+              module: '../blog-post',
+              name: 'Comment',
+            },
+          },
+        ],
+      },
+      adoptsFrom: {
+        module: 'https://cardstack.com/base/spec',
+        name: 'Spec',
+      },
+    },
+  },
+};
+
 module('Acceptance | code-submode | field playground', function (_hooks) {
   module('single realm', function (hooks) {
     let realm: Realm;
@@ -273,87 +359,8 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
               },
             },
           },
-          'Spec/comment-2.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                ref: {
-                  name: 'Comment',
-                  module: '../blog-post',
-                },
-                specType: 'field',
-                containedExamples: [
-                  {
-                    title: 'Spec 2 Example 1',
-                  },
-                ],
-                title: 'Comment spec II',
-              },
-              meta: {
-                fields: {
-                  containedExamples: [
-                    {
-                      adoptsFrom: {
-                        module: '../blog-post',
-                        name: 'Comment',
-                      },
-                    },
-                  ],
-                },
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/spec',
-                  name: 'Spec',
-                },
-              },
-            },
-          },
-          'Spec/comment-1.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                ref: {
-                  name: 'Comment',
-                  module: '../blog-post',
-                },
-                specType: 'field',
-                containedExamples: [
-                  {
-                    title: 'Terrible product',
-                    name: 'Marco',
-                    message: 'I would give 0 stars if I could. Do not buy!',
-                  },
-                  {
-                    title: 'Needs better packaging',
-                    name: 'Harry',
-                    message: 'Arrived broken',
-                  },
-                ],
-                title: 'Comment spec',
-              },
-              meta: {
-                fields: {
-                  containedExamples: [
-                    {
-                      adoptsFrom: {
-                        module: '../blog-post',
-                        name: 'Comment',
-                      },
-                    },
-                    {
-                      adoptsFrom: {
-                        module: '../blog-post',
-                        name: 'Comment',
-                      },
-                    },
-                  ],
-                },
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/spec',
-                  name: 'Spec',
-                },
-              },
-            },
-          },
+          'Spec/comment-alt.json': clone(commentSpec2),
+          'Spec/comment-main.json': clone(commentSpec1),
           'Spec/full-name.json': {
             data: {
               type: 'card',
@@ -476,6 +483,8 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
           },
         },
       }));
+      await realm.delete('Spec/comment-main.json');
+      await realm.write('Spec/comment-main.json', JSON.stringify(commentSpec1));
       setRecentFiles([
         [testRealmURL, 'blog-post.gts'],
         [testRealmURL, 'author.gts'],
@@ -483,6 +492,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         [testRealmURL, 'Author/jane-doe.json'],
       ]);
       removePlaygroundSelections();
+      removeSpecSelection();
 
       setActiveRealms([testRealmURL]);
       setRealmPermissions({
@@ -629,7 +639,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       let selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-1`,
+        cardId: `${testRealmURL}Spec/comment-main`,
         format: 'embedded',
         fieldIndex: 0,
         url: `${testRealmURL}blog-post.gts`,
@@ -638,23 +648,23 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       await toggleSpecPanel();
       assert
         .dom(
-          `[data-test-card="${testRealmURL}Spec/comment-1"] [data-test-boxel-input-id="spec-title"]`,
+          `[data-test-card="${testRealmURL}Spec/comment-main"] [data-test-boxel-input-id="spec-title"]`,
         )
         .hasValue('Comment spec');
       assert
         .dom('[data-test-spec-selector] [data-test-spec-selector-item-path]')
-        .containsText('Spec/comment-1');
+        .containsText('Spec/comment-main');
       await click('[data-test-spec-selector] > div');
       assert
         .dom('[data-option-index="1"] [data-test-spec-selector-item-path]')
-        .hasText('Spec/comment-2');
+        .hasText('Spec/comment-alt');
       await click('[data-option-index="1"]');
       assert
         .dom('[data-test-spec-selector] [data-test-spec-selector-item-path]')
-        .containsText('Spec/comment-2');
+        .containsText('Spec/comment-alt');
       assert
         .dom(
-          `[data-test-card="${testRealmURL}Spec/comment-2"] [data-test-boxel-input-id="spec-title"]`,
+          `[data-test-card="${testRealmURL}Spec/comment-alt"] [data-test-boxel-input-id="spec-title"]`,
         )
         .hasValue('Comment spec II');
 
@@ -668,7 +678,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-2`,
+        cardId: `${testRealmURL}Spec/comment-alt`,
         format: 'embedded',
         fieldIndex: 0,
         url: `${testRealmURL}blog-post.gts`,
@@ -688,7 +698,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       let selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-1`,
+        cardId: `${testRealmURL}Spec/comment-main`,
         format: 'embedded',
         fieldIndex: 0,
         url: `${testRealmURL}blog-post.gts`,
@@ -712,7 +722,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-1`,
+        cardId: `${testRealmURL}Spec/comment-main`,
         format: 'embedded',
         fieldIndex: 1,
         url: `${testRealmURL}blog-post.gts`,
@@ -722,7 +732,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     test('preview the next available example if the previously selected one has been deleted', async function (assert) {
       setPlaygroundSelections({
         [`${testRealmURL}blog-post/Comment`]: {
-          cardId: `${testRealmURL}Spec/comment-1`,
+          cardId: `${testRealmURL}Spec/comment-main`,
           format: 'embedded',
           fieldIndex: 1,
         },
@@ -823,7 +833,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       let selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-1`,
+        cardId: `${testRealmURL}Spec/comment-main`,
         format: 'embedded',
         fieldIndex: 0,
         url: `${testRealmURL}blog-post.gts`,
@@ -836,7 +846,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-1`,
+        cardId: `${testRealmURL}Spec/comment-main`,
         format: 'edit',
         fieldIndex: 2,
         url: `${testRealmURL}blog-post.gts`,
@@ -981,23 +991,30 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     });
 
     test('editing compound field instance live updates the preview', async function (assert) {
-      const updatedCommentField = `import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
-
-      export class Comment extends FieldDef {
-        static displayName = 'Comment';
-        @field title = contains(StringField);
-        @field name = contains(StringField);
-        @field message = contains(StringField);
-
-        static embedded = class Embedded extends Component<typeof this> {
+      const originalEmbeddedBlock = `    static embedded = class Embedded extends Component<typeof this> {
+      <template>
+        <div data-test-embedded-comment>
+          <h4 data-test-embedded-comment-title><@fields.title /></h4>
+          <p><@fields.message /> - by <@fields.name /></p>
+        </div>
+      </template>
+    }
+`;
+      const updatedEmbeddedBlock = `    static embedded = class Embedded extends Component<typeof this> {
       <template>
         <div data-test-embedded-comment>
           <p><@fields.message /> - by <@fields.name /></p>
         </div>
       </template>
+    }
+`;
+      const updatedCommentField = blogPostCard.replace(
+        originalEmbeddedBlock,
+        updatedEmbeddedBlock,
+      );
+      if (updatedCommentField === blogPostCard) {
+        throw new Error('failed to apply updated comment template');
       }
-    }`;
       await openFileInPlayground('blog-post.gts', testRealmURL, {
         declaration: 'Comment',
       });

@@ -15,7 +15,6 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -30,6 +29,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
+  setupOperatorModeStateCleanup,
 } from '../../../helpers';
 import { setupBaseRealm } from '../../../helpers/base-realm';
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
@@ -42,6 +42,7 @@ module('Integration | ai-assistant-panel | debug-message', function (hooks) {
   let operatorModeStateService: OperatorModeStateService;
 
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
@@ -109,7 +110,6 @@ module('Integration | ai-assistant-panel | debug-message', function (hooks) {
         noop = () => {};
         <template>
           <OperatorMode @onClose={{this.noop}} />
-          <CardPrerender />
         </template>
       },
     );
