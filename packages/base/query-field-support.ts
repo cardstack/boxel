@@ -1,4 +1,5 @@
 import type { BaseDef, CardDef, CardStore, Field } from './card-api';
+import { getStore } from './card-api';
 import type {
   LooseCardResource,
   Query,
@@ -23,7 +24,7 @@ import type { FieldDefinition } from '@cardstack/runtime-common/index-structure'
 import type { StoreLiveQuery, StoreLiveQueryOptions } from './card-api';
 import { serializeCard } from './card-serialization';
 import { initSharedState } from './shared-state';
-import { getFields } from './field-support';
+import { getFields, getDataBucket } from './field-support';
 
 interface QueryFieldState {
   signature?: string;
@@ -32,6 +33,7 @@ interface QueryFieldState {
   relationship?: Relationship;
   realm?: string | null;
   stale?: boolean;
+  records?: CardDef[];
 }
 
 const queryFieldStates = initSharedState(
@@ -84,6 +86,9 @@ export function ensureQueryFieldLiveQuery(
     return undefined;
   }
   let cachedState = getQueryFieldState(instance, field.name);
+  if (seedRecords === undefined && cachedState?.records) {
+    seedRecords = cachedState.records;
+  }
   let liveQuery: StoreLiveQuery<CardDef>;
   let options: StoreLiveQueryOptions<CardDef> = {
     getSearchURL: () => resolveSearchURL(instance, field, fieldDefinition),
@@ -266,11 +271,13 @@ export function seedQueryFieldState(
   instance: CardDef,
   resource: LooseCardResource,
 ): void {
+  let store = getStore(instance);
   let queryFieldEntries = Object.entries(
     getFields(instance, { includeComputeds: true }),
   ).filter(([, field]) => 'queryDefinition' in field && field.queryDefinition);
-  let queryFieldNames = queryFieldEntries.map(([fieldName]) => fieldName);
-  let queryFieldNameSet = new Set(queryFieldNames);
+  let queryFieldNameSet = new Set(
+    queryFieldEntries.map(([fieldName]) => fieldName),
+  );
 
   for (let existingField of getQueryFieldStateKeys(instance)) {
     if (!queryFieldNameSet.has(existingField)) {
@@ -278,13 +285,12 @@ export function seedQueryFieldState(
     }
   }
 
-  for (let fieldName of queryFieldNames) {
+  for (let [fieldName, field] of queryFieldEntries) {
     let relationship = resource.relationships?.[fieldName];
     if (!relationship) {
       setQueryFieldState(instance, fieldName, undefined);
       continue;
     }
-
     let searchURL = relationship.links?.search ?? null;
     if (!searchURL || typeof searchURL !== 'string') {
       setQueryFieldState(instance, fieldName, undefined);
@@ -320,6 +326,9 @@ export function seedQueryFieldState(
       }
     }
 
+    let seedRecords = extractSeedRecords(instance, field);
+    registerSeedRecords(store, seedRecords);
+
     setQueryFieldState(instance, fieldName, {
       query: normalizedQuery,
       signature,
@@ -327,6 +336,7 @@ export function seedQueryFieldState(
       relationship: relationshipClone,
       realm: realmFromSearch ?? null,
       stale: false,
+      records: seedRecords ? [...seedRecords] : undefined,
     });
   }
 }
@@ -429,6 +439,7 @@ function syncQueryFieldState(
     relationship,
     realm: liveQuery.realmHref ?? null,
     stale: false,
+    records: [...liveQuery.records],
   });
 }
 
@@ -471,4 +482,51 @@ function recordToResource(card: CardDef): ResourceID | undefined {
     return { type: 'card', lid };
   }
   return undefined;
+}
+
+function extractSeedRecords(
+  instance: CardDef,
+  field: Field,
+): CardDef[] | undefined {
+  let deserialized = getDataBucket(instance);
+  if (!deserialized.has(field.name)) {
+    return undefined;
+  }
+  let value = deserialized.get(field.name);
+  if (value === undefined) {
+    return undefined;
+  }
+  if (field.fieldType === 'linksTo') {
+    if (value == null) {
+      return [];
+    }
+    return [value as CardDef];
+  }
+  if (field.fieldType === 'linksToMany') {
+    if (value == null) {
+      return [];
+    }
+    if (Array.isArray(value)) {
+      return (value as CardDef[]).slice();
+    }
+  }
+  return undefined;
+}
+
+function registerSeedRecords(
+  store: CardStore | undefined,
+  records?: CardDef[],
+): void {
+  if (!store || !records || records.length === 0) {
+    return;
+  }
+  for (let record of records) {
+    if (!record) {
+      continue;
+    }
+    let identifier = record.id ?? record[localIdSymbol];
+    if (identifier) {
+      store.set(identifier, record);
+    }
+  }
 }

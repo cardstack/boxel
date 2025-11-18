@@ -164,6 +164,7 @@ export {
   setQueryFieldState,
   markQueryFieldStale,
   ensureQueryFieldLiveQuery,
+  getStore,
   type BoxComponent,
   type DeserializeOpts,
   type GetCardMenuItemParams,
@@ -3443,6 +3444,9 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     if (isCardInstance(instance) && resource.id != null) {
       (instance as any)[meta] = resource.meta;
     }
+    if (isCardInstance(instance)) {
+      seedQueryFieldState(instance as CardDef, resource);
+    }
     notifyCardTracking(instance);
     if (isCardInstance(instance) && resource.id != null) {
       // importantly, we place this synchronously after the assignment of the model's
@@ -3450,10 +3454,6 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       // saved will throw
       instance[isSavedInstance] = true;
     }
-  }
-
-  if (isCardInstance(instance)) {
-    seedQueryFieldState(instance as CardDef, resource);
   }
 
   // now we make the instance "live" after it's all constructed

@@ -1,5 +1,6 @@
 import { tracked } from '@glimmer/tracking';
 
+import { restartableTask } from 'ember-concurrency';
 import { TrackedArray } from 'tracked-built-ins';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -42,14 +43,13 @@ export default class LiveQuery<T extends CardDef = CardDef> {
   get record(): T | null {
     return this.records[0] ?? null;
   }
-  @tracked status: LiveQueryStatus;
   @tracked error: unknown;
   @tracked realmHref: string | undefined;
   @tracked searchURL: string | undefined;
+  @tracked private stale = true;
+  @tracked private hasFetched = false;
 
   #options: LiveQueryOptions<T>;
-  #pending?: Promise<void>;
-  #stale = true;
   #isDestroyed = false;
 
   constructor(options: LiveQueryOptions<T>) {
@@ -58,12 +58,25 @@ export default class LiveQuery<T extends CardDef = CardDef> {
     this.records = new TrackedArray(options.seedRecords ?? []);
     this.realmHref = options.seedRealmHref;
     this.searchURL = options.seedSearchURL;
-    this.status = hasSeed ? 'ready' : 'idle';
     this.error = undefined;
-    this.#stale = !hasSeed;
+    this.stale = !hasSeed;
+    this.hasFetched = hasSeed;
     if (options.autoRefresh !== false && !hasSeed) {
       void this.refresh({ force: true });
     }
+  }
+
+  get status(): LiveQueryStatus {
+    if (this.refreshTask.isRunning) {
+      return 'loading';
+    }
+    if (this.error) {
+      return 'error';
+    }
+    if (!this.hasFetched) {
+      return this.records.length > 0 ? 'ready' : 'idle';
+    }
+    return this.stale ? 'idle' : 'ready';
   }
 
   get owner(): LiveQueryOwner | undefined {
@@ -78,13 +91,10 @@ export default class LiveQuery<T extends CardDef = CardDef> {
     if (this.#isDestroyed) {
       return false;
     }
-    if (this.#stale) {
+    if (this.stale) {
       return false;
     }
-    this.#stale = true;
-    if (this.status === 'ready') {
-      this.#setStatus('idle');
-    }
+    this.stale = true;
     return true;
   }
 
@@ -92,15 +102,7 @@ export default class LiveQuery<T extends CardDef = CardDef> {
     if (this.#isDestroyed) {
       return;
     }
-    let force = opts?.force ?? false;
-    if (this.#pending) {
-      return this.#pending;
-    }
-    let promise = this.#performRefresh(force);
-    this.#pending = promise.finally(() => {
-      this.#pending = undefined;
-    });
-    return this.#pending;
+    return (await this.refreshTask.perform(opts?.force ?? false)) as void;
   }
 
   destroy(): void {
@@ -109,19 +111,21 @@ export default class LiveQuery<T extends CardDef = CardDef> {
     }
     this.#isDestroyed = true;
     this.records.splice(0, this.records.length);
-    this.#pending = undefined;
+    this.refreshTask.cancelAll();
   }
 
-  async #performRefresh(force: boolean): Promise<void> {
+  private refreshTask = restartableTask(async (force?: boolean) => {
+    if (this.#isDestroyed) {
+      return;
+    }
     let searchArgs = this.#options.getSearchURL();
     if (!searchArgs) {
       this.#handleNoSearchArgs();
       return;
     }
-    if (!force && !this.#stale && this.searchURL === searchArgs.searchURL) {
+    if (!force && !this.stale && this.searchURL === searchArgs.searchURL) {
       return;
     }
-    this.#setStatus('loading');
     this.error = undefined;
     this.#options.onRefreshStart?.();
     try {
@@ -130,28 +134,28 @@ export default class LiveQuery<T extends CardDef = CardDef> {
         return;
       }
       this.#applyResults(records, searchArgs.realmHref, searchArgs.searchURL);
-      this.#setStatus('ready');
-      this.#stale = false;
+      this.stale = false;
+      this.hasFetched = true;
     } catch (error) {
       if (this.#isDestroyed) {
         return;
       }
       this.error = error;
-      this.#setStatus('error');
-      this.#stale = true;
+      this.stale = true;
+      this.hasFetched = true;
       throw error;
     } finally {
       this.#options.onRefreshEnd?.({ error: this.error });
     }
-  }
+  });
 
   #handleNoSearchArgs(): void {
     this.records.splice(0, this.records.length);
     this.realmHref = undefined;
     this.searchURL = undefined;
     this.error = undefined;
-    this.#stale = false;
-    this.#setStatus('idle');
+    this.stale = false;
+    this.hasFetched = true;
   }
 
   #applyResults(
@@ -162,11 +166,5 @@ export default class LiveQuery<T extends CardDef = CardDef> {
     this.records.splice(0, this.records.length, ...records);
     this.realmHref = realmHref;
     this.searchURL = searchURL;
-  }
-
-  #setStatus(next: LiveQueryStatus): void {
-    if (this.status !== next) {
-      this.status = next;
-    }
   }
 }

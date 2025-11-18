@@ -3203,6 +3203,17 @@ module(basename(__filename), function () {
         ),
         '`included` contains the resolved favorite card',
       );
+      assert.deepEqual(
+        favoriteRelationship?.data,
+        { type: 'card', id: `${consumerRealmURL}local-person` },
+        'favorite relationship data references the resolved card',
+      );
+      assert.ok(
+        doc.included.find(
+          (resource: any) => resource.id === `${consumerRealmURL}local-person`,
+        ),
+        'local person is present in included array',
+      );
     });
 
     test('linksToMany query returns remote results and records errors for failing realm', async function (assert) {

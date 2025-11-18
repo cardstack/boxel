@@ -1,11 +1,4 @@
-import {
-  click,
-  fillIn,
-  findAll,
-  settled,
-  waitFor,
-  waitUntil,
-} from '@ember/test-helpers';
+import { click, findAll, settled, waitFor } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -15,7 +8,6 @@ import type { Loader } from '@cardstack/runtime-common';
 import { testRealmURLToUsername } from '@cardstack/runtime-common/helpers/const';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
-import type CardService from '@cardstack/host/services/card-service';
 import type NetworkService from '@cardstack/host/services/network';
 
 import {
