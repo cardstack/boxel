@@ -630,6 +630,9 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click('[data-test-workspace="Test Workspace B"]');
     await click('[data-test-boxel-filter-list-button="All Cards"]');
 
+    await waitFor(
+      `[data-test-cards-grid-item="${testRealmURL}Person/error"][data-test-instance-error]`,
+    );
     assert
       .dom(
         `[data-test-cards-grid-item="${testRealmURL}Person/error"][data-test-instance-error]`,
@@ -656,7 +659,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click('[data-test-toggle-details]');
     assert
       .dom('[data-test-error-details]')
-      .includesText(`missing file ${testRealmURL}Person/missing-link.json`);
+      .includesText(`Person/missing-link.json not found`);
   });
 
   test('can visit a card via canonical URL from second realm', async function (assert) {

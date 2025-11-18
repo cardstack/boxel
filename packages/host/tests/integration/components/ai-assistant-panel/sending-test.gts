@@ -16,7 +16,6 @@ import { module, test } from 'qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 
@@ -30,6 +29,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
+  setupOperatorModeStateCleanup,
 } from '../../../helpers';
 import {
   CardDef,
@@ -49,6 +49,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
   let operatorModeStateService: OperatorModeStateService;
 
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
@@ -144,7 +145,6 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -187,7 +187,6 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -238,7 +237,6 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -268,7 +266,6 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -317,7 +314,6 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );

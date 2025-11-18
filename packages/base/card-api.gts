@@ -2666,11 +2666,38 @@ function lazilyLoadLink(
         // TODO in the future consider recording some link meta that this reference is actually missing
         (instance as any)[field.name] = null;
 
+        let error = e as Error;
+        let isMissingFile =
+          typeof error?.message === 'string' &&
+          /not found/i.test(error.message);
+        let payloadError: {
+          title: string;
+          status: number;
+          message: string;
+          stack?: string;
+          deps?: string[];
+        } = {
+          title: isMissingFile
+            ? 'Link Not Found'
+            : error?.message ?? 'Card Error',
+          status: isMissingFile ? 404 : (error as any)?.status ?? 500,
+          message: isMissingFile
+            ? `missing file ${reference}.json`
+            : error?.message ?? String(e),
+          stack: error?.stack,
+        };
+        if (isCardError(error) && error.deps?.length) {
+          payloadError.deps = [...new Set(error.deps)];
+        }
+        let payload = JSON.stringify({
+          type: 'error',
+          error: payloadError,
+        });
         // We use a custom event for render errors--otherwise QUnit will report a "global error"
         // when we use a promise rejection to signal to the prerender that there was an error
         // even though everything is working as designed. QUnit is very noisy about these errors...
         const event = new CustomEvent('boxel-render-error', {
-          detail: { reason: e },
+          detail: { reason: payload },
         });
         globalThis.dispatchEvent(event);
       } finally {
