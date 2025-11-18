@@ -34,6 +34,7 @@ export default async function setup() {
     adminAccessToken: admin.accessToken,
     synapse,
     realmServerDb: realmServer.db,
+    realmPath: realmServer.realmPath,
     matrixUrl: matrixURL,
     prerenderUrl: prerenderServer.url,
   });

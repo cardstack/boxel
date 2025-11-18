@@ -37,6 +37,7 @@ interface MatrixTestContext {
   adminAccessToken: string;
   synapse: SynapseInstance;
   realmServerDb: string;
+  realmPath?: string;
   matrixUrl?: string;
   prerenderUrl?: string;
 }
@@ -66,6 +67,7 @@ export function getMatrixTestContext(): MatrixTestContext {
       adminAccessToken: parsed.adminAccessToken,
       realmServerDb: parsed.realmServerDb,
       synapse: parsed.synapse as SynapseInstance,
+      realmPath: typeof parsed.realmPath === 'string' ? parsed.realmPath : undefined,
       matrixUrl:
         typeof parsed.matrixUrl === 'string' ? parsed.matrixUrl : undefined,
       prerenderUrl:
