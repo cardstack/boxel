@@ -2282,7 +2282,8 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './friend-with-used-link.gts',
+                    module:
+                      'http://localhost:4202/node-test/friend-with-used-link',
                     name: 'FriendWithUsedLink',
                   },
                 },
@@ -2366,7 +2367,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: `./friend-with-used-link`,
+                      module:
+                        'http://localhost:4202/node-test/friend-with-used-link',
                       name: 'FriendWithUsedLink',
                     },
                   },
@@ -2449,7 +2451,8 @@ module(basename(__filename), function () {
               meta: {
                 adoptsFrom: {
                   name: 'FriendWithUsedLink',
-                  module: './friend-with-used-link',
+                  module:
+                    'http://localhost:4202/node-test/friend-with-used-link',
                 },
                 realmInfo: {
                   ...testRealmInfo,
