@@ -4048,6 +4048,7 @@ new content
           age: 0,
           transaction_id: aiMessageId,
         },
+        status: EventStatus.SENT,
       },
       {
         type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
@@ -4183,6 +4184,7 @@ new content
           age: 0,
           transaction_id: '$user-msg',
         },
+        status: EventStatus.SENT,
       },
       {
         type: 'm.room.message',
@@ -4256,6 +4258,7 @@ new
           age: 0,
           transaction_id: '$patch-result',
         },
+        status: EventStatus.SENT,
       },
       {
         type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -4283,6 +4286,7 @@ new
           age: 0,
           transaction_id: '$command-result',
         },
+        status: EventStatus.SENT,
       },
     ];
 
