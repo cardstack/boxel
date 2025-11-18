@@ -104,7 +104,7 @@ export const testRealm = 'http://test-realm/';
 export const localBaseRealm = 'http://localhost:4441/';
 export const matrixURL = new URL('http://localhost:8008');
 const testPrerenderHost = '127.0.0.1';
-const testPrerenderPort = 4450;
+const testPrerenderPort = 4460;
 const testPrerenderURL = `http://${testPrerenderHost}:${testPrerenderPort}`;
 const testMatrix: MatrixConfig = {
   url: matrixURL,
