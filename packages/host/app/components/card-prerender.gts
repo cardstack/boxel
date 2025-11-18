@@ -117,14 +117,23 @@ export default class CardPrerender extends Component {
         this.#prerendererDelegate,
       );
     }
-    window.addEventListener('boxel-render-error', this.#handleRenderErrorEvent);
-    registerDestructor(this, () => {
-      window.removeEventListener(
+
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.addEventListener !== 'undefined'
+    ) {
+      window.addEventListener(
         'boxel-render-error',
         this.#handleRenderErrorEvent,
       );
-      this.#cardTypeTracker.clear();
-    });
+      registerDestructor(this, () => {
+        window.removeEventListener(
+          'boxel-render-error',
+          this.#handleRenderErrorEvent,
+        );
+        this.#cardTypeTracker.clear();
+      });
+    }
   }
 
   private async prerender({
