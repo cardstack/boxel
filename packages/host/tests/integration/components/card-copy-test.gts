@@ -24,6 +24,7 @@ import {
 } from 'https://cardstack.com/base/matrix-event';
 
 import {
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   percySnapshot,
   testRealmURL,
   setupCardLogs,
@@ -157,6 +158,7 @@ module('Integration | card-copy', function (hooks) {
     ({ realm: realm1 } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'pet.gts': { Pet },
         'index.json': {
@@ -232,6 +234,7 @@ module('Integration | card-copy', function (hooks) {
       mockMatrixUtils,
       realmURL: testRealm2URL,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.json': {
           data: {
             type: 'card',
