@@ -242,7 +242,6 @@ export default class AiAssistantMessage extends Component<Signature> {
             <AiBotMessage
               @monacoSDK={{@monacoSDK}}
               @htmlParts={{@messageHTMLParts}}
-              @messageHTML={{@messageHTML}}
               @roomId={{@roomId}}
               @eventId={{@eventId}}
               @isStreaming={{@isStreaming}}
@@ -256,7 +255,6 @@ export default class AiAssistantMessage extends Component<Signature> {
                   updateExpanded=this.updateReasoningExpanded
                 )
               }}
-              @commands={{@commands}}
             />
           {{/if}}
           {{#if this.hasItems}}
