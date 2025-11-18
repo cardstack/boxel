@@ -22,6 +22,7 @@ import {
   type getCards,
   type getCard,
   type Query,
+  type CardResourceMeta,
   isFieldDef,
   internalKeyFor,
   CodeRef,
@@ -31,6 +32,7 @@ import {
   ResolvedCodeRef,
   specRef,
   localId,
+  meta,
 } from '@cardstack/runtime-common';
 
 import CreateSpecCommand from '@cardstack/host/commands/create-specs';
@@ -278,8 +280,35 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     this.cardResource = this.getCard(this, () => this.activeSpecId);
   };
 
+  private getSpecMeta(spec: Spec): CardResourceMeta | undefined {
+    return (spec as Spec & { [meta]?: CardResourceMeta })[meta];
+  }
+
+  private getSpecCreatedAt(spec: Spec) {
+    return this.getSpecMeta(spec)?.resourceCreatedAt ?? 0;
+  }
+
+  private getSpecIdForSort(spec: Spec) {
+    return spec.id ?? spec[localId];
+  }
+
   get specsForSelectedDefinition() {
-    return this.specSearch?.instances ?? [];
+    const specs = this.specSearch?.instances ?? [];
+    if (specs.length <= 1) {
+      return specs;
+    }
+    return [...specs].sort((a, b) => {
+      const createdDiff = this.getSpecCreatedAt(b) - this.getSpecCreatedAt(a);
+      if (createdDiff !== 0) {
+        return createdDiff;
+      }
+      const aId = this.getSpecIdForSort(a);
+      const bId = this.getSpecIdForSort(b);
+      if (aId && bId && aId !== bId) {
+        return bId.localeCompare(aId);
+      }
+      return 0;
+    });
   }
 
   private get activeSpecId() {

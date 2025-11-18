@@ -1,21 +1,21 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 import {
   FieldDef,
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
+} from 'https://cardstack.com/base/card-api';
 import BaseDateField from 'https://cardstack.com/base/date';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { gt, eq } from '@cardstack/boxel-ui/helpers'; // ² Helpers
-import { DateRangePicker } from '@cardstack/boxel-ui/components'; // ³ DateRangePicker component
-import CalendarStatsIcon from '@cardstack/boxel-icons/calendar-stats'; // ⁴ Calendar stats icon
-import { BusinessDays } from '../components/business-days'; // ⁵ Import BusinessDays component
+import { gt, eq } from '@cardstack/boxel-ui/helpers';
+import { formatDateTime } from '@cardstack/boxel-ui/helpers';
+import { DateRangePicker } from '@cardstack/boxel-ui/components';
 
-// Configuration interface
+import CalendarStatsIcon from '@cardstack/boxel-icons/calendar-stats';
+
+import { BusinessDays } from '../components/business-days';
+
 interface DateRangeConfiguration {
-  // ⁶ Configuration type
   presentation?: 'standard' | 'businessDays';
 }
 
@@ -25,7 +25,6 @@ class DateRangeFieldEdit extends Component<typeof DateRangeField> {
 
   constructor(owner: any, args: any) {
     super(owner, args);
-    // ¹³ Initialize from model or set defaults
     try {
       const startValue = this.args.model?.start;
       const endValue = this.args.model?.end;
@@ -58,11 +57,9 @@ class DateRangeFieldEdit extends Component<typeof DateRangeField> {
 
   @action
   onSelect(selected: { date: { start: Date | null; end: Date | null } }) {
-    // ¹⁴ Update tracked state for partial selections
     this.startDate = selected.date.start;
     this.endDate = selected.date.end;
 
-    // ¹⁵ Save to model fields only when BOTH dates selected
     if (selected.date.start && selected.date.end) {
       this.args.model.start = selected.date.start as any;
       this.args.model.end = selected.date.end as any;
@@ -105,15 +102,13 @@ class DateRangeFieldEdit extends Component<typeof DateRangeField> {
   </template>
 }
 
-// ⁷ DateRangeField - Independent FieldDef with structured start/end dates and presentation support
 export class DateRangeField extends FieldDef {
   static displayName = 'Date Range';
   static icon = CalendarStatsIcon;
 
-  @field start = contains(BaseDateField); // ⁸ Use base DateField for range start
-  @field end = contains(BaseDateField); // ⁹ Use base DateField for range end
+  @field start = contains(BaseDateField);
+  @field end = contains(BaseDateField);
 
-  // ¹⁰ Embedded format - routes to presentation or displays value
   static embedded = class Embedded extends Component<typeof this> {
     get config(): DateRangeConfiguration | undefined {
       return this.args.configuration as DateRangeConfiguration | undefined;
@@ -159,7 +154,6 @@ export class DateRangeField extends FieldDef {
     </template>
   };
 
-  // ¹¹ Atom format - compact badge display
   static atom = class Atom extends Component<typeof this> {
     get displayValue() {
       const start = this.args.model?.start;
@@ -171,9 +165,9 @@ export class DateRangeField extends FieldDef {
         const formatDate = (dateValue: string | Date) => {
           const date =
             typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
-          return date.toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
+          return formatDateTime(date, {
+            preset: 'short',
+            fallback: String(dateValue),
           });
         };
 
@@ -218,7 +212,6 @@ export class DateRangeField extends FieldDef {
     </template>
   };
 
-  // ¹² Edit format - DateRangePicker with duration display
   static edit = DateRangeFieldEdit;
 }
 

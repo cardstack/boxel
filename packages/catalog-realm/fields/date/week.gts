@@ -1,14 +1,15 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 import {
   FieldDef,
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
+} from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event'; // ² Calendar event icon
+
+import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event';
+import { formatDateTime } from '@cardstack/boxel-ui/helpers';
 
 class WeekFieldEdit extends Component<typeof WeekField> {
   @action
@@ -111,14 +112,12 @@ class WeekFieldEdit extends Component<typeof WeekField> {
   </template>
 }
 
-// ³ WeekField - Independent FieldDef for ISO week selection
 export class WeekField extends FieldDef {
   static displayName = 'Week';
   static icon = CalendarEventIcon;
 
-  @field value = contains(StringField); // ⁴ Week value (YYYY-Www format)
+  @field value = contains(StringField); // Week value (YYYY-Www format)
 
-  // ⁵ Embedded format - formatted week display
   static embedded = class Embedded extends Component<typeof this> {
     get displayValue() {
       const value = this.args.model?.value;
@@ -126,10 +125,24 @@ export class WeekField extends FieldDef {
 
       try {
         const [year, week] = value.split('-W');
-        return `Week ${week} of ${year}`;
+        const date = this.getDateFromWeek(parseInt(year), parseInt(week));
+
+        return formatDateTime(date, {
+          kind: 'week',
+          weekFormat: 'label',
+          fallback: `Week ${week} of ${year}`,
+        });
       } catch {
         return value;
       }
+    }
+
+    getDateFromWeek(year: number, week: number) {
+      const jan4 = new Date(year, 0, 4);
+      const dayOfWeek = jan4.getDay() || 7;
+      const weekStart = new Date(jan4);
+      weekStart.setDate(jan4.getDate() - dayOfWeek + 1 + (week - 1) * 7);
+      return weekStart;
     }
 
     <template>
@@ -153,7 +166,6 @@ export class WeekField extends FieldDef {
     </template>
   };
 
-  // ⁶ Atom format - compact week badge
   static atom = class Atom extends Component<typeof this> {
     get displayValue() {
       const value = this.args.model?.value;
@@ -161,10 +173,24 @@ export class WeekField extends FieldDef {
 
       try {
         const [year, week] = value.split('-W');
-        return `W${week} ${year}`;
+        const date = this.getDateFromWeek(parseInt(year), parseInt(week));
+
+        return formatDateTime(date, {
+          kind: 'week',
+          weekFormat: 'iso',
+          fallback: `W${week} ${year}`,
+        });
       } catch {
         return value;
       }
+    }
+
+    getDateFromWeek(year: number, week: number) {
+      const jan4 = new Date(year, 0, 4);
+      const dayOfWeek = jan4.getDay() || 7;
+      const weekStart = new Date(jan4);
+      weekStart.setDate(jan4.getDate() - dayOfWeek + 1 + (week - 1) * 7);
+      return weekStart;
     }
 
     <template>
@@ -199,7 +225,6 @@ export class WeekField extends FieldDef {
     </template>
   };
 
-  // ⁷ Edit format - week input
   static edit = WeekFieldEdit;
 }
 

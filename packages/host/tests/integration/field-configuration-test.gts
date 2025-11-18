@@ -3,8 +3,14 @@ import { RenderingTestContext, settled } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, Deferred } from '@cardstack/runtime-common';
+import type { SingleCardDocument } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
+
+import type {
+  CardStore,
+  CardDef as CardDefType,
+} from 'https://cardstack.com/base/card-api';
 
 import {
   testRealmURL,
@@ -15,7 +21,6 @@ import {
 import {
   setupBaseRealm,
   createFromSerialized,
-  ensureLinksLoaded,
   field,
   contains,
   linksTo,
@@ -29,6 +34,103 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 let loader: Loader;
+
+class DeferredLinkStore implements CardStore {
+  private instances = new Map<string, CardDefType>();
+  private readyDocs = new Map<string, SingleCardDocument>();
+  private pendingDocs = new Map<string, Deferred<SingleCardDocument>>();
+  private inFlightLoads = new Set<Promise<unknown>>();
+  private loadGeneration = 0;
+
+  get(url: string) {
+    return this.instances.get(this.normalize(url));
+  }
+
+  set(url: string, instance: CardDefType) {
+    this.instances.set(this.normalize(url), instance);
+  }
+
+  setNonTracked(url: string, instance: CardDefType) {
+    this.instances.set(this.normalize(url), instance);
+  }
+
+  makeTracked(_id: string) {}
+
+  async loadDocument(url: string) {
+    let normalized = this.normalize(url);
+    let ready = this.readyDocs.get(normalized);
+    if (ready) {
+      return ready;
+    }
+    let pending = this.pendingDocs.get(normalized);
+    if (!pending) {
+      pending = new Deferred<SingleCardDocument>();
+      this.pendingDocs.set(normalized, pending);
+    }
+    return pending.promise;
+  }
+
+  trackLoad(load: Promise<unknown>) {
+    if (this.inFlightLoads.has(load)) {
+      return;
+    }
+    this.inFlightLoads.add(load);
+    this.loadGeneration++;
+    load.finally(() => {
+      this.inFlightLoads.delete(load);
+    });
+  }
+
+  async loaded() {
+    let observedGeneration = this.loadGeneration;
+    let settled = false;
+    while (!settled) {
+      if (this.inFlightLoads.size === 0) {
+        await Promise.resolve();
+      } else {
+        await Promise.allSettled(Array.from(this.inFlightLoads));
+      }
+      if (
+        this.inFlightLoads.size === 0 &&
+        this.loadGeneration === observedGeneration
+      ) {
+        settled = true;
+      } else {
+        observedGeneration = this.loadGeneration;
+      }
+    }
+  }
+
+  provideDocument(url: string, doc: SingleCardDocument) {
+    let normalized = this.normalize(url);
+    this.readyDocs.set(normalized, doc);
+    let pending = this.pendingDocs.get(normalized);
+    if (pending) {
+      pending.fulfill(doc);
+      this.pendingDocs.delete(normalized);
+    }
+  }
+
+  private normalize(url: string) {
+    return url.replace(/\.json$/, '');
+  }
+}
+
+function buildThemeDocument(palette: string): SingleCardDocument {
+  return {
+    data: {
+      type: 'card',
+      id: `${testRealmURL}ThemeCard/main`,
+      attributes: { palette },
+      meta: {
+        adoptsFrom: {
+          module: `${testRealmURL}reactive`,
+          name: 'ThemeCard',
+        },
+      },
+    },
+  };
+}
 
 module('Integration | field configuration', function (hooks) {
   setupRenderingTest(hooks);
@@ -197,26 +299,7 @@ module('Integration | field configuration', function (hooks) {
 
     // Provide a custom store that can satisfy link resolution from cache, avoiding HTTP fetch.
     let themeRef = `${testRealmURL}ThemeCard/main`;
-    let mod = await loader.import(`${testRealmURL}reactive`);
-    let ThemeCard = (mod as any).ThemeCard;
-    let cachedTheme = new ThemeCard({ palette: 'purple' });
-    let themeAvailable = false;
-    let customStore = {
-      get(url: string) {
-        if (url.replace(/\.json$/, '') === themeRef && themeAvailable) {
-          return cachedTheme;
-        }
-        return undefined;
-      },
-      set() {},
-      setNonTracked() {},
-      makeTracked() {},
-      async loadDocument(_url: string) {
-        throw new Error('should not fetch');
-      },
-      trackLoad() {},
-      async loaded() {},
-    } as any;
+    let customStore = new DeferredLinkStore();
 
     let parent = await createFromSerialized(
       resource as any,
@@ -233,8 +316,8 @@ module('Integration | field configuration', function (hooks) {
 
     // No write needed since the custom store returns the Theme from cache
     // Now load links and assert re-render picks up the theme palette
-    themeAvailable = true;
-    await ensureLinksLoaded(parent);
+    customStore.provideDocument(themeRef, buildThemeDocument('purple'));
+    await customStore.loaded();
     await settled();
     assert
       .dom('[data-test-reactive-parent] [data-test-has-purple]')
@@ -256,26 +339,10 @@ module('Integration | field configuration', function (hooks) {
       },
     };
 
-    // Custom store returns a Theme instance immediately so initial configuration resolves
+    // Custom store resolves the theme document immediately so initial configuration resolves
     let themeRef = `${testRealmURL}ThemeCard/main`;
-    let mod = await loader.import(`${testRealmURL}reactive`);
-    let ThemeCard = (mod as any).ThemeCard;
-    let cachedTheme = new ThemeCard({ palette: 'purple' });
-    let customStore = {
-      get(url: string) {
-        return url.replace(/\\.json$/, '') === themeRef
-          ? cachedTheme
-          : undefined;
-      },
-      set() {},
-      setNonTracked() {},
-      makeTracked() {},
-      async loadDocument(_url: string) {
-        throw new Error('should not fetch');
-      },
-      trackLoad() {},
-      async loaded() {},
-    } as any;
+    let customStore = new DeferredLinkStore();
+    customStore.provideDocument(themeRef, buildThemeDocument('purple'));
 
     let parent = await createFromSerialized(
       resource as any,
@@ -285,17 +352,22 @@ module('Integration | field configuration', function (hooks) {
     );
 
     // Ensure link is realized, then render and verify initial state 'yes'
-    await ensureLinksLoaded(parent);
-    await settled();
     await renderCard(loader, parent, 'isolated');
+    await customStore.loaded();
+    await settled();
     assert
       .dom('[data-test-reactive-parent] [data-test-has-purple]')
       .hasText('yes', 'configuration reflects initial theme value');
 
     // Change the consumed field in the linked Theme card
-    cachedTheme.palette = 'orange';
+    let mod = await loader.import(`${testRealmURL}reactive`);
+    let ThemeCard = (mod as any).ThemeCard;
+    let loadedTheme = customStore.get(themeRef) as InstanceType<
+      typeof ThemeCard
+    >;
+    loadedTheme.palette = 'orange';
+    (parent as any).theme = loadedTheme;
     // Trigger parent recompute and re-render
-    await ensureLinksLoaded(parent);
     await settled();
 
     assert

@@ -24,7 +24,6 @@ if (process.env.NODE_ENV === 'test') {
 }
 
 if (process.env.USE_HEADLESS_CHROME_INDEXING === 'true') {
-  // in node context this is a boolean
   (globalThis as any).__useHeadlessChromePrerender = true;
 }
 

@@ -20,24 +20,31 @@ interface Args {
 export class CardResource extends Resource<Args> {
   #id: string | undefined;
   #hasRegisteredDestructor = false;
+  #hasReference = false;
   @service declare private store: StoreService;
 
   modify(_positional: never[], named: Args['named']) {
     let { id } = named;
     if (id !== this.#id) {
-      if (this.#id) {
-        this.store.dropReference(this.#id);
-      }
+      this.dropReferenceIfHeld();
       this.#id = id;
-      this.store.addReference(this.#id);
+      if (this.#id) {
+        this.store.addReference(this.#id);
+        this.#hasReference = true;
+      }
     }
     if (!this.#hasRegisteredDestructor) {
       this.#hasRegisteredDestructor = true;
       registerDestructor(this, () => {
-        if (this.#id) {
-          this.store.dropReference(this.#id);
-        }
+        this.dropReferenceIfHeld();
       });
+    }
+  }
+
+  private dropReferenceIfHeld() {
+    if (this.#id && this.#hasReference) {
+      this.store.dropReference(this.#id);
+      this.#hasReference = false;
     }
   }
 

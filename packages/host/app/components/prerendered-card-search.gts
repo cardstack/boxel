@@ -1,5 +1,6 @@
 import { setComponentTemplate } from '@ember/component';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { isDestroyed, isDestroying } from '@ember/destroyable';
 import { service } from '@ember/service';
 import { precompileTemplate } from '@ember/template-compilation';
 import { buildWaiter } from '@ember/test-waiters';
@@ -41,6 +42,8 @@ import type CardService from '../services/card-service';
 import type LoaderService from '../services/loader-service';
 
 const waiter = buildWaiter('prerendered-card-search:waiter');
+const OWNER_DESTROYED_ERROR =
+  "Cannot call `.lookup('renderer:-dom')` after the owner has been destroyed";
 
 export class PrerenderedCard implements PrerenderedCardLike {
   component: HTMLComponent;
@@ -189,7 +192,21 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
   );
 
   private get cardComponentModifier() {
-    return this.cardContext?.cardComponentModifier;
+    if (isDestroying(this) || isDestroyed(this)) {
+      return undefined;
+    }
+    try {
+      return this.cardContext?.cardComponentModifier;
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes(OWNER_DESTROYED_ERROR)
+      ) {
+        // Realm refreshes can finish after the component tree has torn down.
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   async searchPrerendered(
@@ -225,6 +242,10 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
         this.loaderService.loader.import(cssModuleUrl),
       ),
     );
+
+    if (isDestroying(this) || isDestroyed(this)) {
+      return { instances: [], meta: json.meta };
+    }
 
     let modifier = this.cardComponentModifier;
 

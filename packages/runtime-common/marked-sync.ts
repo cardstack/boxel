@@ -2,6 +2,10 @@ import { marked } from 'marked';
 import { sanitizeHtml } from './dompurify-runtime';
 import { escapeHtml } from './helpers/html';
 
+const DECORATIVE_BULLET_PATTERN =
+  // eslint-disable-next-line no-misleading-character-class -- match pictographic symbols plus a few geometric glyphs not covered by the Unicode class
+  /(^|\n)(\s*)([\p{Extended_Pictographic}★•▪●❖✦✧◉◦◾◽⬢⬡☑✔☑️➤➔➜➡→])(\s+)/gu;
+
 export function markedSync(
   markdown: string,
   opts: { escapeHtmlInCodeBlocks?: boolean } = {
@@ -36,7 +40,13 @@ export function markdownToHtml(
   if (!markdown) {
     return '';
   }
-  let html = markedSync(markdown, {
+  // Marked only treats ASCII list markers, so prefix decorative bullets with a standard marker.
+  let normalizedMarkdown = markdown.replace(
+    DECORATIVE_BULLET_PATTERN,
+    (_match, boundary, indentation, bullet, whitespace) =>
+      `${boundary}${indentation}* ${bullet}${whitespace}`,
+  );
+  let html = markedSync(normalizedMarkdown, {
     escapeHtmlInCodeBlocks: opts.escapeHtmlInCodeBlocks,
   });
   if (opts.sanitize) {

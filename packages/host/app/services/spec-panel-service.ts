@@ -61,4 +61,9 @@ export default class SpecPanelService extends Service {
       window.localStorage.setItem(SpecSelection, id);
     }
   }
+
+  resetSelection() {
+    this.specSelection = null;
+    window.localStorage.removeItem(SpecSelection);
+  }
 }

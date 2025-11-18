@@ -194,7 +194,6 @@ export class CurrentRun {
 
     await current.whileIndexing(async () => {
       let visitStart = Date.now();
-      invalidations = CurrentRun.#sortInvalidations(invalidations);
       for (let invalidation of invalidations) {
         await current.tryToVisit(invalidation);
       }
@@ -243,8 +242,8 @@ export class CurrentRun {
       current.#jobInfo,
     );
     await current.batch.invalidate(urls);
-    let invalidations = CurrentRun.#sortInvalidations(
-      current.batch.invalidations.map((href) => new URL(href)),
+    let invalidations = current.batch.invalidations.map(
+      (href) => new URL(href),
     );
     let hasExecutableInvalidation = invalidations.some((url) =>
       hasExecutableExtension(url.href),
@@ -343,21 +342,6 @@ export class CurrentRun {
       reason: `${jobIdentity(this.#jobInfo)} pending-loader-reset`,
     });
     this.#pendingLoaderReset = false;
-  }
-
-  static #sortInvalidations(urls: URL[]): URL[] {
-    if ((globalThis as any).__useHeadlessChromePrerender?.()) {
-      return urls.sort((a, b) => {
-        let aExec = hasExecutableExtension(a.href);
-        let bExec = hasExecutableExtension(b.href);
-        if (aExec === bExec) {
-          return a.href.localeCompare(b.href);
-        }
-        return aExec ? -1 : 1;
-      });
-    } else {
-      return urls;
-    }
   }
 
   @cached

@@ -559,27 +559,37 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private startAnimation = dropTask(
     async (animationType: 'closing' | 'movingForward') => {
       this.animationType = animationType;
-      if (!this.itemEl) return;
       await new Promise<void>((resolve) => {
         scheduleOnce(
           'afterRender',
           this,
           this.handleAnimationCompletion,
+          animationType,
           resolve,
         );
       });
     },
   );
 
-  private handleAnimationCompletion(resolve: () => void) {
+  private handleAnimationCompletion(
+    animationName: 'opening' | 'closing' | 'movingForward',
+    resolve?: () => void,
+  ) {
     if (!this.itemEl) {
+      this.clearAnimationType(animationName);
+      resolve?.();
       return;
     }
-    const animations = this.itemEl.getAnimations() || [];
+    const animations = this.itemEl.getAnimations?.() ?? [];
+    if (animations.length === 0) {
+      this.clearAnimationType(animationName);
+      resolve?.();
+      return;
+    }
     Promise.all(animations.map((animation) => animation.finished))
       .then(() => {
-        this.animationType = undefined;
-        resolve();
+        this.clearAnimationType(animationName);
+        resolve?.();
       })
       .catch((e) => {
         // AbortError is expected in two scenarios:
@@ -588,13 +598,32 @@ export default class OperatorModeStackItem extends Component<Signature> {
         // 2. Tests running with animation-duration: 0s can cause
         //    animations to abort before they're properly tracked
         if (e.name === 'AbortError') {
-          this.animationType = undefined;
-          resolve();
+          this.clearAnimationType(animationName);
+          resolve?.();
         } else {
           console.error(e);
         }
       });
   }
+
+  private clearAnimationType(
+    animationName: 'opening' | 'closing' | 'movingForward',
+  ) {
+    if (this.animationType === animationName) {
+      this.animationType = undefined;
+    }
+  }
+
+  private trackOpeningAnimation = () => {
+    if (this.animationType !== 'opening') {
+      return;
+    }
+    scheduleOnce('afterRender', this, this.finishOpeningAnimation);
+  };
+
+  private finishOpeningAnimation = () => {
+    this.handleAnimationCompletion('opening');
+  };
 
   private setupContentEl = (el: HTMLElement) => {
     this.contentEl = el;
@@ -629,6 +658,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private setupItemEl = (el: HTMLElement) => {
     this.itemEl = el;
+    this.trackOpeningAnimation();
   };
 
   private get doOpeningAnimation() {

@@ -111,12 +111,7 @@ export class RunnerOptionsManager {
 }
 
 function isHeadlessChromeFeatureFlagEnabled() {
-  let useHeadlessChromePrerender = (globalThis as any)
-    .__useHeadlessChromePrerender;
-  if (typeof useHeadlessChromePrerender === 'function') {
-    return useHeadlessChromePrerender();
-  }
-  return useHeadlessChromePrerender;
+  return Boolean((globalThis as any).__useHeadlessChromePrerender);
 }
 
 export class Worker {
@@ -141,6 +136,7 @@ export class Worker {
     | undefined;
   #reportStatus: ((args: StatusArgs) => void) | undefined;
   #realmServerMatrixUsername;
+  #useHeadlessChromePrerender: boolean | undefined;
 
   constructor({
     indexWriter,
@@ -155,6 +151,7 @@ export class Worker {
     secretSeed,
     reportStatus,
     prerenderer,
+    useHeadlessChromePrerender,
   }: {
     indexWriter: IndexWriter;
     queue: QueueRunner;
@@ -168,6 +165,7 @@ export class Worker {
     secretSeed: string;
     prerenderer: Prerenderer;
     reportStatus?: (args: StatusArgs) => void;
+    useHeadlessChromePrerender?: boolean;
   }) {
     this.#queue = queue;
     this.#indexWriter = indexWriter;
@@ -181,6 +179,7 @@ export class Worker {
     this.#dbAdapter = dbAdapter;
     this.#queuePublisher = queuePublisher;
     this.#prerenderer = prerenderer;
+    this.#useHeadlessChromePrerender = useHeadlessChromePrerender;
   }
 
   async run() {
@@ -196,7 +195,8 @@ export class Worker {
       reportStatus: this.reportStatus.bind(this),
     };
 
-    let isFeatureFlagEnabled = isHeadlessChromeFeatureFlagEnabled();
+    let isFeatureFlagEnabled =
+      this.#useHeadlessChromePrerender ?? isHeadlessChromeFeatureFlagEnabled();
     await Promise.all([
       this.#queue.register(
         `from-scratch-index`,
