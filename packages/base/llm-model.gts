@@ -15,7 +15,12 @@ class LLMModelEdit extends Component<typeof LLMModelField> {
     if (!current) {
       return null;
     }
-    return this.options.find((option) => option.value === current) ?? null;
+    return (
+      this.options.find((option) => option.value === current) ?? {
+        value: current,
+        label: current,
+      }
+    );
   }
 
   onSelect = (option: { value: string; label: string } | null) => {
