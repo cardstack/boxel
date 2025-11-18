@@ -981,6 +981,23 @@ ${REPLACE_MARKER}
     await click('[data-test-send-message-btn]');
     await waitFor('[data-test-message-idx]');
 
+    // Wait until matrix state stabilizes so we compare the final command set
+    await waitUntil(
+      () => {
+        let skillsState = getRoomState(
+          roomId,
+          APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+        );
+        let currentLength = skillsState?.commandDefinitions?.length ?? 0;
+        let initialLength =
+          initialRoomStateSkillsJson?.commandDefinitions?.length ?? 0;
+        return currentLength === initialLength;
+      },
+      {
+        timeoutMessage: 'timed out waiting for command definitions to settle',
+      },
+    );
+
     const finalRoomStateSkillsJson = getRoomState(
       roomId,
       APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
