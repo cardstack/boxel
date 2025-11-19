@@ -74,6 +74,11 @@ export class ShowCardInput extends CardDef {
   @field format = contains(StringField);
 }
 
+export class PatchThemeInput extends CardDef {
+  @field cardId = contains(StringField);
+  @field skillCard = linksTo(Skill);
+}
+
 export class FileUrlCard extends CardDef {
   @field fileUrl = contains(StringField);
 }
@@ -136,6 +141,7 @@ export class GenerateThemeExampleInput extends CardDef {
   @field prompt = contains(MarkdownField);
   @field llmModel = contains(StringField);
   @field skillCardIds = containsMany(StringField);
+  @field skillCard = linksTo(Skill);
   @field localDir = contains(StringField);
 }
 

@@ -36,7 +36,7 @@ import { task } from 'ember-concurrency';
 import type { TaskInstance } from 'ember-concurrency';
 import { tracked } from '@glimmer/tracking';
 import GenerateThemeExampleCommand from '@cardstack/boxel-host/commands/generate-theme-example';
-import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
+import PatchThemeCommand from '@cardstack/boxel-host/commands/patch-theme';
 import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
 
 class Isolated extends Component<typeof ThemeCreator> {
@@ -463,22 +463,16 @@ class Isolated extends Component<typeof ThemeCreator> {
       return;
     }
 
-    let skillIds: string[] = [];
-    try {
-      let themeDesignURL = (import.meta as any).loader.importSync?.(
-        '../Skill/theme-design',
-      )?.id;
-      if (typeof themeDesignURL === 'string') {
-        skillIds.push(themeDesignURL);
-      }
-    } catch {
-      // ignore resolution issues
-    }
-
-    let prompt = [
-      'Ask me for possible improvements to modify this theme card (e.g., change font, adjust backgrounds, tweak palettes, spacing, shadows).',
-      'Then propose changes and outline the patches you would apply to the theme JSON or CSS variables.',
-    ].join('\n');
+    let linkedSkills =
+      Array.isArray(this.args.model.skillCards) &&
+      this.args.model.skillCards.length
+        ? this.args.model.skillCards
+        : [];
+    let linkedSkill =
+      (linkedSkills.find(
+        (s: Skill | string | null | undefined): s is Skill =>
+          typeof s === 'object' && s !== null && 'id' in s,
+      ) as Skill | undefined) ?? undefined;
 
     if (cardId) {
       try {
@@ -488,14 +482,10 @@ class Isolated extends Component<typeof ThemeCreator> {
       }
     }
 
-    let useAssistant = new UseAiAssistantCommand(commandContext);
-    await useAssistant.execute({
-      roomId: 'new',
-      openRoom: true,
-      llmModel: 'anthropic/claude-3.5-sonnet',
-      prompt,
-      skillCardIds: skillIds.length ? skillIds : undefined,
-      attachedCardIds: [cardId],
+    let patchTheme = new PatchThemeCommand(commandContext);
+    await patchTheme.execute({
+      cardId,
+      skillCard: linkedSkill,
     });
   });
 

@@ -3,17 +3,16 @@ import { service } from '@ember/service';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
-
 import {
   buildAttachedFileURLs,
   buildExamplePrompt,
   ONE_SHOT_SYSTEM_PROMPT,
   parseExamplePayloadFromOutput,
-} from './example-card-helpers';
+} from '../lib/example-card-helpers';
+import HostBaseCommand from '../lib/host-base-command';
+
 import { createExampleInstanceFromPayload } from './generate-example-cards';
 import OneShotLlmRequestCommand from './one-shot-llm-request';
-import { skillCardURL } from '../lib/utils';
 
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
@@ -58,19 +57,10 @@ export default class GenerateThemeExampleCommand extends HostBaseCommand<
     const attachedFileURLs = input.codeRef.module
       ? buildAttachedFileURLs(input.codeRef.module)
       : [];
-    let themeDesignSkillId: string | undefined;
-    try {
-      themeDesignSkillId = new URL(
-        'theme-generation/Skill/theme-design',
-        realm,
-      ).href;
-    } catch {
-      themeDesignSkillId = undefined;
-    }
     const skillCardIds = Array.from(
       new Set(
         [
-          themeDesignSkillId,
+          input.skillCard?.id,
           ...(Array.isArray(input.skillCardIds) ? input.skillCardIds : []),
         ].filter(
           (id): id is string => typeof id === 'string' && id.trim().length > 0,

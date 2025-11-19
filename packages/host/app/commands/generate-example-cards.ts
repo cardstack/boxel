@@ -13,16 +13,16 @@ import {
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
-
-import { prettifyPrompts } from '../utils/prettify-prompts';
-
 import {
   buildAttachedFileURLs,
   buildExamplePrompt,
   ONE_SHOT_SYSTEM_PROMPT,
   parseExamplePayloadFromOutput,
-} from './example-card-helpers';
+} from '../lib/example-card-helpers';
+import HostBaseCommand from '../lib/host-base-command';
+
+import { prettifyPrompts } from '../utils/prettify-prompts';
+
 import OneShotLlmRequestCommand from './one-shot-llm-request';
 import SendAiAssistantMessageCommand from './send-ai-assistant-message';
 
