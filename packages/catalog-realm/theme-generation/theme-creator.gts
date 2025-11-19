@@ -19,7 +19,7 @@ import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 import Wand from '@cardstack/boxel-icons/wand';
 import Eye from '@cardstack/boxel-icons/eye';
 import SourceCode from '@cardstack/boxel-icons/source-code';
-import { type Query } from '@cardstack/runtime-common';
+import { RealmPaths, type Query } from '@cardstack/runtime-common';
 const DEFAULT_LLM = 'anthropic/claude-3.5-sonnet';
 import {
   BRAND_GUIDE_TEMPLATE,
@@ -285,24 +285,18 @@ class Isolated extends Component<typeof ThemeCreator> {
     }
     try {
       let url = new URL(urlString);
-      let path = url.pathname;
       let realmUrl = this.realmURLFor(card);
       if (realmUrl) {
-        let realmPath = realmUrl.pathname.replace(/\/+$/, '');
-        if (
-          realmPath &&
-          path.startsWith(realmPath) &&
-          (path.length === realmPath.length ||
-            path.charAt(realmPath.length) === '/')
-        ) {
-          path = path.slice(realmPath.length);
+        try {
+          let localPath = new RealmPaths(realmUrl).local(url);
+          return localPath || '/';
+        } catch {
+          // fall back to default handling below
         }
       }
-      let normalizedPath = path.replace(/^\/+/, '');
-      if (!normalizedPath) {
-        normalizedPath = '/';
-      }
-      return normalizedPath;
+
+      let path = url.pathname.replace(/^\/+/, '');
+      return path || '/';
     } catch {
       return urlString;
     }
