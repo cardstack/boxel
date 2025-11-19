@@ -143,8 +143,8 @@ class Edit extends Component<typeof SingleUploadField> {
         },
       );
     } catch (error: any) {
-      this.errorMessage = 'Failed to generate upload URL';
-      throw new Error(`Failed to generate upload URL: ${error.message}`);
+      this.errorMessage = `Failed to generate upload URL: ${error.message}`;
+      throw error;
     }
   });
 
@@ -170,7 +170,7 @@ class Edit extends Component<typeof SingleUploadField> {
       this.selectedFile = null;
       this.errorMessage = '';
     } catch (error: any) {
-      this.errorMessage = 'Upload failed';
+      this.errorMessage = `Upload failed: ${error.message}`;
       throw error;
     }
   });

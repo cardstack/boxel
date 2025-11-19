@@ -233,7 +233,7 @@ class Edit extends Component<typeof MultipleUploadField> {
       this.persistEntries();
     } catch (error: any) {
       console.error('Bulk upload error:', error);
-      this.errorMessage = 'Upload failed';
+      this.errorMessage = `Upload failed: ${error.message}`;
     }
   });
 

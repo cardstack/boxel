@@ -15,12 +15,7 @@
         "thumbnailURL": null
       },
       "multipleUpload": {
-        "uploads": [
-          {
-            "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1763551810962",
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1763551810962/public"
-          }
-        ]
+        "uploads": []
       }
     },
     "relationships": {

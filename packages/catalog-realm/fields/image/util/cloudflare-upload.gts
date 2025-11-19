@@ -52,9 +52,7 @@ export async function uploadFileToCloudflare(
   });
 
   if (!response.ok) {
-    throw new Error(
-      `Upload failed: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(await formatUploadFailure(response));
   }
 
   const result = await response.json();
@@ -63,6 +61,16 @@ export async function uploadFileToCloudflare(
     throw new Error('Upload succeeded but no image URL returned');
   }
   return imageUrl;
+}
+
+async function formatUploadFailure(response: Response): Promise<string> {
+  let body = '';
+  try {
+    body = await response.text();
+  } catch {
+    body = '[Could not read response body]';
+  }
+  return `Upload failed: ${response.status} ${response.statusText}\n\n${body}`;
 }
 
 async function formatCloudflareError(response: Response): Promise<string> {
