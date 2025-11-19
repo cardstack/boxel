@@ -1,0 +1,67 @@
+name: Preview Deployment Comment
+
+on:
+  workflow_run:
+    workflows:
+      - Preview Host
+      - CI [boxel-ui]
+    types:
+      - completed
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  publish-preview-comment:
+    if: ${{ github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.pull_requests[0].number != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gather preview links
+        id: gather
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          statuses="$(
+            curl -sf \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPOSITORY/statuses/$HEAD_SHA"
+          )"
+
+          host_staging="$(echo "$statuses" | jq -r 'map(select(.context == "Preview boxel-host staging")) | .[0].target_url // empty')"
+          host_production="$(echo "$statuses" | jq -r 'map(select(.context == "Preview boxel-host production")) | .[0].target_url // empty')"
+          ui_staging="$(echo "$statuses" | jq -r 'map(select(.context == "Preview boxel-ui staging")) | .[0].target_url // empty')"
+
+          {
+            echo "message<<'EOF'"
+            echo "### Preview deployments"
+            echo
+            if [ -n "$host_staging" ]; then
+              echo "- [Host staging preview]($host_staging)"
+            fi
+            if [ -n "$host_production" ]; then
+              echo "- [Host production preview]($host_production)"
+            fi
+            if [ -n "$ui_staging" ]; then
+              echo "- [Boxel UI staging preview]($ui_staging)"
+            fi
+            if [ -n "$host_staging$host_production$ui_staging" ]; then
+              echo
+              echo "_This comment is updated automatically when previews are redeployed._"
+            else
+              echo "No preview deployments are available for this pull request."
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Post preview links comment
+        uses: marocchino/sticky-pull-request-comment@5060d4700a91de252c87eeddd2da026382d9298a
+        with:
+          header: preview-deployments
+          number: ${{ github.event.workflow_run.pull_requests[0].number }}
+          message: ${{ steps.gather.outputs.message }}
