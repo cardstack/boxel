@@ -23,13 +23,15 @@ import {
   Deferred,
   delay,
   mergeRelationships,
+  isLocalId,
   realmURL as realmURLSymbol,
   localId as localIdSymbol,
   meta,
   logger,
   formattedError,
+  parseQuery,
+  SupportedMimeType,
   RealmPaths,
-  isLocalId,
   type Store as StoreInterface,
   type AddOptions,
   type CreateOptions,
@@ -39,13 +41,11 @@ import {
   type AutoSaveState,
   type CardDocument,
   type SingleCardDocument,
-  type CardResource,
   type CardResourceMeta,
   type LooseSingleCardDocument,
   type LooseCardResource,
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
-  SupportedMimeType,
 } from '@cardstack/runtime-common';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
@@ -489,7 +489,21 @@ export default class StoreService extends Service implements StoreInterface {
     return persistedResult as T | CardErrorJSONAPI;
   }
 
-  async search(query: Query, realmURL?: URL): Promise<CardDef[]> {
+  async search(query: Query, realmURL?: URL): Promise<CardDef[]>;
+  async search(searchURL: string | URL): Promise<CardDef[]>;
+  async search(
+    queryOrSearchURL: Query | string | URL,
+    realmURL?: URL,
+  ): Promise<CardDef[]> {
+    if (
+      typeof queryOrSearchURL === 'string' ||
+      queryOrSearchURL instanceof URL
+    ) {
+      let { query, realm } = this.parseSearchURL(queryOrSearchURL);
+      return this._search(query, realm);
+    }
+
+    let query = queryOrSearchURL;
     let realms = realmURL ? [realmURL] : this.realmServer.availableRealmURLs;
     return flatMap(
       await Promise.all(
@@ -537,6 +551,24 @@ export default class StoreService extends Service implements StoreInterface {
         }),
       )
     ).filter(Boolean) as CardDef[];
+  }
+
+  private parseSearchURL(searchURL: string | URL): {
+    query: Query;
+    realm: URL;
+  } {
+    let url = new URL(searchURL);
+    let query = parseQuery(url.search.slice(1));
+
+    // strip the trailing "_search" path segment to recover the realm URL
+    if (url.pathname.endsWith('_search')) {
+      url.pathname = url.pathname.replace(/_search$/, '');
+    } else if (url.pathname.endsWith('_search/')) {
+      url.pathname = url.pathname.replace(/_search\/$/, '/');
+    }
+    url.search = '';
+
+    return { query, realm: url };
   }
 
   createLiveQuery<T extends CardDef = CardDef>(
@@ -1542,50 +1574,19 @@ export default class StoreService extends Service implements StoreInterface {
     searchURL,
     realmHref,
   }: LiveQuerySearchArgs): Promise<CardDef[]> {
-    let json = await this.cardService.fetchJSON(searchURL);
-    if (!isCardCollectionDocument(json)) {
-      throw new Error(
-        `live query expected a collection document for ${searchURL} but received ${JSON.stringify(
-          json,
-        )}`,
-      );
-    }
-    let deduped = this.dedupeCardResources(json.data);
-    let defaultRelativeTo = realmHref ? new URL(realmHref) : undefined;
-    let instances: CardDef[] = [];
-    for (let doc of deduped) {
-      try {
-        let relativeTo = doc.id ? new URL(doc.id) : defaultRelativeTo;
-        let instance = await this.getInstance({
-          idOrDoc: { data: doc },
-          relativeTo,
-        });
-        if (isCardInstance(instance)) {
-          instances.push(instance);
-        }
-      } catch (error) {
+    // Delegate to the search overload that understands search URLs so we share
+    // hydration and error handling.
+    try {
+      return await this.search(searchURL);
+    } catch (error) {
+      if (realmHref) {
         storeLogger.warn(
-          `Skipping ${
-            doc.id
-          } because an error occurred while hydrating live query result for ${searchURL}`,
+          `Error hydrating live query results for realm ${realmHref} via ${searchURL}`,
           error,
         );
       }
+      throw error;
     }
-    return instances;
-  }
-
-  private dedupeCardResources(cards: CardResource[]): CardResource[] {
-    let seen = new Set<string>();
-    let deduped: CardResource[] = [];
-    for (let card of cards) {
-      if (!card?.id || seen.has(card.id)) {
-        continue;
-      }
-      seen.add(card.id);
-      deduped.push(card);
-    }
-    return deduped;
   }
 
   private registerLiveQueryRealm(

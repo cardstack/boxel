@@ -371,9 +371,7 @@ export interface StoreLiveQuery<T extends CardDef = CardDef> {
 }
 
 export interface StoreLiveQueryOptions<T extends CardDef = CardDef> {
-  getSearchURL: () =>
-    | { realmHref: string; searchURL: string }
-    | undefined;
+  getSearchURL: () => { realmHref: string; searchURL: string } | undefined;
   seedRecords?: T[];
   seedRealmHref?: string;
   seedSearchURL?: string;
@@ -1207,10 +1205,24 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         `linksTo field '${this.name}' cannot deserialize a list of resource ids`,
       );
     }
-    if (value?.links?.self == null || value.links.self === '') {
+    let reference = value.links?.self;
+    if (reference === null || reference === '') {
       return null;
     }
-    let cachedInstance = store.get(new URL(value.links.self, relativeTo).href);
+    if (reference === undefined) {
+      if (value.data && 'id' in value.data && value.data.id) {
+        reference = value.data.id;
+      } else {
+        return null;
+      }
+    }
+    let resolvedReference: string;
+    try {
+      resolvedReference = new URL(reference, relativeTo).href;
+    } catch {
+      resolvedReference = reference;
+    }
+    let cachedInstance = store.get(resolvedReference);
     if (cachedInstance) {
       cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
@@ -1230,7 +1242,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       }
       return {
         type: 'not-loaded',
-        reference: value.links.self,
+        reference: resolvedReference,
       };
     }
 
@@ -1715,12 +1727,24 @@ class LinksToMany<FieldT extends CardDefConstructor>
             `linksToMany field '${this.name}' cannot deserialize a list of resource ids`,
           );
         }
-        if (value.links?.self == null) {
+        let reference = value.links?.self;
+        if (reference === null || reference === '') {
           return null;
         }
-        let cachedInstance = store.get(
-          new URL(value.links.self, relativeTo).href,
-        );
+        if (reference === undefined) {
+          if (value.data && 'id' in value.data && value.data.id) {
+            reference = value.data.id;
+          } else {
+            return null;
+          }
+        }
+        let resolvedReference: string;
+        try {
+          resolvedReference = new URL(reference, relativeTo).href;
+        } catch {
+          resolvedReference = reference;
+        }
+        let cachedInstance = store.get(resolvedReference);
         if (cachedInstance) {
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
@@ -1744,7 +1768,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
         if (!resource) {
           return {
             type: 'not-loaded',
-            reference: value.links.self,
+            reference: resolvedReference,
           };
         }
         let clazz = await cardClassFromResource(
@@ -1983,7 +2007,10 @@ function fieldComponent(
 }
 
 interface InternalFieldInitializer {
-  setupField(name: string, ownerPrototype: BaseDef): {
+  setupField(
+    name: string,
+    ownerPrototype: BaseDef,
+  ): {
     enumerable?: boolean;
     get(): unknown;
     set(value: unknown): void;
