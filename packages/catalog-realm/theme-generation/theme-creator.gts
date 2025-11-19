@@ -13,7 +13,7 @@ import MarkdownField from 'https://cardstack.com/base/markdown';
 import NumberField from 'https://cardstack.com/base/number';
 import { Skill } from 'https://cardstack.com/base/skill';
 import LLMModelField from 'https://cardstack.com/base/llm-model';
-import { Button, RealmIcon } from '@cardstack/boxel-ui/components';
+import { Alert, Button, RealmIcon } from '@cardstack/boxel-ui/components';
 import { copyCardURLToClipboard } from '@cardstack/boxel-ui/helpers';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 import Wand from '@cardstack/boxel-icons/wand';
@@ -29,7 +29,6 @@ import {
 import ThemeCodeRefField from '../fields/theme-code-ref';
 import StatusIndicator from '../components/status-indicator';
 import PaginatedCards from '../components/paginated-cards';
-import NotificationBubble from '../components/notification-bubble';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { task } from 'ember-concurrency';
@@ -355,6 +354,16 @@ class Isolated extends Component<typeof ThemeCreator> {
     return String(error);
   };
 
+  errorMessagesFor = (
+    instance?: TaskInstance<CardDef | undefined> | null,
+  ): string[] => {
+    return [this.errorMessageFor(instance)];
+  };
+
+  get cardPreviewErrorMessages(): string[] {
+    return ['Failed to load this card preview.'];
+  }
+
   get variantCount(): number {
     let count = Number(this.args.model.numberOfVariants);
     if (!Number.isFinite(count) || count < 1) {
@@ -617,10 +626,11 @@ class Isolated extends Component<typeof ThemeCreator> {
                 </div>
                 <div class='theme-creator__progress-actions'>
                   {{#if run.instance.isError}}
-                    <NotificationBubble
-                      @type='error'
-                      @message={{this.errorMessageFor run.instance}}
-                    />
+                    <Alert @type='error' as |Alert|>
+                      <Alert.Messages
+                        @messages={{this.errorMessagesFor run.instance}}
+                      />
+                    </Alert>
                   {{/if}}
                   <span class='theme-creator__progress-status'>
                     <StatusIndicator
@@ -655,10 +665,11 @@ class Isolated extends Component<typeof ThemeCreator> {
           >
             <div class='theme-creator__card-wrapper'>
               {{#if card.isError}}
-                <NotificationBubble
-                  @type='error'
-                  @message='Failed to load this card preview.'
-                />
+                <Alert @type='error' as |Alert|>
+                  <Alert.Messages
+                    @messages={{this.cardPreviewErrorMessages}}
+                  />
+                </Alert>
               {{/if}}
               <card.component />
               <div class='theme-creator__card-actions'>
