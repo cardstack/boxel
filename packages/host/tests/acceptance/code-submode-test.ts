@@ -422,12 +422,14 @@ module('Acceptance | code submode tests', function (_hooks) {
   module('multiple realms', function (hooks) {
     let additionalRealmURL: string;
     let catalogRealmURL: string;
+    const systemCardAccountData: { id?: string } = {};
 
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
+      systemCardAccountData,
     });
 
     let { setActiveRealms, createAndJoinRoom } = mockMatrixUtils;
@@ -455,6 +457,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       personalRealmURL = `${realmServerService.url}testuser/personal/`;
       additionalRealmURL = `${realmServerService.url}testuser/aaa/`; // writeable realm that is lexically before the personal realm
       catalogRealmURL = `${realmServerService.url}catalog/`;
+      systemCardAccountData.id = `${catalogRealmURL}SystemCard/default`;
       setActiveRealms([catalogRealmURL, additionalRealmURL, personalRealmURL]);
 
       await setupAcceptanceTestRealm({
