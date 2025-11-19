@@ -284,6 +284,9 @@ export function instanceOf(instance: BaseDef, clazz: typeof BaseDef): boolean {
   let instanceClazz: typeof BaseDef | null = instance.constructor;
   let codeRefInstance: CodeRef | undefined;
   let codeRefClazz = identifyCard(clazz);
+  if (!codeRefClazz) {
+    return instance instanceof (clazz as any);
+  }
   do {
     codeRefInstance = instanceClazz ? identifyCard(instanceClazz) : undefined;
     if (isEqual(codeRefInstance, codeRefClazz)) {
