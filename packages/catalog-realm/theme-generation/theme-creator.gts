@@ -663,30 +663,34 @@ class Isolated extends Component<typeof ThemeCreator> {
               {{/if}}
               <card.component />
               <div class='theme-creator__card-actions'>
-                <Button
-                  @kind='secondary-light'
-                  @size='small'
-                  aria-label='Modify theme via AI'
-                  {{on 'click' (fn this.patchThemeTask.perform card.url)}}
-                >
-                  <Wand width='14' height='14' />
-                </Button>
-                <Button
-                  @kind='secondary-light'
-                  @size='small'
-                  aria-label='Preview theme on selected card'
-                  {{on 'click' (fn this.previewTheme card.url)}}
-                >
-                  <Eye width='14' height='14' />
-                </Button>
-                <Button
-                  @kind='secondary-light'
-                  @size='small'
-                  aria-label='Open in code mode'
-                  {{on 'click' (fn this.openCardInCodeMode card.url)}}
-                >
-                  <SourceCode width='14' height='14' />
-                </Button>
+                <div class='theme-creator__card-actions-row'>
+                  <Button
+                    @kind='secondary-light'
+                    @size='small'
+                    aria-label='Preview theme on selected card'
+                    {{on 'click' (fn this.previewTheme card.url)}}
+                  >
+                    <Eye width='14' height='14' />
+                  </Button>
+                  <Button
+                    @kind='secondary-light'
+                    @size='small'
+                    aria-label='Open in code mode'
+                    {{on 'click' (fn this.openCardInCodeMode card.url)}}
+                  >
+                    <SourceCode width='14' height='14' />
+                  </Button>
+                </div>
+                <div class='theme-creator__card-actions-row'>
+                  <Button
+                    @kind='primary'
+                    @size='small'
+                    aria-label='Modify theme via AI'
+                    {{on 'click' (fn this.patchThemeTask.perform card.url)}}
+                  >
+                    <Wand width='14' height='14' />
+                  </Button>
+                </div>
               </div>
             </div>
           </PaginatedCards>
@@ -853,10 +857,20 @@ class Isolated extends Component<typeof ThemeCreator> {
 
       .theme-creator__card-actions {
         display: flex;
-        align-items: center;
+        flex-direction: column;
         gap: var(--boxel-sp-xs);
         justify-content: center;
         margin-top: auto;
+      }
+
+      .theme-creator__card-actions-row {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
+
+      .theme-creator__card-actions-row > * {
+        flex: 1;
       }
     </style>
   </template>
