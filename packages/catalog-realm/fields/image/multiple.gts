@@ -10,15 +10,19 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { restartableTask } from 'ember-concurrency';
-import { Button } from '@cardstack/boxel-ui/components';
-import ImagePreview from './components/image-preview';
 import ImagePreviewContainer from './components/image-preview-container';
 import ImageUploader from './components/image-uploader';
 import CloudflareUploadButton from './components/cloudflare-upload-button';
+import ErrorMessage from './components/error-message';
 import {
   requestCloudflareUploadUrl,
   uploadFileToCloudflare,
 } from './util/cloudflare-upload';
+import {
+  buildUploadHint,
+  generateUploadId,
+  mergeMultipleUploadConfig,
+} from './util/index';
 import type { MultipleUploadConfig } from './util/types';
 import SingleUploadField from './single';
 
@@ -28,7 +32,6 @@ interface UploadEntry {
   base64Preview: string;
   uploadedImageUrl?: string;
   uploadUrl?: string; // Add uploadUrl to match SingleUploadField
-  uploadStatus?: string;
 }
 
 interface Configuration {
@@ -37,7 +40,7 @@ interface Configuration {
 
 class Edit extends Component<typeof MultipleUploadField> {
   @tracked uploadEntries: UploadEntry[] = [];
-  @tracked uploadStatus = '';
+  @tracked errorMessage = '';
 
   constructor(owner: unknown, args: unknown) {
     super(owner, args);
@@ -53,21 +56,9 @@ class Edit extends Component<typeof MultipleUploadField> {
   }
 
   get config(): MultipleUploadConfig {
-    const defaultConfig: MultipleUploadConfig = {
-      type: 'multiple',
-      maxSize: 10 * 1024 * 1024,
-      maxFiles: 10,
-      allowedFormats: ['jpeg', 'jpg', 'png', 'gif'],
-      scrollable: true,
-      showPreview: true,
-      showFileName: true,
-      showFileSize: true,
-    };
-
-    return {
-      ...defaultConfig,
-      ...(this.args.configuration?.presentation || {}),
-    } as MultipleUploadConfig;
+    return mergeMultipleUploadConfig(
+      this.args.configuration?.presentation as MultipleUploadConfig,
+    );
   }
 
   get hasImages() {
@@ -82,27 +73,30 @@ class Edit extends Component<typeof MultipleUploadField> {
     return this.uploadEntries.some((entry) => !entry.uploadedImageUrl);
   }
 
+  get showUploadButton() {
+    return this.uploadEntries.length > 0;
+  }
+
   get uploadButtonText() {
     if (this.bulkUploadTask.isRunning) {
       return 'Uploading...';
     }
-    const pendingCount = this.uploadEntries.filter(
-      (entry) => !entry.uploadedImageUrl,
-    ).length;
-    return pendingCount > 0
-      ? `Upload ${pendingCount} Image${pendingCount > 1 ? 's' : ''}`
-      : 'All Images Uploaded';
+    return this.hasPendingUploads ? 'Upload Images' : 'Uploaded successfully';
   }
 
-  get isUploadDisabled() {
+  get uploadButtonDisabled() {
     return this.bulkUploadTask.isRunning || !this.hasPendingUploads;
   }
 
   get uploadHint() {
-    const formats = this.config.allowedFormats.join(', ').toUpperCase();
-    const maxSize = this.formatFileSize(this.config.maxSize);
-    const maxFiles = this.config.maxFiles;
-    return `${formats} up to ${maxSize} each (max ${maxFiles} files)`;
+    const baseHint =
+      buildUploadHint(
+        this.config.allowedFormats,
+        this.config.maxSize,
+        'PNG, JPG, GIF up to 10MB',
+      ) || 'Upload images up to 10MB';
+    const maxFiles = this.config.maxFiles || 10;
+    return `${baseHint} (max ${maxFiles} files)`;
   }
 
   get previewImages() {
@@ -154,9 +148,11 @@ class Edit extends Component<typeof MultipleUploadField> {
   @action
   removeImage(id: string) {
     this.uploadEntries = this.uploadEntries.filter((entry) => entry.id !== id);
-    // Only persist if we have uploaded URLs to save
+    this.errorMessage = '';
     if (this.uploadEntries.some((entry) => entry.uploadedImageUrl)) {
       this.persistEntries();
+    } else {
+      this.args.model.uploads = [];
     }
   }
 
@@ -179,7 +175,7 @@ class Edit extends Component<typeof MultipleUploadField> {
 
   createEntry(file: File, base64Preview: string): UploadEntry {
     return {
-      id: this.generateImageId(),
+      id: generateUploadId(),
       file,
       base64Preview,
     };
@@ -194,27 +190,11 @@ class Edit extends Component<typeof MultipleUploadField> {
     } as File;
 
     return {
-      id: this.generateImageId(),
+      id: generateUploadId(),
       file: fileLike,
       base64Preview: upload.uploadedImageUrl || '',
       uploadedImageUrl: upload.uploadedImageUrl,
     };
-  }
-
-  generateImageId() {
-    const cryptoObj = (globalThis as any)?.crypto;
-    if (cryptoObj?.randomUUID) {
-      return cryptoObj.randomUUID();
-    }
-    return `${Date.now()}-${Math.random()}`;
-  }
-
-  formatFileSize(bytes: number): string {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   }
 
   bulkUploadTask = restartableTask(async () => {
@@ -223,20 +203,12 @@ class Edit extends Component<typeof MultipleUploadField> {
     );
 
     if (pendingEntries.length === 0) {
-      this.uploadStatus = 'No images to upload';
       return;
     }
-
-    this.uploadStatus = `Uploading ${pendingEntries.length} image${
-      pendingEntries.length > 1 ? 's' : ''
-    }...`;
 
     try {
       // Generate upload URLs for all pending images
       const uploadPromises = pendingEntries.map(async (entry) => {
-        // Update entry status
-        entry.uploadStatus = 'Generating upload URL...';
-
         try {
           const uploadUrl = await requestCloudflareUploadUrl(
             this.args.context?.commandContext,
@@ -244,16 +216,11 @@ class Edit extends Component<typeof MultipleUploadField> {
               source: 'boxel-multiple-image-field',
             },
           );
-
-          entry.uploadStatus = 'Uploading...';
+          entry.uploadUrl = uploadUrl;
           const imageUrl = await uploadFileToCloudflare(uploadUrl, entry.file);
-
           entry.uploadedImageUrl = imageUrl;
-          entry.uploadUrl = uploadUrl; // Store the uploadUrl like single.gts
-          entry.uploadStatus = 'Upload successful!';
           return imageUrl;
         } catch (error: any) {
-          entry.uploadStatus = `Upload failed: ${error.message}`;
           throw error;
         }
       });
@@ -262,11 +229,10 @@ class Edit extends Component<typeof MultipleUploadField> {
 
       // Trigger reactivity by reassigning the array
       this.uploadEntries = [...this.uploadEntries];
-      this.uploadStatus = 'All images uploaded successfully!';
       this.persistEntries();
     } catch (error: any) {
       console.error('Bulk upload error:', error);
-      this.uploadStatus = `Bulk upload failed: ${error.message}`;
+      this.errorMessage = 'Upload failed';
     }
   });
 
@@ -301,18 +267,15 @@ class Edit extends Component<typeof MultipleUploadField> {
         </div>
       {{/if}}
 
-      {{#if this.hasPendingUploads}}
-        <CloudflareUploadButton
-          @onUpload={{this.bulkUploadTask.perform}}
-          @disabled={{this.isUploadDisabled}}
-          @isUploading={{this.bulkUploadTask.isRunning}}
-          @uploadStatus={{this.uploadButtonText}}
-        />
-      {{/if}}
+      <CloudflareUploadButton
+        @showButton={{this.showUploadButton}}
+        @onUpload={{this.bulkUploadTask.perform}}
+        @disabled={{this.uploadButtonDisabled}}
+        @isUploading={{this.bulkUploadTask.isRunning}}
+        @label={{this.uploadButtonText}}
+      />
 
-      {{#if this.uploadStatus}}
-        <div class='bulk-status-message'>{{this.uploadStatus}}</div>
-      {{/if}}
+      <ErrorMessage @message={{this.errorMessage}} />
     </div>
 
     <style scoped>
@@ -357,16 +320,6 @@ class Edit extends Component<typeof MultipleUploadField> {
         font-size: 0.875rem;
         border: 1px dashed var(--boxel-200, #e5e7eb);
         border-radius: 0.75rem;
-      }
-
-      .bulk-status-message {
-        padding: 0.5rem 0.75rem;
-        border-radius: 0.375rem;
-        background: #f3f4f6;
-        border-left: 3px solid var(--boxel-primary-500, #3b82f6);
-        font-size: 0.8125rem;
-        white-space: pre-wrap;
-        align-self: stretch;
       }
     </style>
   </template>

@@ -14,20 +14,22 @@ export type {
   FieldConfigMap,
 } from './types';
 
-import type { FieldConfigMap, UploadConfig } from './types';
-import SingleUploadField from '../single';
-import MultipleUploadField from '../multiple';
+import type {
+  FieldConfigMap,
+  MultipleUploadConfig,
+  SingleUploadConfig,
+  UploadConfig,
+} from './types';
 
 export function formatFileSize(bytes: number): string {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  } else if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  } else if (bytes < 1024 * 1024 * 1024) {
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  } else {
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  if (bytes === 0) {
+    return '0 Bytes';
   }
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const value = parseFloat((bytes / Math.pow(k, i)).toFixed(1));
+  return `${value} ${sizes[i]}`;
 }
 
 export function isValidImageFile(file: File): boolean {
@@ -110,14 +112,73 @@ export function hasFeature(
   return Boolean(config.features?.[feature]);
 }
 
-const FIELD_TYPE_MAP: Record<keyof FieldConfigMap, any> = {
-  single: SingleUploadField,
-  multiple: MultipleUploadField,
-  avatar: null, // Will be implemented
-  gallery: null, // Will be implemented
+const SINGLE_UPLOAD_DEFAULT: SingleUploadConfig = {
+  type: 'single',
+  maxSize: 10 * 1024 * 1024,
+  allowedFormats: ['jpeg', 'jpg', 'png', 'gif'],
+  showPreview: true,
+  showFileName: true,
+  showFileSize: true,
+  placeholder: 'Click to upload',
 };
 
-export function getFieldClass(type?: keyof FieldConfigMap): any | null {
-  if (!type) return null;
-  return FIELD_TYPE_MAP[type] ?? null;
+const MULTIPLE_UPLOAD_DEFAULT: MultipleUploadConfig = {
+  type: 'multiple',
+  maxSize: 10 * 1024 * 1024,
+  maxFiles: 10,
+  allowedFormats: ['jpeg', 'jpg', 'png', 'gif'],
+  scrollable: true,
+  showPreview: true,
+  showFileName: true,
+  showFileSize: true,
+  placeholder: 'Click to upload image',
+};
+
+export function mergeSingleUploadConfig(
+  overrides?: SingleUploadConfig,
+): SingleUploadConfig {
+  return {
+    ...SINGLE_UPLOAD_DEFAULT,
+    ...(overrides || {}),
+    type: 'single',
+    allowedFormats:
+      overrides?.allowedFormats && overrides.allowedFormats.length
+        ? overrides.allowedFormats
+        : SINGLE_UPLOAD_DEFAULT.allowedFormats,
+  };
+}
+
+export function mergeMultipleUploadConfig(
+  overrides?: MultipleUploadConfig,
+): MultipleUploadConfig {
+  return {
+    ...MULTIPLE_UPLOAD_DEFAULT,
+    ...(overrides || {}),
+    type: 'multiple',
+    allowedFormats:
+      overrides?.allowedFormats && overrides.allowedFormats.length
+        ? overrides.allowedFormats
+        : MULTIPLE_UPLOAD_DEFAULT.allowedFormats,
+  };
+}
+
+export function buildUploadHint(
+  allowedFormats?: string[],
+  maxSize?: number,
+  fallback = '',
+): string {
+  if (allowedFormats?.length && typeof maxSize === 'number') {
+    const formats = allowedFormats.join(', ').toUpperCase();
+    const readableSize = formatFileSize(maxSize);
+    return `${formats} up to ${readableSize}`;
+  }
+  return fallback;
+}
+
+export function generateUploadId(): string {
+  const cryptoObj = (globalThis as any)?.crypto;
+  if (cryptoObj?.randomUUID) {
+    return cryptoObj.randomUUID();
+  }
+  return `${Date.now()}-${Math.random()}`;
 }

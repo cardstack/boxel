@@ -1,28 +1,5 @@
 {
   "data": {
-    "type": "card",
-    "attributes": {
-      "readMe": null,
-      "ref": {
-        "module": "../fields/image/single",
-        "name": "default"
-      },
-      "specType": "field",
-      "containedExamples": [
-        {
-          "uploadUrl": null,
-          "uploadedImageUrl": null
-        }
-      ],
-      "title": "default",
-      "description": null,
-      "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
-        "notes": null
-      }
-    },
     "meta": {
       "fields": {
         "containedExamples": [
@@ -35,8 +12,43 @@
         ]
       },
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
-        "name": "Spec"
+        "name": "Spec",
+        "module": "https://cardstack.com/base/spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../fields/image/single"
+      },
+      "title": "default",
+      "readMe": null,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "specType": "field",
+      "description": null,
+      "containedExamples": [
+        {
+          "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1763548094444",
+          "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1763548094444/public"
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

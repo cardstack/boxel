@@ -13,10 +13,12 @@ import type { SingleUploadConfig } from './util/types';
 import ImagePreview from './components/image-preview';
 import ImageUploader from './components/image-uploader';
 import CloudflareUploadButton from './components/cloudflare-upload-button';
+import ErrorMessage from './components/error-message';
 import {
   requestCloudflareUploadUrl,
   uploadFileToCloudflare,
 } from './util/cloudflare-upload';
+import { buildUploadHint, mergeSingleUploadConfig } from './util/index';
 
 interface Configuration {
   presentation: SingleUploadConfig;
@@ -26,7 +28,7 @@ class Edit extends Component<typeof SingleUploadField> {
   @tracked imageName: string = '';
   @tracked imageSize: number | undefined;
   @tracked previewUrl: string | undefined;
-  @tracked uploadStatus = '';
+  @tracked errorMessage = '';
   @tracked selectedFile: File | null = null;
 
   constructor(owner: any, args: any) {
@@ -38,18 +40,9 @@ class Edit extends Component<typeof SingleUploadField> {
   }
 
   get config(): SingleUploadConfig {
-    const defaultConfig: SingleUploadConfig = {
-      type: 'single',
-      maxSize: 10 * 1024 * 1024,
-      allowedFormats: ['jpeg', 'jpg', 'png', 'gif'],
-      showPreview: true,
-      showFileName: true,
-      placeholder: 'Click to upload',
-    };
-    return {
-      ...defaultConfig,
-      ...(this.args.configuration?.presentation || {}),
-    } as SingleUploadConfig;
+    return mergeSingleUploadConfig(
+      this.args.configuration?.presentation as SingleUploadConfig,
+    );
   }
 
   get uploadText(): string {
@@ -57,12 +50,13 @@ class Edit extends Component<typeof SingleUploadField> {
   }
 
   get uploadHint(): string {
-    if (this.config.allowedFormats && this.config.maxSize) {
-      return `${this.config.allowedFormats
-        .join(', ')
-        .toUpperCase()} up to ${this.formatFileSize(this.config.maxSize)}`;
-    }
-    return 'PNG, JPG, GIF up to 10MB';
+    return (
+      buildUploadHint(
+        this.config.allowedFormats,
+        this.config.maxSize,
+        'PNG, JPG, GIF up to 10MB',
+      ) || 'PNG, JPG, GIF up to 10MB'
+    );
   }
 
   get hasImage() {
@@ -77,10 +71,31 @@ class Edit extends Component<typeof SingleUploadField> {
     return !!(this.previewUrl && this.selectedFile);
   }
 
-  get isUploadDisabled() {
-    return (
-      this.uploadImageTask.isRunning || this.generateUploadUrlTask.isRunning
-    );
+  get showUploadButton() {
+    return this.hasImage;
+  }
+
+  get uploadButtonLabel() {
+    if (this.uploadImageTask.isRunning) {
+      return 'Uploading...';
+    }
+    if (this.hasPendingUpload) {
+      return 'Upload Image to Cloudflare';
+    }
+    if (this.args.model?.uploadedImageUrl) {
+      return 'Uploaded successfully';
+    }
+    return 'Upload Image';
+  }
+
+  get uploadButtonDisabled() {
+    if (
+      this.uploadImageTask.isRunning ||
+      this.generateUploadUrlTask.isRunning
+    ) {
+      return true;
+    }
+    return !this.hasPendingUpload;
   }
 
   @action
@@ -92,7 +107,7 @@ class Edit extends Component<typeof SingleUploadField> {
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      this.uploadStatus = 'Please select a valid image file';
+      this.errorMessage = 'Please select a valid image file';
       this.selectedFile = null;
       return;
     }
@@ -104,45 +119,22 @@ class Edit extends Component<typeof SingleUploadField> {
       this.imageName = file.name;
       this.imageSize = file.size;
       this.previewUrl = reader.result as string;
-      this.uploadStatus = 'Ready to upload to Cloudflare';
     };
     reader.readAsDataURL(file);
   }
 
   @action
   removeImage() {
-    const hadPendingUpload = this.hasPendingUpload;
-
     this.imageName = '';
     this.imageSize = undefined;
     this.previewUrl = undefined;
     this.selectedFile = null;
-    this.uploadStatus = '';
-
-    if (this.args.model.uploadUrl) {
-      this.args.model.uploadUrl = undefined;
-    }
-
-    if (hadPendingUpload) {
-      this.imageName = this.args.model?.uploadedImageUrl
-        ? 'Uploaded Image'
-        : '';
-    } else {
-      this.args.model.uploadedImageUrl = undefined;
-    }
-  }
-
-  formatFileSize(bytes: number): string {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    this.errorMessage = '';
+    this.args.model.uploadUrl = undefined;
+    this.args.model.uploadedImageUrl = undefined;
   }
 
   generateUploadUrlTask = restartableTask(async () => {
-    this.uploadStatus = 'Generating upload URL...';
-
     try {
       this.args.model.uploadUrl = await requestCloudflareUploadUrl(
         this.args.context?.commandContext,
@@ -150,16 +142,15 @@ class Edit extends Component<typeof SingleUploadField> {
           source: 'boxel-single-image-field',
         },
       );
-      this.uploadStatus = 'Ready to upload!';
     } catch (error: any) {
-      console.error('Upload URL generation error:', error);
-      this.uploadStatus = `Failed to generate upload URL: ${error.message}`;
+      this.errorMessage = 'Failed to generate upload URL';
+      throw new Error(`Failed to generate upload URL: ${error.message}`);
     }
   });
 
   uploadImageTask = restartableTask(async () => {
     if (!this.selectedFile) {
-      this.uploadStatus = 'Please select a file first';
+      this.errorMessage = 'Please select a file first';
       return;
     }
 
@@ -169,8 +160,6 @@ class Edit extends Component<typeof SingleUploadField> {
       return;
     }
 
-    this.uploadStatus = 'Uploading to Cloudflare...';
-
     try {
       const imageUrl = await uploadFileToCloudflare(
         this.args.model.uploadUrl,
@@ -178,11 +167,11 @@ class Edit extends Component<typeof SingleUploadField> {
       );
       this.args.model.uploadedImageUrl = imageUrl;
       this.previewUrl = imageUrl;
-      this.uploadStatus = 'Upload successful!';
       this.selectedFile = null;
+      this.errorMessage = '';
     } catch (error: any) {
-      console.error('Upload error:', error);
-      this.uploadStatus = `Upload failed: ${error.message}`;
+      this.errorMessage = 'Upload failed';
+      throw error;
     }
   });
 
@@ -201,18 +190,14 @@ class Edit extends Component<typeof SingleUploadField> {
           @fileSize={{this.imageSize}}
           @onRemove={{this.removeImage}}
         />
-        {{#if this.hasPendingUpload}}
-          <CloudflareUploadButton
-            @onUpload={{this.uploadImageTask.perform}}
-            @disabled={{this.isUploadDisabled}}
-            @isUploading={{this.uploadImageTask.isRunning}}
-            @uploadStatus={{this.uploadStatus}}
-          />
-        {{else}}
-          {{#if this.uploadStatus}}
-            <div class='status-message'>{{this.uploadStatus}}</div>
-          {{/if}}
-        {{/if}}
+        <CloudflareUploadButton
+          @showButton={{this.showUploadButton}}
+          @onUpload={{this.uploadImageTask.perform}}
+          @disabled={{this.uploadButtonDisabled}}
+          @isUploading={{this.uploadImageTask.isRunning}}
+          @label={{this.uploadButtonLabel}}
+        />
+        <ErrorMessage @message={{this.errorMessage}} />
       {{else}}
         {{! Upload area }}
         <ImageUploader
@@ -222,24 +207,13 @@ class Edit extends Component<typeof SingleUploadField> {
           @height='256px'
           @testId='upload-area'
         />
-        {{#if this.uploadStatus}}
-          <div class='status-message'>{{this.uploadStatus}}</div>
-        {{/if}}
+        <ErrorMessage @message={{this.errorMessage}} />
       {{/if}}
     </div>
 
     <style scoped>
       .single-upload-container {
         width: 100%;
-      }
-
-      .status-message {
-        padding: 0.5rem 0.75rem;
-        border-radius: 0.375rem;
-        background: #f3f4f6;
-        border-left: 3px solid var(--boxel-primary-500, #3b82f6);
-        font-size: 0.8125rem;
-        white-space: pre-wrap;
       }
     </style>
   </template>
