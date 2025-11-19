@@ -2452,6 +2452,90 @@ module('Integration | serialization', function (hooks) {
     );
   });
 
+  test('can deserialize a nested polymorphic contains field', async function (assert) {
+    class TravelGoal extends FieldDef {
+      @field goalTitle = contains(StringField);
+    }
+
+    class TravelGoalWithProgress extends TravelGoal {
+      @field progress = contains(NumberField);
+    }
+
+    class Traveler extends FieldDef {
+      @field name = contains(StringField);
+      @field nextTravelGoal = contains(TravelGoal);
+    }
+
+    class TripInfo extends CardDef {
+      @field traveler = contains(Traveler);
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'trip-info-cards.gts': {
+          TravelGoal,
+          TravelGoalWithProgress,
+          Traveler,
+          TripInfo,
+        },
+      },
+    });
+
+    let doc: LooseSingleCardDocument = {
+      data: {
+        id: `${testRealmURL}TripInfo/polymorphic`,
+        attributes: {
+          traveler: {
+            name: 'Marcelius Wilde',
+            nextTravelGoal: {
+              goalTitle: "Summer '25",
+              progress: 0.5,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}trip-info-cards`,
+            name: 'TripInfo',
+          },
+          fields: {
+            traveler: {
+              fields: {
+                nextTravelGoal: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}trip-info-cards`,
+                    name: 'TravelGoalWithProgress',
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    let instance = await createFromSerialized<typeof TripInfo>(
+      doc.data,
+      doc,
+      undefined,
+    );
+
+    assert.strictEqual(instance.traveler.name, 'Marcelius Wilde');
+    assert.true(
+      instance.traveler.nextTravelGoal instanceof TravelGoalWithProgress,
+      'nested field adopts overridden type',
+    );
+    assert.strictEqual(
+      instance.traveler.nextTravelGoal.goalTitle,
+      "Summer '25",
+    );
+    assert.strictEqual(
+      (instance.traveler.nextTravelGoal as TravelGoalWithProgress).progress,
+      0.5,
+    );
+  });
+
   test('can serialize a composite field that has been edited', async function (assert) {
     class Person extends FieldDef {
       @field firstName = contains(StringField);
