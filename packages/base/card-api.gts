@@ -836,7 +836,10 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
         }
       }
 
-      if (this.card === Reflect.getPrototypeOf(value)!.constructor) {
+      if (
+        this.card === Reflect.getPrototypeOf(value)!.constructor &&
+        !this.isPolymorphic
+      ) {
         // when our implementation matches the default we don't need to include
         // meta.adoptsFrom
         delete serialized.meta.adoptsFrom;
@@ -1152,6 +1155,13 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         return value;
       }
       if (!instanceOf(value, this.card)) {
+        console.warn(
+          'linksTo instance mismatch',
+          JSON.stringify({
+            expected: identifyCard(this.card),
+            actual: identifyCard(value.constructor as typeof BaseDef),
+          }),
+        );
         throw new Error(
           `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
         );
@@ -3030,17 +3040,52 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     let entry = fieldsMeta?.[key];
     return Array.isArray(entry) ? entry : undefined;
   }
+  function isAssignableToField(
+    overrideCard: typeof BaseDef,
+    fieldCard: typeof BaseDef,
+  ): boolean {
+    let current: typeof BaseDef | undefined = overrideCard;
+    while (current) {
+      if (current === fieldCard) {
+        return true;
+      }
+      current = getAncestor(current) ?? undefined;
+    }
+    return false;
+  }
+
+  function applyFieldOverride(
+    fieldName: string,
+    overrideCard?: typeof BaseDef,
+    field?: Field<typeof BaseDef, any>,
+  ): boolean {
+    if (!overrideCard) {
+      return false;
+    }
+    if (
+      field &&
+      !isAssignableToField(overrideCard, field.card as typeof BaseDef)
+    ) {
+      return false;
+    }
+    if (existingOverrides.get(fieldName) === overrideCard) {
+      return false;
+    }
+    existingOverrides.set(fieldName, overrideCard);
+    return true;
+  }
   async function setDeserializedFieldOverride(
     fieldName: string,
     resource: LooseCardResource,
+    field: Field<typeof BaseDef, any>,
     serializedFieldOverride?: Partial<Meta>,
-  ) {
+  ): Promise<boolean> {
     let overrideMeta = serializedFieldOverride;
     if (!overrideMeta) {
-      overrideMeta = getFieldMeta(resource.meta.fields, fieldName);
+      overrideMeta = getFieldMeta(resource.meta?.fields, fieldName);
     }
     if (!overrideMeta || !overrideMeta.adoptsFrom) {
-      return;
+      return false;
     }
     let override = await loadCardDef(overrideMeta.adoptsFrom, {
       loader: myLoader(),
@@ -3049,7 +3094,40 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
           ? new URL(resource.id)
           : instanceRelativeTo,
     });
-    existingOverrides.set(fieldName, override);
+    if (!override) {
+      return false;
+    }
+    return applyFieldOverride(fieldName, override, field);
+  }
+
+  function applyLinkOverrideFromValue(
+    fieldName: string,
+    field: Field<typeof BaseDef, any>,
+    value: any,
+  ): Field<typeof BaseDef, any> {
+    let changed = false;
+    if (field.fieldType === 'linksTo') {
+      if (isCardInstance(value)) {
+        changed = applyFieldOverride(
+          fieldName,
+          value.constructor as typeof BaseDef,
+        );
+      }
+    } else if (field.fieldType === 'linksToMany') {
+      if (Array.isArray(value)) {
+        let linked = value.find((entry) => isCardInstance(entry));
+        if (linked) {
+          changed = applyFieldOverride(
+            fieldName,
+            linked.constructor as typeof BaseDef,
+          );
+        }
+      }
+    }
+    if (changed) {
+      return (getField(instance, fieldName) ?? field) as Field<T>;
+    }
+    return field;
   }
 
   let values = (await Promise.all(
@@ -3067,63 +3145,79 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         // and have a chance to fix it so that it adheres to the definition
         return [];
       }
-      let resourceMetaFields = resource.meta.fields;
+      let resourceMetaFields = resource.meta?.fields;
+      let overrideApplied = false;
       if (field.fieldType === 'containsMany') {
         if (primitive in field.card) {
           if (Array.isArray(value)) {
             for (let [index] of value.entries()) {
               let key = `${fieldName}.${index}`;
-              await setDeserializedFieldOverride(
-                key,
-                resource,
-                getFieldMeta(resourceMetaFields, key),
-              );
+              overrideApplied =
+                (await setDeserializedFieldOverride(
+                  key,
+                  resource,
+                  field,
+                  getFieldMeta(resourceMetaFields, key),
+                )) || overrideApplied;
             }
           } else {
-            await setDeserializedFieldOverride(
-              fieldName,
-              resource,
-              getFieldMeta(resourceMetaFields, fieldName),
-            );
+            overrideApplied =
+              (await setDeserializedFieldOverride(
+                fieldName,
+                resource,
+                field,
+                getFieldMeta(resourceMetaFields, fieldName),
+              )) || overrideApplied;
           }
         } else {
           let metas = getFieldMetaArray(resourceMetaFields, fieldName);
           if (metas) {
             for (let [index, meta] of metas.entries()) {
-              await setDeserializedFieldOverride(
-                `${fieldName}.${index}`,
-                resource,
-                meta,
-              );
+              overrideApplied =
+                (await setDeserializedFieldOverride(
+                  `${fieldName}.${index}`,
+                  resource,
+                  field,
+                  meta,
+                )) || overrideApplied;
             }
           }
         }
       } else if (field.fieldType === 'contains') {
-        await setDeserializedFieldOverride(
-          fieldName,
-          resource,
-          getFieldMeta(resourceMetaFields, fieldName),
-        );
+        overrideApplied =
+          (await setDeserializedFieldOverride(
+            fieldName,
+            resource,
+            field,
+            getFieldMeta(resourceMetaFields, fieldName),
+          )) || overrideApplied;
+      }
+      if (overrideApplied) {
+        field = (getField(instance, fieldName) ?? field) as Field<T>;
       }
       let relativeToVal =
         'id' in instance && typeof instance.id === 'string'
           ? new URL(instance.id)
           : instance[relativeTo];
-      return [
+      let deserializedValue = await getDeserializedValue({
+        card,
+        loadedValue: loadedValues.get(fieldName),
+        fieldName,
+        value,
+        resource,
+        modelPromise: deferred.promise,
+        doc,
+        store,
+        relativeTo: relativeToVal,
+        opts,
+      });
+
+      field = applyLinkOverrideFromValue(
+        fieldName,
         field,
-        await getDeserializedValue({
-          card,
-          loadedValue: loadedValues.get(fieldName),
-          fieldName,
-          value,
-          resource,
-          modelPromise: deferred.promise,
-          doc,
-          store,
-          relativeTo: relativeToVal,
-          opts,
-        }),
-      ];
+        deserializedValue,
+      ) as Field<T>;
+      return [field, deserializedValue];
     }),
   )) as [Field<T>, any][];
 
