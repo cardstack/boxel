@@ -207,33 +207,38 @@ class Edit extends Component<typeof MultipleUploadField> {
       return;
     }
 
-    try {
-      // Generate upload URLs for all pending images
-      const uploadPromises = pendingEntries.map(async (entry) => {
-        try {
-          const uploadUrl = await requestCloudflareUploadUrl(
-            this.args.context?.commandContext,
-            {
-              source: 'boxel-multiple-image-field',
-            },
-          );
-          entry.uploadUrl = uploadUrl;
-          const imageUrl = await uploadFileToCloudflare(uploadUrl, entry.file);
-          entry.uploadedImageUrl = imageUrl;
-          return imageUrl;
-        } catch (error: any) {
-          throw error;
-        }
-      });
+    const errorMessages: string[] = [];
 
-      await Promise.all(uploadPromises);
+    // Upload each image individually to catch specific errors
+    for (const entry of pendingEntries) {
+      try {
+        const uploadUrl = await requestCloudflareUploadUrl(
+          this.args.context?.commandContext,
+          {
+            source: 'boxel-multiple-image-field',
+          },
+        );
+        entry.uploadUrl = uploadUrl;
+        const imageUrl = await uploadFileToCloudflare(uploadUrl, entry.file);
+        entry.uploadedImageUrl = imageUrl;
+      } catch (error: any) {
+        // Collect error message for this specific entry
+        const fullErrorMessage = error.message || String(error);
+        // Remove newlines from error message to prevent formatting issues
+        const cleanErrorMessage = fullErrorMessage.replace(/\n/g, ' ').trim();
+        errorMessages.push(`${entry.file.name}: ${cleanErrorMessage}`);
+      }
+    }
 
-      // Trigger reactivity by reassigning the array
-      this.uploadEntries = [...this.uploadEntries];
-      this.persistEntries();
-    } catch (error: any) {
-      console.error('Bulk upload error:', error);
-      this.errorMessage = `Upload failed: ${error.message}`;
+    // Trigger reactivity by reassigning the array
+    this.uploadEntries = [...this.uploadEntries];
+    this.persistEntries();
+
+    // Show all error messages if any failed
+    if (errorMessages.length > 0) {
+      this.errorMessage = `Upload failed for ${
+        errorMessages.length
+      } image(s):\n${errorMessages.join('\n')}`;
     }
   });
 
