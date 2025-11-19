@@ -1,9 +1,15 @@
-import { Component } from 'https://cardstack.com/base/card-api';
 import CodeRefField from 'https://cardstack.com/base/code-ref';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 
 const THEME_CODE_REF_OPTIONS: Array<{ label: string; ref: ResolvedCodeRef }> = [
+  {
+    label: 'Theme',
+    ref: {
+      module: 'https://cardstack.com/base/theme',
+      name: 'default',
+    },
+  },
   {
     label: 'Style Reference',
     ref: {
@@ -27,7 +33,7 @@ const THEME_CODE_REF_OPTIONS: Array<{ label: string; ref: ResolvedCodeRef }> = [
   },
 ];
 
-class ThemeCodeRefEdit extends Component<typeof ThemeCodeRefField> {
+class ThemeCodeRefEdit extends (CodeRefField.edit as typeof CodeRefField.edit) {
   options = THEME_CODE_REF_OPTIONS;
 
   get selected() {
