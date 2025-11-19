@@ -261,7 +261,6 @@ export class Worker {
       async (req, next) => {
         req.headers.set('X-Boxel-Building-Index', 'true');
         req.headers.set('X-Boxel-Assume-User', realmUserId);
-        req.headers.set('X-Boxel-Disable-Module-Cache', 'true');
         return next(req);
       },
       async (req, next) => {
