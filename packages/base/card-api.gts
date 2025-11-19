@@ -2113,6 +2113,7 @@ export type ViewCardFn = (
   format?: Format,
   opts?: {
     openCardInRightMostStack?: boolean;
+    openAtIndex?: number;
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
     fieldName?: string;
   },
