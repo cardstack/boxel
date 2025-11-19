@@ -124,6 +124,20 @@ class Isolated extends Component<typeof ThemeCreator> {
     return moduleString.includes(fragment);
   }
 
+  get themeType(): 'brand-guide' | 'style-reference' | 'structured-theme' | null {
+    let ref = this.codeRefSelection;
+    if (this.moduleMatches(ref, 'brand-guide')) {
+      return 'brand-guide';
+    }
+    if (this.moduleMatches(ref, 'style-reference')) {
+      return 'style-reference';
+    }
+    if (this.moduleMatches(ref, 'structured-theme')) {
+      return 'structured-theme';
+    }
+    return null;
+  }
+
   get structuredThemeGuidancePrompt(): string {
     return [
       // 'Structured Theme guidance: produce JSON matching the template, with `cssVariables` that include :root, .dark, and an `@theme inline` mapping back to Boxel tokens.',
@@ -161,31 +175,31 @@ class Isolated extends Component<typeof ThemeCreator> {
     ].join('\n');
   }
 
-  promptGuidanceFor(codeRef: { module?: string | URL | null } | null): string {
-    if (this.moduleMatches(codeRef, 'style-reference')) {
-      return this.styleReferenceGuidance;
+  promptGuidanceFor(): string {
+    switch (this.themeType) {
+      case 'style-reference':
+        return this.styleReferenceGuidance;
+      case 'brand-guide':
+        return this.brandGuideGuidance;
+      case 'structured-theme':
+        return this.structuredThemeGuidancePrompt;
+      default:
+        console.error('No prompt guidance for theme type:', this.themeType);
+        return '';
     }
-    if (this.moduleMatches(codeRef, 'brand-guide')) {
-      return this.brandGuideGuidance;
-    }
-    if (this.moduleMatches(codeRef, 'structured-theme')) {
-      return this.structuredThemeGuidancePrompt;
-    }
-    console.error('No prompt guidance');
-    return '';
   }
 
-  themePrompt(codeRef: { module?: string | URL | null } | null): string | null {
-    if (this.moduleMatches(codeRef, 'brand-guide')) {
-      return 'Generate a theme. This is a brand guide theme.';
+  themePrompt(): string | null {
+    switch (this.themeType) {
+      case 'brand-guide':
+        return 'Generate a theme. This is a brand guide theme.';
+      case 'style-reference':
+        return 'Generate a theme. This is a style reference theme.';
+      case 'structured-theme':
+        return 'Generate a theme. This is a structured theme.';
+      default:
+        return null;
     }
-    if (this.moduleMatches(codeRef, 'style-reference')) {
-      return 'Generate a theme. This is a style reference theme.';
-    }
-    if (this.moduleMatches(codeRef, 'structured-theme')) {
-      return 'Generate a theme. This is a structured theme.';
-    }
-    return null;
   }
 
   @tracked generationRuns: Array<{
@@ -382,14 +396,14 @@ class Isolated extends Component<typeof ThemeCreator> {
         ? this.args.model.prompt.trim()
         : null;
     let promptSections: string[] = [];
-    let intent = this.themePrompt(codeRef);
+    let intent = this.themePrompt();
     if (intent) {
       promptSections.push(`Intent:\n${intent}`);
     }
     if (userPrompt?.length) {
       promptSections.push(`User request:\n${userPrompt}`);
     }
-    let guidancePrompt = this.promptGuidanceFor(codeRef).trim();
+    let guidancePrompt = this.promptGuidanceFor().trim();
     if (guidancePrompt.length) {
       promptSections.push(`Guidance:\n${guidancePrompt}`);
     }
