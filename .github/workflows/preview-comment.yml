@@ -64,7 +64,7 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
       - name: Post preview links comment
-        uses: marocchino/sticky-pull-request-comment@5060d4700a91de252c87eeddd2da026382d9298a
+        uses: marocchino/sticky-pull-request-comment@5060d4700a91de252c87eeddd2da026382d9298a # 2.9.4
         with:
           header: preview-deployments
           number: ${{ inputs.pr-number }}
