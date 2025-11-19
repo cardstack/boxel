@@ -82,7 +82,9 @@ import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 import ImportIcon from '@cardstack/boxel-icons/import';
+import WandIcon from '@cardstack/boxel-icons/wand';
 // normalizeEnumOptions used by enum moved to packages/base/enum.gts
+import PatchThemeCommand from '@cardstack/boxel-host/commands/patch-theme';
 
 import {
   callSerializeHook,
@@ -2429,6 +2431,27 @@ export class Theme extends CardDef {
   static icon = ThemeIcon;
   @field cssVariables = contains(CSSField);
   @field cssImports = containsMany(CssImportField);
+
+  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
+    let menuItems = super[getCardMenuItems](params);
+    if (params.menuContext === 'interact' && params.commandContext && this.id) {
+      menuItems = [
+        ...menuItems,
+        {
+          label: 'Modify theme via AI',
+          action: async () => {
+            let cmd = new PatchThemeCommand(params.commandContext);
+            await cmd.execute({
+              cardId: this.id as unknown as string,
+            });
+          },
+          icon: WandIcon,
+          disabled: !this.id,
+        },
+      ];
+    }
+    return menuItems;
+  }
 }
 
 export type BaseDefConstructor = typeof BaseDef;

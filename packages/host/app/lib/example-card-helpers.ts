@@ -78,97 +78,22 @@ function coerceExamplePayload(
     }
     return { ...record };
   }
-  return undefined;
-}
-
-function extractJsonString(output: string): string | undefined {
-  let text = stripCodeFences(output);
-  if (!text) {
-    return undefined;
-  }
-  if (isJsonParsable(text)) {
-    return text;
-  }
-  return findJsonSubstring(text);
-}
-
-function stripCodeFences(text: string): string {
-  let trimmed = String(text).trim();
-  if (trimmed.startsWith('```')) {
-    trimmed = trimmed
-      .replace(/^```[a-zA-Z0-9-]*\n?/, '')
-      .replace(/```$/, '')
-      .trim();
-  }
-  return trimmed;
-}
-
-function isJsonParsable(text: string): boolean {
-  try {
-    JSON.parse(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function findJsonSubstring(text: string): string | undefined {
-  let index = 0;
-  while (index < text.length) {
-    const start = findNextJsonStart(text, index);
-    if (start === -1) {
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return coerceExamplePayload(parsed);
+    } catch {
       return undefined;
     }
-    const candidate = extractBalancedJson(text, start);
-    if (candidate) {
-      return candidate;
-    }
-    index = start + 1;
   }
   return undefined;
 }
 
-function findNextJsonStart(text: string, fromIndex: number): number {
-  let brace = text.indexOf('{', fromIndex);
-  let bracket = text.indexOf('[', fromIndex);
-  if (brace === -1) return bracket;
-  if (bracket === -1) return brace;
-  return Math.min(brace, bracket);
-}
-
-function extractBalancedJson(text: string, start: number): string | undefined {
-  const openChar = text[start];
-  const closeChar = openChar === '{' ? '}' : ']';
-  let depth = 0;
-  let inString = false;
-  let escape = false;
-  for (let i = start; i < text.length; i++) {
-    const ch = text[i];
-    if (inString) {
-      if (escape) {
-        escape = false;
-      } else if (ch === '\\') {
-        escape = true;
-      } else if (ch === '"') {
-        inString = false;
-      }
-      continue;
-    }
-    if (ch === '"') {
-      inString = true;
-      continue;
-    }
-    if (ch === openChar) {
-      depth++;
-    } else if (ch === closeChar) {
-      depth--;
-      if (depth === 0) {
-        const candidate = text.slice(start, i + 1);
-        if (isJsonParsable(candidate)) {
-          return candidate;
-        }
-      }
-    }
+function extractJsonString(text: string): string | undefined {
+  let start = text.indexOf('{');
+  let end = text.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) {
+    return undefined;
   }
-  return undefined;
+  return text.slice(start, end + 1);
 }
