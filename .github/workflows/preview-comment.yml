@@ -43,7 +43,7 @@ jobs:
           ui_staging="$(echo "$statuses" | jq -r 'map(select(.context == "Preview boxel-ui staging")) | .[0].target_url // empty')"
 
           {
-            echo "message<<'EOF'"
+            echo "message<<EOF"
             echo "### Preview deployments"
             echo
             if [ -n "$host_staging" ]; then
