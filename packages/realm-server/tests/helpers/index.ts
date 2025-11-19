@@ -809,11 +809,37 @@ export function setupMatrixRoom(
 export async function waitForRealmEvent(
   getMessagesSince: (since: number) => Promise<MatrixEvent[]>,
   since: number,
-) {
-  await waitUntil(async () => {
-    let matrixMessages = await getMessagesSince(since);
-    return matrixMessages.length > 0;
-  });
+  options: {
+    predicate?: (event: RealmEvent) => boolean;
+    timeout?: number;
+    timeoutMessage?: string;
+  } = {},
+): Promise<RealmEvent> {
+  let { predicate = () => true, timeout, timeoutMessage } = options;
+
+  let event = await waitUntil<RealmEvent | undefined>(
+    async () => {
+      let matrixMessages = await getMessagesSince(since);
+      let matchingEvent = matrixMessages.find((event): event is RealmEvent => {
+        if (event.type !== APP_BOXEL_REALM_EVENT_TYPE) {
+          return false;
+        }
+        return predicate(event as RealmEvent);
+      });
+
+      if (matchingEvent) {
+        return matchingEvent;
+      }
+
+      return undefined;
+    },
+    {
+      timeout: timeout ?? 5000,
+      timeoutMessage,
+    },
+  );
+
+  return event!;
 }
 
 export function findRealmEvent(
