@@ -42,6 +42,11 @@ jobs:
           host_production="$(echo "$statuses" | jq -r 'map(select(.context == "Preview boxel-host production")) | .[0].target_url // empty')"
           ui_staging="$(echo "$statuses" | jq -r 'map(select(.context == "Preview boxel-ui staging")) | .[0].target_url // empty')"
 
+          if [ -z "$host_staging$host_production$ui_staging" ]; then
+            echo "empty=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           {
             echo "message<<EOF"
             echo "### Preview deployments"
@@ -55,15 +60,10 @@ jobs:
             if [ -n "$ui_staging" ]; then
               echo "- [Boxel UI staging preview]($ui_staging)"
             fi
-            if [ -n "$host_staging$host_production$ui_staging" ]; then
-              echo
-              echo "_This comment is updated automatically when previews are redeployed._"
-            else
-              echo "No preview deployments are available for this pull request."
-            fi
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
       - name: Post preview links comment
+        if: steps.gather.outputs.empty != 'true'
         uses: marocchino/sticky-pull-request-comment@5060d4700a91de252c87eeddd2da026382d9298a # 2.9.4
         with:
           header: preview-deployments
