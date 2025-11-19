@@ -1,0 +1,55 @@
+{
+  "data": {
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../fields/image/basic-upload",
+              "name": "default"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "https://cardstack.com/base/spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../fields/image/basic-upload"
+      },
+      "title": "default",
+      "readMe": null,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "specType": "field",
+      "description": null,
+      "containedExamples": [
+        {
+          "uploadUrl": null,
+          "uploadedImageUrl": null
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
