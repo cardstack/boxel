@@ -107,3 +107,15 @@ jobs:
         with:
           package: boxel-host
           environment: production
+
+  post-preview-comment:
+    name: Update preview comment
+    needs:
+      - deploy-host-preview-staging
+      - deploy-host-preview-production
+    if: ${{ always() && (needs.deploy-host-preview-staging.result == 'success' || needs.deploy-host-preview-production.result == 'success') }}
+    uses: ./.github/workflows/preview-comment.yml
+    with:
+      pr-number: ${{ github.event.pull_request.number }}
+      head-sha: ${{ github.event.pull_request.head.sha }}
+    secrets: inherit

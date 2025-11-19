@@ -1,12 +1,16 @@
 name: Preview Deployment Comment
 
 on:
-  workflow_run:
-    workflows:
-      - Preview Host
-      - CI [boxel-ui]
-    types:
-      - completed
+  workflow_call:
+    inputs:
+      pr-number:
+        description: Pull request number to comment on
+        required: true
+        type: number
+      head-sha:
+        description: Commit SHA that produced the preview
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -15,7 +19,6 @@ permissions:
 
 jobs:
   publish-preview-comment:
-    if: ${{ github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.pull_requests[0].number != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: Gather preview links
@@ -23,7 +26,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_SHA: ${{ inputs.head-sha }}
         run: |
           set -euo pipefail
 
@@ -64,5 +67,5 @@ jobs:
         uses: marocchino/sticky-pull-request-comment@5060d4700a91de252c87eeddd2da026382d9298a
         with:
           header: preview-deployments
-          number: ${{ github.event.workflow_run.pull_requests[0].number }}
+          number: ${{ inputs.pr-number }}
           message: ${{ steps.gather.outputs.message }}
