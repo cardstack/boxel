@@ -55,6 +55,7 @@ jobs:
           AWS_S3_BUCKET: boxel-ui-preview.stack.cards
           AWS_REGION: us-east-1
           AWS_CLOUDFRONT_DISTRIBUTION: E14K8X1FKQ6Y6Z
+        # If you change these, change the equivalent line in preview-comment.yml
         with:
           package: boxel-ui
           environment: staging

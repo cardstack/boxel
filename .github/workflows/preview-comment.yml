@@ -34,6 +34,7 @@ jobs:
               "https://api.github.com/repos/$REPOSITORY/statuses/$HEAD_SHA"
           )"
 
+          # These check names are inputs to deploy-ember-preview action
           host_staging="$(echo "$statuses" | jq -r 'map(select(.context == "Preview boxel-host staging")) | .[0].target_url // empty')"
           host_production="$(echo "$statuses" | jq -r 'map(select(.context == "Preview boxel-host production")) | .[0].target_url // empty')"
           ui_staging="$(echo "$statuses" | jq -r 'map(select(.context == "Preview boxel-ui staging")) | .[0].target_url // empty')"
