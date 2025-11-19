@@ -126,6 +126,8 @@ export class DefinitionsCache {
       );
     }
     let json = await response.json();
-    return json.data.attributes as Definition;
+    let definition = json.data.attributes as Definition;
+
+    return definition;
   }
 }
