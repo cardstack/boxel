@@ -194,6 +194,7 @@ class Edit extends Component<typeof MultipleUploadField> {
       file: fileLike,
       base64Preview: upload.uploadedImageUrl || '',
       uploadedImageUrl: upload.uploadedImageUrl,
+      uploadUrl: upload.uploadUrl,
     };
   }
 
