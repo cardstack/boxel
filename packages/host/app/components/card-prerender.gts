@@ -7,6 +7,9 @@ import type {
 } from '@ember/routing/-internals';
 import RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
+
+import { isTesting } from '@embroider/macros';
+
 import Component from '@glimmer/component';
 
 import { didCancel, enqueueTask } from 'ember-concurrency';
@@ -50,6 +53,10 @@ import {
   coerceRenderError,
   normalizeRenderError,
 } from '../utils/render-error';
+import {
+  enableRenderTimerStub,
+  withTimersBlocked,
+} from '../utils/render-timer-stub';
 
 import type LoaderService from '../services/loader-service';
 import type LocalIndexer from '../services/local-indexer';
@@ -116,15 +123,18 @@ export default class CardPrerender extends Component {
         this.incremental.bind(this),
         this.#prerendererDelegate,
       );
-    }
-    window.addEventListener('boxel-render-error', this.#handleRenderErrorEvent);
-    registerDestructor(this, () => {
-      window.removeEventListener(
+      window.addEventListener(
         'boxel-render-error',
         this.#handleRenderErrorEvent,
       );
-      this.#cardTypeTracker.clear();
-    });
+      registerDestructor(this, () => {
+        window.removeEventListener(
+          'boxel-render-error',
+          this.#handleRenderErrorEvent,
+        );
+        this.#cardTypeTracker.clear();
+      });
+    }
   }
 
   private async prerender({
@@ -142,13 +152,15 @@ export default class CardPrerender extends Component {
   }): Promise<RenderResponse> {
     return await withRenderContext(async () => {
       try {
-        let results = await this.prerenderTask.perform({
-          url,
-          realm,
-          userId,
-          permissions,
-          renderOptions,
-        });
+        let run = () =>
+          this.prerenderTask.perform({
+            url,
+            realm,
+            userId,
+            permissions,
+            renderOptions,
+          });
+        let results = isTesting() ? await run() : await withTimersBlocked(run);
         return results;
       } catch (e: any) {
         if (!didCancel(e)) {
@@ -176,13 +188,15 @@ export default class CardPrerender extends Component {
   }): Promise<ModuleRenderResponse> {
     return await withRenderContext(async () => {
       try {
-        return await this.modulePrerenderTask.perform({
-          url,
-          realm,
-          userId,
-          permissions,
-          renderOptions,
-        });
+        let run = () =>
+          this.modulePrerenderTask.perform({
+            url,
+            realm,
+            userId,
+            permissions,
+            renderOptions,
+          });
+        return isTesting() ? await run() : await withTimersBlocked(run);
       } catch (e: any) {
         if (!didCancel(e)) {
           throw e;
@@ -711,14 +725,19 @@ export default class CardPrerender extends Component {
 
 async function withRenderContext<T>(cb: () => Promise<T>): Promise<T> {
   let hadContext = Boolean((globalThis as any).__boxelRenderContext);
+  let restoreTimers: (() => void) | undefined;
   if (!hadContext) {
     (globalThis as any).__boxelRenderContext = true;
+    if (!isTesting()) {
+      restoreTimers = enableRenderTimerStub();
+    }
   }
   try {
     return await cb();
   } finally {
     if (!hadContext) {
       delete (globalThis as any).__boxelRenderContext;
+      restoreTimers?.();
     }
   }
 }

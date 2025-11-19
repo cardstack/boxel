@@ -54,7 +54,10 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
 
-import { enableRenderTimerStub } from '../utils/render-timer-stub';
+import {
+  enableRenderTimerStub,
+  withTimersBlocked,
+} from '../utils/render-timer-stub';
 
 import type { CardSaveSubscriber } from './card-service';
 import type CardService from './card-service';
@@ -148,6 +151,10 @@ export default class StoreService extends Service implements StoreInterface {
     this.autoSavePromises = new Map();
     this.store = new CardStore(this.referenceCount, this.network.authedFetch);
     this.ready = this.setup();
+  }
+
+  async ensureSetupComplete(): Promise<void> {
+    await this.ready;
   }
 
   resetCache(opts?: { preserveReferences?: boolean }) {
@@ -1391,7 +1398,7 @@ export function asURL(urlOrDoc: string | LooseSingleCardDocument) {
 }
 
 async function withStubbedRenderTimers<T>(cb: () => Promise<T>): Promise<T> {
-  if (typeof window === 'undefined') {
+  if (typeof window === 'undefined' || isTesting()) {
     return await cb();
   }
   // Prevent cards that use timers (e.g. timers-card.gts) from continuing to
@@ -1400,7 +1407,7 @@ async function withStubbedRenderTimers<T>(cb: () => Promise<T>): Promise<T> {
   // single-shot renders so runaway timers don't crash indexing.
   let restore = enableRenderTimerStub();
   try {
-    return await cb();
+    return await withTimersBlocked(cb);
   } finally {
     restore();
   }
