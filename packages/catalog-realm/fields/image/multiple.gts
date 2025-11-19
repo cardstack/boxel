@@ -289,43 +289,43 @@ class Edit extends Component<typeof MultipleUploadField> {
         width: 100%;
         display: flex;
         flex-direction: column;
-        gap: 1.5rem;
+        gap: calc(var(--spacing, 0.25rem) * 6);
       }
 
       .upload-controls {
         display: flex;
         flex-direction: column;
-        gap: 1rem;
+        gap: calc(var(--spacing, 0.25rem) * 4);
         align-items: flex-start;
       }
 
       .preview-section {
         display: grid;
         grid-template-columns: 1fr;
-        gap: 1rem;
+        gap: calc(var(--spacing, 0.25rem) * 4);
       }
 
       .preview-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 0 0.5rem;
+        padding: 0 calc(var(--spacing, 0.25rem) * 2);
       }
 
       .preview-title {
         margin: 0;
         font-size: 1rem;
         font-weight: 600;
-        color: var(--boxel-700, #374151);
+        color: var(--foreground, #374151);
       }
 
       .empty-state {
         text-align: center;
-        color: var(--boxel-400, #9ca3af);
-        padding: 2rem;
+        color: var(--muted-foreground, #9ca3af);
+        padding: calc(var(--spacing, 0.25rem) * 8);
         font-size: 0.875rem;
-        border: 1px dashed var(--boxel-200, #e5e7eb);
-        border-radius: 0.75rem;
+        border: 1px dashed var(--border, #e5e7eb);
+        border-radius: var(--radius, 0.75rem);
       }
     </style>
   </template>

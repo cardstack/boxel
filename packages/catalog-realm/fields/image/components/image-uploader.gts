@@ -56,16 +56,17 @@ export default class ImageUploader extends Component<Signature> {
         justify-content: center;
         width: 100%;
         height: {{@height}};
-        border: 2px dashed var(--boxel-300, #d1d5db);
-        border-radius: var(--boxel-border-radius, 0.5rem);
-        background-color: var(--boxel-100, #f9fafb);
+        border: 2px dashed var(--border, #d1d5db);
+        border-radius: var(--radius, 0.5rem);
+        background-color: var(--muted, #f9fafb);
         cursor: pointer;
         transition: all 0.2s ease;
         margin-bottom: {{@marginBottom}};
       }
 
       .upload-area:hover {
-        background-color: var(--boxel-200, #f3f4f6);
+        background-color: var(--accent, #f3f4f6);
+        border-color: var(--primary, #3b82f6);
       }
 
       .file-input {
@@ -77,14 +78,15 @@ export default class ImageUploader extends Component<Signature> {
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 1.25rem 1.5rem;
+        padding: calc(var(--spacing, 0.25rem) * 5)
+          calc(var(--spacing, 0.25rem) * 6);
       }
 
       .upload-icon {
         width: 3rem;
         height: 3rem;
-        color: var(--boxel-400, #9ca3af);
-        margin-bottom: 0.75rem;
+        color: var(--muted-foreground, #9ca3af);
+        margin-bottom: calc(var(--spacing, 0.25rem) * 3);
       }
 
       .upload-text {
@@ -94,13 +96,13 @@ export default class ImageUploader extends Component<Signature> {
 
       .upload-text-bold {
         font-weight: 600;
-        color: var(--boxel-700, #374151);
+        color: var(--foreground, #374151);
       }
 
       .upload-text-hint {
         font-size: 0.875rem;
-        color: var(--boxel-500, #6b7280);
-        margin-top: 0.25rem;
+        color: var(--muted-foreground, #6b7280);
+        margin-top: calc(var(--spacing, 0.25rem));
       }
     </style>
   </template>

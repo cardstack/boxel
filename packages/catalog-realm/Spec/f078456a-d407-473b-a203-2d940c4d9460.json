@@ -5,7 +5,7 @@
         "containedExamples": [
           {
             "adoptsFrom": {
-              "module": "../fields/image/single",
+              "module": "../fields/image/multiple",
               "name": "default"
             }
           }
@@ -20,7 +20,7 @@
     "attributes": {
       "ref": {
         "name": "default",
-        "module": "../fields/image/single"
+        "module": "../fields/image/multiple"
       },
       "title": "default",
       "readMe": null,
@@ -34,18 +34,12 @@
       "description": null,
       "containedExamples": [
         {
-          "uploadUrl": null,
-          "uploadedImageUrl": null
+          "uploads": []
         }
       ]
     },
     "relationships": {
       "cardInfo.theme": {
-        "links": {
-          "self": null
-        }
-      },
-      "linkedExamples": {
         "links": {
           "self": null
         }

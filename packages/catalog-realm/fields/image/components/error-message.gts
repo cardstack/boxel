@@ -18,10 +18,12 @@ export default class ErrorMessage extends Component<Signature> {
 
     <style scoped>
       .error-message {
-        padding: 0.5rem 0.75rem;
-        border-radius: 0.375rem;
-        background: #f3f4f6;
-        border-left: 3px solid var(--boxel-primary-500, #3b82f6);
+        padding: calc(var(--spacing, 0.25rem) * 2)
+          calc(var(--spacing, 0.25rem) * 3);
+        border-radius: var(--radius, 0.375rem);
+        background: var(--muted, #f3f4f6);
+        border-left: 3px solid var(--primary, #3b82f6);
+        color: var(--muted-foreground, #6b7280);
         font-size: 0.8125rem;
         white-space: pre-wrap;
       }

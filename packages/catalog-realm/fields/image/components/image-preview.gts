@@ -103,6 +103,7 @@ export default class ImagePreview extends Component<Signature> {
         height: 100%;
         object-fit: cover;
         border-radius: var(--boxel-border-radius, 0.5rem);
+        border: 1px solid var(--border, #e5e7eb);
         display: block;
       }
 
