@@ -1,5 +1,3 @@
-# FIXME remove
-
 ## How to build this addon
 
 ### `pnpm build` in the addon/ dir
