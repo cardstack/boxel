@@ -75,23 +75,29 @@ export default class ImagePreviewContainer extends GlimmerComponent<ImagePreview
 
       .image-preview-container--scrollable {
         grid-auto-flow: column;
-        grid-auto-columns: 200px; /* Fixed column width for horizontal flow */
+        grid-auto-columns: 120px; /* Fixed column width */
         align-items: stretch;
         overflow-x: auto;
         overflow-y: hidden;
-        height: 200px; /* Fixed height for horizontal scrolling */
-        width: 100%;
+        height: 120px; /* Fixed height for horizontal scrolling */
+        max-width: 100%; /* Constrain width to enable scrolling */
+        width: auto; /* Allow content to determine natural width */
       }
 
       .image-preview-container--stacked {
         overflow: visible;
         grid-auto-flow: row;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fit, 120px); /* Fixed column width */
       }
 
       .image-preview-container--scrollable .image-preview-wrapper {
-        width: 100%;
-        height: 200px; /* Fixed height for 1:1 aspect ratio */
+        width: 120px;
+        height: 120px; /* Fixed height for 1:1 aspect ratio */
+      }
+
+      .image-preview-container--stacked .image-preview-wrapper {
+        width: 120px;
+        height: 120px; /* Fixed height for 1:1 aspect ratio */
       }
 
       .image-preview-wrapper {
