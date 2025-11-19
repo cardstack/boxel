@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "realm": "http://localhost:4201/experiments/",
-      "prompt": "Create a structured theme in deep crimson, with bold contrast, minimal typography, and clean UI surfaces suitable for dashboards.",
+      "prompt": "Create a structured in deep crimson, with bold contrast, minimal typography, and clean UI surfaces suitable for dashboards.",
       "codeRef": {
         "name": "default",
         "module": "https://cardstack.com/base/structured-theme"
