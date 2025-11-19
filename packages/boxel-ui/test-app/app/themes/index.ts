@@ -31,7 +31,9 @@ function getThemeStyles(cssString: string) {
   if (!extractCssVariables) {
     return htmlSafe('');
   }
-  return sanitizeHtmlSafe(extractCssVariables(cssString));
+  // adjust for freestyle doc styles overriding theme variables
+  let css = cssString + `\n\n :root{\n  --theme-radius: var(--radius); \n}`;
+  return sanitizeHtmlSafe(extractCssVariables(css));
 }
 
 const Themes: Theme[] = Object.entries(THEMES).map(([name, vars]) => ({

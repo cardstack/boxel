@@ -2935,6 +2935,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-new-session-settings-create-button]');
     await waitFor(`[data-room-settled]`);
     await waitForSessionPreparationToFinish();
+    await waitUntil(
+      () => document.querySelectorAll('[data-test-message-idx]').length >= 1,
+      {
+        timeout: 5000,
+        timeoutMessage:
+          'timed out waiting for summary message to arrive in new session',
+      },
+    );
 
     // Verify the summary message was sent to the new room
     assertMessages(assert, [
@@ -3012,6 +3020,13 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-new-session-settings-create-button]');
     await waitFor(`[data-room-settled]`);
     await waitForSessionPreparationToFinish();
+    await waitUntil(
+      () => document.querySelectorAll('[data-test-message-idx]').length >= 1,
+      {
+        timeoutMessage:
+          'timed out waiting for summary message to arrive in new session',
+      },
+    );
 
     // Verify the summary message was sent to the new room
     assertMessages(assert, [

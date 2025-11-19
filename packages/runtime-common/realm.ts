@@ -80,6 +80,7 @@ import type { Readable } from 'stream';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
+import { getCardDirectoryName } from './helpers/card-directory-name';
 import {
   MatrixClient,
   ensureFullMatrixUserId,
@@ -1980,10 +1981,7 @@ export class Realm {
       ) {
         continue;
       }
-      let name =
-        'name' in resource.meta.adoptsFrom
-          ? resource.meta.adoptsFrom.name
-          : 'cards';
+      let name = getCardDirectoryName(resource.meta?.adoptsFrom, this.paths);
 
       let fileURL = this.paths.fileURL(
         `/${join(new URL(request.url).pathname, name, (resource.lid ?? uuidV4()) + '.json')}`,
@@ -2181,10 +2179,7 @@ export class Realm {
       ) {
         continue;
       }
-      let name =
-        'name' in resource.meta.adoptsFrom
-          ? resource.meta.adoptsFrom.name
-          : 'cards';
+      let name = getCardDirectoryName(resource.meta?.adoptsFrom, this.paths);
       let fileURL =
         i === 0
           ? new URL(`${url}.json`)
@@ -3361,10 +3356,7 @@ function promoteLocalIdsToRemoteIds({
     ) {
       return;
     }
-    let name =
-      'name' in sideLoadedResource.meta.adoptsFrom
-        ? sideLoadedResource.meta.adoptsFrom.name
-        : 'cards';
+    let name = getCardDirectoryName(sideLoadedResource.meta?.adoptsFrom, paths);
     relationships[field].links = {
       self: paths.fileURL(`${name}/${lid}`).href,
     };
