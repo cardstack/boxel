@@ -4,6 +4,7 @@ import {
   contains,
   field,
   linksToMany,
+  linksTo,
   realmInfo,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
@@ -17,6 +18,7 @@ import { copyCardURLToClipboard } from '@cardstack/boxel-ui/helpers';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 import Wand from '@cardstack/boxel-icons/wand';
 import Eye from '@cardstack/boxel-icons/eye';
+import SourceCode from '@cardstack/boxel-icons/source-code';
 import { type Query } from '@cardstack/runtime-common';
 const DEFAULT_LLM = 'anthropic/claude-3.5-sonnet';
 import {
@@ -190,6 +192,44 @@ class Isolated extends Component<typeof ThemeCreator> {
     label: string;
     instance: TaskInstance<CardDef | undefined>;
   }> = [];
+  @tracked previewThemeId: string | null = null;
+
+  previewThemeResource = this.args.context?.getCard(
+    this,
+    () => this.previewThemeId ?? undefined,
+  );
+
+  previewCardResource = this.args.context?.getCard(
+    this,
+    () => (this.args.model?.previewCard as CardDef | null | undefined)?.id,
+  );
+
+  previewTheme = (cardId?: string | null) => {
+    if (!cardId) {
+      return;
+    }
+    this.previewThemeId = cardId;
+    let previewCard = this.args.model?.previewCard as
+      | CardDef
+      | null
+      | undefined;
+    if (!previewCard) {
+      return;
+    }
+    let view = this.args.viewCard;
+    if (typeof view !== 'function') {
+      return;
+    }
+    try {
+      let themeCard =
+        (this.previewThemeResource?.card as CardDef | null | undefined) ?? null;
+      let themeValue: CardDef | null = themeCard;
+      (previewCard as any).cardInfo.theme = themeValue;
+      view(previewCard, 'isolated', { stackIndex: 1 });
+    } catch (error) {
+      console.error('Failed to preview theme on card', error);
+    }
+  };
 
   realmInfoFor = (card?: CardDef | null) => {
     if (!card) {
@@ -570,36 +610,6 @@ class Isolated extends Component<typeof ThemeCreator> {
                     >
                       <CopyIcon width='12' height='12' />
                     </Button>
-                    <Button
-                      @kind='secondary-light'
-                      @size='extra-small'
-                      class='theme-creator__copy-button'
-                      aria-label='Modify theme via AI'
-                      {{on
-                        'click'
-                        (fn
-                          this.patchThemeTask.perform
-                          (this.cardURLFrom run.instance.value)
-                        )
-                      }}
-                    >
-                      <Wand width='12' height='12' />
-                    </Button>
-                    <Button
-                      @kind='secondary-light'
-                      @size='extra-small'
-                      class='theme-creator__copy-button'
-                      aria-label='Open card in code mode'
-                      {{on
-                        'click'
-                        (fn
-                          this.openCardInCodeMode
-                          (this.cardURLFrom run.instance.value)
-                        )
-                      }}
-                    >
-                      <Eye width='12' height='12' />
-                    </Button>
                   {{else}}
                     <span class='theme-creator__progress-id-text'>
                       {{run.label}}
@@ -664,10 +674,18 @@ class Isolated extends Component<typeof ThemeCreator> {
                 <Button
                   @kind='secondary-light'
                   @size='small'
+                  aria-label='Preview theme on selected card'
+                  {{on 'click' (fn this.previewTheme card.url)}}
+                >
+                  <Eye width='14' height='14' />
+                </Button>
+                <Button
+                  @kind='secondary-light'
+                  @size='small'
                   aria-label='Open in code mode'
                   {{on 'click' (fn this.openCardInCodeMode card.url)}}
                 >
-                  <Eye width='14' height='14' />
+                  <SourceCode width='14' height='14' />
                 </Button>
               </div>
             </div>
@@ -853,6 +871,7 @@ export class ThemeCreator extends CardDef {
   @field skillCards = linksToMany(Skill);
   @field numberOfVariants = contains(NumberField);
   @field llmModel = contains(LLMModelField);
+  @field previewCard = linksTo(CardDef);
 
   static isolated = Isolated;
 }
