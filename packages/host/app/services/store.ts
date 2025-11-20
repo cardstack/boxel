@@ -933,7 +933,7 @@ export default class StoreService extends Service implements StoreInterface {
       let cardError = errorResponse.errors[0];
       deferred?.fulfill(cardError);
       console.error(
-        `error getting instance ${JSON.stringify(idOrDoc, null, 2)}`,
+        `error getting instance ${JSON.stringify(idOrDoc, null, 2)}: ${JSON.stringify(error, null, 2)}`,
         error,
       );
       return cardError;
