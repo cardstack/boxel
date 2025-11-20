@@ -1218,6 +1218,45 @@ module('Acceptance | host submode', function (hooks) {
         }
       });
 
+      test('custom subdomain checkbox is selected when domain already claimed', async function (assert) {
+        let realmServer = getService('realm-server') as any;
+        let originalFetchClaimed = realmServer.fetchBoxelClaimedDomain;
+
+        realmServer.fetchBoxelClaimedDomain = async () => ({
+          id: 'claimed-domain-1',
+          hostname: 'my-custom-site.localhost:4201',
+          subdomain: 'my-custom-site',
+          sourceRealmURL: testRealmURL,
+        });
+
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-publish-realm-modal]');
+
+          assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
+          assert
+            .dom(
+              '[data-test-publish-realm-modal] .domain-option:nth-of-type(2)',
+            )
+            .containsText('Not published yet');
+
+          // Toggling off should be possible and should reflect in checkbox
+          await click('[data-test-custom-subdomain-checkbox]');
+          assert.dom('[data-test-custom-subdomain-checkbox]').isNotChecked();
+
+          // Toggling on again should reselect it
+          await click('[data-test-custom-subdomain-checkbox]');
+          assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
+        } finally {
+          realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
+        }
+      });
+
       test('can unpublish claimed domain', async function (assert) {
         let realmServer = getService('realm-server') as any;
         let originalFetchClaimed = realmServer.fetchBoxelClaimedDomain;
