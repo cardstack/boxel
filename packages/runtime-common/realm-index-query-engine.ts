@@ -12,7 +12,7 @@ import {
   type IndexedDefinitionOrError,
   type InstanceOrError,
   type ResolvedCodeRef,
-  DefinitionLookup,
+  type DefinitionLookup,
 } from '.';
 import type { Realm } from './realm';
 import { RealmPaths } from './paths';

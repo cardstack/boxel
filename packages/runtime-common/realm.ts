@@ -111,7 +111,7 @@ import type {
 import { filterAtomicOperations } from './atomic-document';
 import {
   isFilterRefersToNonexistentTypeError,
-  DefinitionLookup,
+  type DefinitionLookup,
 } from './definition-lookup';
 import {
   fetchSessionRoom,
