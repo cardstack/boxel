@@ -1,5 +1,7 @@
-import { module, test } from 'qunit';
+import { type TestContext, getContext } from '@ember/test-helpers';
+
 import { setupTest } from 'ember-qunit';
+import { module, test } from 'qunit';
 
 import {
   IndexQueryEngine,
@@ -16,6 +18,7 @@ import {
 import { CachingDefinitionLookup } from '@cardstack/runtime-common/definition-lookup';
 
 import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
+import type LocalIndexer from '@cardstack/host/services/local-indexer';
 
 import {
   getDbAdapter,
@@ -23,9 +26,8 @@ import {
   setupIndex,
   makeRenderer,
 } from '../helpers';
-import { type TestContext, getContext } from '@ember/test-helpers';
+
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import type LocalIndexer from '@cardstack/host/services/local-indexer';
 
 const testRealmURL2 = `http://test-realm/test2/`;
 const testRealmInfo: RealmInfo = {
@@ -54,17 +56,20 @@ module('Unit | index-writer', function (hooks) {
     let owner = (getContext() as TestContext).owner;
     await makeRenderer();
     let localIndexer = owner.lookup('service:local-indexer') as LocalIndexer;
-    indexQueryEngine = new IndexQueryEngine(
+
+    let definitionLookup = new CachingDefinitionLookup(
       adapter,
-      new CachingDefinitionLookup(adapter, localIndexer.prerenderer, () => [
-        {
-          url: testRealmURL,
-          async getRealmOwnerUserId() {
-            return '@user1:localhost';
-          },
-        },
-      ]),
+      localIndexer.prerenderer,
     );
+
+    definitionLookup.registerRealm({
+      url: testRealmURL,
+      async getRealmOwnerUserId() {
+        return '@user1:localhost';
+      },
+    });
+
+    indexQueryEngine = new IndexQueryEngine(adapter, definitionLookup);
   });
 
   test('can perform invalidations for a instance entry', async function (assert) {

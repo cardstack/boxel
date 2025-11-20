@@ -11,7 +11,7 @@ import {
   setupPermissionedRealms,
 } from './helpers';
 import {} from '../prerender/prerenderer';
-import { PgAdapter } from '@cardstack/postgres/pg-adapter';
+import type { PgAdapter } from '@cardstack/postgres/pg-adapter';
 
 module(basename(__filename), function () {
   module('DefinitionLookup', function (hooks) {
@@ -74,15 +74,13 @@ module(basename(__filename), function () {
       definitionLookup = new CachingDefinitionLookup(
         dbAdapter,
         mockRemotePrerenderer,
-        () => [
-          {
-            url: realmURL,
-            async getRealmOwnerUserId() {
-              return testUserId;
-            },
-          },
-        ],
       );
+      definitionLookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+      });
     });
 
     hooks.after(async () => {
@@ -134,15 +132,13 @@ module(basename(__filename), function () {
         definitionLookup = new CachingDefinitionLookup(
           dbAdapter,
           mockRemotePrerenderer,
-          () => [
-            {
-              url: realmURL,
-              async getRealmOwnerUserId() {
-                return testUserId;
-              },
-            },
-          ],
         );
+        definitionLookup.registerRealm({
+          url: realmURL,
+          async getRealmOwnerUserId() {
+            return testUserId;
+          },
+        });
       },
     });
 
@@ -151,16 +147,24 @@ module(basename(__filename), function () {
         module: `${realmURL}person.gts`,
         name: 'Person',
       });
-      assert.equal(definition?.displayName, 'Person');
-      assert.equal(prerenderModuleCalls, 1, 'prerenderModule was called once');
+      assert.strictEqual(definition?.displayName, 'Person');
+      assert.strictEqual(
+        prerenderModuleCalls,
+        1,
+        'prerenderModule was called once',
+      );
 
       // second call should hit the cache and not call prerenderModule again
       definition = await definitionLookup.lookupDefinition({
         module: `${realmURL}person.gts`,
         name: 'Person',
       });
-      assert.equal(definition?.displayName, 'Person');
-      assert.equal(prerenderModuleCalls, 1, 'prerenderModule was called once');
+      assert.strictEqual(definition?.displayName, 'Person');
+      assert.strictEqual(
+        prerenderModuleCalls,
+        1,
+        'prerenderModule was called once',
+      );
     });
 
     test('invalidation', async function (assert) {
@@ -168,8 +172,12 @@ module(basename(__filename), function () {
         module: `${realmURL}person.gts`,
         name: 'Person',
       });
-      assert.equal(definition?.displayName, 'Person');
-      assert.equal(prerenderModuleCalls, 1, 'prerenderModule was called once');
+      assert.strictEqual(definition?.displayName, 'Person');
+      assert.strictEqual(
+        prerenderModuleCalls,
+        1,
+        'prerenderModule was called once',
+      );
 
       await definitionLookup.invalidate('http://some-realm-url');
 
@@ -177,8 +185,8 @@ module(basename(__filename), function () {
         module: `${realmURL}person.gts`,
         name: 'Person',
       });
-      assert.equal(definition?.displayName, 'Person');
-      assert.equal(
+      assert.strictEqual(definition?.displayName, 'Person');
+      assert.strictEqual(
         prerenderModuleCalls,
         1,
         'prerenderModule was still only called once',
@@ -190,8 +198,8 @@ module(basename(__filename), function () {
         module: `${realmURL}person.gts`,
         name: 'Person',
       });
-      assert.equal(definition?.displayName, 'Person');
-      assert.equal(
+      assert.strictEqual(definition?.displayName, 'Person');
+      assert.strictEqual(
         prerenderModuleCalls,
         2,
         'prerenderModule was called a second time after invalidation',

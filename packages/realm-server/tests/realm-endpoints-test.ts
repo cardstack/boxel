@@ -1154,12 +1154,10 @@ module(basename(__filename), function () {
     setupDB(hooks, {
       beforeEach: async (dbAdapter, publisher, runner) => {
         let localBaseRealmURL = new URL('http://127.0.0.1:4446/base/');
-        let realms: Realm[] = [];
         let prerenderer = await getTestPrerenderer();
         let definitionLookup = new CachingDefinitionLookup(
           dbAdapter,
           prerenderer,
-          () => realms,
         );
         virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 
@@ -1195,10 +1193,8 @@ module(basename(__filename), function () {
           seed: realmSecretSeed,
         });
         let getIndexHTML = (await getFastbootState()).getIndexHTML;
-        realms.push(base);
-        realms.push(testRealm);
         testRealmServer = new RealmServer({
-          realms,
+          realms: [base, testRealm],
           virtualNetwork,
           matrixClient,
           realmServerSecretSeed,

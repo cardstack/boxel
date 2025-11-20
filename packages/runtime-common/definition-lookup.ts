@@ -1,6 +1,7 @@
 import type { DBAdapter, TypeCoercion } from './db';
 import {
   fetchUserPermissions,
+  Realm,
   type Definition,
   type ErrorEntry,
   type ModuleDefinitionResult,
@@ -48,27 +49,17 @@ export function isFilterRefersToNonexistentTypeError(
 export interface DefinitionLookup {
   lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition>;
   invalidate(realmURL: string): Promise<void>;
+  registerRealm(realm: Pick<Realm, 'url' | 'getRealmOwnerUserId'>): void;
 }
 
 export class CachingDefinitionLookup implements DefinitionLookup {
   #dbAdapter: DBAdapter;
   #prerenderer: Prerenderer;
-  #getRealms: () => {
-    url: string;
-    getRealmOwnerUserId: () => Promise<string>;
-  }[];
+  #realms: Pick<Realm, 'url' | 'getRealmOwnerUserId'>[] = [];
 
-  constructor(
-    dbAdapter: DBAdapter,
-    prerenderer: Prerenderer,
-    getRealms: () => {
-      url: string;
-      getRealmOwnerUserId: () => Promise<string>;
-    }[],
-  ) {
+  constructor(dbAdapter: DBAdapter, prerenderer: Prerenderer) {
     this.#dbAdapter = dbAdapter;
     this.#prerenderer = prerenderer;
-    this.#getRealms = getRealms;
   }
 
   async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
@@ -119,8 +110,12 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     );
   }
 
+  registerRealm(realm: Pick<Realm, 'url' | 'getRealmOwnerUserId'>): void {
+    this.#realms.push(realm);
+  }
+
   private async realmOwnerLookup(moduleURL: string) {
-    let containingRealm = this.#getRealms().find((realm) => {
+    let containingRealm = this.#realms.find((realm) => {
       return moduleURL.startsWith(realm.url);
     });
     if (containingRealm) {

@@ -53,7 +53,6 @@ module(basename(__filename), function () {
       return maybeInstance;
     }
 
-    let realms: Realm[];
     let dir: string;
     let realm: Realm;
     let adapter: RealmAdapter;
@@ -64,12 +63,10 @@ module(basename(__filename), function () {
       beforeEach: async (dbAdapter, publisher, runner) => {
         testDbAdapter = dbAdapter;
         let virtualNetwork = createVirtualNetwork();
-        realms = [];
         let prerenderer = await getTestPrerenderer();
         let definitionLookup = new CachingDefinitionLookup(
           dbAdapter,
           prerenderer,
-          () => realms,
         );
         dir = dirSync().name;
         ({ realm, adapter } = await createRealm({
@@ -432,7 +429,6 @@ module(basename(__filename), function () {
               'In  macOS, .DS_Store is a file that stores custom attributes of its containing folder',
           },
         }));
-        realms.push(realm);
         await realm.start();
       },
     });

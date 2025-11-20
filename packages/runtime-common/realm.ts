@@ -419,6 +419,7 @@ export class Realm {
         new RealmAuthDataSource(this.#realmServerMatrixClient, () => _fetch),
       ),
     ]);
+    definitionLookup.registerRealm(this);
     this.#definitionLookup = definitionLookup;
 
     this.__fetchForTesting = _fetch;

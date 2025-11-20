@@ -9,12 +9,9 @@ import {
   IndexQueryEngine,
   fetcher,
   maybeHandleScopedCSSRequest,
-  parseQuery,
   internalKeyFor,
   identifyCard,
-  SupportedMimeType,
   getFieldDefinitions,
-  DefinitionLookup,
   type ResolvedCodeRef,
   type Definition,
   type LooseCardResource,
@@ -25,10 +22,7 @@ import ENV from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
-import type {
-  JSONAPISingleResourceDocument,
-  CardDef,
-} from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import {
@@ -236,6 +230,7 @@ module('Unit | query', function (hooks) {
       async invalidate(_realmURL: string): Promise<void> {
         // no-op for tests
       },
+      registerRealm() {},
     };
     indexQueryEngine = new IndexQueryEngine(dbAdapter, mockDefinitionLookup);
   });
