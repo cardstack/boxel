@@ -195,7 +195,7 @@ class Edit extends Component<typeof SingleUploadField> {
           @onUpload={{this.uploadImageTask.perform}}
           @disabled={{this.uploadButtonDisabled}}
           @isUploading={{this.uploadImageTask.isRunning}}
-          @label={{this.uploadButtonLabel}}
+          @label='Upload Image'
         />
         <ErrorMessage @message={{this.errorMessage}} />
       {{else}}
