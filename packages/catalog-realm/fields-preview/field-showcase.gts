@@ -1,30 +1,29 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 import {
   CardDef,
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
+} from 'https://cardstack.com/base/card-api';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { eq, gt } from '@cardstack/boxel-ui/helpers';
 
 import StringField from 'https://cardstack.com/base/string';
-import DateField from '../fields/date'; // ² Import DateField
-import TimeField from '../fields/time'; // ³ Import TimeField
-import DatetimeField from '../fields/date-time'; // ⁴ Import DatetimeField
-import DateRangeField from '../fields/date/date-range'; // ⁵ Import DateRangeField
-import TimeRangeField from '../fields/time/time-range'; // ⁶ Import TimeRangeField
-import DurationField from '../fields/time/duration'; // ⁷ Import DurationField
-import RelativeTimeField from '../fields/time/relative-time'; // ⁸ Import RelativeTimeField
-import MonthDayField from '../fields/date/month-day'; // ⁹ Import MonthDayField
-import QuarterField from '../fields/date/quarter'; // ¹⁰ Import QuarterField
-import RecurringPatternField from '../fields/recurring-pattern'; // ¹¹ Import RecurringPatternField
-import YearField from '../fields/date/year'; // ¹² Import YearField
-import MonthField from '../fields/date/month'; // ¹³ Import MonthField
-import MonthYearField from '../fields/date/month-year'; // ¹⁴ Import MonthYearField
-import WeekField from '../fields/date/week'; // ¹⁵ Import WeekField
-import NumberField from '../fields/number'; // ¹⁶ Import NumberField
+import DateField from '../fields/date';
+import TimeField from '../fields/time';
+import DatetimeField from '../fields/date-time';
+import DateRangeField from '../fields/date/date-range';
+import TimeRangeField from '../fields/time/time-range';
+import DurationField from '../fields/time/duration';
+import RelativeTimeField from '../fields/time/relative-time';
+import MonthDayField from '../fields/date/month-day';
+import QuarterField from '../fields/date/quarter';
+import RecurringPatternField from '../fields/recurring-pattern';
+import YearField from '../fields/date/year';
+import MonthField from '../fields/date/month';
+import MonthYearField from '../fields/date/month-year';
+import WeekField from '../fields/date/week';
+import NumberField from '../fields/number';
 import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
 import CubeIcon from '@cardstack/boxel-icons/cube';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
@@ -35,7 +34,7 @@ import { tracked } from '@glimmer/tracking';
 class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
   @tracked isSidebarCollapsed = false;
   @tracked searchQuery = '';
-  @tracked expandedGroups = new Set(['Date & Time Fields']); // Default expanded
+  @tracked expandedGroups = new Set(['Date & Time Fields']); // Sidebar groups expanded by default
   @tracked expandedSections = new Set(['configuration', 'variants']); // Hero sections expanded by default
   @tracked selectedFormat: 'edit' | 'embedded' | 'atom' = 'edit'; // Format switcher
 
@@ -75,7 +74,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
   @action
   copyCode() {
     navigator.clipboard.writeText(this.configCode);
-    // Could add toast notification here
   }
 
   get isGroupExpanded() {
@@ -95,7 +93,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
     if (this.args.model) {
       this.args.model.playgroundFieldType = value;
 
-      // Auto-reset presentation to 'standard' if incompatible
       const currentPresentation =
         this.args.model.playgroundPresentation || 'standard';
       const compatiblePresentations = this.compatibilityMap[value] || [
@@ -132,7 +129,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       .filter((group) => group.options.length > 0);
   }
 
-  // ¹⁸ Compatibility map - defines which presentations work with each field type
   compatibilityMap: Record<string, string[]> = {
     date: ['standard', 'countdown', 'timeline', 'age'],
     time: ['standard', 'timeSlots'],
@@ -169,7 +165,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
     'number-progress-circle': ['standard'],
   };
 
-  // ¹⁹ Field type options with groups
   fieldTypeOptions = [
     {
       groupName: 'Date & Time Fields',
@@ -298,7 +293,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
     },
   ];
 
-  // ²⁰ All presentation options
   allPresentationOptions = [
     { value: 'standard', label: 'Standard' },
     { value: 'countdown', label: 'Countdown Timer' },
@@ -318,7 +312,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
     );
   }
 
-  // ²¹ Filter presentation options based on selected field type
   get availablePresentationOptions() {
     const fieldType = this.args.model?.playgroundFieldType || 'date';
     const compatiblePresentations = this.compatibilityMap[fieldType] || [
@@ -335,7 +328,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       : [{ value: 'standard', label: 'Standard' }];
   }
 
-  // Map field types to their example fields - only showing configuration examples (not presentation duplicates)
   get examplesForCurrentField() {
     const fieldType = this.args.model?.playgroundFieldType || 'date';
 
@@ -401,10 +393,8 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
     return examplesMap[fieldType] || [];
   }
 
-  // ²² Get the current playground field name
   get currentPlaygroundField() {
     const fieldType = this.args.model?.playgroundFieldType || 'date';
-    // Search in grouped options
     for (const group of this.fieldTypeOptions) {
       const found = group.options.find((opt: any) => opt.value === fieldType);
       if (found) return found.fieldName;
@@ -418,7 +408,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       this.args.model.playgroundPresentation = option.value;
 
       // Auto-switch to embedded format when selecting a presentation mode
-      // (presentations are for display, not editing)
       if (option.value !== 'standard') {
         this.selectedFormat = 'embedded';
       }
@@ -445,12 +434,10 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
     );
   }
 
-  // ²⁴ Generate configuration code based on current selection
   get configCode() {
     const fieldType = this.args.model?.playgroundFieldType || 'date';
     const presentation = this.args.model?.playgroundPresentation || 'standard';
 
-    // Search in grouped options
     let option: any = null;
     for (const group of this.fieldTypeOptions) {
       const found = group.options.find((opt: any) => opt.value === fieldType);
@@ -462,7 +449,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
 
     const fieldTypeName = option?.label || 'DateField';
 
-    // Number fields - show their specific configurations
     if (fieldType === 'number-slider') {
       return `@field myField = contains(NumberField, {
   configuration: {
@@ -617,8 +603,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       return `@field myField = contains(NumberField);`;
     }
 
-    // Fields without presentation support
-    const simplFields = [
+    const simpleFields = [
       'year',
       'month',
       'monthYear',
@@ -631,11 +616,10 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       'recurringPattern',
     ];
 
-    if (simplFields.includes(fieldType)) {
+    if (simpleFields.includes(fieldType)) {
       return `@field myField = contains(${fieldTypeName});`;
     }
 
-    // Fields with presentation support
     if (presentation === 'standard') {
       return `@field myField = contains(${fieldTypeName});`;
     }
@@ -693,8 +677,12 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
               <circle cx='11' cy='11' r='8'></circle>
               <path d='m21 21-4.35-4.35'></path>
             </svg>
+            <label for='sidebar-search-input' class='sr-only'>
+              Search fields
+            </label>
             <input
               type='text'
+              id='sidebar-search-input'
               class='sidebar-search-input'
               placeholder='Search fields...'
               value={{this.searchQuery}}
@@ -834,353 +822,145 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
                 {{/if}}
               </div>
               <div class='demo-display-large'>
-                {{#if (eq this.selectedFormat 'edit')}}
-                  {{#if (eq this.currentPlaygroundField 'playgroundDate')}}
-                    <@fields.playgroundDate @format='edit' />
-                  {{else if (eq this.currentPlaygroundField 'playgroundTime')}}
-                    <@fields.playgroundTime @format='edit' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundDatetime')
-                  }}
-                    <@fields.playgroundDatetime @format='edit' />
-                  {{else if (eq this.currentPlaygroundField 'playgroundYear')}}
-                    <@fields.playgroundYear @format='edit' />
-                  {{else if (eq this.currentPlaygroundField 'playgroundMonth')}}
-                    <@fields.playgroundMonth @format='edit' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundMonthYear')
-                  }}
-                    <@fields.playgroundMonthYear @format='edit' />
-                  {{else if (eq this.currentPlaygroundField 'playgroundWeek')}}
-                    <@fields.playgroundWeek @format='edit' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundDateRange')
-                  }}
-                    <@fields.playgroundDateRange @format='edit' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundTimeRange')
-                  }}
-                    <@fields.playgroundTimeRange @format='edit' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundDuration')
-                  }}
-                    <@fields.playgroundDuration @format='edit' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundRelativeTime')
-                  }}
-                    <@fields.playgroundRelativeTime @format='edit' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundMonthDay')
-                  }}
-                    <@fields.playgroundMonthDay @format='edit' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundQuarter')
-                  }}
-                    <@fields.playgroundQuarter @format='edit' />
-                  {{else if
-                    (eq
-                      this.currentPlaygroundField 'playgroundRecurringPattern'
-                    )
-                  }}
-                    <@fields.playgroundRecurringPattern @format='edit' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberBasic')
-                  }}
-                    <@fields.playgroundNumberBasic @format='edit' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberSlider')
-                  }}
-                    <@fields.playgroundNumberSlider @format='edit' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberRating')
-                  }}
-                    <@fields.playgroundNumberRating @format='edit' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberProgress')
-                  }}
-                    <@fields.playgroundNumberProgress @format='edit' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberGauge')
-                  }}
-                    <@fields.playgroundNumberGauge @format='edit' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberQuantity')
-                  }}
-                    <@fields.playgroundNumberQuantity @format='edit' />
-                  {{else if
-                    (eq
-                      this.currentPlaygroundField 'playgroundNumberPercentage'
-                    )
-                  }}
-                    <@fields.playgroundNumberPercentage @format='edit' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberStat')
-                  }}
-                    <@fields.playgroundNumberStat @format='edit' />
-                  {{else if
-                    (eq
-                      this.currentPlaygroundField
-                      'playgroundNumberBadgeNotification'
-                    )
-                  }}
-                    <@fields.playgroundNumberBadgeNotification @format='edit' />
-                  {{else if
-                    (eq
-                      this.currentPlaygroundField 'playgroundNumberBadgeMetric'
-                    )
-                  }}
-                    <@fields.playgroundNumberBadgeMetric @format='edit' />
-                  {{else if
-                    (eq
-                      this.currentPlaygroundField 'playgroundNumberBadgeCounter'
-                    )
-                  }}
-                    <@fields.playgroundNumberBadgeCounter @format='edit' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberScore')
-                  }}
-                    <@fields.playgroundNumberScore @format='edit' />
-                  {{else if
-                    (eq
-                      this.currentPlaygroundField
-                      'playgroundNumberProgressCircle'
-                    )
-                  }}
-                    <@fields.playgroundNumberProgressCircle @format='edit' />
-                  {{/if}}
-                {{else if (eq this.selectedFormat 'embedded')}}
-                  {{#if (eq this.currentPlaygroundField 'playgroundDate')}}
-                    <@fields.playgroundDate @format='embedded' />
-                  {{else if (eq this.currentPlaygroundField 'playgroundTime')}}
-                    <@fields.playgroundTime @format='embedded' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundDatetime')
-                  }}
-                    <@fields.playgroundDatetime @format='embedded' />
-                  {{else if (eq this.currentPlaygroundField 'playgroundYear')}}
-                    <@fields.playgroundYear @format='embedded' />
-                  {{else if (eq this.currentPlaygroundField 'playgroundMonth')}}
-                    <@fields.playgroundMonth @format='embedded' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundMonthYear')
-                  }}
-                    <@fields.playgroundMonthYear @format='embedded' />
-                  {{else if (eq this.currentPlaygroundField 'playgroundWeek')}}
-                    <@fields.playgroundWeek @format='embedded' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundDateRange')
-                  }}
-                    <@fields.playgroundDateRange @format='embedded' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundTimeRange')
-                  }}
-                    <@fields.playgroundTimeRange @format='embedded' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundDuration')
-                  }}
-                    <@fields.playgroundDuration @format='embedded' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundRelativeTime')
-                  }}
-                    <@fields.playgroundRelativeTime @format='embedded' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundMonthDay')
-                  }}
-                    <@fields.playgroundMonthDay @format='embedded' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundQuarter')
-                  }}
-                    <@fields.playgroundQuarter @format='embedded' />
-                  {{else if
-                    (eq
-                      this.currentPlaygroundField 'playgroundRecurringPattern'
-                    )
-                  }}
-                    <@fields.playgroundRecurringPattern @format='embedded' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberBasic')
-                  }}
-                    <@fields.playgroundNumberBasic @format='embedded' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberSlider')
-                  }}
-                    <@fields.playgroundNumberSlider @format='embedded' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberRating')
-                  }}
-                    <@fields.playgroundNumberRating @format='embedded' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberProgress')
-                  }}
-                    <@fields.playgroundNumberProgress @format='embedded' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberGauge')
-                  }}
-                    <@fields.playgroundNumberGauge @format='embedded' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberQuantity')
-                  }}
-                    <@fields.playgroundNumberQuantity @format='embedded' />
-                  {{else if
-                    (eq
-                      this.currentPlaygroundField 'playgroundNumberPercentage'
-                    )
-                  }}
-                    <@fields.playgroundNumberPercentage @format='embedded' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberStat')
-                  }}
-                    <@fields.playgroundNumberStat @format='embedded' />
-                  {{else if
-                    (eq
-                      this.currentPlaygroundField
-                      'playgroundNumberBadgeNotification'
-                    )
-                  }}
-                    <@fields.playgroundNumberBadgeNotification
-                      @format='embedded'
-                    />
-                  {{else if
-                    (eq
-                      this.currentPlaygroundField 'playgroundNumberBadgeMetric'
-                    )
-                  }}
-                    <@fields.playgroundNumberBadgeMetric @format='embedded' />
-                  {{else if
-                    (eq
-                      this.currentPlaygroundField 'playgroundNumberBadgeCounter'
-                    )
-                  }}
-                    <@fields.playgroundNumberBadgeCounter @format='embedded' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberScore')
-                  }}
-                    <@fields.playgroundNumberScore @format='embedded' />
-                  {{else if
-                    (eq
-                      this.currentPlaygroundField
-                      'playgroundNumberProgressCircle'
-                    )
-                  }}
-                    <@fields.playgroundNumberProgressCircle
-                      @format='embedded'
-                    />
-                  {{/if}}
-                {{else}}
-                  {{! Atom format }}
-                  {{#if (eq this.currentPlaygroundField 'playgroundDate')}}
-                    <@fields.playgroundDate @format='atom' />
-                  {{else if (eq this.currentPlaygroundField 'playgroundTime')}}
-                    <@fields.playgroundTime @format='atom' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundDatetime')
-                  }}
-                    <@fields.playgroundDatetime @format='atom' />
-                  {{else if (eq this.currentPlaygroundField 'playgroundYear')}}
-                    <@fields.playgroundYear @format='atom' />
-                  {{else if (eq this.currentPlaygroundField 'playgroundMonth')}}
-                    <@fields.playgroundMonth @format='atom' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundMonthYear')
-                  }}
-                    <@fields.playgroundMonthYear @format='atom' />
-                  {{else if (eq this.currentPlaygroundField 'playgroundWeek')}}
-                    <@fields.playgroundWeek @format='atom' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundDateRange')
-                  }}
-                    <@fields.playgroundDateRange @format='atom' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundTimeRange')
-                  }}
-                    <@fields.playgroundTimeRange @format='atom' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundDuration')
-                  }}
-                    <@fields.playgroundDuration @format='atom' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundRelativeTime')
-                  }}
-                    <@fields.playgroundRelativeTime @format='atom' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundMonthDay')
-                  }}
-                    <@fields.playgroundMonthDay @format='atom' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundQuarter')
-                  }}
-                    <@fields.playgroundQuarter @format='atom' />
-                  {{else if
-                    (eq
-                      this.currentPlaygroundField 'playgroundRecurringPattern'
-                    )
-                  }}
-                    <@fields.playgroundRecurringPattern @format='atom' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberBasic')
-                  }}
-                    <@fields.playgroundNumberBasic @format='atom' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberSlider')
-                  }}
-                    <@fields.playgroundNumberSlider @format='atom' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberRating')
-                  }}
-                    <@fields.playgroundNumberRating @format='atom' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberProgress')
-                  }}
-                    <@fields.playgroundNumberProgress @format='atom' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberGauge')
-                  }}
-                    <@fields.playgroundNumberGauge @format='atom' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberQuantity')
-                  }}
-                    <@fields.playgroundNumberQuantity @format='atom' />
-                  {{else if
-                    (eq
-                      this.currentPlaygroundField 'playgroundNumberPercentage'
-                    )
-                  }}
-                    <@fields.playgroundNumberPercentage @format='atom' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberStat')
-                  }}
-                    <@fields.playgroundNumberStat @format='atom' />
-                  {{else if
-                    (eq
-                      this.currentPlaygroundField
-                      'playgroundNumberBadgeNotification'
-                    )
-                  }}
-                    <@fields.playgroundNumberBadgeNotification @format='atom' />
-                  {{else if
-                    (eq
-                      this.currentPlaygroundField 'playgroundNumberBadgeMetric'
-                    )
-                  }}
-                    <@fields.playgroundNumberBadgeMetric @format='atom' />
-                  {{else if
-                    (eq
-                      this.currentPlaygroundField 'playgroundNumberBadgeCounter'
-                    )
-                  }}
-                    <@fields.playgroundNumberBadgeCounter @format='atom' />
-                  {{else if
-                    (eq this.currentPlaygroundField 'playgroundNumberScore')
-                  }}
-                    <@fields.playgroundNumberScore @format='atom' />
-                  {{else if
-                    (eq
-                      this.currentPlaygroundField
-                      'playgroundNumberProgressCircle'
-                    )
-                  }}
-                    <@fields.playgroundNumberProgressCircle @format='atom' />
-                  {{/if}}
+                {{#if (eq this.currentPlaygroundField 'playgroundDate')}}
+                  <@fields.playgroundDate @format={{this.selectedFormat}} />
+                {{else if (eq this.currentPlaygroundField 'playgroundTime')}}
+                  <@fields.playgroundTime @format={{this.selectedFormat}} />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundDatetime')
+                }}
+                  <@fields.playgroundDatetime @format={{this.selectedFormat}} />
+                {{else if (eq this.currentPlaygroundField 'playgroundYear')}}
+                  <@fields.playgroundYear @format={{this.selectedFormat}} />
+                {{else if (eq this.currentPlaygroundField 'playgroundMonth')}}
+                  <@fields.playgroundMonth @format={{this.selectedFormat}} />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundMonthYear')
+                }}
+                  <@fields.playgroundMonthYear
+                    @format={{this.selectedFormat}}
+                  />
+                {{else if (eq this.currentPlaygroundField 'playgroundWeek')}}
+                  <@fields.playgroundWeek @format={{this.selectedFormat}} />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundDateRange')
+                }}
+                  <@fields.playgroundDateRange
+                    @format={{this.selectedFormat}}
+                  />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundTimeRange')
+                }}
+                  <@fields.playgroundTimeRange
+                    @format={{this.selectedFormat}}
+                  />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundDuration')
+                }}
+                  <@fields.playgroundDuration @format={{this.selectedFormat}} />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundRelativeTime')
+                }}
+                  <@fields.playgroundRelativeTime
+                    @format={{this.selectedFormat}}
+                  />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundMonthDay')
+                }}
+                  <@fields.playgroundMonthDay @format={{this.selectedFormat}} />
+                {{else if (eq this.currentPlaygroundField 'playgroundQuarter')}}
+                  <@fields.playgroundQuarter @format={{this.selectedFormat}} />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundRecurringPattern')
+                }}
+                  <@fields.playgroundRecurringPattern
+                    @format={{this.selectedFormat}}
+                  />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundNumberBasic')
+                }}
+                  <@fields.playgroundNumberBasic
+                    @format={{this.selectedFormat}}
+                  />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundNumberSlider')
+                }}
+                  <@fields.playgroundNumberSlider
+                    @format={{this.selectedFormat}}
+                  />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundNumberRating')
+                }}
+                  <@fields.playgroundNumberRating
+                    @format={{this.selectedFormat}}
+                  />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundNumberProgress')
+                }}
+                  <@fields.playgroundNumberProgress
+                    @format={{this.selectedFormat}}
+                  />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundNumberGauge')
+                }}
+                  <@fields.playgroundNumberGauge
+                    @format={{this.selectedFormat}}
+                  />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundNumberQuantity')
+                }}
+                  <@fields.playgroundNumberQuantity
+                    @format={{this.selectedFormat}}
+                  />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundNumberPercentage')
+                }}
+                  <@fields.playgroundNumberPercentage
+                    @format={{this.selectedFormat}}
+                  />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundNumberStat')
+                }}
+                  <@fields.playgroundNumberStat
+                    @format={{this.selectedFormat}}
+                  />
+                {{else if
+                  (eq
+                    this.currentPlaygroundField
+                    'playgroundNumberBadgeNotification'
+                  )
+                }}
+                  <@fields.playgroundNumberBadgeNotification
+                    @format={{this.selectedFormat}}
+                  />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundNumberBadgeMetric')
+                }}
+                  <@fields.playgroundNumberBadgeMetric
+                    @format={{this.selectedFormat}}
+                  />
+                {{else if
+                  (eq
+                    this.currentPlaygroundField 'playgroundNumberBadgeCounter'
+                  )
+                }}
+                  <@fields.playgroundNumberBadgeCounter
+                    @format={{this.selectedFormat}}
+                  />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundNumberScore')
+                }}
+                  <@fields.playgroundNumberScore
+                    @format={{this.selectedFormat}}
+                  />
+                {{else if
+                  (eq
+                    this.currentPlaygroundField 'playgroundNumberProgressCircle'
+                  )
+                }}
+                  <@fields.playgroundNumberProgressCircle
+                    @format={{this.selectedFormat}}
+                  />
                 {{/if}}
               </div>
             </div>
@@ -1443,14 +1223,16 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         margin-left: auto;
       }
 
-      .theme {
-        padding: 0.375rem 0.875rem;
-        background: var(--muted, #f1f5f9);
-        border: 1px solid var(--border, #e2e8f0);
-        border-radius: var(--radius, 0.375rem);
-        font-size: 0.75rem;
-        font-style: italic;
-        color: var(--muted-foreground, #94a3b8);
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border-width: 0;
       }
 
       /* Hero Section Styles */
@@ -1508,12 +1290,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         padding: 0.5rem 1rem;
         background: var(--muted, #f8fafc);
         border-bottom: 1px solid var(--border, #e2e8f0);
-      }
-
-      .demo-icon {
-        width: 0.875rem;
-        height: 0.875rem;
-        color: var(--muted-foreground, #94a3b8);
       }
 
       .demo-display-large {
@@ -2103,24 +1879,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         letter-spacing: -0.03em;
       }
 
-      .hero-badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.25rem 0.625rem;
-        background: linear-gradient(
-          135deg,
-          rgba(59, 130, 246, 0.15),
-          rgba(147, 51, 234, 0.15)
-        );
-        border: 1px solid rgba(59, 130, 246, 0.3);
-        border-radius: 9999px;
-        font-size: 0.6875rem;
-        font-weight: 600;
-        color: var(--primary, #3b82f6);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-      }
-
       .hero-description {
         font-size: 1rem;
         color: var(--muted-foreground, #64748b);
@@ -2138,19 +1896,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
           0 2px 4px -1px rgba(0, 0, 0, 0.03);
       }
 
-      .demo-split {
-        display: grid;
-        grid-template-columns: 1fr auto 1fr;
-        gap: 2rem;
-        align-items: start;
-      }
-
-      .demo-column {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-      }
-
       .demo-label {
         display: flex;
         align-items: center;
@@ -2160,12 +1905,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         color: var(--foreground, #0f172a);
         padding-bottom: 0.5rem;
         border-bottom: 2px solid var(--border, #e2e8f0);
-      }
-
-      .demo-icon {
-        width: 1.125rem;
-        height: 1.125rem;
-        color: var(--primary, #3b82f6);
       }
 
       .demo-display {
@@ -3006,10 +2745,6 @@ export class FieldShowcase extends CardDef {
     },
   });
 
-  // Example fields for DateField, TimeField, and DatetimeField only
-
-  // Example fields - only configuration examples (presentation examples covered by Presentation Modes section)
-
   // DateField examples - configuration only (standard shown in hero demo)
   @field appointmentDateCompact = contains(DateField, {
     configuration: { preset: 'tiny' },
@@ -3034,6 +2769,5 @@ export class FieldShowcase extends CardDef {
     configuration: { format: 'ddd, MMM D [at] h:mm A' },
   });
 
-  // ¹⁸ Isolated format - shows edit mode for all components
   static isolated = FieldShowcaseIsolated;
 }

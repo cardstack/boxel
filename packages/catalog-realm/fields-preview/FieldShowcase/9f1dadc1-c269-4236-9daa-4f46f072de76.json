@@ -53,7 +53,7 @@
         "end": null,
         "start": null
       },
-      "playgroundFieldType": "month",
+      "playgroundFieldType": "date",
       "playgroundMonthYear": {
         "value": "2025-10"
       },
