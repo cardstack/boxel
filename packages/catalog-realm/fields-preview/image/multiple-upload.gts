@@ -16,30 +16,18 @@ export class MultipleUploadPreview extends CardDef {
    * Multiple Upload Image Field
    *
    * An image upload field that supports multiple file selection with drag-and-drop.
-   * Displays images in a grid layout with individual remove buttons for each image.
+   * Displays images in a list layout with individual remove buttons for each image.
    * Perfect for galleries, product photos, and multi-image uploads.
    *
-   * Accepted configuration options:
-   * - type: 'multiple' - REQUIRED to use multiple upload rendering
-   * - maxSize?: number - Maximum file size in bytes per file (default: 10MB)
-   * - maxFiles?: number - Maximum number of files allowed (default: 10)
-   * - allowedFormats?: string[] - Allowed file formats (default: ['jpeg', 'jpg', 'png', 'gif'])
-   * - scrollable?: boolean - Whether grid should scroll horizontally (true) or stack vertically (false, default: true)
-   * - showPreview?: boolean - Show image previews (default: true)
-   * - showFileName?: boolean - Show uploaded file names (default: true)
-   * - showFileSize?: boolean - Show uploaded file sizes (default: true)
+   * Supported features: ['drag-drop', 'validated', 'progress']
+   * - 'drag-drop': File upload via drag & drop + drag to reorder list items
+   * - 'validated': Dimension/aspect ratio validation before upload
+   * - 'progress': Real-time upload progress indicators
    */
   @field multipleUpload = contains(MultipleUploadField, {
     configuration: {
       presentation: {
         type: 'multiple',
-        maxSize: 10 * 1024 * 1024, // 10MB
-        maxFiles: 10,
-        allowedFormats: ['jpeg', 'jpg', 'png'],
-        scrollable: true,
-        showPreview: true,
-        showFileName: true,
-        showFileSize: true,
       },
     },
   });

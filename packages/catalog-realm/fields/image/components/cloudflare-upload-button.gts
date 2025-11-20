@@ -17,7 +17,7 @@ export default class CloudflareUploadButton extends Component<Signature> {
     if (this.args.isUploading) {
       return 'Uploading...';
     }
-    return this.args.label || 'Upload Image to Cloudflare';
+    return this.args.label || 'Upload Image';
   }
 
   get shouldRenderButton() {

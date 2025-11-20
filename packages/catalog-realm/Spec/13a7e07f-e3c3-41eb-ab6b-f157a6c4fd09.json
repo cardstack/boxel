@@ -5,13 +5,7 @@
         "containedExamples": [
           {
             "adoptsFrom": {
-              "module": "../fields/image/multiple",
-              "name": "default"
-            }
-          },
-          {
-            "adoptsFrom": {
-              "module": "../fields/image/multiple",
+              "module": "../fields/image/gallery",
               "name": "default"
             }
           }
@@ -26,7 +20,7 @@
     "attributes": {
       "ref": {
         "name": "default",
-        "module": "../fields/image/multiple"
+        "module": "../fields/image/gallery"
       },
       "title": "default",
       "readMe": null,
@@ -41,19 +35,11 @@
       "containedExamples": [
         {
           "uploads": []
-        },
-        {
-          "uploads": []
         }
       ]
     },
     "relationships": {
       "cardInfo.theme": {
-        "links": {
-          "self": null
-        }
-      },
-      "linkedExamples": {
         "links": {
           "self": null
         }

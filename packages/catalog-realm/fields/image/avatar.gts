@@ -1,3 +1,4 @@
+import { concat } from '@ember/helper';
 import {
   Component,
   FieldDef,
@@ -20,6 +21,7 @@ import {
   uploadFileToCloudflare,
   requestCloudflareUploadUrl,
 } from './util/cloudflare-upload';
+import { hasFeature } from './util/index';
 
 interface Configuration {
   presentation: AvatarUploadConfig;
@@ -30,16 +32,30 @@ function mergeAvatarUploadConfig(
 ): AvatarUploadConfig {
   const defaults: AvatarUploadConfig = {
     type: 'avatar',
-    maxSize: 5 * 1024 * 1024, // 5MB for avatars
-    allowedFormats: ['jpeg', 'jpg', 'png', 'gif', 'webp'],
     circular: true,
-    size: 128, // Default avatar size
-    showPreview: true,
+    features: [],
+    validation: {
+      maxFileSize: 5 * 1024 * 1024, // 5MB for avatars
+      allowedFormats: ['image/jpeg', 'image/png', 'image/gif'],
+      aspectRatio: '1/1',
+    },
   };
 
   return {
     ...defaults,
     ...userConfig,
+    validation: {
+      ...defaults.validation,
+      ...userConfig?.validation,
+    },
+    uploadOptions: userConfig?.uploadOptions
+      ? {
+          dragDrop: {
+            ...defaults.uploadOptions?.dragDrop,
+            ...userConfig.uploadOptions.dragDrop,
+          },
+        }
+      : defaults.uploadOptions,
   };
 }
 
@@ -61,32 +77,28 @@ class Edit extends Component<typeof AvatarField> {
     );
   }
 
-  get avatarSize(): string {
-    return `${this.config.size || 128}px`;
+  get isCircular() {
+    return this.config.circular !== false; // Default to true if not specified
   }
 
-  get avatarHeight(): string {
-    return `${this.config.size}px`;
-  }
-
-  get avatarStyle() {
-    return {
-      width: this.avatarSize,
-      height: this.avatarSize,
-      borderRadius: this.config.circular ? '50%' : 'var(--radius, 0.5rem)',
-    };
+  get borderRadiusStyle() {
+    return this.isCircular ? '50%' : 'var(--radius, 0.5rem)';
   }
 
   get uploadHint(): string {
     const formats =
-      this.config.allowedFormats
-        ?.map((format) => format.replace('image/', '').toUpperCase())
+      this.config.validation?.allowedFormats
+        ?.map((format) => format.split('/')[1].toUpperCase())
         .join(', ') || 'PNG, JPG, GIF';
     const maxSizeMB = (
-      (this.config.maxSize || 5 * 1024 * 1024) /
+      (this.config.validation?.maxFileSize || 5 * 1024 * 1024) /
       (1024 * 1024)
     ).toFixed(0);
     return `${formats} up to ${maxSizeMB}MB`;
+  }
+
+  get hasDragDropFeature() {
+    return hasFeature(this.config, 'drag-drop');
   }
 
   get hasAvatar() {
@@ -123,26 +135,60 @@ class Edit extends Component<typeof AvatarField> {
   }
 
   @action
-  handleFileSelect(event: Event) {
+  async handleFileSelect(event: Event) {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
 
     if (!file) return;
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      this.errorMessage = 'Please select a valid image file';
+    await this.processFile(file);
+
+    // Reset input
+    input.value = '';
+  }
+
+  @action
+  async handleDragOver(event: DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  @action
+  async handleDrop(event: DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const file = event.dataTransfer?.files?.[0];
+    if (!file) return;
+
+    await this.processFile(file);
+  }
+
+  async processFile(file: File) {
+    // Import validation utilities
+    const { validateImageFile, validateImageDimensions } = await import(
+      './util/index'
+    );
+
+    // Validate basic file properties (sync)
+    const basicError = validateImageFile(file, this.config.validation);
+    if (basicError) {
+      this.errorMessage = basicError;
       this.selectedFile = null;
       return;
     }
 
-    // Validate file size
-    const maxSize = this.config.maxSize || 5 * 1024 * 1024;
-    if (file.size > maxSize) {
-      const maxSizeMB = (maxSize / (1024 * 1024)).toFixed(0);
-      this.errorMessage = `File size must be less than ${maxSizeMB}MB`;
-      this.selectedFile = null;
-      return;
+    // Validate dimensions (async) - only if 'validated' feature is enabled
+    if (hasFeature(this.config, 'validated')) {
+      const dimensionError = await validateImageDimensions(
+        file,
+        this.config.validation,
+      );
+      if (dimensionError) {
+        this.errorMessage = dimensionError;
+        this.selectedFile = null;
+        return;
+      }
     }
 
     this.selectedFile = file;
@@ -154,9 +200,6 @@ class Edit extends Component<typeof AvatarField> {
       this.previewUrl = reader.result as string;
     };
     reader.readAsDataURL(file);
-
-    // Reset input
-    input.value = '';
   }
 
   @action
@@ -210,9 +253,18 @@ class Edit extends Component<typeof AvatarField> {
   });
 
   <template>
-    <div class='avatar-upload-container' data-test-avatar-upload>
+    <div
+      class='avatar-upload-container'
+      data-test-avatar-upload
+      style={{concat '--avatar-radius: ' this.borderRadiusStyle}}
+    >
       <div class='avatar-wrapper'>
-        <label class='avatar-upload-area' data-test-avatar-upload-area>
+        <label
+          class='avatar-upload-area'
+          data-test-avatar-upload-area
+          {{on 'dragover' this.handleDragOver}}
+          {{on 'drop' this.handleDrop}}
+        >
           {{#if this.hasAvatar}}
             <img src={{this.displayImage}} alt='Avatar' class='avatar-image' />
           {{else}}
@@ -284,7 +336,7 @@ class Edit extends Component<typeof AvatarField> {
         position: relative;
         width: 100%;
         height: 100%;
-        border-radius: 50%;
+        border-radius: var(--avatar-radius);
         overflow: hidden;
         cursor: pointer;
         background-color: var(--muted, #f1f5f9);
@@ -305,11 +357,19 @@ class Edit extends Component<typeof AvatarField> {
         transform: scale(1.02);
       }
 
+      .avatar-upload-area.dragging {
+        border-color: var(--primary, #3b82f6);
+        border-style: solid;
+        border-width: 3px;
+        background-color: var(--primary, #eff6ff);
+        transform: scale(1.05);
+      }
+
       .avatar-image {
         width: 100%;
         height: 100%;
         object-fit: cover;
-        border-radius: 50%;
+        border-radius: var(--avatar-radius);
       }
 
       .avatar-placeholder {
@@ -345,7 +405,7 @@ class Edit extends Component<typeof AvatarField> {
         justify-content: center;
         opacity: 0;
         transition: all 0.3s ease;
-        border-radius: 50%;
+        border-radius: var(--avatar-radius);
         backdrop-filter: blur(2px);
       }
 
@@ -482,10 +542,18 @@ export default class AvatarField extends FieldDef {
   static configuration: Configuration = {
     presentation: {
       type: 'avatar',
-      maxSize: 5 * 1024 * 1024, // 5MB
-      allowedFormats: ['jpeg', 'jpg', 'png', 'gif', 'webp'],
-      size: 200, // Larger avatar size
-      placeholder: 'Upload Avatar',
+      circular: true,
+      features: ['drag-drop', 'progress'],
+      validation: {
+        maxFileSize: 5 * 1024 * 1024, // 5MB
+        allowedFormats: ['image/jpeg', 'image/png', 'image/gif'],
+        aspectRatio: '1/1',
+      },
+      uploadOptions: {
+        dragDrop: {
+          dropzoneLabel: 'Drop avatar image here',
+        },
+      },
     },
   };
 

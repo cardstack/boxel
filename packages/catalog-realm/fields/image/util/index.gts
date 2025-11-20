@@ -1,23 +1,17 @@
 // Export all types
 export type {
-  UploadVariant,
-  UploadFeatures,
-  BaseUploadConfig,
   SingleUploadConfig,
   MultipleUploadConfig,
   AvatarUploadConfig,
   GalleryUploadConfig,
   UploadConfig,
-  ImageValidationConfig,
-  UploadProgressConfig,
-  CameraConfig,
-  FieldConfigMap,
 } from './types';
 
 import type {
-  FieldConfigMap,
   MultipleUploadConfig,
   SingleUploadConfig,
+  AvatarUploadConfig,
+  GalleryUploadConfig,
   UploadConfig,
 } from './types';
 
@@ -107,72 +101,139 @@ export function isGalleryUploadConfig(
  */
 export function hasFeature(
   config: UploadConfig,
-  feature: keyof UploadFeatures,
+  feature: 'drag-drop' | 'reorder' | 'validated' | 'progress' | 'batch-select',
 ): boolean {
-  return Boolean(config.features?.[feature]);
+  return (config.features as string[] | undefined)?.includes(feature) || false;
 }
 
 const SINGLE_UPLOAD_DEFAULT: SingleUploadConfig = {
   type: 'single',
-  maxSize: 10 * 1024 * 1024,
-  allowedFormats: ['jpeg', 'jpg', 'png', 'gif'],
-  showPreview: true,
-  showFileName: true,
-  showFileSize: true,
   placeholder: 'Click to upload',
+  features: [],
+  validation: {
+    maxFileSize: 10 * 1024 * 1024,
+    allowedFormats: ['image/jpeg', 'image/png', 'image/gif'],
+  },
 };
 
 const MULTIPLE_UPLOAD_DEFAULT: MultipleUploadConfig = {
   type: 'multiple',
-  maxSize: 10 * 1024 * 1024,
-  maxFiles: 10,
-  allowedFormats: ['jpeg', 'jpg', 'png', 'gif'],
-  scrollable: true,
-  showPreview: true,
-  showFileName: true,
   showFileSize: true,
-  placeholder: 'Click to upload image',
+  features: [],
+  validation: {
+    maxFileSize: 10 * 1024 * 1024,
+    maxFiles: 10,
+    allowedFormats: ['image/jpeg', 'image/png', 'image/gif'],
+  },
+};
+
+const GALLERY_UPLOAD_DEFAULT: GalleryUploadConfig = {
+  type: 'gallery',
+  itemSize: '200px',
+  gap: '1rem',
+  allowBatchSelect: true,
+  features: [],
+  validation: {
+    maxFileSize: 10 * 1024 * 1024,
+    maxFiles: 50,
+    allowedFormats: ['image/jpeg', 'image/png', 'image/gif'],
+  },
 };
 
 export function mergeSingleUploadConfig(
-  overrides?: SingleUploadConfig,
+  overrides?: Partial<SingleUploadConfig>,
 ): SingleUploadConfig {
   return {
     ...SINGLE_UPLOAD_DEFAULT,
-    ...(overrides || {}),
+    ...overrides,
     type: 'single',
-    allowedFormats:
-      overrides?.allowedFormats && overrides.allowedFormats.length
-        ? overrides.allowedFormats
-        : SINGLE_UPLOAD_DEFAULT.allowedFormats,
+    validation: {
+      ...SINGLE_UPLOAD_DEFAULT.validation,
+      ...overrides?.validation,
+    },
+    uploadOptions: overrides?.uploadOptions
+      ? {
+          dragDrop: {
+            ...SINGLE_UPLOAD_DEFAULT.uploadOptions?.dragDrop,
+            ...overrides.uploadOptions.dragDrop,
+          },
+        }
+      : SINGLE_UPLOAD_DEFAULT.uploadOptions,
   };
 }
 
 export function mergeMultipleUploadConfig(
-  overrides?: MultipleUploadConfig,
+  overrides?: Partial<MultipleUploadConfig>,
 ): MultipleUploadConfig {
   return {
     ...MULTIPLE_UPLOAD_DEFAULT,
-    ...(overrides || {}),
+    ...overrides,
     type: 'multiple',
-    allowedFormats:
-      overrides?.allowedFormats && overrides.allowedFormats.length
-        ? overrides.allowedFormats
-        : MULTIPLE_UPLOAD_DEFAULT.allowedFormats,
+    validation: {
+      ...MULTIPLE_UPLOAD_DEFAULT.validation,
+      ...overrides?.validation,
+    },
+    uploadOptions: overrides?.uploadOptions
+      ? {
+          dragDrop: {
+            ...MULTIPLE_UPLOAD_DEFAULT.uploadOptions?.dragDrop,
+            ...overrides.uploadOptions.dragDrop,
+          },
+        }
+      : MULTIPLE_UPLOAD_DEFAULT.uploadOptions,
+    reorderOptions: overrides?.reorderOptions
+      ? {
+          ...MULTIPLE_UPLOAD_DEFAULT.reorderOptions,
+          ...overrides.reorderOptions,
+        }
+      : MULTIPLE_UPLOAD_DEFAULT.reorderOptions,
+  };
+}
+
+export function mergeGalleryUploadConfig(
+  overrides?: Partial<GalleryUploadConfig>,
+): GalleryUploadConfig {
+  return {
+    ...GALLERY_UPLOAD_DEFAULT,
+    ...overrides,
+    type: 'gallery',
+    validation: {
+      ...GALLERY_UPLOAD_DEFAULT.validation,
+      ...overrides?.validation,
+    },
+    uploadOptions: overrides?.uploadOptions
+      ? {
+          dragDrop: {
+            ...GALLERY_UPLOAD_DEFAULT.uploadOptions?.dragDrop,
+            ...overrides.uploadOptions.dragDrop,
+          },
+        }
+      : GALLERY_UPLOAD_DEFAULT.uploadOptions,
+    reorderOptions: overrides?.reorderOptions
+      ? {
+          ...GALLERY_UPLOAD_DEFAULT.reorderOptions,
+          ...overrides.reorderOptions,
+        }
+      : GALLERY_UPLOAD_DEFAULT.reorderOptions,
   };
 }
 
 export function buildUploadHint(
-  allowedFormats?: string[],
+  allowedFormats?: ('image/jpeg' | 'image/png' | 'image/gif')[],
   maxSize?: number,
-  fallback = '',
 ): string {
-  if (allowedFormats?.length && typeof maxSize === 'number') {
-    const formats = allowedFormats.join(', ').toUpperCase();
-    const readableSize = formatFileSize(maxSize);
-    return `${formats} up to ${readableSize}`;
+  const parts: string[] = [];
+
+  if (allowedFormats?.length) {
+    const formats = allowedFormats.map((f) => f.split('/')[1].toUpperCase());
+    parts.push(formats.join(', '));
   }
-  return fallback;
+
+  if (typeof maxSize === 'number') {
+    parts.push(`up to ${formatFileSize(maxSize)}`);
+  }
+
+  return parts.join(' ');
 }
 
 export function generateUploadId(): string {
@@ -181,4 +242,134 @@ export function generateUploadId(): string {
     return cryptoObj.randomUUID();
   }
   return `${Date.now()}-${Math.random()}`;
+}
+
+/**
+ * Simulate realistic upload progress
+ * Updates the entry's uploadProgress and uploadedBytes
+ * Triggers reactivity callback after each step
+ */
+export async function simulateProgress(
+  entry: {
+    uploadProgress?: number;
+    uploadedBytes?: number;
+    totalBytes?: number;
+  },
+  triggerReactivity: () => void,
+): Promise<void> {
+  // Simulate realistic upload progress with slower, more visible increments
+  const steps = [15, 25, 35, 45, 55, 65, 75, 85, 92, 98];
+  for (const step of steps) {
+    await new Promise((resolve) => setTimeout(resolve, 400)); // 400ms per step
+    entry.uploadProgress = step;
+    entry.uploadedBytes = Math.floor((entry.totalBytes! * step) / 100);
+    triggerReactivity(); // Trigger reactivity
+  }
+}
+
+/**
+ * Validate an image file against configuration options (synchronous checks only)
+ * Returns null if valid, or an error message string if invalid
+ * Note: This only validates file type, size, and format.
+ * For dimension/aspect ratio validation, use validateImageDimensions after loading.
+ */
+export function validateImageFile(
+  file: File,
+  validation?: {
+    maxFileSize?: number;
+    allowedFormats?: ('image/jpeg' | 'image/png' | 'image/gif')[];
+    minWidth?: number;
+    maxWidth?: number;
+    minHeight?: number;
+    maxHeight?: number;
+    aspectRatio?: string;
+  },
+): string | null {
+  // Validate file type
+  if (!file.type.startsWith('image/')) {
+    return 'Not an image file';
+  }
+
+  // Validate file size
+  const maxSize = validation?.maxFileSize || 10 * 1024 * 1024;
+  if (file.size > maxSize) {
+    const maxMB = Math.round(maxSize / 1024 / 1024);
+    return `File too large (max ${maxMB}MB)`;
+  }
+
+  // Validate format if specified
+  if (validation?.allowedFormats) {
+    if (!validation.allowedFormats.includes(file.type as any)) {
+      const formats = validation.allowedFormats
+        .map((f) => f.split('/')[1].toUpperCase())
+        .join(', ');
+      return `Format not allowed. Allowed: ${formats}`;
+    }
+  }
+
+  return null; // Valid
+}
+
+/**
+ * Validate image dimensions and aspect ratio (async - requires loading the image)
+ * Returns null if valid, or an error message string if invalid
+ */
+export async function validateImageDimensions(
+  file: File,
+  validation?: {
+    minWidth?: number;
+    maxWidth?: number;
+    minHeight?: number;
+    maxHeight?: number;
+    aspectRatio?: string;
+  },
+): Promise<string | null> {
+  if (!validation) return null;
+
+  const { minWidth, maxWidth, minHeight, maxHeight, aspectRatio } = validation;
+
+  // If no dimension validation is specified, skip loading
+  if (!minWidth && !maxWidth && !minHeight && !maxHeight && !aspectRatio) {
+    return null;
+  }
+
+  try {
+    const { width, height } = await loadImageDimensions(file);
+
+    // Validate width
+    if (minWidth && width < minWidth) {
+      return `Image width too small (min ${minWidth}px, got ${width}px)`;
+    }
+    if (maxWidth && width > maxWidth) {
+      return `Image width too large (max ${maxWidth}px, got ${width}px)`;
+    }
+
+    // Validate height
+    if (minHeight && height < minHeight) {
+      return `Image height too small (min ${minHeight}px, got ${height}px)`;
+    }
+    if (maxHeight && height > maxHeight) {
+      return `Image height too large (max ${maxHeight}px, got ${height}px)`;
+    }
+
+    // Validate aspect ratio if specified (e.g., "16/9", "1/1", "4/3")
+    if (aspectRatio) {
+      const [expectedWidth, expectedHeight] = aspectRatio
+        .split('/')
+        .map(Number);
+      if (expectedWidth && expectedHeight) {
+        const expectedRatio = expectedWidth / expectedHeight;
+        const actualRatio = width / height;
+        const tolerance = 0.02; // 2% tolerance for aspect ratio
+
+        if (Math.abs(actualRatio - expectedRatio) > tolerance) {
+          return `Image aspect ratio must be ${aspectRatio} (got ${width}×${height})`;
+        }
+      }
+    }
+
+    return null; // Valid
+  } catch (error: any) {
+    return `Failed to load image: ${error.message}`;
+  }
 }

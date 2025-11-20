@@ -10,12 +10,20 @@
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
+        "title": "Single Upload Field Examples",
+        "description": "Three configurations: Basic, Drag-Drop, and Full-Featured",
         "thumbnailURL": null
       },
-      "singleUpload": {
-        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1763552031043",
+      "basicUpload": {
+        "uploadUrl": null,
+        "uploadedImageUrl": null
+      },
+      "dragDropUpload": {
+        "uploadUrl": null,
+        "uploadedImageUrl": null
+      },
+      "fullFeaturedUpload": {
+        "uploadUrl": null,
         "uploadedImageUrl": null
       }
     },

@@ -8,6 +8,12 @@
               "module": "../fields/image/single",
               "name": "default"
             }
+          },
+          {
+            "adoptsFrom": {
+              "module": "../fields/image/single",
+              "name": "default"
+            }
           }
         ]
       },
@@ -33,6 +39,10 @@
       "specType": "field",
       "description": null,
       "containedExamples": [
+        {
+          "uploadUrl": null,
+          "uploadedImageUrl": null
+        },
         {
           "uploadUrl": null,
           "uploadedImageUrl": null

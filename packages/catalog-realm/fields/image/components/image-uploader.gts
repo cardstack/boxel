@@ -14,10 +14,18 @@ interface Signature {
     iconSize?: string;
     marginBottom?: string;
     testId?: string;
+    allowedFormats?: string[];
   };
 }
 
 export default class ImageUploader extends Component<Signature> {
+  get acceptAttribute(): string {
+    if (this.args.allowedFormats && this.args.allowedFormats.length > 0) {
+      return this.args.allowedFormats.join(',');
+    }
+    return 'image/*';
+  }
+
   <template>
     <label class='upload-area' data-test-upload-area={{@testId}}>
       <div class='upload-content'>
@@ -39,7 +47,7 @@ export default class ImageUploader extends Component<Signature> {
       <input
         type='file'
         class='file-input'
-        accept='image/*'
+        accept={{this.acceptAttribute}}
         multiple={{@multiple}}
         {{on 'change' @onFileSelect}}
         data-test-file-input
