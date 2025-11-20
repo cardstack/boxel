@@ -3237,6 +3237,15 @@ export class Realm {
       if (!tracked || tracked.isTracked) {
         return;
       }
+
+      let localPath = this.paths.local(tracked.url);
+      this.#sourceCache.invalidate(localPath);
+
+      if (hasExecutableExtension(localPath)) {
+        this.#moduleCache.invalidate(localPath);
+        this.#definitionsCache.invalidate();
+      }
+
       this.broadcastRealmEvent(data);
       this.#updateItems.push({
         operation: ('added' in data
