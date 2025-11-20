@@ -99,6 +99,7 @@ module(basename(__filename), function () {
     let { getMessagesSince } = setupMatrixRoom(hooks, getRealmSetup);
 
     test('file creation produces an added event', async function (assert) {
+      console.log('Starting file creation test');
       realmEventTimestampStart = Date.now();
 
       let newFilePath = join(
@@ -126,6 +127,7 @@ module(basename(__filename), function () {
 
       await waitForRealmEvent(getMessagesSince, realmEventTimestampStart);
       let messages = await getMessagesSince(realmEventTimestampStart);
+      console.log('Messages since', realmEventTimestampStart, messages);
       let updateEvent = findRealmEvent(messages, 'update', 'incremental');
 
       assert.deepEqual(updateEvent?.content, {
@@ -135,6 +137,7 @@ module(basename(__filename), function () {
     });
 
     test('file updating produces an updated event', async function (assert) {
+      console.log('Starting update test');
       realmEventTimestampStart = Date.now();
 
       let updatedFilePath = join(
@@ -160,6 +163,7 @@ module(basename(__filename), function () {
 
       await waitForRealmEvent(getMessagesSince, realmEventTimestampStart);
       let messages = await getMessagesSince(realmEventTimestampStart);
+      console.log('Messages since', realmEventTimestampStart, messages);
       let updateEvent = findRealmEvent(messages, 'update', 'incremental');
 
       assert.deepEqual(updateEvent?.content, {
@@ -169,6 +173,7 @@ module(basename(__filename), function () {
     });
 
     test('file deletion produces a removed event', async function (assert) {
+      console.log('Starting deletion test');
       realmEventTimestampStart = Date.now();
 
       let deletedFilePath = join(
@@ -182,6 +187,7 @@ module(basename(__filename), function () {
 
       await waitForRealmEvent(getMessagesSince, realmEventTimestampStart);
       let messages = await getMessagesSince(realmEventTimestampStart);
+      console.log(messages);
       let updateEvent = findRealmEvent(messages, 'update', 'incremental');
 
       assert.deepEqual(updateEvent?.content, {

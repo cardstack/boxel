@@ -795,6 +795,12 @@ export function setupMatrixRoom(
     matrixClient,
     getMessagesSince: async function (since: number) {
       let allMessages = await matrixClient.roomMessages(testAuthRoomId!);
+      console.log(
+        'All messages:',
+        allMessages,
+        allMessages.length,
+        allMessages.map((m) => JSON.stringify(m)),
+      );
       let messagesAfterSentinel = allMessages.filter(
         (m) => m.origin_server_ts > since,
       );
