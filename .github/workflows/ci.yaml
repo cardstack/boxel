@@ -418,6 +418,7 @@ jobs:
             "card-dependencies-endpoint-test.ts",
             "card-endpoints-test.ts",
             "card-source-endpoints-test.ts",
+            "definition-lookup-test.ts",
             "file-watcher-events-test.ts",
             "headless-chrome-indexing-test.ts",
             "indexing-test.ts",
