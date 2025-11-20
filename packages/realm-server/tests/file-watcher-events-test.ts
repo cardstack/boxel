@@ -130,6 +130,7 @@ module(basename(__filename), function () {
           m.origin_server_ts > realmEventTimestampStart &&
           m.type === APP_BOXEL_REALM_EVENT_TYPE &&
           m.content.eventName === 'update' &&
+          'added' in m.content &&
           m.content.added === basename(newFilePath),
       );
       assert.ok(updateEvents);
@@ -170,6 +171,7 @@ module(basename(__filename), function () {
           m.origin_server_ts > realmEventTimestampStart &&
           m.type === APP_BOXEL_REALM_EVENT_TYPE &&
           m.content.eventName === 'update' &&
+          'updated' in m.content &&
           m.content.updated === basename(updatedFilePath),
       );
       assert.ok(updateEvents);
@@ -198,6 +200,7 @@ module(basename(__filename), function () {
           m.origin_server_ts > realmEventTimestampStart &&
           m.type === APP_BOXEL_REALM_EVENT_TYPE &&
           m.content.eventName === 'update' &&
+          'removed' in m.content &&
           m.content.removed === basename(deletedFilePath),
       );
       assert.ok(updateEvents);
