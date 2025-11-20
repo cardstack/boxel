@@ -263,7 +263,11 @@ export default class PublishRealmModal extends Component<Signature> {
     this.customSubdomainError = null;
   }
 
-  private applyClaimedDomain(claim: ClaimedDomain | null) {
+  private applyClaimedDomain(
+    claim: ClaimedDomain | null,
+    options: { select?: boolean } = {},
+  ) {
+    const { select = false } = options;
     const previousSelectionUrl = this.customSubdomainSelection?.url;
     this.claimedDomain = claim;
 
@@ -276,7 +280,9 @@ export default class PublishRealmModal extends Component<Signature> {
         url: publishedUrl,
         subdomain: claim.subdomain,
       });
-      this.addPublishedRealmUrl(publishedUrl);
+      if (select) {
+        this.addPublishedRealmUrl(publishedUrl);
+      }
       this.customSubdomain = '';
       this.isCustomSubdomainSetupVisible = false;
     } else {
@@ -450,12 +456,15 @@ export default class PublishRealmModal extends Component<Signature> {
                 };
               };
             };
-            this.applyClaimedDomain({
-              id: claimResult.data.id,
-              subdomain: claimResult.data.attributes.subdomain,
-              hostname: claimResult.data.attributes.hostname,
-              sourceRealmURL: claimResult.data.attributes.sourceRealmURL,
-            });
+            this.applyClaimedDomain(
+              {
+                id: claimResult.data.id,
+                subdomain: claimResult.data.attributes.subdomain,
+                hostname: claimResult.data.attributes.hostname,
+                sourceRealmURL: claimResult.data.attributes.sourceRealmURL,
+              },
+              { select: true },
+            );
             this.isCustomSubdomainSetupVisible = false;
           } catch (claimError) {
             let errorMessage = (claimError as Error).message;

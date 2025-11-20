@@ -794,6 +794,7 @@ module('Acceptance | host submode', function (hooks) {
             'http://my-boxel-site.localhost:4201/ Not published yet',
           );
         assert.dom('[data-test-unclaim-custom-subdomain-button]').exists();
+        assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
       });
 
       test('shows error when claiming domain fails with 422', async function (assert) {
@@ -1109,6 +1110,9 @@ module('Acceptance | host submode', function (hooks) {
           await click('[data-test-publish-realm-button]');
           await waitFor('[data-test-publish-realm-modal]');
 
+          assert.dom('[data-test-custom-subdomain-checkbox]').isNotChecked();
+          assert.dom('[data-test-default-domain-checkbox]').isNotChecked();
+
           // Check both checkboxes
           await click('[data-test-default-domain-checkbox]');
           await click('[data-test-custom-subdomain-checkbox]');
@@ -1218,7 +1222,7 @@ module('Acceptance | host submode', function (hooks) {
         }
       });
 
-      test('custom subdomain checkbox is selected when domain already claimed', async function (assert) {
+      test('custom subdomain checkbox remains unchecked when modal opens with claimed domain', async function (assert) {
         let realmServer = getService('realm-server') as any;
         let originalFetchClaimed = realmServer.fetchBoxelClaimedDomain;
 
@@ -1238,18 +1242,14 @@ module('Acceptance | host submode', function (hooks) {
           await click('[data-test-publish-realm-button]');
           await waitFor('[data-test-publish-realm-modal]');
 
-          assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
+          assert.dom('[data-test-custom-subdomain-checkbox]').isNotChecked();
           assert
             .dom(
               '[data-test-publish-realm-modal] .domain-option:nth-of-type(2)',
             )
             .containsText('Not published yet');
 
-          // Toggling off should be possible and should reflect in checkbox
-          await click('[data-test-custom-subdomain-checkbox]');
-          assert.dom('[data-test-custom-subdomain-checkbox]').isNotChecked();
-
-          // Toggling on again should reselect it
+          // User can still manually select it
           await click('[data-test-custom-subdomain-checkbox]');
           assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
         } finally {
