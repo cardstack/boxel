@@ -1,7 +1,6 @@
 import type { DBAdapter, TypeCoercion } from './db';
 import {
   fetchUserPermissions,
-  internalKeyFor,
   type Definition,
   type ErrorEntry,
   type ModuleDefinitionResult,
@@ -49,7 +48,6 @@ export class DefinitionLookup {
     }
     let { realmURL, userId } = realmOwnerInfo;
 
-    let definitionKey = internalKeyFor(codeRef, undefined);
     let moduleEntry =
       (await this.readFromDatabaseCache(codeRef.module)) ??
       (await this.populateCache(codeRef.module, realmURL, userId));
@@ -66,7 +64,7 @@ export class DefinitionLookup {
       return undefined;
     }
 
-    let defOrError = moduleEntry.definitions[definitionKey];
+    let defOrError = moduleEntry.definitions[codeRef.name];
     if (!defOrError) {
       return undefined;
     }
@@ -101,15 +99,14 @@ export class DefinitionLookup {
     let rows = (await this.#dbAdapter.execute(
       `SELECT definitions, deps, error_doc FROM ${MODULES_TABLE} WHERE url = $1`,
       { bind: [moduleUrl], coerceTypes: modulesTableCoerceTypes },
-    )) as
-      | {
-          definitions:
-            | Record<string, ModuleDefinitionResult | ErrorEntry>
-            | string
-            | null;
-          deps: string[] | string | null;
-          error_doc: ErrorEntry | string | null;
-        }[];
+    )) as {
+      definitions:
+        | Record<string, ModuleDefinitionResult | ErrorEntry>
+        | string
+        | null;
+      deps: string[] | string | null;
+      error_doc: ErrorEntry | string | null;
+    }[];
 
     if (!rows.length) {
       return undefined;
