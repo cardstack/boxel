@@ -169,7 +169,9 @@ export default class RoomMessageCommand extends Component<Signature> {
       ...attributes
     >
       {{#if @isStreaming}}
-        <PreparingRoomMessageCommand />
+        <PreparingRoomMessageCommand
+          @commandDescription={{@messageCommand.description}}
+        />
       {{else}}
         <CodeBlock
           class='command-code-block'
