@@ -49,6 +49,8 @@ function installStubs() {
       );
       warnedTimeout = true;
     }
+    // Return a syntactically valid timeout handle but immediately clear it so
+    // no timer keeps running while prerendering.
     let handle = invokeSetTimeout(() => {}, args[1] as number | undefined);
     nativeClearTimeout?.(handle as unknown as number | undefined);
     return handle;
@@ -64,6 +66,7 @@ function installStubs() {
       );
       warnedInterval = true;
     }
+    // Likewise for intervals: issue and clear right away to satisfy callers.
     let handle = invokeSetInterval(() => {}, args[1] as number | undefined);
     nativeClearInterval?.(handle as unknown as number | undefined);
     return handle;
