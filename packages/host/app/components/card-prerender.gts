@@ -238,6 +238,7 @@ export default class CardPrerender extends Component {
         await this.#primeCardType(url, context);
         let error: RenderError | undefined;
         let isolatedHTML: string | null = null;
+        let headHTML: string | null = null;
         let meta: PrerenderMeta = {
           serialized: null,
           searchDoc: null,
@@ -259,6 +260,12 @@ export default class CardPrerender extends Component {
             initialRenderOptions,
           );
           meta = await this.renderMeta.perform(url, subsequentRenderOptions);
+          headHTML = await this.renderHTML.perform(
+            url,
+            'head',
+            0,
+            subsequentRenderOptions,
+          );
           atomHTML = await this.renderHTML.perform(
             url,
             'atom',
@@ -306,6 +313,7 @@ export default class CardPrerender extends Component {
         return {
           ...meta,
           isolatedHTML,
+          headHTML,
           atomHTML,
           embeddedHTML,
           fittedHTML,
@@ -378,7 +386,9 @@ export default class CardPrerender extends Component {
       let captured = await this.renderService.renderCardComponent(
         component,
         // I think this is right, may need to revisit this as we incorporate more tests
-        ['isolated', 'atom'].includes(format) ? 'innerHTML' : 'outerHTML',
+        ['isolated', 'atom', 'head'].includes(format)
+          ? 'innerHTML'
+          : 'outerHTML',
         format,
         this.waitForLinkedData,
       );
