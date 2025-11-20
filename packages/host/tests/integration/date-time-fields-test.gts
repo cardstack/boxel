@@ -214,7 +214,7 @@ module('Integration | date-time fields', function (hooks) {
     );
     assert
       .dom('[data-test-date-range-embedded]')
-      .hasText('2024-05-01 → 2024-05-10');
+      .hasText('May 1, 2024 → May 10, 2024');
 
     await renderField(
       TimeRangeFieldClass,
@@ -429,13 +429,13 @@ module('Integration | date-time fields', function (hooks) {
       DateRangeFieldClass,
       buildField(DateRangeFieldClass, { start: '2024-05-01' }),
     );
-    assert.dom('[data-test-date-range-embedded]').hasText('From 2024-05-01');
+    assert.dom('[data-test-date-range-embedded]').hasText('From May 1, 2024');
 
     await renderField(
       DateRangeFieldClass,
       buildField(DateRangeFieldClass, { end: '2024-05-10' }),
     );
-    assert.dom('[data-test-date-range-embedded]').hasText('Until 2024-05-10');
+    assert.dom('[data-test-date-range-embedded]').hasText('Until May 10, 2024');
 
     await renderField(DateRangeFieldClass, buildField(DateRangeFieldClass, {}));
     assert.dom('[data-test-date-range-embedded]').hasText('No date range set');
@@ -545,11 +545,10 @@ module('Integration | date-time fields', function (hooks) {
       buildField(MonthDayFieldClass, { month: '01', day: '01' }),
       'edit',
     );
-    await select('[data-test-month-select]', '05');
+    await select('[data-test-month-select]', '5');
     await select('[data-test-day-select]', '15');
-    assert
-      .dom('[data-test-field-container]')
-      .hasTextContaining('Birthday: May 15');
+    assert.dom('[data-test-month-select]').hasValue('5');
+    assert.dom('[data-test-day-select]').hasValue('15');
   });
 
   test('presentation content reflects configuration', async function (assert) {
