@@ -4,14 +4,15 @@ import { join, basename } from 'path';
 import type { Server } from 'http';
 import type { DirResult } from 'tmp';
 import { removeSync, writeJSONSync } from 'fs-extra';
-import type { Realm } from '@cardstack/runtime-common';
 import {
-  findRealmEvent,
+  APP_BOXEL_REALM_EVENT_TYPE,
+  type Realm,
+} from '@cardstack/runtime-common';
+import {
   setupBaseRealmServer,
   setupPermissionedRealm,
   setupMatrixRoom,
   matrixURL,
-  waitForRealmEvent,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -96,10 +97,9 @@ module(basename(__filename), function () {
       },
     });
 
-    let { getMessagesSince } = setupMatrixRoom(hooks, getRealmSetup);
+    let { waitForMatchingMessages } = setupMatrixRoom(hooks, getRealmSetup);
 
     test('file creation produces an added event', async function (assert) {
-      console.log('Starting file creation test');
       realmEventTimestampStart = Date.now();
 
       let newFilePath = join(
@@ -125,19 +125,23 @@ module(basename(__filename), function () {
         },
       });
 
-      await waitForRealmEvent(getMessagesSince, realmEventTimestampStart);
-      let messages = await getMessagesSince(realmEventTimestampStart);
-      console.log('Messages since', realmEventTimestampStart, messages);
-      let updateEvent = findRealmEvent(messages, 'update', 'incremental');
+      let updateEvents = await waitForMatchingMessages(
+        (m) =>
+          m.origin_server_ts > realmEventTimestampStart &&
+          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+          m.content.eventName === 'update' &&
+          m.content.added === basename(newFilePath),
+      );
+      assert.ok(updateEvents);
+      assert.strictEqual(updateEvents!.length, 1);
 
-      assert.deepEqual(updateEvent?.content, {
+      assert.deepEqual(updateEvents![0].content, {
         eventName: 'update',
         added: basename(newFilePath),
       });
     });
 
     test('file updating produces an updated event', async function (assert) {
-      console.log('Starting update test');
       realmEventTimestampStart = Date.now();
 
       let updatedFilePath = join(
@@ -161,19 +165,23 @@ module(basename(__filename), function () {
         },
       });
 
-      await waitForRealmEvent(getMessagesSince, realmEventTimestampStart);
-      let messages = await getMessagesSince(realmEventTimestampStart);
-      console.log('Messages since', realmEventTimestampStart, messages);
-      let updateEvent = findRealmEvent(messages, 'update', 'incremental');
+      let updateEvents = await waitForMatchingMessages(
+        (m) =>
+          m.origin_server_ts > realmEventTimestampStart &&
+          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+          m.content.eventName === 'update' &&
+          m.content.updated === basename(updatedFilePath),
+      );
+      assert.ok(updateEvents);
+      assert.strictEqual(updateEvents!.length, 1);
 
-      assert.deepEqual(updateEvent?.content, {
+      assert.deepEqual(updateEvents![0].content, {
         eventName: 'update',
         updated: basename(updatedFilePath),
       });
     });
 
     test('file deletion produces a removed event', async function (assert) {
-      console.log('Starting deletion test');
       realmEventTimestampStart = Date.now();
 
       let deletedFilePath = join(
@@ -185,12 +193,17 @@ module(basename(__filename), function () {
 
       removeSync(deletedFilePath);
 
-      await waitForRealmEvent(getMessagesSince, realmEventTimestampStart);
-      let messages = await getMessagesSince(realmEventTimestampStart);
-      console.log(messages);
-      let updateEvent = findRealmEvent(messages, 'update', 'incremental');
+      let updateEvents = await waitForMatchingMessages(
+        (m) =>
+          m.origin_server_ts > realmEventTimestampStart &&
+          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+          m.content.eventName === 'update' &&
+          m.content.removed === basename(deletedFilePath),
+      );
+      assert.ok(updateEvents);
+      assert.strictEqual(updateEvents!.length, 1);
 
-      assert.deepEqual(updateEvent?.content, {
+      assert.deepEqual(updateEvents![0].content, {
         eventName: 'update',
         removed: basename(deletedFilePath),
       });

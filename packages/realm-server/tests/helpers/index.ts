@@ -67,6 +67,8 @@ import type {
 import { createRemotePrerenderer } from '../../prerender/remote-prerenderer';
 import { createPrerenderHttpServer } from '../../prerender/prerender-app';
 
+type MatrixMessageMatcher = (message: MatrixEvent) => boolean;
+
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
 
@@ -791,33 +793,31 @@ export function setupMatrixRoom(
     );
   });
 
+  async function getMatchingMessages(
+    matcher: MatrixMessageMatcher = () => true,
+  ) {
+    let allMessages = await matrixClient.roomMessages(testAuthRoomId!);
+    return allMessages.filter(matcher);
+  }
+
   return {
     matrixClient,
-    getMessagesSince: async function (since: number) {
-      let allMessages = await matrixClient.roomMessages(testAuthRoomId!);
-      console.log(
-        'All messages:',
-        allMessages,
-        allMessages.length,
-        allMessages.map((m) => JSON.stringify(m)),
-      );
-      let messagesAfterSentinel = allMessages.filter(
-        (m) => m.origin_server_ts > since,
-      );
-
-      return messagesAfterSentinel;
-    },
+    getMatchingMessages,
+    getMessagesSince: (since: number) =>
+      getMatchingMessages((m) => m.origin_server_ts > since),
+    waitForMatchingMessages: (
+      matcher: MatrixMessageMatcher,
+      options?: {
+        timeout?: number;
+        interval?: number;
+        timeoutMessage?: string;
+      },
+    ) =>
+      waitUntil(async () => {
+        let matches = await getMatchingMessages(matcher);
+        return matches.length ? matches : undefined;
+      }, options),
   };
-}
-
-export async function waitForRealmEvent(
-  getMessagesSince: (since: number) => Promise<MatrixEvent[]>,
-  since: number,
-) {
-  await waitUntil(async () => {
-    let matrixMessages = await getMessagesSince(since);
-    return matrixMessages.length > 0;
-  });
 }
 
 export function findRealmEvent(
