@@ -252,6 +252,7 @@ export interface FieldConstructor<T> {
   name: string;
   isUsed?: true;
   isPolymorphic?: true;
+  declaredCardThunk?: () => T;
 }
 
 type CardChangeSubscriber = (
@@ -912,9 +913,10 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
 
   validate(_instance: BaseDef, value: any) {
     if (!(primitive in this.card)) {
-      if (value != null && !instanceOf(value, this.card)) {
+      let expectedCard = this.card;
+      if (value != null && !instanceOf(value, expectedCard)) {
         throw new Error(
-          `field validation error: tried set instance of ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
+          `field validation error: tried set instance of ${value.constructor.name} as field '${this.name}' but it is not an instance of ${expectedCard.name}`,
         );
       }
     }
@@ -933,6 +935,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
 class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly fieldType = 'linksTo';
   private cardThunk: () => CardT;
+  private declaredCardThunk: () => CardT;
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly description: string | undefined;
@@ -941,12 +944,14 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly configuration?: ConfigurationInput<any>;
   constructor({
     cardThunk,
+    declaredCardThunk,
     computeVia,
     name,
     isUsed,
     isPolymorphic,
   }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
+    this.declaredCardThunk = declaredCardThunk ?? cardThunk;
     this.computeVia = computeVia;
     this.name = name;
     this.isUsed = isUsed;
@@ -955,6 +960,10 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
 
   get card(): CardT {
     return this.cardThunk();
+  }
+
+  get declaredCardResolver(): () => CardT {
+    return this.declaredCardThunk;
   }
 
   getter(instance: CardDef): BaseInstanceType<CardT> | undefined {
@@ -1304,6 +1313,8 @@ class LinksToMany<FieldT extends CardDefConstructor>
 {
   readonly fieldType = 'linksToMany';
   private cardThunk: () => FieldT;
+  private declaredCardThunk: () => FieldT;
+  private declaredCardCache: FieldT | undefined;
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly isUsed: undefined | true;
@@ -1311,12 +1322,14 @@ class LinksToMany<FieldT extends CardDefConstructor>
   readonly configuration?: ConfigurationInput<any>;
   constructor({
     cardThunk,
+    declaredCardThunk,
     computeVia,
     name,
     isUsed,
     isPolymorphic,
   }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
+    this.declaredCardThunk = declaredCardThunk ?? cardThunk;
     this.computeVia = computeVia;
     this.name = name;
     this.isUsed = isUsed;
@@ -1325,6 +1338,17 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
   get card(): FieldT {
     return this.cardThunk();
+  }
+
+  private get declaredCard(): FieldT {
+    if (!this.declaredCardCache) {
+      this.declaredCardCache = this.declaredCardThunk();
+    }
+    return this.declaredCardCache;
+  }
+
+  get declaredCardResolver(): () => FieldT {
+    return this.declaredCardThunk;
   }
 
   getter(instance: CardDef): BaseInstanceType<FieldT> {
@@ -1681,14 +1705,15 @@ class LinksToMany<FieldT extends CardDefConstructor>
       );
     }
 
+    let expectedCard = this.declaredCard;
     for (let value of values) {
       if (
         !isNotLoadedValue(value) &&
         value != null &&
-        !instanceOf(value, this.card)
+        !instanceOf(value, expectedCard)
       ) {
         throw new Error(
-          `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
+          `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${expectedCard.name}`,
         );
       }
     }
@@ -1930,8 +1955,10 @@ export function linksTo<CardT extends CardDefConstructor>(
   return {
     setupField(fieldName: string) {
       let { computeVia, isUsed } = options ?? {};
+      let fieldCardThunk = cardThunk(cardOrThunk);
       let instance = new LinksTo({
-        cardThunk: cardThunk(cardOrThunk),
+        cardThunk: fieldCardThunk,
+        declaredCardThunk: fieldCardThunk,
         computeVia,
         name: fieldName,
         isUsed,
@@ -1950,8 +1977,10 @@ export function linksToMany<CardT extends CardDefConstructor>(
   return {
     setupField(fieldName: string) {
       let { computeVia, isUsed } = options ?? {};
+      let fieldCardThunk = cardThunk(cardOrThunk);
       let instance = new LinksToMany({
-        cardThunk: cardThunk(cardOrThunk),
+        cardThunk: fieldCardThunk,
+        declaredCardThunk: fieldCardThunk,
         computeVia,
         name: fieldName,
         isUsed,

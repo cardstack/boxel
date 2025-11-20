@@ -14,9 +14,6 @@ import { setupApplicationTest } from '../helpers/setup';
 
 const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
 const CATALOG_READINESS_URL = `${catalogRealmURL}_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson`;
-const CATALOG_SITE_URL = `${catalogRealmURL}site.json`;
-const CATALOG_INDEX_URL = `${catalogRealmURL}index`;
-const CATALOG_INDEX_JSON_URL = `${CATALOG_INDEX_URL}.json`;
 
 class StubHostModeService extends HostModeService {
   override get isActive() {
@@ -40,9 +37,6 @@ module('Acceptance | Catalog | real catalog app', function (hooks) {
     let realmServer = getService('realm-server');
     await realmServer.ready;
     await ensureCatalogRealmReady();
-    await ensureCatalogCardLoaded(CATALOG_SITE_URL, 'site config');
-    await ensureCatalogCardLoaded(CATALOG_INDEX_URL, 'index card');
-    await ensureCatalogCardLoaded(CATALOG_INDEX_JSON_URL, 'index JSON');
 
     await visit('/catalog/');
 
@@ -66,24 +60,6 @@ async function ensureCatalogRealmReady() {
     {
       timeout: 30_000,
       timeoutMessage: `Timed out waiting for catalog realm readiness at ${CATALOG_READINESS_URL}`,
-    },
-  );
-}
-
-async function ensureCatalogCardLoaded(url: string, description: string) {
-  let cardService = getService('card-service');
-  await waitUntil(
-    async () => {
-      try {
-        await cardService.fetchJSON(url);
-        return true;
-      } catch (_e) {
-        return false;
-      }
-    },
-    {
-      timeout: 60_000,
-      timeoutMessage: `Timed out waiting for catalog ${description} card at ${url}`,
     },
   );
 }

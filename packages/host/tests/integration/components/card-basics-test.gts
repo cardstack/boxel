@@ -275,6 +275,37 @@ module('Integration | card-basics', function (hooks) {
     });
   });
 
+  test('linksToMany declared with CardDef accepts heterogeneous card instances', function (assert) {
+    class DrumKitCard extends CardDef {
+      @field name = contains(StringField);
+    }
+
+    class BeatMakerCard extends CardDef {
+      @field title = contains(StringField);
+    }
+
+    class Listing extends CardDef {
+      @field examples = linksToMany(() => CardDef);
+    }
+
+    let listing = new Listing({
+      examples: [
+        new DrumKitCard({ name: '808 Analog Kit' }),
+        new BeatMakerCard({ title: 'Beat Maker Studio' }),
+      ],
+    });
+
+    assert.strictEqual(listing.examples.length, 2, 'both cards are accepted');
+    assert.ok(
+      listing.examples[0] instanceof DrumKitCard,
+      'first example preserves its concrete type',
+    );
+    assert.ok(
+      listing.examples[1] instanceof BeatMakerCard,
+      'second example preserves its concrete type',
+    );
+  });
+
   module('cards allowed to be edited', function (hooks) {
     hooks.beforeEach(function () {
       provideConsumeContext(PermissionsContextName, {
