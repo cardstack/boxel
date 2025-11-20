@@ -151,7 +151,7 @@ module(basename(__filename), function () {
       },
     });
 
-    test.only('lookupDefinition', async function (assert) {
+    test('lookupDefinition', async function (assert) {
       let definition = await definitionLookup.lookupDefinition({
         module: `${realmURL}person.gts`,
         name: 'Person',
@@ -168,7 +168,7 @@ module(basename(__filename), function () {
       assert.equal(prerenderModuleCalls, 1, 'prerenderModule was called once');
     });
 
-    test.only('invalidation', async function (assert) {
+    test('invalidation', async function (assert) {
       let definition = await definitionLookup.lookupDefinition({
         module: `${realmURL}person.gts`,
         name: 'Person',
