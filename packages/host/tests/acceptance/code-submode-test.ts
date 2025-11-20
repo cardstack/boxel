@@ -422,14 +422,12 @@ module('Acceptance | code submode tests', function (_hooks) {
   module('multiple realms', function (hooks) {
     let additionalRealmURL: string;
     let catalogRealmURL: string;
-    const systemCardAccountData: { id?: string } = {};
 
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
-      systemCardAccountData,
     });
 
     let { setActiveRealms, createAndJoinRoom } = mockMatrixUtils;
@@ -457,7 +455,6 @@ module('Acceptance | code submode tests', function (_hooks) {
       personalRealmURL = `${realmServerService.url}testuser/personal/`;
       additionalRealmURL = `${realmServerService.url}testuser/aaa/`; // writeable realm that is lexically before the personal realm
       catalogRealmURL = `${realmServerService.url}catalog/`;
-      systemCardAccountData.id = `${catalogRealmURL}SystemCard/default`;
       setActiveRealms([catalogRealmURL, additionalRealmURL, personalRealmURL]);
 
       await setupAcceptanceTestRealm({
@@ -513,6 +510,16 @@ module('Acceptance | code submode tests', function (_hooks) {
         [catalogRealmURL]: ['read'],
         [additionalRealmURL]: ['read', 'write', 'realm-owner'],
         [personalRealmURL]: ['read', 'write', 'realm-owner'],
+      });
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealmURL,
+        permissions: {
+          '@testuser:localhost': ['read', 'write', 'realm-owner'],
+        },
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+        },
       });
     });
 

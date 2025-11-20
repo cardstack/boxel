@@ -4,7 +4,7 @@ import { visit, waitFor, waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { ensureTrailingSlash } from '@cardstack/runtime-common';
+import { ensureTrailingSlash, isCardInstance } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 import HostModeService from '@cardstack/host/services/host-mode-service';
@@ -15,6 +15,8 @@ import { setupApplicationTest } from '../helpers/setup';
 const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
 const CATALOG_READINESS_URL = `${catalogRealmURL}_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson`;
 const CATALOG_SITE_URL = `${catalogRealmURL}site.json`;
+const CATALOG_INDEX_URL = `${catalogRealmURL}index`;
+const CATALOG_INDEX_JSON_URL = `${CATALOG_INDEX_URL}.json`;
 
 class StubHostModeService extends HostModeService {
   override get isActive() {
@@ -38,7 +40,9 @@ module('Acceptance | Catalog | real catalog app', function (hooks) {
     let realmServer = getService('realm-server');
     await realmServer.ready;
     await ensureCatalogRealmReady();
-    await ensureCatalogSiteReady();
+    await ensureCatalogCardLoaded(CATALOG_SITE_URL, 'site config');
+    await ensureCatalogCardLoaded(CATALOG_INDEX_URL, 'index card');
+    await ensureCatalogCardLoaded(CATALOG_INDEX_JSON_URL, 'index JSON');
 
     await visit('/catalog/');
 
@@ -66,24 +70,20 @@ async function ensureCatalogRealmReady() {
   );
 }
 
-async function ensureCatalogSiteReady() {
-  let network = getService('network');
+async function ensureCatalogCardLoaded(url: string, description: string) {
+  let store = getService('store');
   await waitUntil(
     async () => {
       try {
-        let response = await network.fetch(CATALOG_SITE_URL);
-        if (!response.ok) {
-          return false;
-        }
-        await response.clone().json();
-        return true;
-      } catch (e) {
+        let card = await store.get(url);
+        return Boolean(card && isCardInstance(card));
+      } catch (_e) {
         return false;
       }
     },
     {
       timeout: 60_000,
-      timeoutMessage: `Timed out waiting for catalog site at ${CATALOG_SITE_URL}`,
+      timeoutMessage: `Timed out waiting for catalog ${description} card at ${url}`,
     },
   );
 }
