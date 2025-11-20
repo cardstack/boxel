@@ -55,6 +55,7 @@ import { setupApplicationTest } from '../helpers/setup';
 
 const testRealm2URL = `http://test-realm/test2/`;
 const testRealm3URL = `http://test-realm/test3/`;
+let personalRealmURL: string;
 
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
@@ -78,6 +79,9 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
     setupUserSubscription();
     setupAuthEndpoints();
+    let realmServerService = getService('realm-server');
+    personalRealmURL = `${realmServerService.url}testuser/personal/`;
+    setActiveRealms([testRealmURL, testRealm2URL, testRealm3URL]);
 
     let loader = getService('loader-service').loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -416,6 +420,20 @@ module('Acceptance | interact submode tests', function (hooks) {
           name: 'Test Workspace C',
           backgroundURL:
             'https://boxel-images.boxel.ai/background-images/4k-powder-puff.jpg',
+          iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+        },
+      },
+    });
+    await setupAcceptanceTestRealm({
+      mockMatrixUtils,
+      realmURL: personalRealmURL,
+      contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
+        'index.json': new CardsGrid(),
+        '.realm.json': {
+          name: 'Test Personal Workspace',
+          backgroundURL:
+            'https://boxel-images.boxel.ai/background-images/4k-origami-flock.jpg',
           iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
         },
       },
@@ -2179,9 +2197,27 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-operator-mode-stack]').doesNotExist();
     });
 
-    test('displays highlights filter with special layout and community cards', async function (assert) {
+    test('does not display highlights filter for non-personal realms', async function (assert) {
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+      });
+
+      assert
+        .dom('[data-test-boxel-filter-list-button="Highlights"]')
+        .doesNotExist();
+      assert.dom('[data-test-selected-filter="All Cards"]').exists();
+      assert.dom('[data-test-highlights-layout]').doesNotExist();
+    });
+
+    test('displays highlights filter with special layout and community cards', async function (assert) {
+      setActiveRealms([
+        testRealmURL,
+        testRealm2URL,
+        testRealm3URL,
+        personalRealmURL,
+      ]);
+      await visitOperatorMode({
+        stacks: [[{ id: `${personalRealmURL}index`, format: 'isolated' }]],
         selectAllCardsFilter: false,
       });
 
@@ -2217,7 +2253,12 @@ module('Acceptance | interact submode tests', function (hooks) {
           from: 'testuser',
           message:
             'Build a personal portfolio page with your background, skills, and contact information',
-          cards: [{ id: `${testRealmURL}index`, title: 'Test Workspace B' }],
+          cards: [
+            {
+              id: `${personalRealmURL}index`,
+              title: 'Test Personal Workspace',
+            },
+          ],
         },
       ]);
       assert
@@ -2281,7 +2322,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
     test('sends typed prompt to ask ai when creating app', async function (assert) {
       await visitOperatorMode({
-        stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+        stacks: [[{ id: `${personalRealmURL}index`, format: 'isolated' }]],
         selectAllCardsFilter: false,
       });
 
@@ -2305,7 +2346,12 @@ module('Acceptance | interact submode tests', function (hooks) {
         {
           from: 'testuser',
           message: typedPrompt,
-          cards: [{ id: `${testRealmURL}index`, title: 'Test Workspace B' }],
+          cards: [
+            {
+              id: `${personalRealmURL}index`,
+              title: 'Test Personal Workspace',
+            },
+          ],
         },
       ]);
     });
