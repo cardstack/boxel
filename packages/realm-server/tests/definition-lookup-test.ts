@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import {
-  DefinitionLookup,
+  CachingDefinitionLookup,
   Realm,
   type ModulePrerenderArgs,
   type RealmOwnerLookup,
@@ -19,7 +19,7 @@ import { PgAdapter } from '@cardstack/postgres/pg-adapter';
 
 module(basename(__filename), function () {
   module('DefinitionLookup', function (hooks) {
-    let definitionLookup: DefinitionLookup;
+    let definitionLookup: CachingDefinitionLookup;
     let realmURL = 'http://127.0.0.1:4450/';
     let prerenderServerURL = realmURL.endsWith('/')
       ? realmURL.slice(0, -1)
@@ -33,8 +33,10 @@ module(basename(__filename), function () {
     let dbAdapter: PgAdapter;
     let prerenderModuleCalls: number = 0;
 
-    hooks.before(async () => {
+    hooks.beforeEach(async () => {
       prerenderModuleCalls = 0;
+    });
+    hooks.before(async () => {
       mockRemotePrerenderer = {
         async prerenderCard() {
           throw new Error('Not implemented in mock');
@@ -80,11 +82,11 @@ module(basename(__filename), function () {
         },
       };
       mockRealmOwnerLookup = {
-        fromModule(_moduleURL: string) {
+        async fromModule(_moduleURL: string) {
           return { realmURL: realmURL, userId: testUserId };
         },
       };
-      definitionLookup = new DefinitionLookup(
+      definitionLookup = new CachingDefinitionLookup(
         dbAdapter,
         mockRemotePrerenderer,
         mockRealmOwnerLookup,
@@ -141,7 +143,7 @@ module(basename(__filename), function () {
           [realmURL]: ['read', 'write', 'realm-owner'],
         };
         dbAdapter = pgAdapter;
-        definitionLookup = new DefinitionLookup(
+        definitionLookup = new CachingDefinitionLookup(
           dbAdapter,
           mockRemotePrerenderer,
           mockRealmOwnerLookup,
@@ -164,6 +166,41 @@ module(basename(__filename), function () {
       });
       assert.equal(definition?.displayName, 'Person');
       assert.equal(prerenderModuleCalls, 1, 'prerenderModule was called once');
+    });
+
+    test.only('invalidation', async function (assert) {
+      let definition = await definitionLookup.lookupDefinition({
+        module: `${realmURL}person.gts`,
+        name: 'Person',
+      });
+      assert.equal(definition?.displayName, 'Person');
+      assert.equal(prerenderModuleCalls, 1, 'prerenderModule was called once');
+
+      await definitionLookup.invalidate('http://some-realm-url');
+
+      definition = await definitionLookup.lookupDefinition({
+        module: `${realmURL}person.gts`,
+        name: 'Person',
+      });
+      assert.equal(definition?.displayName, 'Person');
+      assert.equal(
+        prerenderModuleCalls,
+        1,
+        'prerenderModule was still only called once',
+      );
+
+      await definitionLookup.invalidate(realmURL);
+
+      definition = await definitionLookup.lookupDefinition({
+        module: `${realmURL}person.gts`,
+        name: 'Person',
+      });
+      assert.equal(definition?.displayName, 'Person');
+      assert.equal(
+        prerenderModuleCalls,
+        2,
+        'prerenderModule was called a second time after invalidation',
+      );
     });
   });
 });

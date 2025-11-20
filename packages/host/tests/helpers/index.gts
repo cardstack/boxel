@@ -378,7 +378,7 @@ type RenderingContextWithPrerender = TestContext & {
   __cardPrerenderElement?: HTMLElement;
 };
 
-async function makeRenderer() {
+export async function makeRenderer() {
   let context = getContext() as RenderingContextWithPrerender;
   let owner = context.owner;
   if (!owner) {

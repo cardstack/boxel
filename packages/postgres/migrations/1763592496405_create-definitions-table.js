@@ -17,6 +17,7 @@ exports.up = (pgm) => {
   pgm.addConstraint(table, `${table}_pkey`, {
     primaryKey: ['url'],
   });
+  pgm.addIndex(table, 'realm_url');
 };
 
 exports.down = (pgm) => {

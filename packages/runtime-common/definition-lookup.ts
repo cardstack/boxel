@@ -22,7 +22,35 @@ interface ModuleCacheEntry {
   error?: ErrorEntry;
 }
 
-export class DefinitionLookup {
+export class FilterRefersToNonexistentTypeError extends Error {
+  codeRef: ResolvedCodeRef;
+
+  constructor(codeRef: ResolvedCodeRef, opts?: { cause?: unknown }) {
+    super(
+      `Your filter refers to a nonexistent type: import { ${codeRef.name} } from "${codeRef.module}"`,
+    );
+    this.name = 'FilterRefersToNonexistentTypeError';
+    this.codeRef = codeRef;
+    if (opts?.cause !== undefined) {
+      (this as any).cause = opts.cause;
+    }
+    // make sure instances of this Error subclass behave like instances of the subclass should
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+export function isFilterRefersToNonexistentTypeError(
+  error: unknown,
+): error is FilterRefersToNonexistentTypeError {
+  return error instanceof FilterRefersToNonexistentTypeError;
+}
+
+export interface DefinitionLookup {
+  lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition>;
+  invalidate(realmURL: string): Promise<void>;
+}
+
+export class CachingDefinitionLookup implements DefinitionLookup {
   #dbAdapter: DBAdapter;
   #prerenderer: Prerenderer;
   #realmOwnerLookup: RealmOwnerLookup;
@@ -37,10 +65,10 @@ export class DefinitionLookup {
     this.#realmOwnerLookup = realmOwnerLookup;
   }
 
-  async lookupDefinition(
-    codeRef: ResolvedCodeRef,
-  ): Promise<Definition | undefined> {
-    let realmOwnerInfo = this.#realmOwnerLookup.fromModule(codeRef.module);
+  async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
+    let realmOwnerInfo = await this.#realmOwnerLookup.fromModule(
+      codeRef.module,
+    );
     if (!realmOwnerInfo) {
       throw new Error(
         `Could not determine realm owner for module URL: ${codeRef.module}`,
@@ -53,30 +81,38 @@ export class DefinitionLookup {
       (await this.populateCache(codeRef.module, realmURL, userId));
 
     if (!moduleEntry) {
-      return undefined;
+      throw new FilterRefersToNonexistentTypeError(codeRef, {
+        cause: `Module entry not found for URL: ${codeRef.module}`,
+      });
     }
 
     if (moduleEntry.error) {
-      let message = moduleEntry.error.error.message ?? 'unknown error';
-      console.warn(
-        `Module ${codeRef.module} is cached with an error: ${message}`,
-      );
-      return undefined;
+      throw new FilterRefersToNonexistentTypeError(codeRef, {
+        cause: moduleEntry.error,
+      });
     }
 
     let defOrError = moduleEntry.definitions[codeRef.name];
     if (!defOrError) {
-      return undefined;
+      throw new FilterRefersToNonexistentTypeError(codeRef, {
+        cause: `Definition for ${codeRef.name} in module ${codeRef.module} not found`,
+      });
     }
 
     if (defOrError.type === 'definition') {
       return defOrError.definition;
     }
 
-    console.warn(
-      `Definition for ${codeRef.name} in module ${codeRef.module} had an error: ${defOrError.error.message ?? 'unknown error'}`,
+    throw new FilterRefersToNonexistentTypeError(codeRef, {
+      cause: `Definition for ${codeRef.name} in module ${codeRef.module} had an error: ${defOrError.error.message ?? 'unknown error'}`,
+    });
+  }
+
+  async invalidate(realmURL: string): Promise<void> {
+    await this.#dbAdapter.execute(
+      `DELETE FROM ${MODULES_TABLE} WHERE realm_url = $1`,
+      { bind: [realmURL] },
     );
-    return undefined;
   }
 
   private async getModuleDefinitionsViaPrerenderer(
@@ -93,7 +129,7 @@ export class DefinitionLookup {
     });
   }
 
-  async readFromDatabaseCache(
+  private async readFromDatabaseCache(
     moduleUrl: string,
   ): Promise<ModuleCacheEntry | undefined> {
     let rows = (await this.#dbAdapter.execute(
@@ -122,7 +158,7 @@ export class DefinitionLookup {
     };
   }
 
-  async writeToDatabaseCache(
+  private async writeToDatabaseCache(
     moduleUrl: string,
     definitions: Record<string, ModuleDefinitionResult | ErrorEntry>,
     deps: string[],
@@ -178,7 +214,9 @@ export class DefinitionLookup {
 }
 
 export interface RealmOwnerLookup {
-  fromModule(moduleURL: string): { realmURL: string; userId: string } | null;
+  fromModule(
+    moduleURL: string,
+  ): Promise<{ realmURL: string; userId: string } | null>;
 }
 
 function parseJSON<T>(value: unknown, fallback: T): T {
