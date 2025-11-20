@@ -53,22 +53,26 @@ export interface DefinitionLookup {
 export class CachingDefinitionLookup implements DefinitionLookup {
   #dbAdapter: DBAdapter;
   #prerenderer: Prerenderer;
-  #realmOwnerLookup: RealmOwnerLookup;
+  #getRealms: () => {
+    url: string;
+    getRealmOwnerUserId: () => Promise<string>;
+  }[];
 
   constructor(
     dbAdapter: DBAdapter,
     prerenderer: Prerenderer,
-    realmOwnerLookup: RealmOwnerLookup,
+    getRealms: () => {
+      url: string;
+      getRealmOwnerUserId: () => Promise<string>;
+    }[],
   ) {
     this.#dbAdapter = dbAdapter;
     this.#prerenderer = prerenderer;
-    this.#realmOwnerLookup = realmOwnerLookup;
+    this.#getRealms = getRealms;
   }
 
   async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
-    let realmOwnerInfo = await this.#realmOwnerLookup.fromModule(
-      codeRef.module,
-    );
+    let realmOwnerInfo = await this.realmOwnerLookup(codeRef.module);
     if (!realmOwnerInfo) {
       throw new Error(
         `Could not determine realm owner for module URL: ${codeRef.module}`,
@@ -113,6 +117,19 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       `DELETE FROM ${MODULES_TABLE} WHERE realm_url = $1`,
       { bind: [realmURL] },
     );
+  }
+
+  private async realmOwnerLookup(moduleURL: string) {
+    let containingRealm = this.#getRealms().find((realm) => {
+      return moduleURL.startsWith(realm.url);
+    });
+    if (containingRealm) {
+      return {
+        realmURL: containingRealm.url,
+        userId: await containingRealm.getRealmOwnerUserId(),
+      };
+    }
+    return null;
   }
 
   private async getModuleDefinitionsViaPrerenderer(

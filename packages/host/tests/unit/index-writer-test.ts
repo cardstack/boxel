@@ -56,11 +56,14 @@ module('Unit | index-writer', function (hooks) {
     let localIndexer = owner.lookup('service:local-indexer') as LocalIndexer;
     indexQueryEngine = new IndexQueryEngine(
       adapter,
-      new CachingDefinitionLookup(adapter, localIndexer.prerenderer, {
-        fromModule: async (_moduleURL: string) => {
-          return { realmURL: testRealmURL, userId: '@user1:localhost' };
+      new CachingDefinitionLookup(adapter, localIndexer.prerenderer, () => [
+        {
+          url: testRealmURL,
+          async getRealmOwnerUserId() {
+            return '@user1:localhost';
+          },
         },
-      }),
+      ]),
     );
   });
 

@@ -2,12 +2,8 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import {
   CachingDefinitionLookup,
-  Realm,
   type ModulePrerenderArgs,
-  type RealmOwnerLookup,
   type Prerenderer,
-  type RealmAdapter,
-  type RealmPermissions,
 } from '@cardstack/runtime-common';
 import {
   matrixURL,
@@ -21,15 +17,9 @@ module(basename(__filename), function () {
   module('DefinitionLookup', function (hooks) {
     let definitionLookup: CachingDefinitionLookup;
     let realmURL = 'http://127.0.0.1:4450/';
-    let prerenderServerURL = realmURL.endsWith('/')
-      ? realmURL.slice(0, -1)
-      : realmURL;
     let testUserId = '@user1:localhost';
-    let permissions: RealmPermissions = {};
+
     let mockRemotePrerenderer: Prerenderer;
-    let mockRealmOwnerLookup: RealmOwnerLookup;
-    let realmAdapter: RealmAdapter;
-    let realm: Realm;
     let dbAdapter: PgAdapter;
     let prerenderModuleCalls: number = 0;
 
@@ -81,15 +71,17 @@ module(basename(__filename), function () {
           });
         },
       };
-      mockRealmOwnerLookup = {
-        async fromModule(_moduleURL: string) {
-          return { realmURL: realmURL, userId: testUserId };
-        },
-      };
       definitionLookup = new CachingDefinitionLookup(
         dbAdapter,
         mockRemotePrerenderer,
-        mockRealmOwnerLookup,
+        () => [
+          {
+            url: realmURL,
+            async getRealmOwnerUserId() {
+              return testUserId;
+            },
+          },
+        ],
       );
     });
 
@@ -137,16 +129,19 @@ module(basename(__filename), function () {
           },
         },
       ],
-      onRealmSetup({ realms: setupRealms, dbAdapter: pgAdapter }) {
-        ({ realm, realmAdapter } = setupRealms[0]);
-        permissions = {
-          [realmURL]: ['read', 'write', 'realm-owner'],
-        };
+      onRealmSetup({ dbAdapter: pgAdapter }) {
         dbAdapter = pgAdapter;
         definitionLookup = new CachingDefinitionLookup(
           dbAdapter,
           mockRemotePrerenderer,
-          mockRealmOwnerLookup,
+          () => [
+            {
+              url: realmURL,
+              async getRealmOwnerUserId() {
+                return testUserId;
+              },
+            },
+          ],
         );
       },
     });

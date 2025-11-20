@@ -6,7 +6,6 @@ import {
   logger,
   RunnerOptionsManager,
   Deferred,
-  DefinitionLookup,
   CachingDefinitionLookup,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
@@ -225,20 +224,11 @@ let autoMigrate = migrateDB || undefined;
   });
   let prerenderer = createRemotePrerenderer(prerendererUrl);
 
-  let definitionLookup = new CachingDefinitionLookup(dbAdapter, prerenderer, {
-    fromModule: async (moduleURL: string) => {
-      let containingRealm = realms.find((realm) => {
-        return moduleURL.startsWith(realm.url);
-      });
-      if (containingRealm) {
-        return {
-          realmURL: containingRealm.url,
-          userId: await containingRealm.getRealmOwnerUserId(),
-        };
-      }
-      return null;
-    },
-  });
+  let definitionLookup = new CachingDefinitionLookup(
+    dbAdapter,
+    prerenderer,
+    () => realms,
+  );
 
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
