@@ -4,7 +4,7 @@ import { visit, waitFor, waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { ensureTrailingSlash, isCardInstance } from '@cardstack/runtime-common';
+import { ensureTrailingSlash } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 import HostModeService from '@cardstack/host/services/host-mode-service';
@@ -71,12 +71,12 @@ async function ensureCatalogRealmReady() {
 }
 
 async function ensureCatalogCardLoaded(url: string, description: string) {
-  let store = getService('store');
+  let cardService = getService('card-service');
   await waitUntil(
     async () => {
       try {
-        let card = await store.get(url);
-        return Boolean(card && isCardInstance(card));
+        await cardService.fetchJSON(url);
+        return true;
       } catch (_e) {
         return false;
       }
