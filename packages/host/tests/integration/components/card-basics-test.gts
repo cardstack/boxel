@@ -275,7 +275,7 @@ module('Integration | card-basics', function (hooks) {
     });
   });
 
-  test('linksToMany declared with CardDef accepts heterogeneous card instances', function (assert) {
+  test('linksToMany declared with CardDef accepts heterogeneous polymorphic card instances', async function (assert) {
     class DrumKitCard extends CardDef {
       @field name = contains(StringField);
     }
@@ -288,12 +288,19 @@ module('Integration | card-basics', function (hooks) {
       @field examples = linksToMany(() => CardDef);
     }
 
-    let listing = new Listing({
-      examples: [
-        new DrumKitCard({ name: '808 Analog Kit' }),
-        new BeatMakerCard({ title: 'Beat Maker Studio' }),
-      ],
+    loader.shimModule(`${testRealmURL}test-cards`, {
+      Listing,
+      DrumKitCard,
+      BeatMakerCard,
     });
+
+    let e1 = new DrumKitCard({ name: '808 Analog Kit' });
+    let e2 = new BeatMakerCard({ title: 'Beat Maker Studio' });
+
+    await saveCard(e1, `${testRealmURL}e1`, loader);
+    await saveCard(e2, `${testRealmURL}e2`, loader);
+
+    let listing = new Listing({ examples: [e1, e2] });
 
     assert.strictEqual(listing.examples.length, 2, 'both cards are accepted');
     assert.ok(
