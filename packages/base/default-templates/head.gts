@@ -32,11 +32,13 @@ export default class DefaultHeadTemplate extends GlimmerComponent<{
     <title data-test-card-head-title>{{this.title}}</title>
     <meta property='og:title' content={{this.title}} />
     <meta name='twitter:title' content={{this.title}} />
+
     {{#if this.description}}
       <meta name='description' content={{this.description}} />
       <meta property='og:description' content={{this.description}} />
       <meta name='twitter:description' content={{this.description}} />
     {{/if}}
+
     {{#if this.image}}
       <meta property='og:image' content={{this.image}} />
       <meta name='twitter:image' content={{this.image}} />
@@ -44,10 +46,12 @@ export default class DefaultHeadTemplate extends GlimmerComponent<{
     {{else}}
       <meta name='twitter:card' content='summary' />
     {{/if}}
+
     {{#if this.url}}
       <link rel='canonical' href={{this.url}} />
       <meta property='og:url' content={{this.url}} />
     {{/if}}
+
     <meta property='og:type' content='website' />
   </template>
 }
