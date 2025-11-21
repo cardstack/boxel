@@ -133,6 +133,8 @@ export type RealmInfo = {
   backgroundURL: string | null;
   iconURL: string | null;
   showAsCatalog: boolean | null;
+  interactHome: string | null;
+  hostHome: string | null;
   visibility: RealmVisibility;
   realmUserId?: string;
   publishable: boolean | null;
@@ -436,6 +438,11 @@ export class Realm {
 
     this.#router = new Router(new URL(url))
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
+      .patch(
+        '/_info',
+        SupportedMimeType.RealmInfo,
+        this.patchRealmInfo.bind(this),
+      )
       .query('/_lint', SupportedMimeType.JSON, this.lint.bind(this))
       .get('/_mtimes', SupportedMimeType.Mtimes, this.realmMtimes.bind(this))
       .get('/_search', SupportedMimeType.CardJson, this.search.bind(this))
@@ -1323,7 +1330,11 @@ export class Realm {
         }
 
         let requiredPermission: RealmAction;
-        if (['_permissions'].includes(this.paths.local(new URL(request.url)))) {
+        let localPath = this.paths.local(new URL(request.url));
+        if (
+          ['_permissions'].includes(localPath) ||
+          (localPath === '_info' && request.method === 'PATCH')
+        ) {
           requiredPermission = 'realm-owner';
         } else if (
           ['PUT', 'PATCH', 'POST', 'DELETE'].includes(request.method)
@@ -3065,6 +3076,8 @@ export class Realm {
       backgroundURL: null,
       iconURL: null,
       showAsCatalog: null,
+      interactHome: null,
+      hostHome: null,
       visibility: await this.visibility(),
       realmUserId: ensureFullMatrixUserId(
         this.#matrixClient.getUserId()! || this.#matrixClient.username,
@@ -3086,6 +3099,9 @@ export class Realm {
         realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
         realmInfo.showAsCatalog =
           realmConfigJson.showAsCatalog ?? realmInfo.showAsCatalog;
+        realmInfo.interactHome =
+          realmConfigJson.interactHome ?? realmInfo.interactHome;
+        realmInfo.hostHome = realmConfigJson.hostHome ?? realmInfo.hostHome;
         realmInfo.realmUserId = ensureFullMatrixUserId(
           realmConfigJson.realmUserId ??
             (this.#matrixClient.getUserId()! || this.#matrixClient.username),
@@ -3100,6 +3116,103 @@ export class Realm {
       }
     }
     return realmInfo;
+  }
+
+  private async patchRealmInfo(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let json: {
+      data?: { attributes?: { property?: string; value?: unknown } };
+    };
+    try {
+      json = await request.json();
+    } catch (e: any) {
+      return badRequest({
+        message: `The request body was not json: ${e.message}`,
+        requestContext,
+      });
+    }
+
+    let { property, value } = json.data?.attributes ?? {};
+    if (!property || typeof property !== 'string') {
+      return badRequest({
+        message: `The request body was missing a property name to update`,
+        requestContext,
+      });
+    }
+
+    let validators: Record<string, (value: unknown) => string | undefined> = {
+      name: (val) =>
+        typeof val === 'string'
+          ? undefined
+          : 'name must be a string',
+      backgroundURL: (val) =>
+        val === null || typeof val === 'string'
+          ? undefined
+          : 'backgroundURL must be a string or null',
+      iconURL: (val) =>
+        val === null || typeof val === 'string'
+          ? undefined
+          : 'iconURL must be a string or null',
+      showAsCatalog: (val) =>
+        val === null || typeof val === 'boolean'
+          ? undefined
+          : 'showAsCatalog must be a boolean or null',
+      interactHome: (val) =>
+        val === null || typeof val === 'string'
+          ? undefined
+          : 'interactHome must be a string or null',
+      hostHome: (val) =>
+        val === null || typeof val === 'string'
+          ? undefined
+          : 'hostHome must be a string or null',
+      publishable: (val) =>
+        val === null || typeof val === 'boolean'
+          ? undefined
+          : 'publishable must be a boolean or null',
+      visibility: (val) =>
+        val === 'private' || val === 'shared' || val === 'public'
+          ? undefined
+          : "visibility must be 'private', 'shared', or 'public'",
+    };
+
+    let validate = validators[property];
+    if (!validate) {
+      return badRequest({
+        message: `The property '${property}' cannot be updated`,
+        requestContext,
+      });
+    }
+
+    let validationError = validate(value);
+    if (validationError) {
+      return badRequest({
+        message: validationError,
+        requestContext,
+      });
+    }
+
+    let fileURL = this.paths.fileURL(`.realm.json`);
+    let realmConfigPath: LocalPath = this.paths.local(fileURL);
+    let realmConfig: Record<string, unknown> = {};
+    let existingConfig = await this.readFileAsText(realmConfigPath, undefined);
+    if (existingConfig?.content) {
+      try {
+        realmConfig = JSON.parse(existingConfig.content);
+      } catch (e: any) {
+        return systemError({
+          requestContext,
+          message: `Unable to parse existing realm config: ${e.message}`,
+        });
+      }
+    }
+
+    realmConfig[property] = value;
+    let serializedConfig = JSON.stringify(realmConfig, null, 2) + '\n';
+    await this.write(realmConfigPath, serializedConfig);
+
+    return await this.realmInfo(request, requestContext);
   }
 
   private async realmInfo(
