@@ -59,7 +59,7 @@ export async function renderHTML(
   await transitionTo(page, 'render.html', format, String(ancestorLevel));
   let result = await captureResult(
     page,
-    ['isolated', 'atom'].includes(format) ? 'innerHTML' : 'outerHTML',
+    ['isolated', 'atom', 'head'].includes(format) ? 'innerHTML' : 'outerHTML',
     opts,
   );
   if (result.status === 'error' || result.status === 'unusable') {

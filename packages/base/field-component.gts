@@ -538,6 +538,8 @@ function defaultFieldFormats(containingFormat: Format): FieldFormats {
       return { fieldDef: 'embedded', cardDef: 'fitted' };
     case 'atom':
       return { fieldDef: 'atom', cardDef: 'atom' };
+    case 'head':
+      return { fieldDef: 'head', cardDef: 'head' };
   }
 }
 

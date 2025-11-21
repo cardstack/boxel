@@ -80,6 +80,7 @@ export interface InstanceEntry {
   resource: CardResource;
   searchData: Record<string, any>;
   isolatedHtml?: string;
+  headHtml?: string | null;
   embeddedHtml?: Record<string, string>;
   fittedHtml?: Record<string, string>;
   atomHtml?: string;
@@ -299,6 +300,7 @@ export class Batch {
             pristine_doc: entry.resource,
             search_doc: entry.searchData,
             isolated_html: entry.isolatedHtml,
+            head_html: entry.headHtml ?? null,
             embedded_html: entry.embeddedHtml,
             fitted_html: entry.fittedHtml,
             atom_html: entry.atomHtml,
