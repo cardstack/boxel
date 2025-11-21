@@ -57,7 +57,7 @@ test.describe('Publish realm', () => {
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
-      `http://${user.username}.localhost:4205/new-workspace/`,
+      `http://${user.username}.localhost:4205/new-workspaceFIXME/`,
     );
     await expect(
       newTab.locator(
