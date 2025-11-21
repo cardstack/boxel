@@ -25,6 +25,7 @@ import {
   BRAND_GUIDE_TEMPLATE,
   STRUCTURED_THEME_TEMPLATE,
   STYLE_REFERENCE_TEMPLATE,
+  THEME_TEMPLATE,
 } from './theme-templates';
 import ThemeCodeRefField from '../fields/theme-code-ref';
 import StatusIndicator from '../components/status-indicator';
@@ -123,8 +124,16 @@ class Isolated extends Component<typeof ThemeCreator> {
     return moduleString.includes(fragment);
   }
 
-  get themeType(): 'brand-guide' | 'style-reference' | 'structured-theme' | null {
+  get themeType():
+    | 'brand-guide'
+    | 'style-reference'
+    | 'structured-theme'
+    | 'theme'
+    | null {
     let ref = this.codeRefSelection;
+    if (this.moduleMatches(ref, 'base/theme')) {
+      return 'theme';
+    }
     if (this.moduleMatches(ref, 'brand-guide')) {
       return 'brand-guide';
     }
@@ -174,8 +183,18 @@ class Isolated extends Component<typeof ThemeCreator> {
     ].join('\n');
   }
 
+  get themeGuidance(): string {
+    return [
+      // 'Theme guidance: provide :root, .dark, and `@theme inline` blocks that map back to Boxel tokens while keeping cssImports limited to required fonts.',
+      'Sample serialized JSON:',
+      THEME_TEMPLATE,
+    ].join('\n');
+  }
+
   promptGuidanceFor(): string {
     switch (this.themeType) {
+      case 'theme':
+        return this.themeGuidance;
       case 'style-reference':
         return this.styleReferenceGuidance;
       case 'brand-guide':
@@ -190,6 +209,8 @@ class Isolated extends Component<typeof ThemeCreator> {
 
   themePrompt(): string | null {
     switch (this.themeType) {
+      case 'theme':
+        return 'Generate a theme. This is a base theme card.';
       case 'brand-guide':
         return 'Generate a theme. This is a brand guide theme.';
       case 'style-reference':
@@ -425,23 +446,6 @@ class Isolated extends Component<typeof ThemeCreator> {
             .filter((id): id is string => Boolean(id && id.length))
         : undefined;
 
-    try {
-      console.debug(
-        'ThemeCreator payload prompt',
-        JSON.stringify(
-          {
-            scope: 'ThemeCreator:AskPayload',
-            guidance: guidancePrompt,
-            prompt: combinedPrompt,
-          },
-          null,
-          2,
-        ),
-      );
-    } catch {
-      // ignore logging issues
-    }
-
     let llmModel =
       typeof this.args.model.llmModel === 'string' &&
       this.args.model.llmModel.trim().length
@@ -666,9 +670,7 @@ class Isolated extends Component<typeof ThemeCreator> {
             <div class='theme-creator__card-wrapper'>
               {{#if card.isError}}
                 <Alert @type='error' as |Alert|>
-                  <Alert.Messages
-                    @messages={{this.cardPreviewErrorMessages}}
-                  />
+                  <Alert.Messages @messages={{this.cardPreviewErrorMessages}} />
                 </Alert>
               {{/if}}
               <card.component />

@@ -226,7 +226,6 @@ export async function createExampleInstanceFromPayload(opts: {
       },
     },
   };
-  console.debug('createExampleInstance: creating card', doc);
 
   const creationResult = await opts.store.add(doc, {
     realm: opts.realm ?? opts.defaultRealm,
