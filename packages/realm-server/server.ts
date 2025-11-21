@@ -40,6 +40,7 @@ import { resolve, join } from 'path';
 import merge from 'lodash/merge';
 
 import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
+import { any } from '@cardstack/runtime-common/expression';
 import * as Sentry from '@sentry/node';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
@@ -291,7 +292,12 @@ export class RealmServer {
       }
 
       ctxt.type = 'html';
-      ctxt.body = await this.retrieveIndexHTML();
+      let indexHTML = await this.retrieveIndexHTML();
+      let headHTML = await this.retrieveHeadHTML(
+        new URL(`${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`),
+      );
+      ctxt.body =
+        headHTML != null ? this.injectHeadHTML(indexHTML, headHTML) : indexHTML;
       return;
     }
     return next();
@@ -346,6 +352,50 @@ export class RealmServer {
 
     deferred.fulfill(indexHTML);
     return indexHTML;
+  }
+
+  private async retrieveHeadHTML(cardURL: URL): Promise<string | null> {
+    let candidates = this.headURLCandidates(cardURL);
+    if (candidates.length === 0) {
+      return null;
+    }
+    let candidateExpressions = () =>
+      any(
+        candidates.flatMap((candidate) => [
+          ['url =', param(candidate)],
+          ['file_alias =', param(candidate)],
+        ]),
+      );
+
+    let rows = await query(this.dbAdapter, [
+      `SELECT head_html, realm_version FROM boxel_index_working WHERE head_html IS NOT NULL AND`,
+      ...candidateExpressions(),
+      `UNION ALL
+       SELECT head_html, realm_version FROM boxel_index WHERE head_html IS NOT NULL AND`,
+      ...candidateExpressions(),
+      `ORDER BY realm_version DESC
+       LIMIT 1`,
+    ]);
+
+    let headRow = rows[0] as { head_html?: string | null } | undefined;
+    return headRow?.head_html ?? null;
+  }
+
+  private headURLCandidates(cardURL: URL): string[] {
+    let href = cardURL.href.replace(/\?.*/, '');
+    // strip trailing slash, but keep root realm URLs that end with slash
+    let trimmed = href.endsWith('/') ? href.slice(0, -1) : href;
+    let withIndex = href.endsWith('/') ? `${trimmed}/index` : `${href}/index`;
+    let withJson = `${href.replace(/\/?$/, '')}.json`;
+    let withIndexJson = `${withIndex}.json`;
+    return [...new Set([href, trimmed, withIndex, withJson, withIndexJson])];
+  }
+
+  private injectHeadHTML(indexHTML: string, headHTML: string): string {
+    return indexHTML.replace(
+      /(<!-- HEADSTART -->)([\s\S]*?)(<!-- HEADEND -->)/,
+      `$1\n${headHTML}\n$3`,
+    );
   }
 
   private serveFromRealm = async (ctxt: Koa.Context, _next: Koa.Next) => {
