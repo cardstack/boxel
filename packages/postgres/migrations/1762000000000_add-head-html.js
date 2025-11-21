@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/naming-convention */
-
 exports.shorthands = undefined;
 
 exports.up = (pgm) => {
