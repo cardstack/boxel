@@ -3144,9 +3144,7 @@ export class Realm {
 
     let validators: Record<string, (value: unknown) => string | undefined> = {
       name: (val) =>
-        typeof val === 'string'
-          ? undefined
-          : 'name must be a string',
+        typeof val === 'string' ? undefined : 'name must be a string',
       backgroundURL: (val) =>
         val === null || typeof val === 'string'
           ? undefined
