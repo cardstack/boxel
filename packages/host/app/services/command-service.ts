@@ -97,7 +97,7 @@ export default class CommandService extends Service {
     return `${roomId}::${normalizedCardId}`;
   }
 
-  trackAiAssistantCardRequest(
+  trackAiAssistantCardPatchRequest(
     cardId: string,
     clientRequestId: string,
     roomId: string,
@@ -115,7 +115,7 @@ export default class CommandService extends Service {
     );
   }
 
-  markAiAssistantClientRequestInvalidated(clientRequestId?: string) {
+  markAiAssistantClientRequestReceivedInvalidation(clientRequestId?: string) {
     if (!clientRequestId) {
       return;
     }
