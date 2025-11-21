@@ -68,7 +68,7 @@ import { monitoringAuthToken } from '../utils/monitoring';
 
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 
-module.only(basename(__filename), function () {
+module(basename(__filename), function () {
   module(
     'Realm Server Endpoints (not specific to one realm)',
     function (hooks) {
