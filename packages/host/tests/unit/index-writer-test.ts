@@ -1179,6 +1179,7 @@ module('Unit | index-writer', function (hooks) {
         atomHtml: null,
         embeddedHtml: null,
         fittedHtml: null,
+        headHtml: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be an error document`);
@@ -1272,6 +1273,7 @@ module('Unit | index-writer', function (hooks) {
         embeddedHtml: null,
         fittedHtml: null,
         atomHtml: null,
+        headHtml: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be an error document`);
