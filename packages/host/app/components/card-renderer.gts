@@ -1,11 +1,11 @@
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
+import { modifier } from 'ember-modifier';
 import { provide, consume } from 'ember-provide-consume-context';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
-import { modifier } from 'ember-modifier';
-import { tracked } from '@glimmer/tracking';
 import {
   CardContextName,
   DefaultFormatsContextName,
