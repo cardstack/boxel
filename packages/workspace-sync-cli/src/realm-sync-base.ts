@@ -440,7 +440,7 @@ function deriveRealmUsername(workspaceUrl: string): string {
     return `realm/${segments[0]}_${segments[1]}`;
   }
 
-  // Root realms like base/skills/experiments use <realm>_realm
+  // Root realms like /base/, /skills/, or /experiments/ use <realm>_realm
   return `${segments[0]}_realm`;
 }
 
