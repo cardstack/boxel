@@ -1,4 +1,10 @@
-export type Format = 'isolated' | 'embedded' | 'fitted' | 'edit' | 'atom' | 'head';
+export type Format =
+  | 'isolated'
+  | 'embedded'
+  | 'fitted'
+  | 'edit'
+  | 'atom'
+  | 'head';
 
 export function isValidFormat(
   format: string,
