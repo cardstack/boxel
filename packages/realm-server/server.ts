@@ -252,22 +252,6 @@ export class RealmServer {
 
   private serveIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
     if (ctxt.header.accept?.includes('text/html')) {
-      // Serve prerendered head content for crawlers when requested
-      if (ctxt.query?.format === 'head') {
-        let requestURL = new URL(
-          `${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`,
-        );
-        requestURL.search = '';
-        let headHTML = await this.retrieveHeadHTML(requestURL);
-        ctxt.type = 'html';
-        let indexHTML = await this.retrieveIndexHTML();
-        ctxt.body =
-          headHTML != null
-            ? this.injectHeadHTML(indexHTML, headHTML)
-            : indexHTML;
-        return;
-      }
-
       // If this is a /connect iframe request, is the origin a valid published realm?
 
       let connectMatch = ctxt.request.path.match(/\/connect\/(.+)$/);
@@ -308,7 +292,12 @@ export class RealmServer {
       }
 
       ctxt.type = 'html';
-      ctxt.body = await this.retrieveIndexHTML();
+      let indexHTML = await this.retrieveIndexHTML();
+      let headHTML = await this.retrieveHeadHTML(
+        new URL(`${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`),
+      );
+      ctxt.body =
+        headHTML != null ? this.injectHeadHTML(indexHTML, headHTML) : indexHTML;
       return;
     }
     return next();
@@ -393,13 +382,13 @@ export class RealmServer {
   }
 
   private headURLCandidates(cardURL: URL): string[] {
-    let href = cardURL.href;
+    let href = cardURL.href.replace(/\?.*/, '');
     // strip trailing slash, but keep root realm URLs that end with slash
     let trimmed = href.endsWith('/') ? href.slice(0, -1) : href;
-    let withIndex = href.endsWith('/')
-      ? `${trimmed}/index`
-      : `${href}/index`;
-    return [...new Set([href, trimmed, withIndex])];
+    let withIndex = href.endsWith('/') ? `${trimmed}/index` : `${href}/index`;
+    let withJson = `${href.replace(/\/?$/, '')}.json`;
+    let withIndexJson = `${withIndex}.json`;
+    return [...new Set([href, trimmed, withIndex, withJson, withIndexJson])];
   }
 
   private injectHeadHTML(indexHTML: string, headHTML: string): string {

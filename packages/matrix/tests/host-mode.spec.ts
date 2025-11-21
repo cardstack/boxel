@@ -189,11 +189,11 @@ test.describe('Published realm head format', () => {
   });
 
   test('serves prerendered head html when requested', async ({ page }) => {
-    let response = await page.request.get(`${publishedRealmURL}?format=head`);
+    let response = await page.goto(publishedRealmURL);
 
-    expect(response.status()).toBe(200);
+    expect(response?.status()).toBe(200);
 
-    let body = await response.text();
+    let body = await response!.text();
     expect(body).toBeDefined();
     expect(body).toContain('data-test-card-head-title');
     expect(body).toContain('property="og:title"');
