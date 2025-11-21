@@ -1,0 +1,30 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "PercentageNumberPreview",
+        "module": "../fields-preview/number/percentage-number"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "solidBar": 100,
+      "gradientBar": 50,
+      "solidCircle": 50,
+      "gradientCircle": 100
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/b5b23e66-3b36-44a2-9625-8b50e170115d"
+        }
+      }
+    }
+  }
+}

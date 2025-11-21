@@ -213,9 +213,6 @@ export default class SliderField extends NumberField {
           <div class='slider-fill' style={{this.fillStyle}}></div>
           <div class='slider-thumb' style={{this.thumbStyle}}></div>
         </div>
-        {{#if this.config.showValue}}
-          <span class='slider-label'>{{this.displayValue}}</span>
-        {{/if}}
         {{#if this.hasRange}}
           <div class='slider-range'>
             <span>Min {{this.config.min}}</span>
@@ -282,11 +279,6 @@ export default class SliderField extends NumberField {
           border-radius: 50%;
           box-shadow: var(--shadow-sm, 0 1px 2px 0 rgb(0 0 0 / 0.05));
           transition: left 0.3s ease;
-        }
-        .slider-label {
-          align-self: flex-end;
-          font-weight: 600;
-          color: var(--primary, #3b82f6);
         }
         .slider-range {
           display: flex;

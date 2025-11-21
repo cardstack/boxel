@@ -13,7 +13,7 @@
         "module": "../fields/number/score"
       },
       "title": "Score Field",
-      "readMe": null,
+      "readMe": "A visual score field designed for displaying numeric scores like credit scores, test scores, or ratings within a defined range.\n\n**Features:**\n- Segmented progress bar with color-coded tiers\n- Dynamic coloring based on score thresholds\n- Percentile ranking display\n- Custom label support\n- Configurable min/max range\n\n**Color Tiers:**\n- 0-25%: Red (Poor) - destructive\n- 25-50%: Orange (Fair) - warning\n- 50-75%: Yellow (Good) - caution\n- 75-100%: Green (Excellent) - success\n\n**Embedded View:**\n- Large score display with color coding\n- Segmented bar showing position in range\n- Percentile ranking (e.g., \"Top 23% of range\")\n- Optional custom label\n\n**Atom View:**\n- Mini chart icon with dynamic color\n- Compact score display",
       "cardInfo": {
         "notes": null,
         "title": null,

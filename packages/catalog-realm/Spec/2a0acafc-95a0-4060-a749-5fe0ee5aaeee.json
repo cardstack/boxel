@@ -13,7 +13,7 @@
         "module": "../fields/number/percentage"
       },
       "title": "Percentage Field",
-      "readMe": null,
+      "readMe": "A flexible percentage field that displays numeric values as a percentage (0-100%). Supports multiple visual styles:\n\n**Visual Styles:**\n- `visualStyle: 'bar'` - Horizontal progress bar (default)\n- `visualStyle: 'circle'` - Circular/radial progress indicator\n\n**Bar Styles:**\n- `barStyle: 'gradient'` - Gradient colors based on value thresholds (red→orange→yellow→green)\n- `barStyle: 'solid'` - Single solid color\n\n**Display Options:**\n- `valueFormat: 'percentage'` - Shows as \"75%\" (default)\n- `valueFormat: 'fraction'` - Shows as \"75/100\"\n- `label` - Optional label text\n- `showRange` - Show min/max values\n\n**Component Arguments:**\nProgress components support `@showValue` argument (default: true):\n- `@showValue={{true}}` - Show internal text/labels (default)\n- `@showValue={{false}}` - Show only the shape without internal text\n\n**Size Control (CSS Custom Properties):**\nControl sizing via scoped styles:\n```css\n.my-field {\n  --progress-bar-height: 1.5rem; /* For bars */\n  --progress-circle-size: 160px; /* For circles */\n  --progress-circle-stroke-width: 12; /* Circle thickness */\n  --progress-circle-value-size: 2rem; /* Internal text size */\n}\n```\n\n**Color Thresholds (gradient style):**\n- 0-25%: Red (destructive)\n- 25-50%: Orange (warning) \n- 50-75%: Yellow (caution)\n- 75-100%: Green (success)\n\nThis field consolidates the functionality of the previous progress-bar and progress-circle fields.",
       "cardInfo": {
         "notes": null,
         "title": null,

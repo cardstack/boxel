@@ -18,10 +18,14 @@ import {
 } from './util/index';
 import type { GaugeConfig } from './util/types';
 
+interface Configuration {
+  presentation: GaugeConfig;
+}
+
 export default class GaugeField extends NumberField {
   static displayName = 'Gauge Number Field';
 
-  static configuration = {
+  static configuration: Configuration = {
     presentation: {
       type: 'gauge',
       min: 0,
@@ -31,6 +35,8 @@ export default class GaugeField extends NumberField {
       suffix: '',
       prefix: '',
       label: '',
+      warningThreshold: 60, // Show warning color at 60% of range
+      dangerThreshold: 80, // Show danger color at 80% of range
     },
   };
 

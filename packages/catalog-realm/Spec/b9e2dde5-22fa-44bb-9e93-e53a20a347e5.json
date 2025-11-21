@@ -13,7 +13,7 @@
         "module": "../fields/number/badge-notification"
       },
       "title": "Badge Notification Field",
-      "readMe": "",
+      "readMe": "A notification-style badge that overlays a count on an icon (e.g., bell icon with notification count).\n\n**Features:**\n- Icon with overlaid notification badge\n- Circular badge positioning (top-right)\n- Integer counts (default: 0 decimals)\n- Limited range display (default: 0-99)\n- Custom label for context\n\n**Display Style:**\n- Small notification badge (atom view): 14px badge on 16px icon\n- Large notification badge (embedded view): 24px badge on 40px icon with label\n- Badge color: Red (destructive) for attention\n- White border for contrast against backgrounds\n\n**Use Cases:**\n- Unread notifications (🔔 3)\n- Message counts\n- Alert indicators\n- Pending items",
       "cardInfo": {
         "notes": null,
         "title": null,

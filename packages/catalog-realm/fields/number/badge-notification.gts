@@ -31,10 +31,8 @@ class NotificationAtom extends Component<typeof BadgeNotificationField> {
   <template>
     <span class='badge-notification-atom'>
       {{#if this.BadgeIcon}}
-        <span class='icon-wrapper'>
-          <this.BadgeIcon width='16' height='16' />
-          <span class='notification-badge'>{{this.displayValue}}</span>
-        </span>
+        <this.BadgeIcon width='18' height='18' />
+        <span class='notification-badge'>{{this.displayValue}}</span>
       {{/if}}
     </span>
 
@@ -42,33 +40,24 @@ class NotificationAtom extends Component<typeof BadgeNotificationField> {
       .badge-notification-atom {
         display: inline-flex;
         align-items: center;
+        gap: calc(var(--spacing, 0.25rem) * 1.2);
       }
-      .icon-wrapper {
-        position: relative;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .icon-wrapper svg {
+      .badge-notification-atom svg {
         color: var(--muted-foreground, #64748b);
       }
       .notification-badge {
-        position: absolute;
-        top: -0.2rem;
-        right: -0.5rem;
         min-width: 0.875rem;
         height: 0.875rem;
-        padding: 0 calc(var(--spacing, 0.25rem) * 0.75);
+        padding: 0 calc(var(--spacing, 0.25rem) * 1);
         background: var(--destructive, #ef4444);
         color: var(--destructive-foreground, #ffffff);
-        border-radius: 999px;
+        border-radius: 0.25rem;
         font-size: 0.5625rem;
         font-weight: 700;
         display: flex;
         align-items: center;
         justify-content: center;
         line-height: 1;
-        border: 1px solid var(--background, #ffffff);
       }
     </style>
   </template>
