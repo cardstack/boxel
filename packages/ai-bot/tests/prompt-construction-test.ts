@@ -4220,6 +4220,7 @@ new
                   targetType: 'file',
                   targetRef: 'http://localhost/example.gts',
                   fileUrl: 'http://localhost/example.gts',
+                  roomId,
                 },
               }),
             },
