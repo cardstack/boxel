@@ -3,6 +3,7 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS_DIR/wait-for-pg.sh"
 
 wait_for_postgres
+PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
 
 pnpm --dir=../skills-realm skills:setup
 
@@ -27,6 +28,7 @@ NODE_ENV=test \
   --realmsRootPath='./realms/localhost_4202' \
   --matrixRegistrationSecretFile='../matrix/registration_secret.txt' \
   --migrateDB \
+  --prerendererUrl="${PRERENDER_URL}" \
   $1 \
   \
   --path='./tests/cards' \

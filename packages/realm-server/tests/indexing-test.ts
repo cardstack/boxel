@@ -1,11 +1,12 @@
 import { module, test } from 'qunit';
 import { dirSync } from 'tmp';
-import type {
-  DBAdapter,
-  LooseSingleCardDocument,
-  Realm,
-  RealmPermissions,
-  RealmAdapter,
+import {
+  type DBAdapter,
+  type LooseSingleCardDocument,
+  type Realm,
+  type RealmPermissions,
+  type RealmAdapter,
+  CachingDefinitionLookup,
 } from '@cardstack/runtime-common';
 import type { IndexedInstance } from '@cardstack/runtime-common';
 import {
@@ -20,6 +21,7 @@ import {
   testRealmServerMatrixUserId,
   cardDefinition,
   cardInfo,
+  getTestPrerenderer,
 } from './helpers';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { basename } from 'path';
@@ -61,9 +63,15 @@ module(basename(__filename), function () {
       beforeEach: async (dbAdapter, publisher, runner) => {
         testDbAdapter = dbAdapter;
         let virtualNetwork = createVirtualNetwork();
+        let prerenderer = await getTestPrerenderer();
+        let definitionLookup = new CachingDefinitionLookup(
+          dbAdapter,
+          prerenderer,
+        );
         dir = dirSync().name;
         ({ realm, adapter } = await createRealm({
           withWorker: true,
+          definitionLookup,
           dir,
           virtualNetwork,
           dbAdapter,

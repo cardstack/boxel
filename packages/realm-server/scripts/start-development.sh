@@ -16,6 +16,9 @@ START_EXPERIMENTS=$(if [ -z "$SKIP_EXPERIMENTS" ]; then echo "true"; else echo "
 DEFAULT_CATALOG_REALM_URL='http://localhost:4201/catalog/'
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
 
+PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
+
+
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   PGPORT=5435 \
@@ -32,6 +35,7 @@ NODE_ENV=development \
   --port=4201 \
   --matrixURL='http://localhost:8008' \
   --realmsRootPath='./realms/localhost_4201' \
+  --prerendererUrl="${PRERENDER_URL}" \
   --migrateDB \
   $1 \
   \
