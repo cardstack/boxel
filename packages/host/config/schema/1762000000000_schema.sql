@@ -23,6 +23,7 @@
    resource_created_at,
    icon_html TEXT,
    definition BLOB,
+   head_html,
    PRIMARY KEY ( url, realm_url ) 
 );
 
@@ -48,6 +49,7 @@
    display_names BLOB,
    resource_created_at,
    definition BLOB,
+   head_html,
    PRIMARY KEY ( url, realm_url ) 
 );
 
