@@ -842,6 +842,7 @@ module(basename(__filename), function () {
           atomHTML: null,
           embeddedHTML: null,
           fittedHTML: null,
+          headHTML: null,
           iconHTML: null,
           isolatedHTML: null,
         });
