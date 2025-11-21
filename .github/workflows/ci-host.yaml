@@ -107,7 +107,7 @@ jobs:
         if: always()
         with:
           name: testem-log-${{ matrix.shardIndex }}
-          path: packages/host/testem.log
+          path: junit/host-testem.log
           retention-days: 30
       - name: Upload icon server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
