@@ -915,12 +915,12 @@ module('Acceptance | host submode', function (hooks) {
               'Tooltip shows correct text when menu is closed',
             );
 
-        assert.dom('[data-test-open-site-popover]').doesNotExist();
+          assert.dom('[data-test-open-site-popover]').doesNotExist();
 
-        await click('[data-test-open-site-button]', { shiftKey: true });
+          await click('[data-test-open-site-button]', { shiftKey: true });
 
-        assert.dom('[data-test-open-site-popover]').exists();
-        assert.dom('[data-test-published-realm-item]').exists({ count: 2 });
+          assert.dom('[data-test-open-site-popover]').exists();
+          assert.dom('[data-test-published-realm-item]').exists({ count: 2 });
 
           assert
             .dom(
