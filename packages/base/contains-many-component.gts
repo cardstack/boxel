@@ -374,6 +374,7 @@ export function getContainsManyComponent({
           .containsMany-field.embedded-format {
             display: grid;
             gap: var(--boxel-sp);
+            word-break: break-word;
           }
         }
       </style>

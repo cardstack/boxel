@@ -1,14 +1,16 @@
-import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
 import {
   BoxelButton,
-  BoxelContainer,
   GridContainer,
   BoxelInput,
   CopyButton,
+  FieldContainer,
+  ContextButton,
+  Accordion,
+  Header,
 } from '@cardstack/boxel-ui/components';
 import {
   buildCssGroups,
@@ -16,8 +18,6 @@ import {
   parseCssGroups,
   type CssRuleMap,
 } from '@cardstack/boxel-ui/helpers';
-import CaretUp from '@cardstack/boxel-icons/chevron-up';
-import CaretDown from '@cardstack/boxel-icons/chevron-down';
 
 import {
   field,
@@ -28,57 +28,7 @@ import {
   type BaseDefComponent,
 } from './card-api';
 import ThemeVarField from './structured-theme-variables';
-
-interface SectionToggleSignature {
-  Args: {
-    expanded: boolean;
-    onToggle: (event: Event) => void;
-  };
-  Element: HTMLButtonElement;
-}
-
-class SectionToggleButton extends GlimmerComponent<SectionToggleSignature> {
-  <template>
-    <BoxelButton
-      class='section-toggle'
-      @kind='text-only'
-      @size='auto'
-      aria-expanded={{@expanded}}
-      {{on 'click' @onToggle}}
-      ...attributes
-    >
-      <span class='section-toggle__label'>{{if @expanded 'Hide' 'Show'}}</span>
-      {{#if @expanded}}
-        <CaretUp width='14' height='14' role='presentation' />
-      {{else}}
-        <CaretDown width='14' height='14' role='presentation' />
-      {{/if}}
-    </BoxelButton>
-
-    <style scoped>
-      @layer baseComponent {
-        .section-toggle {
-          display: inline-flex;
-          align-items: center;
-          gap: var(--boxel-sp-xxxs);
-          padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
-          background: none;
-          border: none;
-          min-height: 1.5rem;
-        }
-        .section-toggle:hover {
-          color: var(--primary);
-          text-decoration: underline;
-        }
-        .section-toggle__label {
-          font-size: var(--boxel-font-size-xs);
-          line-height: 1;
-          text-transform: uppercase;
-        }
-      }
-    </style>
-  </template>
-}
+import CardInfoTemplates from './default-templates/card-info';
 
 // Applies parsed CSS rules back onto the card fields for editing.
 const applyCssRulesToField = (
@@ -105,11 +55,11 @@ const applyCssRulesToField = (
 };
 
 class Isolated extends Component<typeof StructuredTheme> {
-  @tracked isCssTextareaVisible = true;
+  @tracked isCssTextareaVisible = false;
   @tracked isRootVariablesVisible = true;
-  @tracked isDarkVariablesVisible = true;
-  @tracked areCSSImportsVisible = true;
-  @tracked isGeneratedCSSVisible = true;
+  @tracked isDarkVariablesVisible = false;
+  @tracked areCSSImportsVisible = false;
+  @tracked isGeneratedCSSVisible = false;
 
   @action toggleCssTextarea() {
     this.isCssTextareaVisible = !this.isCssTextareaVisible;
@@ -147,193 +97,172 @@ class Isolated extends Component<typeof StructuredTheme> {
   }
 
   private cssPlaceholder = `:root {
+  --background: 0 0% 100%;
+  --foreground: oklch(0.52 0.13 144.17);
+  --primary: #3e2723;
   /* ... */
 }
 
 .dark {
+  --background: 222.2 84% 4.9%;
+  --foreground: hsl(37.50 36.36% 95.69%);
+  --primary: rgb(46, 125, 50);
   /* ... */
 }`;
 
   <template>
     <GridContainer @tag='article' class='structured-theme-card'>
-      <BoxelContainer @tag='header' @display='flex' class='theme-header'>
-        <h1><@fields.title /></h1>
-        <p class='theme-description'>
-          <@fields.description />
-        </p>
-      </BoxelContainer>
+      <Header class='card-info-header'>
+        <CardInfoTemplates.view
+          @title={{@model.title}}
+          @description={{@model.description}}
+          @thumbnailURL={{@model.thumbnailURL}}
+          @icon={{@model.constructor.icon}}
+        />
+      </Header>
 
       <GridContainer @tag='section' class='content-section'>
-        <GridContainer @tag='header' class='section-header'>
-          <h2>Insert CSS Variables</h2>
-          <SectionToggleButton
-            @expanded={{this.isCssTextareaVisible}}
-            @onToggle={{this.toggleCssTextarea}}
-            aria-controls='insert-css-content'
-          />
-        </GridContainer>
+        <div>
+          <BoxelButton
+            class='import-button'
+            @kind='primary'
+            @size='small'
+            {{on 'click' this.toggleCssTextarea}}
+            data-test-import-css-button
+          >
+            Import CSS
+          </BoxelButton>
+        </div>
         {{#if this.isCssTextareaVisible}}
-          <div id='insert-css-content' class='section-body'>
-            <label for='css-textarea' class='boxel-sr-only'>Insert CSS Variables</label>
-            <BoxelInput
-              id='css-textarea'
-              @type='textarea'
-              @onInput={{this.parseCss}}
-              @placeholder={{this.cssPlaceholder}}
-              class='css-textarea'
-              data-test-custom-css-variables
+          <div class='css-textarea-section'>
+            <ContextButton
+              class='css-textarea-close-button'
+              @label='Close CSS Textarea'
+              @icon='close'
+              @variant='ghost'
+              @size='extra-small'
+              {{on 'click' this.toggleCssTextarea}}
             />
-          </div>
-
-        {{/if}}
-      </GridContainer>
-
-      <GridContainer @tag='section' class='content-section'>
-        <GridContainer @tag='header' class='section-header'>
-          <h2>Root Variables (:root)</h2>
-          <SectionToggleButton
-            @expanded={{this.isRootVariablesVisible}}
-            @onToggle={{this.toggleRootVariables}}
-            aria-controls='root-variables-content'
-          />
-        </GridContainer>
-        {{#if this.isRootVariablesVisible}}
-          <div
-            id='root-variables-content'
-            class='section-body'
-            data-test-root-vars
-          >
-            <@fields.rootVariables />
-          </div>
-        {{/if}}
-      </GridContainer>
-
-      <GridContainer @tag='section' class='content-section'>
-        <GridContainer @tag='header' class='section-header'>
-          <h2>Dark Mode Variables (.dark)</h2>
-          <SectionToggleButton
-            @expanded={{this.isDarkVariablesVisible}}
-            @onToggle={{this.toggleDarkVariables}}
-            aria-controls='dark-variables-content'
-          />
-        </GridContainer>
-        {{#if this.isDarkVariablesVisible}}
-          <div
-            id='dark-variables-content'
-            class='section-body'
-            data-test-dark-vars
-          >
-            <@fields.darkModeVariables />
-          </div>
-        {{/if}}
-      </GridContainer>
-
-      <GridContainer @tag='section' class='content-section'>
-        <GridContainer @tag='header' class='section-header'>
-          <h2>CSS Imports</h2>
-          <SectionToggleButton
-            @expanded={{this.areCSSImportsVisible}}
-            @onToggle={{this.toggleCSSImports}}
-            aria-controls='css-imports-content'
-          />
-        </GridContainer>
-        {{#if this.areCSSImportsVisible}}
-          <div id='css-imports-content' class='section-body'>
-            {{#if @model.cssImports}}
-              <@fields.cssImports />
-            {{else}}
-              <em>None</em>
-            {{/if}}
-          </div>
-        {{/if}}
-      </GridContainer>
-
-      <GridContainer @tag='section' class='content-section'>
-        <GridContainer @tag='header' class='section-header'>
-          <h2>Calculated CSS Variables</h2>
-          <SectionToggleButton
-            @expanded={{this.isGeneratedCSSVisible}}
-            @onToggle={{this.toggleGeneratedCSS}}
-            aria-controls='generated-css-content'
-          />
-        </GridContainer>
-        {{#if this.isGeneratedCSSVisible}}
-          <div
-            id='generated-css-content'
-            class='section-body'
-            data-test-css-vars
-          >
-            <div class='generates-css-container'>
-              <CopyButton
-                class='copy-css-variables-button'
-                @textToCopy={{@model.cssVariables}}
+            <FieldContainer @vertical={{true}} @label='Import CSS' @tag='label'>
+              <BoxelInput
+                id='css-textarea'
+                @type='textarea'
+                @onInput={{this.parseCss}}
+                @placeholder={{this.cssPlaceholder}}
+                class='css-textarea'
+                data-test-custom-css-variables
               />
-              <@fields.cssVariables />
-            </div>
+            </FieldContainer>
           </div>
         {{/if}}
+
+        <Accordion as |A|>
+          <A.Item
+            @isOpen={{this.isRootVariablesVisible}}
+            @onClick={{this.toggleRootVariables}}
+            @id='root-variables-content'
+          >
+            <:title><span class='section-title'>Root Variables (:root)</span></:title>
+            <:content>
+              <div class='section-content' data-test-root-vars>
+                <@fields.rootVariables />
+              </div>
+            </:content>
+          </A.Item>
+          <A.Item
+            @isOpen={{this.isDarkVariablesVisible}}
+            @onClick={{this.toggleDarkVariables}}
+            @id='dark-variables-content'
+          >
+            <:title><span class='section-title'>Dark Mode Variables (.dark)</span></:title>
+            <:content>
+              <div class='section-content' data-test-dark-vars>
+                <@fields.darkModeVariables />
+              </div>
+            </:content>
+          </A.Item>
+          <A.Item
+            @isOpen={{this.isGeneratedCSSVisible}}
+            @onClick={{this.toggleGeneratedCSS}}
+            @id='generated-css-content'
+          >
+            <:title><span class='section-title'>CSS Variables</span></:title>
+            <:content>
+              <div class='section-content generated-css-content'>
+                {{#if @model.cssVariables.length}}
+                  <CopyButton
+                    class='copy-css-variables-button'
+                    @textToCopy={{@model.cssVariables}}
+                  />
+                {{/if}}
+                <div class='generated-css' data-test-css-vars>
+                  <@fields.cssVariables />
+                </div>
+              </div>
+            </:content>
+          </A.Item>
+          <A.Item
+            @isOpen={{this.areCSSImportsVisible}}
+            @onClick={{this.toggleCSSImports}}
+            @id='css-imports-content'
+          >
+            <:title><span class='section-title'>CSS Imports</span></:title>
+            <:content>
+              <div class='section-content'>
+                {{#if @model.cssImports}}
+                  <@fields.cssImports />
+                {{else}}
+                  <em>None</em>
+                {{/if}}
+              </div>
+            </:content>
+          </A.Item>
+        </Accordion>
       </GridContainer>
     </GridContainer>
 
     <style scoped>
-      p {
-        margin: 0;
-      }
-
-      h1,
-      h2 {
-        margin: 0;
-      }
-
-      h1 {
-        font-size: var(--boxel-font-size-xl);
-        line-height: var(--boxel-line-height-xl);
-        font-weight: var(--boxel-font-weight-semibold);
-      }
-
-      h2 {
-        font-size: var(--boxel-font-size-lg);
-        line-height: var(--boxel-line-height-lg);
-        font-weight: var(--boxel-font-weight-medium);
-      }
-
       .structured-theme-card {
         min-height: 100%;
         align-content: start;
         gap: 0;
-        container-name: structured-theme-card;
-        container-type: inline-size;
       }
 
-      .theme-header {
-        min-height: 20vh;
-        flex-direction: column;
-        flex-wrap: nowrap;
-        justify-content: center;
-        padding: var(--boxel-sp-xxl);
-        gap: var(--boxel-sp-xs);
-        text-align: center;
-        background-color: var(--card);
-        color: var(--card-foreground);
+      .card-info-header {
+        --boxel-header-min-height: 9.375rem; /* 150px */
+        --boxel-header-padding: var(--boxel-sp-xxl) var(--boxel-sp-xl)
+          var(--boxel-sp-xl);
+        --boxel-header-gap: var(--boxel-sp-lg);
+        --boxel-header-border-color: var(--hr-color);
+        align-items: flex-start;
+        background-color: var(--muted, var(--boxel-100));
+      }
+      .card-info-header :deep(.info) {
+        align-self: center;
       }
 
-      .theme-description {
-        color: var(--muted-foreground);
+      .section-title {
+        font-size: var(--boxel-font-size);
+        line-height: var(--boxel-lineheight);
+        font-weight: var(--boxel-font-weight-medium);
       }
 
       .content-section {
-        padding: var(--boxel-sp) var(--boxel-sp-xxl);
+        padding: var(--boxel-sp-xxl);
+        gap: var(--boxel-sp-xl);
+      }
+      .section-content {
+        padding-bottom: var(--boxel-sp);
       }
 
-      .section-header {
-        grid-template-columns: 1fr auto;
-        align-items: center;
+      .css-textarea-section {
+        position: relative;
       }
-
-      .section-body {
-        animation: fade-in 120ms ease-out;
+      .css-textarea-close-button {
+        position: absolute;
+        top: 0;
+        right: 0;
       }
-
       .css-textarea {
         font-family: var(
           --font-mono,
@@ -341,37 +270,26 @@ class Isolated extends Component<typeof StructuredTheme> {
         );
       }
 
-      .generates-css-container {
+      .generated-css-content {
         position: relative;
+      }
+      .generated-css-section {
+        background-color: var(--muted);
+        color: var(--muted-foreground);
       }
       .copy-css-variables-button {
         position: absolute;
-        top: 0;
-        right: 0;
-        color: var(--primary);
+        top: var(--boxel-sp-xs);
+        right: var(--boxel-sp-xs);
+        opacity: 0.5;
       }
-
-      @keyframes fade-in {
-        from {
-          opacity: 0;
-          transform: translateY(-4px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
+      .copy-css-variables-button:hover {
+        opacity: 1;
       }
-
-      @container structured-theme-card (width < 31.25rem) {
-        .content-section {
-          padding: var(--boxel-sp-xs);
-        }
-        .field-list {
-          grid-template-columns: 1fr 1fr;
-        }
-        h2 {
-          font-size: var(--boxel-font-size-med);
-        }
+      .generated-css {
+        max-height: 50cqmin;
+        border-radius: var(--radius);
+        overflow: auto;
       }
     </style>
   </template>

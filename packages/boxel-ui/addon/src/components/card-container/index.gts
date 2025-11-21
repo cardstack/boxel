@@ -84,8 +84,8 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       --boxel-font-size-xl: calc(var(--boxel-font-size) * 2);
       --boxel-font-size-lg: calc(var(--boxel-font-size) * 1.375);
       --boxel-font-size-med: calc(var(--boxel-font-size) * 1.25);
-      --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.8125);
-      --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.6875);
+      --boxel-font-size-sm: var(--boxel-font-size);
+      --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.8125);
       /* spacing */
       --boxel-sp-6xs: calc(var(--boxel-sp-5xs) / var(--boxel-ratio));
       --boxel-sp-5xs: calc(var(--boxel-sp-4xs) / var(--boxel-ratio));
