@@ -733,9 +733,7 @@ module(basename(__filename), function () {
           `failed to find twitter:card in head html:${cleanedHead}`,
         );
         assert.ok(
-          cleanedHead.includes(
-            `property="og:url" content="${realmURL2}1"`,
-          ),
+          cleanedHead.includes(`property="og:url" content="${realmURL2}1"`),
           `failed to find og:url in head html:${cleanedHead}`,
         );
       });
