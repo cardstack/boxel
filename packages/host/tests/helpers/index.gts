@@ -773,7 +773,7 @@ async function setupTestRealm({
         'definition-lookup:main',
         new CachingDefinitionLookup(dbAdapter, localIndexer.prerenderer),
         {
-          singleton: true,
+          instantiate: false,
         },
       );
       definitionLookup = owner.lookup(
