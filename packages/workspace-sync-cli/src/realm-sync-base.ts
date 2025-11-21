@@ -464,7 +464,7 @@ export async function validateMatrixEnvVars(
 
   if (!username) {
     if (!realmSecret) {
-      console.error('MATRIX_USERNAME environment variable is required');
+      console.error('Either MATRIX_USERNAME or REALM_SECRET_SEED environment variable is required');
       process.exit(1);
     }
     username = deriveRealmUsername(workspaceUrl);
