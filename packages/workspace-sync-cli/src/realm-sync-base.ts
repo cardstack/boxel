@@ -444,9 +444,7 @@ function deriveRealmUsername(workspaceUrl: string): string {
   return `${segments[0]}_realm`;
 }
 
-export async function validateMatrixEnvVars(
-  workspaceUrl: string,
-): Promise<{
+export async function validateMatrixEnvVars(workspaceUrl: string): Promise<{
   matrixUrl: string;
   username: string;
   password: string;
