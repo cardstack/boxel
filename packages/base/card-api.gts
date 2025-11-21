@@ -64,8 +64,15 @@ import {
   loadDocument,
   LocalPath,
   getCardMenuItems,
+  type QueryWithInterpolations,
 } from '@cardstack/runtime-common';
-
+import {
+  ensureQueryFieldLiveQuery,
+  getQueryFieldState,
+  seedQueryFieldState,
+  setQueryFieldState,
+  validateRelationshipQuery,
+} from './query-field-support';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
 import DefaultFittedTemplate from './default-templates/fitted';
@@ -82,7 +89,6 @@ import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 import ImportIcon from '@cardstack/boxel-icons/import';
-// normalizeEnumOptions used by enum moved to packages/base/enum.gts
 
 import {
   callSerializeHook,
@@ -115,6 +121,7 @@ import {
   notifyCardTracking,
   peekAtField,
   relationshipMeta,
+  markQueryFieldStale,
   setFieldDescription,
   type NotLoadedValue,
 } from './field-support';
@@ -147,6 +154,11 @@ export {
   relationshipMeta,
   serialize,
   serializeCard,
+  getQueryFieldState,
+  setQueryFieldState,
+  markQueryFieldStale,
+  ensureQueryFieldLiveQuery,
+  getStore,
   type BoxComponent,
   type DeserializeOpts,
   type GetCardMenuItemParams,
@@ -226,6 +238,10 @@ interface Options {
   configuration?: ConfigurationInput<any>;
 }
 
+interface RelationshipOptions extends Options {
+  query?: QueryWithInterpolations;
+}
+
 export interface CardContext<T extends CardDef = CardDef> {
   commandContext?: CommandContext;
   cardComponentModifier?: typeof Modifier<{
@@ -252,6 +268,7 @@ export interface FieldConstructor<T> {
   name: string;
   isUsed?: true;
   isPolymorphic?: true;
+  queryDefinition?: QueryWithInterpolations;
 }
 
 type CardChangeSubscriber = (
@@ -330,6 +347,29 @@ export async function flushLogs() {
   await logger.flush();
 }
 
+export type StoreLiveQueryStatus = 'idle' | 'loading' | 'ready' | 'error';
+
+export interface StoreLiveQuery<T extends CardDef = CardDef> {
+  readonly records: T[];
+  readonly record: T | null;
+  readonly status: StoreLiveQueryStatus;
+  readonly error?: unknown;
+  readonly searchURL?: string;
+  readonly realmHref?: string;
+  refresh(opts?: { force?: boolean }): Promise<void>;
+  destroy(): void;
+}
+
+export interface StoreLiveQueryOptions<T extends CardDef = CardDef> {
+  getSearchURL: () => { realmHref: string; searchURL: string } | undefined;
+  seedRecords?: T[];
+  seedRealmHref?: string;
+  seedSearchURL?: string;
+  autoRefresh?: boolean;
+  onRefreshStart?: () => void;
+  onRefreshEnd?: (result: { error?: unknown }) => void;
+}
+
 export interface CardStore {
   get(url: string): CardDef | undefined;
   set(url: string, instance: CardDef): void;
@@ -338,6 +378,16 @@ export interface CardStore {
   loadDocument(url: string): Promise<SingleCardDocument | CardError>;
   trackLoad(load: Promise<unknown>): void;
   loaded(): Promise<void>;
+  createLiveQuery<T extends CardDef = CardDef>(
+    options: StoreLiveQueryOptions<T>,
+  ): StoreLiveQuery<T>;
+  ensureFieldLiveQuery<T extends CardDef = CardDef>(
+    instance: CardDef,
+    fieldName: string,
+    options: StoreLiveQueryOptions<T>,
+  ): StoreLiveQuery<T>;
+  destroyLiveQueries(instance: CardDef): void;
+  markLiveQueriesStaleForRealm(realmHref: string): void;
 }
 
 export interface Field<
@@ -350,6 +400,8 @@ export interface Field<
   computeVia: undefined | (() => unknown);
   // Optional per-usage configuration stored on the field descriptor
   configuration?: ConfigurationInput<any>;
+  // Declarative relationship query definition, if provided
+  queryDefinition?: QueryWithInterpolations;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
   // use the rendering mechanism to tell if a card is used or not,
@@ -933,18 +985,21 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   readonly configuration?: ConfigurationInput<any>;
+  readonly queryDefinition?: QueryWithInterpolations;
   constructor({
     cardThunk,
     computeVia,
     name,
     isUsed,
     isPolymorphic,
+    queryDefinition,
   }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
     this.name = name;
     this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
+    this.queryDefinition = queryDefinition;
   }
 
   get card(): CardT {
@@ -953,8 +1008,44 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
 
   getter(instance: CardDef): BaseInstanceType<CardT> | undefined {
     let deserialized = getDataBucket(instance);
-    // this establishes that our field should rerender when cardTracking for this card changes
     entangleWithCardTracking(instance);
+
+    if (this.queryDefinition && !this.computeVia) {
+      let hasStoredValue =
+        typeof (deserialized as Map<string, unknown>).has === 'function'
+          ? (deserialized as Map<string, unknown>).has(this.name)
+          : deserialized.get(this.name) !== undefined;
+      let storedValue = hasStoredValue
+        ? deserialized.get(this.name)
+        : undefined;
+      if (isNotLoadedValue(storedValue)) {
+        storedValue = undefined;
+      }
+      let seedRecords: CardDef[] | undefined;
+      if (hasStoredValue && storedValue !== undefined) {
+        seedRecords = storedValue == null ? [] : [storedValue as CardDef];
+      }
+      let liveQuery = ensureQueryFieldLiveQuery(
+        getStore(instance),
+        instance,
+        this,
+        seedRecords,
+      );
+      if (liveQuery) {
+        let next = liveQuery.records[0] as BaseInstanceType<CardT> | undefined;
+        deserialized.set(this.name, next ?? null);
+        return next;
+      }
+      if (seedRecords) {
+        let next = seedRecords[0] as BaseInstanceType<CardT> | undefined;
+        deserialized.set(this.name, next ?? null);
+        return next;
+      }
+      deserialized.set(this.name, null);
+      return undefined;
+    }
+
+    // fallback to legacy behavior
     let maybeNotLoaded = deserialized.get(this.name);
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance, this, maybeNotLoaded.reference);
@@ -1093,10 +1184,24 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         `linksTo field '${this.name}' cannot deserialize a list of resource ids`,
       );
     }
-    if (value?.links?.self == null || value.links.self === '') {
+    let reference = value.links?.self;
+    if (reference === null || reference === '') {
       return null;
     }
-    let cachedInstance = store.get(new URL(value.links.self, relativeTo).href);
+    if (reference === undefined) {
+      if (value.data && 'id' in value.data && value.data.id) {
+        reference = value.data.id;
+      } else {
+        return null;
+      }
+    }
+    let resolvedReference: string;
+    try {
+      resolvedReference = new URL(reference, relativeTo).href;
+    } catch {
+      resolvedReference = reference;
+    }
+    let cachedInstance = store.get(resolvedReference);
     if (cachedInstance) {
       cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
@@ -1116,7 +1221,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       }
       return {
         type: 'not-loaded',
-        reference: value.links.self,
+        reference: resolvedReference,
       };
     }
 
@@ -1213,7 +1318,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   }
 
   component(model: Box<CardDef>): BoxComponent {
-    let isComputed = !!this.computeVia;
+    let isComputed = !!this.computeVia || !!this.queryDefinition;
     let fieldName = this.name as keyof CardDef;
     let linksToField = this;
     let getInnerModel = () => {
@@ -1296,18 +1401,21 @@ class LinksToMany<FieldT extends CardDefConstructor>
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   readonly configuration?: ConfigurationInput<any>;
+  readonly queryDefinition?: QueryWithInterpolations;
   constructor({
     cardThunk,
     computeVia,
     name,
     isUsed,
     isPolymorphic,
+    queryDefinition,
   }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
     this.name = name;
     this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
+    this.queryDefinition = queryDefinition;
   }
 
   get card(): FieldT {
@@ -1316,14 +1424,45 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
   getter(instance: CardDef): BaseInstanceType<FieldT> {
     entangleWithCardTracking(instance);
-
     if (this.computeVia) {
-      // For computed LinksToMany fields, use the main getter function
       return getter(instance, this);
     }
 
-    // For non-computed LinksToMany fields, handle directly
     let deserialized = getDataBucket(instance);
+
+    if (this.queryDefinition) {
+      let hasStoredValue =
+        typeof (deserialized as Map<string, unknown>).has === 'function'
+          ? (deserialized as Map<string, unknown>).has(this.name)
+          : deserialized.get(this.name) !== undefined;
+      let storedValue = hasStoredValue
+        ? deserialized.get(this.name)
+        : undefined;
+      let seedRecords: CardDef[] | undefined;
+      if (hasStoredValue && Array.isArray(storedValue)) {
+        seedRecords = storedValue.filter(
+          (entry) => !isNotLoadedValue(entry),
+        ) as CardDef[];
+      }
+      let liveQuery = ensureQueryFieldLiveQuery(
+        getStore(instance),
+        instance,
+        this,
+        seedRecords,
+      );
+      if (liveQuery) {
+        deserialized.set(this.name, liveQuery.records);
+        return liveQuery.records as BaseInstanceType<FieldT>;
+      }
+      if (Array.isArray(storedValue)) {
+        return storedValue as BaseInstanceType<FieldT>;
+      }
+      let fallback = this.emptyValue(instance);
+      deserialized.set(this.name, fallback);
+      return fallback as BaseInstanceType<FieldT>;
+    }
+
+    // Non-query fields
     let value = deserialized.get(this.name);
 
     if (!value) {
@@ -1331,19 +1470,16 @@ class LinksToMany<FieldT extends CardDefConstructor>
       deserialized.set(this.name, value);
     }
 
-    // Handle the case where the field was set to a single NotLoadedValue during deserialization
     if (isNotLoadedValue(value)) {
       if (!(globalThis as any).__lazilyLoadLinks) {
         throw new NotLoaded(instance, value.reference, field.name);
       }
-      // TODO figure out this test case...
       value = this.emptyValue(instance);
       deserialized.set(this.name, value);
       lazilyLoadLink(instance, this, value.reference, { value });
       return this.emptyValue(instance) as BaseInstanceType<FieldT>;
     }
 
-    // Ensure we have an array - if not, something went wrong during deserialization
     if (!Array.isArray(value)) {
       throw new Error(
         `LinksToMany field '${
@@ -1352,7 +1488,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
       );
     }
 
-    // Check if the returned array contains any NotLoadedValues
     let notLoadedRefs: string[] = [];
     for (let entry of value) {
       if (isNotLoadedValue(entry)) {
@@ -1360,31 +1495,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
       }
     }
     if (notLoadedRefs.length > 0) {
-      // Important: we intentionally leave the NotLoadedValue sentinels inside the
-      // WatchedArray so the lazy loader can swap them out in place once the linked
-      // cards finish loading. Because the array identity never changes, Glimmer’s
-      // tracking sees the mutation and re-renders when lazilyLoadLink replaces each
-      // sentinel with a CardDef instance. Callers should treat these entries as
-      // placeholders (e.g. check for constructor.getComponent) rather than assuming
-      // every element is immediately renderable. Ideally the .value refactor can
-      // iron out this kink.
-      // TODO
-      // Codex has offered a couple interim solutions to ease the burden on card
-      // authors around this:
-      // We can wrap the guard in a reusable helper/component so card authors don’t
-      // have to think about the sentinel:
-      //
-      // - Helper – export something like `has-card-component` (just checks
-      //   `value?.constructor?.getComponent`) from card-api. Then in templates
-      //   they write: `{{#if (has-card-component card)}}…{{/if}}` or
-      //   `{{#each (filter-loadable cards) as |c|}}`.
-      //
-      // - Component – provide a `LoadableCard` component that takes a card instance
-      //   and renders the correct `CardContainer` only when the component is ready;
-      //   otherwise it renders nothing or a skeleton. Card authors use
-      //   `<LoadableCard @card={{card}}/>` instead of calling `getComponent`
-      //   themselves.
-
       if (!(globalThis as any).__lazilyLoadLinks) {
         throw new NotLoaded(instance, notLoadedRefs, this.name);
       }
@@ -1574,12 +1684,24 @@ class LinksToMany<FieldT extends CardDefConstructor>
             `linksToMany field '${this.name}' cannot deserialize a list of resource ids`,
           );
         }
-        if (value.links?.self == null) {
+        let reference = value.links?.self;
+        if (reference === null || reference === '') {
           return null;
         }
-        let cachedInstance = store.get(
-          new URL(value.links.self, relativeTo).href,
-        );
+        if (reference === undefined) {
+          if (value.data && 'id' in value.data && value.data.id) {
+            reference = value.data.id;
+          } else {
+            return null;
+          }
+        }
+        let resolvedReference: string;
+        try {
+          resolvedReference = new URL(reference, relativeTo).href;
+        } catch {
+          resolvedReference = reference;
+        }
+        let cachedInstance = store.get(resolvedReference);
         if (cachedInstance) {
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
@@ -1603,7 +1725,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
         if (!resource) {
           return {
             type: 'not-loaded',
-            reference: value.links.self,
+            reference: resolvedReference,
           };
         }
         let clazz = await cardClassFromResource(
@@ -1841,7 +1963,10 @@ function fieldComponent(
 }
 
 interface InternalFieldInitializer {
-  setupField(name: string): {
+  setupField(
+    name: string,
+    ownerPrototype: BaseDef,
+  ): {
     enumerable?: boolean;
     get(): unknown;
     set(value: unknown): void;
@@ -1861,8 +1986,13 @@ export const field = function (
       `the @field decorator only supports string field names, not symbols`,
     );
   }
+  if (!(target instanceof BaseDef)) {
+    throw new Error(
+      `the @field decorator can only be used inside classes that extend BaseDef`,
+    );
+  }
   let init = initializer() as InternalFieldInitializer;
-  let descriptor = init.setupField(key);
+  let descriptor = init.setupField(key, target as BaseDef);
   if (init.description) {
     setFieldDescription(target.constructor, key as string, init.description);
   }
@@ -1875,7 +2005,7 @@ export function containsMany<FieldT extends FieldDefConstructor>(
   options?: Options,
 ): BaseInstanceType<FieldT>[] {
   return {
-    setupField(fieldName: string) {
+    setupField(fieldName: string, _ownerPrototype: BaseDef) {
       let { computeVia, isUsed } = options ?? {};
       let instance = new ContainsMany({
         cardThunk: cardThunk(field),
@@ -1895,7 +2025,7 @@ export function contains<FieldT extends FieldDefConstructor>(
   options?: Options,
 ): BaseInstanceType<FieldT> {
   return {
-    setupField(fieldName: string) {
+    setupField(fieldName: string, _ownerPrototype: BaseDef) {
       let { computeVia, isUsed } = options ?? {};
       let instance = new Contains({
         cardThunk: cardThunk(field),
@@ -1912,16 +2042,20 @@ export function contains<FieldT extends FieldDefConstructor>(
 
 export function linksTo<CardT extends CardDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
-  options?: Options,
+  options?: RelationshipOptions,
 ): BaseInstanceType<CardT> {
   return {
-    setupField(fieldName: string) {
-      let { computeVia, isUsed } = options ?? {};
+    setupField(fieldName: string, ownerPrototype: BaseDef) {
+      let { computeVia, isUsed, query } = options ?? {};
+      if (query) {
+        validateRelationshipQuery(ownerPrototype, fieldName, query);
+      }
       let instance = new LinksTo({
         cardThunk: cardThunk(cardOrThunk),
         computeVia,
         name: fieldName,
         isUsed,
+        queryDefinition: query,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
@@ -1932,16 +2066,20 @@ export function linksTo<CardT extends CardDefConstructor>(
 
 export function linksToMany<CardT extends CardDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
-  options?: Options,
+  options?: RelationshipOptions,
 ): BaseInstanceType<CardT>[] {
   return {
-    setupField(fieldName: string) {
-      let { computeVia, isUsed } = options ?? {};
+    setupField(fieldName: string, ownerPrototype: BaseDef) {
+      let { computeVia, isUsed, query } = options ?? {};
+      if (query) {
+        validateRelationshipQuery(ownerPrototype, fieldName, query);
+      }
       let instance = new LinksToMany({
         cardThunk: cardThunk(cardOrThunk),
         computeVia,
         name: fieldName,
         isUsed,
+        queryDefinition: query,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
@@ -3113,6 +3251,9 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     if (isCardInstance(instance) && resource.id != null) {
       (instance as any)[meta] = resource.meta;
     }
+    if (isCardInstance(instance)) {
+      seedQueryFieldState(instance as CardDef, resource);
+    }
     notifyCardTracking(instance);
     if (isCardInstance(instance) && resource.id != null) {
       // importantly, we place this synchronously after the assignment of the model's
@@ -3479,6 +3620,7 @@ class FallbackCardStore implements CardStore {
   #instances: Map<string, CardDef> = new Map();
   #inFlight: Set<Promise<unknown>> = new Set();
   #loadGeneration = 0; // mirrors host store tracking to detect new loads
+  #liveQuery = new NullLiveQuery();
 
   get(id: string) {
     id = id.replace(/\.json$/, '');
@@ -3525,5 +3667,34 @@ class FallbackCardStore implements CardStore {
     let promise = loadDocument(fetch, url);
     this.trackLoad(promise);
     return await promise;
+  }
+  createLiveQuery<T extends CardDef = CardDef>(
+    _options?: StoreLiveQueryOptions<T>,
+  ): StoreLiveQuery<T> {
+    return this.#liveQuery as StoreLiveQuery<T>;
+  }
+  ensureFieldLiveQuery<T extends CardDef = CardDef>(
+    _instance: CardDef,
+    _fieldName: string,
+    _options?: StoreLiveQueryOptions<T>,
+  ): StoreLiveQuery<T> {
+    return this.#liveQuery as StoreLiveQuery<T>;
+  }
+  destroyLiveQueries(): void {}
+  markLiveQueriesStaleForRealm(): void {}
+}
+
+class NullLiveQuery implements StoreLiveQuery<CardDef> {
+  readonly records: CardDef[] = [];
+  readonly status: StoreLiveQueryStatus = 'idle';
+  readonly record: CardDef | null = null;
+  readonly error: unknown = undefined;
+  readonly searchURL: string | undefined = undefined;
+  readonly realmHref: string | undefined = undefined;
+  async refresh(): Promise<void> {
+    /* no-op */
+  }
+  destroy(): void {
+    /* no-op */
   }
 }

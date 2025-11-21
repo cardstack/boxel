@@ -10,6 +10,8 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import type {
   CardStore,
   CardDef as CardDefType,
+  StoreLiveQuery,
+  StoreLiveQueryOptions,
 } from 'https://cardstack.com/base/card-api';
 
 import {
@@ -41,6 +43,20 @@ class DeferredLinkStore implements CardStore {
   private pendingDocs = new Map<string, Deferred<SingleCardDocument>>();
   private inFlightLoads = new Set<Promise<unknown>>();
   private loadGeneration = 0;
+  private makeLiveQuery<
+    T extends CardDefType = CardDefType,
+  >(): StoreLiveQuery<T> {
+    return {
+      records: [],
+      record: null,
+      status: 'idle',
+      error: undefined,
+      searchURL: undefined,
+      realmHref: undefined,
+      async refresh() {},
+      destroy() {},
+    } as StoreLiveQuery<T>;
+  }
 
   get(url: string) {
     return this.instances.get(this.normalize(url));
@@ -55,6 +71,28 @@ class DeferredLinkStore implements CardStore {
   }
 
   makeTracked(_id: string) {}
+
+  createLiveQuery<T extends CardDefType = CardDefType>(
+    _options: StoreLiveQueryOptions<T>,
+  ): StoreLiveQuery<T> {
+    return this.makeLiveQuery<T>();
+  }
+
+  ensureFieldLiveQuery<T extends CardDefType = CardDefType>(
+    _instance: CardDefType,
+    _fieldName: string,
+    _options: StoreLiveQueryOptions<T>,
+  ): StoreLiveQuery<T> {
+    return this.makeLiveQuery<T>();
+  }
+
+  destroyLiveQueries(_instance: CardDefType): void {
+    /* no-op */
+  }
+
+  markLiveQueriesStaleForRealm(_realmHref: string): void {
+    /* no-op */
+  }
 
   async loadDocument(url: string) {
     let normalized = this.normalize(url);

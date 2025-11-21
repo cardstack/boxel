@@ -22,6 +22,7 @@ import { initSharedState } from './shared-state';
 import { flatMap } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import type { ConfigurationInput, FieldConfiguration } from './card-api';
+import { markQueryFieldStaleInternal } from './query-field-support';
 
 export interface NotLoadedValue {
   type: 'not-loaded';
@@ -260,6 +261,13 @@ export function getFieldDescription(
     fieldDescriptions.set(klass, descriptionsMap);
   }
   return descriptionsMap.get(fieldName);
+}
+
+export function markQueryFieldStale(
+  instance: BaseDef,
+  fieldName: string,
+): boolean {
+  return markQueryFieldStaleInternal(instance, fieldName, notifyCardTracking);
 }
 
 export function getFieldOverrides<T extends BaseDef>(

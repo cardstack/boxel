@@ -6,6 +6,7 @@ import {
 } from './index';
 import stringify from 'safe-stable-stringify';
 import qs from 'qs';
+import type { WIPOptions } from './index-query-engine';
 
 export class FilterRefersToNonexistentTypeError extends Error {
   codeRef: ResolvedCodeRef;
@@ -49,7 +50,10 @@ export class DefinitionsCache {
     return [...this.#cache.keys()];
   }
 
-  async getDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
+  async getDefinition(
+    codeRef: ResolvedCodeRef,
+    opts?: WIPOptions,
+  ): Promise<Definition> {
     let key = internalKeyFor(codeRef, undefined);
     let missing = this.#missing.get(key);
     if (missing) {
@@ -60,7 +64,7 @@ export class DefinitionsCache {
       return cached;
     }
     try {
-      let definition = await this.fetchDefinition(codeRef);
+      let definition = await this.fetchDefinition(codeRef, opts);
       this.#cache.set(key, definition);
       this.#missing.delete(key);
       return definition;
@@ -72,7 +76,10 @@ export class DefinitionsCache {
     }
   }
 
-  private async fetchDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
+  private async fetchDefinition(
+    codeRef: ResolvedCodeRef,
+    opts?: WIPOptions,
+  ): Promise<Definition> {
     let head: Response;
     try {
       head = await this.#fetch(codeRef.module, {
@@ -98,9 +105,13 @@ export class DefinitionsCache {
     }
     let url = `${realmURL}_definition?${qs.stringify({ codeRef })}`;
     let response: Response;
+    let headers = { accept: SupportedMimeType.JSONAPI };
+    if (opts?.useWorkInProgressIndex) {
+      (headers as any)['X-Boxel-Building-Index'] = 'true';
+    }
     try {
       response = await this.#fetch(url, {
-        headers: { accept: SupportedMimeType.JSONAPI },
+        headers,
       });
     } catch (e) {
       throw new FilterRefersToNonexistentTypeError(codeRef, { cause: e });
@@ -115,6 +126,8 @@ export class DefinitionsCache {
       );
     }
     let json = await response.json();
-    return json.data.attributes as Definition;
+    let definition = json.data.attributes as Definition;
+
+    return definition;
   }
 }

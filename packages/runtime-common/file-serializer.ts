@@ -221,7 +221,10 @@ function processRelationships({
 
     if (processedValue.links && 'self' in processedValue.links) {
       // Handle both truthy and null values for links.self
-      if (processedValue.links.self !== null) {
+      if (
+        processedValue.links.self !== null &&
+        processedValue.links.self !== undefined
+      ) {
         processedValue.links = {
           self: isRelativeURL(processedValue.links.self)
             ? processedValue.links.self
