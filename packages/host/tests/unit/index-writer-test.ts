@@ -639,7 +639,7 @@ module('Unit | index-writer', function (hooks) {
           ),
           isolated_html: `<div class="isolated">Isolated HTML</div>`,
           atom_html: `<span class="atom">Atom HTML</span>`,
-          head_html: null,
+          head_html: `<span class="head">Head HTML</span>`,
           icon_html: '<svg>test icon</svg>',
         },
         {
@@ -776,7 +776,7 @@ module('Unit | index-writer', function (hooks) {
         ),
         isolated_html: `<div class="isolated">Isolated HTML</div>`,
         atom_html: `<span class="atom">Atom HTML</span>`,
-        head_html: null,
+        head_html: `<span class="head">Head HTML</span>`,
         icon_html: '<svg>test icon</svg>',
         is_deleted: null,
         definition: null,
