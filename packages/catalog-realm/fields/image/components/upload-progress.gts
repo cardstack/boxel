@@ -1,16 +1,13 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
-import { Component } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import Loader2Icon from '@cardstack/boxel-icons/loader-2'; // ² Icon import
+import GlimmerComponent from '@glimmer/component';
+import Loader2Icon from '@cardstack/boxel-icons/loader-2';
 
-// ³ Component signature interface
-interface UploadProgressSignature {
+interface UploadProgressArgs {
   Args: {
     progress: number;
   };
 }
 
-// ⁴ Upload progress component
-export class UploadProgress extends Component<UploadProgressSignature> {
+export default class UploadProgress extends GlimmerComponent<UploadProgressArgs> {
   <template>
     <div class='upload-progress'>
       {{! ⁵ Progress display }}

@@ -1,12 +1,10 @@
 import { not, eq } from '@cardstack/boxel-ui/helpers';
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
-import { Component } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import { on } from '@ember/modifier'; // ² Event handling
-import XIcon from '@cardstack/boxel-icons/x'; // ³ Icons
+import GlimmerComponent from '@glimmer/component';
+import { on } from '@ember/modifier';
+import XIcon from '@cardstack/boxel-icons/x';
 import ZoomInIcon from '@cardstack/boxel-icons/zoom-in';
 
-// ⁴ Component signature interface
-interface BrowsePreviewSignature {
+interface BrowsePreviewArgs {
   Args: {
     imageData: string;
     fileName?: string;
@@ -16,8 +14,7 @@ interface BrowsePreviewSignature {
   };
 }
 
-// ⁵ Browse variant preview component
-export class BrowsePreview extends Component<BrowsePreviewSignature> {
+export default class BrowsePreview extends GlimmerComponent<BrowsePreviewArgs> {
   <template>
     <div class='browse-preview'>
       {{! ⁷ Main container }}

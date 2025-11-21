@@ -1,17 +1,14 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
-import { Component } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import { on } from '@ember/modifier'; // ² Event handling
-import CameraIcon from '@cardstack/boxel-icons/camera'; // ³ Icon import
+import GlimmerComponent from '@glimmer/component';
+import { on } from '@ember/modifier';
+import CameraIcon from '@cardstack/boxel-icons/camera';
 
-// ⁴ Component signature interface
-interface AvatarUploadSignature {
+interface AvatarUploadArgs {
   Args: {
     onFileSelect: (event: Event) => void;
   };
 }
 
-// ⁵ Avatar variant upload trigger
-export class AvatarUpload extends Component<AvatarUploadSignature> {
+export default class AvatarUpload extends GlimmerComponent<AvatarUploadArgs> {
   <template>
     <label class='avatar-upload'>
       {{! ⁶ Upload trigger }}

@@ -7,23 +7,23 @@ import {
   contains,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import UploadIcon from '@cardstack/boxel-icons/upload';
-import XIcon from '@cardstack/boxel-icons/x';
-import ZoomInIcon from '@cardstack/boxel-icons/zoom-in';
+import { restartableTask } from 'ember-concurrency'; // ¹⁴ Async task management
 import CameraIcon from '@cardstack/boxel-icons/camera';
-import Loader2Icon from '@cardstack/boxel-icons/loader-2';
-import { BrowsePreview } from './components/browse-preview'; // ² Preview component imports
-import { AvatarPreview } from './components/avatar-preview';
-import { DropzonePreview } from './components/dropzone-preview';
-import { UploadProgress } from './components/upload-progress'; // ⁷ Upload progress component
-import { BrowseUpload } from './components/browse-upload'; // ⁹ Upload trigger components
-import { AvatarUpload } from './components/avatar-upload';
-import { DropzoneUpload } from './components/dropzone-upload';
-import { PreviewModal } from './components/preview-modal'; // ¹¹ Preview modal component
+import BrowsePreview from './components/browse-preview'; // ² Preview component imports
+import AvatarPreview from './components/avatar-preview';
+import DropzonePreview from './components/dropzone-preview';
+import BrowseUpload from './components/browse-upload'; // ⁹ Upload trigger components
+import AvatarUpload from './components/avatar-upload';
+import DropzoneUpload from './components/dropzone-upload';
+import PreviewModal from './components/preview-modal'; // ¹¹ Preview modal component
+import { Button } from '@cardstack/boxel-ui/components'; // ¹⁵ Upload button
+import {
+  requestCloudflareUploadUrl,
+  uploadFileToCloudflare,
+} from './util/cloudflare-upload'; // ¹⁶ Cloudflare upload utilities
 
 // ¹³ TypeScript configuration interface
 export type ImageFieldConfiguration =
@@ -31,31 +31,39 @@ export type ImageFieldConfiguration =
       variant: 'browse' | 'dropzone';
       presentation?: 'default' | 'compact' | 'featured';
       options?: {
-        showProgress?: boolean;
         showImageModal?: boolean;
+        autoUpload?: boolean;
       };
     }
   | {
       variant: 'avatar';
       presentation?: 'default' | 'compact' | 'featured';
       options?: {
-        showProgress?: boolean;
+        autoUpload?: boolean;
         // No showImageModal allowed here
       };
     };
 
 class ImageFieldEdit extends Component<typeof ImageField> {
-  @tracked preview: string | null = null;
-  @tracked isUploading = false;
-  @tracked uploadProgress = 0;
+  @tracked preview: string | null = null; // ¹⁸ Temporary local preview
+  @tracked selectedFile: File | null = null; // ¹⁹ File ready for upload
+  @tracked errorMessage = ''; // ²⁰ Upload error messages
   @tracked showPreview = false;
 
+  constructor(owner: any, args: any) {
+    super(owner, args);
+    // ²¹ Initialize preview from uploaded URL
+    if (args.model?.uploadedImageUrl) {
+      this.preview = args.model.uploadedImageUrl;
+    }
+  }
+
   get hasImage() {
-    return this.preview || this.args.model?.imageData;
+    return this.preview || this.args.model?.uploadedImageUrl;
   }
 
   get displayPreview() {
-    return this.preview || this.args.model?.imageData || '';
+    return this.preview || this.args.model?.uploadedImageUrl || '';
   }
 
   get variant() {
@@ -73,69 +81,70 @@ class ImageFieldEdit extends Component<typeof ImageField> {
     );
   }
 
-  get showProgress() {
-    return this.options.showProgress !== false;
+  get autoUpload() {
+    return this.options.autoUpload === true;
   }
 
   get showImageModal() {
     return this.options.showImageModal !== false;
   }
 
+  get hasPendingUpload() {
+    return !!(
+      this.preview &&
+      this.selectedFile &&
+      !this.args.model?.uploadedImageUrl
+    );
+  }
+
+  get showUploadButton() {
+    return this.hasPendingUpload && !this.autoUpload;
+  }
+
+  get uploadButtonLabel() {
+    if (this.uploadImageTask.isRunning) {
+      return 'Uploading...';
+    }
+    return 'Upload to Cloudflare';
+  }
+
   @action
-  handleFileSelect(event: Event) {
+  async handleFileSelect(event: Event) {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
 
     if (!file || !file.type.startsWith('image/')) return;
 
+    // ²² Store file and create local preview
+    this.selectedFile = file;
+    this.errorMessage = '';
+
     const reader = new FileReader();
     reader.onload = (e) => {
       const result = e.target?.result as string;
-      const img = new Image();
+      // ²³ Set preview for local display
+      this.preview = result;
 
-      img.onload = () => {
-        if (this.showProgress) {
-          this.isUploading = true;
-          this.uploadProgress = 0;
-
-          const interval = setInterval(() => {
-            this.uploadProgress += 10;
-
-            if (this.uploadProgress >= 100) {
-              clearInterval(interval as unknown as number);
-              this.isUploading = false;
-              this.preview = result;
-              this.args.model.imageData = result;
-              this.args.model.fileName = file.name;
-              this.args.model.fileSize = file.size;
-              this.args.model.width = img.width;
-              this.args.model.height = img.height;
-            }
-          }, 200);
-        } else {
-          this.preview = result;
-          this.args.model.imageData = result;
-          this.args.model.fileName = file.name;
-          this.args.model.fileSize = file.size;
-          this.args.model.width = img.width;
-          this.args.model.height = img.height;
-        }
-      };
-
-      img.src = result;
+      // ²⁴ Auto-upload if enabled
+      if (this.autoUpload) {
+        this.uploadImageTask.perform();
+      }
     };
 
     reader.readAsDataURL(file);
+
+    // Reset input
+    input.value = '';
   }
 
   @action
   removeImage() {
+    // ²⁵ Clear all image data
     this.preview = null;
-    this.args.model.imageData = undefined;
-    this.args.model.fileName = undefined;
-    this.args.model.fileSize = undefined;
-    this.args.model.width = undefined;
-    this.args.model.height = undefined;
+    this.selectedFile = null;
+    this.errorMessage = '';
+    this.args.model.uploadUrl = undefined;
+    this.args.model.uploadedImageUrl = undefined;
   }
 
   @action
@@ -163,36 +172,57 @@ class ImageFieldEdit extends Component<typeof ImageField> {
     this.showPreview = !this.showPreview;
   }
 
-  get formattedSize() {
-    const bytes = this.args.model?.fileSize;
-    if (!bytes) return '';
-
-    if (bytes < 1024 * 1024) {
-      return (bytes / 1024).toFixed(1) + ' KB';
+  // ²⁶ Cloudflare upload task
+  uploadImageTask = restartableTask(async () => {
+    if (!this.selectedFile) {
+      this.errorMessage = 'Please select a file first';
+      return;
     }
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  }
+
+    try {
+      // ²⁷ Step 1: Get upload URL from Cloudflare
+      this.args.model.uploadUrl = await requestCloudflareUploadUrl(
+        this.args.context?.commandContext,
+        {
+          source: 'boxel-image-field',
+        },
+      );
+
+      if (!this.args.model.uploadUrl) {
+        this.errorMessage = 'Failed to get upload URL';
+        return;
+      }
+
+      // ²⁸ Step 2: Upload file to Cloudflare
+      const imageUrl = await uploadFileToCloudflare(
+        this.args.model.uploadUrl,
+        this.selectedFile,
+      );
+
+      // ²⁹ Update model with permanent CDN URL
+      this.args.model.uploadedImageUrl = imageUrl;
+      this.preview = imageUrl;
+      this.selectedFile = null;
+      this.errorMessage = '';
+    } catch (error: any) {
+      // ³⁰ Display Cloudflare error messages
+      this.errorMessage = `Upload failed: ${error.message}`;
+      throw error;
+    }
+  });
 
   <template>
     <div class='image-field-edit' data-test-image-field-edit>
-      {{#if this.isUploading}}
-        {{! ⁸ Upload progress component }}
-        <UploadProgress @progress={{this.uploadProgress}} />
-      {{else if this.hasImage}}
+      {{#if this.hasImage}}
         {{! ³ Image preview display }}
         {{#if (eq this.variant 'avatar')}}
           <AvatarPreview
             @imageData={{this.displayPreview}}
-            @fileName={{@model.fileName}}
             @onRemove={{this.removeImage}}
           />
         {{else if (eq this.variant 'dropzone')}}
           <DropzonePreview
             @imageData={{this.displayPreview}}
-            @fileName={{@model.fileName}}
-            @fileSize={{@model.fileSize}}
-            @width={{@model.width}}
-            @height={{@model.height}}
             @onRemove={{this.removeImage}}
             @onZoom={{this.togglePreview}}
             @showZoomButton={{this.showImageModal}}
@@ -200,14 +230,31 @@ class ImageFieldEdit extends Component<typeof ImageField> {
         {{else}}
           <BrowsePreview
             @imageData={{this.displayPreview}}
-            @fileName={{@model.fileName}}
-            @fileSize={{@model.fileSize}}
-            @width={{@model.width}}
-            @height={{@model.height}}
             @onRemove={{this.removeImage}}
             @onZoom={{this.togglePreview}}
             @showZoomButton={{this.showImageModal}}
           />
+        {{/if}}
+
+        {{! ³¹ Upload button (only shown when file selected but not uploaded) }}
+        {{#if this.showUploadButton}}
+          <Button
+            class='upload-button'
+            @kind='primary-dark'
+            @size='tall'
+            @disabled={{this.uploadImageTask.isRunning}}
+            {{on 'click' this.uploadImageTask.perform}}
+            data-test-upload-to-cloudflare
+          >
+            {{this.uploadButtonLabel}}
+          </Button>
+        {{/if}}
+
+        {{! ³² Error message display }}
+        {{#if this.errorMessage}}
+          <div class='error-message' data-test-error-message>
+            {{this.errorMessage}}
+          </div>
         {{/if}}
       {{else}}
         {{! ¹⁰ Upload trigger components }}
@@ -228,8 +275,6 @@ class ImageFieldEdit extends Component<typeof ImageField> {
         {{! ¹² Full-screen preview modal }}
         <PreviewModal
           @imageData={{this.displayPreview}}
-          @fileName={{@model.fileName}}
-          @fileSize={{@model.fileSize}}
           @onClose={{this.togglePreview}}
         />
       {{/if}}
@@ -238,6 +283,22 @@ class ImageFieldEdit extends Component<typeof ImageField> {
     <style scoped>
       .image-field-edit {
         width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .upload-button {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .error-message {
+        padding: 0.75rem;
+        background: var(--destructive, #fee2e2);
+        color: var(--destructive-foreground, #991b1b);
+        border-radius: var(--radius, 0.375rem);
+        font-size: 0.875rem;
       }
     </style>
   </template>
@@ -247,16 +308,13 @@ export class ImageField extends FieldDef {
   static displayName = 'Image';
   static icon = CameraIcon;
 
-  @field imageData = contains(StringField);
-  @field fileName = contains(StringField);
-  @field fileSize = contains(NumberField);
-  @field width = contains(NumberField);
-  @field height = contains(NumberField);
-  @field altText = contains(StringField);
+  // ³³ Cloudflare upload fields (replaces imageData)
+  @field uploadUrl = contains(StringField); // Temporary upload URL from Cloudflare
+  @field uploadedImageUrl = contains(StringField); // Permanent CDN URL
 
   static embedded = class Embedded extends Component<typeof this> {
     get hasImage() {
-      return !!this.args.model?.imageData;
+      return !!this.args.model?.uploadedImageUrl;
     }
 
     get presentation() {
@@ -267,8 +325,8 @@ export class ImageField extends FieldDef {
       <div class='image-embedded presentation-{{this.presentation}}'>
         {{#if this.hasImage}}
           <img
-            src={{@model.imageData}}
-            alt={{if @model.altText @model.altText @model.fileName}}
+            src={{@model.uploadedImageUrl}}
+            alt='Image'
             class='embedded-image'
           />
         {{else}}
@@ -316,18 +374,18 @@ export class ImageField extends FieldDef {
 
   static atom = class Atom extends Component<typeof this> {
     get hasImage() {
-      return !!this.args.model?.imageData;
+      return !!this.args.model?.uploadedImageUrl;
     }
 
     <template>
       <span class='image-atom'>
         {{#if this.hasImage}}
           <img
-            src={{@model.imageData}}
-            alt={{if @model.altText @model.altText @model.fileName}}
+            src={{@model.uploadedImageUrl}}
+            alt='Image'
             class='atom-thumbnail'
           />
-          <span class='atom-name'>{{@model.fileName}}</span>
+          <span class='atom-name'>Image</span>
         {{else}}
           <CameraIcon class='atom-icon' />
           <span>No image</span>

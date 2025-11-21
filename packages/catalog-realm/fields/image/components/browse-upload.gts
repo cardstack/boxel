@@ -1,17 +1,14 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
-import { Component } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import { on } from '@ember/modifier'; // ² Event handling
-import UploadIcon from '@cardstack/boxel-icons/upload'; // ³ Icon import
+import GlimmerComponent from '@glimmer/component';
+import { on } from '@ember/modifier';
+import UploadIcon from '@cardstack/boxel-icons/upload';
 
-// ⁴ Component signature interface
-interface BrowseUploadSignature {
+interface BrowseUploadArgs {
   Args: {
     onFileSelect: (event: Event) => void;
   };
 }
 
-// ⁵ Browse variant upload trigger
-export class BrowseUpload extends Component<BrowseUploadSignature> {
+export default class BrowseUpload extends GlimmerComponent<BrowseUploadArgs> {
   <template>
     <label class='browse-upload'>
       {{! ⁶ Upload trigger }}

@@ -21,11 +21,6 @@ export class ImageFieldsPreview extends CardDef {
   @field avatarImage = contains(ImageField, {
     configuration: {
       variant: 'avatar',
-      presentation: 'compact',
-      options: {
-        showProgress: false,
-        showImageModal: true,
-      },
     },
   });
 
@@ -33,9 +28,9 @@ export class ImageFieldsPreview extends CardDef {
   @field dropzoneImage = contains(ImageField, {
     configuration: {
       variant: 'dropzone',
-      presentation: 'featured',
       options: {
-        showProgress: true,
+        showImageModal: true,
+        autoUpload: true
       },
     },
   });
@@ -277,7 +272,8 @@ export class ImageFieldsPreview extends CardDef {
         this.args.model.constructor!,
         key,
       );
-      return field?.metadata?.icon || 'image';
+      let fieldInstance = field?.card;
+      return fieldInstance?.icon;
     };
   };
 }

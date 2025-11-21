@@ -1,10 +1,8 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
-import { Component } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import { on } from '@ember/modifier'; // ² Event handling
-import XIcon from '@cardstack/boxel-icons/x'; // ³ Icon import
+import GlimmerComponent from '@glimmer/component';
+import { on } from '@ember/modifier';
+import XIcon from '@cardstack/boxel-icons/x';
 
-// ⁴ Component signature interface
-interface AvatarPreviewSignature {
+interface AvatarPreviewArgs {
   Args: {
     imageData: string;
     fileName?: string;
@@ -12,8 +10,7 @@ interface AvatarPreviewSignature {
   };
 }
 
-// ⁵ Avatar variant preview component
-export class AvatarPreview extends Component<AvatarPreviewSignature> {
+export default class AvatarPreview extends GlimmerComponent<AvatarPreviewArgs> {
   <template>
     <div class='avatar-preview'>
       {{! ⁶ Avatar container }}

@@ -1,4 +1,5 @@
-import { eq, gt } from '@cardstack/boxel-ui/helpers';
+// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
+import { eq, gt, and, not } from '@cardstack/boxel-ui/helpers'; // ¹ Helper imports
 import { fn } from '@ember/helper';
 import GripVerticalIcon from '@cardstack/boxel-icons/grip-vertical';
 import {
@@ -12,41 +13,70 @@ import StringField from 'https://cardstack.com/base/string';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
+import { restartableTask } from 'ember-concurrency'; // ² Async task management
 import UploadIcon from '@cardstack/boxel-icons/upload';
 import XIcon from '@cardstack/boxel-icons/x';
 import Grid3x3Icon from '@cardstack/boxel-icons/grid-3x3';
 import CameraIcon from '@cardstack/boxel-icons/camera';
-import Loader2Icon from '@cardstack/boxel-icons/loader-2';
+import { Button } from '@cardstack/boxel-ui/components'; // ³ Upload button
 import {
   SortableGroupModifier as sortableGroup,
   SortableHandleModifier as sortableHandle,
   SortableItemModifier as sortableItem,
 } from '@cardstack/boxel-ui/modifiers';
 import { uuidv4 } from '@cardstack/runtime-common';
-import ImageField from './image-field';
+import ImageField from './image-field'; // ⁴ Base ImageField with uploadUrl/uploadedImageUrl
+import {
+  requestCloudflareUploadUrl,
+  uploadFileToCloudflare,
+} from './util/cloudflare-upload'; // ⁵ Cloudflare upload utilities
 
+// ⁶ Configuration interface
 export interface MultipleImageFieldConfiguration {
   variant?: 'list' | 'gallery';
   presentation?: 'default' | 'compact' | 'featured';
   options?: {
-    showProgress?: boolean;
-    allowBatchSelect?: boolean;
-    allowReorder?: boolean;
-    allowReorderItem?: boolean;
+    autoUpload?: boolean; // Auto-upload after file selection
+    allowReorder?: boolean; // Allow drag-drop reordering
+    allowBatchSelect?: boolean; // Allow batch selection and delete (default true)
+    maxFiles?: number; // Max number of files (default 10)
   };
 }
 
+// ⁷ ImageItem extends ImageField (has uploadUrl/uploadedImageUrl)
 class ImageItem extends ImageField {
-  @field id = contains(StringField);
+  @field id = contains(StringField); // Unique ID for tracking
+}
+
+// ⁸ Upload entry for local preview before upload
+interface UploadEntry {
+  id: string;
+  file: File;
+  preview: string; // Local base64 preview
+  uploadedImageUrl?: string; // Cloudflare CDN URL
+  selected?: boolean; // Batch selection state
 }
 
 class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
-  @tracked isUploading = false;
-  @tracked uploadProgress = 0;
-  @tracked selectedImageIds = new Set<string>();
-  // Use a unique group name to avoid cross-instance sortable collisions
-  private sortableGroupId = uuidv4();
+  @tracked uploadEntries: UploadEntry[] = []; // ⁹ Local preview entries
+  @tracked errorMessage = ''; // ¹⁰ Upload error messages
+  @tracked selectAll = false; // ³⁸ Select all checkbox state
+  private sortableGroupId = uuidv4(); // ¹¹ Unique ID for sortable
 
+  constructor(owner: any, args: any) {
+    super(owner, args);
+    // ¹² Load existing uploaded images
+    const existingImages = Array.isArray(this.args.model?.images)
+      ? this.args.model.images
+      : [];
+    if (existingImages.length) {
+      this.uploadEntries = existingImages.map((img: ImageItem) =>
+        this.createEntryFromExisting(img),
+      );
+    }
+  }
+
+  // ¹³ Configuration getters
   get variant(): 'list' | 'gallery' {
     return (
       (this.args.configuration as MultipleImageFieldConfiguration)?.variant ||
@@ -54,37 +84,38 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
     );
   }
 
-  get presentation(): string {
-    return (
-      (this.args.configuration as MultipleImageFieldConfiguration)
-        ?.presentation || 'default'
-    );
-  }
-
-  get options(): NonNullable<MultipleImageFieldConfiguration['options']> {
+  get options() {
     return (
       (this.args.configuration as MultipleImageFieldConfiguration)?.options ||
       {}
     );
   }
 
-  get showProgress(): boolean {
-    return this.options.showProgress !== false;
+  get autoUpload() {
+    return this.options.autoUpload === true;
   }
 
-  get allowBatchSelect(): boolean {
-    return this.options.allowBatchSelect !== false;
+  get allowReorder() {
+    return this.options.allowReorder === true;
   }
 
-  get allowReorderItem(): boolean {
-    return this.options.allowReorderItem === true;
+  get allowBatchSelect() {
+    return this.options.allowBatchSelect !== false; // ³⁹ Default to true
   }
 
-  get allowReorder(): boolean {
-    return this.options.allowReorder === true || this.allowReorderItem;
+  get maxFiles() {
+    return this.options.maxFiles || 10;
   }
 
-  get sortableDisabled(): boolean {
+  get hasSelection() {
+    return this.uploadEntries.some((entry) => entry.selected);
+  }
+
+  get selectedCount() {
+    return this.uploadEntries.filter((entry) => entry.selected).length;
+  }
+
+  get sortableDisabled() {
     return !this.allowReorder;
   }
 
@@ -92,299 +123,401 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
     return this.variant === 'gallery' ? 'grid' : 'y';
   }
 
-  get allSelected(): boolean {
-    if (!this.images || this.images.length === 0) {
-      return false;
+  // ¹⁴ State getters
+  get hasImages() {
+    return this.uploadEntries.length > 0;
+  }
+
+  get maxFilesReached() {
+    return this.uploadEntries.length >= this.maxFiles;
+  }
+
+  get hasPendingUploads() {
+    return this.uploadEntries.some((entry) => !entry.uploadedImageUrl);
+  }
+
+  get showUploadButton() {
+    return this.hasImages && !this.autoUpload;
+  }
+
+  get uploadButtonLabel() {
+    if (this.bulkUploadTask.isRunning) {
+      return 'Uploading...';
     }
-    return this.selectedImageIds.size === this.images.length;
+    return this.hasPendingUploads ? 'Upload All to Cloudflare' : 'Uploaded';
   }
 
-  isSelected(imageId: string): boolean {
-    return this.selectedImageIds.has(imageId);
-  }
-
-  get images(): ImageItem[] {
-    return this.args.model?.images || [];
+  get uploadButtonDisabled() {
+    return this.bulkUploadTask.isRunning || !this.hasPendingUploads;
   }
 
   @action
-  handleFileSelect(event: Event) {
+  async handleFileSelect(event: Event) {
     const input = event.target as HTMLInputElement;
     const files = Array.from(input.files || []);
+    await this.processFiles(files);
+    input.value = ''; // Reset input
+  }
+
+  @action
+  async handleFilesDropped(files: File[]) {
+    await this.processFiles(files);
+  }
+
+  // ¹⁵ Process selected files
+  async processFiles(files: File[]) {
+    if (!files.length) return;
 
     const imageFiles = files.filter((f) => f.type.startsWith('image/'));
+    const remainingSlots = this.maxFiles - this.uploadEntries.length;
+    const filesToAdd = imageFiles.slice(0, remainingSlots);
 
-    if (this.showProgress && imageFiles.length > 0) {
-      this.isUploading = true;
-      this.uploadProgress = 0;
+    // ¹⁶ Create preview for each file
+    for (const file of filesToAdd) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const entry = this.createEntry(file, reader.result as string);
+        this.uploadEntries = [...this.uploadEntries, entry];
 
-      let processed = 0;
-      const total = imageFiles.length;
-
-      imageFiles.forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const result = e.target?.result as string;
-          this.addImage(result, file.name, file.size);
-          processed++;
-          this.uploadProgress = Math.floor((processed / total) * 100);
-
-          if (processed === total) {
-            setTimeout(() => {
-              this.isUploading = false;
-              this.uploadProgress = 0;
-            }, 500);
-          }
-        };
-        reader.readAsDataURL(file);
-      });
-    } else {
-      imageFiles.forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const result = e.target?.result as string;
-          this.addImage(result, file.name, file.size);
-        };
-        reader.readAsDataURL(file);
-      });
+        // ¹⁷ Auto-upload if enabled
+        if (this.autoUpload) {
+          this.bulkUploadTask.perform();
+        }
+      };
+      reader.readAsDataURL(file);
     }
   }
 
-  addImage(imageData: string, fileName: string, fileSize: number): void {
-    const newImage = new ImageItem();
-    newImage.imageData = imageData;
-    newImage.fileName = fileName;
-    newImage.fileSize = fileSize.toString();
-    newImage.id = Date.now().toString() + Math.random();
+  // ¹⁸ Create upload entry from file
+  createEntry(file: File, preview: string): UploadEntry {
+    return {
+      id: `${Date.now()}-${Math.random()}`,
+      file,
+      preview,
+      selected: false, // ⁴⁰ Initialize selection state
+    };
+  }
 
-    if (!this.args.model.images) {
+  // ¹⁹ Create entry from existing ImageItem
+  createEntryFromExisting(img: ImageItem): UploadEntry {
+    const fileLike = {
+      name: 'uploaded-image',
+      size: 0,
+      type: 'image/jpeg',
+    } as File;
+
+    return {
+      id: img.id || `${Date.now()}-${Math.random()}`,
+      file: fileLike,
+      preview: img.uploadedImageUrl || '',
+      uploadedImageUrl: img.uploadedImageUrl,
+      selected: false, // ⁴¹ Initialize selection state
+    };
+  }
+
+  @action
+  removeImage(id: string) {
+    // ²⁰ Remove entry from local preview
+    this.uploadEntries = this.uploadEntries.filter((entry) => entry.id !== id);
+    this.errorMessage = '';
+
+    // ²¹ Update model if any uploads exist
+    if (this.uploadEntries.some((entry) => entry.uploadedImageUrl)) {
+      this.persistEntries();
+    } else {
       this.args.model.images = [];
     }
-    this.args.model.images = [...this.args.model.images, newImage];
   }
 
   @action
-  removeImage(imageId: string): void {
-    if (!this.args.model.images) return;
-    this.args.model.images = this.args.model.images.filter(
-      (img: ImageItem) => img.id !== imageId,
-    );
-  }
-
-  @action
-  reorderImages(reorderedImages: ImageItem[]): void {
-    this.args.model.images = reorderedImages;
-  }
-
-  @action
-  toggleSelectAll(): void {
-    if (this.allSelected) {
-      this.selectedImageIds = new Set();
-    } else {
-      this.selectedImageIds = new Set(this.images.map((img) => img.id!));
+  handleReorder(reorderedEntries: UploadEntry[]) {
+    // ²² Reorder entries
+    this.uploadEntries = reorderedEntries;
+    if (this.uploadEntries.some((entry) => entry.uploadedImageUrl)) {
+      this.persistEntries();
     }
   }
 
   @action
-  toggleImageSelection(imageId: string): void {
-    const newSet = new Set(this.selectedImageIds);
-    if (newSet.has(imageId)) {
-      newSet.delete(imageId);
-    } else {
-      newSet.add(imageId);
-    }
-    this.selectedImageIds = newSet;
-  }
-
-  @action
-  deleteSelected(): void {
-    if (!this.args.model.images) return;
-    this.args.model.images = this.args.model.images.filter(
-      (img) => !this.selectedImageIds.has(img.id!),
-    );
-    this.selectedImageIds = new Set();
-  }
-
-  @action
-  handleDragOver(event: DragEvent): void {
+  handleDragOver(event: DragEvent) {
     event.preventDefault();
   }
 
   @action
-  handleDrop(event: DragEvent): void {
+  handleDrop(event: DragEvent) {
     event.preventDefault();
     const files = Array.from(event.dataTransfer?.files || []);
+    this.processFiles(files);
+  }
 
-    const fakeEvent = {
-      target: {
-        files: files.filter((f) => f.type.startsWith('image/')),
-      },
-    } as any;
+  @action
+  toggleSelectAll() {
+    // ⁴² Toggle select all
+    this.selectAll = !this.selectAll;
+    this.uploadEntries = this.uploadEntries.map((entry) => ({
+      ...entry,
+      selected: this.selectAll,
+    }));
+  }
 
-    if (fakeEvent.target.files.length > 0) {
-      this.handleFileSelect(fakeEvent);
+  @action
+  toggleSelection(id: string) {
+    // ⁴³ Toggle individual selection
+    this.uploadEntries = this.uploadEntries.map((entry) =>
+      entry.id === id ? { ...entry, selected: !entry.selected } : entry,
+    );
+    this.selectAll = this.uploadEntries.every((entry) => entry.selected);
+  }
+
+  @action
+  deleteSelected() {
+    // ⁴⁴ Delete all selected images
+    this.uploadEntries = this.uploadEntries.filter((entry) => !entry.selected);
+    this.selectAll = false;
+    this.errorMessage = '';
+
+    if (this.uploadEntries.some((entry) => entry.uploadedImageUrl)) {
+      this.persistEntries();
+    } else {
+      this.args.model.images = [];
     }
   }
 
-  formatSize(bytes: string): string {
-    const size = Number(bytes);
-    if (!size) return '';
+  // ²³ Save uploaded images to model
+  persistEntries() {
+    this.args.model.images = [];
 
-    if (size < 1024 * 1024) {
-      return (size / 1024).toFixed(1) + ' KB';
+    this.uploadEntries
+      .filter((entry) => entry.uploadedImageUrl)
+      .forEach((entry) => {
+        const imageItem = new ImageItem();
+        imageItem.id = entry.id;
+        imageItem.uploadedImageUrl = entry.uploadedImageUrl;
+        this.args.model.images.push(imageItem);
+      });
+  }
+
+  // ²⁴ Bulk upload task - uploads all pending images
+  bulkUploadTask = restartableTask(async () => {
+    const pendingEntries = this.uploadEntries.filter(
+      (entry) => !entry.uploadedImageUrl,
+    );
+
+    if (pendingEntries.length === 0) {
+      return;
     }
-    return (size / (1024 * 1024)).toFixed(1) + ' MB';
+
+    const errorMessages: string[] = [];
+
+    // ²⁵ Upload each image individually
+    for (const entry of pendingEntries) {
+      try {
+        // ²⁶ Step 1: Get Cloudflare upload URL
+        const uploadUrl = await requestCloudflareUploadUrl(
+          this.args.context?.commandContext,
+          { source: 'boxel-multiple-image-field' },
+        );
+
+        // ²⁷ Step 2: Upload to Cloudflare
+        const imageUrl = await uploadFileToCloudflare(uploadUrl, entry.file);
+
+        // ²⁸ Save CDN URL
+        entry.uploadedImageUrl = imageUrl;
+      } catch (error: any) {
+        // ²⁹ Collect error for this image
+        const cleanError = (error.message || String(error))
+          .replace(/\n/g, ' ')
+          .trim();
+        errorMessages.push(`${entry.file.name}: ${cleanError}`);
+      }
+    }
+
+    // ³⁰ Trigger reactivity and persist
+    this.uploadEntries = [...this.uploadEntries];
+    this.persistEntries();
+
+    // ³¹ Show errors if any failed
+    if (errorMessages.length > 0) {
+      this.errorMessage = `Upload failed for ${
+        errorMessages.length
+      } image(s):\n${errorMessages.join('\n')}`;
+    } else {
+      this.errorMessage = '';
+    }
+  });
+
+  formatSize(bytes: number): string {
+    if (bytes < 1024 * 1024) {
+      return (bytes / 1024).toFixed(1) + ' KB';
+    }
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   }
 
   <template>
-    <div class='multiple-image-field-edit variant-{{this.variant}}'>
-      {{#if this.isUploading}}
-        <div class='upload-progress'>
-          <div class='progress-header'>
-            <Loader2Icon class='spinner' />
-            <span class='progress-text'>Uploading images...</span>
-            <span class='progress-percent'>{{this.uploadProgress}}%</span>
-          </div>
-          <div class='progress-bar-container'>
-            <div
-              class='progress-bar'
-              style='width: {{this.uploadProgress}}%'
-            ></div>
-          </div>
-        </div>
-      {{/if}}
-
+    <div
+      class='multiple-image-field-edit variant-{{this.variant}}'
+      data-test-multiple-image-field
+    >
+      {{! ³² Upload trigger }}
       <label
-        class='upload-trigger variant-{{this.variant}}'
+        class='upload-trigger variant-{{this.variant}}
+          {{if this.maxFilesReached "disabled"}}'
         {{on 'dragover' this.handleDragOver}}
         {{on 'drop' this.handleDrop}}
       >
         {{#if (eq this.variant 'gallery')}}
           <Grid3x3Icon class='upload-icon' />
-          <span class='upload-text'>Add to gallery ({{this.images.length}})</span>
+          <span class='upload-text'>
+            {{#if this.maxFilesReached}}
+              Max images reached ({{this.uploadEntries.length}}/{{this.maxFiles}})
+            {{else}}
+              Add to gallery ({{this.uploadEntries.length}}/{{this.maxFiles}})
+            {{/if}}
+          </span>
         {{else}}
           <UploadIcon class='upload-icon' />
-          <span class='upload-text'>Add images ({{this.images.length}})</span>
+          <span class='upload-text'>
+            {{#if this.maxFilesReached}}
+              Max images reached ({{this.uploadEntries.length}}/{{this.maxFiles}})
+            {{else}}
+              Add images ({{this.uploadEntries.length}}/{{this.maxFiles}})
+            {{/if}}
+          </span>
         {{/if}}
         <input
           type='file'
           class='file-input'
           accept='image/*'
-          multiple={{this.allowBatchSelect}}
+          multiple={{true}}
+          disabled={{this.maxFilesReached}}
           {{on 'change' this.handleFileSelect}}
         />
       </label>
 
-      {{!-- {{#if this.allowBatchSelect}}
-        <div class='header-actions'>
-          <label class='select-all-checkbox'>
-            <input
-              type='checkbox'
-              checked={{this.selectAll}}
-              {{on 'change' this.toggleSelectAll}}
-              data-test-select-all
-            />
-            <span>Select All</span>
-          </label>
-          {{#if this.hasSelection}}
-            <button
-              type='button'
-              class='btn-delete-selected'
-              {{on 'click' this.deleteSelected}}
-              data-test-delete-selected
-            >
-              <XIcon class='icon' />
-              Delete ({{this.selectedCount}})
-            </button>
-          {{/if}}
-        </div>
-      {{/if}} --}}
+      {{! ³³ Image list }}
+      {{#if (gt this.uploadEntries.length 0)}}
+        {{! ⁴⁵ Batch actions header }}
+        {{#if this.allowBatchSelect}}
+          <div class='batch-actions'>
+            <label class='select-all-label'>
+              <input
+                type='checkbox'
+                class='select-all-checkbox'
+                checked={{this.selectAll}}
+                {{on 'change' this.toggleSelectAll}}
+                data-test-select-all
+              />
+              <span>Select All</span>
+            </label>
+            {{#if this.hasSelection}}
+              <button
+                type='button'
+                class='delete-selected-button'
+                {{on 'click' this.deleteSelected}}
+                data-test-delete-selected
+              >
+                <XIcon class='delete-icon' />
+                Delete ({{this.selectedCount}})
+              </button>
+            {{/if}}
+          </div>
+        {{/if}}
 
-      {{#if (gt this.images.length 0)}}
         <div
           class='images-container variant-{{this.variant}}'
           {{sortableGroup
             groupName=this.sortableGroupId
-            onChange=this.reorderImages
+            onChange=this.handleReorder
             disabled=this.sortableDisabled
             direction=this.sortableDirection
           }}
         >
-          {{#each this.images as |image|}}
+          {{#each this.uploadEntries as |entry|}}
+            {{! ³⁴ Gallery variant }}
             {{#if (eq this.variant 'gallery')}}
               <div
-                class='gallery-item'
+                class='gallery-item {{if entry.selected "is-selected"}}'
                 {{sortableItem
                   groupName=this.sortableGroupId
-                  model=image
+                  model=entry
                   disabled=this.sortableDisabled
                 }}
               >
+                {{! ⁴⁶ Gallery checkbox }}
                 {{#if this.allowBatchSelect}}
-                  <div class='item-checkbox item-checkbox-gallery'>
+                  <div class='item-checkbox-gallery'>
                     <input
                       type='checkbox'
-                      {{!-- checked={{this.isSelected image.id}}
-                      {{on 'change' (fn this.toggleImageSelection image.id)}}
-                      data-test-item-checkbox --}}
+                      checked={{entry.selected}}
+                      {{on 'change' (fn this.toggleSelection entry.id)}}
+                      data-test-item-checkbox
                     />
                   </div>
                 {{/if}}
+
                 {{#if this.allowReorder}}
-                  <div class='drag-handle' {{sortableHandle}}>
-                  </div>
+                  <div class='drag-handle' {{sortableHandle}}></div>
                 {{/if}}
                 <img
-                  src={{image.imageData}}
-                  alt={{image.fileName}}
+                  src={{if
+                    entry.uploadedImageUrl
+                    entry.uploadedImageUrl
+                    entry.preview
+                  }}
+                  alt='Image'
                   class='gallery-image'
                 />
                 <button
                   type='button'
-                  {{on 'click' (fn this.removeImage image.id)}}
+                  {{on 'click' (fn this.removeImage entry.id)}}
                   class='gallery-remove'
                 >
                   <XIcon class='remove-icon' />
                 </button>
               </div>
+              {{! ³⁵ List variant }}
             {{else}}
               <div
-                class='list-item'
+                class='list-item {{if entry.selected "is-selected"}}'
                 {{sortableItem
                   groupName=this.sortableGroupId
-                  model=image
+                  model=entry
                   disabled=this.sortableDisabled
                 }}
               >
+                {{! ⁴⁷ List checkbox }}
+                {{#if this.allowBatchSelect}}
+                  <input
+                    type='checkbox'
+                    class='list-checkbox'
+                    checked={{entry.selected}}
+                    {{on 'change' (fn this.toggleSelection entry.id)}}
+                    data-test-item-checkbox
+                  />
+                {{/if}}
+
                 {{#if this.allowReorder}}
                   <GripVerticalIcon class='grip-icon' />
-                  <div class='drag-handle' {{sortableHandle}}>
-                  </div>
-                {{/if}}
-                {{#if this.allowBatchSelect}}
-                  <div class='item-checkbox item-checkbox-list-item'>
-                    <input
-                      type='checkbox'
-                      {{!-- checked={{this.isSelected image.id}}
-                      {{on 'change' (fn this.toggleImageSelection image.id)}}
-                      data-test-item-checkbox --}}
-                    />
-                  </div>
+                  <div class='drag-handle' {{sortableHandle}}></div>
                 {{/if}}
                 <img
-                  src={{image.imageData}}
-                  alt={{image.fileName}}
+                  src={{if
+                    entry.uploadedImageUrl
+                    entry.uploadedImageUrl
+                    entry.preview
+                  }}
+                  alt='Image'
                   class='list-image'
                 />
                 <div class='list-info'>
-                  <div class='list-name'>{{image.fileName}}</div>
+                  <div class='list-name'>{{entry.file.name}}</div>
                   <div class='list-size'>{{this.formatSize
-                      image.fileSize
+                      entry.file.size
                     }}</div>
                 </div>
                 <button
                   type='button'
-                  {{on 'click' (fn this.removeImage image.id)}}
+                  {{on 'click' (fn this.removeImage entry.id)}}
                   class='list-remove'
                 >
                   <XIcon class='remove-icon' />
@@ -392,6 +525,27 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
               </div>
             {{/if}}
           {{/each}}
+        </div>
+      {{/if}}
+
+      {{! ³⁶ Upload button (only shown when not auto-upload) }}
+      {{#if this.showUploadButton}}
+        <Button
+          class='upload-button'
+          @kind='primary-dark'
+          @size='tall'
+          @disabled={{this.uploadButtonDisabled}}
+          {{on 'click' this.bulkUploadTask.perform}}
+          data-test-bulk-upload-button
+        >
+          {{this.uploadButtonLabel}}
+        </Button>
+      {{/if}}
+
+      {{! ³⁷ Error message display }}
+      {{#if this.errorMessage}}
+        <div class='error-message' data-test-error-message>
+          {{this.errorMessage}}
         </div>
       {{/if}}
     </div>
@@ -453,62 +607,23 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
         color: var(--foreground, #1a1a1a);
       }
 
-      .upload-progress {
-        border: 2px solid var(--border, #e0e0e0);
-        border-radius: var(--radius, 0.5rem);
-        padding: 1.5rem;
-        background: var(--input, #ffffff);
+      .upload-trigger.disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
       }
 
-      .progress-header {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        margin-bottom: 0.75rem;
-      }
-
-      .spinner {
-        width: 1.5rem;
-        height: 1.5rem;
-        color: var(--primary, #3b82f6);
-        animation: spin 1s linear infinite;
-      }
-
-      @keyframes spin {
-        from {
-          transform: rotate(0deg);
-        }
-        to {
-          transform: rotate(360deg);
-        }
-      }
-
-      .progress-text {
-        font-size: 0.875rem;
-        font-weight: 500;
-        color: var(--foreground, #1a1a1a);
-        flex: 1;
-      }
-
-      .progress-percent {
-        font-size: 0.875rem;
-        font-weight: 600;
-        color: var(--primary, #3b82f6);
-      }
-
-      .progress-bar-container {
+      .upload-button {
         width: 100%;
-        height: 0.75rem;
-        background: var(--muted, #f1f5f9);
-        border-radius: 9999px;
-        overflow: hidden;
+        justify-content: center;
       }
 
-      .progress-bar {
-        height: 100%;
-        background: linear-gradient(to right, var(--primary, #3b82f6), #60a5fa);
-        border-radius: 9999px;
-        transition: width 0.3s ease;
+      .error-message {
+        padding: 0.75rem;
+        background: var(--destructive, #fee2e2);
+        color: var(--destructive-foreground, #991b1b);
+        border-radius: var(--radius, 0.375rem);
+        font-size: 0.875rem;
+        white-space: pre-wrap;
       }
 
       /* List variant */
@@ -741,44 +856,37 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
 
       .item-checkbox-gallery {
         position: absolute;
-        top: calc(var(--spacing, 0.25rem) * 2);
-        left: calc(var(--spacing, 0.25rem) * 2);
+        top: 0.5rem;
+        left: 0.5rem;
+        z-index: 3;
       }
 
-      .item-checkbox input[type='checkbox'] {
-        position: relative;
+      .item-checkbox-gallery input[type='checkbox'] {
         width: 1.25rem;
         height: 1.25rem;
         cursor: pointer;
-        z-index: 2;
+        accent-color: var(--primary, #3b82f6);
       }
 
-      .gallery-item.is-selected .gallery-image {
+      .gallery-item.is-selected {
         outline: 3px solid var(--primary, #3b82f6);
         outline-offset: -3px;
-        border-radius: var(--radius, 0.5rem);
-      }
-      .gallery-item.is-selected::after {
-        content: '✔';
-        position: absolute;
-        top: 0.5rem;
-        left: 0.5rem;
-        width: 1.5rem;
-        height: 1.5rem;
-        background: var(--primary, #3b82f6);
-        color: white;
-        z-index: 14;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: var(--radius-sm, 0.25rem);
-        font-size: 0.875rem;
-        font-weight: bold;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
       }
       .list-item.is-selected {
         background-color: var(--accent, #f0f9ff);
         border-color: var(--primary, #3b82f6);
+      }
+
+      .list-checkbox {
+        width: 1.25rem;
+        height: 1.25rem;
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+
+      .delete-icon {
+        width: 1rem;
+        height: 1rem;
       }
     </style>
   </template>
@@ -808,8 +916,8 @@ export class MultipleImageField extends FieldDef {
           <div class='images-grid'>
             {{#each @model.images as |image|}}
               <img
-                src={{image.imageData}}
-                alt={{image.fileName}}
+                src={{image.uploadedImageUrl}}
+                alt='Image'
                 class='grid-image'
               />
             {{/each}}
@@ -875,8 +983,8 @@ export class MultipleImageField extends FieldDef {
       <span class='multiple-image-atom'>
         {{#if this.firstImage}}
           <img
-            src={{this.firstImage.imageData}}
-            alt={{this.firstImage.fileName}}
+            src={{this.firstImage.uploadedImageUrl}}
+            alt='Image'
             class='atom-thumbnail'
           />
           <span class='atom-count'>{{this.imageCount}}

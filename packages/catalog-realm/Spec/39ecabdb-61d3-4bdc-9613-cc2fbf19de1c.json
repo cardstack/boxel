@@ -1,27 +1,5 @@
 {
   "data": {
-    "type": "card",
-    "attributes": {
-      "readMe": null,
-      "ref": {
-        "module": "../fields/image/multiple-image-field",
-        "name": "MultipleImageField"
-      },
-      "specType": "field",
-      "containedExamples": [
-        {
-          "images": []
-        }
-      ],
-      "title": "MultipleImageField",
-      "description": null,
-      "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
-        "notes": null
-      }
-    },
     "meta": {
       "fields": {
         "containedExamples": [
@@ -34,8 +12,37 @@
         ]
       },
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
-        "name": "Spec"
+        "name": "Spec",
+        "module": "https://cardstack.com/base/spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "MultipleImageField",
+        "module": "../fields/image/multiple-image-field"
+      },
+      "title": "MultipleImageField",
+      "readMe": null,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "specType": "field",
+      "description": null,
+      "containedExamples": [
+        {
+          "images": []
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

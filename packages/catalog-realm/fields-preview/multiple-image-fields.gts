@@ -17,31 +17,21 @@ export class MultipleImageFieldsPreview extends CardDef {
   // Basic multiple image field (default - list variant)
   @field basicMultipleImages = contains(MultipleImageField);
 
-  // Gallery variant
+  // Gallery variant with auto-upload and batch select
   @field galleryImages = contains(MultipleImageField, {
     configuration: {
       variant: 'gallery',
       presentation: 'featured',
       options: {
-        showProgress: true,
-        allowBatchSelect: true,
-        allowReorder: true,
+        autoUpload: false, // Manual upload button
+        allowBatchSelect: true, // Enable batch selection and delete
+        allowReorder: true, // Enable drag-drop reordering
+        maxFiles: 4, // Max 3 images
       },
     },
   });
 
-  // Compact list variant
-  @field compactListImages = contains(MultipleImageField, {
-    configuration: {
-      variant: 'list',
-      presentation: 'compact',
-      options: {
-        showProgress: false,
-        allowBatchSelect: false,
-        allowReorder: true,
-      },
-    },
-  });
+ 
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
@@ -79,13 +69,14 @@ export class MultipleImageFieldsPreview extends CardDef {
         <section class='field-section'>
           <div class='section-header'>
             <h2 class='section-title'>2. Gallery View</h2>
-            <p class='section-description'>Grid layout for multiple images with
-              batch operations</p>
+            <p class='section-description'>Grid layout with batch select,
+              reordering, and manual upload (max 20 images)</p>
           </div>
           <div class='field-layout'>
             <div class='edit-column'>
               <div class='column-header'>Edit Mode</div>
-              <p class='column-subtitle'>Try drag-and-drop reordering</p>
+              <p class='column-subtitle'>Features: Batch select, reorder, manual
+                upload</p>
               <@fields.galleryImages @format='edit' />
             </div>
             <div class='display-column'>
@@ -94,30 +85,6 @@ export class MultipleImageFieldsPreview extends CardDef {
                 <div class='display-item'>
                   <p>Embedded:</p>
                   <@fields.galleryImages @format='embedded' />
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class='field-section'>
-          <div class='section-header'>
-            <h2 class='section-title'>3. Compact List</h2>
-            <p class='section-description'>Space-efficient list view for
-              multiple images</p>
-          </div>
-          <div class='field-layout'>
-            <div class='edit-column'>
-              <div class='column-header'>Edit Mode</div>
-              <p class='column-subtitle'>Compact view with reordering</p>
-              <@fields.compactListImages @format='edit' />
-            </div>
-            <div class='display-column'>
-              <div class='column-header'>Display View</div>
-              <div class='display-group'>
-                <div class='display-item'>
-                  <p>Embedded:</p>
-                  <@fields.compactListImages @format='embedded' />
                 </div>
               </div>
             </div>

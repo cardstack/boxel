@@ -1,10 +1,8 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
-import { Component } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import { on } from '@ember/modifier'; // ² Event handling
-import UploadIcon from '@cardstack/boxel-icons/upload'; // ³ Icon import
+import GlimmerComponent from '@glimmer/component';
+import { on } from '@ember/modifier';
+import UploadIcon from '@cardstack/boxel-icons/upload';
 
-// ⁴ Component signature interface
-interface DropzoneUploadSignature {
+interface DropzoneUploadArgs {
   Args: {
     onFileSelect: (event: Event) => void;
     onDragOver: (event: DragEvent) => void;
@@ -12,8 +10,7 @@ interface DropzoneUploadSignature {
   };
 }
 
-// ⁵ Dropzone variant upload trigger
-export class DropzoneUpload extends Component<DropzoneUploadSignature> {
+export default class DropzoneUpload extends GlimmerComponent<DropzoneUploadArgs> {
   <template>
     <label
       class='dropzone-upload'

@@ -1,12 +1,10 @@
 import { not, eq } from '@cardstack/boxel-ui/helpers';
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
-import { Component } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import { on } from '@ember/modifier'; // ² Event handling
-import XIcon from '@cardstack/boxel-icons/x'; // ³ Icons
+import GlimmerComponent from '@glimmer/component';
+import { on } from '@ember/modifier';
+import XIcon from '@cardstack/boxel-icons/x';
 import ZoomInIcon from '@cardstack/boxel-icons/zoom-in';
 
-// ⁴ Component signature interface
-interface DropzonePreviewSignature {
+interface DropzonePreviewArgs {
   Args: {
     imageData: string;
     fileName?: string;
@@ -19,8 +17,7 @@ interface DropzonePreviewSignature {
   };
 }
 
-// ⁵ Dropzone variant preview component
-export class DropzonePreview extends Component<DropzonePreviewSignature> {
+export default class DropzonePreview extends GlimmerComponent<DropzonePreviewArgs> {
   <template>
     <div class='dropzone-preview'>
       {{! ⁷ Main container }}
