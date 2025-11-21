@@ -440,7 +440,7 @@ function deriveRealmUsername(workspaceUrl: string): string {
     return `realm/${segments[0]}_${segments[1]}`;
   }
 
-  // Root realms like base/skills/experiments use <realm>_realm
+  // Root realms like /base/, /skills/, or /experiments/ use <realm>_realm
   return `${segments[0]}_realm`;
 }
 
@@ -462,7 +462,7 @@ export async function validateMatrixEnvVars(workspaceUrl: string): Promise<{
 
   if (!username) {
     if (!realmSecret) {
-      console.error('MATRIX_USERNAME environment variable is required');
+      console.error('Either MATRIX_USERNAME or REALM_SECRET_SEED environment variable is required');
       process.exit(1);
     }
     username = deriveRealmUsername(workspaceUrl);
