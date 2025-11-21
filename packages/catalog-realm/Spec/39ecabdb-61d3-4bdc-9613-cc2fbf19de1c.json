@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "module": "../fields/image/multiple-image-field",
+        "name": "MultipleImageField"
+      },
+      "specType": "field",
+      "containedExamples": [
+        {
+          "images": []
+        }
+      ],
+      "title": "MultipleImageField",
+      "description": null,
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../fields/image/multiple-image-field",
+              "name": "MultipleImageField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
