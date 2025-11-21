@@ -3977,6 +3977,20 @@ module('Integration | card-basics', function (hooks) {
         'The place where the person was born',
         'getFieldDescription works for instance',
       );
+
+      class Employee extends Person {}
+
+      assert.strictEqual(
+        getFieldDescription(Employee, 'hometown'),
+        'The place where the person was born',
+        'getFieldDescription works for subclasses',
+      );
+
+      assert.strictEqual(
+        getFieldDescription(new Employee(), 'hometown'),
+        'The place where the person was born',
+        'getFieldDescription works for subclass instances',
+      );
     });
 
     test('ReadOnlyField wont display input field', async function (assert) {
