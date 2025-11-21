@@ -410,15 +410,52 @@ export abstract class RealmSyncBase {
   abstract sync(): Promise<void>;
 }
 
-export async function validateMatrixEnvVars(): Promise<{
+function deriveRealmUsername(workspaceUrl: string): string {
+  let url: URL;
+  try {
+    url = new URL(workspaceUrl);
+  } catch (error) {
+    throw new Error(`Invalid workspace URL: ${workspaceUrl}`);
+  }
+
+  let segments = url.pathname.split('/').filter(Boolean);
+  if (segments.length === 0) {
+    throw new Error(
+      `Cannot derive realm username from workspace URL (${workspaceUrl}). Please provide MATRIX_USERNAME`,
+    );
+  }
+
+  // Published realms live at /published/<id>/ and use realm/published_<id>
+  if (segments[0] === 'published') {
+    if (!segments[1]) {
+      throw new Error(
+        `Cannot derive published realm username from workspace URL (${workspaceUrl}). Missing published realm id.`,
+      );
+    }
+    return `realm/published_${segments[1]}`;
+  }
+
+  // Realms created through the app live at /<owner>/<endpoint>/ and use realm/<owner>_<endpoint>
+  if (segments.length >= 2) {
+    return `realm/${segments[0]}_${segments[1]}`;
+  }
+
+  // Root realms like base/skills/experiments use <realm>_realm
+  return `${segments[0]}_realm`;
+}
+
+export async function validateMatrixEnvVars(
+  workspaceUrl: string,
+): Promise<{
   matrixUrl: string;
   username: string;
   password: string;
 }> {
   const matrixUrl = process.env.MATRIX_URL;
-  const username = process.env.MATRIX_USERNAME;
+  const envUsername = process.env.MATRIX_USERNAME;
   let password = process.env.MATRIX_PASSWORD;
   const realmSecret = process.env.REALM_SECRET_SEED;
+  let username = envUsername;
 
   if (!matrixUrl) {
     console.error('MATRIX_URL environment variable is required');
@@ -426,15 +463,14 @@ export async function validateMatrixEnvVars(): Promise<{
   }
 
   if (!username) {
-    console.error('MATRIX_USERNAME environment variable is required');
-    process.exit(1);
-  }
-
-  if (!password && !realmSecret) {
-    console.error(
-      'Either MATRIX_PASSWORD or REALM_SECRET_SEED environment variable is required',
+    if (!realmSecret) {
+      console.error('MATRIX_USERNAME environment variable is required');
+      process.exit(1);
+    }
+    username = deriveRealmUsername(workspaceUrl);
+    console.log(
+      `Derived realm Matrix username '${username}' from workspace URL using REALM_SECRET_SEED`,
     );
-    process.exit(1);
   }
 
   // If password is not provided but realm secret is, generate password from secret
@@ -443,6 +479,13 @@ export async function validateMatrixEnvVars(): Promise<{
     console.log(
       'Generated password from REALM_SECRET_SEED for realm user authentication',
     );
+  }
+
+  if (!password) {
+    console.error(
+      'Either MATRIX_PASSWORD or REALM_SECRET_SEED environment variable is required',
+    );
+    process.exit(1);
   }
 
   return { matrixUrl, username, password: password! };
