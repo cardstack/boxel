@@ -664,6 +664,11 @@ export async function getTools(
       }
     }
   }
+
+  // Correctness commands should only be emitted by helper flows, not
+  // directly via LLM tool calls.
+  toolMap.delete(CHECK_CORRECTNESS_COMMAND_NAME);
+
   return Array.from(toolMap.values()).sort((a, b) =>
     a.function.name.localeCompare(b.function.name),
   );
