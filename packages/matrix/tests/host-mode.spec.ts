@@ -131,3 +131,75 @@ test.skip('Host mode', () => {
     );
   });
 });
+
+test.describe('Published realm head format', () => {
+  let publishedRealmURL: string;
+  let username: string;
+
+  test.beforeEach(async ({ page }) => {
+    const serverIndexUrl = new URL(appURL).origin;
+    const user = await createSubscribedUserAndLogin(
+      page,
+      'host-mode-head',
+      serverIndexUrl,
+    );
+    username = user.username;
+
+    const realmName = `host-mode-head-${randomUUID()}`;
+
+    await createRealm(page, realmName);
+    const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
+
+    await page.goto(realmURL);
+    await page.locator('[data-test-stack-item-content]').first().waitFor();
+
+    publishedRealmURL = `http://published.localhost:4205/${username}/${realmName}/`;
+
+    await page.evaluate(
+      async ({ realmURL, publishedRealmURL }) => {
+        let sessions = JSON.parse(
+          window.localStorage.getItem('boxel-session') ?? '{}',
+        );
+        let token = sessions[realmURL];
+        if (!token) {
+          throw new Error(`No session token found for ${realmURL}`);
+        }
+
+        let response = await fetch('http://localhost:4205/_publish-realm', {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            Authorization: token,
+          },
+          body: JSON.stringify({
+            sourceRealmURL: realmURL,
+            publishedRealmURL,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+
+        return response.json();
+      },
+      { realmURL, publishedRealmURL },
+    );
+  });
+
+  test('serves prerendered head html when requested', async ({ page }) => {
+    let response = await page.request.get(`${publishedRealmURL}?format=head`);
+
+    expect(response.status()).toBe(200);
+
+    let body = await response.text();
+    expect(body).toBeDefined();
+    expect(body).toContain('data-test-card-head-title');
+    expect(body).toContain('property="og:title"');
+    expect(body).toContain('property="og:type"');
+    expect(body).toContain(
+      `property="og:url" content="${publishedRealmURL}index"`,
+    );
+  });
+});
