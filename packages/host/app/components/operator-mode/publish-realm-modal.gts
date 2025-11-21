@@ -356,18 +356,28 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   @action
-  toggleDefaultDomain() {
+  toggleDefaultDomain(event: Event) {
     const defaultUrl = this.subdirectoryRealmUrl;
-    this.addPublishedRealmUrl(defaultUrl);
+    const input = event.target as HTMLInputElement;
+    if (input.checked) {
+      this.addPublishedRealmUrl(defaultUrl);
+    } else {
+      this.removePublishedRealmUrl(defaultUrl);
+    }
   }
 
   @action
-  toggleCustomSubdomain() {
+  toggleCustomSubdomain(event: Event) {
     if (this.claimedDomain) {
       const customUrl = this.buildPublishedRealmUrl(
         this.claimedDomain.hostname,
       );
-      this.addPublishedRealmUrl(customUrl);
+      const input = event.target as HTMLInputElement;
+      if (input.checked) {
+        this.addPublishedRealmUrl(customUrl);
+      } else {
+        this.removePublishedRealmUrl(customUrl);
+      }
     }
   }
 

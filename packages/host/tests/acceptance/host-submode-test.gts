@@ -668,6 +668,26 @@ module('Acceptance | host submode', function (hooks) {
           .hasAttribute('target', '_blank');
       });
 
+      test('default domain checkbox can be checked and unchecked', async function (assert) {
+        await visitOperatorMode({
+          submode: 'host',
+          trail: [`${testRealmURL}Person/1.json`],
+        });
+
+        await click('[data-test-publish-realm-button]');
+
+        assert.dom('[data-test-default-domain-checkbox]').isNotChecked();
+        assert.dom('[data-test-publish-button]').isDisabled();
+
+        await click('[data-test-default-domain-checkbox]');
+        assert.dom('[data-test-default-domain-checkbox]').isChecked();
+        assert.dom('[data-test-publish-button]').isNotDisabled();
+
+        await click('[data-test-default-domain-checkbox]');
+        assert.dom('[data-test-default-domain-checkbox]').isNotChecked();
+        assert.dom('[data-test-publish-button]').isDisabled();
+      });
+
       test('can unpublish realm', async function (assert) {
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
@@ -895,12 +915,12 @@ module('Acceptance | host submode', function (hooks) {
               'Tooltip shows correct text when menu is closed',
             );
 
-          assert.dom('[data-test-open-site-popover]').doesNotExist();
+        assert.dom('[data-test-open-site-popover]').doesNotExist();
 
-          await click('[data-test-open-site-button]', { shiftKey: true });
+        await click('[data-test-open-site-button]', { shiftKey: true });
 
-          assert.dom('[data-test-open-site-popover]').exists();
-          assert.dom('[data-test-published-realm-item]').exists({ count: 2 });
+        assert.dom('[data-test-open-site-popover]').exists();
+        assert.dom('[data-test-published-realm-item]').exists({ count: 2 });
 
           assert
             .dom(
@@ -1019,6 +1039,41 @@ module('Acceptance | host submode', function (hooks) {
         } finally {
           realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
           realmServer.deleteBoxelClaimedDomain = originalDeleteClaimed;
+        }
+      });
+
+      test('custom site checkbox can be checked and unchecked', async function (assert) {
+        let realmServer = getService('realm-server') as any;
+        let originalFetchClaimed = realmServer.fetchBoxelClaimedDomain;
+
+        realmServer.fetchBoxelClaimedDomain = async () => ({
+          id: 'claimed-domain-1',
+          hostname: 'custom-site-name.localhost:4201',
+          subdomain: 'custom-site-name',
+          sourceRealmURL: testRealmURL,
+        });
+
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-custom-subdomain-checkbox]');
+
+          assert.dom('[data-test-custom-subdomain-checkbox]').isNotChecked();
+          assert.dom('[data-test-publish-button]').isDisabled();
+
+          await click('[data-test-custom-subdomain-checkbox]');
+          assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
+          assert.dom('[data-test-publish-button]').isNotDisabled();
+
+          await click('[data-test-custom-subdomain-checkbox]');
+          assert.dom('[data-test-custom-subdomain-checkbox]').isNotChecked();
+          assert.dom('[data-test-publish-button]').isDisabled();
+        } finally {
+          realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
         }
       });
 
