@@ -34,6 +34,7 @@ declare const config: {
   stripePaymentLink: string;
   featureFlags?: {
     SHOW_ASK_AI?: boolean;
+    AI_PATCHING_CORRECTNESS_CHECKS?: boolean;
   };
   publishedRealmBoxelSpaceDomain: string;
   publishedRealmBoxelSiteDomain: string;

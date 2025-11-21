@@ -1,6 +1,7 @@
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
+
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -52,6 +53,9 @@ interface Signature {
       isExpanded: boolean;
       updateExpanded: (ev: MouseEvent | KeyboardEvent) => void;
     };
+  };
+  Blocks: {
+    default: [];
   };
 }
 

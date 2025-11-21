@@ -7,6 +7,10 @@ export const APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE =
 export const APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE = 'app.boxel.codePatchResult';
 export const APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE =
   'app.boxel.codePatchAnnotation';
+export const APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE =
+  'app.boxel.codePatchCorrectness';
+export const APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE =
+  'app.boxel.codePatchCorrectnessAnnotation';
 export const APP_BOXEL_COMMAND_RESULT_EVENT_TYPE = 'app.boxel.commandResult';
 export const APP_BOXEL_COMMAND_RESULT_REL_TYPE = 'app.boxel.commandAnnotation';
 export const APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE =

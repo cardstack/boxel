@@ -4,6 +4,7 @@ import * as AddFieldToCardDefinitionCommandModule from './add-field-to-card-defi
 import * as UseAiAssistantCommandModule from './ai-assistant';
 import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-block';
 import * as AskAiCommandModule from './ask-ai';
+import * as CheckCorrectnessCommandModule from './check-correctness';
 import * as CopyCardToRealmModule from './copy-card';
 import * as CopyCardToStackCommandModule from './copy-card-to-stack';
 import * as CopySourceCommandModule from './copy-source';
@@ -87,6 +88,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/create-specs',
     CreateSpecCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/check-correctness',
+    CheckCorrectnessCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-events-from-room',
@@ -318,6 +323,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   SummarizeSessionCommandModule.default,
   SwitchSubmodeCommandModule.default,
   TransformCardsCommandModule.default,
+  CheckCorrectnessCommandModule.default,
   UpdateCodePathWithSelectionCommandModule.default,
   UpdatePlaygroundSelectionCommandModule.default,
   UpdateRoomSkillsCommandModule.default,

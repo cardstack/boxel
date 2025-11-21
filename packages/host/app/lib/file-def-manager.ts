@@ -6,6 +6,7 @@ import { md5 } from 'super-fast-md5';
 
 import {
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   baseRealm,
   codeRefWithAbsoluteURL,
@@ -518,7 +519,8 @@ export default class FileDefManagerImpl
     const recachingPromises: Promise<void>[] = [];
     if (
       event.type === 'm.room.message' &&
-      event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
+      (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE ||
+        event.content.msgtype === APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE)
     ) {
       // Handle attached files and cards
       let data = event.content.data;

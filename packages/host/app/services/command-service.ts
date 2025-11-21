@@ -22,6 +22,7 @@ import {
 
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 
+import CheckCorrectnessCommand from '@cardstack/host/commands/check-correctness';
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -42,6 +43,7 @@ import type MessageCommand from '../lib/matrix-classes/message-command';
 import type { IEvent } from 'matrix-js-sdk';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
+const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
 
 type GenericCommand = Command<
   typeof CardDef | undefined,
@@ -223,8 +225,11 @@ export default class CommandService extends Service {
         // Auto-execute if LLM mode is 'act' AND the command came after the LLM mode was set to 'act',
         // or if requiresApproval is false
         let shouldAutoExecute = false;
+        let isCheckCorrectnessCommand =
+          messageCommand.name === CHECK_CORRECTNESS_COMMAND_NAME;
 
         if (
+          isCheckCorrectnessCommand ||
           messageCommand.requiresApproval === false ||
           activeModeAtMessageTime === 'act'
         ) {
@@ -369,6 +374,10 @@ export default class CommandService extends Service {
         commandToRun = new CommandConstructor(this.commandContext);
       }
 
+      if (!commandToRun && command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
+        commandToRun = new CheckCorrectnessCommand(this.commandContext);
+      }
+
       if (commandToRun) {
         let typedInput = await this.instantiateCommandInput(
           commandToRun,
@@ -449,7 +458,11 @@ export default class CommandService extends Service {
     }
 
     let commandCodeRef = command.codeRef;
-    if (!commandCodeRef) {
+    let commandInstance: GenericCommand | undefined;
+
+    if (command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
+      commandInstance = new CheckCorrectnessCommand(this.commandContext);
+    } else if (!commandCodeRef) {
       error = `No command for the name "${command.name}" was found`;
     } else {
       let CommandConstructor = (await getClass(
@@ -458,8 +471,12 @@ export default class CommandService extends Service {
       )) as { new (context: CommandContext): Command<any, any> };
       if (!CommandConstructor) {
         error = `No command for the name "${command.name}" was found`;
+      } else {
+        commandInstance = new CommandConstructor(this.commandContext);
       }
-      let commandInstance = new CommandConstructor(this.commandContext);
+    }
+
+    if (commandInstance && !error) {
       let loader = (
         getOwner(this.commandContext)!.lookup(
           'service:loader-service',

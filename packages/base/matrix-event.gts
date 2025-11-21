@@ -9,6 +9,7 @@ import {
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+  APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
@@ -224,7 +225,9 @@ export interface CardMessageContent {
     rel_type: string;
     event_id: string;
   };
-  msgtype: typeof APP_BOXEL_MESSAGE_MSGTYPE;
+  msgtype:
+    | typeof APP_BOXEL_MESSAGE_MSGTYPE
+    | typeof APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE;
   format: 'org.matrix.custom.html';
   body: string;
   isStreamingFinished?: boolean;

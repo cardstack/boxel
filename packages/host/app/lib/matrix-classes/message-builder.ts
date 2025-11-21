@@ -27,6 +27,7 @@ import {
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+  APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type { RoomSkill } from '@cardstack/host/resources/room';
@@ -159,7 +160,12 @@ export default class MessageBuilder {
     let { event } = this;
     let message = this.coreMessageArgs;
     message.errorMessage = this.errorMessage;
-    if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
+    message.isCodePatchCorrectness =
+      event.content.msgtype === APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE;
+    if (
+      event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE ||
+      event.content.msgtype === APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE
+    ) {
       message.clientGeneratedId = this.clientGeneratedId;
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
       message.setIsCanceled(!!event.content.isCanceled);
@@ -327,12 +333,14 @@ export default class MessageBuilder {
       }
     }
 
+    let requiresApproval = skillCommand?.requiresApproval ?? true;
+
     let messageCommand = new MessageCommand(
       message,
       commandRequest,
       skillCommand?.codeRef,
       this.builderContext.effectiveEventId,
-      skillCommand?.requiresApproval ?? true,
+      requiresApproval,
       actionVerb,
       (commandResultEvent?.content['m.relates_to']?.key ||
         'ready') as CommandStatus,
@@ -409,7 +417,10 @@ export function isCardMessageEvent(
   if (!matrixEvent.content) {
     return false;
   }
-  return matrixEvent.content?.msgtype === APP_BOXEL_MESSAGE_MSGTYPE;
+  return (
+    matrixEvent.content?.msgtype === APP_BOXEL_MESSAGE_MSGTYPE ||
+    matrixEvent.content?.msgtype === APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE
+  );
 }
 
 function hasContinuation(matrixEvent: DiscreteMatrixEvent) {
