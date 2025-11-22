@@ -193,9 +193,14 @@ export class TimeField extends FieldDef {
         const today = new Date();
         today.setHours(hours, minutes, 0, 0);
 
+        const hourCycle = this.args?.configuration?.hourCycle;
+        const timeStyle = this.args?.configuration?.timeStyle;
+
         return formatDateTime(today, {
           kind: 'time',
-          hour12: true,
+          hour12: hourCycle ? undefined : true, // hour12 conflicts with hourCycle
+          hourCycle: hourCycle,
+          timeStyle: timeStyle,
           fallback: time,
         });
       } catch {

@@ -17,19 +17,6 @@ class MonthYearFieldEdit extends Component<typeof MonthYearField> {
     this.args.model.value = target.value;
   }
 
-  get displayValue() {
-    if (!this.args.model?.value) return '';
-    try {
-      const date = new Date(this.args.model.value + '-01');
-      return formatDateTime(date, {
-        kind: 'monthYear',
-        fallback: this.args.model.value,
-      });
-    } catch {
-      return '';
-    }
-  }
-
   <template>
     <div class='month-year-wrapper'>
       <div class='input-wrapper'>
@@ -46,9 +33,6 @@ class MonthYearFieldEdit extends Component<typeof MonthYearField> {
           data-test-month-year-input
         />
       </div>
-      {{#if this.displayValue}}
-        <p class='display-value'>{{this.displayValue}}</p>
-      {{/if}}
     </div>
 
     <style scoped>
@@ -95,12 +79,6 @@ class MonthYearFieldEdit extends Component<typeof MonthYearField> {
         outline: none;
         border-color: var(--ring, #3b82f6);
         box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-      }
-
-      .display-value {
-        font-size: 0.75rem;
-        color: var(--muted-foreground, #9ca3af);
-        margin: 0;
       }
 
       .sr-only {

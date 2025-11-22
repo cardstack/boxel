@@ -167,8 +167,38 @@ class RecurringPatternFieldEdit extends Component<
   saveToModel() {
     // ¹⁹ Save to individual model fields
     this.args.model.pattern = this.pattern;
-    this.args.model.startDate = this.startDate as any;
-    this.args.model.endDate = this.endDate as any;
+
+    // Convert string dates to Date objects for DateField
+    if (this.startDate && this.startDate !== '') {
+      if (typeof this.startDate === 'string') {
+        const date = new Date(this.startDate);
+        if (!isNaN(date.getTime())) {
+          this.args.model.startDate = date;
+        } else {
+          this.args.model.startDate = undefined;
+        }
+      } else {
+        this.args.model.startDate = this.startDate;
+      }
+    } else {
+      this.args.model.startDate = undefined;
+    }
+
+    if (this.endDate && this.endDate !== '') {
+      if (typeof this.endDate === 'string') {
+        const date = new Date(this.endDate);
+        if (!isNaN(date.getTime())) {
+          this.args.model.endDate = date;
+        } else {
+          this.args.model.endDate = undefined;
+        }
+      } else {
+        this.args.model.endDate = this.endDate;
+      }
+    } else {
+      this.args.model.endDate = undefined;
+    }
+
     this.args.model.occurrences = this.occurrences ?? undefined;
     this.args.model.interval = this.interval;
     this.args.model.daysOfWeek =

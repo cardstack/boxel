@@ -9,6 +9,7 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event';
 import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 class YearFieldEdit extends Component<typeof YearField> {
   @action
@@ -35,7 +36,10 @@ class YearFieldEdit extends Component<typeof YearField> {
         data-test-year-select
       >
         {{#each this.years as |year|}}
-          <option value={{year}}>{{year}}</option>
+          <option
+            value={{year}}
+            selected={{eq @model.value year}}
+          >{{year}}</option>
         {{/each}}
       </select>
       <div class='select-icon'>

@@ -123,10 +123,20 @@ export class DateRangeField extends FieldDef {
       const end = this.args.model?.end;
 
       if (!start && !end) return 'No date range set';
-      if (!start) return `Until ${end}`;
-      if (!end) return `From ${start}`;
+      if (!start)
+        return `Until ${formatDateTime(end, {
+          preset: 'long',
+        })}`;
+      if (!end)
+        return `From ${formatDateTime(start, {
+          preset: 'long',
+        })}`;
 
-      return `${start} → ${end}`;
+      return `${formatDateTime(start, {
+        preset: 'long',
+      })} → ${formatDateTime(end, {
+        preset: 'long',
+      })}`;
     }
 
     <template>

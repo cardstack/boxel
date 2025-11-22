@@ -1,5 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
-import { and } from '@cardstack/boxel-ui/helpers';
+import { and, eq } from '@cardstack/boxel-ui/helpers';
 
 interface AgeConfiguration {
   ageOptions?: {
@@ -19,7 +19,7 @@ export class Age extends GlimmerComponent<AgeSignature> {
   }
 
   get birthDate() {
-    return this.args.model?.value ?? this.args.model;
+    return this.args.model;
   }
 
   get showNextBirthday() {
@@ -32,17 +32,34 @@ export class Age extends GlimmerComponent<AgeSignature> {
     try {
       const birth = new Date(this.birthDate);
       const today = new Date();
-      let age = today.getFullYear() - birth.getFullYear();
+
+      // If birth date is in the future, return null (invalid)
+      if (birth > today) return null;
+
+      let years = today.getFullYear() - birth.getFullYear();
       const monthDiff = today.getMonth() - birth.getMonth();
 
       if (
         monthDiff < 0 ||
         (monthDiff === 0 && today.getDate() < birth.getDate())
       ) {
-        age--;
+        years--;
       }
 
-      return age;
+      // If less than 1 year old, calculate months
+      if (years === 0) {
+        let months = today.getMonth() - birth.getMonth();
+        if (today.getDate() < birth.getDate()) {
+          months--;
+        }
+        // Handle negative months (birth date in previous calendar year)
+        if (months < 0) {
+          months += 12;
+        }
+        return { years: 0, months };
+      }
+
+      return { years, months: 0 };
     } catch {
       return null;
     }
@@ -54,6 +71,10 @@ export class Age extends GlimmerComponent<AgeSignature> {
     try {
       const birth = new Date(this.birthDate);
       const today = new Date();
+
+      // If birth date is in the future, can't calculate next birthday
+      if (birth > today) return null;
+
       const nextBday = new Date(
         today.getFullYear(),
         birth.getMonth(),
@@ -73,6 +94,17 @@ export class Age extends GlimmerComponent<AgeSignature> {
     }
   }
 
+  get isFutureDate() {
+    if (!this.birthDate) return false;
+    try {
+      const birth = new Date(this.birthDate);
+      const today = new Date();
+      return birth > today;
+    } catch {
+      return false;
+    }
+  }
+
   get birthDateDisplay() {
     if (!this.birthDate) return '';
 
@@ -89,16 +121,28 @@ export class Age extends GlimmerComponent<AgeSignature> {
 
   <template>
     <div class='age-calculator' data-test-age-calculator>
-      {{#if this.age}}
+      {{#if this.isFutureDate}}
+        <div class='age-error'>Invalid birth date (future date not allowed)</div>
+      {{else if this.age}}
         <div class='age-display'>
-          <div class='age-value'>{{this.age}} years old</div>
+          <div class='age-value'>
+            {{#if (eq this.age.years 0)}}
+              {{this.age.months}}
+              {{if (eq this.age.months 1) 'month' 'months'}}
+              old
+            {{else}}
+              {{this.age.years}}
+              {{if (eq this.age.years 1) 'year' 'years'}}
+              old
+            {{/if}}
+          </div>
           <div class='age-meta'>
             Born
             {{this.birthDateDisplay}}
             {{#if (and this.nextBirthday (Number this.showNextBirthday))}}
-              • Next birthday in
+              * • Next birthday in
               {{this.nextBirthday}}
-              days
+              {{if (eq this.nextBirthday 1) 'day' 'days'}}
             {{/if}}
           </div>
         </div>
@@ -139,6 +183,12 @@ export class Age extends GlimmerComponent<AgeSignature> {
       .age-placeholder {
         font-size: 0.875rem;
         color: var(--muted-foreground, #9ca3af);
+        font-style: italic;
+      }
+
+      .age-error {
+        font-size: 0.875rem;
+        color: var(--destructive, #ef4444);
         font-style: italic;
       }
     </style>
