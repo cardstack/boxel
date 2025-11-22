@@ -25,6 +25,8 @@ const testRealmInfo: RealmInfo = {
   backgroundURL: null,
   iconURL: null,
   showAsCatalog: null,
+  interactHome: null,
+  hostHome: null,
   visibility: 'public',
   publishable: null,
   lastPublishedAt: null,

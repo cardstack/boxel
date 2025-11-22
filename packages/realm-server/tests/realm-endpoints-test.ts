@@ -4,7 +4,7 @@ import supertest from 'supertest';
 import { join, resolve, basename } from 'path';
 import type { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
-import { copySync, ensureDirSync } from 'fs-extra';
+import { copySync, ensureDirSync, existsSync, readJSONSync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   baseRealm,
@@ -95,6 +95,8 @@ module(basename(__filename), function () {
     setupPermissionedRealm(hooks, {
       permissions: {
         '*': ['read', 'write'],
+        user: ['read', 'write', 'realm-owner'],
+        carol: ['read', 'write'],
       },
       onRealmSetup,
     });
@@ -200,6 +202,119 @@ module(basename(__filename), function () {
         'no-store, no-cache, must-revalidate',
         'cache control header is set correctly',
       );
+    });
+
+    module('realm config patch', function (hooks) {
+      let realmConfigPath: string;
+      let initialConfig: any;
+
+      hooks.beforeEach(function () {
+        realmConfigPath = join(
+          dir.name,
+          'realm_server_1',
+          'test',
+          '.realm.json',
+        );
+        initialConfig = existsSync(realmConfigPath)
+          ? readJSONSync(realmConfigPath)
+          : undefined;
+      });
+
+      test('non-owner cannot patch realm config', async function (assert) {
+        let response = await request
+          .patch('/_info')
+          .set('Accept', SupportedMimeType.RealmInfo)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'carol', ['read', 'write'])}`,
+          )
+          .send({
+            data: {
+              type: 'realm-info',
+              attributes: { property: 'publishable', value: true },
+            },
+          });
+
+        assert.strictEqual(response.status, 403, 'HTTP 403 status');
+        if (initialConfig) {
+          assert.deepEqual(
+            readJSONSync(realmConfigPath),
+            initialConfig,
+            '.realm.json was not modified',
+          );
+        }
+      });
+
+      test('realm-owner can patch realm config property', async function (assert) {
+        let response = await request
+          .patch('/_info')
+          .set('Accept', SupportedMimeType.RealmInfo)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'user', [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
+          )
+          .send({
+            data: {
+              type: 'realm-info',
+              attributes: { property: 'publishable', value: true },
+            },
+          });
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          response.body,
+          {
+            data: {
+              id: testRealmHref,
+              type: 'realm-info',
+              attributes: {
+                ...testRealmInfo,
+                realmUserId: '@node-test_realm:localhost',
+                publishable: true,
+              },
+            },
+          },
+          'response includes updated realm info',
+        );
+        assert.deepEqual(
+          readJSONSync(realmConfigPath),
+          { ...(initialConfig ?? {}), publishable: true },
+          '.realm.json contains the updated property',
+        );
+      });
+
+      test('invalid property returns bad request', async function (assert) {
+        let response = await request
+          .patch('/_info')
+          .set('Accept', SupportedMimeType.RealmInfo)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'user', [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
+          )
+          .send({
+            data: {
+              type: 'realm-info',
+              attributes: { property: 'realmUserId', value: 'someone' },
+            },
+          });
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        if (initialConfig) {
+          assert.deepEqual(
+            readJSONSync(realmConfigPath),
+            initialConfig,
+            '.realm.json remains unchanged',
+          );
+        }
+      });
     });
 
     test('serves module requests through read-through cache', async function (assert) {
