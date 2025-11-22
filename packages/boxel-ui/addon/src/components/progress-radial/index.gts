@@ -49,7 +49,7 @@ export default class ProgressRadial extends Component<Signature> {
           );
           --progress-radial-background-color: var(
             --boxel-progress-radial-background-color,
-            var(--muted, var(--boxel-light-200))
+            var(--muted, var(--boxel-200))
           );
           --progress-radial-font-weight: var(
             --boxel-progress-radial-font-weight,

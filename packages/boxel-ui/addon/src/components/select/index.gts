@@ -423,7 +423,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         );
         --dropdown-hover-color: var(
           --boxel-dropdown-hover-color,
-          var(--theme-hover, var(--boxel-light-100))
+          var(--theme-hover, var(--boxel-150))
         );
         --dropdown-focus-border-color: var(
           --boxel-dropdown-focus-border-color,
@@ -545,7 +545,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         );
         --dropdown-hover-color: var(
           --boxel-dropdown-hover-color,
-          var(--theme-hover, var(--boxel-light-100))
+          var(--theme-hover, var(--boxel-150))
         );
       }
 
@@ -583,7 +583,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         );
         --dropdown-hover-color: var(
           --boxel-dropdown-hover-color,
-          var(--theme-hover, var(--boxel-light-100))
+          var(--theme-hover, var(--boxel-150))
         );
         --dropdown-selected-text-color: var(
           --secondary-foreground,
@@ -606,7 +606,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         );
         --dropdown-hover-color: var(
           --boxel-dropdown-hover-color,
-          var(--theme-hover, var(--boxel-light-100))
+          var(--theme-hover, var(--boxel-150))
         );
         --dropdown-selected-text-color: var(
           --muted-foreground,
@@ -626,7 +626,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         );
         --dropdown-hover-color: var(
           --boxel-dropdown-hover-color,
-          var(--theme-hover, var(--boxel-light-100))
+          var(--theme-hover, var(--boxel-150))
         );
         --dropdown-selected-text-color: var(
           --destructive-foreground,
@@ -835,7 +835,7 @@ export class BoxelSelectOptions extends PowerSelectOptions {
 
       .boxel-select-option-checkmark-container {
         /* maintain space for icon and keep content widths the same */
-        width: var(--boxel-icon-med);
+        width: var(--boxel-icon-md);
         height: 100%;
         display: flex;
         align-items: center;

@@ -226,7 +226,7 @@ export default class RegisterUser extends Component<Signature> {
     {{/if}}
     <style scoped>
       .title {
-        font: 600 var(--boxel-font-med);
+        font: 600 var(--boxel-font-md);
         margin-bottom: var(--boxel-sp-sm);
       }
       .button-wrapper {

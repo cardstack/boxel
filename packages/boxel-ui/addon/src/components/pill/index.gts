@@ -170,7 +170,7 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
         display: inline-flex;
         min-width: var(
           --boxel-pill-icon-size,
-          var(--pill-icon-size, var(--boxel-icon-xxs))
+          var(--pill-icon-size, var(--boxel-icon-2xs))
         );
         margin-block: 0;
         margin-inline: 0;

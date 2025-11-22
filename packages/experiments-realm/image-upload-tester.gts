@@ -268,7 +268,8 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
           <FieldContainer @label='Source Image URL'>
             <@fields.sourceImageUrl @format='edit' />
             <p class='field-hint'>
-              Supports https URLs, Blob URLs, and data URIs (e.g. data:image/png;base64,...)
+              Supports https URLs, Blob URLs, and data URIs (e.g.
+              data:image/png;base64,...)
             </p>
           </FieldContainer>
         {{/if}}
@@ -367,14 +368,14 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
       .status-message {
         padding: var(--boxel-sp);
         border-radius: var(--boxel-border-radius);
-        background: var(--boxel-50);
+        background: var(--boxel-150);
         color: var(--boxel-600);
         font: 500 var(--boxel-font-sm);
       }
 
       .status-message--error {
         background: var(--boxel-error-50);
-        color: var(--boxel-error-400);
+        color: var(--boxel-danger);
       }
 
       .status-message--success {

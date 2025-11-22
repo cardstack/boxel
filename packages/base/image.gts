@@ -19,7 +19,7 @@ class ImageCardView extends Component<typeof ImageCard> {
         padding: var(--boxel-sp);
         text-align: center;
         color: var(--boxel-500);
-        background-color: var(--boxel-50);
+        background-color: var(--boxel-150);
         border-radius: var(--boxel-form-control-border-radius);
       }
     </style>

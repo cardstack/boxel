@@ -563,7 +563,7 @@ export default class AvatarCreatorComponent extends Component<AvatarCreatorArgs>
         align-items: center;
         justify-content: center;
         position: relative;
-        background: var(--boxel-50);
+        background: var(--boxel-150);
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
         transition: all 0.3s ease;
       }

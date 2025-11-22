@@ -89,7 +89,7 @@ export default class AskAiContainer extends Component<Signature> {
         right: calc(
           2 * var(--operator-mode-spacing) + var(--container-button-size)
         );
-        border-radius: var(--boxel-border-radius-xxl);
+        border-radius: var(--boxel-border-radius-2xl);
         box-shadow: var(--boxel-deep-box-shadow);
         z-index: var(--host-ai-panel-button-z-index);
         transition: width 0.3s ease-in-out;

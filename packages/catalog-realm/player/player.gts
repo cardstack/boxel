@@ -104,7 +104,7 @@ export class Player extends CardDef {
         .player-embedded-card__name {
           font: 700 var(--boxel-font-sm);
           color: #ffffff;
-          letter-spacing: var(--boxel-lsp-xxs);
+          letter-spacing: var(--boxel-lsp-2xs);
           text-shadow: 0 0 6px rgba(0, 255, 255, 0.35);
         }
       </style>

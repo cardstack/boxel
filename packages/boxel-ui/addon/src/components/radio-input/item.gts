@@ -58,7 +58,7 @@ const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
           --boxel-radio-disabled-border-color,
           var(
             --radio-disabled-border-color,
-            var(--muted-foreground, var(--boxel-purple-300))
+            var(--muted-foreground, var(--boxel-400))
           )
         );
 

@@ -256,7 +256,7 @@ class BoxelDropdown extends Component<Signature> {
 
           --dropdown-hover-color: var(
             --boxel-dropdown-hover-color,
-            var(--theme-hover, var(--boxel-light-100))
+            var(--theme-hover, var(--boxel-150))
           );
 
           background-color: var(--dropdown-background-color);
@@ -297,7 +297,7 @@ class BoxelDropdown extends Component<Signature> {
           );
           --dropdown-hover-color: var(
             --boxel-dropdown-hover-color,
-            var(--theme-hover, var(--boxel-light-100))
+            var(--theme-hover, var(--boxel-150))
           );
         }
 
@@ -327,7 +327,7 @@ class BoxelDropdown extends Component<Signature> {
           );
           --dropdown-hover-color: var(
             --boxel-dropdown-hover-color,
-            var(--theme-hover, var(--boxel-light-100))
+            var(--theme-hover, var(--boxel-150))
           );
           --dropdown-selected-text-color: var(
             --secondary-foreground,

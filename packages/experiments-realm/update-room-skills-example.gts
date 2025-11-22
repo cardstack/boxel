@@ -545,7 +545,7 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
         border: 1px solid var(--boxel-300);
         border-radius: 9999px;
         padding: var(--boxel-sp-xs) var(--boxel-sp);
-        background: var(--boxel-50);
+        background: var(--boxel-150);
         font-size: 0.9rem;
         cursor: pointer;
       }

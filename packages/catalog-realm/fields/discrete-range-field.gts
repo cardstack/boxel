@@ -42,7 +42,7 @@ export class DiscreteRangeField extends CardDef {
       <style scoped>
         .discrete-range-display {
           padding: 0.5rem;
-          background: var(--boxel-50);
+          background: var(--boxel-150);
           border-radius: 0.25rem;
           text-align: center;
           font-weight: 500;
