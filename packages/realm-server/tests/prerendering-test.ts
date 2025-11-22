@@ -892,7 +892,7 @@ module(basename(__filename), function () {
         assert.strictEqual(response.error?.error.status, 500);
       });
 
-      test('recovers isolated HTML when timeout hits but DOM is settled', async function (assert) {
+      test('does not recover when timeout hits even if DOM is settled', async function (assert) {
         const testCardURL = `${realmURL2}1`;
         await prerenderer.prerenderCard({
           realm: realmURL2,
@@ -900,7 +900,7 @@ module(basename(__filename), function () {
           userId: testUserId,
           permissions,
         });
-        let recovered = await prerenderer.prerenderCard({
+        let timedOut = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: testCardURL,
           userId: testUserId,
@@ -909,21 +909,26 @@ module(basename(__filename), function () {
         });
 
         assert.ok(
-          recovered.response.isolatedHTML,
-          'captured isolated HTML after timeout recovery',
+          timedOut.response.error,
+          'timeout returns error payload even when DOM is settled',
         );
         assert.strictEqual(
-          recovered.response.error,
-          undefined,
-          'no timeout error returned when DOM recovered',
+          timedOut.response.error?.error.title,
+          'Render timeout',
+          'timeout surfaces render timeout',
         );
         assert.true(
-          recovered.pool.timedOut,
-          'pool still notes timeout when recovery occurs',
+          timedOut.pool.timedOut,
+          'pool notes timeout when render exceeds limit',
         );
-        assert.false(
-          recovered.pool.evicted,
-          'realm not evicted after recovering from timeout',
+        assert.true(
+          timedOut.pool.evicted,
+          'realm evicted after timeout even when DOM settled',
+        );
+        assert.strictEqual(
+          timedOut.response.isolatedHTML,
+          null,
+          'does not return isolated HTML after timeout',
         );
 
         let next = await prerenderer.prerenderCard({
@@ -932,9 +937,14 @@ module(basename(__filename), function () {
           userId: testUserId,
           permissions,
         });
-        assert.true(
+        assert.false(
           next.pool.reused,
-          'subsequent render reuses pooled page after recovery',
+          'subsequent render uses fresh page after timeout eviction',
+        );
+        assert.strictEqual(
+          next.response.error,
+          undefined,
+          'subsequent render succeeds',
         );
       });
 
