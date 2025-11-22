@@ -1,0 +1,75 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SpecCreator",
+        "module": "../card-generation/spec-creator"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "steps": [
+        {
+          "stepId": "find-spec",
+          "label": "Search for Existing Specs",
+          "description": "Search for an existing spec that matches the code reference.",
+          "commandRef": {
+            "name": "SearchCardsByQueryCommand",
+            "module": "@cardstack/boxel-host/commands/search-cards"
+          },
+          "format": "isolated",
+          "codeRef": {
+            "name": "default",
+            "module": "https://cardstack.com/base/style-reference"
+          },
+          "targetRealm": "http://localhost:4201/experiments/"
+        },
+        {
+          "stepId": "create-spec",
+          "label": "Create spec if missing",
+          "description": "Create the spec in the selected realm when one is not already present.",
+          "commandRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/create-specs"
+          },
+          "format": "isolated",
+          "codeRef": {
+            "name": "default",
+            "module": "https://cardstack.com/base/style-reference"
+          },
+          "targetRealm": "http://localhost:4201/experiments/"
+        },
+        {
+          "stepId": "generate-readme",
+          "label": "Generate README",
+          "description": "Produce documentation for the located or newly created spec.",
+          "commandRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/generate-readme-spec"
+          },
+          "format": "isolated",
+          "codeRef": {},
+          "targetRealm": null
+        }
+      ],
+      "codeRef": {
+        "name": "default",
+        "module": "https://cardstack.com/base/style-reference"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "targetRealmUrl": "http://localhost:4201/experiments/"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

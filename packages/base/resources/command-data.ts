@@ -4,6 +4,7 @@ import {
   type CommandInvocation,
   type Command,
   type CardInstance,
+  type CommandInvocationStatus,
 } from '@cardstack/runtime-common';
 
 import { CommandContext } from '@cardstack/runtime-common';
@@ -15,7 +16,7 @@ import { resource } from 'ember-resources';
 export class CommandExecutionState<CardResultType extends CardDefConstructor>
   implements CommandInvocation<CardResultType>
 {
-  @tracked status: 'pending' | 'success' | 'error' = 'pending';
+  @tracked status: CommandInvocationStatus = 'idle';
   @tracked value: CardInstance<CardResultType> | null = null;
   @tracked error: Error | null = null;
 
@@ -25,6 +26,12 @@ export class CommandExecutionState<CardResultType extends CardDefConstructor>
 
   get isLoading() {
     return this.status === 'pending';
+  }
+
+  reset() {
+    this.status = 'idle';
+    this.value = null;
+    this.error = null;
   }
 
   setLoading() {
