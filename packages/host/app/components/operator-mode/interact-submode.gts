@@ -194,11 +194,8 @@ export default class InteractSubmode extends Component {
     stackIndex: number,
     cardOrURL: CardDef | URL | string,
     format: Format | Event = 'isolated',
-    opts?: { openCardInRightMostStack?: boolean },
+    opts?: { openCardInRightMostStack?: boolean; stackIndex?: number },
   ): void => {
-    if (opts?.openCardInRightMostStack) {
-      stackIndex = this.stacks.length;
-    }
     if (format instanceof Event) {
       // common when invoked from template {{on}} modifier
       format = 'isolated';
@@ -209,6 +206,23 @@ export default class InteractSubmode extends Component {
         : cardOrURL instanceof URL
         ? cardOrURL.href
         : cardOrURL.id;
+    if (opts?.openCardInRightMostStack) {
+      stackIndex = this.stacks.length;
+    } else if (typeof opts?.stackIndex === 'number') {
+      let allowedIndex = this.stacks.length;
+      if (opts.stackIndex !== allowedIndex) {
+        throw new Error(
+          `stackIndex must target index ${allowedIndex}, received ${opts.stackIndex}`,
+        );
+      }
+      let targetedStack = this.stacks[opts.stackIndex];
+      let targetStackItem = targetedStack?.[targetedStack.length - 1];
+      if (targetStackItem?.id === cardId) {
+        this.operatorModeStateService.closeWorkspaceChooser();
+        return;
+      }
+      stackIndex = opts.stackIndex;
+    }
     let newItem = new StackItem({
       id: cardId,
       format,
