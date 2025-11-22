@@ -263,18 +263,35 @@ export default class PublishRealmModal extends Component<Signature> {
     this.customSubdomainError = null;
   }
 
-  private applyClaimedDomain(claim: ClaimedDomain | null) {
+  private applyClaimedDomain(
+    claim: ClaimedDomain | null,
+    options: { select?: boolean } = {},
+  ) {
+    const { select = false } = options;
+    const previousSelectionUrl = this.customSubdomainSelection?.url;
     this.claimedDomain = claim;
 
     if (claim) {
+      const publishedUrl = this.buildPublishedRealmUrl(claim.hostname);
+      if (previousSelectionUrl && previousSelectionUrl !== publishedUrl) {
+        this.removePublishedRealmUrl(previousSelectionUrl);
+      }
       this.setCustomSubdomainSelection({
-        url: this.buildPublishedRealmUrl(claim.hostname),
+        url: publishedUrl,
         subdomain: claim.subdomain,
       });
+      if (select) {
+        this.addPublishedRealmUrl(publishedUrl);
+      }
       this.customSubdomain = '';
       this.isCustomSubdomainSetupVisible = false;
-    } else if (!this.isCustomSubdomainSetupVisible) {
-      this.setCustomSubdomainSelection(null);
+    } else {
+      if (previousSelectionUrl) {
+        this.removePublishedRealmUrl(previousSelectionUrl);
+      }
+      if (!this.isCustomSubdomainSetupVisible) {
+        this.setCustomSubdomainSelection(null);
+      }
     }
   }
 
@@ -339,28 +356,48 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   @action
-  toggleDefaultDomain() {
+  toggleDefaultDomain(event: Event) {
     const defaultUrl = this.subdirectoryRealmUrl;
-    if (!this.isSubdirectoryRealmSelected) {
-      this.selectedPublishedRealmURLs = [
-        ...this.selectedPublishedRealmURLs,
-        defaultUrl,
-      ];
+    const input = event.target as HTMLInputElement;
+    if (input.checked) {
+      this.addPublishedRealmUrl(defaultUrl);
+    } else {
+      this.removePublishedRealmUrl(defaultUrl);
     }
   }
 
   @action
-  toggleCustomSubdomain() {
+  toggleCustomSubdomain(event: Event) {
     if (this.claimedDomain) {
       const customUrl = this.buildPublishedRealmUrl(
         this.claimedDomain.hostname,
       );
-      if (!this.selectedPublishedRealmURLs.includes(customUrl)) {
-        this.selectedPublishedRealmURLs = [
-          ...this.selectedPublishedRealmURLs,
-          customUrl,
-        ];
+      const input = event.target as HTMLInputElement;
+      if (input.checked) {
+        this.addPublishedRealmUrl(customUrl);
+      } else {
+        this.removePublishedRealmUrl(customUrl);
       }
+    }
+  }
+
+  private addPublishedRealmUrl(url: string) {
+    if (!this.selectedPublishedRealmURLs.includes(url)) {
+      this.selectedPublishedRealmURLs = [
+        ...this.selectedPublishedRealmURLs,
+        url,
+      ];
+    }
+  }
+
+  private removePublishedRealmUrl(url: string | undefined) {
+    if (!url) {
+      return;
+    }
+    if (this.selectedPublishedRealmURLs.includes(url)) {
+      this.selectedPublishedRealmURLs = this.selectedPublishedRealmURLs.filter(
+        (selectedUrl) => selectedUrl !== url,
+      );
     }
   }
 
@@ -429,12 +466,15 @@ export default class PublishRealmModal extends Component<Signature> {
                 };
               };
             };
-            this.applyClaimedDomain({
-              id: claimResult.data.id,
-              subdomain: claimResult.data.attributes.subdomain,
-              hostname: claimResult.data.attributes.hostname,
-              sourceRealmURL: claimResult.data.attributes.sourceRealmURL,
-            });
+            this.applyClaimedDomain(
+              {
+                id: claimResult.data.id,
+                subdomain: claimResult.data.attributes.subdomain,
+                hostname: claimResult.data.attributes.hostname,
+                sourceRealmURL: claimResult.data.attributes.sourceRealmURL,
+              },
+              { select: true },
+            );
             this.isCustomSubdomainSetupVisible = false;
           } catch (claimError) {
             let errorMessage = (claimError as Error).message;
