@@ -120,7 +120,7 @@ export default class PaginatedCards extends GlimmerComponent<Signature> {
         {{#if paginatedQuery}}
           <SearchComponent
             @query={{paginatedQuery}}
-            @format='embedded'
+            @format='fitted'
             @realms={{this.normalizedRealms}}
             @isLive={{true}}
           >

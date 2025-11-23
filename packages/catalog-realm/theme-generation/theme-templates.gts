@@ -1,3 +1,15 @@
+export const THEME_TEMPLATE = `
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cssVariables": ":root {\\n  --background: <css color>;\\n  --foreground: <css color>;\\n  --primary: <css color>;\\n  --primary-foreground: <css color>;\\n}\\n\\n.dark {\\n  --background: <css color>;\\n  --foreground: <css color>;\\n}\\n\\n@theme inline {\\n  --background: var(--background);\\n  --foreground: var(--foreground);\\n  --primary: var(--primary);\\n  --primary-foreground: var(--primary-foreground);\\n}",
+      "cssImports": ["<https font url>", "<optional second font url>"]
+    }
+  }
+}
+`;
+
 export const STRUCTURED_THEME_TEMPLATE = `
 {
   "data": {
