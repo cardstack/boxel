@@ -877,6 +877,10 @@ export class Prerenderer {
       simulateTimeoutMs: opts?.simulateTimeoutMs,
     };
 
+    log.debug(
+      `manually visit prerendered url ${url} at: ${boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}/html/isolated/0 with localStorage boxel-session=${auth}`,
+    );
+
     // We need to render the isolated HTML view first, as the template will pull linked fields.
     let result = await withTimeout(
       page,

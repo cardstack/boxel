@@ -80,16 +80,12 @@ function computeTableOfContents(
 
     const mode = skillRef.inclusionMode || 'link-only';
 
-    // TODO: when Skill is linked
-    /* const skillContent =
-      skillRef.skill?.instructions &&  mode === 'full' 
+    const skillContent =
+      skillRef.skill?.instructions && mode === 'full'
         ? skillRef.skill.instructions
         : mode === 'essential' && skillRef.essentials
         ? skillRef.essentials
-        : ''; */
-
-    const skillContent =
-      mode === 'essential' && skillRef.essentials ? skillRef.essentials : '';
+        : '';
 
     if (!skillContent) continue;
 
@@ -196,9 +192,7 @@ export class SkillReference extends FieldDef {
   @field essentials = contains(MarkdownField, {
     // ¹⁹ Computed essentials from skill instructions
     computeVia: function (this: SkillReference) {
-      // TODO: when Skill is linked
-      //  const instructions = this.skill?.instructions;
-      /*     const instructions = '';
+      const instructions = this.skill?.instructions;
       if (!instructions) return undefined;
 
       // Extract content before <!--more--> marker
@@ -209,8 +203,6 @@ export class SkillReference extends FieldDef {
       }
 
       return instructions.substring(0, moreMarkerIndex).trim();
-
-   */
     },
   });
 
@@ -473,29 +465,9 @@ export class SkillSet extends Skill {
           result += dividerLines.join('\n');
 
           // ¹⁶³ Add skill content with header normalization
-          /*    if (mode === 'full' && skillRef.skill?.instructions) {
+          if (mode === 'full' && skillRef.skill?.instructions) {
             result += normalizeHeaders(skillRef.skill.instructions) + '\n\n';
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-          } else */
-          if (mode === 'essential' && skillRef.essentials) {
+          } else if (mode === 'essential' && skillRef.essentials) {
             result += normalizeHeaders(skillRef.essentials) + '\n\n';
           }
         }
