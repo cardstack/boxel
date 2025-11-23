@@ -55,6 +55,7 @@ import {
   BigIntegerField,
   getQueryableValue,
   EthereumAddressField,
+  getFields,
 } from '../../helpers/base-realm';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -2452,6 +2453,90 @@ module('Integration | serialization', function (hooks) {
     );
   });
 
+  test('can deserialize a nested polymorphic contains field', async function (assert) {
+    class TravelGoal extends FieldDef {
+      @field goalTitle = contains(StringField);
+    }
+
+    class TravelGoalWithProgress extends TravelGoal {
+      @field progress = contains(NumberField);
+    }
+
+    class Traveler extends FieldDef {
+      @field name = contains(StringField);
+      @field nextTravelGoal = contains(TravelGoal);
+    }
+
+    class TripInfo extends CardDef {
+      @field traveler = contains(Traveler);
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'trip-info-cards.gts': {
+          TravelGoal,
+          TravelGoalWithProgress,
+          Traveler,
+          TripInfo,
+        },
+      },
+    });
+
+    let doc: LooseSingleCardDocument = {
+      data: {
+        id: `${testRealmURL}TripInfo/polymorphic`,
+        attributes: {
+          traveler: {
+            name: 'Marcelius Wilde',
+            nextTravelGoal: {
+              goalTitle: "Summer '25",
+              progress: 0.5,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}trip-info-cards`,
+            name: 'TripInfo',
+          },
+          fields: {
+            traveler: {
+              fields: {
+                nextTravelGoal: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}trip-info-cards`,
+                    name: 'TravelGoalWithProgress',
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    let instance = await createFromSerialized<typeof TripInfo>(
+      doc.data,
+      doc,
+      undefined,
+    );
+
+    assert.strictEqual(instance.traveler.name, 'Marcelius Wilde');
+    assert.true(
+      instance.traveler.nextTravelGoal instanceof TravelGoalWithProgress,
+      'nested field adopts overridden type',
+    );
+    assert.strictEqual(
+      instance.traveler.nextTravelGoal.goalTitle,
+      "Summer '25",
+    );
+    assert.strictEqual(
+      (instance.traveler.nextTravelGoal as TravelGoalWithProgress).progress,
+      0.5,
+    );
+  });
+
   test('can serialize a composite field that has been edited', async function (assert) {
     class Person extends FieldDef {
       @field firstName = contains(StringField);
@@ -3997,6 +4082,122 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(
       (favorite as Toy).description,
       'Toilet paper ghost: Poooo!',
+    );
+  });
+
+  test('can deserialize a heterogenous polymorphic linksToMany relationship targeting CardDef', async function (assert) {
+    class DrumKitCard extends CardDef {
+      @field name = contains(StringField);
+    }
+
+    class BeatMakerCard extends CardDef {
+      @field title = contains(StringField);
+    }
+
+    class Listing extends CardDef {
+      @field examples = linksToMany(() => CardDef);
+    }
+
+    let listingFields = getFields(Listing);
+    assert.strictEqual(
+      listingFields.examples.card.name,
+      'CardDef',
+      'Listing examples field still targets CardDef before serialization',
+    );
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Listing, DrumKitCard, BeatMakerCard },
+      },
+    });
+
+    assert.strictEqual(
+      getFields(Listing).examples.card.name,
+      'CardDef',
+      'Listing examples field still targets CardDef after realm setup',
+    );
+
+    let doc: LooseSingleCardDocument = {
+      data: {
+        type: 'card',
+        attributes: {
+          cardInfo: {},
+        },
+        relationships: {
+          'examples.0': {
+            links: {
+              self: `${testRealmURL}DrumKitCard/kit`,
+            },
+            data: {
+              id: `${testRealmURL}DrumKitCard/kit`,
+              type: 'card',
+            },
+          },
+          'examples.1': {
+            links: {
+              self: `${testRealmURL}BeatMakerCard/app`,
+            },
+            data: {
+              id: `${testRealmURL}BeatMakerCard/app`,
+              type: 'card',
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Listing',
+          },
+        },
+      },
+      included: [
+        {
+          id: `${testRealmURL}DrumKitCard/kit`,
+          type: 'card',
+          attributes: {
+            name: '808 Analog Kit',
+            cardInfo: {},
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}test-cards`,
+              name: 'DrumKitCard',
+            },
+          },
+        },
+        {
+          id: `${testRealmURL}BeatMakerCard/app`,
+          type: 'card',
+          attributes: {
+            title: 'Beat Maker Studio',
+            cardInfo: {},
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}test-cards`,
+              name: 'BeatMakerCard',
+            },
+          },
+        },
+      ],
+    };
+
+    let listing = await createFromSerialized<typeof Listing>(
+      doc.data,
+      doc,
+      undefined,
+    );
+
+    assert.ok(listing instanceof Listing, 'listing deserialized');
+    assert.strictEqual(listing.examples.length, 2, 'both examples loaded');
+    assert.ok(
+      listing.examples[0] instanceof DrumKitCard,
+      'first entry is DrumKitCard instance',
+    );
+    assert.ok(
+      listing.examples[1] instanceof BeatMakerCard,
+      'second entry is BeatMakerCard instance',
     );
   });
 
@@ -6325,6 +6526,7 @@ module('Integration | serialization', function (hooks) {
           typeof serialized?.data?.attributes?.someBigInt,
           'number',
         );
+
         assert.strictEqual(
           serialized?.data?.attributes?.someBigInt,
           '9223372036854775808',

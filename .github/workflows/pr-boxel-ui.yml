@@ -11,7 +11,7 @@ on:
 
 permissions:
   contents: read
-  issues: read
+  issues: write
   checks: write
   pull-requests: write
   id-token: write
@@ -55,6 +55,18 @@ jobs:
           AWS_S3_BUCKET: boxel-ui-preview.stack.cards
           AWS_REGION: us-east-1
           AWS_CLOUDFRONT_DISTRIBUTION: E14K8X1FKQ6Y6Z
+        # If you change these, change the equivalent line in preview-comment.yml
         with:
           package: boxel-ui
           environment: staging
+
+  post-preview-comment:
+    name: Update preview comment
+    needs:
+      - deploy-ui-preview-staging
+    if: ${{ always() && needs.deploy-ui-preview-staging.result == 'success' }}
+    uses: ./.github/workflows/preview-comment.yml
+    with:
+      pr-number: ${{ github.event.pull_request.number }}
+      head-sha: ${{ github.event.pull_request.head.sha }}
+    secrets: inherit
