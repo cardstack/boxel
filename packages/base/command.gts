@@ -92,6 +92,11 @@ export class ReadTextFileInput extends CardDef {
   @field path = contains(StringField);
 }
 
+export class ReadSourceInput extends CardDef {
+  @field realm = contains(StringField);
+  @field path = contains(StringField);
+}
+
 export class FileContents extends CardDef {
   @field content = contains(StringField);
 }

@@ -141,4 +141,29 @@ module('Integration | commands | read-text-file', function (hooks) {
 
     assert.strictEqual(result.content, '');
   });
+
+  test('uses text/plain accept header for requests', async function (assert) {
+    let targetUrl = `${testRealmURL}test.txt`;
+    let network = getService('network');
+    let originalFetch = network.virtualNetwork.fetch;
+    let acceptHeader: string | null = null;
+    let stubFetch: typeof originalFetch = async (input, init) => {
+      let request = input instanceof Request ? input : new Request(input, init);
+      if (request.url === targetUrl) {
+        acceptHeader = request.headers.get('Accept');
+        return new Response('stubbed', { status: 200 });
+      }
+      return originalFetch(input, init);
+    };
+    network.virtualNetwork.fetch = stubFetch;
+    try {
+      await readTextFileCommand.execute({
+        path: 'test.txt',
+        realm: testRealmURL,
+      });
+    } finally {
+      network.virtualNetwork.fetch = originalFetch;
+    }
+    assert.strictEqual(acceptHeader, 'text/plain');
+  });
 });
