@@ -16,6 +16,8 @@ import {
   DEFAULT_PERMISSIONS,
   normalizeFullReindexBatchSize,
   normalizeFullReindexCooldownSeconds,
+  systemInitiatedPriority,
+  userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
 import { stringify } from 'qs';
@@ -152,6 +154,19 @@ module(basename(__filename), function () {
           },
         });
 
+        test('startup indexing uses system initiated queue priority', async function (assert) {
+          let [job] = (await dbAdapter.execute(
+            `SELECT priority FROM jobs WHERE job_type = 'from-scratch-index' AND args->>'realmURL' = '${testRealm2URL.href}' ORDER BY created_at DESC LIMIT 1`,
+          )) as { priority: number }[];
+
+          assert.ok(job, 'found startup from-scratch index job for realm');
+          assert.strictEqual(
+            job.priority,
+            systemInitiatedPriority,
+            'realm startup uses system initiated priority',
+          );
+        });
+
         test('POST /_create-realm', async function (assert) {
           // we randomize the realm and owner names so that we can isolate matrix
           // test state--there is no "delete user" matrix API
@@ -219,6 +234,17 @@ module(basename(__filename), function () {
             existsSync(join(realmPath, 'index.json')),
             'seed file index.json exists',
           );
+
+          let job = (await dbAdapter.execute(
+            `SELECT priority FROM jobs WHERE job_type = 'from-scratch-index' AND args->>'realmURL' = '${json.data.id}' ORDER BY created_at DESC LIMIT 1`,
+          )) as { priority: number }[];
+          assert.ok(job[0], 'found from-scratch index job for created realm');
+          assert.strictEqual(
+            job[0].priority,
+            userInitiatedPriority,
+            'user initiated realm indexing uses high priority queue',
+          );
+
           let permissions = await fetchRealmPermissions(
             dbAdapter,
             new URL(json.data.id),

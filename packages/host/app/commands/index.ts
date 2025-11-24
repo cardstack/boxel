@@ -11,6 +11,7 @@ import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room'
 import * as CreateSpecCommandModule from './create-specs';
 import * as GenerateExampleCardsCommandModule from './generate-example-cards';
 import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
+import * as GenerateThemeExampleCommandModule from './generate-theme-example';
 import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
 import * as GetCardCommandModule from './get-card';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
@@ -29,6 +30,7 @@ import * as OpenWorkspaceCommandModule from './open-workspace';
 import * as PatchCardInstanceCommandModule from './patch-card-instance';
 import * as PatchCodeCommandModule from './patch-code';
 import * as PatchFieldsCommandModule from './patch-fields';
+import * as PatchThemeCommandModule from './patch-theme';
 import * as PopulateWithSampleDataCommandModule from './populate-with-sample-data';
 import * as PreviewFormatCommandModule from './preview-format';
 import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assistant';
@@ -89,6 +91,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     CreateSpecCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/generate-theme-example',
+    GenerateThemeExampleCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-events-from-room',
     GetEventsFromRoomCommandModule,
   );
@@ -139,6 +145,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/patch-fields',
     PatchFieldsCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/patch-theme',
+    PatchThemeCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/preview-format',
@@ -297,8 +307,10 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   OpenAiAssistantRoomCommandModule.default,
   OpenInInteractModeModule.default,
   OpenWorkspaceCommandModule.default,
+  GenerateThemeExampleCommandModule.default,
   PatchCodeCommandModule.default,
   PatchFieldsCommandModule.default,
+  PatchThemeCommandModule.default,
   PopulateWithSampleDataCommandModule.default,
   PreviewFormatCommandModule.default,
   ReadCardForAiAssistantCommandModule.default,
