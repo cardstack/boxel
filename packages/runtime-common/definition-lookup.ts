@@ -87,7 +87,8 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       });
     }
 
-    let defOrError = moduleEntry.definitions[codeRef.name];
+    const moduleId = [codeRef.module, codeRef.name].join('/');
+    let defOrError = moduleEntry.definitions[moduleId];
     if (!defOrError) {
       throw new FilterRefersToNonexistentTypeError(codeRef, {
         cause: `Definition for ${codeRef.name} in module ${codeRef.module} not found`,
