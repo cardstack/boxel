@@ -75,9 +75,11 @@ export default class PublishRealmModal extends Component<Signature> {
   @tracked private customSubdomainError: string | null = null;
   @tracked private isCheckingCustomSubdomain = false;
   @tracked private claimedDomain: ClaimedDomain | null = null;
+  private initialSelectionsSet = false;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
+    this.ensureInitialSelections();
     this.fetchBoxelClaimedDomain.perform();
   }
 
@@ -293,6 +295,7 @@ export default class PublishRealmModal extends Component<Signature> {
         this.setCustomSubdomainSelection(null);
       }
     }
+    this.ensureInitialSelections(claim);
   }
 
   private fetchBoxelClaimedDomain = restartableTask(async () => {
@@ -540,6 +543,28 @@ export default class PublishRealmModal extends Component<Signature> {
       return null;
     }
     return this.getPublishErrorForUrl(this.claimedDomainPublishedUrl);
+  }
+
+  private ensureInitialSelections(claim: ClaimedDomain | null = null) {
+    let selections = this.initialSelectionsSet
+      ? this.selectedPublishedRealmURLs
+      : [...this.hostModeService.publishedRealmURLs];
+
+    if (claim) {
+      let claimedUrl = this.buildPublishedRealmUrl(claim.hostname);
+      if (!selections.includes(claimedUrl)) {
+        selections = [...selections, claimedUrl];
+      }
+    }
+
+    if (
+      !this.initialSelectionsSet ||
+      selections !== this.selectedPublishedRealmURLs
+    ) {
+      this.selectedPublishedRealmURLs = [...selections];
+    }
+
+    this.initialSelectionsSet = true;
   }
 
   <template>

@@ -668,6 +668,43 @@ module('Acceptance | host submode', function (hooks) {
           .hasAttribute('target', '_blank');
       });
 
+      test('preselects previously published domains on refresh', async function (assert) {
+        let now = Date.now();
+        let realmServer = getService('realm-server') as any;
+        let originalFetchClaimed = realmServer.fetchBoxelClaimedDomain;
+
+        realmServer.fetchBoxelClaimedDomain = async () => ({
+          id: 'claimed-domain-1',
+          hostname: 'custom-site-name.localhost:4201',
+          subdomain: 'custom-site-name',
+          sourceRealmURL: testRealmURL,
+        });
+
+        let restoreRealmInfo = withUpdatedTestRealmInfo({
+          lastPublishedAt: {
+            'http://testuser.localhost:4201/test/': String(now),
+            'http://custom-site-name.localhost:4201/': String(now),
+          },
+        });
+
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-publish-realm-modal]');
+
+          assert.dom('[data-test-default-domain-checkbox]').isChecked();
+          assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
+          assert.dom('[data-test-publish-button]').isNotDisabled();
+        } finally {
+          realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
+          restoreRealmInfo();
+        }
+      });
+
       test('default domain checkbox can be checked and unchecked', async function (assert) {
         await visitOperatorMode({
           submode: 'host',
@@ -1042,6 +1079,33 @@ module('Acceptance | host submode', function (hooks) {
         }
       });
 
+      test('claimed custom domain is preselected even before first publish', async function (assert) {
+        let realmServer = getService('realm-server') as any;
+        let originalFetchClaimed = realmServer.fetchBoxelClaimedDomain;
+        realmServer.fetchBoxelClaimedDomain = async () => ({
+          id: 'claimed-domain-1',
+          hostname: 'custom-site-name.localhost:4201',
+          subdomain: 'custom-site-name',
+          sourceRealmURL: testRealmURL,
+        });
+
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-publish-realm-modal]');
+
+          assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
+          assert.dom('[data-test-default-domain-checkbox]').isNotChecked();
+          assert.dom('[data-test-publish-button]').isNotDisabled();
+        } finally {
+          realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
+        }
+      });
+
       test('custom site checkbox can be checked and unchecked', async function (assert) {
         let realmServer = getService('realm-server') as any;
         let originalFetchClaimed = realmServer.fetchBoxelClaimedDomain;
@@ -1062,16 +1126,16 @@ module('Acceptance | host submode', function (hooks) {
           await click('[data-test-publish-realm-button]');
           await waitFor('[data-test-custom-subdomain-checkbox]');
 
-          assert.dom('[data-test-custom-subdomain-checkbox]').isNotChecked();
-          assert.dom('[data-test-publish-button]').isDisabled();
-
-          await click('[data-test-custom-subdomain-checkbox]');
           assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
           assert.dom('[data-test-publish-button]').isNotDisabled();
 
-          await click('[data-test-custom-subdomain-checkbox]');
+          await click('[data-test-custom-subdomain-checkbox]'); // uncheck
           assert.dom('[data-test-custom-subdomain-checkbox]').isNotChecked();
           assert.dom('[data-test-publish-button]').isDisabled();
+
+          await click('[data-test-custom-subdomain-checkbox]'); // re-check
+          assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
+          assert.dom('[data-test-publish-button]').isNotDisabled();
         } finally {
           realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
         }
@@ -1165,12 +1229,11 @@ module('Acceptance | host submode', function (hooks) {
           await click('[data-test-publish-realm-button]');
           await waitFor('[data-test-publish-realm-modal]');
 
-          assert.dom('[data-test-custom-subdomain-checkbox]').isNotChecked();
+          assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
           assert.dom('[data-test-default-domain-checkbox]').isNotChecked();
 
-          // Check both checkboxes
+          // Check default checkbox (custom already selected)
           await click('[data-test-default-domain-checkbox]');
-          await click('[data-test-custom-subdomain-checkbox]');
 
           await click('[data-test-publish-button]');
           publishDeferred.fulfill();
@@ -1228,9 +1291,8 @@ module('Acceptance | host submode', function (hooks) {
           await click('[data-test-publish-realm-button]');
           await waitFor('[data-test-publish-realm-modal]');
 
-          // Check both checkboxes
+          // Custom is preselected; add default checkbox
           await click('[data-test-default-domain-checkbox]');
-          await click('[data-test-custom-subdomain-checkbox]');
 
           assert.dom('[data-test-default-domain-checkbox]').isChecked();
           assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
@@ -1277,7 +1339,7 @@ module('Acceptance | host submode', function (hooks) {
         }
       });
 
-      test('custom subdomain checkbox remains unchecked when modal opens with claimed domain', async function (assert) {
+      test('custom subdomain checkbox is checked when modal opens with claimed domain', async function (assert) {
         let realmServer = getService('realm-server') as any;
         let originalFetchClaimed = realmServer.fetchBoxelClaimedDomain;
 
@@ -1297,7 +1359,7 @@ module('Acceptance | host submode', function (hooks) {
           await click('[data-test-publish-realm-button]');
           await waitFor('[data-test-publish-realm-modal]');
 
-          assert.dom('[data-test-custom-subdomain-checkbox]').isNotChecked();
+          assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
           assert
             .dom(
               '[data-test-publish-realm-modal] .domain-option:nth-of-type(2)',
@@ -1306,7 +1368,7 @@ module('Acceptance | host submode', function (hooks) {
 
           // User can still manually select it
           await click('[data-test-custom-subdomain-checkbox]');
-          assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
+          assert.dom('[data-test-custom-subdomain-checkbox]').isNotChecked();
         } finally {
           realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
         }
