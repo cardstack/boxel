@@ -10,9 +10,10 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn, array } from '@ember/helper';
-import { BoxelSelect } from '@cardstack/boxel-ui/components';
+import { BoxelSelect, Pill } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event';
+import InfoIcon from '@cardstack/boxel-icons/info';
 
 import DateField from './date';
 
@@ -20,13 +21,7 @@ class RecurringPatternFieldEdit extends Component<
   typeof RecurringPatternField
 > {
   @tracked pattern = 'none';
-  @tracked startDate: Date | string = '';
-  @tracked endDate: Date | string = '';
-  @tracked occurrences: number | null = null;
-  @tracked interval = 1;
   @tracked daysOfWeekArray: number[] = [];
-  @tracked dayOfMonth = 1;
-  @tracked monthOfYear = 1;
 
   patterns = [
     { value: 'none', label: 'Does not repeat' },
@@ -49,16 +44,24 @@ class RecurringPatternFieldEdit extends Component<
     { value: 6, label: 'Sat' },
   ];
 
+  monthOptions = [
+    { value: 1, label: 'January' },
+    { value: 2, label: 'February' },
+    { value: 3, label: 'March' },
+    { value: 4, label: 'April' },
+    { value: 5, label: 'May' },
+    { value: 6, label: 'June' },
+    { value: 7, label: 'July' },
+    { value: 8, label: 'August' },
+    { value: 9, label: 'September' },
+    { value: 10, label: 'October' },
+    { value: 11, label: 'November' },
+    { value: 12, label: 'December' },
+  ];
+
   constructor(owner: any, args: any) {
     super(owner, args);
-    // ¹⁸ Load from model fields
     this.pattern = this.args.model?.pattern || 'none';
-    this.startDate = this.args.model?.startDate || '';
-    this.endDate = this.args.model?.endDate || '';
-    this.occurrences = this.args.model?.occurrences ?? null;
-    this.interval = this.args.model?.interval ?? 1;
-    this.dayOfMonth = this.args.model?.dayOfMonth ?? 1;
-    this.monthOfYear = this.args.model?.monthOfYear ?? 1;
 
     // Parse daysOfWeek from comma-separated string
     const daysStr = this.args.model?.daysOfWeek;
@@ -88,6 +91,14 @@ class RecurringPatternFieldEdit extends Component<
     return this.pattern === 'yearly';
   }
 
+  get selectedMonth() {
+    const monthValue = this.args.model?.monthOfYear;
+    return (
+      this.monthOptions.find((opt) => opt.value === monthValue) ||
+      this.monthOptions[0]
+    );
+  }
+
   @action
   updatePattern(selected: { value: string; label: string } | null) {
     if (!selected) return;
@@ -101,42 +112,16 @@ class RecurringPatternFieldEdit extends Component<
       const today = new Date().getDay();
       this.daysOfWeekArray = [today];
     } else if (selected.value === 'biweekly') {
-      this.interval = 2;
+      this.args.model.interval = 2;
       const today = new Date().getDay();
       this.daysOfWeekArray = [today];
     } else if (selected.value === 'monthly') {
-      this.dayOfMonth = new Date().getDate();
+      this.args.model.dayOfMonth = new Date().getDate();
     } else if (selected.value === 'yearly') {
-      this.monthOfYear = new Date().getMonth() + 1;
-      this.dayOfMonth = new Date().getDate();
+      this.args.model.monthOfYear = new Date().getMonth() + 1;
+      this.args.model.dayOfMonth = new Date().getDate();
     }
 
-    this.saveToModel();
-  }
-
-  @action
-  updateStartDate(event: Event) {
-    const target = event.target as HTMLInputElement;
-    this.startDate = target.value;
-    this.saveToModel();
-  }
-
-  @action
-  updateEndDate(event: Event) {
-    const target = event.target as HTMLInputElement;
-    this.endDate = target.value;
-    this.occurrences = null;
-    this.saveToModel();
-  }
-
-  @action
-  updateOccurrences(event: Event) {
-    const target = event.target as HTMLInputElement;
-    const value = parseInt(target.value);
-    this.occurrences = isNaN(value) ? null : value;
-    if (this.occurrences) {
-      this.endDate = '';
-    }
     this.saveToModel();
   }
 
@@ -151,71 +136,34 @@ class RecurringPatternFieldEdit extends Component<
   }
 
   @action
-  updateDayOfMonth(event: Event) {
-    const target = event.target as HTMLInputElement;
-    this.dayOfMonth = parseInt(target.value) || 1;
-    this.saveToModel();
-  }
-
-  @action
-  updateMonthOfYear(event: Event) {
-    const target = event.target as HTMLSelectElement;
-    this.monthOfYear = parseInt(target.value) || 1;
+  updateMonthOfYear(selected: { value: number; label: string } | null) {
+    if (!selected) return;
+    this.args.model.monthOfYear = selected.value;
     this.saveToModel();
   }
 
   saveToModel() {
-    // ¹⁹ Save to individual model fields
     this.args.model.pattern = this.pattern;
-
-    // Convert string dates to Date objects for DateField
-    if (this.startDate && this.startDate !== '') {
-      if (typeof this.startDate === 'string') {
-        const date = new Date(this.startDate);
-        if (!isNaN(date.getTime())) {
-          this.args.model.startDate = date;
-        } else {
-          this.args.model.startDate = undefined;
-        }
-      } else {
-        this.args.model.startDate = this.startDate;
-      }
-    } else {
-      this.args.model.startDate = undefined;
-    }
-
-    if (this.endDate && this.endDate !== '') {
-      if (typeof this.endDate === 'string') {
-        const date = new Date(this.endDate);
-        if (!isNaN(date.getTime())) {
-          this.args.model.endDate = date;
-        } else {
-          this.args.model.endDate = undefined;
-        }
-      } else {
-        this.args.model.endDate = this.endDate;
-      }
-    } else {
-      this.args.model.endDate = undefined;
-    }
-
-    this.args.model.occurrences = this.occurrences ?? undefined;
-    this.args.model.interval = this.interval;
     this.args.model.daysOfWeek =
       this.daysOfWeekArray.length > 0
         ? this.daysOfWeekArray.join(',')
         : undefined;
-    this.args.model.dayOfMonth = this.dayOfMonth;
-    this.args.model.monthOfYear = this.monthOfYear;
   }
+
+  isWeekdaySelected = (day: number) => {
+    return this.daysOfWeekArray.includes(day);
+  };
 
   get summary() {
     if (this.pattern === 'none') return 'Does not repeat';
 
     const parts: string[] = [];
+    const interval = this.args.model?.interval;
+    const endDate = this.args.model?.endDate;
+    const occurrences = this.args.model?.occurrences;
 
-    if (this.interval > 1) {
-      parts.push(`Every ${this.interval}`);
+    if (interval && interval > 1) {
+      parts.push(`Every ${interval}`);
     }
 
     parts.push(this.selectedPattern.label);
@@ -227,36 +175,22 @@ class RecurringPatternFieldEdit extends Component<
       parts.push(`on ${dayNames}`);
     }
 
-    if (this.endDate) {
+    if (endDate) {
       try {
         parts.push(
-          `until ${new Date(this.endDate).toLocaleDateString('en-US', {
+          `until ${new Date(endDate).toLocaleDateString('en-US', {
             month: 'short',
             day: 'numeric',
           })}`,
         );
       } catch {
-        parts.push(`until ${this.endDate}`);
+        parts.push(`until ${endDate}`);
       }
-    } else if (this.occurrences) {
-      parts.push(`${this.occurrences} times`);
+    } else if (occurrences) {
+      parts.push(`${occurrences} times`);
     }
 
     return parts.join(' ');
-  }
-
-  get startDateValue() {
-    if (this.startDate instanceof Date) {
-      return this.startDate.toISOString().split('T')[0];
-    }
-    return this.startDate;
-  }
-
-  get endDateValue() {
-    if (this.endDate instanceof Date) {
-      return this.endDate.toISOString().split('T')[0];
-    }
-    return this.endDate;
   }
 
   <template>
@@ -280,36 +214,29 @@ class RecurringPatternFieldEdit extends Component<
         <div class='recurrence-details'>
           {{! Start Date }}
           <div class='detail-field'>
-            <label for='recurring-start-date' class='detail-label'>Starts on</label>
-            <input
-              id='recurring-start-date'
-              type='date'
-              value={{this.startDateValue}}
-              {{on 'change' this.updateStartDate}}
-              class='detail-input'
-              data-test-recurring-start
-            />
+            <label class='detail-label'>Starts on</label>
+            <@fields.startDate @format='edit' />
           </div>
 
           {{! Weekly: Day selection }}
           {{#if this.needsWeekdays}}
             <div class='detail-field'>
               <label class='detail-label'>Repeat on</label>
-              <div class='weekday-buttons'>
+              <div class='weekday-pills'>
                 {{#each this.weekDays as |day|}}
-                  <button
-                    type='button'
+                  <Pill
+                    @kind='button'
+                    @variant={{if
+                      (this.isWeekdaySelected day.value)
+                      'primary'
+                      ''
+                    }}
+                    @size='small'
                     {{on 'click' (fn this.toggleWeekday day.value)}}
-                    class='weekday-btn
-                      {{if
-                        (array this.daysOfWeekArray day.value)
-                        "selected"
-                        ""
-                      }}'
                     data-test-weekday={{day.value}}
                   >
                     {{day.label}}
-                  </button>
+                  </Pill>
                 {{/each}}
               </div>
             </div>
@@ -318,48 +245,25 @@ class RecurringPatternFieldEdit extends Component<
           {{! Monthly: Day of month }}
           {{#if this.needsDayOfMonth}}
             <div class='detail-field'>
-              <label for='recurring-day-of-month' class='detail-label'>Day of
-                month</label>
-              <input
-                id='recurring-day-of-month'
-                type='number'
-                value={{this.dayOfMonth}}
-                min='1'
-                max='31'
-                {{on 'input' this.updateDayOfMonth}}
-                class='detail-input'
-                data-test-day-of-month
-              />
+              <label class='detail-label'>Day of month</label>
+              <@fields.dayOfMonth @format='edit' />
             </div>
           {{/if}}
 
           {{! Yearly: Month }}
           {{#if this.needsMonthOfYear}}
             <div class='detail-field'>
-              <label
-                for='recurring-month-of-year'
-                class='detail-label'
-              >Month</label>
-              <select
-                id='recurring-month-of-year'
-                value={{this.monthOfYear}}
-                {{on 'change' this.updateMonthOfYear}}
-                class='detail-select'
+              <label class='detail-label'>Month</label>
+              <BoxelSelect
+                @options={{this.monthOptions}}
+                @selected={{this.selectedMonth}}
+                @onChange={{this.updateMonthOfYear}}
+                @placeholder='Select month'
                 data-test-month-of-year
+                as |option|
               >
-                <option value='1'>January</option>
-                <option value='2'>February</option>
-                <option value='3'>March</option>
-                <option value='4'>April</option>
-                <option value='5'>May</option>
-                <option value='6'>June</option>
-                <option value='7'>July</option>
-                <option value='8'>August</option>
-                <option value='9'>September</option>
-                <option value='10'>October</option>
-                <option value='11'>November</option>
-                <option value='12'>December</option>
-              </select>
+                {{option.label}}
+              </BoxelSelect>
             </div>
           {{/if}}
 
@@ -368,48 +272,15 @@ class RecurringPatternFieldEdit extends Component<
             <label class='detail-label'>Ends</label>
             <div class='end-options'>
               <div class='end-option'>
-                <label for='recurring-end-date' class='radio-label'>
-                  <input
-                    id='recurring-end-date-radio'
-                    type='radio'
-                    name='endType'
-                    checked={{if this.endDate true false}}
-                    {{on 'change' (fn (mut this.occurrences) null)}}
-                  />
-                  <span>On date</span>
-                </label>
-                <input
-                  id='recurring-end-date'
-                  type='date'
-                  value={{this.endDateValue}}
-                  {{on 'change' this.updateEndDate}}
-                  class='detail-input'
-                  disabled={{if this.occurrences true false}}
-                  data-test-recurring-end
-                />
+                <label class='end-option-label'>On date</label>
+                <@fields.endDate @format='edit' />
               </div>
               <div class='end-option'>
-                <label for='recurring-occurrences' class='radio-label'>
-                  <input
-                    id='recurring-occurrences-radio'
-                    type='radio'
-                    name='endType'
-                    checked={{this.occurrences}}
-                    {{on 'change' (fn (mut this.endDate) '')}}
-                  />
-                  <span>After</span>
-                </label>
+                <label class='end-option-label'>After</label>
                 <div class='occurrence-input'>
-                  <input
-                    id='recurring-occurrences'
-                    type='number'
-                    value={{this.occurrences}}
-                    min='1'
-                    {{on 'input' this.updateOccurrences}}
-                    class='detail-input occurrence-number'
-                    disabled={{this.endDateValue}}
-                    data-test-recurring-occurrences
-                  />
+                  <div class='occurrence-field'>
+                    <@fields.occurrences @format='edit' />
+                  </div>
                   <span class='occurrence-label'>occurrences</span>
                 </div>
               </div>
@@ -418,17 +289,7 @@ class RecurringPatternFieldEdit extends Component<
 
           {{! Summary }}
           <div class='recurrence-summary'>
-            <svg
-              class='summary-icon'
-              viewBox='0 0 24 24'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='2'
-            >
-              <circle cx='12' cy='12' r='10'></circle>
-              <line x1='12' y1='16' x2='12' y2='12'></line>
-              <line x1='12' y1='8' x2='12.01' y2='8'></line>
-            </svg>
+            <InfoIcon class='summary-icon' />
             {{this.summary}}
           </div>
         </div>
@@ -486,55 +347,10 @@ class RecurringPatternFieldEdit extends Component<
         color: var(--muted-foreground, #64748b);
       }
 
-      .detail-input,
-      .detail-select {
-        padding: 0.375rem 0.5rem;
-        border: 1px solid var(--border, #e0e0e0);
-        border-radius: var(--radius, 0.25rem);
-        font-size: 0.8125rem;
-        color: var(--foreground, #1a1a1a);
-        background: var(--input, #ffffff);
-        transition: all 0.15s ease;
-      }
-
-      .detail-input:focus,
-      .detail-select:focus {
-        outline: none;
-        border-color: var(--ring, #3b82f6);
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-      }
-
-      .detail-input:disabled {
-        background: var(--muted, #f1f5f9);
-        color: var(--muted-foreground, #94a3b8);
-        cursor: not-allowed;
-      }
-
-      .weekday-buttons {
-        display: grid;
-        grid-template-columns: repeat(7, 1fr);
+      .weekday-pills {
+        display: flex;
+        flex-wrap: wrap;
         gap: 0.25rem;
-      }
-
-      .weekday-btn {
-        padding: 0.375rem;
-        font-size: 0.75rem;
-        border: 1px solid var(--border, #e0e0e0);
-        border-radius: var(--radius, 0.25rem);
-        background: var(--background, #ffffff);
-        color: var(--foreground, #1a1a1a);
-        cursor: pointer;
-        transition: all 0.15s ease;
-      }
-
-      .weekday-btn:hover {
-        border-color: var(--primary, #3b82f6);
-      }
-
-      .weekday-btn.selected {
-        background: var(--primary, #3b82f6);
-        color: var(--primary-foreground, #ffffff);
-        border-color: var(--primary, #3b82f6);
       }
 
       .end-options {
@@ -549,28 +365,27 @@ class RecurringPatternFieldEdit extends Component<
         gap: 0.375rem;
       }
 
-      .radio-label {
-        display: flex;
-        align-items: center;
-        gap: 0.375rem;
+      .end-option-label {
         font-size: 0.8125rem;
+        font-weight: 500;
         color: var(--foreground, #1a1a1a);
-        cursor: pointer;
       }
 
       .occurrence-input {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: 0.5rem;
       }
 
-      .occurrence-number {
-        width: 5rem;
+      .occurrence-field {
+        width: 6rem;
+        flex-shrink: 0;
       }
 
       .occurrence-label {
         font-size: 0.8125rem;
         color: var(--muted-foreground, #64748b);
+        padding-top: 0.5rem;
       }
 
       .recurrence-summary {

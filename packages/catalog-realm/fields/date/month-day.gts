@@ -3,15 +3,12 @@ import {
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
+} from 'https://cardstack.com/base/card-api';
 import NumberField from 'https://cardstack.com/base/number';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { on } from '@ember/modifier';
-import { array } from '@ember/helper';
-import { add, eq } from '@cardstack/boxel-ui/helpers'; // ² Helpers
-import GiftIcon from '@cardstack/boxel-icons/gift'; // ³ Gift icon
-import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down'; // ⁴ Chevron down icon
+import { BoxelSelect } from '@cardstack/boxel-ui/components';
+import GiftIcon from '@cardstack/boxel-icons/gift';
 
 class MonthDayFieldEdit extends Component<typeof MonthDayField> {
   @tracked month = 1;
@@ -34,126 +31,79 @@ class MonthDayFieldEdit extends Component<typeof MonthDayField> {
 
   constructor(owner: any, args: any) {
     super(owner, args);
-    // ¹¹ Initialize from model or set defaults
     this.month = this.args.model?.month || 1;
     this.day = this.args.model?.day || 1;
   }
 
-  @action
-  updateMonth(event: Event) {
-    const target = event.target as HTMLSelectElement;
-    this.month = Number(target.value);
-    this.args.model.month = Number(target.value);
+  get monthOptions() {
+    return this.months.map((name, index) => ({
+      value: index + 1,
+      label: name,
+    }));
+  }
+
+  get selectedMonth() {
+    return this.monthOptions.find((opt) => opt.value === this.month) || null;
+  }
+
+  get dayOptions() {
+    return Array.from({ length: 31 }, (_, i) => ({
+      value: i + 1,
+      label: String(i + 1),
+    }));
+  }
+
+  get selectedDay() {
+    return this.dayOptions.find((opt) => opt.value === this.day) || null;
   }
 
   @action
-  updateDay(event: Event) {
-    const target = event.target as HTMLSelectElement;
-    this.day = Number(target.value);
-    this.args.model.day = Number(target.value);
+  updateMonth(option: { value: number; label: string } | null) {
+    this.month = option?.value || 1;
+    this.args.model.month = this.month;
   }
 
-  get displayValue() {
-    const monthName = this.months[this.month - 1];
-    return `${monthName} ${this.day}`;
+  @action
+  updateDay(option: { value: number; label: string } | null) {
+    this.day = option?.value || 1;
+    this.args.model.day = this.day;
   }
 
   <template>
-    <div class='month-day-edit'>
-      <div class='month-day-inputs'>
-        <div class='select-wrapper month-select'>
-          <label for='month-select' class='sr-only'>Month</label>
-          <select
-            id='month-select'
-            value={{this.month}}
-            {{on 'change' this.updateMonth}}
-            class='month-day-select'
-            data-test-month-select
-          >
-            {{#each this.months as |monthName index|}}
-              <option
-                value={{add index 1}}
-                selected={{eq this.month (add index 1)}}
-              >
-                {{monthName}}
-              </option>
-            {{/each}}
-          </select>
-          <div class='select-icon'>
-            <ChevronDownIcon class='icon' />
-          </div>
-        </div>
-        <div class='select-wrapper day-select'>
-          <label for='day-select' class='sr-only'>Day</label>
-          <select
-            id='day-select'
-            value={{this.day}}
-            {{on 'change' this.updateDay}}
-            class='month-day-select'
-            data-test-day-select
-          >
-            {{#each
-              (array
-                1
-                2
-                3
-                4
-                5
-                6
-                7
-                8
-                9
-                10
-                11
-                12
-                13
-                14
-                15
-                16
-                17
-                18
-                19
-                20
-                21
-                22
-                23
-                24
-                25
-                26
-                27
-                28
-                29
-                30
-                31
-              )
-              as |dayNum|
-            }}
-              <option value={{dayNum}} selected={{eq this.day dayNum}}>
-                {{dayNum}}
-              </option>
-            {{/each}}
-          </select>
-          <div class='select-icon'>
-            <ChevronDownIcon class='icon' />
-          </div>
-        </div>
+    <div class='month-day-inputs'>
+      <div class='month-select'>
+        <BoxelSelect
+          @options={{this.monthOptions}}
+          @selected={{this.selectedMonth}}
+          @onChange={{this.updateMonth}}
+          @placeholder='Select month'
+          @dropdownClass='month-dropdown'
+          data-test-month-select
+          as |option|
+        >
+          {{option.label}}
+        </BoxelSelect>
+      </div>
+
+      <div class='day-select'>
+        <BoxelSelect
+          @options={{this.dayOptions}}
+          @selected={{this.selectedDay}}
+          @onChange={{this.updateDay}}
+          @placeholder='Day'
+          @dropdownClass='day-dropdown'
+          data-test-day-select
+          as |option|
+        >
+          {{option.label}}
+        </BoxelSelect>
       </div>
     </div>
 
     <style scoped>
-      .month-day-edit {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-      }
-
       .month-day-inputs {
         display: flex;
         gap: 0.5rem;
-      }
-
-      .select-wrapper {
-        position: relative;
       }
 
       .month-select {
@@ -162,60 +112,7 @@ class MonthDayFieldEdit extends Component<typeof MonthDayField> {
 
       .day-select {
         width: 6rem;
-      }
-
-      .select-icon {
-        position: absolute;
-        right: 0.75rem;
-        top: 50%;
-        transform: translateY(-50%);
-        pointer-events: none;
-        display: flex;
-        align-items: center;
-        color: var(--muted-foreground, #9ca3af);
-      }
-
-      .icon {
-        width: 1.25rem;
-        height: 1.25rem;
-      }
-
-      .month-day-select {
-        width: 100%;
-        padding: 0.5rem 2rem 0.5rem 0.75rem;
-        border: 1px solid var(--border, #e0e0e0);
-        border-radius: var(--radius, 0.375rem);
-        font-family: var(--font-sans, system-ui, sans-serif);
-        font-size: 0.875rem;
-        color: var(--foreground, #1a1a1a);
-        background: var(--input, #ffffff);
-        appearance: none;
-        cursor: pointer;
-        transition: all 0.15s ease;
-      }
-
-      .month-day-select:focus {
-        outline: none;
-        border-color: var(--ring, #3b82f6);
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-      }
-
-      .month-day-display {
-        font-size: 0.75rem;
-        color: var(--muted-foreground, #9ca3af);
-        margin: 0;
-      }
-
-      .sr-only {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border-width: 0;
+        flex-shrink: 0;
       }
     </style>
   </template>

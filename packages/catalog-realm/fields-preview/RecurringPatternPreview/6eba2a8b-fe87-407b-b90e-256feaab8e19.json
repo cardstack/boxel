@@ -16,20 +16,20 @@
       },
       "recurringPattern": {
         "endDate": "2025-10-30",
-        "pattern": "custom",
+        "pattern": "weekly",
         "interval": 1,
         "startDate": "2025-11-12",
         "customRule": null,
         "dayOfMonth": 17,
-        "daysOfWeek": "1,2,3,4",
+        "daysOfWeek": "1,4,6",
         "monthOfYear": 1,
-        "occurrences": null
+        "occurrences": 12
       }
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": null
+          "self": "../../Theme/cardstack"
         }
       }
     }

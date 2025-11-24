@@ -95,9 +95,6 @@ export class DatetimeField extends BaseDatetimeField {
         .datetime-embedded {
           display: flex;
           align-items: center;
-          padding: 0.5rem;
-          font-size: 0.875rem;
-          color: var(--foreground, #1a1a1a);
         }
 
         .datetime-value {
