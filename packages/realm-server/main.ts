@@ -387,7 +387,7 @@ async function waitForWorkerManager(port: number) {
   } while (!isReady && Date.now() < timeout);
   if (!isReady) {
     throw new Error(
-      `timed out trying to waiting for worker manager to be ready on port ${port}`,
+      `timed out waiting for worker manager to be ready on port ${port}`,
     );
   }
   log.info('workers are ready');
