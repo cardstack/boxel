@@ -1092,7 +1092,7 @@ export async function buildPromptForModel(
     }
   }
   if (
-    !autoCorrectnessChecksEnabled &&
+    autoCorrectnessChecksEnabled &&
     shouldPromptCheckCorrectnessSummary(history, aiBotUserId)
   ) {
     historicalMessages.push({
