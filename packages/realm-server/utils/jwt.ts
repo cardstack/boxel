@@ -11,7 +11,7 @@ import {
 
 export interface RealmServerTokenClaim {
   user: string;
-  sessionRoom: string;
+  sessionRoom?: string;
 }
 
 export function createJWT(

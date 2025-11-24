@@ -17,6 +17,12 @@ export interface RealmAuthMatrixClientInterface {
   hashMessageWithSecret(message: string): Promise<string>;
   getAccountDataFromServer(type: string): Promise<{ [k: string]: any } | null>;
   setAccountData(type: string, data: any): Promise<any>;
+  getOpenIdToken(): Promise<{
+    access_token: string;
+    token_type: 'Bearer' | string;
+    matrix_server_name: string;
+    expires_in: number;
+  }>;
 }
 
 interface Options {
@@ -95,53 +101,17 @@ export class RealmAuthClient {
       );
     }
 
-    let initialResponse = await this.initiateSessionRequest();
+    let response = await this.makeSessionRequest();
 
-    if (initialResponse.status !== 401) {
+    if (!response.ok) {
       throw new Error(
         `unexpected response from POST ${this.realmURL.href}${
           this.sessionEndpoint
-        }: ${initialResponse.status} - ${await initialResponse.text()}`,
+        }: ${response.status} - ${await response.text()}`,
       );
     }
 
-    let initialJSON = (await initialResponse.json()) as {
-      room?: string;
-      challenge: string;
-    };
-
-    let { room, challenge } = initialJSON;
-    let challengeResponse: Response;
-    if (!room) {
-      // if the realm did not invite us to a room that means that the realm user
-      // is the same as our user and that we hash the challenge with our realm
-      // password
-      challengeResponse = await this.challengeRequest(
-        challenge,
-        await this.matrixClient.hashMessageWithSecret(challenge),
-      );
-    } else {
-      let { joined_rooms: rooms } = await this.matrixClient.getJoinedRooms();
-
-      if (!rooms.includes(room)) {
-        await joinDMRoom(this.matrixClient, room);
-      }
-
-      await this.matrixClient.sendEvent(room, 'm.room.message', {
-        body: `auth-response: ${challenge}`,
-        msgtype: 'm.text',
-      });
-      challengeResponse = await this.challengeRequest(challenge);
-    }
-    if (!challengeResponse.ok) {
-      throw new Error(
-        `unsuccessful HTTP status in response to POST session: ${
-          challengeResponse.status
-        }: ${await challengeResponse.text()}`,
-      );
-    }
-
-    let jwt = challengeResponse.headers.get('Authorization');
+    let jwt = response.headers.get('Authorization');
 
     if (!jwt) {
       throw new Error(
@@ -152,10 +122,10 @@ export class RealmAuthClient {
     return jwt;
   }
 
-  private async initiateSessionRequest() {
-    let userId = this.matrixClient.getUserId();
-    if (!userId) {
-      throw new Error('userId is undefined');
+  private async makeSessionRequest() {
+    let openIdToken = await this.matrixClient.getOpenIdToken();
+    if (!openIdToken) {
+      throw new Error('Unable to get OpenID token from Matrix client');
     }
     return this.withRetries(() =>
       this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
@@ -163,28 +133,7 @@ export class RealmAuthClient {
         headers: {
           Accept: 'application/json',
         },
-        body: JSON.stringify({
-          user: userId,
-        }),
-      }),
-    );
-  }
-
-  private async challengeRequest(
-    challenge: string,
-    challengeResponse?: string,
-  ) {
-    return this.withRetries(() =>
-      this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          user: this.matrixClient.getUserId(),
-          challenge,
-          ...(challengeResponse ? { challengeResponse } : {}),
-        }),
+        body: JSON.stringify(openIdToken),
       }),
     );
   }

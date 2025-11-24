@@ -55,7 +55,6 @@ export class MatrixClient {
     includeAuth = true,
   ) {
     options.method = method;
-
     if (includeAuth) {
       if (!this.access) {
         throw new Error(`Missing matrix access token`);
@@ -338,6 +337,64 @@ export class MatrixClient {
       hash.update(this.password);
     }
     return uint8ArrayToHex(await hash.digest());
+  }
+
+  async getOpenIdToken() {
+    if (!this.access) {
+      await this.login();
+    }
+    let response = await this.request(
+      `_matrix/client/v3/user/${encodeURIComponent(this.getUserId()!)}/openid/request_token`,
+      'POST',
+      {
+        body: '{}',
+      },
+    );
+    let json:
+      | {
+          access_token: string;
+          //others
+        }
+      | undefined;
+    let text = await response.text();
+    try {
+      json = JSON.parse(text);
+    } catch (e) {
+      throw new Error(
+        `unable to parse response from ${this.matrixURL.href}_matrix/client/v3/user/openid/request_token, response was not JSON: ${text}`,
+      );
+    }
+    if (!json || !response.ok) {
+      return undefined;
+    } else {
+      return json;
+    }
+  }
+
+  async getUserIdFromOpenIdToken(openIdToken: string) {
+    let response = await this.request(
+      `_matrix/federation/v1/openid/userinfo?access_token=${encodeURIComponent(openIdToken)}`,
+      'GET',
+    );
+    let json:
+      | {
+          sub: string;
+        }
+      | undefined;
+    let text = await response.text();
+    console.log('Userinfo response:', text, response.status);
+    try {
+      json = JSON.parse(text);
+    } catch (e) {
+      throw new Error(
+        `unable to parse response from ${this.matrixURL.href}_matrix/client/v3/userinfo, response was not JSON: ${text}`,
+      );
+    }
+    if (!json || !response.ok) {
+      return undefined;
+    } else {
+      return json.sub;
+    }
   }
 }
 

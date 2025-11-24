@@ -1,8 +1,4 @@
-import { Sha256 } from '@aws-crypto/sha256-js';
 import type { MatrixClient } from './matrix-client';
-import { waitForMatrixMessage } from './matrix-client';
-import { v4 as uuidv4 } from 'uuid';
-import type { MessageEvent } from 'https://cardstack.com/base/matrix-event';
 
 export interface Utils {
   badRequest(message: string): Response;
@@ -10,14 +6,12 @@ export interface Utils {
     body: BodyInit | null,
     responseInit: ResponseInit | undefined,
   ): Response;
-  createJWT(user: string, sessionRoom?: string): Promise<string>;
-  ensureSessionRoom(user: string): Promise<string>;
+  createJWT(user: string): Promise<string>;
 }
 
 export class MatrixBackendAuthentication {
   constructor(
     private matrixClient: MatrixClient,
-    private secretSeed: string,
     private utils: Utils,
   ) {}
 
@@ -25,180 +19,24 @@ export class MatrixBackendAuthentication {
     if (!(await this.matrixClient.isTokenValid())) {
       await this.matrixClient.login();
     }
-    let body = await request.text();
-    let json;
+    let accessToken: string;
     try {
-      json = JSON.parse(body);
+      let json = await request.json();
+      accessToken = json['access_token'];
     } catch (e) {
       return this.utils.badRequest(
-        JSON.stringify({ errors: [`Request body is not valid JSON`] }),
-      );
-    }
-    let { user, challenge, challengeResponse } = json as {
-      user?: string;
-      challenge?: string;
-      challengeResponse?: string;
-    };
-    if (!user) {
-      return this.utils.badRequest(
-        JSON.stringify({ errors: [`Request body missing 'user' property`] }),
-      );
-    }
-
-    if (challenge) {
-      return await this.verifyChallenge(user, challenge, challengeResponse);
-    } else {
-      return await this.createChallenge(user);
-    }
-  }
-
-  private async createChallenge(user: string) {
-    let challenge = uuidv4();
-
-    // if the client being authenticated is the same as the realm matrix user,
-    // when we just need to verify that the client can hash the challenge with
-    // the realm user's password
-    if (this.matrixClient.getUserId() === user) {
-      return this.utils.createResponse(
         JSON.stringify({
-          challenge,
-        }),
-        {
-          status: 401,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        },
-      );
-    }
-
-    let roomId = await this.utils.ensureSessionRoom(user);
-
-    let hash = new Sha256();
-    hash.update(challenge);
-    hash.update(this.secretSeed);
-    let hashedChallenge = uint8ArrayToHex(await hash.digest());
-    await this.matrixClient.sendEvent(roomId, 'm.room.message', {
-      body: `auth-challenge: ${hashedChallenge}`,
-      msgtype: 'm.text',
-    });
-
-    return this.utils.createResponse(
-      JSON.stringify({
-        room: roomId,
-        challenge,
-      }),
-      {
-        status: 401,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      },
-    );
-  }
-
-  private async verifyChallenge(
-    user: string,
-    challenge: string,
-    challengeResponse?: string,
-  ) {
-    if (user === this.matrixClient.getUserId() && challengeResponse) {
-      let successfulChallengeResponse =
-        await this.matrixClient.hashMessageWithSecret(challenge);
-      if (challengeResponse === successfulChallengeResponse) {
-        let jwt = await this.utils.createJWT(user);
-        return this.utils.createResponse(null, {
-          status: 201,
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: jwt,
-            'Access-Control-Expose-Headers': 'Authorization',
-          },
-        });
-      } else {
-        return this.utils.createResponse(
-          JSON.stringify({
-            errors: [`user ${user} failed auth challenge`],
-          }),
-          {
-            status: 401,
-          },
-        );
-      }
-    }
-
-    let roomId = await this.utils.ensureSessionRoom(user);
-
-    // The messages look like this:
-    // --- Matrix Room Messages ---:
-    // realm1
-    // auth-challenge: 7cb8f904a2a53d256687c2aeb374a686a26cfd66af5fcc09a366d49644a3e2ba
-    // realm2
-    // auth-response: 342c5854-e716-4bda-9b31-eba83d24e25d
-    // ----------------------------
-
-    // This is a best-effort type of implementation - we don't know when the messages will appear in the room so we just wait for a bit.
-    // This is not a problem when the realms are on the same matrix server but when they are on different (federated) servers the latencies and
-    // race conditions can cause delays in the messages appearing in the room.
-    let oneMinuteAgo = Date.now() - 60000;
-
-    let latestAuthChallengeMessage = await waitForMatrixMessage(
-      this.matrixClient,
-      roomId,
-      (m) => {
-        return (
-          m.type === 'm.room.message' &&
-          m.sender === this.matrixClient.getUserId() &&
-          m.content.body.startsWith('auth-challenge:') &&
-          m.origin_server_ts > oneMinuteAgo
-        );
-      },
-    );
-
-    let latestAuthResponseMessage = await waitForMatrixMessage(
-      this.matrixClient,
-      roomId,
-      (m) => {
-        return (
-          m.type === 'm.room.message' &&
-          m.sender === user &&
-          m.content.body.startsWith('auth-response:') &&
-          m.origin_server_ts > oneMinuteAgo
-        );
-      },
-    );
-
-    if (!latestAuthChallengeMessage) {
-      return this.utils.badRequest(
-        JSON.stringify({ errors: [`No challenge found for user ${user}`] }),
-      );
-    }
-
-    if (!latestAuthResponseMessage) {
-      return this.utils.badRequest(
-        JSON.stringify({
-          errors: [`No challenge response response found for user ${user}`],
+          errors: [
+            `Request body is not valid JSON or did not have access_token`,
+          ],
         }),
       );
     }
 
-    latestAuthChallengeMessage = latestAuthChallengeMessage as MessageEvent;
-    latestAuthResponseMessage = latestAuthResponseMessage as MessageEvent;
+    const user = await this.matrixClient.getUserIdFromOpenIdToken(accessToken);
 
-    let lastChallenge = latestAuthChallengeMessage.content.body.replace(
-      'auth-challenge: ',
-      '',
-    );
-    let response = latestAuthResponseMessage.content.body.replace(
-      'auth-response: ',
-      '',
-    );
-    let hash = new Sha256();
-    hash.update(response);
-    hash.update(this.secretSeed);
-    let hashedResponse = uint8ArrayToHex(await hash.digest());
-    if (hashedResponse === lastChallenge) {
-      let jwt = await this.utils.createJWT(user, roomId);
+    if (user) {
+      let jwt = await this.utils.createJWT(user);
       return this.utils.createResponse(null, {
         status: 201,
         headers: {
@@ -210,13 +48,7 @@ export class MatrixBackendAuthentication {
     } else {
       return this.utils.createResponse(
         JSON.stringify({
-          errors: [
-            `user ${user} failed auth challenge: latest challenge message: "${JSON.stringify(
-              latestAuthChallengeMessage,
-            )}", latest response message: "${JSON.stringify(
-              latestAuthResponseMessage,
-            )}"`,
-          ],
+          errors: [`OpenID token not recognised on matrix server`],
         }),
         {
           status: 401,
@@ -224,10 +56,4 @@ export class MatrixBackendAuthentication {
       );
     }
   }
-}
-
-function uint8ArrayToHex(uint8: Uint8Array) {
-  return Array.from(uint8)
-    .map((i) => i.toString(16).padStart(2, '0'))
-    .join('');
 }
