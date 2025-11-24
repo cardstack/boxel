@@ -1917,7 +1917,7 @@ export class Realm {
 
   private handleExecutableInvalidations(invalidatedURLs: URL[]): void {
     let definitionsInvalidated = false;
-    for (let invalidatedURL of invalidatedURLs) {
+    for (const invalidatedURL of invalidatedURLs) {
       if (hasExecutableExtension(invalidatedURL.href)) {
         definitionsInvalidated = true;
         this.#moduleCache.invalidate(this.paths.local(invalidatedURL));
