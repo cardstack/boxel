@@ -129,7 +129,7 @@ type GetEntryOptions = WIPOptions;
 export type QueryOptions = WIPOptions & PrerenderedCardOptions;
 
 interface PrerenderedCardOptions {
-  htmlFormat?: 'embedded' | 'fitted' | 'atom';
+  htmlFormat?: 'embedded' | 'fitted' | 'atom' | 'head';
   renderType?: ResolvedCodeRef;
   includeErrors?: true;
   cardUrls?: string[];
@@ -165,7 +165,8 @@ export function isValidPrerenderedHtmlFormat(
   format: string | undefined,
 ): format is PrerenderedCardOptions['htmlFormat'] {
   return (
-    format !== undefined && ['embedded', 'fitted', 'atom'].includes(format)
+    format !== undefined &&
+    ['embedded', 'fitted', 'atom', 'head'].includes(format)
   );
 }
 
@@ -531,7 +532,7 @@ export class IndexQueryEngine {
   }> {
     if (!isValidPrerenderedHtmlFormat(opts.htmlFormat)) {
       throw new Error(
-        `htmlFormat must be either 'embedded', 'fitted', or 'atom'`,
+        `htmlFormat must be either 'embedded', 'fitted', 'atom', or 'head'`,
       );
     }
 
@@ -653,11 +654,16 @@ export class IndexQueryEngine {
     htmlFormat,
     renderType,
   }: {
-    htmlFormat: 'embedded' | 'fitted' | 'atom' | undefined;
+    htmlFormat: 'embedded' | 'fitted' | 'atom' | 'head' | undefined;
     renderType?: ResolvedCodeRef;
   }): (string | Param | DBSpecificExpression)[] {
     let usedRenderTypeColumnExpression = [];
-    if (htmlFormat && htmlFormat !== 'atom' && renderType) {
+    if (
+      htmlFormat &&
+      htmlFormat !== 'atom' &&
+      htmlFormat !== 'head' &&
+      renderType
+    ) {
       usedRenderTypeColumnExpression.push(`CASE`);
       usedRenderTypeColumnExpression.push(
         `WHEN ANY_VALUE(${htmlFormat}_html) ->> `,
