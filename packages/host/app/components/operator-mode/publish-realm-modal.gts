@@ -79,7 +79,7 @@ export default class PublishRealmModal extends Component<Signature> {
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
-    this.ensureInitialSelections();
+    this.ensureInitialSelectionsTask.perform();
     this.fetchBoxelClaimedDomain.perform();
   }
 
@@ -295,7 +295,7 @@ export default class PublishRealmModal extends Component<Signature> {
         this.setCustomSubdomainSelection(null);
       }
     }
-    this.ensureInitialSelections(claim);
+    this.applyInitialSelections(claim);
   }
 
   private fetchBoxelClaimedDomain = restartableTask(async () => {
@@ -545,7 +545,14 @@ export default class PublishRealmModal extends Component<Signature> {
     return this.getPublishErrorForUrl(this.claimedDomainPublishedUrl);
   }
 
-  private ensureInitialSelections(claim: ClaimedDomain | null = null) {
+  ensureInitialSelectionsTask = restartableTask(
+    async (claim: ClaimedDomain | null = null) => {
+      await this.realm.ensureRealmMeta(this.currentRealmURL);
+      this.applyInitialSelections(claim);
+    },
+  );
+
+  private applyInitialSelections(claim: ClaimedDomain | null = null) {
     let selections = this.initialSelectionsSet
       ? this.selectedPublishedRealmURLs
       : [...this.hostModeService.publishedRealmURLs];
