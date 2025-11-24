@@ -1,12 +1,12 @@
 import type { DBAdapter, TypeCoercion } from './db';
 import {
   fetchUserPermissions,
-  Realm,
   type Definition,
   type ErrorEntry,
   type ModuleDefinitionResult,
   type ModuleRenderResponse,
   type Prerenderer,
+  type Realm,
   type ResolvedCodeRef,
 } from './index';
 
