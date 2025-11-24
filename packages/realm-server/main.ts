@@ -371,10 +371,18 @@ async function waitForWorkerManager(port: number) {
   let isReady = false;
   let timeout = Date.now() + 30_000;
   do {
-    let response = await fetch(`http://localhost:${port}/`);
-    if (response.ok) {
-      let json = await response.json();
-      isReady = json.ready;
+    try {
+      let response = await fetch(`http://localhost:${port}/`);
+      if (response.ok) {
+        let json = await response.json();
+        isReady = json.ready;
+      }
+    } catch (error) {
+      // Worker manager hasn't started yet, continue retrying
+    }
+    if (!isReady) {
+      // Add a small delay between retries to avoid hammering the server
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
   } while (!isReady && Date.now() < timeout);
   if (!isReady) {
