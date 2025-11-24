@@ -295,6 +295,24 @@ function createEnvironmentAwareFetch(): typeof globalThis.fetch {
 // Fetch failed" exceptions.
 const maxAttempts = 5;
 const backOffMs = 100;
+const retryableLocalHosts = new Set(['localhost', '127.0.0.1']);
+
+function shouldRetryFetch(url: URL) {
+  if ((globalThis as any).__environment !== 'test') {
+    return false;
+  }
+
+  if (baseRealm.inRealm(url)) {
+    return true;
+  }
+
+  if (retryableLocalHosts.has(url.hostname)) {
+    return true;
+  }
+
+  return url.href.startsWith('https://boxel-icons.boxel.ai/');
+}
+
 async function withRetries(
   url: URL,
   fetchFn: () => ReturnType<typeof globalThis.fetch>,
@@ -304,12 +322,7 @@ async function withRetries(
     try {
       return await fetchFn();
     } catch (err: any) {
-      if (
-        (globalThis as any).__environment !== 'test' ||
-        (!baseRealm.inRealm(url) &&
-          !url.href.startsWith('https://boxel-icons.boxel.ai/')) ||
-        ++attempt > maxAttempts
-      ) {
+      if (!shouldRetryFetch(url) || ++attempt > maxAttempts) {
         throw err;
       }
       console.error(

@@ -12,6 +12,7 @@ import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room'
 import * as CreateSpecCommandModule from './create-specs';
 import * as GenerateExampleCardsCommandModule from './generate-example-cards';
 import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
+import * as GenerateThemeExampleCommandModule from './generate-theme-example';
 import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
 import * as GetCardCommandModule from './get-card';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
@@ -30,6 +31,7 @@ import * as OpenWorkspaceCommandModule from './open-workspace';
 import * as PatchCardInstanceCommandModule from './patch-card-instance';
 import * as PatchCodeCommandModule from './patch-code';
 import * as PatchFieldsCommandModule from './patch-fields';
+import * as PatchThemeCommandModule from './patch-theme';
 import * as PopulateWithSampleDataCommandModule from './populate-with-sample-data';
 import * as PreviewFormatCommandModule from './preview-format';
 import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assistant';
@@ -42,6 +44,7 @@ import * as SearchGoogleImagesCommandModule from './search-google-images';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
 import * as SendRequestViaProxyCommandModule from './send-request-via-proxy';
 import * as SetActiveLlmModule from './set-active-llm';
+import * as SetSiteConfigCommandModule from './set-site-config';
 import * as SetUserSystemCardCommandModule from './set-user-system-card';
 import * as ShowCardCommandModule from './show-card';
 import * as SummarizeSessionCommandModule from './summarize-session';
@@ -91,6 +94,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/check-correctness',
     CheckCorrectnessCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/generate-theme-example',
+    GenerateThemeExampleCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-events-from-room',
@@ -143,6 +150,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/patch-fields',
     PatchFieldsCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/patch-theme',
+    PatchThemeCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/preview-format',
@@ -268,6 +279,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     '@cardstack/boxel-host/commands/set-user-system-card',
     SetUserSystemCardCommandModule,
   );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/set-site-config',
+    SetSiteConfigCommandModule,
+  );
 }
 
 // Note - this is used for the tests
@@ -297,8 +312,10 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   OpenAiAssistantRoomCommandModule.default,
   OpenInInteractModeModule.default,
   OpenWorkspaceCommandModule.default,
+  GenerateThemeExampleCommandModule.default,
   PatchCodeCommandModule.default,
   PatchFieldsCommandModule.default,
+  PatchThemeCommandModule.default,
   PopulateWithSampleDataCommandModule.default,
   PreviewFormatCommandModule.default,
   ReadCardForAiAssistantCommandModule.default,
@@ -312,6 +329,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   SendAiAssistantMessageModule.default,
   SendRequestViaProxyCommandModule.default,
   SetActiveLlmModule.default,
+  SetSiteConfigCommandModule.default,
   SetUserSystemCardCommandModule.default,
   ShowCardCommandModule.default,
   SummarizeSessionCommandModule.default,

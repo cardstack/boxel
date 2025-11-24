@@ -66,7 +66,7 @@ module(basename(__filename), function () {
             let result: string[] = JSON.parse(response.text.trim());
 
             assert.ok(
-              result.includes('http://127.0.0.1:4444/person.gts'),
+              result.includes('http://127.0.0.1:4444/person'),
               'person.gts is a dependency',
             );
           });
@@ -82,7 +82,7 @@ module(basename(__filename), function () {
             let result: string[] = JSON.parse(response.text.trim());
 
             assert.ok(
-              result.includes('http://127.0.0.1:4444/person.gts'),
+              result.includes('http://127.0.0.1:4444/person'),
               'person.gts is a dependency',
             );
           });

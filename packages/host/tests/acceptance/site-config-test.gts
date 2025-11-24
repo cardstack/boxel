@@ -25,6 +25,8 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 import visitOperatorMode from '../helpers/visit-operator-mode';
 
+import type { TestRealmAdapter } from '../helpers/adapter';
+
 let testHostModeRealmURLWithoutRealm = testHostModeRealmURL.replace(
   '/user/test/',
   '',
@@ -285,6 +287,200 @@ module('Acceptance | site config home page', function (hooks) {
         .exists();
       assert
         .dom(`[data-test-host-mode-card="${testRealmURL}Pet/mango"]`)
+        .doesNotExist();
+    });
+  });
+
+  module('set site config command', function () {
+    let adapter: TestRealmAdapter;
+
+    module('when site config file does not exist', function (hooks) {
+      hooks.beforeEach(async function () {
+        let contents = { ...realmContents };
+        delete contents['site.json'];
+        contents['SiteConfig/custom.json'] = {
+          data: {
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/site-config',
+                name: 'SiteConfig',
+              },
+            },
+            type: 'card',
+            attributes: {
+              cardInfo: {
+                notes: null,
+                title: null,
+                description: null,
+                thumbnailURL: null,
+              },
+            },
+            relationships: {
+              home: {
+                links: {
+                  self: '../Pet/peanut',
+                },
+              },
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
+            },
+          },
+        };
+
+        ({ adapter } = await setupAcceptanceTestRealm({
+          contents,
+          mockMatrixUtils,
+        }));
+      });
+
+      test('user can create a site config via stack menu', async function (assert) {
+        await visitOperatorMode({
+          submode: 'interact',
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}SiteConfig/custom`,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+
+        await waitFor(
+          `[data-test-stack-card="${testRealmURL}SiteConfig/custom"]`,
+        );
+        await click('[data-test-more-options-button]');
+        await click('[data-test-boxel-menu-item-text="Set as site home"]');
+
+        let siteDoc: any;
+        await waitUntil(async () => {
+          let file = await adapter.openFile('site.json');
+          if (!file) {
+            return false;
+          }
+          let content =
+            typeof file.content === 'string'
+              ? file.content
+              : JSON.stringify(file.content);
+          siteDoc = JSON.parse(content);
+          return true;
+        });
+
+        assert.strictEqual(
+          siteDoc.data.relationships.home.links.self,
+          './Pet/peanut',
+          'site.json created with correct home',
+        );
+      });
+    });
+
+    module('when site config file exists', function (hooks) {
+      hooks.beforeEach(async function () {
+        let contents = { ...realmContents };
+        contents['SiteConfig/custom.json'] = {
+          data: {
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/site-config',
+                name: 'SiteConfig',
+              },
+            },
+            type: 'card',
+            attributes: {
+              cardInfo: {
+                notes: null,
+                title: null,
+                description: null,
+                thumbnailURL: null,
+              },
+            },
+            relationships: {
+              home: {
+                links: {
+                  self: '../Pet/peanut',
+                },
+              },
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
+            },
+          },
+        };
+
+        ({ adapter } = await setupAcceptanceTestRealm({
+          contents,
+          mockMatrixUtils,
+        }));
+      });
+
+      test('user can update existing site config via stack menu', async function (assert) {
+        let initialDoc = await adapter.openFile('site.json');
+        assert.ok(initialDoc, 'site.json exists before update');
+
+        await visitOperatorMode({
+          submode: 'interact',
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}SiteConfig/custom`,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+
+        await waitFor(
+          `[data-test-stack-card="${testRealmURL}SiteConfig/custom"]`,
+        );
+        await click('[data-test-more-options-button]');
+        await click('[data-test-boxel-menu-item-text="Set as site home"]');
+
+        let siteDoc: any;
+        await waitUntil(async () => {
+          let file = await adapter.openFile('site.json');
+          if (!file) {
+            return false;
+          }
+          let content =
+            typeof file.content === 'string'
+              ? file.content
+              : JSON.stringify(file.content);
+          siteDoc = JSON.parse(content);
+          return siteDoc.data.relationships.home.links.self === './Pet/peanut';
+        });
+
+        assert.strictEqual(
+          siteDoc.data.relationships.home.links.self,
+          './Pet/peanut',
+          'existing site.json updated with new home',
+        );
+      });
+    });
+  });
+
+  module('site config menu visibility', function (hooks) {
+    hooks.beforeEach(async function () {
+      await setupAcceptanceTestRealm({
+        contents: realmContents,
+        mockMatrixUtils,
+      });
+    });
+
+    test('does not show menu for primary site config card', async function (assert) {
+      await visitOperatorMode({
+        submode: 'interact',
+        stacks: [[{ id: `${testRealmURL}site`, format: 'isolated' }]],
+      });
+
+      await waitFor(`[data-test-stack-card="${testRealmURL}site"]`);
+      await click('[data-test-more-options-button]');
+      assert
+        .dom('[data-test-boxel-menu-item-text="Set as site home"]')
         .doesNotExist();
     });
   });
