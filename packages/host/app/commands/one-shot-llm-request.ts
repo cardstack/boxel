@@ -12,6 +12,7 @@ import HostBaseCommand from '../lib/host-base-command';
 import { prettifyMessages } from '../utils/prettify-messages';
 import { prettifyPrompts } from '../utils/prettify-prompts';
 
+import ReadSourceCommand from './read-source';
 import ReadTextFileCommand from './read-text-file';
 import SendRequestViaProxyCommand from './send-request-via-proxy';
 
@@ -63,10 +64,10 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
       // Read the file contents using the codeRef
       let fileContent = '';
       if (input.codeRef?.module) {
-        const readTextFileCommand = new ReadTextFileCommand(
+        const readSourceCommand = new ReadSourceCommand(
           this.commandService.commandContext,
         );
-        const fileContents = await readTextFileCommand.execute({
+        const fileContents = await readSourceCommand.execute({
           path: input.codeRef.module,
         });
         fileContent = fileContents.content;
