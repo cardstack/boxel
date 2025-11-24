@@ -125,8 +125,20 @@ function getDisplayNames(klass: typeof BaseDef): string[] {
     if (!ref || isEqual(ref, baseRef)) {
       break;
     }
-    displayNames.push(current.displayName);
+    displayNames.push(normalizeDisplayName(current));
     current = Reflect.getPrototypeOf(current) as typeof BaseDef | undefined;
   }
   return displayNames;
+}
+
+function normalizeDisplayName(current: typeof BaseDef): string {
+  let name = current.displayName;
+  if (
+    (name === 'Card' && current.name !== 'CardDef') ||
+    (name === 'Field' && current.name !== 'FieldDef') ||
+    (name === 'Base' && current.name !== 'BaseDef')
+  ) {
+    return current.name;
+  }
+  return name;
 }

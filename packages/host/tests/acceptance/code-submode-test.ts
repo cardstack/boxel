@@ -511,6 +511,16 @@ module('Acceptance | code submode tests', function (_hooks) {
         [additionalRealmURL]: ['read', 'write', 'realm-owner'],
         [personalRealmURL]: ['read', 'write', 'realm-owner'],
       });
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealmURL,
+        permissions: {
+          '@testuser:localhost': ['read', 'write', 'realm-owner'],
+        },
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+        },
+      });
     });
 
     test('default realm is the personal realm', async function (assert) {

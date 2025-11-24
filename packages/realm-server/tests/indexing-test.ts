@@ -57,7 +57,7 @@ module(basename(__filename), function () {
     let realm: Realm;
     let adapter: RealmAdapter;
 
-    setupBaseRealmServer(hooks, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL, { disablePrerenderer: true });
 
     setupDB(hooks, {
       beforeEach: async (dbAdapter, publisher, runner) => {
@@ -70,6 +70,7 @@ module(basename(__filename), function () {
         );
         dir = dirSync().name;
         ({ realm, adapter } = await createRealm({
+          disablePrerenderer: true,
           withWorker: true,
           definitionLookup,
           dir,
@@ -2476,7 +2477,7 @@ module(basename(__filename), function () {
   });
 
   module('permissioned realm', function (hooks) {
-    setupBaseRealmServer(hooks, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL, { disablePrerenderer: true });
 
     let testRealm1URL = 'http://127.0.0.1:4447/';
     let testRealm2URL = 'http://127.0.0.1:4448/';
@@ -2490,6 +2491,7 @@ module(basename(__filename), function () {
       },
     ) {
       setupPermissionedRealms(hooks, {
+        disablePrerenderer: true,
         // provider
         realms: [
           {

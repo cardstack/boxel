@@ -55,6 +55,7 @@ import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
 import { render as renderIntoElement } from '@cardstack/host/lib/isolated-render';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
+import type NetworkService from '@cardstack/host/services/network';
 import { RealmServerTokenClaims } from '@cardstack/host/services/realm-server';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
 
@@ -661,10 +662,13 @@ export async function setupAcceptanceTestRealm({
   mockMatrixUtils: MockUtils;
   usePrerenderer?: boolean;
 }) {
-  setupAuthEndpoints();
+  let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
+  setupAuthEndpoints({
+    [resolvedRealmURL]: deriveTestUserPermissions(permissions),
+  });
   return await setupTestRealm({
     contents,
-    realmURL,
+    realmURL: resolvedRealmURL,
     isAcceptanceTest: true,
     permissions,
     mockMatrixUtils,
@@ -685,10 +689,13 @@ export async function setupIntegrationTestRealm({
   mockMatrixUtils: MockUtils;
   usePrerenderer?: boolean;
 }) {
-  setupAuthEndpoints();
+  let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
+  setupAuthEndpoints({
+    [resolvedRealmURL]: deriveTestUserPermissions(permissions),
+  });
   return await setupTestRealm({
     contents,
-    realmURL,
+    realmURL: resolvedRealmURL,
     isAcceptanceTest: false,
     permissions: permissions as RealmPermissions,
     mockMatrixUtils,
@@ -843,26 +850,30 @@ async function setupTestRealm({
   }
 }
 
-export function setupAuthEndpoints(
-  realmPermissions: Record<string, string[]> = {
-    [testRealmURL]: ['read', 'write'],
-  },
-) {
-  getService('network').mount(
-    async (req: Request) => {
+const authHandlerStateSymbol = Symbol('test-auth-handler-state');
+const TEST_MATRIX_USER = '@testuser:localhost';
+
+type AuthHandlerState = {
+  handler: (req: Request) => Promise<Response | null>;
+  realmPermissions: Map<string, RealmAction[]>;
+  mountedVirtualNetwork?: unknown;
+};
+
+function ensureAuthHandlerState(network: NetworkService): AuthHandlerState {
+  let state = (network as any)[authHandlerStateSymbol] as
+    | AuthHandlerState
+    | undefined;
+  if (!state) {
+    let realmPermissions = new Map<string, RealmAction[]>();
+    let handler = async (req: Request) => {
       if (req.url.includes('_realm-auth')) {
         const authTokens: Record<string, string> = {};
-        for (const [realmURL, permissions] of Object.entries(
-          realmPermissions,
-        )) {
+        for (let [realmURL, permissions] of realmPermissions.entries()) {
           authTokens[realmURL] = createJWT(
             {
-              user: '@testuser:localhost',
-              sessionRoom: getRoomIdForRealmAndUser(
-                realmURL,
-                '@testuser:localhost',
-              ),
-              permissions: permissions as RealmAction[],
+              user: TEST_MATRIX_USER,
+              sessionRoom: getRoomIdForRealmAndUser(realmURL, TEST_MATRIX_USER),
+              permissions,
               realm: realmURL,
             },
             '1d',
@@ -889,7 +900,7 @@ export function setupAuthEndpoints(
             headers: {
               Authorization: createJWT(
                 {
-                  user: '@testuser:localhost',
+                  user: TEST_MATRIX_USER,
                   sessionRoom: 'test-auth-realm-server-session-room',
                 },
                 '1d',
@@ -900,9 +911,56 @@ export function setupAuthEndpoints(
         }
       }
       return null;
-    },
-    { prepend: true },
-  );
+    };
+    state = { realmPermissions, handler };
+    (network as any)[authHandlerStateSymbol] = state;
+  }
+  if (state.mountedVirtualNetwork !== network.virtualNetwork) {
+    network.mount(state.handler, { prepend: true });
+    state.mountedVirtualNetwork = network.virtualNetwork;
+  }
+  return state;
+}
+
+export function setupAuthEndpoints(
+  realmPermissions: Record<string, RealmAction[]> = {
+    [testRealmURL]: ['read', 'write'],
+  },
+) {
+  let network = getService('network') as NetworkService;
+  let state = ensureAuthHandlerState(network);
+
+  for (let [realmURL, permissions] of Object.entries(realmPermissions)) {
+    state.realmPermissions.set(
+      ensureTrailingSlash(realmURL),
+      permissions as RealmAction[],
+    );
+  }
+}
+
+function deriveTestUserPermissions(
+  permissions?: RealmPermissions,
+): RealmAction[] {
+  if (!permissions) {
+    return ['read', 'write'];
+  }
+  let forTestUser = permissions[TEST_MATRIX_USER];
+  if (forTestUser) {
+    return forTestUser as RealmAction[];
+  }
+  let wildcard = permissions['*'];
+  if (wildcard) {
+    return wildcard as RealmAction[];
+  }
+  let firstEntry = Object.values(permissions)[0];
+  if (firstEntry) {
+    return firstEntry as RealmAction[];
+  }
+  return ['read', 'write'];
+}
+
+function ensureTrailingSlash(url: string): string {
+  return url.endsWith('/') ? url : `${url}/`;
 }
 
 export function setupUserSubscription() {

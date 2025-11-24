@@ -106,7 +106,7 @@ export const testRealm = 'http://test-realm/';
 export const localBaseRealm = 'http://localhost:4441/';
 export const matrixURL = new URL('http://localhost:8008');
 const testPrerenderHost = '127.0.0.1';
-const testPrerenderPort = 4450;
+const testPrerenderPort = 4460;
 const testPrerenderURL = `http://${testPrerenderHost}:${testPrerenderPort}`;
 const testMatrix: MatrixConfig = {
   url: matrixURL,
@@ -311,7 +311,7 @@ export async function createRealm({
   matrixConfig = testMatrix,
   withWorker,
   enableFileWatcher = false,
-  usePrerenderer,
+  disablePrerenderer = false,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -328,7 +328,7 @@ export async function createRealm({
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
-  usePrerenderer?: boolean;
+  disablePrerenderer?: boolean;
 }): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
@@ -342,7 +342,7 @@ export async function createRealm({
 
   let adapter = new NodeAdapter(dir, enableFileWatcher);
   let worker: Worker | undefined;
-  if (usePrerenderer) {
+  if (!disablePrerenderer) {
     (globalThis as any).__useHeadlessChromePrerender = true;
   }
   let prerenderer = await getTestPrerenderer();
@@ -363,7 +363,7 @@ export async function createRealm({
       secretSeed: realmSecretSeed,
       realmServerMatrixUsername: testRealmServerMatrixUsername,
       prerenderer,
-      useHeadlessChromePrerender: Boolean(usePrerenderer),
+      useHeadlessChromePrerender: Boolean(!disablePrerenderer),
     });
   }
   let realmServerMatrixClient = new MatrixClient({
@@ -392,7 +392,7 @@ export async function createRealm({
 export function setupBaseRealmServer(
   hooks: NestedHooks,
   matrixURL: URL,
-  options: { usePrerenderer?: boolean } = {},
+  options: { disablePrerenderer?: boolean } = {},
 ) {
   let baseRealmServer: Server | undefined;
   setupDB(hooks, {
@@ -426,14 +426,14 @@ export async function runBaseRealmServer(
   matrixURL: URL,
   realmsRootPath: string,
   permissions: RealmPermissions = { '*': ['read'] },
-  options: { usePrerenderer?: boolean } = {},
+  options: { disablePrerenderer?: boolean } = {},
 ) {
-  let { usePrerenderer = false } = options;
+  let { disablePrerenderer = false } = options;
   let localBaseRealmURL = new URL(localBaseRealm);
   virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 
   let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
-  if (usePrerenderer) {
+  if (!disablePrerenderer) {
     (globalThis as any).__useHeadlessChromePrerender = true;
   }
 
@@ -451,7 +451,7 @@ export async function runBaseRealmServer(
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
-    useHeadlessChromePrerender: Boolean(usePrerenderer),
+    useHeadlessChromePrerender: Boolean(!disablePrerenderer),
   });
   let { realm: testBaseRealm } = await createRealm({
     dir: basePath,
@@ -508,7 +508,7 @@ export async function runTestRealmServer({
     boxelSpace: 'localhost',
     boxelSite: 'localhost',
   },
-  usePrerenderer = false,
+  disablePrerenderer = false,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -526,10 +526,10 @@ export async function runTestRealmServer({
     boxelSpace?: string;
     boxelSite?: string;
   };
-  usePrerenderer?: boolean;
+  disablePrerenderer?: boolean;
 }) {
   let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
-  if (usePrerenderer) {
+  if (!disablePrerenderer) {
     (globalThis as any).__useHeadlessChromePrerender = true;
   }
   let prerenderer = await getTestPrerenderer();
@@ -546,7 +546,7 @@ export async function runTestRealmServer({
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
-    useHeadlessChromePrerender: Boolean(usePrerenderer),
+    useHeadlessChromePrerender: Boolean(!disablePrerenderer),
   });
   await worker.run();
   let { realm: testRealm, adapter: testRealmAdapter } = await createRealm({
@@ -818,11 +818,37 @@ export function setupMatrixRoom(
 export async function waitForRealmEvent(
   getMessagesSince: (since: number) => Promise<MatrixEvent[]>,
   since: number,
-) {
-  await waitUntil(async () => {
-    let matrixMessages = await getMessagesSince(since);
-    return matrixMessages.length > 0;
-  });
+  options: {
+    predicate?: (event: RealmEvent) => boolean;
+    timeout?: number;
+    timeoutMessage?: string;
+  } = {},
+): Promise<RealmEvent> {
+  let { predicate = () => true, timeout, timeoutMessage } = options;
+
+  let event = await waitUntil<RealmEvent | undefined>(
+    async () => {
+      let matrixMessages = await getMessagesSince(since);
+      let matchingEvent = matrixMessages.find((event): event is RealmEvent => {
+        if (event.type !== APP_BOXEL_REALM_EVENT_TYPE) {
+          return false;
+        }
+        return predicate(event as RealmEvent);
+      });
+
+      if (matchingEvent) {
+        return matchingEvent;
+      }
+
+      return undefined;
+    },
+    {
+      timeout: timeout ?? 5000,
+      timeoutMessage,
+    },
+  );
+
+  return event!;
 }
 
 export function findRealmEvent(
@@ -963,7 +989,7 @@ export function setupPermissionedRealms(
     mode = 'beforeEach',
     realms: realmsArg,
     onRealmSetup,
-    usePrerenderer,
+    disablePrerenderer,
   }: {
     mode?: 'beforeEach' | 'before';
     realms: {
@@ -980,7 +1006,7 @@ export function setupPermissionedRealms(
         realmAdapter: RealmAdapter;
       }[];
     }) => void;
-    usePrerenderer?: true;
+    disablePrerenderer?: true;
   },
 ) {
   // We want 2 different realm users to test authorization between them - these
@@ -1022,7 +1048,7 @@ export function setupPermissionedRealms(
           dbAdapter,
           publisher,
           runner,
-          usePrerenderer,
+          disablePrerenderer,
         });
         realms.push({
           realm,

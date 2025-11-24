@@ -708,6 +708,78 @@ module(basename(__filename), function () {
             'error message is correct',
           );
         });
+
+        test('can update an existing instance', async function (assert) {
+          let addDoc = {
+            'atomic:operations': [
+              {
+                op: 'add',
+                href: '/update-person.json',
+                data: {
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Initial',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '/person',
+                      name: 'Person',
+                    },
+                  },
+                },
+              },
+            ],
+          };
+
+          await request
+            .post('/_atomic')
+            .set('Accept', SupportedMimeType.JSONAPI)
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+            )
+            .send(JSON.stringify(addDoc))
+            .expect(201);
+
+          let updateDoc = {
+            'atomic:operations': [
+              {
+                op: 'update',
+                href: '/update-person.json',
+                data: {
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Updated',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '/person',
+                      name: 'Person',
+                    },
+                  },
+                },
+              },
+            ],
+          };
+
+          let response = await request
+            .post('/_atomic')
+            .set('Accept', SupportedMimeType.JSONAPI)
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+            )
+            .send(JSON.stringify(updateDoc));
+
+          assert.strictEqual(response.status, 201);
+          assert.strictEqual(response.body['atomic:results'].length, 1);
+
+          let updatedCardResponse = await request
+            .get('/update-person')
+            .set('Accept', SupportedMimeType.CardJson);
+          let updatedCard = updatedCardResponse.body as LooseSingleCardDocument;
+          assert.strictEqual(updatedCard.data.attributes?.firstName, 'Updated');
+        });
       });
       module('validation', function (hooks) {
         setupPermissionedRealm(hooks, {
@@ -782,7 +854,7 @@ module(basename(__filename), function () {
           assert.strictEqual(error1.status, 422);
           assert.strictEqual(
             error1.detail,
-            `You tried to use an unsupported operation type: 'delete'. Only 'add' operations are currently supported`,
+            `You tried to use an unsupported operation type: 'delete'. Only 'add' and 'update' operations are currently supported`,
           );
           assert.strictEqual(error2.title, 'Invalid atomic:operations format');
           assert.strictEqual(error2.status, 400);
@@ -808,6 +880,31 @@ module(basename(__filename), function () {
           assert.strictEqual(
             error.detail,
             `You tried to use an unsupported resource type: 'file'. Only 'card' and 'source' resource types are currently supported`,
+          );
+        });
+
+        test('rejects update when resource does not exist', async function (assert) {
+          let response = await request
+            .post('/_atomic')
+            .set('Accept', SupportedMimeType.JSONAPI)
+            .send({
+              'atomic:operations': [
+                {
+                  op: 'update',
+                  href: '/missing.json',
+                  data: { type: 'card' },
+                },
+              ],
+            })
+            .expect(404);
+
+          assert.strictEqual(response.body.errors.length, 1);
+          let error = response.body.errors[0];
+          assert.strictEqual(error.title, 'Resource does not exist');
+          assert.strictEqual(error.status, 404);
+          assert.strictEqual(
+            error.detail,
+            'Resource /missing.json does not exist',
           );
         });
       });

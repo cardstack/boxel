@@ -1,0 +1,30 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Skill",
+        "module": "https://cardstack.com/base/skill"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": "Theme Design Skill",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "commands": [],
+      "description": null,
+      "instructions": "## Structured Theme\n- Base theme card defining cohesive tokens (palette, typography, spacing, radius, shadows, charts, sidebar) across light `:root` and dark `.dark` modes.\n- Includes plain maps for `rootVariables` and `darkModeVariables`, plus compiled `cssVariables` (with `@theme inline`) so any card can consume the theme.\n- Use OKLCH or Hex values with AA contrast and reference tokens with `var(--token, fallback)`.\n\n## Style Reference (extends Structured Theme)\n- Adds narrative context for the look and feel: `styleName`, `visualDNA`, inspirations, wallpaper imagery, and card metadata while still carrying all structured theme tokens and CSS.\n- Use it when you want both the full token set and a short story for the mood; it stays compatible with any card that reads structured theme variables.\n\n## Brand Guide (extends Style Reference)\n- Adds brand assets and semantics on top of the style reference: marks/clearspace, heading/body typography stacks, named swatches and functional palette, plus all structured theme tokens and CSS.\n- Use it to ship a complete brand kit that can theme any card while also documenting marks, fonts, and semantic colors for your org."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
