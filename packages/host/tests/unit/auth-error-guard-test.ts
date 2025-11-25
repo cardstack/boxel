@@ -20,8 +20,14 @@ module('Unit | auth-error-guard', function () {
         [authErrorEventMiddleware(window)],
       );
 
-      let error = await assert.rejects(
-        guard.race(() => fetch('http://example.com/')),
+      let error: unknown;
+      await assert.rejects(
+        guard
+          .race(() => fetch('http://example.com/'))
+          .catch((err) => {
+            error = err;
+            throw err;
+          }),
         /Unauthorized/,
       );
 
