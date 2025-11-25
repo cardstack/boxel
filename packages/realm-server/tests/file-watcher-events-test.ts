@@ -1,20 +1,26 @@
-import { module, test } from 'qunit';
+import QUnit, { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
 import type { Server } from 'http';
 import type { DirResult } from 'tmp';
-import { removeSync, writeJSONSync } from 'fs-extra';
+import { removeSync, writeJSONSync, writeFileSync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
 import {
-  findRealmEvent,
   setupBaseRealmServer,
   setupPermissionedRealm,
   setupMatrixRoom,
   matrixURL,
   waitForRealmEvent,
+  waitUntil,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { PgAdapter } from '@cardstack/postgres';
+import type {
+  RealmEvent,
+  UpdateRealmEventContent,
+} from 'https://cardstack.com/base/matrix-event';
+
+QUnit.config.testTimeout = 30000;
 
 module(basename(__filename), function () {
   module('file watcher realm events', function (hooks) {
@@ -98,6 +104,40 @@ module(basename(__filename), function () {
 
     let { getMessagesSince } = setupMatrixRoom(hooks, getRealmSetup);
 
+    type FileChangeType = 'added' | 'updated' | 'removed';
+
+    function matchesFileChange(
+      event: RealmEvent,
+      changeType: FileChangeType,
+      fileName: string,
+    ): boolean {
+      if (event.content.eventName !== 'update') {
+        return false;
+      }
+
+      let content = event.content as UpdateRealmEventContent;
+
+      switch (changeType) {
+        case 'added':
+          return 'added' in content && content.added === fileName;
+        case 'updated':
+          return 'updated' in content && content.updated === fileName;
+        case 'removed':
+          return 'removed' in content && content.removed === fileName;
+      }
+    }
+
+    async function waitForFileChange(
+      changeType: FileChangeType,
+      fileName: string,
+    ): Promise<RealmEvent> {
+      return waitForRealmEvent(getMessagesSince, realmEventTimestampStart, {
+        predicate: (event) => matchesFileChange(event, changeType, fileName),
+        timeout: 20000,
+        timeoutMessage: `Waiting for ${changeType} event for ${fileName} exceeded timeout`,
+      });
+    }
+
     test('file creation produces an added event', async function (assert) {
       realmEventTimestampStart = Date.now();
 
@@ -124,11 +164,9 @@ module(basename(__filename), function () {
         },
       });
 
-      await waitForRealmEvent(getMessagesSince, realmEventTimestampStart);
-      let messages = await getMessagesSince(realmEventTimestampStart);
-      let updateEvent = findRealmEvent(messages, 'update', 'incremental');
+      let updateEvent = await waitForFileChange('added', basename(newFilePath));
 
-      assert.deepEqual(updateEvent?.content, {
+      assert.deepEqual(updateEvent.content, {
         eventName: 'update',
         added: basename(newFilePath),
       });
@@ -158,11 +196,12 @@ module(basename(__filename), function () {
         },
       });
 
-      await waitForRealmEvent(getMessagesSince, realmEventTimestampStart);
-      let messages = await getMessagesSince(realmEventTimestampStart);
-      let updateEvent = findRealmEvent(messages, 'update', 'incremental');
+      let updateEvent = await waitForFileChange(
+        'updated',
+        basename(updatedFilePath),
+      );
 
-      assert.deepEqual(updateEvent?.content, {
+      assert.deepEqual(updateEvent.content, {
         eventName: 'update',
         updated: basename(updatedFilePath),
       });
@@ -180,14 +219,153 @@ module(basename(__filename), function () {
 
       removeSync(deletedFilePath);
 
-      await waitForRealmEvent(getMessagesSince, realmEventTimestampStart);
-      let messages = await getMessagesSince(realmEventTimestampStart);
-      let updateEvent = findRealmEvent(messages, 'update', 'incremental');
+      let updateEvent = await waitForFileChange(
+        'removed',
+        basename(deletedFilePath),
+      );
 
-      assert.deepEqual(updateEvent?.content, {
+      assert.deepEqual(updateEvent.content, {
         eventName: 'update',
         removed: basename(deletedFilePath),
       });
+    });
+
+    test('file watcher invalidates caches after external edits', async function (assert) {
+      const personFilePath = join(
+        dir.name,
+        'realm_server_1',
+        'test',
+        'person.gts',
+      );
+      const louisFilePath = join(
+        dir.name,
+        'realm_server_1',
+        'test',
+        'louis.json',
+      );
+
+      testRealm.__testOnlyClearCaches();
+
+      let initialSourceResponse = await request
+        .get('/person.gts')
+        .set('Accept', 'application/vnd.card+source');
+      assert.strictEqual(
+        initialSourceResponse.headers['x-boxel-cache'],
+        'miss',
+        'initial card-source response seeds the cache',
+      );
+
+      let cachedSourceResponse = await request
+        .get('/person.gts')
+        .set('Accept', 'application/vnd.card+source');
+      assert.strictEqual(
+        cachedSourceResponse.headers['x-boxel-cache'],
+        'hit',
+        'card source is cached',
+      );
+      let cachedSourceBody = cachedSourceResponse.text.trim();
+
+      await request.get('/louis').set('Accept', 'application/vnd.card+json');
+
+      realmEventTimestampStart = Date.now();
+
+      let updatedPersonSource = `
+import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+import StringField from "https://cardstack.com/base/string";
+
+export class Person extends CardDef {
+  @field firstName = contains(StringField);
+  @field lastName = contains(StringField);
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <h1><@fields.firstName/> <@fields.lastName/></h1>
+    </template>
+  }
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      Embedded Card Person: <@fields.firstName/> <@fields.lastName/>
+    </template>
+  }
+  static fitted = class Fitted extends Component<typeof this> {
+    <template>
+      Fitted Card Person: <@fields.firstName/> <@fields.lastName/>
+    </template>
+  }
+}
+      `.trim();
+
+      writeFileSync(personFilePath, `${updatedPersonSource}\n`);
+      writeJSONSync(louisFilePath, {
+        data: {
+          attributes: {
+            firstName: 'Louis',
+            lastName: 'Riel',
+          },
+          meta: {
+            adoptsFrom: {
+              module: './person',
+              name: 'Person',
+            },
+          },
+        },
+      });
+
+      await waitUntil(
+        async () =>
+          (await getMessagesSince(realmEventTimestampStart)).length >= 2,
+        { timeout: 5000, timeoutMessage: 'file watcher events did not arrive' },
+      );
+      await testRealm.flushUpdateEvents();
+
+      let updatedSourceResponse = await request
+        .get('/person.gts')
+        .set('Accept', 'application/vnd.card+source');
+
+      assert.strictEqual(
+        updatedSourceResponse.text.trim(),
+        updatedPersonSource,
+        'module source reflects the external edit',
+      );
+      assert.notStrictEqual(
+        updatedSourceResponse.text.trim(),
+        cachedSourceBody,
+        'stale cached source was not served after external edits',
+      );
+
+      let repopulatedSourceResponse = await request
+        .get('/person.gts')
+        .set('Accept', 'application/vnd.card+source');
+
+      assert.strictEqual(
+        repopulatedSourceResponse.headers['x-boxel-cache'],
+        'hit',
+        'updated source is cached again after invalidation',
+      );
+      assert.strictEqual(
+        repopulatedSourceResponse.text.trim(),
+        updatedPersonSource,
+        'cached source reflects the updated module after invalidation',
+      );
+
+      let updatedCardResponse = await request
+        .get('/louis')
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(
+        updatedCardResponse.status,
+        200,
+        'card request succeeds',
+      );
+      assert.strictEqual(
+        updatedCardResponse.body.data.attributes.firstName,
+        'Louis',
+        'existing attributes remain intact',
+      );
+      assert.strictEqual(
+        updatedCardResponse.body.data.attributes.lastName,
+        'Riel',
+        'module and definition caches are refreshed after external edits',
+      );
     });
   });
 });

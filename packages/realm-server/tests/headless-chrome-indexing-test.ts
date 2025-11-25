@@ -416,7 +416,6 @@ async function startTestRealm({
   let virtualNetwork = createVirtualNetwork();
   let dir = dirSync().name;
   let testRealmServer = await runTestRealmServer({
-    usePrerenderer: true,
     testRealmDir: dir,
     realmsRootPath: join(dir, 'realm_server_1'),
     virtualNetwork,
@@ -2326,7 +2325,6 @@ module(basename(__filename), function () {
       },
     ) {
       setupPermissionedRealms(hooks, {
-        usePrerenderer: true,
         // provider
         realms: [
           {

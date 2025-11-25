@@ -85,7 +85,7 @@ export class RealmIndexUpdater {
   // TODO consider triggering realm events for invalidations now that we can
   // calculate fine grained invalidations for from-scratch indexing by passing
   // in an onInvalidation callback
-  async fullIndex() {
+  async fullIndex(priority = systemInitiatedPriority) {
     this.#indexingDeferred = new Deferred<void>();
     let startedAt = performance.now();
     try {
@@ -100,7 +100,7 @@ export class RealmIndexUpdater {
         jobType: `from-scratch-index`,
         concurrencyGroup: `indexing:${this.#realm.url}`,
         timeout: FROM_SCRATCH_JOB_TIMEOUT_SEC,
-        priority: systemInitiatedPriority,
+        priority,
         args,
       });
       let { ignoreData, stats } = await job.done;
