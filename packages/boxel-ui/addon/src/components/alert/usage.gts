@@ -56,7 +56,7 @@ export default class AlertUsage extends Component<Signature> {
         <Alert @type='warning' as |Alert|>
           <Alert.Messages
             @messages={{array
-              'You are about the run of credit. Please upgrade your plan or buy additional credit soon.'
+              'You are about to run of credit. Please upgrade your plan or buy additional credit soon.'
             }}
           />
         </Alert>
