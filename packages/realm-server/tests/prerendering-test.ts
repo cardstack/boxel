@@ -340,6 +340,154 @@ module(basename(__filename), function () {
     });
   });
 
+  module('prerender - permissioned auth failures', function (hooks) {
+    let providerRealmURL = 'http://127.0.0.1:4451/';
+    let consumerRealmURL = 'http://127.0.0.1:4452/';
+    let prerenderServerURL = consumerRealmURL.endsWith('/')
+      ? consumerRealmURL.slice(0, -1)
+      : consumerRealmURL;
+    let testUserId = '@user1:localhost';
+    let permissions: RealmPermissions = {};
+    let prerenderer: Prerenderer;
+
+    hooks.before(async () => {
+      prerenderer = new Prerenderer({
+        secretSeed: realmSecretSeed,
+        maxPages: 2,
+        serverURL: prerenderServerURL,
+      });
+    });
+
+    hooks.after(async () => {
+      await prerenderer.stop();
+    });
+
+    hooks.afterEach(async () => {
+      await Promise.all([
+        prerenderer.disposeRealm(providerRealmURL),
+        prerenderer.disposeRealm(consumerRealmURL),
+      ]);
+    });
+
+    setupBaseRealmServer(hooks, matrixURL);
+
+    setupPermissionedRealms(hooks, {
+      mode: 'before',
+      realms: [
+        {
+          realmURL: providerRealmURL,
+          permissions: {
+            // consumer's matrix user is not authorized to read
+            nobody: ['read', 'write'],
+          },
+          fileSystem: {
+            'article.gts': `
+              import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+              import StringField from "https://cardstack.com/base/string";
+              export class Article extends CardDef {
+                @field title = contains(StringField);
+              }
+            `,
+          },
+        },
+        {
+          realmURL: consumerRealmURL,
+          permissions: {
+            '*': ['read', 'write', 'realm-owner'],
+          },
+          fileSystem: {
+            'website.gts': `
+              import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+              import { Article } from "${providerRealmURL}article" // importing from another realm;
+              export class Website extends CardDef {
+                @field linkedArticle = linksTo(Article);
+              }
+            `,
+            'website-1.json': {
+              data: {
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: './website',
+                    name: 'Website',
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+      onRealmSetup() {
+        permissions = {
+          [consumerRealmURL]: ['read', 'write', 'realm-owner'],
+        };
+      },
+    });
+
+    test('module prerender surfaces auth error without timing out', async function (assert) {
+      const moduleURL = `${consumerRealmURL}website.gts`;
+
+      let result = await prerenderer.prerenderModule({
+        realm: consumerRealmURL,
+        url: moduleURL,
+        userId: testUserId,
+        permissions,
+      });
+
+      assert.strictEqual(
+        result.response.status,
+        'error',
+        'auth failure returns an error response',
+      );
+      let status = result.response.error?.error.status;
+      assert.strictEqual(status, 401, `auth error status should be 401`);
+      assert.notStrictEqual(
+        result.response.error?.error.title,
+        'Render timeout',
+        'auth failure is not reported as a timeout',
+      );
+      assert.false(
+        result.pool.timedOut,
+        'auth failure should not mark prerender as timed out',
+      );
+      assert.false(
+        result.pool.evicted,
+        'auth failure should not evict prerender page',
+      );
+    });
+
+    test('card prerender surfaces auth error without timing out', async function (assert: any) {
+      const cardURL = `${consumerRealmURL}website-1`;
+
+      let result = await prerenderer.prerenderCard({
+        realm: consumerRealmURL,
+        url: cardURL,
+        userId: testUserId,
+        permissions,
+      });
+
+      assert.ok(
+        result.response.error,
+        'auth failure returns an error response',
+      );
+      let status = result.response.error?.error.status;
+      assert.strictEqual(status, 401, `auth error status should be 401`);
+      assert.notStrictEqual(
+        result.response.error?.error.title,
+        'Render timeout',
+        'auth failure is not reported as a timeout',
+      );
+      assert.false(
+        result.pool.timedOut,
+        'auth failure should not mark prerender as timed out',
+      );
+      assert.false(
+        result.pool.evicted,
+        'auth failure should not evict prerender page',
+      );
+    });
+  });
+
   module('prerender - static tests', function (hooks) {
     let realmURL1 = 'http://127.0.0.1:4447/';
     let realmURL2 = 'http://127.0.0.1:4448/';
