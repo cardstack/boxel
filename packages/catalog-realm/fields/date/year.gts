@@ -16,7 +16,7 @@ class YearFieldEdit extends Component<typeof YearField> {
 
   @action
   updateValue(year: number | null) {
-    this.args.model.value = year;
+    this.args.model.value = year ?? undefined;
   }
 
   <template>

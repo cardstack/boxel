@@ -40,7 +40,7 @@ class MonthFieldEdit extends Component<typeof MonthField> {
 
   @action
   updateValue(option: { value: number; label: string } | null) {
-    this.args.model.value = option?.value || null;
+    this.args.model.value = option?.value ?? undefined;
   }
 
   <template>

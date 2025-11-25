@@ -1,15 +1,11 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 import {
   FieldDef,
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
-import { on } from '@ember/modifier';
-import ClockIcon from '@cardstack/boxel-icons/clock'; // ² Clock icon
-import { TimeField } from '../time'; // ³ Import TimeField
+} from 'https://cardstack.com/base/card-api';
+import ClockIcon from '@cardstack/boxel-icons/clock';
+import { TimeField } from '../time';
 
 class TimeRangeFieldEdit extends Component<typeof TimeRangeField> {
   get durationMinutes() {
@@ -102,15 +98,13 @@ class TimeRangeFieldEdit extends Component<typeof TimeRangeField> {
   </template>
 }
 
-// ⁴ TimeRangeField - Independent FieldDef with structured start/end times
 export class TimeRangeField extends FieldDef {
   static displayName = 'Time Range';
   static icon = ClockIcon;
 
-  @field start = contains(TimeField); // ⁵ Use TimeField for range start
-  @field end = contains(TimeField); // ⁶ Use TimeField for range end
+  @field start = contains(TimeField);
+  @field end = contains(TimeField);
 
-  // ⁷ Embedded format - clean time range display
   static embedded = class Embedded extends Component<typeof this> {
     get displayValue() {
       const start = this.args.model?.start?.value;
@@ -141,7 +135,6 @@ export class TimeRangeField extends FieldDef {
     </template>
   };
 
-  // ⁸ Atom format - compact badge display
   static atom = class Atom extends Component<typeof this> {
     get displayValue() {
       const start = this.args.model?.start?.value;
@@ -186,7 +179,6 @@ export class TimeRangeField extends FieldDef {
     </template>
   };
 
-  // ⁹ Edit format - dual time inputs
   static edit = TimeRangeFieldEdit;
 }
 

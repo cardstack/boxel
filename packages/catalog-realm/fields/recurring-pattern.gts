@@ -9,7 +9,7 @@ import NumberField from 'https://cardstack.com/base/number';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { fn, array } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { BoxelSelect, Pill } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event';
@@ -410,22 +410,20 @@ class RecurringPatternFieldEdit extends Component<
   </template>
 }
 
-// ⁵ RecurringPatternField - Independent FieldDef for event recurrence
 export class RecurringPatternField extends FieldDef {
   static displayName = 'Recurring Pattern';
   static icon = CalendarEventIcon;
 
-  @field pattern = contains(StringField); // ⁶ Pattern type (none, daily, weekly, etc.)
-  @field startDate = contains(DateField); // ⁷ When recurrence starts
-  @field endDate = contains(DateField); // ⁸ When recurrence ends (optional)
-  @field occurrences = contains(NumberField); // ⁹ End after N occurrences
-  @field interval = contains(NumberField); // ¹⁰ Interval: every N days/weeks/months
-  @field daysOfWeek = contains(StringField); // ¹¹ For weekly: comma-separated day numbers
-  @field dayOfMonth = contains(NumberField); // ¹² For monthly: day of month (1-31)
-  @field monthOfYear = contains(NumberField); // ¹³ For yearly: month (1-12)
-  @field customRule = contains(StringField); // ¹⁴ iCal RRULE for advanced patterns
+  @field pattern = contains(StringField); //  Pattern type (none, daily, weekly, etc.)
+  @field startDate = contains(DateField); //  When recurrence starts
+  @field endDate = contains(DateField); //  When recurrence ends (optional)
+  @field occurrences = contains(NumberField); //  End after N occurrences
+  @field interval = contains(NumberField); //  Interval: every N days/weeks/months
+  @field daysOfWeek = contains(StringField); //  For weekly: comma-separated day numbers
+  @field dayOfMonth = contains(NumberField); //  For monthly: day of month (1-31)
+  @field monthOfYear = contains(NumberField); //  For yearly: month (1-12)
+  @field customRule = contains(StringField); //  iCal RRULE for advanced patterns
 
-  // ¹⁵ Embedded format - formatted recurrence summary
   static embedded = class Embedded extends Component<typeof this> {
     get displayValue() {
       const pattern = this.args.model?.pattern;
@@ -444,7 +442,6 @@ export class RecurringPatternField extends FieldDef {
 
       let display = patternLabels[pattern] || pattern;
 
-      // Add interval if specified
       const interval = this.args.model?.interval;
       if (interval && interval > 1) {
         display = `Every ${interval} ${
@@ -456,7 +453,6 @@ export class RecurringPatternField extends FieldDef {
         }`;
       }
 
-      // Add end condition
       const endDate = this.args.model?.endDate;
       const occurrences = this.args.model?.occurrences;
 
@@ -499,7 +495,6 @@ export class RecurringPatternField extends FieldDef {
     </template>
   };
 
-  // ¹⁶ Atom format - compact recurrence badge
   static atom = class Atom extends Component<typeof this> {
     get displayValue() {
       const pattern = this.args.model?.pattern;
