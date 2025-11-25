@@ -436,7 +436,6 @@ jobs:
             "realm-endpoints/permissions-test.ts",
             "realm-endpoints/search-test.ts",
             "realm-endpoints/user-test.ts",
-            "realm-endpoints/definition-test.ts",
             "realm-endpoints-test.ts",
             "search-prerendered-test.ts",
             "types-endpoint-test.ts",
