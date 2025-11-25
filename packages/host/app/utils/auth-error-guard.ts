@@ -32,6 +32,7 @@ export function createAuthErrorGuard(
       'detail' in event ? (event as CustomEvent).detail : (event as any).detail;
     let error = coerceAuthError(detail);
     (error as any)[FLAG] = true;
+    console.log('===> rejecting auth error deferreds');
     for (let deferred of inFlight) {
       deferred.reject(error);
     }
@@ -61,7 +62,21 @@ export function createAuthErrorGuard(
     let deferred = new Deferred<never>();
     inFlight.add(deferred);
     try {
-      return await Promise.race([promiseFactory(), deferred.promise]);
+      let result = await Promise.race([promiseFactory(), deferred.promise]);
+      if (result instanceof Response && isAuthStatus(result.status)) {
+        let error: CardError;
+        try {
+          error = await CardError.fromFetchResponse(result.url, result.clone());
+        } catch {
+          error = new CardError(
+            result.statusText || 'Authorization error while logging into realm',
+            { status: result.status },
+          );
+        }
+        (error as any)[FLAG] = true;
+        throw error;
+      }
+      return result;
     } finally {
       inFlight.delete(deferred);
     }

@@ -21,7 +21,7 @@ import {
   trimExecutableExtension,
 } from '@cardstack/runtime-common';
 
-module(basename(__filename), function () {
+module.only(basename(__filename), function () {
   module('prerender - dynamic tests', function (hooks) {
     let realmURL = 'http://127.0.0.1:4450/';
     let prerenderServerURL = realmURL.endsWith('/')
@@ -388,6 +388,19 @@ module(basename(__filename), function () {
                 @field title = contains(StringField);
               }
             `,
+            'secret.json': {
+              data: {
+                attributes: {
+                  title: 'Top Secret',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './article',
+                    name: 'Article',
+                  },
+                },
+              },
+            },
           },
         },
         {
@@ -410,6 +423,45 @@ module(basename(__filename), function () {
                   adoptsFrom: {
                     module: './website',
                     name: 'Website',
+                  },
+                },
+              },
+            },
+            'auth-proxy.gts': `
+              import { contains, field, CardDef, linksTo, Component } from "https://cardstack.com/base/card-api";
+              import StringField from "https://cardstack.com/base/string";
+              // define a local stand-in type so the consumer realm doesn't need to import provider modules
+              export class RemoteArticle extends CardDef {
+                @field title = contains(StringField);
+              }
+              export class AuthProxy extends CardDef {
+                @field linkedArticle = linksTo(RemoteArticle);
+                @field articleTitle = contains(StringField, {
+                  computeVia(this: AuthProxy) {
+                    return this.linkedArticle?.title;
+                  },
+                });
+                static isolated = class extends Component<typeof this> {
+                  <template>
+                    <@fields.articleTitle />
+                  </template>
+                }
+              }
+            `,
+            'auth-proxy-1.json': {
+              data: {
+                attributes: {},
+                relationships: {
+                  linkedArticle: {
+                    links: {
+                      self: `${providerRealmURL}secret`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './auth-proxy',
+                    name: 'AuthProxy',
                   },
                 },
               },
@@ -456,7 +508,7 @@ module(basename(__filename), function () {
     });
 
     test('card prerender surfaces auth error without timing out', async function (assert) {
-      const cardURL = `${consumerRealmURL}website-1`;
+      const cardURL = `${consumerRealmURL}auth-proxy-1`;
 
       let result = await prerenderer.prerenderCard({
         realm: consumerRealmURL,
@@ -484,6 +536,30 @@ module(basename(__filename), function () {
         result.pool.evicted,
         'auth failure should not evict prerender page',
       );
+    });
+
+    test('card prerender surfaces auth error from linked fetch', async function (assert) {
+      const cardURL = `${consumerRealmURL}auth-proxy-1`;
+
+      let result = await prerenderer.prerenderCard({
+        realm: consumerRealmURL,
+        url: cardURL,
+        userId: testUserId,
+        permissions,
+      });
+
+      assert.ok(result.response.error, 'auth failure returns an error');
+      assert.strictEqual(
+        result.response.error?.error.status,
+        401,
+        'linked fetch auth error surfaces as 401',
+      );
+      assert.notStrictEqual(
+        result.response.error?.error.title,
+        'Render timeout',
+        'auth failure not misreported as timeout',
+      );
+      assert.false(result.pool.timedOut, 'prerender did not time out');
     });
   });
 
