@@ -356,7 +356,7 @@ export function hoistPrimaryCardError(
   };
 }
 
-function stripSelfDeps(
+export function stripSelfDeps(
   deps: string[] | undefined,
   moduleURL?: string | null,
   baseId?: string | null,

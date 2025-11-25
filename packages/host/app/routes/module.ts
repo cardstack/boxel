@@ -41,6 +41,7 @@ import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
+import { ensureMessageIncludesUrl, stripSelfDeps } from '../utils/render-error';
 import {
   enableRenderTimerStub,
   beginTimerBlock,
@@ -445,7 +446,11 @@ export function modelWithError({
       serializableError(maybeCardError),
     );
     let depsSet = new Set([...(hoisted.deps ?? []), ...deps]);
-    hoisted.deps = stripSelfDeps(depsSet.size ? [...depsSet] : undefined, id);
+    hoisted.deps = stripSelfDeps(
+      depsSet.size ? [...depsSet] : undefined,
+      id,
+      id,
+    );
     hoisted.message = ensureMessageIncludesUrl(hoisted.message, id);
     hoisted.additionalErrors = null;
     baseError = serializableError(hoisted);
@@ -454,7 +459,7 @@ export function modelWithError({
       status: status ?? err?.status ?? 500,
       message,
       additionalErrors: err !== undefined ? [serializableError(err)] : null,
-      deps: stripSelfDeps(deps, id),
+      deps: stripSelfDeps(deps, id, id),
     };
   }
   return {
@@ -511,35 +516,6 @@ function toSerializedError(err: unknown, message: string): SerializedError {
     cardError.additionalErrors = null;
   }
   return serializableError(cardError);
-}
-
-function ensureMessageIncludesUrl(
-  message: string | undefined,
-  url: string,
-): string {
-  if (!url) {
-    return message ?? '';
-  }
-  if (message && message.includes(url)) {
-    return message;
-  }
-  return message ? `${message} (${url})` : url;
-}
-
-function stripSelfDeps(
-  deps: string[] | undefined,
-  id: string,
-): string[] | undefined {
-  if (!deps) {
-    return undefined;
-  }
-  let selfVariants = new Set<string>([
-    id,
-    id.endsWith('.json') ? id.replace(/\.json$/, '.gts') : id,
-    id.endsWith('.gts') ? id.replace(/\.gts$/, '.json') : id,
-  ]);
-  let filtered = deps.filter((dep) => !selfVariants.has(dep));
-  return filtered.length ? filtered : undefined;
 }
 
 function describeError(err: unknown): string {
