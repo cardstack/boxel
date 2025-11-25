@@ -136,7 +136,8 @@ module(basename(__filename), function () {
           getMessagesSince,
           realmEventTimestampStart,
           {
-            predicate: (event) => matchesFileChange(event, changeType, fileName),
+            predicate: (event) =>
+              matchesFileChange(event, changeType, fileName),
             timeout: 20000,
             timeoutMessage: `Waiting for ${changeType} event for ${fileName} exceeded timeout`,
           },
