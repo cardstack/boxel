@@ -556,7 +556,7 @@ module('Acceptance | prerender | html', function (hooks) {
       .dom(
         `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="atom"]`,
       )
-      .containsText('Paper', 'embedded format is rendered');
+      .containsText('Paper', 'atom format is rendered');
   });
 
   test('prerender fitted html', async function (assert) {
