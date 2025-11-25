@@ -3157,22 +3157,15 @@ export class Realm {
       return badRequest({ message, requestContext });
     }
 
+    const stringOrNull = z.string().nullable();
     const propertySchemas: Record<
       RealmConfigPatchProperty,
       z.ZodNullable<z.ZodString>
     > = {
-      backgroundURL: z
-        .string({ invalid_type_error: 'backgroundURL must be a string' })
-        .nullable(),
-      iconURL: z
-        .string({ invalid_type_error: 'iconURL must be a string' })
-        .nullable(),
-      interactHome: z
-        .string({ invalid_type_error: 'interactHome must be a string' })
-        .nullable(),
-      hostHome: z
-        .string({ invalid_type_error: 'hostHome must be a string' })
-        .nullable(),
+      backgroundURL: stringOrNull,
+      iconURL: stringOrNull,
+      interactHome: stringOrNull,
+      hostHome: stringOrNull,
     };
 
     let valueResult = propertySchemas[parsed.data.property].safeParse(
@@ -3180,9 +3173,8 @@ export class Realm {
     );
     if (!valueResult.success) {
       let message =
-        valueResult.error.issues
-          .map((issue) => issue.message)
-          .join(', ') || 'The request body was invalid';
+        valueResult.error.issues.map((issue) => issue.message).join(', ') ||
+        'The request body was invalid';
       return badRequest({ message, requestContext });
     }
 
