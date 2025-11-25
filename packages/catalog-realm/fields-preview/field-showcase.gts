@@ -27,6 +27,13 @@ import NumberField from '../fields/number';
 import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
 import CubeIcon from '@cardstack/boxel-icons/cube';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
+import ChevronRightIcon from '@cardstack/boxel-icons/chevron-right';
+import ChevronLeftIcon from '@cardstack/boxel-icons/chevron-left';
+import SearchIcon from '@cardstack/boxel-icons/search';
+import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down';
+import CheckIcon from '@cardstack/boxel-icons/check';
+import CopyIcon from '@cardstack/boxel-icons/copy';
+import { BoxelInput, Button, Pill } from '@cardstack/boxel-ui/components';
 
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
@@ -83,9 +90,8 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
   }
 
   @action
-  updateSearch(event: Event) {
-    const target = event.target as HTMLInputElement;
-    this.searchQuery = target.value.toLowerCase();
+  updateSearch(value: string) {
+    this.searchQuery = value.toLowerCase();
   }
 
   @action
@@ -640,8 +646,9 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       <aside class='sidebar'>
         <div class='sidebar-header'>
           <h3>Field Library</h3>
-          <button
-            type='button'
+          <Button
+            @kind='text-only'
+            @size='small'
             class='sidebar-toggle'
             {{on 'click' this.toggleSidebar}}
             title='{{if
@@ -650,43 +657,25 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
               "Collapse sidebar"
             }}'
           >
-            <svg
-              viewBox='0 0 24 24'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='2'
-            >
-              {{#if this.isSidebarCollapsed}}
-                <polyline points='9 18 15 12 9 6'></polyline>
-              {{else}}
-                <polyline points='15 18 9 12 15 6'></polyline>
-              {{/if}}
-            </svg>
-          </button>
+            {{#if this.isSidebarCollapsed}}
+              <ChevronRightIcon width='20' height='20' />
+            {{else}}
+              <ChevronLeftIcon width='20' height='20' />
+            {{/if}}
+          </Button>
         </div>
 
         {{#unless this.isSidebarCollapsed}}
           <div class='sidebar-search'>
-            <svg
-              class='search-icon'
-              viewBox='0 0 24 24'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='2'
-            >
-              <circle cx='11' cy='11' r='8'></circle>
-              <path d='m21 21-4.35-4.35'></path>
-            </svg>
             <label for='sidebar-search-input' class='sr-only'>
               Search fields
             </label>
-            <input
-              type='text'
+            <BoxelInput
               id='sidebar-search-input'
-              class='sidebar-search-input'
-              placeholder='Search fields...'
-              value={{this.searchQuery}}
-              {{on 'input' this.updateSearch}}
+              @value={{this.searchQuery}}
+              @onInput={{this.updateSearch}}
+              @placeholder='Search fields...'
+              aria-label='Search fields'
             />
           </div>
 
@@ -694,27 +683,23 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
             {{#if (gt this.filteredGroups.length 0)}}
               {{#each this.filteredGroups as |group|}}
                 <div class='sidebar-group'>
-                  <button
-                    type='button'
+                  <Button
+                    @kind='text-only'
                     class='sidebar-group-header'
                     {{on 'click' (fn this.toggleGroup group.groupName)}}
                   >
-                    <svg
+                    <ChevronDownIcon
                       class='chevron
                         {{if
                           (this.isGroupExpanded group.groupName)
                           "expanded"
                         }}'
-                      viewBox='0 0 20 20'
-                      fill='none'
-                      stroke='currentColor'
-                      stroke-width='2'
-                    >
-                      <polyline points='6 8 10 12 14 8'></polyline>
-                    </svg>
+                      width='14'
+                      height='14'
+                    />
                     <span class='group-name'>{{group.groupName}}</span>
                     <span class='group-count'>{{group.options.length}}</span>
-                  </button>
+                  </Button>
 
                   {{#if (this.isGroupExpanded group.groupName)}}
                     <div class='sidebar-group-items'>
@@ -730,17 +715,11 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
                         >
                           <span class='item-label'>{{option.label}}</span>
                           {{#if (eq @model.playgroundFieldType option.value)}}
-                            <svg
+                            <CheckIcon
                               class='check-mark'
-                              viewBox='0 0 20 20'
-                              fill='currentColor'
-                            >
-                              <path
-                                fill-rule='evenodd'
-                                d='M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z'
-                                clip-rule='evenodd'
-                              ></path>
-                            </svg>
+                              width='14'
+                              height='14'
+                            />
                           {{/if}}
                         </button>
                       {{/each}}
@@ -750,16 +729,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
               {{/each}}
             {{else}}
               <div class='sidebar-empty'>
-                <svg
-                  class='empty-icon'
-                  viewBox='0 0 24 24'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-width='2'
-                >
-                  <circle cx='11' cy='11' r='8'></circle>
-                  <path d='m21 21-4.35-4.35'></path>
-                </svg>
+                <SearchIcon class='empty-icon' width='32' height='32' />
                 <p>No fields found</p>
                 <span>Try a different search term</span>
               </div>
@@ -793,14 +763,17 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
           <div class='controls-bar'>
             <div class='quick-format-buttons'>
               {{#each this.formatOptions as |format|}}
-                <button
-                  type='button'
-                  class='format-button
-                    {{if (eq this.selectedFormat format.value) "active"}}'
+                <Pill
+                  @kind='button'
+                  @variant={{if
+                    (eq this.selectedFormat format.value)
+                    'primary'
+                    'default'
+                  }}
                   {{on 'click' (fn this.selectFormat format.value)}}
                 >
                   {{format.label}}
-                </button>
+                </Pill>
               {{/each}}
             </div>
 
@@ -969,55 +942,35 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
 
         {{! Collapsible Configuration Section }}
         <section class='collapsible-section'>
-          <button
-            type='button'
+          <Button
+            @kind='text-only'
             class='section-toggle'
             {{on 'click' (fn this.toggleSection 'configuration')}}
           >
-            <svg
+            <ChevronDownIcon
               class='section-chevron
                 {{if (this.isSectionExpanded "configuration") "expanded"}}'
-              viewBox='0 0 20 20'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='2'
-            >
-              <polyline points='6 8 10 12 14 8'></polyline>
-            </svg>
+              width='20'
+              height='20'
+            />
             <span class='section-title'>Configuration</span>
-          </button>
+          </Button>
 
           {{#if (this.isSectionExpanded 'configuration')}}
             <div class='section-content'>
               <div class='code-wrapper'>
                 <div class='code-header-bar'>
                   <span class='code-title'>Field Definition</span>
-                  <button
-                    type='button'
+                  <Button
+                    @kind='secondary-light'
+                    @size='extra-small'
                     class='copy-button'
                     {{on 'click' this.copyCode}}
                     title='Copy to clipboard'
                   >
-                    <svg
-                      viewBox='0 0 24 24'
-                      fill='none'
-                      stroke='currentColor'
-                      stroke-width='2'
-                    >
-                      <rect
-                        x='9'
-                        y='9'
-                        width='13'
-                        height='13'
-                        rx='2'
-                        ry='2'
-                      ></rect>
-                      <path
-                        d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'
-                      ></path>
-                    </svg>
+                    <CopyIcon width='14' height='14' />
                     Copy
-                  </button>
+                  </Button>
                 </div>
                 <pre class='code-content'><code>{{this.configCode}}</code></pre>
               </div>
@@ -1028,44 +981,40 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         {{! Collapsible Presentation Modes Section }}
         {{#if (gt this.availablePresentationOptions.length 1)}}
           <section class='collapsible-section'>
-            <button
-              type='button'
+            <Button
+              @kind='text-only'
               class='section-toggle'
               {{on 'click' (fn this.toggleSection 'variants')}}
             >
-              <svg
+              <ChevronDownIcon
                 class='section-chevron
                   {{if (this.isSectionExpanded "variants") "expanded"}}'
-                viewBox='0 0 20 20'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <polyline points='6 8 10 12 14 8'></polyline>
-              </svg>
+                width='20'
+                height='20'
+              />
               <span class='section-title'>
                 Presentation Modes
                 <span
                   class='count-badge'
                 >{{this.availablePresentationOptions.length}}</span>
               </span>
-            </button>
+            </Button>
 
             {{#if (this.isSectionExpanded 'variants')}}
               <div class='section-content'>
                 <div class='variants-grid'>
                   {{#each this.availablePresentationOptions as |option|}}
-                    <button
-                      type='button'
-                      class='variant-card
-                        {{if
-                          (eq @model.playgroundPresentation option.value)
-                          "active"
-                        }}'
+                    <Pill
+                      @kind='button'
+                      @variant={{if
+                        (eq @model.playgroundPresentation option.value)
+                        'primary'
+                        'default'
+                      }}
                       {{on 'click' (fn this.updatePresentation option)}}
                     >
-                      <span class='variant-name'>{{option.label}}</span>
-                    </button>
+                      {{option.label}}
+                    </Pill>
                   {{/each}}
                 </div>
               </div>
@@ -1076,28 +1025,24 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         {{! Collapsible Examples & Variants Section }}
         {{#if (gt this.examplesForCurrentField.length 0)}}
           <section class='collapsible-section'>
-            <button
-              type='button'
+            <Button
+              @kind='text-only'
               class='section-toggle'
               {{on 'click' (fn this.toggleSection 'examples')}}
             >
-              <svg
+              <ChevronDownIcon
                 class='section-chevron
                   {{if (this.isSectionExpanded "examples") "expanded"}}'
-                viewBox='0 0 20 20'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <polyline points='6 8 10 12 14 8'></polyline>
-              </svg>
+                width='20'
+                height='20'
+              />
               <span class='section-title'>
                 Examples & Variants
                 <span
                   class='count-badge'
                 >{{this.examplesForCurrentField.length}}</span>
               </span>
-            </button>
+            </Button>
 
             {{#if (this.isSectionExpanded 'examples')}}
               <div class='section-content'>
@@ -1192,31 +1137,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         padding: 0.25rem;
         background: var(--muted, #f8fafc);
         border-radius: var(--radius, 0.375rem);
-      }
-
-      .format-button {
-        padding: 0.375rem 0.875rem;
-        background: transparent;
-        border: 1px solid transparent;
-        border-radius: var(--radius, 0.25rem);
-        font-size: 0.8125rem;
-        font-weight: 500;
-        color: var(--muted-foreground, #64748b);
-        cursor: pointer;
-        transition: all 0.15s ease;
-        white-space: nowrap;
-      }
-
-      .format-button:hover {
-        background: var(--card, #ffffff);
-        color: var(--foreground, #0f172a);
-      }
-
-      .format-button.active {
-        background: var(--primary, #3b82f6);
-        border-color: var(--primary, #3b82f6);
-        color: white;
-        font-weight: 600;
       }
 
       .theme-placeholder {
@@ -1323,15 +1243,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         align-items: center;
         gap: 0.75rem;
         padding: 1rem 1.25rem;
-        background: transparent;
-        border: none;
-        cursor: pointer;
-        transition: all 0.15s ease;
         text-align: left;
-      }
-
-      .section-toggle:hover {
-        background: var(--accent, #f8fafc);
       }
 
       .section-chevron {
@@ -1398,35 +1310,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         color: var(--foreground, #0f172a);
       }
 
-      .copy-button {
-        display: flex;
-        align-items: center;
-        gap: 0.375rem;
-        padding: 0.25rem 0.625rem;
-        background: transparent;
-        border: 1px solid var(--border, #e2e8f0);
-        border-radius: var(--radius, 0.375rem);
-        font-size: 0.6875rem;
-        font-weight: 500;
-        color: var(--foreground, #0f172a);
-        cursor: pointer;
-        transition: all 0.15s ease;
-      }
-
-      .copy-button:hover {
-        background: var(--accent, #f1f5f9);
-        border-color: var(--ring, #94a3b8);
-      }
-
-      .copy-button:active {
-        transform: scale(0.98);
-      }
-
-      .copy-button svg {
-        width: 0.875rem;
-        height: 0.875rem;
-      }
-
       .code-content {
         margin: 0;
         padding: 1rem;
@@ -1443,56 +1326,9 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
 
       /* Variants Grid Styles */
       .variants-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-        gap: 0.75rem;
-      }
-
-      .variant-card {
-        position: relative;
         display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 1rem 0.75rem;
-        background: var(--muted, #f8fafc);
-        border: 2px solid var(--border, #e2e8f0);
-        border-radius: var(--radius, 0.5rem);
-        cursor: pointer;
-        transition: all 0.2s ease;
-        text-align: center;
-      }
-
-      .variant-card:hover {
-        background: var(--accent, #f1f5f9);
-        border-color: var(--ring, #94a3b8);
-        transform: translateY(-2px);
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-      }
-
-      .variant-card.active {
-        background: rgba(59, 130, 246, 0.1);
-        border-color: var(--primary, #3b82f6);
-      }
-
-      .variant-name {
-        font-size: 0.8125rem;
-        font-weight: 500;
-        color: var(--foreground, #0f172a);
-      }
-
-      .variant-card.active .variant-name {
-        font-weight: 600;
-        color: var(--primary, #3b82f6);
-      }
-
-      .variant-check {
-        position: absolute;
-        top: 0.375rem;
-        right: 0.375rem;
-        width: 1rem;
-        height: 1rem;
-        color: var(--primary, #3b82f6);
+        flex-wrap: wrap;
+        gap: 0.5rem;
       }
 
       /* Examples List Styles */
@@ -1593,10 +1429,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         .format-button {
           flex: 1;
         }
-
-        .variants-grid {
-          grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-        }
       }
 
       /* Showcase Container - Flexbox layout for sidebar + content */
@@ -1653,64 +1485,16 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       .sidebar-toggle {
         width: 2rem;
         height: 2rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: transparent;
-        border: none;
-        border-radius: var(--radius, 0.375rem);
-        cursor: pointer;
-        color: var(--muted-foreground, #64748b);
-        transition: all 0.15s ease;
-      }
-
-      .sidebar-toggle:hover {
-        background: var(--accent, #f1f5f9);
-        color: var(--foreground, #0f172a);
-      }
-
-      .sidebar-toggle svg {
-        width: 1.25rem;
-        height: 1.25rem;
       }
 
       /* Sidebar Search */
       .sidebar-search {
-        position: relative;
         padding: 0.75rem;
         border-bottom: 1px solid var(--border, #e2e8f0);
       }
 
-      .search-icon {
-        position: absolute;
-        left: 1.25rem;
-        top: 50%;
-        transform: translateY(-50%);
-        width: 0.875rem;
-        height: 0.875rem;
-        color: var(--muted-foreground, #94a3b8);
-        pointer-events: none;
-      }
-
       .sidebar-search-input {
         width: 100%;
-        padding: 0.375rem 0.5rem 0.375rem 2rem;
-        background: var(--background, #ffffff);
-        border: 1px solid var(--border, #e2e8f0);
-        border-radius: var(--radius, 0.375rem);
-        font-size: 0.8125rem;
-        color: var(--foreground, #0f172a);
-        transition: all 0.15s ease;
-      }
-
-      .sidebar-search-input:focus {
-        outline: none;
-        border-color: var(--ring, #3b82f6);
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-      }
-
-      .sidebar-search-input::placeholder {
-        color: var(--muted-foreground, #94a3b8);
       }
 
       /* Sidebar Content */
@@ -1731,15 +1515,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         align-items: center;
         gap: 0.5rem;
         padding: 0.5rem 0.75rem;
-        background: transparent;
-        border: none;
-        cursor: pointer;
-        transition: all 0.15s ease;
         text-align: left;
-      }
-
-      .sidebar-group-header:hover {
-        background: var(--accent, #f1f5f9);
       }
 
       .sidebar-group-header .chevron {
@@ -1795,21 +1571,17 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       }
 
       .sidebar-item.selected {
-        background: rgba(59, 130, 246, 0.1);
-        color: var(--primary, #3b82f6);
+        background: var(--boxel-light);
       }
 
       .sidebar-item.selected .item-label {
         font-weight: 600;
+        color: var(--foreground, #0f172a);
       }
 
       .item-label {
         font-size: 0.8125rem;
         color: var(--foreground, #0f172a);
-      }
-
-      .sidebar-item.selected .item-label {
-        color: var(--primary, #3b82f6);
       }
 
       .check-mark {
@@ -2065,60 +1837,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         line-height: 1.6;
         color: var(--foreground, #1e293b);
         white-space: pre;
-      }
-
-      /* Variants Grid */
-      .variants-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-        gap: 0.75rem;
-      }
-
-      .variant-card {
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 1rem 0.75rem;
-        background: var(--muted, #f8fafc);
-        border: 2px solid var(--border, #e2e8f0);
-        border-radius: var(--radius, 0.5rem);
-        cursor: pointer;
-        transition: all 0.2s ease;
-        text-align: center;
-      }
-
-      .variant-card:hover {
-        background: var(--accent, #f1f5f9);
-        border-color: var(--ring, #94a3b8);
-        transform: translateY(-2px);
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-      }
-
-      .variant-card.active {
-        background: rgba(59, 130, 246, 0.1);
-        border-color: var(--primary, #3b82f6);
-      }
-
-      .variant-name {
-        font-size: 0.8125rem;
-        font-weight: 500;
-        color: var(--foreground, #0f172a);
-      }
-
-      .variant-card.active .variant-name {
-        font-weight: 600;
-        color: var(--primary, #3b82f6);
-      }
-
-      .variant-check {
-        position: absolute;
-        top: 0.375rem;
-        right: 0.375rem;
-        width: 1rem;
-        height: 1rem;
-        color: var(--primary, #3b82f6);
       }
 
       /* Responsive adjustments for hero */
