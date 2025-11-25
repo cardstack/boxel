@@ -42,7 +42,7 @@ module(basename(__filename), function () {
             createdAt: +new Date(),
             deps: ['dep/a', 'dep/b'],
             definitions: {
-              Person: {
+              [`${realmURL}person.gts/Person`]: {
                 type: 'definition',
                 moduleURL: './person.gts',
                 definition: {

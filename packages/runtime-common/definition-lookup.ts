@@ -65,9 +65,9 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
     let realmOwnerInfo = await this.realmOwnerLookup(codeRef.module);
     if (!realmOwnerInfo) {
-      throw new Error(
-        `Could not determine realm owner for module URL: ${codeRef.module}`,
-      );
+      throw new FilterRefersToNonexistentTypeError(codeRef, {
+        cause: `Could not determine realm owner for module URL: ${codeRef.module}`,
+      });
     }
     let { realmURL, userId } = realmOwnerInfo;
 
