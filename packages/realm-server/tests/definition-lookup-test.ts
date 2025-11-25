@@ -14,7 +14,7 @@ import {} from '../prerender/prerenderer';
 import type { PgAdapter } from '@cardstack/postgres/pg-adapter';
 
 module(basename(__filename), function () {
-  module('DefinitionLookup', function (hooks) {
+  module.only('DefinitionLookup', function (hooks) {
     let definitionLookup: CachingDefinitionLookup;
     let realmURL = 'http://127.0.0.1:4450/';
     let testUserId = '@user1:localhost';
@@ -80,6 +80,9 @@ module(basename(__filename), function () {
         async getRealmOwnerUserId() {
           return testUserId;
         },
+        async visibility() {
+          return 'private';
+        },
       });
     });
 
@@ -137,6 +140,9 @@ module(basename(__filename), function () {
           url: realmURL,
           async getRealmOwnerUserId() {
             return testUserId;
+          },
+          async visibility() {
+            return 'private';
           },
         });
       },
@@ -204,6 +210,43 @@ module(basename(__filename), function () {
         2,
         'prerenderModule was called a second time after invalidation',
       );
+    });
+
+    test('uses public cache scope when realm is public', async function (assert) {
+      await dbAdapter.execute('DELETE FROM modules');
+      await dbAdapter.execute(
+        `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner) VALUES ($1, '*', true, false, false)`,
+        { bind: [realmURL] },
+      );
+
+      // rebuild definition lookup to clear cached visibility
+      definitionLookup = new CachingDefinitionLookup(
+        dbAdapter,
+        mockRemotePrerenderer,
+      );
+      definitionLookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          // after inserting '*' the realm is public
+          return 'public';
+        },
+      });
+
+      await definitionLookup.lookupDefinition({
+        module: `${realmURL}person.gts`,
+        name: 'Person',
+      });
+
+      let rows = (await dbAdapter.execute(
+        `SELECT cache_scope, auth_user_id FROM modules WHERE url = $1`,
+        { bind: [`${realmURL}person.gts`] },
+      )) as { cache_scope: string; auth_user_id: string }[];
+
+      assert.strictEqual(rows[0]?.cache_scope, 'public');
+      assert.strictEqual(rows[0]?.auth_user_id, '');
     });
   });
 });

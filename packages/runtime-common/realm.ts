@@ -418,8 +418,13 @@ export class Realm {
         new RealmAuthDataSource(this.#realmServerMatrixClient, () => _fetch),
       ),
     ]);
-    definitionLookup.registerRealm(this);
-    this.#definitionLookup = definitionLookup;
+    if ('forRealm' in definitionLookup) {
+      // Wrap to retain realm context for definition lookups
+      this.#definitionLookup = (definitionLookup as any).forRealm(this);
+    } else {
+      definitionLookup.registerRealm(this);
+      this.#definitionLookup = definitionLookup;
+    }
 
     this.__fetchForTesting = _fetch;
 
@@ -3245,7 +3250,7 @@ export class Realm {
     };
   }
 
-  private async visibility(): Promise<RealmVisibility> {
+  public async visibility(): Promise<RealmVisibility> {
     if (this.visibilityPromise) {
       return this.visibilityPromise;
     }
