@@ -33,26 +33,11 @@ export default class PatchThemeCommand extends HostBaseCommand<
       'Then propose changes and outline the patches you would apply to the theme JSON or CSS variables.',
     ].join('\n');
 
-    let skillIds: string[] = [];
     let linkedSkill = input.skillCard as Skill | undefined;
     let linkedSkillId =
       linkedSkill && typeof linkedSkill.id === 'string'
         ? linkedSkill.id
         : undefined;
-    if (linkedSkillId) {
-      skillIds.push(linkedSkillId);
-    } else {
-      try {
-        let themeDesignURL = (import.meta as any).loader.importSync?.(
-          '@cardstack/catalog/Skill/theme-design',
-        )?.id;
-        if (typeof themeDesignURL === 'string') {
-          skillIds.push(themeDesignURL);
-        }
-      } catch {
-        // Swallow resolution issues; continue without skills
-      }
-    }
 
     let useAssistant = new UseAiAssistantCommand(this.commandContext);
     return await useAssistant.execute({
@@ -60,7 +45,7 @@ export default class PatchThemeCommand extends HostBaseCommand<
       openRoom: true,
       llmModel: 'anthropic/claude-3.5-sonnet',
       prompt,
-      skillCardIds: skillIds.length ? skillIds : undefined,
+      skillCardIds: linkedSkillId ? [linkedSkillId] : undefined,
       attachedCardIds: [input.cardId],
     });
   }
