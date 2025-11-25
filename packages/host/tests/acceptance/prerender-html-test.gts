@@ -559,6 +559,12 @@ module('Acceptance | prerender | html', function (hooks) {
       .containsText('Paper', 'atom format is rendered');
   });
 
+  test('prerender head html', async function (assert) {
+    let url = `${testRealmURL}Cat/paper.json`;
+    await visit(renderPath(url, '/html/head/0'));
+    assert.dom(`title`).containsText('Paper', 'head format is rendered');
+  });
+
   test('prerender fitted html', async function (assert) {
     let url = `${testRealmURL}Cat/paper.json`;
     await visit(renderPath(url, '/html/fitted/0'));
