@@ -7,9 +7,8 @@ import {
 import NumberField from 'https://cardstack.com/base/number';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { on } from '@ember/modifier';
+import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import CalendarStatsIcon from '@cardstack/boxel-icons/calendar-stats';
-import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down';
 
 class QuarterFieldEdit extends Component<typeof QuarterField> {
   @tracked quarter = 1;
@@ -21,18 +20,19 @@ class QuarterFieldEdit extends Component<typeof QuarterField> {
     this.year = this.args.model?.year || new Date().getFullYear();
   }
 
-  @action
-  updateQuarter(event: Event) {
-    const target = event.target as HTMLSelectElement;
-    this.quarter = parseInt(target.value, 10);
-    this.args.model.quarter = this.quarter;
+  get quarterOptions() {
+    return [
+      { value: 1, label: 'Q1 (Jan-Mar)' },
+      { value: 2, label: 'Q2 (Apr-Jun)' },
+      { value: 3, label: 'Q3 (Jul-Sep)' },
+      { value: 4, label: 'Q4 (Oct-Dec)' },
+    ];
   }
 
-  @action
-  updateYear(event: Event) {
-    const target = event.target as HTMLSelectElement;
-    this.year = parseInt(target.value, 10);
-    this.args.model.year = this.year;
+  get selectedQuarter() {
+    return (
+      this.quarterOptions.find((opt) => opt.value === this.quarter) || null
+    );
   }
 
   get years() {
@@ -40,135 +40,68 @@ class QuarterFieldEdit extends Component<typeof QuarterField> {
     return Array.from({ length: 10 }, (_, i) => currentYear - 4 + i);
   }
 
+  get yearOptions() {
+    return this.years.map((year) => ({ value: year, label: String(year) }));
+  }
+
+  get selectedYear() {
+    return this.yearOptions.find((opt) => opt.value === this.year) || null;
+  }
+
+  @action
+  updateQuarter(option: { value: number; label: string } | null) {
+    this.quarter = option?.value || 1;
+    this.args.model.quarter = this.quarter;
+  }
+
+  @action
+  updateYear(option: { value: number; label: string } | null) {
+    this.year = option?.value || new Date().getFullYear();
+    this.args.model.year = this.year;
+  }
+
   <template>
-    <div class='quarter-edit'>
-      <div class='quarter-inputs'>
-        <div class='select-wrapper quarter-select'>
-          <div class='input-icon'>
-            <CalendarStatsIcon class='icon' />
-          </div>
-          <label for='quarter-select-input' class='sr-only'>Quarter</label>
-          <select
-            id='quarter-select-input'
-            value={{this.quarter}}
-            {{on 'change' this.updateQuarter}}
-            class='quarter-select-input'
-            data-test-quarter-select
-          >
-            <option value='1'>Q1 (Jan-Mar)</option>
-            <option value='2'>Q2 (Apr-Jun)</option>
-            <option value='3'>Q3 (Jul-Sep)</option>
-            <option value='4'>Q4 (Oct-Dec)</option>
-          </select>
-          <div class='select-icon'>
-            <ChevronDownIcon class='icon' />
-          </div>
-        </div>
-        <div class='select-wrapper year-select'>
-          <label for='quarter-year-select-input' class='sr-only'>Year</label>
-          <select
-            id='quarter-year-select-input'
-            value={{this.year}}
-            {{on 'change' this.updateYear}}
-            class='quarter-select-input'
-            data-test-quarter-year-select
-          >
-            {{#each this.years as |yearValue|}}
-              <option value={{yearValue}}>{{yearValue}}</option>
-            {{/each}}
-          </select>
-          <div class='select-icon'>
-            <ChevronDownIcon class='icon' />
-          </div>
-        </div>
+    <div class='quarter-inputs'>
+      <div class='quarter-dropdown'>
+        <BoxelSelect
+          @options={{this.quarterOptions}}
+          @selected={{this.selectedQuarter}}
+          @onChange={{this.updateQuarter}}
+          @placeholder='Select quarter'
+          @dropdownClass='data-test-quarter-select'
+          as |option|
+        >
+          {{option.label}}
+        </BoxelSelect>
       </div>
-      <p class='quarter-display'>Period: Q{{this.quarter}} {{this.year}}</p>
+      <div class='year-dropdown'>
+        <BoxelSelect
+          @options={{this.yearOptions}}
+          @selected={{this.selectedYear}}
+          @onChange={{this.updateYear}}
+          @placeholder='Select year'
+          data-test-quarter-year-select
+          as |option|
+        >
+          {{option.label}}
+        </BoxelSelect>
+      </div>
     </div>
 
     <style scoped>
-      .quarter-edit {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-      }
-
       .quarter-inputs {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
+        display: flex;
         gap: 0.5rem;
       }
 
-      .select-wrapper {
-        position: relative;
+      .quarter-dropdown {
+        width: 48%;
+        min-width: 6rem;
       }
 
-      .input-icon {
-        position: absolute;
-        left: 0.75rem;
-        top: 50%;
-        transform: translateY(-50%);
-        pointer-events: none;
-        display: flex;
-        align-items: center;
-        color: var(--muted-foreground, #9ca3af);
-      }
-
-      .select-icon {
-        position: absolute;
-        right: 0.75rem;
-        top: 50%;
-        transform: translateY(-50%);
-        pointer-events: none;
-        display: flex;
-        align-items: center;
-        color: var(--muted-foreground, #9ca3af);
-      }
-
-      .icon {
-        width: 1.25rem;
-        height: 1.25rem;
-      }
-
-      .quarter-select-input {
-        width: 100%;
-        padding: 0.5rem 2rem 0.5rem 0.75rem;
-        border: 1px solid var(--border, #e0e0e0);
-        border-radius: var(--radius, 0.375rem);
-        font-family: var(--font-sans, system-ui, sans-serif);
-        font-size: 0.875rem;
-        color: var(--foreground, #1a1a1a);
-        background: var(--input, #ffffff);
-        appearance: none;
-        cursor: pointer;
-        transition: all 0.15s ease;
-      }
-
-      .quarter-select .quarter-select-input {
-        padding-left: 2.5rem;
-      }
-
-      .quarter-select-input:focus {
-        outline: none;
-        border-color: var(--ring, #3b82f6);
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-      }
-
-      .quarter-display {
-        font-size: 0.75rem;
-        color: var(--muted-foreground, #9ca3af);
-        margin: 0;
-      }
-
-      .sr-only {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border-width: 0;
+      .year-dropdown {
+        width: 48%;
+        flex-shrink: 0;
       }
     </style>
   </template>
