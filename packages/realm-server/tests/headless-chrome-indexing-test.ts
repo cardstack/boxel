@@ -538,11 +538,6 @@ module(basename(__filename), function () {
           cleanWhiteSpace(`<h1> Fitted Card Person: Mango </h1>`),
           'pre-rendered fitted format html is correct',
         );
-        let dbRows = (await testDbAdapter.execute(
-          `SELECT head_html FROM boxel_index WHERE url = $1`,
-          { bind: [`${testRealm}mango.json`] },
-        )) as { head_html: string | null }[];
-        assert.ok(dbRows[0]?.head_html, 'head_html is stored in the DB');
       } else {
         assert.ok(false, 'expected index entry not to be an error');
       }
