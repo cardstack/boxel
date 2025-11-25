@@ -124,7 +124,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
   ): Promise<CardErrorJSONAPI | undefined> {
     await this.store.waitForCardLoad(cardId);
     try {
-      let result = await this.store.get(cardId);
+      let result = await this.store.getWithoutCache(cardId);
       if (isCardErrorJSONAPI(result)) {
         return result;
       }
