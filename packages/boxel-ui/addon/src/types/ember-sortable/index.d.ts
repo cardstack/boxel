@@ -7,8 +7,8 @@ declare module 'ember-sortable/modifiers/sortable-group' {
       Named: {
         a11yAnnouncementConfig?: () => void;
         a11yItemName?: string;
-        disabled?: boolean;
         direction?: 'x' | 'y' | 'grid';
+        disabled?: boolean;
         handleVisualClass?: string;
         itemVisualClass?: string;
         onChange?: (itemModels: any, draggedModel: any) => void;

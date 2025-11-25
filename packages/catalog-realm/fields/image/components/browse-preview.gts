@@ -3,6 +3,8 @@ import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
 import XIcon from '@cardstack/boxel-icons/x';
 import ZoomInIcon from '@cardstack/boxel-icons/zoom-in';
+import ImageIcon from '@cardstack/boxel-icons/image';
+import ReadingProgress from './reading-progress';
 
 interface BrowsePreviewArgs {
   Args: {
@@ -10,30 +12,59 @@ interface BrowsePreviewArgs {
     fileName?: string;
     onRemove: () => void;
     onZoom: () => void;
+    onFileSelect: (event: Event) => void;
     showZoomButton?: boolean;
+    isReading?: boolean;
+    readProgress?: number;
   };
 }
 
 export default class BrowsePreview extends GlimmerComponent<BrowsePreviewArgs> {
+  get readProgress(): number {
+    return this.args.readProgress ?? 0;
+  }
+
   <template>
     <div class='browse-preview'>
-      {{! ⁷ Main container }}
+      {{! Main container }}
       <div class='image-wrapper'>
-        <img src={{@imageData}} alt={{@fileName}} class='preview-image' />
-        <button type='button' {{on 'click' @onRemove}} class='remove-button'>
-          <XIcon class='icon' />
-        </button>
-        {{#if (not (eq @showZoomButton false))}}
-          <button type='button' {{on 'click' @onZoom}} class='zoom-button'>
-            <ZoomInIcon class='icon' />
-          </button>
+        {{#if @isReading}}
+          {{! Progress indicator during file reading }}
+          <ReadingProgress @readProgress={{this.readProgress}} />
+        {{else}}
+          <img src={{@imageData}} alt={{@fileName}} class='preview-image' />
+
+          {{! Top-left: Zoom button }}
+          {{#if (not (eq @showZoomButton false))}}
+            <button type='button' {{on 'click' @onZoom}} class='zoom-button'>
+              <ZoomInIcon class='icon' />
+            </button>
+          {{/if}}
+
+          {{! Top-right: Change and Remove buttons }}
+          <div class='top-right-buttons'>
+            <label class='change-button'>
+              <ImageIcon class='icon' />
+              <input
+                type='file'
+                class='file-input'
+                accept='image/*'
+                {{on 'change' @onFileSelect}}
+              />
+            </label>
+            <button
+              type='button'
+              {{on 'click' @onRemove}}
+              class='remove-button'
+            >
+              <XIcon class='icon' />
+            </button>
+          </div>
         {{/if}}
       </div>
     </div>
 
-    <style
-      scoped
-    > {{! ⁹ Component styles }}
+    <style scoped>
       .browse-preview {
         display: flex;
         flex-direction: column;
@@ -42,6 +73,7 @@ export default class BrowsePreview extends GlimmerComponent<BrowsePreviewArgs> {
 
       .image-wrapper {
         position: relative;
+        height: 12rem;
         border: 2px solid var(--border, #e0e0e0);
         border-radius: var(--radius, 0.5rem);
         overflow: hidden;
@@ -49,13 +81,44 @@ export default class BrowsePreview extends GlimmerComponent<BrowsePreviewArgs> {
 
       .preview-image {
         width: 100%;
-        height: 12rem;
+        height: 100%;
         object-fit: cover;
+        display: block;
       }
 
-      .remove-button,
       .zoom-button {
         position: absolute;
+        top: 0.5rem;
+        left: 0.5rem;
+        width: 2rem;
+        height: 2rem;
+        border-radius: 9999px;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        box-shadow: var(--shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
+        background: var(--background, #ffffff);
+        color: var(--foreground, #1a1a1a);
+      }
+
+      .zoom-button:hover {
+        background: var(--muted, #f1f5f9);
+      }
+
+      .top-right-buttons {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+      }
+
+      .change-button,
+      .remove-button {
         width: 2rem;
         height: 2rem;
         border-radius: 9999px;
@@ -68,9 +131,16 @@ export default class BrowsePreview extends GlimmerComponent<BrowsePreviewArgs> {
         box-shadow: var(--shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
       }
 
+      .change-button {
+        background: var(--primary, #3b82f6);
+        color: var(--primary-foreground, #ffffff);
+      }
+
+      .change-button:hover {
+        background: #2563eb;
+      }
+
       .remove-button {
-        top: 0.5rem;
-        right: 0.5rem;
         background: var(--destructive, #ef4444);
         color: var(--destructive-foreground, #ffffff);
       }
@@ -79,15 +149,16 @@ export default class BrowsePreview extends GlimmerComponent<BrowsePreviewArgs> {
         background: #dc2626;
       }
 
-      .zoom-button {
-        top: 0.5rem;
-        left: 0.5rem;
-        background: var(--background, #ffffff);
-        color: var(--foreground, #1a1a1a);
-      }
-
-      .zoom-button:hover {
-        background: var(--muted, #f1f5f9);
+      .file-input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border-width: 0;
       }
 
       .icon {

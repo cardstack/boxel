@@ -3,6 +3,8 @@ import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
 import XIcon from '@cardstack/boxel-icons/x';
 import ZoomInIcon from '@cardstack/boxel-icons/zoom-in';
+import ImageIcon from '@cardstack/boxel-icons/image';
+import ReadingProgress from './reading-progress';
 
 interface DropzonePreviewArgs {
   Args: {
@@ -13,41 +15,59 @@ interface DropzonePreviewArgs {
     height?: number;
     onRemove: () => void;
     onZoom: () => void;
+    onFileSelect: (event: Event) => void;
     showZoomButton?: boolean;
+    isReading?: boolean;
+    readProgress?: number;
   };
 }
 
 export default class DropzonePreview extends GlimmerComponent<DropzonePreviewArgs> {
+  get readProgress(): number {
+    return this.args.readProgress ?? 0;
+  }
+
   <template>
     <div class='dropzone-preview'>
-      {{! ⁷ Main container }}
+      {{! Main container }}
       <div class='dropzone-image-wrapper'>
-        <img src={{@imageData}} alt={{@fileName}} class='dropzone-image' />
-        <div class='dropzone-overlay'>
-          {{! ⁸ Hover overlay controls }}
+        {{#if @isReading}}
+          {{! Progress indicator during file reading }}
+          <ReadingProgress @readProgress={{this.readProgress}} />
+        {{else}}
+          <img src={{@imageData}} alt={{@fileName}} class='dropzone-image' />
+
+          {{! Top-left: Zoom button }}
           {{#if (not (eq @showZoomButton false))}}
-            <button
-              type='button'
-              {{on 'click' @onZoom}}
-              class='overlay-button zoom'
-            >
+            <button type='button' {{on 'click' @onZoom}} class='zoom-button'>
               <ZoomInIcon class='icon' />
             </button>
           {{/if}}
-          <button
-            type='button'
-            {{on 'click' @onRemove}}
-            class='overlay-button remove'
-          >
-            <XIcon class='icon' />
-          </button>
-        </div>
+
+          {{! Top-right: Change and Remove buttons }}
+          <div class='top-right-buttons'>
+            <label class='change-button'>
+              <ImageIcon class='icon' />
+              <input
+                type='file'
+                class='file-input'
+                accept='image/*'
+                {{on 'change' @onFileSelect}}
+              />
+            </label>
+            <button
+              type='button'
+              {{on 'click' @onRemove}}
+              class='remove-button'
+            >
+              <XIcon class='icon' />
+            </button>
+          </div>
+        {{/if}}
       </div>
     </div>
 
-    <style
-      scoped
-    > {{! ¹⁰ Component styles }}
+    <style scoped>
       .dropzone-preview {
         display: flex;
         flex-direction: column;
@@ -57,38 +77,54 @@ export default class DropzonePreview extends GlimmerComponent<DropzonePreviewArg
       .dropzone-image-wrapper {
         position: relative;
         width: 100%;
-        min-height: 12rem;
-        border: 2px dashed var(--primary, #3b82f6);
+        height: 12rem;
+        border: 2px solid var(--border, #e0e0e0);
         border-radius: var(--radius, 0.5rem);
-        background: rgba(59, 130, 246, 0.05);
         overflow: hidden;
       }
 
       .dropzone-image {
         width: 100%;
-        height: 12rem;
+        height: 100%;
         object-fit: cover;
+        display: block;
       }
 
-      .dropzone-overlay {
+      .zoom-button {
         position: absolute;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.5);
+        top: 0.5rem;
+        left: 0.5rem;
+        width: 2rem;
+        height: 2rem;
+        border-radius: 9999px;
+        border: none;
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 1rem;
-        opacity: 0;
-        transition: opacity 0.2s ease;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        box-shadow: var(--shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
+        background: var(--background, #ffffff);
+        color: var(--foreground, #1a1a1a);
       }
 
-      .dropzone-image-wrapper:hover .dropzone-overlay {
-        opacity: 1;
+      .zoom-button:hover {
+        background: var(--muted, #f1f5f9);
       }
 
-      .overlay-button {
-        width: 2.5rem;
-        height: 2.5rem;
+      .top-right-buttons {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+      }
+
+      .change-button,
+      .remove-button {
+        width: 2rem;
+        height: 2rem;
         border-radius: 9999px;
         border: none;
         display: flex;
@@ -99,29 +135,39 @@ export default class DropzonePreview extends GlimmerComponent<DropzonePreviewArg
         box-shadow: var(--shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
       }
 
-      .overlay-button.zoom {
-        background: var(--background, #ffffff);
-        color: var(--foreground, #1a1a1a);
+      .change-button {
+        background: var(--primary, #3b82f6);
+        color: var(--primary-foreground, #ffffff);
       }
 
-      .overlay-button.zoom:hover {
-        background: var(--muted, #f1f5f9);
-        transform: scale(1.1);
+      .change-button:hover {
+        background: #2563eb;
       }
 
-      .overlay-button.remove {
+      .remove-button {
         background: var(--destructive, #ef4444);
         color: var(--destructive-foreground, #ffffff);
       }
 
-      .overlay-button.remove:hover {
+      .remove-button:hover {
         background: #dc2626;
-        transform: scale(1.1);
+      }
+
+      .file-input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border-width: 0;
       }
 
       .icon {
-        width: 1.25rem;
-        height: 1.25rem;
+        width: 1rem;
+        height: 1rem;
       }
     </style>
   </template>

@@ -1,4 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
+import { htmlSafe } from '@ember/template';
 import Loader2Icon from '@cardstack/boxel-icons/loader-2';
 
 interface UploadProgressArgs {
@@ -8,22 +9,24 @@ interface UploadProgressArgs {
 }
 
 export default class UploadProgress extends GlimmerComponent<UploadProgressArgs> {
+  get progressStyle() {
+    return htmlSafe(`width: ${this.args.progress}%`);
+  }
+
   <template>
     <div class='upload-progress'>
-      {{! ⁵ Progress display }}
+      {{! Progress display }}
       <div class='progress-header'>
         <Loader2Icon class='spinner' />
         <span class='progress-text'>Uploading...</span>
         <span class='progress-percent'>{{@progress}}%</span>
       </div>
       <div class='progress-bar-container'>
-        <div class='progress-bar' style='width: {{@progress}}%'></div>
+        <div class='progress-bar' style={{this.progressStyle}}></div>
       </div>
     </div>
 
-    <style
-      scoped
-    > {{! ⁶ Component styles }}
+    <style scoped>
       .upload-progress {
         border: 2px solid var(--border, #e0e0e0);
         border-radius: var(--radius, 0.5rem);

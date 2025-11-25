@@ -1,5 +1,5 @@
 import ImageIcon from '@cardstack/boxel-icons/image';
-import { ImageField } from '../fields/image/image-field';
+import { ImageField } from '../fields/image-field';
 import {
   CardDef,
   field,
@@ -17,25 +17,36 @@ export class ImageFieldsPreview extends CardDef {
   // Basic image field (default - no type specified)
   @field basicImage = contains(ImageField);
 
-  // Avatar variant
+  // Avatar variant with tile presentation
   @field avatarImage = contains(ImageField, {
     configuration: {
       variant: 'avatar',
+      presentation: 'tile',
     },
   });
 
-  // Dropzone variant
+  // Dropzone variant with compact presentation
   @field dropzoneImage = contains(ImageField, {
     configuration: {
       variant: 'dropzone',
+      presentation: 'compact',
       options: {
         showImageModal: true,
-        autoUpload: true
+        showProgress: true,
       },
     },
   });
 
   static isolated = class Isolated extends Component<typeof this> {
+    getFieldIcon = (key: string) => {
+      const field: Field<BaseDefConstructor> | undefined = getField(
+        this.args.model.constructor!,
+        key,
+      );
+      let fieldInstance = field?.card;
+      return fieldInstance?.icon;
+    };
+
     <template>
       <div class='image-fields-preview'>
         <header class='header'>
@@ -266,14 +277,5 @@ export class ImageFieldsPreview extends CardDef {
         }
       </style>
     </template>
-
-    getFieldIcon = (key: string) => {
-      const field: Field<BaseDefConstructor> | undefined = getField(
-        this.args.model.constructor!,
-        key,
-      );
-      let fieldInstance = field?.card;
-      return fieldInstance?.icon;
-    };
   };
 }

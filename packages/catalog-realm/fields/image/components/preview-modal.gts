@@ -1,4 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
+import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import XIcon from '@cardstack/boxel-icons/x';
 
@@ -13,7 +14,7 @@ interface PreviewModalArgs {
 
 export default class PreviewModal extends GlimmerComponent<PreviewModalArgs> {
   get formattedSize() {
-    // ⁶ Format file size
+    // Format file size
     const bytes = this.args.fileSize;
     if (!bytes) return '';
 
@@ -23,25 +24,31 @@ export default class PreviewModal extends GlimmerComponent<PreviewModalArgs> {
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   }
 
+  @action
+  handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape' || event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.args.onClose();
+    }
+  }
+
   <template>
-    <div class='preview-modal' {{on 'click' @onClose}}>
-      {{! ⁷ Modal overlay }}
+    <div class='preview-modal' role='button' tabindex='0' {{on 'click' @onClose}} {{on 'keydown' this.handleKeydown}}>
+      {{! Modal overlay }}
       <div class='modal-content'>
         <button type='button' {{on 'click' @onClose}} class='modal-close'>
           <XIcon class='icon' />
         </button>
         <img src={{@imageData}} alt={{@fileName}} class='modal-image' />
         <div class='modal-info'>
-          {{! ⁸ File information }}
+          {{! File information }}
           <div class='modal-filename'>{{@fileName}}</div>
           <div class='modal-details'>{{this.formattedSize}}</div>
         </div>
       </div>
     </div>
 
-    <style
-      scoped
-    > {{! ⁹ Component styles }}
+    <style scoped>
       .preview-modal {
         position: fixed;
         inset: 0;

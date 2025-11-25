@@ -17,7 +17,7 @@ export default class DropzoneUpload extends GlimmerComponent<DropzoneUploadArgs>
       {{on 'dragover' @onDragOver}}
       {{on 'drop' @onDrop}}
     >
-      {{! ⁶ Upload trigger with drag & drop }}
+      {{! Upload trigger with drag & drop }}
       <div class='dropzone-content'>
         <UploadIcon class='dropzone-icon' />
         <span class='dropzone-title'>Drag & drop image here</span>
@@ -31,16 +31,14 @@ export default class DropzoneUpload extends GlimmerComponent<DropzoneUploadArgs>
       />
     </label>
 
-    <style
-      scoped
-    > {{! ⁷ Component styles }}
+    <style scoped>
       .dropzone-upload {
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         width: 100%;
-        min-height: 12rem;
+        height: 12rem;
         border: 2px dashed var(--primary, #3b82f6);
         border-radius: var(--radius, 0.5rem);
         background: rgba(59, 130, 246, 0.05);
@@ -71,11 +69,13 @@ export default class DropzoneUpload extends GlimmerComponent<DropzoneUploadArgs>
         font-size: 0.875rem;
         font-weight: 600;
         color: var(--foreground, #1a1a1a);
+        text-align: center;
       }
 
       .dropzone-subtitle {
         font-size: 0.75rem;
         color: var(--muted-foreground, #9ca3af);
+        text-align: center;
       }
 
       .file-input {

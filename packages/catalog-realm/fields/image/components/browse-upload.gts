@@ -11,10 +11,9 @@ interface BrowseUploadArgs {
 export default class BrowseUpload extends GlimmerComponent<BrowseUploadArgs> {
   <template>
     <label class='browse-upload'>
-      {{! ⁶ Upload trigger }}
+      {{! Upload trigger }}
       <UploadIcon class='browse-icon' />
       <span class='browse-text'>Click to upload image</span>
-      <span class='browse-hint'>PNG, JPG, WebP, GIF</span>
       <input
         type='file'
         class='file-input'
@@ -23,19 +22,17 @@ export default class BrowseUpload extends GlimmerComponent<BrowseUploadArgs> {
       />
     </label>
 
-    <style
-      scoped
-    > {{! ⁷ Component styles }}
+    <style scoped>
       .browse-upload {
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         width: 100%;
-        min-height: 12rem;
-        border: 2px dashed var(--border, #e0e0e0);
+        height: 12rem;
+        border: 2px dashed var(--primary, #3b82f6);
         border-radius: var(--radius, 0.5rem);
-        background: var(--input, #ffffff);
+        background: rgba(59, 130, 246, 0.05);
         cursor: pointer;
         transition: all 0.2s ease;
         padding: 2rem;
@@ -43,25 +40,21 @@ export default class BrowseUpload extends GlimmerComponent<BrowseUploadArgs> {
       }
 
       .browse-upload:hover {
-        border-color: var(--primary, #3b82f6);
-        background: var(--accent, #f0f9ff);
+        border-color: #2563eb;
+        background: rgba(59, 130, 246, 0.1);
       }
 
       .browse-icon {
         width: 2.5rem;
         height: 2.5rem;
-        color: var(--muted-foreground, #9ca3af);
+        color: var(--primary, #3b82f6);
       }
 
       .browse-text {
         font-size: 0.875rem;
         font-weight: 600;
         color: var(--foreground, #1a1a1a);
-      }
-
-      .browse-hint {
-        font-size: 0.75rem;
-        color: var(--muted-foreground, #9ca3af);
+        text-align: center;
       }
 
       .file-input {

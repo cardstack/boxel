@@ -1,6 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
 import CameraIcon from '@cardstack/boxel-icons/camera';
+import ImageIcon from '@cardstack/boxel-icons/image';
 
 interface AvatarUploadArgs {
   Args: {
@@ -11,9 +12,12 @@ interface AvatarUploadArgs {
 export default class AvatarUpload extends GlimmerComponent<AvatarUploadArgs> {
   <template>
     <label class='avatar-upload'>
-      {{! ⁶ Upload trigger }}
+      {{! Upload trigger }}
       <div class='avatar-placeholder'>
-        <CameraIcon class='avatar-icon' />
+        <ImageIcon class='placeholder-icon' />
+        <div class='avatar-camera-icon'>
+          <CameraIcon class='icon' />
+        </div>
       </div>
       <span class='avatar-label'>Upload Photo</span>
       <input
@@ -24,9 +28,7 @@ export default class AvatarUpload extends GlimmerComponent<AvatarUploadArgs> {
       />
     </label>
 
-    <style
-      scoped
-    > {{! ⁷ Component styles }}
+    <style scoped>
       .avatar-upload {
         display: flex;
         flex-direction: column;
@@ -37,6 +39,7 @@ export default class AvatarUpload extends GlimmerComponent<AvatarUploadArgs> {
       }
 
       .avatar-placeholder {
+        position: relative;
         width: 8rem;
         height: 8rem;
         border-radius: 9999px;
@@ -47,10 +50,10 @@ export default class AvatarUpload extends GlimmerComponent<AvatarUploadArgs> {
         );
         border: 4px solid var(--background, #ffffff);
         box-shadow: var(--shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
+        transition: all 0.2s ease;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: all 0.2s ease;
       }
 
       .avatar-upload:hover .avatar-placeholder {
@@ -58,10 +61,37 @@ export default class AvatarUpload extends GlimmerComponent<AvatarUploadArgs> {
         transform: scale(1.05);
       }
 
-      .avatar-icon {
+      .avatar-camera-icon {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        width: 2.5rem;
+        height: 2.5rem;
+        background: var(--primary, #3b82f6);
+        color: var(--primary-foreground, #ffffff);
+        border: 3px solid var(--background, #ffffff);
+        border-radius: 9999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: var(--shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
+        transition: all 0.2s ease;
+      }
+
+      .avatar-upload:hover .avatar-camera-icon {
+        background: var(--primary-hover, #2563eb);
+        transform: scale(1.05);
+      }
+
+      .placeholder-icon {
         width: 3rem;
         height: 3rem;
-        color: var(--muted-foreground, #9ca3af);
+        color: var(--primary, #3b82f6);
+      }
+
+      .icon {
+        width: 1.25rem;
+        height: 1.25rem;
       }
 
       .avatar-label {

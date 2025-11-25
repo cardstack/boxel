@@ -4,7 +4,7 @@ import {
   contains,
   Component,
 } from 'https://cardstack.com/base/card-api';
-import { ImageField } from './image-field';
+import { ImageField } from './fields/image-field';
 
 export class ImageFieldCard extends CardDef {
   static displayName = 'Image Field Card';
