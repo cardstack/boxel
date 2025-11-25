@@ -454,12 +454,18 @@ export default class CommandService extends Service {
             "Patch command can't run because it doesn't have all the fields in arguments returned by open ai",
           );
         }
+        let cardId = payload.attributes.cardId;
         let clientRequestId = this.registerAiAssistantClientRequestId(
           'patch-instance',
           command.message.roomId,
         );
+        this.trackAiAssistantCardPatchRequest(
+          cardId,
+          clientRequestId,
+          command.message.roomId,
+        );
         await this.store.patch(
-          payload?.attributes?.cardId,
+          cardId,
           {
             attributes: payload?.attributes?.patch?.attributes,
             relationships: payload?.attributes?.patch?.relationships,
