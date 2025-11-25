@@ -318,11 +318,9 @@ module(basename(__filename), function () {
         null,
         'error is primary and not nested in additionalErrors',
       );
+      let deps = result.response.error?.error.deps ?? [];
       assert.ok(
-        Array.isArray(result.response.error?.error.deps) &&
-          result.response.error?.error.deps.some((dep: string) =>
-            dep.includes(`${realmURL}broken`),
-          ),
+        deps.some((dep) => dep.includes(`${realmURL}broken`)),
         'deps include failing module',
       );
     });
