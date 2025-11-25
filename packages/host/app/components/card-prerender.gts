@@ -52,6 +52,8 @@ import {
   withCardType,
   coerceRenderError,
   normalizeRenderError,
+  hoistPrimaryCardError,
+  resolveModuleUrl,
 } from '../utils/render-error';
 import {
   enableRenderTimerStub,
@@ -461,7 +463,11 @@ export default class CardPrerender extends Component {
     let cardType = context ? this.#cardTypeTracker.get(context) : undefined;
     let renderErrorPayload = coerceRenderError(reason);
     if (renderErrorPayload) {
-      let normalized = normalizeRenderError(renderErrorPayload, {
+      let hoisted = hoistPrimaryCardError(renderErrorPayload, {
+        instanceId: context?.cardId,
+        moduleUrl: resolveModuleUrl(context?.cardId),
+      });
+      let normalized = normalizeRenderError(hoisted, {
         cardId: context?.cardId,
       });
       this.#renderErrorPayload = JSON.stringify(

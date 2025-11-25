@@ -187,6 +187,17 @@ module('Acceptance | prerender | html', function (hooks) {
         'person.gts': { Person },
         'pet.gts': { Pet },
         'cat.gts': { Cat },
+        'broken.gts': 'export const Broken = ;',
+        'broken.json': {
+          data: {
+            meta: {
+              adoptsFrom: {
+                module: './broken',
+                name: 'Broken',
+              },
+            },
+          },
+        },
         'Pet/mango.json': {
           data: {
             attributes: { name: 'Mango' },
@@ -805,12 +816,39 @@ module('Acceptance | prerender | html', function (hooks) {
       'error.id is correct',
     );
     assert.true(error.isCardError, 'error.isCardError is correct');
-    assert.strictEqual(
-      error.message,
-      'does-not-exist.json not found',
-      'error.message is correct',
+    assert.true(
+      error.message.includes('does-not-exist.json'),
+      'error.message references missing file',
     );
     assert.strictEqual(error.status, 404, 'error.status is correct');
-    assert.strictEqual(error.title, 'Not Found', 'error.title is correct');
+    assert.strictEqual(error.title, 'Link Not Found', 'error.title is correct');
+  });
+
+  test('hoists 406 errors for render route responses', async function (assert) {
+    let url = `${testRealmURL}broken.json`;
+    await visit(renderPath(url, '/html/isolated/0'));
+    let { value } = await capturePrerenderResult('textContent', 'error');
+    let { error }: RenderError = JSON.parse(value);
+
+    assert.strictEqual(error.status, 406, 'status is 406');
+    assert.strictEqual(
+      error.message,
+      `Parse Error at broken.gts:1:23: 1:24 (${testRealmURL}broken)`,
+      'message includes enough information for AI to fix the problem',
+    );
+    assert.ok(
+      error.stack?.includes('at transpileJS'),
+      `stack should include "at transpileJS" but was ${error.stack}`,
+    );
+    assert.strictEqual(
+      error.additionalErrors,
+      null,
+      'error is primary and not nested in additionalErrors',
+    );
+    assert.ok(
+      Array.isArray(error.deps) &&
+        error.deps.some((dep) => dep.includes('broken')),
+      'deps include failing module',
+    );
   });
 });

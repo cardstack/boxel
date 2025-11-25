@@ -33,6 +33,7 @@ import {
 } from '@cardstack/runtime-common';
 import {
   serializableError,
+  isCardErrorJSONAPI,
   type SerializedError,
 } from '@cardstack/runtime-common/error';
 
@@ -416,7 +417,7 @@ export default class ModuleRoute extends Route<Model> {
   }
 }
 
-function modelWithError({
+export function modelWithError({
   id,
   nonce,
   message,
@@ -431,6 +432,31 @@ function modelWithError({
   deps?: string[];
   status?: number;
 }): Model {
+  let baseError: SerializedError;
+  let maybeCardError: CardError | undefined;
+  if (err instanceof CardError) {
+    maybeCardError = err;
+  } else if (isCardErrorJSONAPI(err) && err.status === 406) {
+    maybeCardError = CardError.fromCardErrorJsonAPI(err, err.id, err.status);
+  }
+
+  if (maybeCardError && maybeCardError.status === 406) {
+    let hoisted = CardError.fromSerializableError(
+      serializableError(maybeCardError),
+    );
+    let depsSet = new Set([...(hoisted.deps ?? []), ...deps]);
+    hoisted.deps = stripSelfDeps(depsSet.size ? [...depsSet] : undefined, id);
+    hoisted.message = ensureMessageIncludesUrl(hoisted.message, id);
+    hoisted.additionalErrors = null;
+    baseError = serializableError(hoisted);
+  } else {
+    baseError = {
+      status: status ?? err?.status ?? 500,
+      message,
+      additionalErrors: err !== undefined ? [serializableError(err)] : null,
+      deps: stripSelfDeps(deps, id),
+    };
+  }
   return {
     id,
     nonce,
@@ -442,12 +468,7 @@ function modelWithError({
     definitions: {},
     error: {
       type: 'error',
-      error: {
-        status: status ?? err?.status ?? 500,
-        message,
-        additionalErrors: err !== undefined ? [serializableError(err)] : null,
-        deps,
-      },
+      error: baseError,
     },
   };
 }
@@ -490,6 +511,35 @@ function toSerializedError(err: unknown, message: string): SerializedError {
     cardError.additionalErrors = null;
   }
   return serializableError(cardError);
+}
+
+function ensureMessageIncludesUrl(
+  message: string | undefined,
+  url: string,
+): string {
+  if (!url) {
+    return message ?? '';
+  }
+  if (message && message.includes(url)) {
+    return message;
+  }
+  return message ? `${message} (${url})` : url;
+}
+
+function stripSelfDeps(
+  deps: string[] | undefined,
+  id: string,
+): string[] | undefined {
+  if (!deps) {
+    return undefined;
+  }
+  let selfVariants = new Set<string>([
+    id,
+    id.endsWith('.json') ? id.replace(/\.json$/, '.gts') : id,
+    id.endsWith('.gts') ? id.replace(/\.gts$/, '.json') : id,
+  ]);
+  let filtered = deps.filter((dep) => !selfVariants.has(dep));
+  return filtered.length ? filtered : undefined;
 }
 
 function describeError(err: unknown): string {

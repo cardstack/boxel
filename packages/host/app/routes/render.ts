@@ -38,6 +38,10 @@ import {
   withCardType,
   coerceRenderError,
   normalizeRenderError,
+  hoistPrimaryCardError,
+  resolveModuleUrl,
+  mergeDeps,
+  ensureMessageIncludesUrl,
 } from '../utils/render-error';
 import {
   enableRenderTimerStub,
@@ -529,10 +533,11 @@ export default class RenderRoute extends Route<Model> {
         : undefined;
     let coerceFromValue = coerceFromMessage ?? coerceRenderError(error);
     if (coerceFromValue) {
-      let normalized = normalizeRenderError(
-        coerceFromValue,
-        normalizationContext,
-      );
+      let hoisted = hoistPrimaryCardError(coerceFromValue, {
+        instanceId: context?.cardId,
+        moduleUrl: resolveModuleUrl(context?.cardId),
+      });
+      let normalized = normalizeRenderError(hoisted, normalizationContext);
       let withType = withCardType(normalized, cardType);
       return JSON.stringify(this.#stripLastKnownGoodHtml(withType), null, 2);
     }
@@ -545,6 +550,14 @@ export default class RenderRoute extends Route<Model> {
       }
     } while (current && !id);
     if (isCardError(error)) {
+      let moduleURL = resolveModuleUrl(context?.cardId);
+      if (moduleURL) {
+        error.deps = mergeDeps(error.deps, [moduleURL]);
+        error.message = ensureMessageIncludesUrl(
+          String(error.message ?? ''),
+          moduleURL,
+        );
+      }
       let normalized = normalizeRenderError(
         {
           type: 'error',
@@ -556,10 +569,12 @@ export default class RenderRoute extends Route<Model> {
       return JSON.stringify(this.#stripLastKnownGoodHtml(withType), null, 2);
     }
     let errorJSONAPI = formattedError(id, error).errors[0];
-    let errorPayload = normalizeRenderError(
+    let moduleURL = resolveModuleUrl(context?.cardId ?? errorJSONAPI.id);
+    let hoisted = hoistPrimaryCardError(
       errorJsonApiToErrorEntry(errorJSONAPI) as RenderError,
-      normalizationContext,
+      { instanceId: context?.cardId, moduleUrl: moduleURL },
     );
+    let errorPayload = normalizeRenderError(hoisted, normalizationContext);
     return JSON.stringify(
       this.#stripLastKnownGoodHtml(
         withCardType(errorPayload as RenderError, cardType),

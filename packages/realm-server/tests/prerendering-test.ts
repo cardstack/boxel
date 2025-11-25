@@ -82,6 +82,17 @@ module(basename(__filename), function () {
                 },
               },
             },
+            'broken.gts': 'export const Broken = ;',
+            'broken.json': {
+              data: {
+                meta: {
+                  adoptsFrom: {
+                    module: './broken',
+                    name: 'Broken',
+                  },
+                },
+              },
+            },
           },
         },
       ],
@@ -275,6 +286,45 @@ module(basename(__filename), function () {
         'syntax error surfaces as 406',
       );
       assert.false(result.pool.evicted, 'page not evicted for syntax error');
+    });
+
+    test('card prerender hoists module transpile errors', async function (assert) {
+      let brokenCard = `${realmURL}broken.json`;
+
+      let result = await prerenderer.prerenderCard({
+        realm: realmURL,
+        url: brokenCard,
+        userId: testUserId,
+        permissions,
+      });
+
+      assert.ok(result.response.error, 'prerender reports error');
+      assert.strictEqual(
+        result.response.error?.error.status,
+        406,
+        'status is 406',
+      );
+      assert.strictEqual(
+        result.response.error?.error.message,
+        `Parse Error at broken.gts:1:23: 1:24 (${realmURL}broken)`,
+        'message includes enough information for AI to fix the problem',
+      );
+      assert.ok(
+        result.response.error?.error.stack?.includes('at transpileJS'),
+        `stack should include "at transpileJS" but was ${result.response.error?.error.stack}`,
+      );
+      assert.strictEqual(
+        result.response.error?.error.additionalErrors,
+        null,
+        'error is primary and not nested in additionalErrors',
+      );
+      assert.ok(
+        Array.isArray(result.response.error?.error.deps) &&
+          result.response.error?.error.deps.some((dep: string) =>
+            dep.includes(`${realmURL}broken`),
+          ),
+        'deps include failing module',
+      );
     });
 
     test('module prerender evicts pooled page on timeout', async function (assert) {
