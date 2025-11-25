@@ -57,6 +57,7 @@ import {
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
+import { z } from 'zod';
 import type { CardFields } from './resource-types';
 import {
   fileContentToText,
@@ -3134,62 +3135,59 @@ export class Realm {
       });
     }
 
-    let { property, value } = json.data?.attributes ?? {};
-    if (!property || typeof property !== 'string') {
-      return badRequest({
-        message: `The request body was missing a property name to update`,
-        requestContext,
-      });
+    const realmConfigPatchSchema = z.object({
+      property: z.enum([
+        'backgroundURL',
+        'iconURL',
+        'interactHome',
+        'hostHome',
+      ]),
+      value: z.unknown(),
+    });
+
+    type RealmConfigPatchProperty = z.infer<
+      typeof realmConfigPatchSchema
+    >['property'];
+
+    let parsed = realmConfigPatchSchema.safeParse(json.data?.attributes ?? {});
+    if (!parsed.success) {
+      let message =
+        parsed.error.issues.map((issue) => issue.message).join(', ') ||
+        'The request body was invalid';
+      return badRequest({ message, requestContext });
     }
 
-    let validators: Record<string, (value: unknown) => string | undefined> = {
-      name: (val) =>
-        typeof val === 'string' ? undefined : 'name must be a string',
-      backgroundURL: (val) =>
-        val === null || typeof val === 'string'
-          ? undefined
-          : 'backgroundURL must be a string or null',
-      iconURL: (val) =>
-        val === null || typeof val === 'string'
-          ? undefined
-          : 'iconURL must be a string or null',
-      showAsCatalog: (val) =>
-        val === null || typeof val === 'boolean'
-          ? undefined
-          : 'showAsCatalog must be a boolean or null',
-      interactHome: (val) =>
-        val === null || typeof val === 'string'
-          ? undefined
-          : 'interactHome must be a string or null',
-      hostHome: (val) =>
-        val === null || typeof val === 'string'
-          ? undefined
-          : 'hostHome must be a string or null',
-      publishable: (val) =>
-        val === null || typeof val === 'boolean'
-          ? undefined
-          : 'publishable must be a boolean or null',
-      visibility: (val) =>
-        val === 'private' || val === 'shared' || val === 'public'
-          ? undefined
-          : "visibility must be 'private', 'shared', or 'public'",
+    const propertySchemas: Record<
+      RealmConfigPatchProperty,
+      z.ZodNullable<z.ZodString>
+    > = {
+      backgroundURL: z
+        .string({ invalid_type_error: 'backgroundURL must be a string' })
+        .nullable(),
+      iconURL: z
+        .string({ invalid_type_error: 'iconURL must be a string' })
+        .nullable(),
+      interactHome: z
+        .string({ invalid_type_error: 'interactHome must be a string' })
+        .nullable(),
+      hostHome: z
+        .string({ invalid_type_error: 'hostHome must be a string' })
+        .nullable(),
     };
 
-    let validate = validators[property];
-    if (!validate) {
-      return badRequest({
-        message: `The property '${property}' cannot be updated`,
-        requestContext,
-      });
+    let valueResult = propertySchemas[parsed.data.property].safeParse(
+      parsed.data.value,
+    );
+    if (!valueResult.success) {
+      let message =
+        valueResult.error.issues
+          .map((issue) => issue.message)
+          .join(', ') || 'The request body was invalid';
+      return badRequest({ message, requestContext });
     }
 
-    let validationError = validate(value);
-    if (validationError) {
-      return badRequest({
-        message: validationError,
-        requestContext,
-      });
-    }
+    let { property } = parsed.data;
+    let value = valueResult.data;
 
     let fileURL = this.paths.fileURL(`.realm.json`);
     let realmConfigPath: LocalPath = this.paths.local(fileURL);

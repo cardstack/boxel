@@ -231,7 +231,7 @@ module(basename(__filename), function () {
           .send({
             data: {
               type: 'realm-info',
-              attributes: { property: 'publishable', value: true },
+              attributes: { property: 'backgroundURL', value: 'new-bg' },
             },
           });
 
@@ -245,7 +245,49 @@ module(basename(__filename), function () {
         }
       });
 
-      test('realm-owner can patch realm config property', async function (assert) {
+      test('realm-owner can patch allowed realm config property', async function (assert) {
+        let response = await request
+          .patch('/_info')
+          .set('Accept', SupportedMimeType.RealmInfo)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'user', [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
+          )
+          .send({
+            data: {
+              type: 'realm-info',
+              attributes: { property: 'backgroundURL', value: 'new-bg' },
+            },
+          });
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          response.body,
+          {
+            data: {
+              id: testRealmHref,
+              type: 'realm-info',
+              attributes: {
+                ...testRealmInfo,
+                realmUserId: '@node-test_realm:localhost',
+                backgroundURL: 'new-bg',
+              },
+            },
+          },
+          'response includes updated realm info',
+        );
+        assert.deepEqual(
+          readJSONSync(realmConfigPath),
+          { ...(initialConfig ?? {}), backgroundURL: 'new-bg' },
+          '.realm.json contains the updated property',
+        );
+      });
+
+      test('disallowed property returns bad request', async function (assert) {
         let response = await request
           .patch('/_info')
           .set('Accept', SupportedMimeType.RealmInfo)
@@ -264,30 +306,17 @@ module(basename(__filename), function () {
             },
           });
 
-        assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        assert.deepEqual(
-          response.body,
-          {
-            data: {
-              id: testRealmHref,
-              type: 'realm-info',
-              attributes: {
-                ...testRealmInfo,
-                realmUserId: '@node-test_realm:localhost',
-                publishable: true,
-              },
-            },
-          },
-          'response includes updated realm info',
-        );
-        assert.deepEqual(
-          readJSONSync(realmConfigPath),
-          { ...(initialConfig ?? {}), publishable: true },
-          '.realm.json contains the updated property',
-        );
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        if (initialConfig) {
+          assert.deepEqual(
+            readJSONSync(realmConfigPath),
+            initialConfig,
+            '.realm.json remains unchanged',
+          );
+        }
       });
 
-      test('invalid property returns bad request', async function (assert) {
+      test('invalid value type returns bad request', async function (assert) {
         let response = await request
           .patch('/_info')
           .set('Accept', SupportedMimeType.RealmInfo)
@@ -302,7 +331,7 @@ module(basename(__filename), function () {
           .send({
             data: {
               type: 'realm-info',
-              attributes: { property: 'realmUserId', value: 'someone' },
+              attributes: { property: 'backgroundURL', value: true },
             },
           });
 
