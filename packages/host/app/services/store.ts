@@ -349,6 +349,13 @@ export default class StoreService extends Service implements StoreInterface {
     return await this.getInstance<T>({ idOrDoc: id });
   }
 
+  // Bypass cached state and fetch from source of truth
+  async getWithoutCache<T extends CardDef>(
+    id: string,
+  ): Promise<T | CardErrorJSONAPI> {
+    return await this.getInstance<T>({ idOrDoc: id, opts: { noCache: true } });
+  }
+
   async delete(id: string): Promise<void> {
     if (!id) {
       // the card isn't actually saved yet, so do nothing
