@@ -845,9 +845,9 @@ module('Acceptance | prerender | html', function (hooks) {
       null,
       'error is primary and not nested in additionalErrors',
     );
+    let deps = error.deps ?? [];
     assert.ok(
-      Array.isArray(error.deps) &&
-        error.deps.some((dep) => dep.includes('broken')),
+      deps.some((dep) => dep.includes(`${testRealmURL}broken`)),
       'deps include failing module',
     );
   });
