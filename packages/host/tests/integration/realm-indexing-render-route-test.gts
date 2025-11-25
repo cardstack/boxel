@@ -744,6 +744,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         },
         relationships: {
           'cardInfo.theme': { links: { self: null } },
+          linkedExamples: { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -770,6 +771,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         ref: `${testRealmURL}person/Person`,
         title: 'Person Card',
         containedExamples: null,
+        linkedExamples: null,
         isCard: true,
         isComponent: false,
         isField: false,
@@ -861,6 +863,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         },
         relationships: {
           'cardInfo.theme': { links: { self: null } },
+          linkedExamples: { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -887,6 +890,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         ref: `${testRealmURL}person/Person`,
         title: 'Person Card',
         containedExamples: null,
+        linkedExamples: null,
         isCard: true,
         isComponent: false,
         isField: false,
@@ -2471,6 +2475,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
       specType: 'card',
       moduleHref: 'http://localhost:4202/test/booking',
       containedExamples: null,
+      linkedExamples: null,
       ref: 'http://localhost:4202/test/booking/Booking',
       title: 'Booking',
       isCard: true,
@@ -2857,6 +2862,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         },
         relationships: {
           'cardInfo.theme': { links: { self: null } },
+          linkedExamples: { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -2892,6 +2898,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         title: 'PetPerson',
         description: 'Spec for PetPerson',
         containedExamples: null,
+        linkedExamples: null,
         moduleHref: `${testModuleRealm}pet-person`,
         ref: `${testModuleRealm}pet-person/PetPerson`,
         specType: 'card',
