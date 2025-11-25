@@ -231,8 +231,10 @@ class Isolated extends Component<typeof Spec> {
               <span>{{PRIMITIVE_INCOMPATIBILITY_MESSAGE}}</span>
             </p>
           {{else}}
-            <@fields.containedExamples @typeConstraint={{this.absoluteRef}} />
+            <@fields.containedExamples />
           {{/if}}
+        {{else}}
+          <@fields.linkedExamples />
         {{/if}}
       </section>
       <section class='module section'>

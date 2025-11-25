@@ -41,8 +41,6 @@ import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import CodeBlock from '../ai-assistant/code-block';
 import CardRenderer from '../card-renderer';
 
-import PreparingRoomMessageCommand from './preparing-room-message-command';
-
 interface Signature {
   Element: HTMLDivElement;
   Args: {
@@ -157,6 +155,10 @@ export default class RoomMessageCommand extends Component<Signature> {
     );
   }
 
+  private get commandDescription() {
+    return this.args.messageCommand.description ?? 'Preparing tool call...';
+  }
+
   <template>
     <div
       class={{cn
@@ -169,7 +171,23 @@ export default class RoomMessageCommand extends Component<Signature> {
       ...attributes
     >
       {{#if @isStreaming}}
-        <PreparingRoomMessageCommand />
+        <CodeBlock
+          class='command-code-block'
+          @monacoSDK={{@monacoSDK}}
+          @codeData={{hash code=this.previewCommandCode language='json'}}
+          data-test-command-card-idle={{not
+            (eq @messageCommand.status 'applying')
+          }}
+          as |codeBlock|
+        >
+          <codeBlock.commandHeader
+            @commandDescription={{this.commandDescription}}
+            @action={{@runCommand}}
+            @actionVerb={{@messageCommand.actionVerb}}
+            @code={{this.previewCommandCode}}
+            @commandState='preparing'
+          />
+        </CodeBlock>
       {{else}}
         <CodeBlock
           class='command-code-block'

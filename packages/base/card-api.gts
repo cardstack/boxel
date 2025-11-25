@@ -83,7 +83,9 @@ import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 import ImportIcon from '@cardstack/boxel-icons/import';
+import WandIcon from '@cardstack/boxel-icons/wand';
 // normalizeEnumOptions used by enum moved to packages/base/enum.gts
+import PatchThemeCommand from '@cardstack/boxel-host/commands/patch-theme';
 
 import {
   callSerializeHook,
@@ -253,6 +255,7 @@ export interface FieldConstructor<T> {
   name: string;
   isUsed?: true;
   isPolymorphic?: true;
+  declaredCardThunk?: () => T;
 }
 
 type CardChangeSubscriber = (
@@ -285,6 +288,9 @@ export function instanceOf(instance: BaseDef, clazz: typeof BaseDef): boolean {
   let instanceClazz: typeof BaseDef | null = instance.constructor;
   let codeRefInstance: CodeRef | undefined;
   let codeRefClazz = identifyCard(clazz);
+  if (!codeRefClazz) {
+    return instance instanceof (clazz as any);
+  }
   do {
     codeRefInstance = instanceClazz ? identifyCard(instanceClazz) : undefined;
     if (isEqual(codeRefInstance, codeRefClazz)) {
@@ -834,7 +840,10 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
         }
       }
 
-      if (this.card === Reflect.getPrototypeOf(value)!.constructor) {
+      if (
+        this.card === Reflect.getPrototypeOf(value)!.constructor &&
+        !this.isPolymorphic
+      ) {
         // when our implementation matches the default we don't need to include
         // meta.adoptsFrom
         delete serialized.meta.adoptsFrom;
@@ -907,9 +916,10 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
 
   validate(_instance: BaseDef, value: any) {
     if (!(primitive in this.card)) {
-      if (value != null && !instanceOf(value, this.card)) {
+      let expectedCard = this.card;
+      if (value != null && !instanceOf(value, expectedCard)) {
         throw new Error(
-          `field validation error: tried set instance of ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
+          `field validation error: tried set instance of ${value.constructor.name} as field '${this.name}' but it is not an instance of ${expectedCard.name}`,
         );
       }
     }
@@ -928,6 +938,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
 class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly fieldType = 'linksTo';
   private cardThunk: () => CardT;
+  private declaredCardThunk: () => CardT;
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly description: string | undefined;
@@ -936,12 +947,14 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly configuration?: ConfigurationInput<any>;
   constructor({
     cardThunk,
+    declaredCardThunk,
     computeVia,
     name,
     isUsed,
     isPolymorphic,
   }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
+    this.declaredCardThunk = declaredCardThunk ?? cardThunk;
     this.computeVia = computeVia;
     this.name = name;
     this.isUsed = isUsed;
@@ -950,6 +963,10 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
 
   get card(): CardT {
     return this.cardThunk();
+  }
+
+  get declaredCardResolver(): () => CardT {
+    return this.declaredCardThunk;
   }
 
   getter(instance: CardDef): BaseInstanceType<CardT> | undefined {
@@ -1150,6 +1167,13 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         return value;
       }
       if (!instanceOf(value, this.card)) {
+        console.warn(
+          'linksTo instance mismatch',
+          JSON.stringify({
+            expected: identifyCard(this.card),
+            actual: identifyCard(value.constructor as typeof BaseDef),
+          }),
+        );
         throw new Error(
           `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
         );
@@ -1292,6 +1316,8 @@ class LinksToMany<FieldT extends CardDefConstructor>
 {
   readonly fieldType = 'linksToMany';
   private cardThunk: () => FieldT;
+  private declaredCardThunk: () => FieldT;
+  private declaredCardCache: FieldT | undefined;
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly isUsed: undefined | true;
@@ -1299,12 +1325,14 @@ class LinksToMany<FieldT extends CardDefConstructor>
   readonly configuration?: ConfigurationInput<any>;
   constructor({
     cardThunk,
+    declaredCardThunk,
     computeVia,
     name,
     isUsed,
     isPolymorphic,
   }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
+    this.declaredCardThunk = declaredCardThunk ?? cardThunk;
     this.computeVia = computeVia;
     this.name = name;
     this.isUsed = isUsed;
@@ -1313,6 +1341,17 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
   get card(): FieldT {
     return this.cardThunk();
+  }
+
+  private get declaredCard(): FieldT {
+    if (!this.declaredCardCache) {
+      this.declaredCardCache = this.declaredCardThunk();
+    }
+    return this.declaredCardCache;
+  }
+
+  get declaredCardResolver(): () => FieldT {
+    return this.declaredCardThunk;
   }
 
   getter(instance: CardDef): BaseInstanceType<FieldT> {
@@ -1669,14 +1708,15 @@ class LinksToMany<FieldT extends CardDefConstructor>
       );
     }
 
+    let expectedCard = this.declaredCard;
     for (let value of values) {
       if (
         !isNotLoadedValue(value) &&
         value != null &&
-        !instanceOf(value, this.card)
+        !instanceOf(value, expectedCard)
       ) {
         throw new Error(
-          `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
+          `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${expectedCard.name}`,
         );
       }
     }
@@ -1918,8 +1958,10 @@ export function linksTo<CardT extends CardDefConstructor>(
   return {
     setupField(fieldName: string) {
       let { computeVia, isUsed } = options ?? {};
+      let fieldCardThunk = cardThunk(cardOrThunk);
       let instance = new LinksTo({
-        cardThunk: cardThunk(cardOrThunk),
+        cardThunk: fieldCardThunk,
+        declaredCardThunk: fieldCardThunk,
         computeVia,
         name: fieldName,
         isUsed,
@@ -1938,8 +1980,10 @@ export function linksToMany<CardT extends CardDefConstructor>(
   return {
     setupField(fieldName: string) {
       let { computeVia, isUsed } = options ?? {};
+      let fieldCardThunk = cardThunk(cardOrThunk);
       let instance = new LinksToMany({
-        cardThunk: cardThunk(cardOrThunk),
+        cardThunk: fieldCardThunk,
+        declaredCardThunk: fieldCardThunk,
         computeVia,
         name: fieldName,
         isUsed,
@@ -2114,6 +2158,7 @@ export type ViewCardFn = (
   format?: Format,
   opts?: {
     openCardInRightMostStack?: boolean;
+    stackIndex?: number;
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
     fieldName?: string;
   },
@@ -2430,6 +2475,27 @@ export class Theme extends CardDef {
   static icon = ThemeIcon;
   @field cssVariables = contains(CSSField);
   @field cssImports = containsMany(CssImportField);
+
+  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
+    let menuItems = super[getCardMenuItems](params);
+    if (params.menuContext === 'interact' && params.commandContext && this.id) {
+      menuItems = [
+        ...menuItems,
+        {
+          label: 'Modify theme via AI',
+          action: async () => {
+            let cmd = new PatchThemeCommand(params.commandContext);
+            await cmd.execute({
+              cardId: this.id as unknown as string,
+            });
+          },
+          icon: WandIcon,
+          disabled: !this.id,
+        },
+      ];
+    }
+    return menuItems;
+  }
 }
 
 export type BaseDefConstructor = typeof BaseDef;
@@ -3009,21 +3075,114 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
 
   let existingOverrides = getFieldOverrides(instance);
   let loadedValues = getDataBucket(instance);
+  let instanceRelativeTo =
+    ('id' in instance && typeof instance.id === 'string'
+      ? new URL(instance.id)
+      : instance[relativeTo]) ?? undefined;
+
+  function getFieldMeta(
+    fieldsMeta: CardFields | undefined,
+    key: string,
+  ): Partial<Meta> | undefined {
+    let entry = fieldsMeta?.[key];
+    return Array.isArray(entry) ? undefined : entry;
+  }
+
+  function getFieldMetaArray(
+    fieldsMeta: CardFields | undefined,
+    key: string,
+  ): Partial<Meta>[] | undefined {
+    let entry = fieldsMeta?.[key];
+    return Array.isArray(entry) ? entry : undefined;
+  }
+  function isAssignableToField(
+    overrideCard: typeof BaseDef,
+    fieldCard: typeof BaseDef,
+  ): boolean {
+    let current: typeof BaseDef | undefined = overrideCard;
+    while (current) {
+      if (current === fieldCard) {
+        return true;
+      }
+      current = getAncestor(current) ?? undefined;
+    }
+    return false;
+  }
+
+  function applyFieldOverride(
+    fieldName: string,
+    overrideCard?: typeof BaseDef,
+    field?: Field<typeof BaseDef, any>,
+  ): boolean {
+    if (!overrideCard) {
+      return false;
+    }
+    if (
+      field &&
+      !isAssignableToField(overrideCard, field.card as typeof BaseDef)
+    ) {
+      return false;
+    }
+    if (existingOverrides.get(fieldName) === overrideCard) {
+      return false;
+    }
+    existingOverrides.set(fieldName, overrideCard);
+    return true;
+  }
   async function setDeserializedFieldOverride(
     fieldName: string,
     resource: LooseCardResource,
-  ) {
-    let serializedFieldOverride = resource.meta.fields?.[fieldName];
-    if (
-      !Array.isArray(serializedFieldOverride) &&
-      serializedFieldOverride?.adoptsFrom
-    ) {
-      let override = await loadCardDef(serializedFieldOverride.adoptsFrom, {
-        loader: myLoader(),
-        relativeTo: resource.id ? new URL(resource.id) : undefined,
-      });
-      existingOverrides.set(fieldName, override);
+    field: Field<typeof BaseDef, any>,
+    serializedFieldOverride?: Partial<Meta>,
+  ): Promise<boolean> {
+    let overrideMeta = serializedFieldOverride;
+    if (!overrideMeta) {
+      overrideMeta = getFieldMeta(resource.meta?.fields, fieldName);
     }
+    if (!overrideMeta || !overrideMeta.adoptsFrom) {
+      return false;
+    }
+    let override = await loadCardDef(overrideMeta.adoptsFrom, {
+      loader: myLoader(),
+      relativeTo:
+        resource.id && typeof resource.id === 'string'
+          ? new URL(resource.id)
+          : instanceRelativeTo,
+    });
+    if (!override) {
+      return false;
+    }
+    return applyFieldOverride(fieldName, override, field);
+  }
+
+  function applyLinkOverrideFromValue(
+    fieldName: string,
+    field: Field<typeof BaseDef, any>,
+    value: any,
+  ): Field<typeof BaseDef, any> {
+    let changed = false;
+    if (field.fieldType === 'linksTo') {
+      if (isCardInstance(value)) {
+        changed = applyFieldOverride(
+          fieldName,
+          value.constructor as typeof BaseDef,
+        );
+      }
+    } else if (field.fieldType === 'linksToMany') {
+      if (Array.isArray(value)) {
+        let linked = value.find((entry) => isCardInstance(entry));
+        if (linked) {
+          changed = applyFieldOverride(
+            fieldName,
+            linked.constructor as typeof BaseDef,
+          );
+        }
+      }
+    }
+    if (changed) {
+      return (getField(instance, fieldName) ?? field) as Field<T>;
+    }
+    return field;
   }
 
   let values = (await Promise.all(
@@ -3041,37 +3200,79 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         // and have a chance to fix it so that it adheres to the definition
         return [];
       }
-      if (primitive in field.card) {
-        if (Array.isArray(value)) {
-          for (let [index] of value.entries()) {
-            await setDeserializedFieldOverride(
-              `${fieldName}.${index}`,
-              resource,
-            );
+      let resourceMetaFields = resource.meta?.fields;
+      let overrideApplied = false;
+      if (field.fieldType === 'containsMany') {
+        if (primitive in field.card) {
+          if (Array.isArray(value)) {
+            for (let [index] of value.entries()) {
+              let key = `${fieldName}.${index}`;
+              overrideApplied =
+                (await setDeserializedFieldOverride(
+                  key,
+                  resource,
+                  field,
+                  getFieldMeta(resourceMetaFields, key),
+                )) || overrideApplied;
+            }
+          } else {
+            overrideApplied =
+              (await setDeserializedFieldOverride(
+                fieldName,
+                resource,
+                field,
+                getFieldMeta(resourceMetaFields, fieldName),
+              )) || overrideApplied;
           }
         } else {
-          await setDeserializedFieldOverride(fieldName, resource);
+          let metas = getFieldMetaArray(resourceMetaFields, fieldName);
+          if (metas) {
+            for (let [index, meta] of metas.entries()) {
+              overrideApplied =
+                (await setDeserializedFieldOverride(
+                  `${fieldName}.${index}`,
+                  resource,
+                  field,
+                  meta,
+                )) || overrideApplied;
+            }
+          }
         }
+      } else if (field.fieldType === 'contains') {
+        overrideApplied =
+          (await setDeserializedFieldOverride(
+            fieldName,
+            resource,
+            field,
+            getFieldMeta(resourceMetaFields, fieldName),
+          )) || overrideApplied;
+      }
+      if (overrideApplied) {
+        field = (getField(instance, fieldName) ?? field) as Field<T>;
       }
       let relativeToVal =
         'id' in instance && typeof instance.id === 'string'
           ? new URL(instance.id)
           : instance[relativeTo];
-      return [
+      let deserializedValue = await getDeserializedValue({
+        card,
+        loadedValue: loadedValues.get(fieldName),
+        fieldName,
+        value,
+        resource,
+        modelPromise: deferred.promise,
+        doc,
+        store,
+        relativeTo: relativeToVal,
+        opts,
+      });
+
+      field = applyLinkOverrideFromValue(
+        fieldName,
         field,
-        await getDeserializedValue({
-          card,
-          loadedValue: loadedValues.get(fieldName),
-          fieldName,
-          value,
-          resource,
-          modelPromise: deferred.promise,
-          doc,
-          store,
-          relativeTo: relativeToVal,
-          opts,
-        }),
-      ];
+        deserializedValue,
+      ) as Field<T>;
+      return [field, deserializedValue];
     }),
   )) as [Field<T>, any][];
 

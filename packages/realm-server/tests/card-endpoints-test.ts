@@ -154,12 +154,15 @@ module(basename(__filename), function () {
           );
 
           let errorBody = json.errors[0];
-          assert.ok(errorBody.meta.stack.includes('at CurrentRun.visitFile'));
+          assert.ok(
+            errorBody.meta.stack.includes('at Realm.getSourceOrRedirect'),
+            'stack trace is correct',
+          );
           delete errorBody.meta.stack;
           assert.deepEqual(errorBody, {
             id: `${testRealmHref}missing-link`,
             status: 404,
-            title: 'Not Found',
+            title: 'Link Not Found',
             message: `missing file ${testRealmHref}does-not-exist.json`,
             realm: testRealmHref,
             meta: {
@@ -295,9 +298,12 @@ module(basename(__filename), function () {
             errorBody.meta.lastKnownGoodHtml,
           );
 
-          assert.ok(errorBody.meta.stack.includes('at CurrentRun.visitFile'));
+          assert.ok(
+            errorBody.meta.stack.includes('at Realm.getSourceOrRedirect'),
+            'stack trace is correct',
+          );
           assert.strictEqual(errorBody.status, 404);
-          assert.strictEqual(errorBody.title, 'Not Found');
+          assert.strictEqual(errorBody.title, 'Link Not Found');
           assert.strictEqual(
             errorBody.message,
             `missing file ${testRealmHref}does-not-exist.json`,
@@ -2282,7 +2288,8 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './friend-with-used-link.gts',
+                    module:
+                      'http://localhost:4202/node-test/friend-with-used-link',
                     name: 'FriendWithUsedLink',
                   },
                 },
@@ -2366,7 +2373,8 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: `./friend-with-used-link`,
+                      module:
+                        'http://localhost:4202/node-test/friend-with-used-link',
                       name: 'FriendWithUsedLink',
                     },
                   },
@@ -2449,7 +2457,8 @@ module(basename(__filename), function () {
               meta: {
                 adoptsFrom: {
                   name: 'FriendWithUsedLink',
-                  module: './friend-with-used-link',
+                  module:
+                    'http://localhost:4202/node-test/friend-with-used-link',
                 },
                 realmInfo: {
                   ...testRealmInfo,
