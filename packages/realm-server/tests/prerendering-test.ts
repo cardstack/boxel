@@ -456,7 +456,7 @@ module(basename(__filename), function () {
       );
     });
 
-    test('card prerender surfaces auth error without timing out', async function (assert: any) {
+    test('card prerender surfaces auth error without timing out', async function (assert) {
       const cardURL = `${consumerRealmURL}website-1`;
 
       let result = await prerenderer.prerenderCard({
