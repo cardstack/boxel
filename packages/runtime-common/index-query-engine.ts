@@ -613,7 +613,7 @@ export class IndexQueryEngine {
     renderType?: ResolvedCodeRef;
   }): (string | Param | DBSpecificExpression)[] {
     let fieldName = htmlFormat ? `${htmlFormat}_html` : `atom_html`;
-    if (!htmlFormat || htmlFormat === 'atom') {
+    if (!htmlFormat || htmlFormat === 'atom' || htmlFormat === 'head') {
       return [`ANY_VALUE(${fieldName})`];
     }
 
