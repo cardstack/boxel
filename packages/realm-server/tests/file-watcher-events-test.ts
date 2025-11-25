@@ -131,11 +131,28 @@ module(basename(__filename), function () {
       changeType: FileChangeType,
       fileName: string,
     ): Promise<RealmEvent> {
-      return waitForRealmEvent(getMessagesSince, realmEventTimestampStart, {
-        predicate: (event) => matchesFileChange(event, changeType, fileName),
-        timeout: 20000,
-        timeoutMessage: `Waiting for ${changeType} event for ${fileName} exceeded timeout`,
-      });
+      try {
+        return await waitForRealmEvent(
+          getMessagesSince,
+          realmEventTimestampStart,
+          {
+            predicate: (event) =>
+              matchesFileChange(event, changeType, fileName),
+            timeout: 20000,
+            timeoutMessage: `Waiting for ${changeType} event for ${fileName} exceeded timeout`,
+          },
+        );
+      } catch (error) {
+        // Log all received events to help debug failures
+        let allMessages = await getMessagesSince(realmEventTimestampStart);
+        console.log(
+          `Failed waiting for ${changeType} event for ${fileName}. Received ${allMessages.length} messages:`,
+        );
+        allMessages.forEach((msg, index) => {
+          console.log(`Message ${index + 1}:`, JSON.stringify(msg, null, 2));
+        });
+        throw error;
+      }
     }
 
     test('file creation produces an added event', async function (assert) {
