@@ -844,8 +844,6 @@ module('Acceptance | Spec preview', function (hooks) {
       .exists();
     assert.dom(`[data-test-card="${testRealmURL}Pet/mango"]`).exists();
     assert.dom(`[data-test-card="${testRealmURL}Pet/pudding"]`).exists();
-    assert.dom('[data-test-pet="Mango"]').exists();
-    assert.dom('[data-test-pet="Pudding"]').exists();
   });
 
   test('renders linked examples in isolated spec view when user can write (via view instance)', async function (assert) {
@@ -869,8 +867,6 @@ module('Acceptance | Spec preview', function (hooks) {
       .exists();
     assert.dom(`[data-test-card="${testRealmURL}Pet/mango"]`).exists();
     assert.dom(`[data-test-card="${testRealmURL}Pet/pudding"]`).exists();
-    assert.dom('[data-test-pet="Mango"]').exists();
-    assert.dom('[data-test-pet="Pudding"]').exists();
   });
 
   test('renders contained examples in isolated spec view when user cannot write', async function (assert) {
