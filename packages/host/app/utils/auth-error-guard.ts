@@ -32,7 +32,6 @@ export function createAuthErrorGuard(
       'detail' in event ? (event as CustomEvent).detail : (event as any).detail;
     let error = coerceAuthError(detail);
     (error as any)[FLAG] = true;
-    console.log('===> rejecting auth error deferreds');
     for (let deferred of inFlight) {
       deferred.reject(error);
     }
