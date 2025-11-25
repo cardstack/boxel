@@ -45,8 +45,8 @@ export default class ImageAvatarUpload extends GlimmerComponent<ImageAvatarUploa
         border-radius: 9999px;
         background: linear-gradient(
           135deg,
-          rgba(59, 130, 246, 0.1),
-          rgba(147, 51, 234, 0.1)
+          color-mix(in srgb, var(--primary, #3b82f6) 10%, transparent),
+          color-mix(in srgb, var(--accent, #60a5fa) 10%, transparent)
         );
         border: 4px solid var(--background, #ffffff);
         box-shadow: var(--shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
@@ -79,7 +79,7 @@ export default class ImageAvatarUpload extends GlimmerComponent<ImageAvatarUploa
       }
 
       .avatar-upload:hover .avatar-camera-icon {
-        background: var(--primary-hover, #2563eb);
+        background: var(--accent, #60a5fa);
         transform: scale(1.05);
       }
 

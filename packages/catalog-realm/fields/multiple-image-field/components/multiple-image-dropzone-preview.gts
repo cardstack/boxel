@@ -1,10 +1,12 @@
 import GlimmerComponent from '@glimmer/component';
-import { htmlSafe } from '@ember/template';
+import type { SafeString } from '@ember/template';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import GripVerticalIcon from '@cardstack/boxel-icons/grip-vertical';
 import XIcon from '@cardstack/boxel-icons/x';
+import CheckIcon from '@cardstack/boxel-icons/check';
+import CircleXIcon from '@cardstack/boxel-icons/circle-x';
 import {
   SortableHandleModifier as sortableHandle,
   SortableItemModifier as sortableItem,
@@ -34,12 +36,16 @@ interface MultipleImageDropzonePreviewArgs {
     sortableDisabled: boolean;
     onRemove: (id: string) => void;
     onToggleSelection: (id: string) => void;
-    getProgressStyle: (progress: number) => ReturnType<typeof htmlSafe>;
+    getProgressStyle: (progress: number) => SafeString;
     formatSize: (bytes: number) => string;
   };
 }
 
 export default class MultipleImageDropzonePreview extends GlimmerComponent<MultipleImageDropzonePreviewArgs> {
+  get readProgress(): number {
+    return this.args.entry.readProgress ?? 0;
+  }
+
   <template>
     <div
       class='list-item
@@ -77,10 +83,10 @@ export default class MultipleImageDropzonePreview extends GlimmerComponent<Multi
             <div class='progress-bar-small'>
               <div
                 class='progress-fill-small'
-                style={{@getProgressStyle @entry.readProgress}}
+                style={{@getProgressStyle this.readProgress}}
               ></div>
             </div>
-            <span class='progress-text-small'>{{@entry.readProgress}}%</span>
+            <span class='progress-text-small'>{{this.readProgress}}%</span>
           </div>
         </div>
       {{else}}
@@ -105,29 +111,11 @@ export default class MultipleImageDropzonePreview extends GlimmerComponent<Multi
           {{! Upload status indicators }}
           {{#if (eq @entry.uploadStatus 'success')}}
             <div class='upload-status-icon success'>
-              <svg
-                class='status-icon'
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <path d='M20 6L9 17l-5-5' />
-              </svg>
+              <CheckIcon class='status-icon' />
             </div>
           {{else if (eq @entry.uploadStatus 'error')}}
             <div class='upload-status-icon error'>
-              <svg
-                class='status-icon'
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <circle cx='12' cy='12' r='10' />
-                <line x1='15' y1='9' x2='9' y2='15' />
-                <line x1='9' y1='9' x2='15' y2='15' />
-              </svg>
+              <CircleXIcon class='status-icon' />
             </div>
           {{/if}}
         </div>
@@ -174,25 +162,25 @@ export default class MultipleImageDropzonePreview extends GlimmerComponent<Multi
       }
 
       .list-item.upload-success {
-        border: 2px solid #10b981 !important;
-        background: rgba(16, 185, 129, 0.05);
-        box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.2);
+        border: 2px solid var(--chart2, #10b981);
+        background: color-mix(in srgb, var(--chart2, #10b981) 5%, transparent);
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--chart2, #10b981) 20%, transparent);
       }
 
       .list-item.upload-success:hover {
-        border: 2px solid #10b981 !important;
-        box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.3);
+        border: 2px solid var(--chart2, #10b981);
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--chart2, #10b981) 30%, transparent);
       }
 
       .list-item.upload-error {
-        border: 2px solid #ef4444 !important;
-        background: rgba(239, 68, 68, 0.05);
-        box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.2);
+        border: 2px solid var(--destructive, #ef4444);
+        background: color-mix(in srgb, var(--destructive, #ef4444) 5%, transparent);
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--destructive, #ef4444) 20%, transparent);
       }
 
       .list-item.upload-error:hover {
-        border: 2px solid #ef4444 !important;
-        box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.3);
+        border: 2px solid var(--destructive, #ef4444);
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--destructive, #ef4444) 30%, transparent);
       }
 
       .grip-icon {
@@ -239,7 +227,7 @@ export default class MultipleImageDropzonePreview extends GlimmerComponent<Multi
         display: flex;
         align-items: center;
         justify-content: center;
-        background: rgba(59, 130, 246, 0.05);
+        background: color-mix(in srgb, var(--primary, #3b82f6) 5%, transparent);
         border-radius: var(--radius, 0.375rem);
       }
 
@@ -297,8 +285,8 @@ export default class MultipleImageDropzonePreview extends GlimmerComponent<Multi
 
       .upload-error-text {
         font-size: 0.6875rem;
-        color: #ef4444;
-        margin-top: 0.25rem;
+        color: var(--destructive, #ef4444);
+        margin-top: calc(var(--spacing, 0.25rem) * 1);
         font-weight: 500;
         display: -webkit-box;
         -webkit-line-clamp: 2;
@@ -322,13 +310,13 @@ export default class MultipleImageDropzonePreview extends GlimmerComponent<Multi
       }
 
       .upload-status-icon.success {
-        background: #10b981;
-        color: white;
+        background: var(--chart2, #10b981);
+        color: var(--background, #ffffff);
       }
 
       .upload-status-icon.error {
-        background: #ef4444;
-        color: white;
+        background: var(--destructive, #ef4444);
+        color: var(--destructive-foreground, #ffffff);
       }
 
       .upload-status-icon .status-icon {
@@ -342,7 +330,7 @@ export default class MultipleImageDropzonePreview extends GlimmerComponent<Multi
         left: 0;
         right: 0;
         bottom: 0;
-        background: rgba(0, 0, 0, 0.6);
+        background: color-mix(in srgb, var(--foreground, #1a1a1a) 60%, transparent);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -353,8 +341,8 @@ export default class MultipleImageDropzonePreview extends GlimmerComponent<Multi
       .spinner-small {
         width: 1.5rem;
         height: 1.5rem;
-        border: 2px solid rgba(255, 255, 255, 0.3);
-        border-top-color: white;
+        border: 2px solid color-mix(in srgb, var(--background, #ffffff) 30%, transparent);
+        border-top-color: var(--background, #ffffff);
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
       }
@@ -382,7 +370,8 @@ export default class MultipleImageDropzonePreview extends GlimmerComponent<Multi
       }
 
       .list-remove:hover {
-        background: #dc2626;
+        background: var(--destructive, #dc2626);
+        opacity: 0.9;
       }
 
       .list-item.is-selected {

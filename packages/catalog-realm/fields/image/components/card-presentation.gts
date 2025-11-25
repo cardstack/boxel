@@ -45,7 +45,8 @@ export default class CardPresentation extends GlimmerComponent<CardPresentationS
 
       .card-image-wrapper {
         width: 100%;
-        aspect-ratio: 4 / 3;
+        height: var(--image-card-height, 200px);
+        aspect-ratio: var(--image-card-aspect-ratio, 1 / 1);
         background: var(--muted, #f1f5f9);
         flex-shrink: 0;
       }
@@ -75,17 +76,19 @@ export default class CardPresentation extends GlimmerComponent<CardPresentationS
 
       .card-placeholder {
         width: 100%;
-        aspect-ratio: 4 / 3;
+        height: var(--image-card-height, auto);
+        aspect-ratio: var(--image-card-aspect-ratio, 4 / 3);
         background: linear-gradient(
           135deg,
           var(--muted, #f1f5f9) 0%,
-          rgba(148, 163, 184, 0.2) 100%
+          color-mix(in srgb, var(--muted-foreground, #9ca3af) 20%, transparent)
+            100%
         );
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 0.5rem;
+        gap: calc(var(--spacing, 0.25rem) * 2);
         color: var(--muted-foreground, #9ca3af);
       }
 
@@ -101,4 +104,3 @@ export default class CardPresentation extends GlimmerComponent<CardPresentationS
     </style>
   </template>
 }
-

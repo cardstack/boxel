@@ -25,7 +25,6 @@ export default class ImagePresentation extends GlimmerComponent<ImagePresentatio
       .image-embedded {
         width: 100%;
         height: 100%;
-        min-height: 8rem;
       }
 
       .embedded-image {
@@ -40,12 +39,12 @@ export default class ImagePresentation extends GlimmerComponent<ImagePresentatio
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        height: 100%;
+        padding: calc(var(--spacing, 0.25rem) * 8);
         background: var(--muted, #f1f5f9);
         border-radius: var(--radius, 0.375rem);
         color: var(--muted-foreground, #9ca3af);
         font-size: 0.875rem;
-        gap: 0.5rem;
+        gap: calc(var(--spacing, 0.25rem) * 2);
       }
 
       .camera-icon {
@@ -55,4 +54,3 @@ export default class ImagePresentation extends GlimmerComponent<ImagePresentatio
     </style>
   </template>
 }
-

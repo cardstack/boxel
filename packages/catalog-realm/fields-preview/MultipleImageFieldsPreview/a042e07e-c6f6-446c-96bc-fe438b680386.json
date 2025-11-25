@@ -10,8 +10,8 @@
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
+        "title": "Multiple Image Fields Showcase",
+        "description": "Comprehensive preview of multiple image field types with configurations",
         "thumbnailURL": null
       },
       "galleryImages": {
@@ -35,18 +35,6 @@
           {
             "uploadUrl": null,
             "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1763988472618/public"
-          },
-          {
-            "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1763991120019/public"
-          },
-          {
-            "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764049367702/public"
-          },
-          {
-            "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764049370011/public"
           }
         ]
       },
@@ -55,6 +43,14 @@
           {
             "uploadUrl": null,
             "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764053441228/public"
+          },
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764079483535/public"
+          },
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764079526038/public"
           }
         ]
       }

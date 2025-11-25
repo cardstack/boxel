@@ -137,7 +137,7 @@ export default class ImageBrowsePreview extends GlimmerComponent<ImageBrowsePrev
       }
 
       .change-button:hover {
-        background: #2563eb;
+        background: var(--accent, #60a5fa);
       }
 
       .remove-button {
@@ -146,7 +146,8 @@ export default class ImageBrowsePreview extends GlimmerComponent<ImageBrowsePrev
       }
 
       .remove-button:hover {
-        background: #dc2626;
+        background: var(--destructive, #dc2626);
+        opacity: 0.9;
       }
 
       .file-input {

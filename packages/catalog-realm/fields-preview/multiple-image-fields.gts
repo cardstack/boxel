@@ -7,7 +7,37 @@ export class MultipleImageFieldsPreview extends CardDef {
   static displayName = 'Multiple Image Fields Preview';
   static icon = Grid3x3Icon;
 
-  // Basic multiple image field (list variant with grid presentation - default)
+  /**
+   /**
+    * MultipleImageField Configuration Reference:
+    * - basicMultipleImages:
+    *     variant = 'list',
+    *     presentation = 'grid',
+    *     // options: all defaults
+    * - galleryImages:
+    *     variant = 'gallery',
+    *     presentation = 'carousel',
+    *     options:
+    *       autoUpload: false,
+    *       allowBatchSelect: true,
+    *       allowReorder: true,
+    *       maxFiles: 4,
+    *       showProgress: true
+    * - dropzoneImages:
+    *     variant = 'dropzone',
+    *     presentation = 'carousel',
+    *     options:
+    *       autoUpload: false,
+    *       allowBatchSelect: true,
+    *       showProgress: true,
+    *       maxFiles: 10
+    *
+    * Valid variants: 'list' | 'gallery' | 'dropzone'
+    * Valid presentations: 'grid' | 'carousel'
+    * Options: autoUpload, allowReorder, allowBatchSelect (default: true), maxFiles (default: 10), showProgress
+
+    */
+
   @field basicMultipleImages = contains(MultipleImageField, {
     configuration: {
       variant: 'list',
@@ -15,11 +45,10 @@ export class MultipleImageFieldsPreview extends CardDef {
     },
   });
 
-  // Gallery variant with image-carousel presentation
   @field galleryImages = contains(MultipleImageField, {
     configuration: {
       variant: 'gallery',
-      presentation: 'image-carousel',
+      presentation: 'carousel',
       options: {
         autoUpload: false,
         allowBatchSelect: true,
@@ -30,11 +59,10 @@ export class MultipleImageFieldsPreview extends CardDef {
     },
   });
 
-  // Dropzone variant with grid presentation
   @field dropzoneImages = contains(MultipleImageField, {
     configuration: {
       variant: 'dropzone',
-      presentation: 'image-carousel',
+      presentation: 'carousel',
       options: {
         autoUpload: false,
         allowBatchSelect: true,
@@ -48,20 +76,16 @@ export class MultipleImageFieldsPreview extends CardDef {
     <template>
       <div class='multiple-image-fields-preview'>
         <header class='header'>
-          <h1 class='title'>Multiple Image Fields Showcase</h1>
-          <p class='subtitle'>Comprehensive preview of multiple image field
-            types with configurations</p>
+          <h1 class='title'>{{@model.cardInfo.title}}</h1>
+          {{#if @model.cardInfo.description}}
+            <p class='subtitle'>{{@model.cardInfo.description}}</p>
+          {{/if}}
         </header>
 
         <section class='field-section'>
           <div class='section-header'>
             <h2 class='section-title'>
               1. Default Multiple Image Upload Field
-              {{#if @model.basicMultipleImages.images}}
-                <span
-                  class='image-count'
-                >{{@model.basicMultipleImages.images.length}}</span>
-              {{/if}}
             </h2>
             <p class='section-description'>Standard list view with grid display
               (default configuration)</p>
@@ -88,11 +112,6 @@ export class MultipleImageFieldsPreview extends CardDef {
           <div class='section-header'>
             <h2 class='section-title'>
               2. Gallery Multiple Image Upload Field
-              {{#if @model.galleryImages.images}}
-                <span
-                  class='image-count'
-                >{{@model.galleryImages.images.length}}</span>
-              {{/if}}
             </h2>
             <p class='section-description'>Grid edit view with carousel display
               (with batch select & reordering)</p>
@@ -120,11 +139,6 @@ export class MultipleImageFieldsPreview extends CardDef {
           <div class='section-header'>
             <h2 class='section-title'>
               3. Dropzone Multiple Image Upload Field
-              {{#if @model.dropzoneImages.images}}
-                <span
-                  class='image-count'
-                >{{@model.dropzoneImages.images.length}}</span>
-              {{/if}}
             </h2>
             <p class='section-description'>Drag & drop upload with carousel
               display</p>
@@ -201,30 +215,12 @@ export class MultipleImageFieldsPreview extends CardDef {
           font-weight: 600;
           color: var(--boxel-dark);
           margin: 0 0 var(--boxel-sp-xxs);
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
         }
 
         .section-description {
           font-size: 1rem;
           color: var(--boxel-500);
           margin: 0;
-        }
-
-        .image-count {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          min-width: 1.5rem;
-          height: 1.5rem;
-          padding: 0 0.5rem;
-          background: var(--boxel-purple);
-          color: white;
-          font-size: 0.75rem;
-          font-weight: 600;
-          border-radius: 9999px;
-          margin-left: 0.5rem;
         }
 
         .field-layout {

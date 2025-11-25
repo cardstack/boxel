@@ -528,34 +528,31 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
       data-test-multiple-image-field
     >
       {{#if this.hasImages}}
-        {{! Image preview display }}
-        {{! Batch actions header }}
-        {{#if this.allowBatchSelect}}
-          <div class='batch-actions'>
-            <label class='select-all-label'>
-              <input
-                type='checkbox'
-                class='select-all-checkbox'
-                checked={{this.selectAll}}
-                {{on 'change' this.toggleSelectAll}}
-                data-test-select-all
-              />
-              <span>Select All</span>
-            </label>
-            {{#if this.hasSelection}}
-              <button
-                type='button'
-                class='delete-selected-button'
-                {{on 'click' this.deleteSelected}}
-                data-test-delete-selected
-              >
-                <XIcon class='delete-icon' />
-                Delete ({{this.selectedCount}})
-              </button>
-            {{/if}}
-          </div>
-        {{/if}}
+        {{! Upload trigger (shown when images exist but not maxed) }}
+        {{#unless this.maxFilesReached}}
+          {{#if (eq this.variant 'gallery')}}
+            <MultipleImageGalleryUpload
+              @onFileSelect={{this.handleFileSelect}}
+              @onDragOver={{this.handleDragOver}}
+              @onDrop={{this.handleDrop}}
+              @maxFilesReached={{this.maxFilesReached}}
+              @currentCount={{this.uploadEntries.length}}
+              @maxFiles={{this.maxFiles}}
+            />
+          {{else}}
+            <MultipleImageDropzoneUpload
+              @onFileSelect={{this.handleFileSelect}}
+              @onDragOver={{this.handleDragOver}}
+              @onDrop={{this.handleDrop}}
+              @maxFilesReached={{this.maxFilesReached}}
+              @currentCount={{this.uploadEntries.length}}
+              @maxFiles={{this.maxFiles}}
+              @variant={{this.variant}}
+            />
+          {{/if}}
+        {{/unless}}
 
+        {{! Image preview display }}
         <div
           class='images-container variant-{{this.variant}}'
           {{SortableGroupModifier
@@ -565,6 +562,33 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
             direction=this.sortableDirection
           }}
         >
+          {{! Batch actions header (inside preview container) }}
+          {{#if this.allowBatchSelect}}
+            <div class='batch-actions'>
+              <label class='select-all-label'>
+                <input
+                  type='checkbox'
+                  class='select-all-checkbox'
+                  checked={{this.selectAll}}
+                  {{on 'change' this.toggleSelectAll}}
+                  data-test-select-all
+                />
+                <span>Select All</span>
+              </label>
+              {{#if this.hasSelection}}
+                <button
+                  type='button'
+                  class='delete-selected-button'
+                  {{on 'click' this.deleteSelected}}
+                  data-test-delete-selected
+                >
+                  <XIcon class='delete-icon' />
+                  Delete ({{this.selectedCount}})
+                </button>
+              {{/if}}
+            </div>
+          {{/if}}
+
           {{#each this.uploadEntries as |entry|}}
             {{#if (eq this.variant 'gallery')}}
               <MultipleImageGalleryPreview
@@ -592,30 +616,6 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
             {{/if}}
           {{/each}}
         </div>
-
-        {{! Upload trigger (shown when images exist but not maxed) }}
-        {{#unless this.maxFilesReached}}
-          {{#if (eq this.variant 'gallery')}}
-            <MultipleImageGalleryUpload
-              @onFileSelect={{this.handleFileSelect}}
-              @onDragOver={{this.handleDragOver}}
-              @onDrop={{this.handleDrop}}
-              @maxFilesReached={{this.maxFilesReached}}
-              @currentCount={{this.uploadEntries.length}}
-              @maxFiles={{this.maxFiles}}
-            />
-          {{else}}
-            <MultipleImageDropzoneUpload
-              @onFileSelect={{this.handleFileSelect}}
-              @onDragOver={{this.handleDragOver}}
-              @onDrop={{this.handleDrop}}
-              @maxFilesReached={{this.maxFilesReached}}
-              @currentCount={{this.uploadEntries.length}}
-              @maxFiles={{this.maxFiles}}
-              @variant={{this.variant}}
-            />
-          {{/if}}
-        {{/unless}}
       {{else}}
         {{! Upload trigger (shown when no images) }}
         {{#if (eq this.variant 'gallery')}}
@@ -687,26 +687,30 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 0.5rem;
+        gap: calc(var(--spacing, 0.25rem) * 2);
         width: 100%;
         min-height: 4rem;
         border: 2px dashed var(--primary, #3b82f6);
         border-radius: var(--radius, 0.5rem);
-        background: rgba(59, 130, 246, 0.05);
+        background: color-mix(in srgb, var(--primary, #3b82f6) 5%, transparent);
         cursor: pointer;
         transition: all 0.2s ease;
-        padding: 1rem;
+        padding: calc(var(--spacing, 0.25rem) * 4);
       }
 
       .upload-trigger:hover {
-        border-color: #2563eb;
-        background: rgba(59, 130, 246, 0.1);
+        border-color: var(--accent, #60a5fa);
+        background: color-mix(
+          in srgb,
+          var(--primary, #3b82f6) 10%,
+          transparent
+        );
       }
 
       .upload-trigger.variant-gallery,
       .upload-trigger.variant-dropzone {
         border-color: var(--primary, #3b82f6);
-        background: rgba(59, 130, 246, 0.05);
+        background: color-mix(in srgb, var(--primary, #3b82f6) 5%, transparent);
       }
 
       .upload-trigger.variant-dropzone {
@@ -715,8 +719,12 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
       }
 
       .upload-trigger.variant-dropzone:hover {
-        border-color: #2563eb;
-        background: rgba(59, 130, 246, 0.1);
+        border-color: var(--accent, #60a5fa);
+        background: color-mix(
+          in srgb,
+          var(--primary, #3b82f6) 10%,
+          transparent
+        );
       }
 
       .upload-icon {
@@ -817,6 +825,8 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
         border: 1px solid var(--border, #e0e0e0);
         border-radius: var(--radius, 0.5rem);
         background: var(--background, #ffffff);
+        grid-column: 1 / -1; /* Span full width in grid layout */
+        margin-bottom: calc(var(--spacing, 0.25rem) * 1);
       }
       .select-all-label {
         display: flex;
@@ -842,7 +852,8 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
         cursor: pointer;
       }
       .delete-selected-button:hover {
-        background: #dc2626;
+        background: var(--destructive, #dc2626);
+        opacity: 0.9;
       }
 
       .delete-icon {
@@ -959,7 +970,6 @@ class MultipleImageFieldEmbedded extends Component<typeof MultipleImageField> {
     <style scoped>
       .multiple-image-embedded {
         width: 100%;
-        min-height: 8rem;
       }
 
       .no-images {
@@ -967,12 +977,12 @@ class MultipleImageFieldEmbedded extends Component<typeof MultipleImageField> {
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        min-height: 8rem;
+        padding: calc(var(--spacing, 0.25rem) * 8);
         background: var(--muted, #f1f5f9);
         border-radius: var(--radius, 0.375rem);
         color: var(--muted-foreground, #9ca3af);
         font-size: 0.875rem;
-        gap: 0.5rem;
+        gap: calc(var(--spacing, 0.25rem) * 2);
       }
 
       .camera-icon {

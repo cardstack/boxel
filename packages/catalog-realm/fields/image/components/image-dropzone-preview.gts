@@ -141,7 +141,7 @@ export default class ImageDropzonePreview extends GlimmerComponent<ImageDropzone
       }
 
       .change-button:hover {
-        background: #2563eb;
+        background: var(--accent, #60a5fa);
       }
 
       .remove-button {
@@ -150,7 +150,8 @@ export default class ImageDropzonePreview extends GlimmerComponent<ImageDropzone
       }
 
       .remove-button:hover {
-        background: #dc2626;
+        background: var(--destructive, #dc2626);
+        opacity: 0.9;
       }
 
       .file-input {

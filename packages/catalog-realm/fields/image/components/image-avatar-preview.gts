@@ -95,7 +95,7 @@ export default class ImageAvatarPreview extends GlimmerComponent<ImageAvatarPrev
       }
 
       .avatar-image-wrapper:hover .avatar-camera-icon {
-        background: var(--primary-hover, #2563eb);
+        background: var(--accent, #60a5fa);
         transform: scale(1.05);
       }
 
@@ -129,7 +129,8 @@ export default class ImageAvatarPreview extends GlimmerComponent<ImageAvatarPrev
       }
 
       .avatar-remove-button:hover {
-        background: #dc2626;
+        background: var(--destructive, #dc2626);
+        opacity: 0.9;
       }
     </style>
   </template>

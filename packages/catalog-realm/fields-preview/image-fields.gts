@@ -7,25 +7,52 @@ export class ImageFieldsPreview extends CardDef {
   static displayName = 'Image Fields Preview';
   static icon = ImageIcon;
 
-  // Basic image field (default - no type specified)
+  /**
+   * ImageField Configuration Reference:
+   * - basicImage: default (browse variant, image presentation, no options)
+   * - avatarImage:
+   *     variant = 'avatar',
+   *     presentation = 'card',
+   *     options = {
+   *       autoUpload: false,
+   *       showProgress: true
+   *     }
+   *     (Note: showImageModal not available for avatar)
+   * - dropzoneImage:
+   *     variant = 'dropzone',
+   *     presentation = 'inline',
+   *     options = {
+   *       showImageModal: true,
+   *       showProgress: true,
+   *       autoUpload: false
+   *     }
+   *
+   * Valid variants: 'browse' | 'dropzone' | 'avatar'
+   * Valid presentations: 'image' | 'inline' | 'card'
+   * Options: showImageModal (browse/dropzone only), autoUpload, showProgress
+   */
+
   @field basicImage = contains(ImageField);
 
-  // Avatar variant with tile presentation
   @field avatarImage = contains(ImageField, {
     configuration: {
       variant: 'avatar',
-      presentation: 'tile',
+      presentation: 'card',
+      options: {
+        autoUpload: false,
+        showProgress: true,
+      },
     },
   });
 
-  // Dropzone variant with compact presentation
   @field dropzoneImage = contains(ImageField, {
     configuration: {
       variant: 'dropzone',
-      presentation: 'compact',
+      presentation: 'inline',
       options: {
         showImageModal: true,
         showProgress: true,
+        autoUpload: false,
       },
     },
   });
@@ -34,21 +61,24 @@ export class ImageFieldsPreview extends CardDef {
     <template>
       <div class='image-fields-preview'>
         <header class='header'>
-          <h1 class='title'>Image Fields Showcase</h1>
-          <p class='subtitle'>Comprehensive preview of all image field types
-            with configurations</p>
+          <h1 class='title'>{{@model.cardInfo.title}}</h1>
+          {{#if @model.cardInfo.description}}
+            <p class='subtitle'>{{@model.cardInfo.description}}</p>
+          {{/if}}
         </header>
 
         <section class='field-section'>
           <div class='section-header'>
-            <h2 class='section-title'>1. Browse Image</h2>
-            <p class='section-description'>Standard file browser for image
-              uploads</p>
+            <h2 class='section-title'>1. Browse Image Field</h2>
+            <p class='section-description'>Click to browse and upload a single
+              image. Best for general image uploads where users select files
+              from their device using a standard file picker.</p>
           </div>
           <div class='field-layout'>
             <div class='edit-column'>
               <div class='column-header'>Edit Mode</div>
-              <p class='column-subtitle'>Upload or select an image</p>
+              <p class='column-subtitle'>Click the upload button to browse and
+                select an image file</p>
               <@fields.basicImage @format='edit' />
             </div>
             <div class='display-column'>
@@ -73,14 +103,16 @@ export class ImageFieldsPreview extends CardDef {
 
         <section class='field-section'>
           <div class='section-header'>
-            <h2 class='section-title'>2. Avatar Image</h2>
-            <p class='section-description'>Optimized for profile pictures and
-              avatars</p>
+            <h2 class='section-title'>2. Avatar Image Field</h2>
+            <p class='section-description'>Circular image upload optimized for
+              profile pictures and avatars. Displays as a round image with a
+              camera icon overlay for easy replacement.</p>
           </div>
           <div class='field-layout'>
             <div class='edit-column'>
               <div class='column-header'>Edit Mode</div>
-              <p class='column-subtitle'>Upload or select a profile picture</p>
+              <p class='column-subtitle'>Click the circular avatar area to
+                upload or replace a profile picture</p>
               <@fields.avatarImage @format='edit' />
             </div>
             <div class='display-column'>
@@ -105,14 +137,16 @@ export class ImageFieldsPreview extends CardDef {
 
         <section class='field-section'>
           <div class='section-header'>
-            <h2 class='section-title'>3. Dropzone Image</h2>
+            <h2 class='section-title'>3. Dropzone Image Field</h2>
             <p class='section-description'>Drag and drop interface for image
-              uploads</p>
+              uploads. Users can drag images directly onto the upload area or
+              click to browse. Includes progress indicators and zoom preview.</p>
           </div>
           <div class='field-layout'>
             <div class='edit-column'>
               <div class='column-header'>Edit Mode</div>
-              <p class='column-subtitle'>Drag and drop an image here</p>
+              <p class='column-subtitle'>Drag and drop an image file here, or
+                click to browse from your device</p>
               <@fields.dropzoneImage @format='edit' />
             </div>
             <div class='display-column'>

@@ -4,6 +4,8 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
+import ChevronLeftIcon from '@cardstack/boxel-icons/chevron-left';
+import ChevronRightIcon from '@cardstack/boxel-icons/chevron-right';
 import ImageField from '../../image-field';
 
 interface CarouselPresentationSignature {
@@ -66,15 +68,7 @@ export default class CarouselPresentation extends GlimmerComponent<CarouselPrese
             {{on 'click' this.goToPrev}}
             disabled={{not this.canGoPrev}}
           >
-            <svg
-              class='nav-icon'
-              viewBox='0 0 24 24'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='2'
-            >
-              <path d='M15 18l-6-6 6-6' />
-            </svg>
+            <ChevronLeftIcon class='nav-icon' />
           </button>
           <button
             type='button'
@@ -82,15 +76,7 @@ export default class CarouselPresentation extends GlimmerComponent<CarouselPrese
             {{on 'click' this.goToNext}}
             disabled={{not this.canGoNext}}
           >
-            <svg
-              class='nav-icon'
-              viewBox='0 0 24 24'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='2'
-            >
-              <path d='M9 18l6-6-6-6' />
-            </svg>
+            <ChevronRightIcon class='nav-icon' />
           </button>
         {{/if}}
       </div>
@@ -142,7 +128,7 @@ export default class CarouselPresentation extends GlimmerComponent<CarouselPrese
         transform: translateY(-50%);
         width: 2.5rem;
         height: 2.5rem;
-        background: rgba(255, 255, 255, 0.9);
+        background: color-mix(in srgb, var(--background, #ffffff) 90%, transparent);
         border: none;
         border-radius: 9999px;
         display: flex;
@@ -154,7 +140,7 @@ export default class CarouselPresentation extends GlimmerComponent<CarouselPrese
       }
 
       .carousel-nav:hover:not(.disabled) {
-        background: white;
+        background: var(--background, #ffffff);
         transform: translateY(-50%) scale(1.1);
       }
 

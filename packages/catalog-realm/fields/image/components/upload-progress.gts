@@ -80,7 +80,7 @@ export default class UploadProgress extends GlimmerComponent<UploadProgressArgs>
 
       .progress-bar {
         height: 100%;
-        background: linear-gradient(to right, var(--primary, #3b82f6), #60a5fa);
+        background: linear-gradient(to right, var(--primary, #3b82f6), var(--accent, #60a5fa));
         border-radius: 9999px;
         transition: width 0.3s ease;
       }

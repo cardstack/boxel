@@ -35,9 +35,9 @@ export default class ReadingProgress extends GlimmerComponent<ReadingProgressArg
         align-items: center;
         justify-content: center;
         height: 100%;
-        gap: 0.75rem;
-        padding: 2rem;
-        background: rgba(59, 130, 246, 0.05);
+        gap: calc(var(--spacing, 0.25rem) * 3);
+        padding: calc(var(--spacing, 0.25rem) * 8);
+        background: color-mix(in srgb, var(--primary, #3b82f6) 5%, transparent);
       }
 
       .progress-bar {

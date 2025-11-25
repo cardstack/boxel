@@ -41,15 +41,15 @@ export default class ImageDropzoneUpload extends GlimmerComponent<ImageDropzoneU
         height: 12rem;
         border: 2px dashed var(--primary, #3b82f6);
         border-radius: var(--radius, 0.5rem);
-        background: rgba(59, 130, 246, 0.05);
+        background: color-mix(in srgb, var(--primary, #3b82f6) 5%, transparent);
         cursor: pointer;
         transition: all 0.2s ease;
-        padding: 2rem;
+        padding: calc(var(--spacing, 0.25rem) * 8);
       }
 
       .dropzone-upload:hover {
-        border-color: #2563eb;
-        background: rgba(59, 130, 246, 0.1);
+        border-color: var(--accent, #60a5fa);
+        background: color-mix(in srgb, var(--primary, #3b82f6) 10%, transparent);
       }
 
       .dropzone-content {

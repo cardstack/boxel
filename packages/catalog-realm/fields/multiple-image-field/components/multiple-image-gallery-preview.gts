@@ -1,8 +1,11 @@
 import GlimmerComponent from '@glimmer/component';
-import { fn, htmlSafe } from '@ember/template';
+import { fn } from '@ember/helper';
+import type { SafeString } from '@ember/template';
 import { on } from '@ember/modifier';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import XIcon from '@cardstack/boxel-icons/x';
+import CheckIcon from '@cardstack/boxel-icons/check';
+import CircleXIcon from '@cardstack/boxel-icons/circle-x';
 import {
   SortableHandleModifier as sortableHandle,
   SortableItemModifier as sortableItem,
@@ -32,7 +35,7 @@ interface MultipleImageGalleryPreviewArgs {
     sortableDisabled: boolean;
     onRemove: (id: string) => void;
     onToggleSelection: (id: string) => void;
-    getProgressStyle: (progress: number) => ReturnType<typeof htmlSafe>;
+    getProgressStyle: (progress: number) => SafeString;
   };
 }
 
@@ -106,29 +109,11 @@ export default class MultipleImageGalleryPreview extends GlimmerComponent<Multip
         {{! Upload status indicators }}
         {{#if (eq @entry.uploadStatus 'success')}}
           <div class='upload-status-icon success'>
-            <svg
-              class='status-icon'
-              viewBox='0 0 24 24'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='2'
-            >
-              <path d='M20 6L9 17l-5-5' />
-            </svg>
+            <CheckIcon class='status-icon' />
           </div>
         {{else if (eq @entry.uploadStatus 'error')}}
           <div class='gallery-error-badge'>
-            <svg
-              class='error-badge-icon'
-              viewBox='0 0 24 24'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='2'
-            >
-              <circle cx='12' cy='12' r='10' />
-              <line x1='15' y1='9' x2='9' y2='15' />
-              <line x1='9' y1='9' x2='15' y2='15' />
-            </svg>
+            <CircleXIcon class='error-badge-icon' />
             <span class='error-badge-text'>Upload failed</span>
           </div>
         {{/if}}
@@ -159,25 +144,33 @@ export default class MultipleImageGalleryPreview extends GlimmerComponent<Multip
       }
 
       .gallery-item.upload-success {
-        border: 2px solid #10b981 !important;
-        background: rgba(16, 185, 129, 0.05);
-        box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.2);
+        border: 2px solid var(--chart2, #10b981);
+        background: color-mix(in srgb, var(--chart2, #10b981) 5%, transparent);
+        box-shadow: 0 0 0 1px
+          color-mix(in srgb, var(--chart2, #10b981) 20%, transparent);
       }
 
       .gallery-item.upload-success:hover {
-        border: 2px solid #10b981 !important;
-        box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.3);
+        border: 2px solid var(--chart2, #10b981);
+        box-shadow: 0 0 0 1px
+          color-mix(in srgb, var(--chart2, #10b981) 30%, transparent);
       }
 
       .gallery-item.upload-error {
-        border: 2px solid #ef4444 !important;
-        background: rgba(239, 68, 68, 0.05);
-        box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.2);
+        border: 2px solid var(--destructive, #ef4444);
+        background: color-mix(
+          in srgb,
+          var(--destructive, #ef4444) 5%,
+          transparent
+        );
+        box-shadow: 0 0 0 1px
+          color-mix(in srgb, var(--destructive, #ef4444) 20%, transparent);
       }
 
       .gallery-item.upload-error:hover {
-        border: 2px solid #ef4444 !important;
-        box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.3);
+        border: 2px solid var(--destructive, #ef4444);
+        box-shadow: 0 0 0 1px
+          color-mix(in srgb, var(--destructive, #ef4444) 30%, transparent);
       }
 
       .drag-handle {
@@ -210,7 +203,7 @@ export default class MultipleImageGalleryPreview extends GlimmerComponent<Multip
         display: flex;
         align-items: center;
         justify-content: center;
-        background: rgba(59, 130, 246, 0.05);
+        background: color-mix(in srgb, var(--primary, #3b82f6) 5%, transparent);
       }
 
       .progress-indicator {
@@ -266,7 +259,8 @@ export default class MultipleImageGalleryPreview extends GlimmerComponent<Multip
       }
 
       .gallery-remove:hover {
-        background: #dc2626;
+        background: var(--destructive, #dc2626);
+        opacity: 0.9;
         transform: scale(1.1);
       }
 
@@ -308,8 +302,8 @@ export default class MultipleImageGalleryPreview extends GlimmerComponent<Multip
       }
 
       .upload-status-icon.success {
-        background: #10b981;
-        color: white;
+        background: var(--chart2, #10b981);
+        color: var(--background, #ffffff);
       }
 
       .upload-status-icon .status-icon {
@@ -325,15 +319,16 @@ export default class MultipleImageGalleryPreview extends GlimmerComponent<Multip
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 0.375rem;
-        padding: 0.375rem 0.625rem;
-        background: #ef4444;
-        color: white;
-        border-radius: 0.375rem;
+        gap: calc(var(--spacing, 0.25rem) * 1.5);
+        padding: calc(var(--spacing, 0.25rem) * 1.5)
+          calc(var(--spacing, 0.25rem) * 2.5);
+        background: var(--destructive, #ef4444);
+        color: var(--destructive-foreground, #ffffff);
+        border-radius: var(--radius, 0.375rem);
         font-size: 0.75rem;
         font-weight: 600;
         z-index: 2;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        box-shadow: var(--shadow-sm, 0 2px 4px rgba(0, 0, 0, 0.2));
       }
 
       .error-badge-icon {
@@ -352,20 +347,25 @@ export default class MultipleImageGalleryPreview extends GlimmerComponent<Multip
         left: 0;
         right: 0;
         bottom: 0;
-        background: rgba(0, 0, 0, 0.6);
+        background: color-mix(
+          in srgb,
+          var(--foreground, #1a1a1a) 60%,
+          transparent
+        );
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 0.5rem;
+        gap: calc(var(--spacing, 0.25rem) * 2);
         z-index: 3;
       }
 
       .spinner {
         width: 2.5rem;
         height: 2.5rem;
-        border: 3px solid rgba(255, 255, 255, 0.3);
-        border-top-color: white;
+        border: 3px solid
+          color-mix(in srgb, var(--background, #ffffff) 30%, transparent);
+        border-top-color: var(--background, #ffffff);
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
       }
@@ -377,7 +377,7 @@ export default class MultipleImageGalleryPreview extends GlimmerComponent<Multip
       }
 
       .uploading-text {
-        color: white;
+        color: var(--background, #ffffff);
         font-size: 0.875rem;
         font-weight: 600;
       }
