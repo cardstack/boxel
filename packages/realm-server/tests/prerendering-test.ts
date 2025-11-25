@@ -434,13 +434,9 @@ module(basename(__filename), function () {
         permissions,
       });
 
-      assert.strictEqual(
-        result.response.status,
-        'error',
-        'auth failure returns an error response',
-      );
+      assert.ok(result.response.error, 'auth failure returns an error response');
       let status = result.response.error?.error.status;
-      assert.strictEqual(status, 401, `auth error status should be 401`);
+      assert.strictEqual(status, 401, 'auth error status should be 401');
       assert.notStrictEqual(
         result.response.error?.error.title,
         'Render timeout',
@@ -466,13 +462,9 @@ module(basename(__filename), function () {
         permissions,
       });
 
-      assert.strictEqual(
-        result.response.status,
-        'error',
-        'auth failure returns an error response',
-      );
+      assert.ok(result.response.error, 'auth failure returns an error response');
       let status = result.response.error?.error.status;
-      assert.strictEqual(status, 401, `auth error status should be 401`);
+      assert.strictEqual(status, 401, 'auth error status should be 401');
       assert.notStrictEqual(
         result.response.error?.error.title,
         'Render timeout',
