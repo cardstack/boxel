@@ -466,8 +466,9 @@ module(basename(__filename), function () {
         permissions,
       });
 
-      assert.ok(
-        result.response.error,
+      assert.strictEqual(
+        result.response.status,
+        'error',
         'auth failure returns an error response',
       );
       let status = result.response.error?.error.status;
