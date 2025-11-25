@@ -1,0 +1,37 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "RecurringPatternPreview",
+        "module": "../recurring-pattern"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "recurringPattern": {
+        "endDate": "2025-10-30",
+        "pattern": "weekly",
+        "interval": 1,
+        "startDate": "2025-11-12",
+        "customRule": null,
+        "dayOfMonth": 17,
+        "daysOfWeek": "1,4,6",
+        "monthOfYear": 1,
+        "occurrences": 12
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../../Theme/cardstack"
+        }
+      }
+    }
+  }
+}
