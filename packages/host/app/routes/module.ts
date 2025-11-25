@@ -1,6 +1,9 @@
 import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
+import type Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
+
+import { isTesting } from '@embroider/macros';
 
 import { parse } from 'date-fns';
 
@@ -37,6 +40,10 @@ import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
+import {
+  enableRenderTimerStub,
+  beginTimerBlock,
+} from '../utils/render-timer-stub';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
@@ -80,20 +87,32 @@ export default class ModuleRoute extends Route<Model> {
   private typesCache = new WeakMap<typeof BaseDef, Promise<TypesWithErrors>>();
   private lastStoreResetKey: string | undefined;
   #authGuard = createAuthErrorGuard();
+  #restoreRenderTimers: (() => void) | undefined;
+  #releaseTimerBlock: (() => void) | undefined;
 
   deactivate() {
     (globalThis as any).__lazilyLoadLinks = undefined;
     (globalThis as any).__boxelRenderContext = undefined;
     this.lastStoreResetKey = undefined;
     this.#authGuard.unregister();
+    this.#restoreRenderTimers?.();
+    this.#restoreRenderTimers = undefined;
+    this.#releaseTimerBlock?.();
+    this.#releaseTimerBlock = undefined;
   }
 
-  beforeModel() {
+  async beforeModel(transition: Transition) {
+    await super.beforeModel?.(transition);
     // activate() doesn't run early enough for this to be set before the model()
     // hook is run
     (globalThis as any).__lazilyLoadLinks = true;
     (globalThis as any).__boxelRenderContext = true;
     this.#authGuard.register();
+    if (!isTesting()) {
+      await this.store.ensureSetupComplete();
+      this.#restoreRenderTimers = enableRenderTimerStub();
+      this.#releaseTimerBlock = beginTimerBlock();
+    }
   }
 
   async model({
