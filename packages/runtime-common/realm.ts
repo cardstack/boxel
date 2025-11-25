@@ -3180,9 +3180,8 @@ export class Realm {
     );
     if (!valueResult.success) {
       let message =
-        valueResult.error.issues
-          .map((issue) => issue.message)
-          .join(', ') || 'The request body was invalid';
+        valueResult.error.issues.map((issue) => issue.message).join(', ') ||
+        'The request body was invalid';
       return badRequest({ message, requestContext });
     }
 
