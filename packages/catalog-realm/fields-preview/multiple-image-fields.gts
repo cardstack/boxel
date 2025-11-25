@@ -1,14 +1,7 @@
 import Grid3x3Icon from '@cardstack/boxel-icons/grid-3x3';
 import { MultipleImageField } from '../fields/multiple-image-field';
-import {
-  CardDef,
-  field,
-  contains,
-  type BaseDefConstructor,
-  type Field,
-} from 'https://cardstack.com/base/card-api';
+import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
-import { getField } from '@cardstack/runtime-common';
 
 export class MultipleImageFieldsPreview extends CardDef {
   static displayName = 'Multiple Image Fields Preview';
@@ -326,13 +319,5 @@ export class MultipleImageFieldsPreview extends CardDef {
         }
       </style>
     </template>
-
-    getFieldIcon = (key: string) => {
-      const field: Field<BaseDefConstructor> | undefined = getField(
-        this.args.model.constructor!,
-        key,
-      );
-      return field?.def?.icon;
-    };
   };
 }

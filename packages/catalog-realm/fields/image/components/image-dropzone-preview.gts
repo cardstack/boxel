@@ -6,10 +6,13 @@ import ZoomInIcon from '@cardstack/boxel-icons/zoom-in';
 import ImageIcon from '@cardstack/boxel-icons/image';
 import ReadingProgress from './reading-progress';
 
-interface BrowsePreviewArgs {
+interface ImageDropzonePreviewArgs {
   Args: {
     imageData: string;
     fileName?: string;
+    fileSize?: number;
+    width?: number;
+    height?: number;
     onRemove: () => void;
     onZoom: () => void;
     onFileSelect: (event: Event) => void;
@@ -19,20 +22,20 @@ interface BrowsePreviewArgs {
   };
 }
 
-export default class BrowsePreview extends GlimmerComponent<BrowsePreviewArgs> {
+export default class ImageDropzonePreview extends GlimmerComponent<ImageDropzonePreviewArgs> {
   get readProgress(): number {
     return this.args.readProgress ?? 0;
   }
 
   <template>
-    <div class='browse-preview'>
+    <div class='dropzone-preview'>
       {{! Main container }}
-      <div class='image-wrapper'>
+      <div class='dropzone-image-wrapper'>
         {{#if @isReading}}
           {{! Progress indicator during file reading }}
           <ReadingProgress @readProgress={{this.readProgress}} />
         {{else}}
-          <img src={{@imageData}} alt={{@fileName}} class='preview-image' />
+          <img src={{@imageData}} alt={{@fileName}} class='dropzone-image' />
 
           {{! Top-left: Zoom button }}
           {{#if (not (eq @showZoomButton false))}}
@@ -65,21 +68,22 @@ export default class BrowsePreview extends GlimmerComponent<BrowsePreviewArgs> {
     </div>
 
     <style scoped>
-      .browse-preview {
+      .dropzone-preview {
         display: flex;
         flex-direction: column;
         gap: 0.75rem;
       }
 
-      .image-wrapper {
+      .dropzone-image-wrapper {
         position: relative;
+        width: 100%;
         height: 12rem;
         border: 2px solid var(--border, #e0e0e0);
         border-radius: var(--radius, 0.5rem);
         overflow: hidden;
       }
 
-      .preview-image {
+      .dropzone-image {
         width: 100%;
         height: 100%;
         object-fit: cover;

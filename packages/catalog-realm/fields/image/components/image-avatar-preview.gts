@@ -3,7 +3,7 @@ import { on } from '@ember/modifier';
 import CameraIcon from '@cardstack/boxel-icons/camera';
 import { Button } from '@cardstack/boxel-ui/components';
 
-interface AvatarPreviewArgs {
+interface ImageAvatarPreviewArgs {
   Args: {
     imageData: string;
     fileName?: string;
@@ -13,7 +13,7 @@ interface AvatarPreviewArgs {
   };
 }
 
-export default class AvatarPreview extends GlimmerComponent<AvatarPreviewArgs> {
+export default class ImageAvatarPreview extends GlimmerComponent<ImageAvatarPreviewArgs> {
   <template>
     <div class='avatar-preview'>
       {{! Avatar container }}

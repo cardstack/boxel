@@ -2,18 +2,27 @@ import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
 import UploadIcon from '@cardstack/boxel-icons/upload';
 
-interface BrowseUploadArgs {
+interface ImageDropzoneUploadArgs {
   Args: {
     onFileSelect: (event: Event) => void;
+    onDragOver: (event: DragEvent) => void;
+    onDrop: (event: DragEvent) => void;
   };
 }
 
-export default class BrowseUpload extends GlimmerComponent<BrowseUploadArgs> {
+export default class ImageDropzoneUpload extends GlimmerComponent<ImageDropzoneUploadArgs> {
   <template>
-    <label class='browse-upload'>
-      {{! Upload trigger }}
-      <UploadIcon class='browse-icon' />
-      <span class='browse-text'>Click to upload image</span>
+    <label
+      class='dropzone-upload'
+      {{on 'dragover' @onDragOver}}
+      {{on 'drop' @onDrop}}
+    >
+      {{! Upload trigger with drag & drop }}
+      <div class='dropzone-content'>
+        <UploadIcon class='dropzone-icon' />
+        <span class='dropzone-title'>Drag & drop image here</span>
+        <span class='dropzone-subtitle'>or click to browse</span>
+      </div>
       <input
         type='file'
         class='file-input'
@@ -23,7 +32,7 @@ export default class BrowseUpload extends GlimmerComponent<BrowseUploadArgs> {
     </label>
 
     <style scoped>
-      .browse-upload {
+      .dropzone-upload {
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -36,24 +45,36 @@ export default class BrowseUpload extends GlimmerComponent<BrowseUploadArgs> {
         cursor: pointer;
         transition: all 0.2s ease;
         padding: 2rem;
-        gap: 0.5rem;
       }
 
-      .browse-upload:hover {
+      .dropzone-upload:hover {
         border-color: #2563eb;
         background: rgba(59, 130, 246, 0.1);
       }
 
-      .browse-icon {
+      .dropzone-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .dropzone-icon {
         width: 2.5rem;
         height: 2.5rem;
         color: var(--primary, #3b82f6);
       }
 
-      .browse-text {
+      .dropzone-title {
         font-size: 0.875rem;
         font-weight: 600;
         color: var(--foreground, #1a1a1a);
+        text-align: center;
+      }
+
+      .dropzone-subtitle {
+        font-size: 0.75rem;
+        color: var(--muted-foreground, #9ca3af);
         text-align: center;
       }
 

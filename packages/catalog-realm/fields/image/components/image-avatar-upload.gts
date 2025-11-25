@@ -3,13 +3,13 @@ import { on } from '@ember/modifier';
 import CameraIcon from '@cardstack/boxel-icons/camera';
 import ImageIcon from '@cardstack/boxel-icons/image';
 
-interface AvatarUploadArgs {
+interface ImageAvatarUploadArgs {
   Args: {
     onFileSelect: (event: Event) => void;
   };
 }
 
-export default class AvatarUpload extends GlimmerComponent<AvatarUploadArgs> {
+export default class ImageAvatarUpload extends GlimmerComponent<ImageAvatarUploadArgs> {
   <template>
     <label class='avatar-upload'>
       {{! Upload trigger }}

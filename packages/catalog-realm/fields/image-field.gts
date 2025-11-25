@@ -11,12 +11,12 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
 import CameraIcon from '@cardstack/boxel-icons/camera';
-import BrowsePreview from './image/components/browse-preview';
-import AvatarPreview from './image/components/avatar-preview';
-import DropzonePreview from './image/components/dropzone-preview';
-import BrowseUpload from './image/components/browse-upload';
-import AvatarUpload from './image/components/avatar-upload';
-import DropzoneUpload from './image/components/dropzone-upload';
+import ImageBrowsePreview from './image/components/image-browse-preview';
+import ImageAvatarPreview from './image/components/image-avatar-preview';
+import ImageDropzonePreview from './image/components/image-dropzone-preview';
+import ImageBrowseUpload from './image/components/image-browse-upload';
+import ImageAvatarUpload from './image/components/image-avatar-upload';
+import ImageDropzoneUpload from './image/components/image-dropzone-upload';
 import PreviewModal from './image/components/preview-modal';
 import { Button } from '@cardstack/boxel-ui/components';
 import NotificationBubble from '../components/notification-bubble';
@@ -31,14 +31,14 @@ import CardPresentation from './image/components/card-presentation';
 
 // Type definitions
 type ImageInputVariant = 'browse' | 'dropzone' | 'avatar';
-type ImagePresentation = 'image' | 'inline' | 'card';
+type ImagePresentationType = 'image' | 'inline' | 'card';
 type UploadStatus = 'idle' | 'pending' | 'success' | 'error';
 
 // TypeScript configuration interface
 export type ImageFieldConfiguration =
   | {
       variant: 'browse' | 'dropzone';
-      presentation?: ImagePresentation;
+      presentation?: ImagePresentationType;
       options?: {
         showImageModal?: boolean;
         autoUpload?: boolean;
@@ -47,7 +47,7 @@ export type ImageFieldConfiguration =
     }
   | {
       variant: 'avatar';
-      presentation?: ImagePresentation;
+      presentation?: ImagePresentationType;
       options?: {
         autoUpload?: boolean;
         showProgress?: boolean; // Show progress during file reading
@@ -86,9 +86,9 @@ class ImageFieldEdit extends Component<typeof ImageField> {
     );
   }
 
-  get presentation(): ImagePresentation {
+  get presentation(): ImagePresentationType {
     const config = this.args.configuration as ImageFieldConfiguration;
-    return (config?.presentation as ImagePresentation) || 'image';
+    return (config?.presentation as ImagePresentationType) || 'image';
   }
 
   get options() {
@@ -291,14 +291,14 @@ class ImageFieldEdit extends Component<typeof ImageField> {
       {{#if this.hasImage}}
         {{! Image preview display }}
         {{#if (eq this.variant 'avatar')}}
-          <AvatarPreview
+          <ImageAvatarPreview
             @imageData={{this.displayPreview}}
             @onRemove={{this.removeImage}}
             @onFileSelect={{this.handleFileSelect}}
             @hasPendingUpload={{this.hasPendingUpload}}
           />
         {{else if (eq this.variant 'dropzone')}}
-          <DropzonePreview
+          <ImageDropzonePreview
             @imageData={{this.displayPreview}}
             @onRemove={{this.removeImage}}
             @onZoom={{this.togglePreview}}
@@ -308,7 +308,7 @@ class ImageFieldEdit extends Component<typeof ImageField> {
             @readProgress={{this.readProgress}}
           />
         {{else}}
-          <BrowsePreview
+          <ImageBrowsePreview
             @imageData={{this.displayPreview}}
             @onRemove={{this.removeImage}}
             @onZoom={{this.togglePreview}}
@@ -344,15 +344,15 @@ class ImageFieldEdit extends Component<typeof ImageField> {
       {{else}}
         {{! Upload trigger components }}
         {{#if (eq this.variant 'avatar')}}
-          <AvatarUpload @onFileSelect={{this.handleFileSelect}} />
+          <ImageAvatarUpload @onFileSelect={{this.handleFileSelect}} />
         {{else if (eq this.variant 'dropzone')}}
-          <DropzoneUpload
+          <ImageDropzoneUpload
             @onFileSelect={{this.handleFileSelect}}
             @onDragOver={{this.handleDragOver}}
             @onDrop={{this.handleDrop}}
           />
         {{else}}
-          <BrowseUpload @onFileSelect={{this.handleFileSelect}} />
+          <ImageBrowseUpload @onFileSelect={{this.handleFileSelect}} />
         {{/if}}
       {{/if}}
 
@@ -395,7 +395,7 @@ class ImageFieldEmbedded extends Component<typeof ImageField> {
     return !!this.args.model?.uploadedImageUrl;
   }
 
-  get presentation(): ImagePresentation {
+  get presentation(): ImagePresentationType {
     return (
       (this.args.configuration as ImageFieldConfiguration)?.presentation ||
       'image'

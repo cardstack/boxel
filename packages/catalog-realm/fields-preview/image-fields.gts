@@ -1,14 +1,7 @@
 import ImageIcon from '@cardstack/boxel-icons/image';
 import { ImageField } from '../fields/image-field';
-import {
-  CardDef,
-  field,
-  contains,
-  type BaseDefConstructor,
-  type Field,
-} from 'https://cardstack.com/base/card-api';
+import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
-import { getField } from '@cardstack/runtime-common';
 
 export class ImageFieldsPreview extends CardDef {
   static displayName = 'Image Fields Preview';
@@ -38,15 +31,6 @@ export class ImageFieldsPreview extends CardDef {
   });
 
   static isolated = class Isolated extends Component<typeof this> {
-    getFieldIcon = (key: string) => {
-      const field: Field<BaseDefConstructor> | undefined = getField(
-        this.args.model.constructor!,
-        key,
-      );
-      let fieldInstance = field?.card;
-      return fieldInstance?.icon;
-    };
-
     <template>
       <div class='image-fields-preview'>
         <header class='header'>

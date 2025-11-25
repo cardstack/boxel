@@ -26,14 +26,27 @@ export default class PreviewModal extends GlimmerComponent<PreviewModalArgs> {
 
   @action
   handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape' || event.key === 'Enter' || event.key === ' ') {
+    if (event.key === 'Escape') {
       event.preventDefault();
       this.args.onClose();
     }
   }
 
+  @action
+  handleOverlayClick(event: MouseEvent) {
+    // Only close if clicking directly on the overlay, not on modal content
+    if (event.target === event.currentTarget) {
+      this.args.onClose();
+    }
+  }
+
   <template>
-    <div class='preview-modal' role='button' tabindex='0' {{on 'click' @onClose}} {{on 'keydown' this.handleKeydown}}>
+    <div
+      class='preview-modal'
+      tabindex='0'
+      {{on 'click' this.handleOverlayClick}}
+      {{on 'keydown' this.handleKeydown}}
+    >
       {{! Modal overlay }}
       <div class='modal-content'>
         <button type='button' {{on 'click' @onClose}} class='modal-close'>
@@ -56,20 +69,23 @@ export default class PreviewModal extends GlimmerComponent<PreviewModalArgs> {
         display: flex;
         align-items: center;
         justify-content: center;
-        z-index: 50;
+        z-index: var(--boxel-layer-modal-default);
         padding: 1rem;
       }
 
       .modal-content {
         position: relative;
         max-width: 64rem;
-        max-height: 100%;
+        max-height: calc(100vh - 2rem);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
       }
 
       .modal-close {
         position: absolute;
-        top: -3rem;
-        right: 0;
+        top: 0.5rem;
+        right: 0.5rem;
         width: 2.5rem;
         height: 2.5rem;
         background: var(--background, #ffffff);
@@ -81,6 +97,8 @@ export default class PreviewModal extends GlimmerComponent<PreviewModalArgs> {
         justify-content: center;
         cursor: pointer;
         transition: background 0.2s ease;
+        z-index: 10;
+        box-shadow: var(--shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
       }
 
       .modal-close:hover {
@@ -94,7 +112,10 @@ export default class PreviewModal extends GlimmerComponent<PreviewModalArgs> {
 
       .modal-image {
         max-width: 100%;
-        max-height: 80vh;
+        max-height: calc(100vh - 2rem);
+        width: auto;
+        height: auto;
+        object-fit: contain;
         border-radius: var(--radius, 0.5rem);
         box-shadow: var(--shadow-2xl, 0 25px 50px -12px rgb(0 0 0 / 0.25));
       }
