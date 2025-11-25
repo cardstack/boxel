@@ -1,7 +1,12 @@
-import { CardError, isCardError } from '@cardstack/runtime-common';
+import {
+  CardError,
+  isCardError,
+  type FetcherMiddlewareHandler,
+} from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 
-const EVENT_NAME = 'boxel-auth-error';
+export const AUTH_ERROR_EVENT_NAME = 'boxel-auth-error';
+const AUTH_STATUSES = new Set([401, 403]);
 
 export interface AuthErrorGuard {
   register(): void;
@@ -15,7 +20,7 @@ export function createAuthErrorGuard(
     ? window
     : undefined,
 ): AuthErrorGuard {
-  const FLAG = Symbol('boxel-auth-error');
+  const FLAG = Symbol(AUTH_ERROR_EVENT_NAME);
   let inFlight = new Set<Deferred<never>>();
   let listening = false;
 
@@ -37,7 +42,7 @@ export function createAuthErrorGuard(
     if (listening || !target?.addEventListener) {
       return;
     }
-    target.addEventListener(EVENT_NAME, handler);
+    target.addEventListener(AUTH_ERROR_EVENT_NAME, handler);
     listening = true;
   }
 
@@ -47,7 +52,7 @@ export function createAuthErrorGuard(
       listening = false;
       return;
     }
-    target.removeEventListener(EVENT_NAME, handler);
+    target.removeEventListener(AUTH_ERROR_EVENT_NAME, handler);
     inFlight.clear();
     listening = false;
   }
@@ -63,7 +68,14 @@ export function createAuthErrorGuard(
   }
 
   function isAuthError(err: unknown): err is Error & { status?: number } {
-    return Boolean(err && typeof err === 'object' && (err as any)[FLAG]);
+    if (!err || typeof err !== 'object') {
+      return false;
+    }
+    if ((err as any)[FLAG]) {
+      return true;
+    }
+    let status = (err as any).status;
+    return typeof status === 'number' && isAuthStatus(status);
   }
 
   return {
@@ -72,6 +84,39 @@ export function createAuthErrorGuard(
     race,
     isAuthError,
   };
+}
+
+export function authErrorEventMiddleware(
+  target: EventTarget | undefined = typeof window !== 'undefined'
+    ? window
+    : undefined,
+): FetcherMiddlewareHandler {
+  return async (req, next) => {
+    let response = await next(req);
+    if (isAuthStatus(response.status)) {
+      dispatchAuthError(
+        await CardError.fromFetchResponse(req.url, response.clone()),
+        target,
+      );
+    }
+    return response;
+  };
+}
+
+export function dispatchAuthError(
+  detail: unknown,
+  target: EventTarget | undefined = typeof window !== 'undefined'
+    ? window
+    : undefined,
+) {
+  if (!target?.dispatchEvent) {
+    return;
+  }
+  target.dispatchEvent(new CustomEvent(AUTH_ERROR_EVENT_NAME, { detail }));
+}
+
+function isAuthStatus(status?: number): boolean {
+  return typeof status === 'number' && AUTH_STATUSES.has(status);
 }
 
 function coerceAuthError(detail: unknown): CardError {
