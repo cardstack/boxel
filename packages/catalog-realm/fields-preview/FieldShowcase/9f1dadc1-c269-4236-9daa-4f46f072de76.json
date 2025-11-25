@@ -111,7 +111,7 @@
       "appointmentDateCompact": "2025-11-28",
       "playgroundNumberRating": null,
       "playgroundNumberSlider": null,
-      "playgroundPresentation": "grid",
+      "playgroundPresentation": "standard",
       "playgroundRelativeTime": {
         "unit": null,
         "amount": null
