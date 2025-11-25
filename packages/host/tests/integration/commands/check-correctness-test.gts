@@ -1,11 +1,11 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { type CommandContext } from '@cardstack/runtime-common';
+
 import CheckCorrectnessCommand from '@cardstack/host/commands/check-correctness';
 import PatchCardInstanceCommand from '@cardstack/host/commands/patch-card-instance';
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
-
-import { type CommandContext } from '@cardstack/runtime-common';
 
 import {
   testRealmURL,

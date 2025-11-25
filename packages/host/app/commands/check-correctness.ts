@@ -9,12 +9,13 @@ import {
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
+
 import { waitForRealmState } from './utils';
 
+import type CardService from '../services/card-service';
+import type CommandService from '../services/command-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
-import type CommandService from '../services/command-service';
-import type CardService from '../services/card-service';
 
 const CARD_INDEX_TIMEOUT_MS = 15_000;
 
