@@ -152,6 +152,12 @@ module('Acceptance | prerender | html', function (hooks) {
             <@fields.name />
           </div>
         </template>
+
+        static head = class Head extends Component<typeof Cat> {
+          <template>
+            <title>{{@fields.name}}</title>
+          </template>
+        };
       };
     }
 
