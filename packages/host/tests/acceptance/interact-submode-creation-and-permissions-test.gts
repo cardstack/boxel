@@ -30,6 +30,7 @@ import {
   type TestContextWithSave,
 } from '../helpers';
 import {
+  personalRealmURL,
   setupInteractSubmodeTests,
   testRealm2URL,
   testRealm3URL,
@@ -38,9 +39,12 @@ import {
 module(
   'Acceptance | interact submode creation & permissions',
   function (hooks) {
-    let { setRealmPermissions } = setupInteractSubmodeTests(hooks, {
-      setRealm() {},
-    });
+    let { setRealmPermissions, setActiveRealms } = setupInteractSubmodeTests(
+      hooks,
+      {
+        setRealm() {},
+      },
+    );
 
     module('1 stack creation flows', function () {
       test<TestContextWithSave>('can create a card from the index stack item', async function (assert) {
@@ -867,9 +871,27 @@ module(
         assert.dom('[data-test-operator-mode-stack]').doesNotExist();
       });
 
-      test('displays highlights filter with special layout and community cards', async function (assert) {
+      test('does not display highlights filter for non-personal realms', async function (assert) {
         await visitOperatorMode({
           stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+        });
+
+        assert
+          .dom('[data-test-boxel-filter-list-button="Highlights"]')
+          .doesNotExist();
+        assert.dom('[data-test-selected-filter="All Cards"]').exists();
+        assert.dom('[data-test-highlights-layout]').doesNotExist();
+      });
+
+      test('displays highlights filter with special layout and community cards', async function (assert) {
+        setActiveRealms([
+          testRealmURL,
+          testRealm2URL,
+          testRealm3URL,
+          personalRealmURL,
+        ]);
+        await visitOperatorMode({
+          stacks: [[{ id: `${personalRealmURL}index`, format: 'isolated' }]],
           selectAllCardsFilter: false,
         });
 
@@ -905,7 +927,12 @@ module(
             from: 'testuser',
             message:
               'Build a personal portfolio page with your background, skills, and contact information',
-            cards: [{ id: `${testRealmURL}index`, title: 'Test Workspace B' }],
+            cards: [
+              {
+                id: `${personalRealmURL}index`,
+                title: 'Test Personal Workspace',
+              },
+            ],
           },
         ]);
         assert
@@ -973,7 +1000,7 @@ module(
 
       test('sends typed prompt to ask ai when creating app', async function (assert) {
         await visitOperatorMode({
-          stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+          stacks: [[{ id: `${personalRealmURL}index`, format: 'isolated' }]],
           selectAllCardsFilter: false,
         });
 
@@ -997,7 +1024,12 @@ module(
           {
             from: 'testuser',
             message: typedPrompt,
-            cards: [{ id: `${testRealmURL}index`, title: 'Test Workspace B' }],
+            cards: [
+              {
+                id: `${personalRealmURL}index`,
+                title: 'Test Personal Workspace',
+              },
+            ],
           },
         ]);
       });

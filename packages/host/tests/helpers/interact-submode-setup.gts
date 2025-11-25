@@ -21,6 +21,7 @@ import { setupApplicationTest } from '../helpers/setup';
 
 export const testRealm2URL = `http://test-realm/test2/`;
 export const testRealm3URL = `http://test-realm/test3/`;
+export const personalRealmURL = `http://test-realm/personal/`;
 
 type InteractSubmodeSetupOptions = {
   setRealm: (realm: Realm) => void;
@@ -390,6 +391,21 @@ export function setupInteractSubmodeTests(
           name: 'Test Workspace C',
           backgroundURL:
             'https://boxel-images.boxel.ai/background-images/4k-powder-puff.jpg',
+          iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+        },
+      },
+    });
+
+    await setupAcceptanceTestRealm({
+      mockMatrixUtils,
+      realmURL: personalRealmURL,
+      contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
+        'index.json': new CardsGrid(),
+        '.realm.json': {
+          name: 'Test Personal Workspace',
+          backgroundURL:
+            'https://boxel-images.boxel.ai/background-images/4k-origami-flock.jpg',
           iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
         },
       },
