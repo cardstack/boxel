@@ -609,7 +609,7 @@ export class IndexQueryEngine {
     htmlFormat,
     renderType,
   }: {
-    htmlFormat: 'embedded' | 'fitted' | 'atom' | undefined;
+    htmlFormat: 'embedded' | 'fitted' | 'atom' | 'head' | undefined;
     renderType?: ResolvedCodeRef;
   }): (string | Param | DBSpecificExpression)[] {
     let fieldName = htmlFormat ? `${htmlFormat}_html` : `atom_html`;
