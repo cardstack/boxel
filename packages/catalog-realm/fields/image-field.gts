@@ -31,7 +31,7 @@ import CardPresentation from './image/components/card-presentation';
 
 // Type definitions
 type ImageInputVariant = 'browse' | 'dropzone' | 'avatar';
-type ImagePresentationType = 'image' | 'inline' | 'card';
+type ImagePresentationType = 'standard' | 'image' | 'inline' | 'card';
 type UploadStatus = 'idle' | 'pending' | 'success' | 'error';
 
 // TypeScript configuration interface
@@ -88,7 +88,9 @@ class ImageFieldEdit extends Component<typeof ImageField> {
 
   get presentation(): ImagePresentationType {
     const config = this.args.configuration as ImageFieldConfiguration;
-    return (config?.presentation as ImagePresentationType) || 'image';
+    const presentation =
+      (config?.presentation as ImagePresentationType) || 'standard';
+    return presentation === 'standard' ? 'image' : presentation;
   }
 
   get options() {
@@ -368,6 +370,8 @@ class ImageFieldEdit extends Component<typeof ImageField> {
     <style scoped>
       .image-field-edit {
         width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
         display: flex;
         flex-direction: column;
         gap: 0.75rem;
@@ -396,10 +400,10 @@ class ImageFieldEmbedded extends Component<typeof ImageField> {
   }
 
   get presentation(): ImagePresentationType {
-    return (
+    const presentation =
       (this.args.configuration as ImageFieldConfiguration)?.presentation ||
-      'image'
-    );
+      'standard';
+    return presentation === 'standard' ? 'image' : presentation;
   }
 
   <template>

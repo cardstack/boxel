@@ -14,6 +14,18 @@
         "description": null,
         "thumbnailURL": null
       },
+      "imageAvatar": {
+        "uploadUrl": null,
+        "uploadedImageUrl": null
+      },
+      "imageBrowse": {
+        "uploadUrl": null,
+        "uploadedImageUrl": null
+      },
+      "imageDropzone": {
+        "uploadUrl": null,
+        "uploadedImageUrl": null
+      },
       "playgroundDate": "2025-11-20",
       "playgroundTime": {
         "value": "13:00"
@@ -27,11 +39,18 @@
       "meetingTimeLong": {
         "value": "09:15"
       },
+      "playgroundImage": {
+        "uploadUrl": null,
+        "uploadedImageUrl": null
+      },
       "playgroundMonth": {
         "value": 4
       },
       "meetingTime24Hour": {
         "value": "14:30"
+      },
+      "multipleImageList": {
+        "images": []
       },
       "playgroundQuarter": {
         "year": null,
@@ -53,7 +72,7 @@
         "end": null,
         "start": null
       },
-      "playgroundFieldType": "date",
+      "playgroundFieldType": "multipleImage",
       "playgroundMonthYear": {
         "value": "2025-10"
       },
@@ -65,18 +84,49 @@
           "value": null
         }
       },
+      "multipleImageGallery": {
+        "images": [
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764090026309/public"
+          },
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764090033434/public"
+          },
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764090035611/public"
+          }
+        ]
+      },
       "playgroundNumberStat": null,
       "appointmentDateCustom": "2025-12-15",
+      "multipleImageDropzone": {
+        "images": []
+      },
       "playgroundNumberBasic": null,
       "playgroundNumberGauge": null,
       "playgroundNumberScore": null,
       "appointmentDateCompact": "2025-11-28",
       "playgroundNumberRating": null,
       "playgroundNumberSlider": null,
-      "playgroundPresentation": "standard",
+      "playgroundPresentation": "grid",
       "playgroundRelativeTime": {
         "unit": null,
         "amount": null
+      },
+      "playgroundMultipleImage": {
+        "images": [
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764089989880/public"
+          },
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764089992240/public"
+          }
+        ]
       },
       "playgroundNumberProgress": null,
       "playgroundNumberQuantity": null,

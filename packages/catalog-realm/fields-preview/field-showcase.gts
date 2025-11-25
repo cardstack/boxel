@@ -24,6 +24,8 @@ import MonthField from '../fields/date/month';
 import MonthYearField from '../fields/date/month-year';
 import WeekField from '../fields/date/week';
 import NumberField from '../fields/number';
+import ImageField from '../fields/image-field';
+import MultipleImageField from '../fields/multiple-image-field';
 import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
 import CubeIcon from '@cardstack/boxel-icons/cube';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
@@ -169,6 +171,8 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
     'number-badge-counter': ['standard'],
     'number-score': ['standard'],
     'number-progress-circle': ['standard'],
+    image: ['standard', 'image', 'inline', 'card'],
+    multipleImage: ['standard', 'grid', 'carousel'],
   };
 
   fieldTypeOptions = [
@@ -297,6 +301,17 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         },
       ],
     },
+    {
+      groupName: 'Image Fields',
+      options: [
+        { value: 'image', label: 'ImageField', fieldName: 'playgroundImage' },
+        {
+          value: 'multipleImage',
+          label: 'MultipleImageField',
+          fieldName: 'playgroundMultipleImage',
+        },
+      ],
+    },
   ];
 
   allPresentationOptions = [
@@ -308,6 +323,11 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
     { value: 'timeline', label: 'Timeline Event' },
     { value: 'timeSlots', label: 'Time Slots' },
     { value: 'expirationWarning', label: 'Expiration Warning' },
+    { value: 'image', label: 'Image' },
+    { value: 'inline', label: 'Inline' },
+    { value: 'card', label: 'Card' },
+    { value: 'grid', label: 'Grid' },
+    { value: 'carousel', label: 'Carousel' },
   ];
 
   get selectedPresentation() {
@@ -328,7 +348,12 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       compatiblePresentations.includes(option.value),
     );
 
-    // Always return at least the standard option
+    // For image fields, return the filtered options (no 'standard' fallback)
+    if (fieldType === 'image' || fieldType === 'multipleImage') {
+      return filtered.length > 0 ? filtered : [];
+    }
+
+    // Always return at least the standard option for other fields
     return filtered.length > 0
       ? filtered
       : [{ value: 'standard', label: 'Standard' }];
@@ -394,6 +419,52 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
           fieldName: 'eventDateTimeCustom',
         },
       ],
+      image: [
+        {
+          name: 'Browse Variant',
+          description: 'Default browse variant for general image uploads',
+          config:
+            '@field myImage = contains(ImageField, { configuration: { variant: "browse" } });',
+          fieldName: 'imageBrowse',
+        },
+        {
+          name: 'Avatar Variant',
+          description: 'Circular image upload for profile pictures',
+          config:
+            '@field myAvatar = contains(ImageField, { configuration: { variant: "avatar", presentation: "card" } });',
+          fieldName: 'imageAvatar',
+        },
+        {
+          name: 'Dropzone Variant',
+          description: 'Drag and drop interface with modal preview',
+          config:
+            '@field myDropzone = contains(ImageField, { configuration: { variant: "dropzone", presentation: "inline" } });',
+          fieldName: 'imageDropzone',
+        },
+      ],
+      multipleImage: [
+        {
+          name: 'List Variant',
+          description: 'Standard list view with grid display',
+          config:
+            '@field myImages = contains(MultipleImageField, { configuration: { variant: "list", presentation: "grid" } });',
+          fieldName: 'multipleImageList',
+        },
+        {
+          name: 'Gallery Variant',
+          description: 'Grid edit with carousel display and reordering',
+          config:
+            '@field myGallery = contains(MultipleImageField, { configuration: { variant: "gallery", presentation: "carousel", options: { allowReorder: true, maxFiles: 4 } } });',
+          fieldName: 'multipleImageGallery',
+        },
+        {
+          name: 'Dropzone Variant',
+          description: 'Drag and drop multiple images with carousel',
+          config:
+            '@field myDropzoneImages = contains(MultipleImageField, { configuration: { variant: "dropzone", presentation: "carousel", maxFiles: 10 } });',
+          fieldName: 'multipleImageDropzone',
+        },
+      ],
     };
 
     return examplesMap[fieldType] || [];
@@ -414,7 +485,13 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       this.args.model.playgroundPresentation = option.value;
 
       // Auto-switch to embedded format when selecting a presentation mode
-      if (option.value !== 'standard') {
+      // For image fields, always switch to embedded since they don't have 'standard'
+      const fieldType = this.args.model?.playgroundFieldType || 'date';
+      if (
+        fieldType === 'image' ||
+        fieldType === 'multipleImage' ||
+        option.value !== 'standard'
+      ) {
         this.selectedFormat = 'embedded';
       }
     }
@@ -609,6 +686,32 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       return `@field myField = contains(NumberField);`;
     }
 
+    if (fieldType === 'image') {
+      const presentation =
+        this.args.model?.playgroundPresentation || 'standard';
+      if (presentation === 'standard') {
+        return `@field myField = contains(ImageField);`;
+      }
+      return `@field myField = contains(ImageField, {
+  configuration: {
+    presentation: '${presentation}'
+  }
+});`;
+    }
+
+    if (fieldType === 'multipleImage') {
+      const presentation =
+        this.args.model?.playgroundPresentation || 'standard';
+      if (presentation === 'standard') {
+        return `@field myField = contains(MultipleImageField);`;
+      }
+      return `@field myField = contains(MultipleImageField, {
+  configuration: {
+    presentation: '${presentation}'
+  }
+});`;
+    }
+
     const simpleFields = [
       'year',
       'month',
@@ -753,6 +856,12 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
                 Time input for meetings, reminders, and schedules
               {{else if (eq this.currentPlaygroundField 'playgroundDatetime')}}
                 Combined date and time for events, bookings, and timestamps
+              {{else if (eq this.currentPlaygroundField 'playgroundImage')}}
+                Single image upload field with multiple presentation modes
+              {{else if
+                (eq this.currentPlaygroundField 'playgroundMultipleImage')
+              }}
+                Multiple image upload field with grid and carousel presentations
               {{else}}
                 Explore the interactive demo below
               {{/if}}
@@ -934,6 +1043,14 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
                   <@fields.playgroundNumberProgressCircle
                     @format={{this.selectedFormat}}
                   />
+                {{else if (eq this.currentPlaygroundField 'playgroundImage')}}
+                  <@fields.playgroundImage @format={{this.selectedFormat}} />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundMultipleImage')
+                }}
+                  <@fields.playgroundMultipleImage
+                    @format={{this.selectedFormat}}
+                  />
                 {{/if}}
               </div>
             </div>
@@ -1087,6 +1204,34 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
                           <@fields.eventDateTimeCustom
                             @format={{this.selectedFormat}}
                           />
+                        {{else if (eq example.fieldName 'imageBrowse')}}
+                          <@fields.imageBrowse
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if (eq example.fieldName 'imageAvatar')}}
+                          <@fields.imageAvatar
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if (eq example.fieldName 'imageDropzone')}}
+                          <@fields.imageDropzone
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if (eq example.fieldName 'multipleImageList')}}
+                          <@fields.multipleImageList
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if
+                          (eq example.fieldName 'multipleImageGallery')
+                        }}
+                          <@fields.multipleImageGallery
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if
+                          (eq example.fieldName 'multipleImageDropzone')
+                        }}
+                          <@fields.multipleImageDropzone
+                            @format={{this.selectedFormat}}
+                          />
                         {{/if}}
                       </div>
                     </div>
@@ -1221,6 +1366,12 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         background: #ffffff;
         border: 1px solid var(--border, #e2e8f0);
         border-radius: 0;
+      }
+
+      .demo-display-large > :first-child {
+        width: 100%;
+        max-width: 100%;
+        flex: 1;
       }
 
       /* Collapsible Section Styles */
@@ -1399,6 +1550,12 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         display: flex;
         align-items: center;
         justify-content: center;
+      }
+
+      .example-demo > :first-child {
+        width: 100%;
+        max-width: 100%;
+        flex: 1;
       }
 
       /* Responsive adjustments for hero */
@@ -2463,6 +2620,26 @@ export class FieldShowcase extends CardDef {
     },
   });
 
+  // ImageField playground field
+  @field playgroundImage = contains(ImageField, {
+    configuration: function (this: FieldShowcase) {
+      const presentation = this.playgroundPresentation || 'standard';
+      return {
+        presentation: presentation === 'standard' ? undefined : presentation,
+      };
+    },
+  });
+
+  // MultipleImageField playground field
+  @field playgroundMultipleImage = contains(MultipleImageField, {
+    configuration: function (this: FieldShowcase) {
+      const presentation = this.playgroundPresentation || 'standard';
+      return {
+        presentation: presentation === 'standard' ? undefined : presentation,
+      };
+    },
+  });
+
   // DateField examples - configuration only (standard shown in hero demo)
   @field appointmentDateCompact = contains(DateField, {
     configuration: { preset: 'tiny' },
@@ -2485,6 +2662,65 @@ export class FieldShowcase extends CardDef {
   });
   @field eventDateTimeCustom = contains(DatetimeField, {
     configuration: { format: 'ddd, MMM D [at] h:mm A' },
+  });
+
+  // ImageField examples - variant configurations
+  @field imageBrowse = contains(ImageField, {
+    configuration: { variant: 'browse' },
+  });
+  @field imageAvatar = contains(ImageField, {
+    configuration: {
+      variant: 'avatar',
+      presentation: 'card',
+      options: {
+        autoUpload: false,
+        showProgress: true,
+      },
+    },
+  });
+  @field imageDropzone = contains(ImageField, {
+    configuration: {
+      variant: 'dropzone',
+      presentation: 'inline',
+      options: {
+        showImageModal: true,
+        showProgress: true,
+        autoUpload: false,
+      },
+    },
+  });
+
+  // MultipleImageField examples - variant configurations
+  @field multipleImageList = contains(MultipleImageField, {
+    configuration: {
+      variant: 'list',
+      presentation: 'grid',
+    },
+  });
+  @field multipleImageGallery = contains(MultipleImageField, {
+    configuration: {
+      variant: 'gallery',
+      presentation: 'carousel',
+      options: {
+        autoUpload: false,
+        allowBatchSelect: true,
+        allowReorder: true,
+        maxFiles: 4,
+        showProgress: true,
+      },
+    },
+  });
+  @field multipleImageDropzone = contains(MultipleImageField, {
+    configuration: {
+      variant: 'dropzone',
+      presentation: 'carousel',
+      options: {
+        autoUpload: false,
+        allowBatchSelect: true,
+        showProgress: true,
+        maxFiles: 10,
+      },
+    },
   });
 
   static isolated = FieldShowcaseIsolated;

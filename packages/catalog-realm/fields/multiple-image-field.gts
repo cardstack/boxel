@@ -41,7 +41,7 @@ import CarouselPresentation from './multiple-image-field/components/carousel-pre
 
 // Type definitions
 type ImageInputVariant = 'list' | 'gallery' | 'dropzone';
-type ImagePresentationType = 'grid' | 'carousel';
+type ImagePresentationType = 'standard' | 'grid' | 'carousel';
 type UploadStatus = 'idle' | 'pending' | 'success' | 'error';
 type SortableDirection = 'x' | 'y' | 'grid';
 
@@ -103,10 +103,10 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
   }
 
   get presentation(): ImagePresentationType {
-    return (
+    const presentation =
       (this.args.configuration as MultipleImageFieldConfiguration)
-        ?.presentation || 'grid'
-    );
+        ?.presentation || 'standard';
+    return presentation === 'standard' ? 'grid' : presentation;
   }
 
   get options() {
@@ -528,29 +528,26 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
       data-test-multiple-image-field
     >
       {{#if this.hasImages}}
-        {{! Upload trigger (shown when images exist but not maxed) }}
-        {{#unless this.maxFilesReached}}
-          {{#if (eq this.variant 'gallery')}}
-            <MultipleImageGalleryUpload
-              @onFileSelect={{this.handleFileSelect}}
-              @onDragOver={{this.handleDragOver}}
-              @onDrop={{this.handleDrop}}
-              @maxFilesReached={{this.maxFilesReached}}
-              @currentCount={{this.uploadEntries.length}}
-              @maxFiles={{this.maxFiles}}
-            />
-          {{else}}
-            <MultipleImageDropzoneUpload
-              @onFileSelect={{this.handleFileSelect}}
-              @onDragOver={{this.handleDragOver}}
-              @onDrop={{this.handleDrop}}
-              @maxFilesReached={{this.maxFilesReached}}
-              @currentCount={{this.uploadEntries.length}}
-              @maxFiles={{this.maxFiles}}
-              @variant={{this.variant}}
-            />
-          {{/if}}
-        {{/unless}}
+        {{#if (eq this.variant 'gallery')}}
+          <MultipleImageGalleryUpload
+            @onFileSelect={{this.handleFileSelect}}
+            @onDragOver={{this.handleDragOver}}
+            @onDrop={{this.handleDrop}}
+            @maxFilesReached={{this.maxFilesReached}}
+            @currentCount={{this.uploadEntries.length}}
+            @maxFiles={{this.maxFiles}}
+          />
+        {{else}}
+          <MultipleImageDropzoneUpload
+            @onFileSelect={{this.handleFileSelect}}
+            @onDragOver={{this.handleDragOver}}
+            @onDrop={{this.handleDrop}}
+            @maxFilesReached={{this.maxFilesReached}}
+            @currentCount={{this.uploadEntries.length}}
+            @maxFiles={{this.maxFiles}}
+            @variant={{this.variant}}
+          />
+        {{/if}}
 
         {{! Image preview display }}
         <div
@@ -617,27 +614,29 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
           {{/each}}
         </div>
       {{else}}
-        {{! Upload trigger (shown when no images) }}
-        {{#if (eq this.variant 'gallery')}}
-          <MultipleImageGalleryUpload
-            @onFileSelect={{this.handleFileSelect}}
-            @onDragOver={{this.handleDragOver}}
-            @onDrop={{this.handleDrop}}
-            @maxFilesReached={{this.maxFilesReached}}
-            @currentCount={{this.uploadEntries.length}}
-            @maxFiles={{this.maxFiles}}
-          />
-        {{else}}
-          <MultipleImageDropzoneUpload
-            @onFileSelect={{this.handleFileSelect}}
-            @onDragOver={{this.handleDragOver}}
-            @onDrop={{this.handleDrop}}
-            @maxFilesReached={{this.maxFilesReached}}
-            @currentCount={{this.uploadEntries.length}}
-            @maxFiles={{this.maxFiles}}
-            @variant={{this.variant}}
-          />
-        {{/if}}
+        {{! Upload trigger (shown when no images and not maxed) }}
+        {{#unless this.maxFilesReached}}
+          {{#if (eq this.variant 'gallery')}}
+            <MultipleImageGalleryUpload
+              @onFileSelect={{this.handleFileSelect}}
+              @onDragOver={{this.handleDragOver}}
+              @onDrop={{this.handleDrop}}
+              @maxFilesReached={{this.maxFilesReached}}
+              @currentCount={{this.uploadEntries.length}}
+              @maxFiles={{this.maxFiles}}
+            />
+          {{else}}
+            <MultipleImageDropzoneUpload
+              @onFileSelect={{this.handleFileSelect}}
+              @onDragOver={{this.handleDragOver}}
+              @onDrop={{this.handleDrop}}
+              @maxFilesReached={{this.maxFilesReached}}
+              @currentCount={{this.uploadEntries.length}}
+              @maxFiles={{this.maxFiles}}
+              @variant={{this.variant}}
+            />
+          {{/if}}
+        {{/unless}}
       {{/if}}
 
       {{! Upload button (only shown when not auto-upload) }}
@@ -666,6 +665,8 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
     <style scoped>
       .multiple-image-field-edit {
         width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
         display: flex;
         flex-direction: column;
         gap: 1rem;
@@ -945,7 +946,8 @@ class MultipleImageFieldEmbedded extends Component<typeof MultipleImageField> {
   }
 
   get presentation(): ImagePresentationType {
-    return this.args.configuration?.presentation || 'grid';
+    const presentation = this.args.configuration?.presentation || 'standard';
+    return presentation === 'standard' ? 'grid' : presentation;
   }
 
   <template>
