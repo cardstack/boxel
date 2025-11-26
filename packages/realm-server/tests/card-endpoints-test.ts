@@ -2571,7 +2571,7 @@ module(basename(__filename), function () {
           }
         });
 
-        test('ignores "lid" for other realms', async function (assert) {
+        test.only('ignores "lid" for other realms', async function (assert) {
           let response = await request
             .patch('/hassan')
             .send({

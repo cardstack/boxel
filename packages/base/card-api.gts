@@ -2777,6 +2777,7 @@ function lazilyLoadLink(
       }
     })();
   } else {
+    console.log("I'm about to throw NotLoaded here");
     throw new NotLoaded(instance, link, field.name);
   }
 }

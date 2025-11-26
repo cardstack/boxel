@@ -68,6 +68,11 @@ type ModelState = {
   isReady: boolean;
 };
 
+console.error('evaluated app/routes/render');
+setInterval(() => {
+  console.log(`lazilyLoadLinks=${(globalThis as any).__lazilyLoadLinks}`);
+}, 2000);
+
 export default class RenderRoute extends Route<Model> {
   @service('render-store') declare store: RenderStoreService;
   @service declare router: RouterService;
@@ -90,6 +95,7 @@ export default class RenderRoute extends Route<Model> {
   #releaseTimerBlock: (() => void) | undefined;
 
   errorHandler = (event: Event) => {
+    console.error(`render route errorHandler fired`, event, event.error);
     windowErrorHandler({
       event,
       setStatusToUnusable() {
