@@ -36,6 +36,8 @@ jobs:
     concurrency:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
+    env:
+      CHROME_HTTP_CACHE_DIR: ${{ runner.temp }}/chrome-http-cache/host/shard-${{ matrix.shardIndex }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - uses: ./.github/actions/init
@@ -53,6 +55,16 @@ jobs:
       # https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
       - name: Disable TCP/UDP network offloading
         run: sudo ethtool -K eth0 tx off rx off
+      - name: Restore Chrome HTTP cache
+        uses: actions/cache@13aacd865c20de90d75de3b19f0bc992e1b501e1 # 4.1.0
+        with:
+          path: ${{ env.CHROME_HTTP_CACHE_DIR }}
+          key: host-chrome-http-cache-${{ runner.os }}-v1-shard-${{ matrix.shardIndex }}-${{ github.run_number }}
+          restore-keys: |
+            host-chrome-http-cache-${{ runner.os }}-v1-shard-${{ matrix.shardIndex }}
+            host-chrome-http-cache-${{ runner.os }}-v1-
+      - name: Ensure Chrome cache directories exist
+        run: mkdir -p "$CHROME_HTTP_CACHE_DIR"
       - name: Start host to serve assets for fastboot
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
@@ -83,6 +95,7 @@ jobs:
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
           DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
+          CHROME_HTTP_CACHE_DIR: ${{ env.CHROME_HTTP_CACHE_DIR }}
         working-directory: packages/host
 
       - name: Upload junit report to GitHub Actions Artifacts
@@ -116,6 +129,13 @@ jobs:
           name: icon-server-log-${{ matrix.shardIndex }}
           path: /tmp/icon-server.log
           retention-days: 30
+      - name: Upload Chrome HTTP cache
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: chrome-http-cache-${{ matrix.shardIndex }}
+          path: ${{ env.CHROME_HTTP_CACHE_DIR }}
+          retention-days: 7
 
   host-merge-reports-and-publish:
     name: Merge Host reports and publish

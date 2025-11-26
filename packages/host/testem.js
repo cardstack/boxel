@@ -6,6 +6,10 @@ const XunitReporter = require('testem/lib/reporters/xunit_reporter');
 const fs = require('fs');
 const path = require('path');
 
+const chromeHttpCacheDir =
+  process.env.CHROME_HTTP_CACHE_DIR &&
+  path.resolve(process.env.CHROME_HTTP_CACHE_DIR);
+
 const config = {
   test_page: 'tests/index.html?hidepassed',
   disable_watching: true,
@@ -26,10 +30,22 @@ const config = {
         '--mute-audio',
         '--remote-debugging-port=0',
         '--window-size=1440,900',
+        chromeHttpCacheDir
+          ? `--user-data-dir=${path.join(chromeHttpCacheDir, 'profile')}`
+          : null,
+        chromeHttpCacheDir
+          ? `--disk-cache-dir=${path.join(chromeHttpCacheDir, 'disk-cache')}`
+          : null,
       ].filter(Boolean),
     },
   },
 };
+
+if (chromeHttpCacheDir) {
+  fs.mkdirSync(chromeHttpCacheDir, { recursive: true });
+  fs.mkdirSync(path.join(chromeHttpCacheDir, 'profile'), { recursive: true });
+  fs.mkdirSync(path.join(chromeHttpCacheDir, 'disk-cache'), { recursive: true });
+}
 
 if (process.env.CI) {
   const junitDir = path.join(__dirname, '..', '..', 'junit');
