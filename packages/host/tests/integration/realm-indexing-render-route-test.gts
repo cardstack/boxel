@@ -744,6 +744,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         },
         relationships: {
           'cardInfo.theme': { links: { self: null } },
+          linkedExamples: { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -770,6 +771,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         ref: `${testRealmURL}person/Person`,
         title: 'Person Card',
         containedExamples: null,
+        linkedExamples: null,
         isCard: true,
         isComponent: false,
         isField: false,
@@ -861,6 +863,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         },
         relationships: {
           'cardInfo.theme': { links: { self: null } },
+          linkedExamples: { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -887,6 +890,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         ref: `${testRealmURL}person/Person`,
         title: 'Person Card',
         containedExamples: null,
+        linkedExamples: null,
         isCard: true,
         isComponent: false,
         isField: false,
@@ -1551,6 +1555,47 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
     assert.false(
       atomHtml!.includes('id="ember'),
       `atom HTML does not include ember ID's`,
+    );
+  });
+
+  test('can capture head html when indexing a card', async function (assert) {
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+
+      static head = class Head extends Component<typeof this> {
+        <template>
+          <title>{{@model.firstName}}!</title>
+        </template>
+      };
+    }
+
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'person.gts': { Person },
+        'vangogh.json': {
+          data: {
+            attributes: {
+              firstName: 'Van Gogh',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person',
+                name: 'Person',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let { headHtml } =
+      (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
+
+    assert.strictEqual(
+      cleanWhiteSpace(stripScopedCSSAttributes(headHtml!)),
+      cleanWhiteSpace(`<title>Van Gogh!</title>`),
+      'head html is correct',
     );
   });
 
@@ -2471,6 +2516,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
       specType: 'card',
       moduleHref: 'http://localhost:4202/test/booking',
       containedExamples: null,
+      linkedExamples: null,
       ref: 'http://localhost:4202/test/booking/Booking',
       title: 'Booking',
       isCard: true,
@@ -2857,6 +2903,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         },
         relationships: {
           'cardInfo.theme': { links: { self: null } },
+          linkedExamples: { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -2892,6 +2939,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         title: 'PetPerson',
         description: 'Spec for PetPerson',
         containedExamples: null,
+        linkedExamples: null,
         moduleHref: `${testModuleRealm}pet-person`,
         ref: `${testModuleRealm}pet-person/PetPerson`,
         specType: 'card',
