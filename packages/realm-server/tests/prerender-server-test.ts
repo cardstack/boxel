@@ -20,10 +20,11 @@ import {
 } from '../prerender/prerender-constants';
 import { Deferred } from '@cardstack/runtime-common';
 
+const originalTestTimeout = QUnit.config.testTimeout;
+
 module(basename(__filename), function () {
   // Keep a generous timeout to catch genuine hangs; timers are unref'd in tests/index.ts
   // so the suite should still exit promptly once work completes.
-  QUnit.config.testTimeout = 60000;
   module('Prerender server', function (hooks) {
     let request: SuperTest<Test>;
     let prerenderer: Prerenderer;
@@ -57,6 +58,10 @@ module(basename(__filename), function () {
     });
 
     hooks.before(function () {
+      QUnit.config.testTimeout = 60000;
+    });
+
+    hooks.before(function () {
       draining = false;
       let built = buildPrerenderApp(realmSecretSeed, {
         serverURL: 'http://127.0.0.1:4221',
@@ -68,6 +73,10 @@ module(basename(__filename), function () {
 
     hooks.after(async function () {
       await prerenderer.stop();
+    });
+
+    hooks.after(function () {
+      QUnit.config.testTimeout = originalTestTimeout;
     });
 
     test('liveness', async function (assert) {
@@ -229,9 +238,25 @@ module(basename(__filename), function () {
         'returns draining status code',
       );
       assert.strictEqual(
-        res.headers[PRERENDER_SERVER_STATUS_HEADER],
+        res.headers[PRERENDER_SERVER_STATUS_HEADER.toLowerCase()],
         PRERENDER_SERVER_STATUS_DRAINING,
         'sets draining header',
+      );
+      draining = false;
+    });
+
+    test('HEAD reflects draining state', async function (assert) {
+      draining = true;
+      let res = await request.head('/').set('Accept', 'application/json');
+      assert.strictEqual(
+        res.status,
+        PRERENDER_SERVER_DRAINING_STATUS_CODE,
+        'HEAD returns draining status',
+      );
+      assert.strictEqual(
+        res.headers[PRERENDER_SERVER_STATUS_HEADER.toLowerCase()],
+        PRERENDER_SERVER_STATUS_DRAINING,
+        'HEAD sets draining header',
       );
       draining = false;
     });
@@ -328,7 +353,7 @@ module(basename(__filename), function () {
         'returns draining status code during in-flight prerender',
       );
       assert.strictEqual(
-        res.headers[PRERENDER_SERVER_STATUS_HEADER],
+        res.headers[PRERENDER_SERVER_STATUS_HEADER.toLowerCase()],
         PRERENDER_SERVER_STATUS_DRAINING,
         'sets draining header during in-flight prerender',
       );
@@ -376,7 +401,7 @@ module(basename(__filename), function () {
 
         assert.strictEqual(res.status, PRERENDER_SERVER_DRAINING_STATUS_CODE);
         assert.strictEqual(
-          res.headers[PRERENDER_SERVER_STATUS_HEADER],
+          res.headers[PRERENDER_SERVER_STATUS_HEADER.toLowerCase()],
           PRERENDER_SERVER_STATUS_DRAINING,
         );
 

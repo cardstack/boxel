@@ -846,6 +846,96 @@ module(basename(__filename), function () {
       );
     });
 
+    test('pressure mode assignment updates activeRealms for capacity accounting', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '1';
+      let { app, registry, chooseServerForRealm } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlA },
+        },
+      });
+
+      let lruRealm = 'https://realm.example/lru';
+      let first = chooseServerForRealm(lruRealm);
+      assert.strictEqual(first, serverUrlA, 'initial realm assigned');
+      registry.lastAccessByRealm.set(lruRealm, Date.now() - 1000);
+
+      let newRealm = 'https://realm.example/new-capacity';
+      let target = chooseServerForRealm(newRealm, {
+        exclude: [serverUrlA as string],
+      });
+      assert.strictEqual(
+        target,
+        serverUrlA,
+        'pressure mode selects server even when excluded',
+      );
+      assert.true(
+        registry.servers
+          .get(serverUrlA!)
+          ?.activeRealms.has(newRealm) as boolean,
+        'activeRealms updated for new realm',
+      );
+    });
+
+    test('returns draining response if all targets are draining', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      // Both responders return draining
+      mockPrerenderA?.setResponder(async (ctxt) => {
+        ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+        ctxt.set(
+          PRERENDER_SERVER_STATUS_HEADER,
+          PRERENDER_SERVER_STATUS_DRAINING,
+        );
+      });
+      mockPrerenderB?.setResponder(async (ctxt) => {
+        ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+        ctxt.set(
+          PRERENDER_SERVER_STATUS_HEADER,
+          PRERENDER_SERVER_STATUS_DRAINING,
+        );
+      });
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlA },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlB },
+        },
+      });
+
+      let realm = 'https://realm.example/draining';
+      let res = await request
+        .post('/prerender-card')
+        .send(makeBody(realm, `${realm}/1`));
+
+      assert.strictEqual(
+        res.status,
+        PRERENDER_SERVER_DRAINING_STATUS_CODE,
+        'returns draining when all servers draining',
+      );
+      assert.strictEqual(
+        res.headers[PRERENDER_SERVER_STATUS_HEADER.toLowerCase()],
+        PRERENDER_SERVER_STATUS_DRAINING,
+        'sets draining header',
+      );
+      assert.strictEqual(
+        res.body?.errors?.[0]?.message,
+        'All prerender servers draining',
+        'helpful message',
+      );
+    });
+
     test('returns 503 when no prerender servers are registered', async function (assert) {
       let { app } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());

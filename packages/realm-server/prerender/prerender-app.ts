@@ -53,7 +53,17 @@ export function buildPrerenderApp(
     serverURL: options.serverURL,
   });
 
-  router.head('/', livenessCheck);
+  router.head('/', (ctxt: Koa.Context) => {
+    if (options.isDraining?.()) {
+      ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+      ctxt.set(
+        PRERENDER_SERVER_STATUS_HEADER,
+        PRERENDER_SERVER_STATUS_DRAINING,
+      );
+      return;
+    }
+    return livenessCheck(ctxt, async () => undefined);
+  });
   router.get('/', async (ctxt: Koa.Context) => {
     if (options.isDraining?.()) {
       ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
@@ -473,6 +483,7 @@ export function createPrerenderHttpServer(options?: {
       drainingResolved = true;
       drainingDeferred.fulfill();
     }
+    stopHeartbeatLoop();
     void sendHeartbeat('draining');
     const shutdownTimer = setTimeout(() => {
       if (isClosing) return;

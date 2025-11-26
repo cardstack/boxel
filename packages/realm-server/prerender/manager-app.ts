@@ -473,6 +473,7 @@ export function buildPrerenderManagerApp(): {
           if (!list.includes(url)) list.push(url);
           if (list.length > multiplex) list = list.slice(-multiplex);
           registry.realms.set(realm, list);
+          info.activeRealms.add(realm);
           info.lastAssignedAt = now();
           return url;
         }
@@ -491,6 +492,7 @@ export function buildPrerenderManagerApp(): {
       registry.realms.set(realm, list);
       let info = registry.servers.get(anyCandidate);
       if (info) {
+        info.activeRealms.add(realm);
         info.lastAssignedAt = now();
       }
       return anyCandidate;
@@ -602,8 +604,26 @@ export function buildPrerenderManagerApp(): {
           if (attempts.size < registry.servers.size) {
             continue;
           }
-          ctxt.status = 502;
-          ctxt.body = { errors: [{ status: 502, message: 'Upstream error' }] };
+          if (draining) {
+            ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+            ctxt.set(
+              PRERENDER_SERVER_STATUS_HEADER,
+              PRERENDER_SERVER_STATUS_DRAINING,
+            );
+            ctxt.body = {
+              errors: [
+                {
+                  status: PRERENDER_SERVER_DRAINING_STATUS_CODE,
+                  message: 'All prerender servers draining',
+                },
+              ],
+            };
+          } else {
+            ctxt.status = 502;
+            ctxt.body = {
+              errors: [{ status: 502, message: 'Upstream error' }],
+            };
+          }
           return;
         }
 
