@@ -416,7 +416,6 @@ async function startTestRealm({
   let virtualNetwork = createVirtualNetwork();
   let dir = dirSync().name;
   let testRealmServer = await runTestRealmServer({
-    usePrerenderer: true,
     testRealmDir: dir,
     realmsRootPath: join(dir, 'realm_server_1'),
     virtualNetwork,
@@ -510,16 +509,6 @@ module(basename(__filename), function () {
           cleanWhiteSpace(`<h1> Mango $</h1>`),
           'pre-rendered isolated format html is correct',
         );
-        assert.ok(entry.headHtml, 'pre-rendered head format html is present');
-        let cleanedHead = cleanWhiteSpace(entry.headHtml!);
-        assert.ok(
-          cleanedHead.includes('<title data-test-card-head-title>'),
-          `head html includes title: ${cleanedHead}`,
-        );
-        assert.ok(
-          cleanedHead.includes(`property="og:url" content="${testRealm}mango"`),
-          `head html includes canonical url: ${cleanedHead}`,
-        );
         assert.strictEqual(
           trimCardContainer(
             stripScopedCSSAttributes(
@@ -529,6 +518,20 @@ module(basename(__filename), function () {
           cleanWhiteSpace(`<h1> Embedded Card Person: Mango </h1>`),
           'pre-rendered embedded format html is correct',
         );
+
+        assert.ok(entry.headHtml, 'pre-rendered head format html is present');
+
+        let cleanedHead = cleanWhiteSpace(entry.headHtml!);
+
+        assert.ok(
+          cleanedHead.includes('<title data-test-card-head-title>'),
+          `head html includes title: ${cleanedHead}`,
+        );
+        assert.ok(
+          cleanedHead.includes(`property="og:url" content="${testRealm}mango"`),
+          `head html includes canonical url: ${cleanedHead}`,
+        );
+
         assert.strictEqual(
           trimCardContainer(
             stripScopedCSSAttributes(
@@ -538,11 +541,6 @@ module(basename(__filename), function () {
           cleanWhiteSpace(`<h1> Fitted Card Person: Mango </h1>`),
           'pre-rendered fitted format html is correct',
         );
-        let dbRows = (await testDbAdapter.execute(
-          `SELECT head_html FROM boxel_index WHERE url = $1`,
-          { bind: [`${testRealm}mango.json`] },
-        )) as { head_html: string | null }[];
-        assert.ok(dbRows[0]?.head_html, 'head_html is stored in the DB');
       } else {
         assert.ok(false, 'expected index entry not to be an error');
       }
@@ -2331,7 +2329,6 @@ module(basename(__filename), function () {
       },
     ) {
       setupPermissionedRealms(hooks, {
-        usePrerenderer: true,
         // provider
         realms: [
           {

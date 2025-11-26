@@ -1,5 +1,6 @@
 import type Owner from '@ember/owner';
 
+import type { RealmAction } from '@cardstack/runtime-common';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import type RealmService from '@cardstack/host/services/realm';
@@ -51,7 +52,7 @@ export class MockUtils {
       ) as RealmEvent[];
   };
 
-  setRealmPermissions = (permissions: Record<string, string[]>) => {
+  setRealmPermissions = (permissions: Record<string, RealmAction[]>) => {
     this.testState.opts!.realmPermissions = permissions;
     (this.testState.owner!.lookup('service:realm') as RealmService).logout();
 

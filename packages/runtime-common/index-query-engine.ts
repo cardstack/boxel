@@ -609,11 +609,11 @@ export class IndexQueryEngine {
     htmlFormat,
     renderType,
   }: {
-    htmlFormat: 'embedded' | 'fitted' | 'atom' | undefined;
+    htmlFormat: 'embedded' | 'fitted' | 'atom' | 'head' | undefined;
     renderType?: ResolvedCodeRef;
   }): (string | Param | DBSpecificExpression)[] {
     let fieldName = htmlFormat ? `${htmlFormat}_html` : `atom_html`;
-    if (!htmlFormat || htmlFormat === 'atom') {
+    if (!htmlFormat || htmlFormat === 'atom' || htmlFormat === 'head') {
       return [`ANY_VALUE(${fieldName})`];
     }
 
