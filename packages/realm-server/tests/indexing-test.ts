@@ -87,7 +87,7 @@ module(basename(__filename), function () {
 
               static head = class Head extends Component<typeof this> {
                 <template>
-                  <title><@fields.firstName />!</title>
+                  <title>{{@model.firstName}}!</title>
                 </template>
               }
 
