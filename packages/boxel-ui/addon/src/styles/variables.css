@@ -20,7 +20,7 @@
   /* font size range -- note: see semantic names on line 241 */
   --boxel-font-size-2xl: calc(var(--boxel-font-size) * 2.25); /* 36px */
   --boxel-font-size-xl: calc(var(--boxel-font-size) * 2); /* 32px */
-  --boxel-font-size-lg: calc(var(--boxel-font-size) * 1.625); /* 26px */
+  --boxel-font-size-lg: calc(var(--boxel-font-size) * 1.375); /* 22px */
   --boxel-font-size-md: calc(var(--boxel-font-size) * 1.25); /* 20px */
   /* --boxel-font-size: 16px; (base - declared on line 10) */
   --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.875); /* 14px */
@@ -38,6 +38,13 @@
     var(--boxel-font-family); /* default */
   --boxel-font-xs: var(--boxel-font-size-xs) / calc(15 / 11)
     var(--boxel-font-family);
+
+  /* line-height for corresponding font-size */
+  --boxel-line-height-xl: calc(43 / 32); /* 1.34375 */
+  --boxel-line-height-lg: calc(30 / 22); /* 1.3636 */
+  --boxel-line-height-md: calc(28 / 20); /* 1.4 */
+  --boxel-line-height: calc(22 / 16); /* 1.375 */
+  --boxel-line-height-sm: calc(18 / 13); /* 1.3846 (body) */
 
   /* letter-spacing */
   /* Note: the px conversion is using default font_size = 16px (1rem) */
@@ -245,18 +252,14 @@
   --boxel-heading-font-family: var(--boxel-font-family);
 
   /* font-size */
-  --boxel-heading-font-size: var(--boxel-font-size-lg); /* 26px */
-  --boxel-title-font-size: var(--boxel-font-size); /* 16px */
+  --boxel-heading-font-size: var(--boxel-font-size-lg); /* 22px */
   --boxel-body-font-size: var(--boxel-font-size-sm); /* 14px */
   --boxel-caption-font-size: var(--boxel-font-size-xs); /* 12px */
-  --boxel-display-font-size: var(--boxel-font-size-xl); /* 32px */
-  --boxel-hero-font-size: var(--boxel-font-size-2xl); /* 36px */
 
   /* line-height */
-  --boxel-body-line-height: calc(18 / 13);
-  --boxel-heading-line-height: calc(30 / 22);
-  --boxel-title-line-height: calc(22 / 16);
-  --boxel-caption-line-height: calc(15 / 11);
+  --boxel-body-line-height: var(--boxel-line-height-sm);
+  --boxel-heading-line-height: var(--boxel-line-height-lg);
+  --boxel-caption-line-height: var(--boxel-line-height-xs);
 
   /* font-weight */
   --boxel-heading-font-weight: 700;

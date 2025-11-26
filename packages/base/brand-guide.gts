@@ -118,9 +118,9 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         line-height: var(--boxel-heading-line-height);
       }
       h2 {
-        font-size: var(--boxel-title-font-size);
+        font-size: var(--boxel-font-size-md);
         font-weight: 500;
-        line-height: var(--boxel-title-line-height);
+        line-height: var(--boxel-line-height);
       }
       p {
         margin-block: 0;

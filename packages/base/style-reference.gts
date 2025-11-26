@@ -61,7 +61,7 @@ class Isolated extends Component<typeof StyleReference> {
       h2 {
         margin-top: 0;
         margin-bottom: var(--boxel-sp);
-        font-size: var(--boxel-title-font-size);
+        font-size: var(--boxel-font-size-md);
         font-weight: 500;
       }
       ul {

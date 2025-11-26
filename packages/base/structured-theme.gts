@@ -291,9 +291,9 @@ class Isolated extends Component<typeof StructuredTheme> {
       }
 
       h2 {
-        font-size: var(--boxel-title-font-size);
+        font-size: var(--boxel-font-size-md);
         font-weight: 500;
-        line-height: var(--boxel-title-line-height);
+        line-height: var(--boxel-line-height-md);
       }
 
       .structured-theme-card {
@@ -369,7 +369,7 @@ class Isolated extends Component<typeof StructuredTheme> {
           grid-template-columns: 1fr 1fr;
         }
         h2 {
-          font-size: var(--boxel-font-size-md);
+          font-size: var(--boxel-font-size);
         }
       }
     </style>

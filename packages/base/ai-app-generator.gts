@@ -155,7 +155,7 @@ export class AiAppGenerator extends CardDef {
 
         .title {
           color: var(--boxel-light);
-          font-size: var(--boxel-hero-font-size);
+          font-size: var(--boxel-font-size-2xl);
           font-weight: 400;
           text-align: left;
           margin: 0 0 var(--boxel-sp-sm) 0;

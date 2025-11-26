@@ -66,11 +66,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
     }
 
     :global(.boxel-card-container--themed) {
-      /* internal variable names for conversion */
       --_theme-spacing: calc(var(--spacing) * 4);
-      --_theme-title-size: calc(
-        var(--brand-body-font-size) * (1 / 0.875)
-      ); /* adjustment because our default for title size is actually var(--boxel-font-size) */
       /* setting boxel base css variable overrides, with boxel defaults as fallback */
       --boxel-font-size: var(--brand-body-font-size, var(--_boxel-font-size));
       --boxel-spacing: var(--_theme-spacing, var(--_boxel-spacing));
@@ -83,7 +79,10 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
         --brand-body-font-size,
         var(--boxel-font-size-sm)
       );
-      --boxel-body-line-height: var(--brand-body-line-height, calc(18 / 13));
+      --boxel-body-line-height: var(
+        --brand-body-line-height,
+        var(--boxel-line-height-sm)
+      );
       --boxel-body-font-weight: var(--brand-body-font-weight, 400);
       --boxel-heading-font-family: var(
         --brand-heading-font-family,
@@ -95,18 +94,15 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       );
       --boxel-heading-line-height: var(
         --brand-heading-line-height,
-        calc(30 / 22)
+        var(--boxel-line-height-lg)
       );
       --boxel-heading-font-weight: var(--brand-heading-font-weight, 700);
-      --boxel-title-font-size: var(--_theme-title-size, var(--boxel-font-size));
       --boxel-caption-font-size: var(--boxel-font-size-xs);
-      --boxel-display-font-size: var(--boxel-font-size-xl);
-      --boxel-hero-font-size: var(--boxel-font-size-2xl);
       /*** code below this line is from "variables.css". values will be recalculated based on theming variable values ***/
       /* font-sizes */
       --boxel-font-size-2xl: calc(var(--boxel-font-size) * 2.25);
       --boxel-font-size-xl: calc(var(--boxel-font-size) * 2);
-      --boxel-font-size-lg: calc(var(--boxel-font-size) * 1.625);
+      --boxel-font-size-lg: calc(var(--boxel-font-size) * 1.375);
       --boxel-font-size-md: calc(var(--boxel-font-size) * 1.25);
       --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.875);
       --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.75);

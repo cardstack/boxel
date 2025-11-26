@@ -147,7 +147,7 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
       /* Common */
       @container fitted-card ((aspect-ratio <= 1) and (height < 180px)) {
         :global(.card-title) {
-          font-size: var(--boxel-font-size-xs);
+          font-size: var(--boxel-caption-font-size);
         }
       }
 
