@@ -54,7 +54,6 @@ const pirateSkillListingId = `${mockCatalogURL}SkillListing/pirate-skill`;
 const incompleteSkillListingId = `${mockCatalogURL}Listing/incomplete-skill`;
 const apiDocumentationStubListingId = `${mockCatalogURL}Listing/api-documentation-stub`;
 const themeListingId = `${mockCatalogURL}ThemeListing/cardstack-theme`;
-const themeExampleId = `${mockCatalogURL}theme/theme-example`;
 //license
 const mitLicenseId = `${mockCatalogURL}License/mit`;
 //category
