@@ -22,6 +22,7 @@ const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 const cacheableExternalHosts = new Set(
   (config.cacheableExternalHosts || []).map((host) => host.toLowerCase()),
 );
+const shouldLogCacheUsage = !!config.logCacheUsage;
 
 function getNativeFetch(): typeof fetch {
   if (isFastBoot) {
@@ -134,10 +135,25 @@ function buildCacheAwareFetch(nativeFetch: typeof fetch): typeof fetch {
     let url = new URL(request.url, defaultBase);
     let host = url.host.toLowerCase();
 
-    if (host && !cacheableExternalHosts.has(host)) {
+    let isCacheable = host && cacheableExternalHosts.has(host);
+
+    if (host && !isCacheable) {
       request = new Request(request, { cache: 'no-store' });
     }
 
-    return nativeFetch(request);
+    let response = await nativeFetch(request);
+
+    if (shouldLogCacheUsage) {
+      let cacheHeader =
+        response.headers.get('x-cache') ||
+        response.headers.get('cf-cache-status') ||
+        'n/a';
+      let ageHeader = response.headers.get('age') || 'n/a';
+      console.info(
+        `[cache] ${isCacheable ? 'cacheable' : 'non-cacheable'} ${url.href} cache=${request.cache ?? 'default'} status=${response.status} x-cache=${cacheHeader} age=${ageHeader}`,
+      );
+    }
+
+    return response;
   };
 }

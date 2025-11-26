@@ -40,6 +40,7 @@ module.exports = function (environment) {
       .split(',')
       .map((host) => host.trim().toLowerCase())
       .filter(Boolean),
+    logCacheUsage: process.env.CHROME_HTTP_CACHE_DEBUG === 'true',
     minSaveTaskDurationMs: 1000,
     renderTimeoutMs: 30_000,
     iconsURL: process.env.ICONS_URL || 'https://boxel-icons.boxel.ai',
