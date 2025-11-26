@@ -34,8 +34,8 @@ const Label: TemplateOnlyComponent<Signature> = <template>
     @layer boxelComponentL1 {
       .boxel-label {
         color: var(--boxel-label-color);
-        font-size: var(--boxel-label-font-size, var(--boxel-font-size-sm));
-        font-weight: var(--boxel-label-font-weight, 600);
+        font-size: var(--boxel-label-font-size, var(--boxel-body-font-size));
+        font-weight: var(--boxel-label-font-weight, 500);
         line-height: var(--boxel-label-line-height, calc(18 / 13));
         font-family: inherit;
         letter-spacing: var(--boxel-label-letter-spacing, var(--boxel-lsp-sm));
@@ -43,12 +43,12 @@ const Label: TemplateOnlyComponent<Signature> = <template>
       .boxel-label--small {
         font-size: var(
           --boxel-label-font-size-small,
-          var(--boxel-font-size-xs)
+          var(--boxel-caption-font-size)
         );
         line-height: var(--boxel-label-line-height-small, calc(15 / 11));
       }
       .boxel-label--default {
-        font-size: var(--boxel-label-font-size, var(--boxel-font-size-sm));
+        font-size: var(--boxel-label-font-size, var(--boxel-body-font-size));
         line-height: var(--boxel-label-line-height, calc(18 / 13));
       }
     }

@@ -7,66 +7,37 @@
   /* end of internal variables */
 
   /* boxel base variable defaults  */
-  --boxel-font-size: var(--_boxel-font-size); /* 16px */
-  --boxel-spacing: var(--_boxel-spacing); /* 16px */
-  --boxel-radius: var(--_boxel-radius); /* 10px */
+  --boxel-font-size: var(--_boxel-font-size);
+  --boxel-spacing: var(--_boxel-spacing);
+  --boxel-radius: var(--_boxel-radius);
 
   /* font-family */
-  --boxel-font-family: 'Poppins', 'Open Sans', helvetica, arial, sans-serif;
+  --boxel-font-family: 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
+  --boxel-serif-font-family: 'IBM Plex Serif', 'Georgia', Times, serif;
   --boxel-monospace-font-family:
-    'Roboto Mono', 'Courier New', courier, monospace;
+    'IBM Plex Mono', 'Menlo', 'Courier New', Courier, monospace;
 
-  /* font shorthand */
-  --boxel-font-xl: var(--boxel-font-size-xl) / var(--boxel-lineheight-xl)
-    var(--boxel-font-family);
-  --boxel-font-lg: var(--boxel-font-size-lg) / var(--boxel-lineheight-lg)
-    var(--boxel-font-family);
-  --boxel-font-med: var(--boxel-font-size-med) / var(--boxel-lineheight-med)
-    var(--boxel-font-family);
-  --boxel-font: var(--boxel-font-size) / var(--boxel-lineheight)
-    var(--boxel-font-family);
-  --boxel-font-sm: var(--boxel-font-size-sm) / var(--boxel-lineheight-sm)
-    var(--boxel-font-family); /* default */
-  --boxel-font-xs: var(--boxel-font-size-xs) / var(--boxel-lineheight-xs)
-    var(--boxel-font-family);
-
-  /* font-sizes */
-  --boxel-font-size-xxl: calc(var(--boxel-font-size) * 2.5); /* 40px */
+  /* font size range -- note: see semantic names on line 241 */
+  --boxel-font-size-2xl: calc(var(--boxel-font-size) * 2.25); /* 36px */
   --boxel-font-size-xl: calc(var(--boxel-font-size) * 2); /* 32px */
-  --boxel-font-size-lg: calc(var(--boxel-font-size) * 1.375); /* 22px */
-  --boxel-font-size-med: calc(var(--boxel-font-size) * 1.25); /* 20px */
+  --boxel-font-size-lg: calc(var(--boxel-font-size) * 1.625); /* 26px */
+  --boxel-font-size-md: calc(var(--boxel-font-size) * 1.25); /* 20px */
   /* --boxel-font-size: 16px; (base - declared on line 10) */
-  --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.8125); /* 13px (body) */
-  --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.6875); /* 11px */
+  --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.875); /* 14px */
+  --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.75); /* 12px */
 
-  /* line-height for corresponding font-size */
-  --boxel-lineheight-xl: calc(43 / 32); /* 1.34375 */
-  --boxel-lineheight-lg: calc(30 / 22); /* 1.3636 */
-  --boxel-lineheight-med: calc(28 / 20); /* 1.4 */
-  --boxel-lineheight: calc(22 / 16); /* 1.375 */
-  --boxel-lineheight-sm: calc(18 / 13); /* 1.3846 (body) */
-  --boxel-lineheight-xs: calc(15 / 11); /* 1.3636 */
-  /* additional line-height options */
-  --boxel-lineheight-100: 1;
-  --boxel-lineheight-110: 1.1;
-  --boxel-lineheight-120: 1.2;
-  --boxel-lineheight-125: 1.25;
-  --boxel-lineheight-130: 1.3;
-  --boxel-lineheight-140: 1.4;
-  --boxel-lineheight-150: 1.5;
-  --boxel-lineheight-160: 1.6;
-  --boxel-lineheight-170: 1.7;
-  --boxel-lineheight-180: 1.8;
-  --boxel-lineheight-190: 1.9;
-  --boxel-lineheight-200: 2;
-
-  /* font-weight */
-  --boxel-font-weight-light: 300;
-  --boxel-font-weight-normal: 400;
-  --boxel-font-weight-medium: 500;
-  --boxel-font-weight-semibold: 600;
-  --boxel-font-weight-bold: 700;
-  --boxel-font-weight-extra-bold: 800;
+  /* font shorthand -- note: see semantic names on line 241 */
+  --boxel-font-xl: var(--boxel-font-size-xl) / calc(43 / 32)
+    var(--boxel-font-family);
+  --boxel-font-lg: var(--boxel-font-size-lg) / calc(30 / 22)
+    var(--boxel-font-family);
+  --boxel-font-md: var(--boxel-font-size-md) / calc(28 / 20)
+    var(--boxel-font-family);
+  --boxel-font: var(--boxel-font-size) / calc(22 / 16) var(--boxel-font-family);
+  --boxel-font-sm: var(--boxel-font-size-sm) / calc(18 / 13)
+    var(--boxel-font-family); /* default */
+  --boxel-font-xs: var(--boxel-font-size-xs) / calc(15 / 11)
+    var(--boxel-font-family);
 
   /* letter-spacing */
   /* Note: the px conversion is using default font_size = 16px (1rem) */
@@ -81,18 +52,21 @@
 
   /* Modular scale for spacing */
   --boxel-ratio: 1.333; /* scale (based on "Perfect Fourth" scale) */
-  --boxel-sp-6xs: calc(var(--boxel-sp-5xs) / var(--boxel-ratio)); /* 2.17px */
-  --boxel-sp-5xs: calc(var(--boxel-sp-4xs) / var(--boxel-ratio)); /* 2.88px */
-  --boxel-sp-4xs: calc(var(--boxel-sp-xxxs) / var(--boxel-ratio)); /* 3.827px */
-  --boxel-sp-xxxs: calc(var(--boxel-sp-xxs) / var(--boxel-ratio)); /* 5.09px */
-  --boxel-sp-xxs: calc(var(--boxel-sp-xs) / var(--boxel-ratio)); /* 6.78px */
-  --boxel-sp-xs: calc(var(--boxel-sp-sm) / var(--boxel-ratio)); /* 9.05px */
+  --boxel-sp-6xs: calc(var(--boxel-sp-5xs) / var(--boxel-ratio)); /* 2.14px */
+  --boxel-sp-5xs: calc(var(--boxel-sp-4xs) / var(--boxel-ratio)); /* 2.86px */
+  --boxel-sp-4xs: calc(var(--boxel-sp-3xs) / var(--boxel-ratio)); /* 3.57px */
+  --boxel-sp-3xs: calc(var(--boxel-sp-2xs) / var(--boxel-ratio)); /* 4.76px */
+  --boxel-sp-2xs: calc(var(--boxel-sp-xs) / var(--boxel-ratio)); /* 6.75px */
+  --boxel-sp-xs: calc(var(--boxel-sp-sm) / var(--boxel-ratio)); /* 9px */
   --boxel-sp-sm: calc(var(--boxel-sp) / var(--boxel-ratio)); /* 12px */
   --boxel-sp: var(--boxel-spacing); /* 16px */
-  --boxel-sp-lg: calc(var(--boxel-sp) * var(--boxel-ratio)); /* 21.28px */
-  --boxel-sp-xl: calc(var(--boxel-sp-lg) * var(--boxel-ratio)); /* 28.43px */
-  --boxel-sp-xxl: calc(var(--boxel-sp-xl) * var(--boxel-ratio)); /* 37.89px */
-  --boxel-sp-xxxl: calc(var(--boxel-sp-xxl) * var(--boxel-ratio)); /* 50.51px */
+  --boxel-sp-lg: calc(var(--boxel-sp) * var(--boxel-ratio)); /* 21.33px */
+  --boxel-sp-xl: calc(var(--boxel-sp-lg) * var(--boxel-ratio)); /* 28.44px */
+  --boxel-sp-2xl: calc(var(--boxel-sp-xl) * var(--boxel-ratio)); /* 37.92px */
+  --boxel-sp-3xl: calc(var(--boxel-sp-2xl) * var(--boxel-ratio)); /* 50.56px */
+  --boxel-sp-4xl: calc(var(--boxel-sp-3xl) * var(--boxel-ratio)); /* 67.41px */
+  --boxel-sp-5xl: calc(var(--boxel-sp-4xl) * var(--boxel-ratio)); /* 89.88px */
+  --boxel-sp-6xl: calc(var(--boxel-sp-5xl) * var(--boxel-ratio)); /* 119.84px */
 
   /* common icon sizes */
   --boxel-icon-xxs: 0.75rem; /* 12px */
@@ -256,4 +230,35 @@
   --boxel-form-control-border-radius: var(--boxel-border-radius);
   --boxel-form-control-dark-mode-placeholder-color: #acacac;
   --boxel-form-control-dark-mode-border: var(--boxel-border-flexible);
+
+  /* deprecated */
+  --boxel-sp-xxxl: var(--boxel-sp-3xl); /* xxxl is deprecated, use 3xl */
+  --boxel-sp-xxl: var(--boxel-sp-2xl); /* xxl is deprecated, use 2xl */
+  --boxel-sp-xxs: var(--boxel-sp-2xs); /* xxs is deprecated, use 2xs */
+  --boxel-sp-xxxs: var(--boxel-sp-3xs); /* xxxs is deprecated, use 3xs */
+}
+
+/** Semantic CSS Variables for General Use */
+:root {
+  /* font-family */
+  --boxel-body-font-family: var(--boxel-font-family);
+  --boxel-heading-font-family: var(--boxel-font-family);
+
+  /* font-size */
+  --boxel-heading-font-size: var(--boxel-font-size-lg); /* 26px */
+  --boxel-title-font-size: var(--boxel-font-size); /* 16px */
+  --boxel-body-font-size: var(--boxel-font-size-sm); /* 14px */
+  --boxel-caption-font-size: var(--boxel-font-size-xs); /* 12px */
+  --boxel-display-font-size: var(--boxel-font-size-xl); /* 32px */
+  --boxel-hero-font-size: var(--boxel-font-size-2xl); /* 36px */
+
+  /* line-height */
+  --boxel-body-line-height: calc(18 / 13);
+  --boxel-heading-line-height: calc(30 / 22);
+  --boxel-title-line-height: calc(22 / 16);
+  --boxel-caption-line-height: calc(15 / 11);
+
+  /* font-weight */
+  --boxel-heading-font-weight: 700;
+  --boxel-body-font-weight: 400;
 }

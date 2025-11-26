@@ -286,15 +286,14 @@ class Isolated extends Component<typeof StructuredTheme> {
       }
 
       h1 {
-        font-size: var(--boxel-font-size-xl);
-        line-height: var(--boxel-line-height-xl);
-        font-weight: var(--boxel-font-weight-semibold);
+        font-size: var(--boxel-heading-font-size);
+        line-height: var(--boxel-heading-line-height);
       }
 
       h2 {
-        font-size: var(--boxel-font-size-lg);
-        line-height: var(--boxel-line-height-lg);
-        font-weight: var(--boxel-font-weight-medium);
+        font-size: var(--boxel-title-font-size);
+        font-weight: 500;
+        line-height: var(--boxel-title-line-height);
       }
 
       .structured-theme-card {
@@ -370,7 +369,7 @@ class Isolated extends Component<typeof StructuredTheme> {
           grid-template-columns: 1fr 1fr;
         }
         h2 {
-          font-size: var(--boxel-font-size-med);
+          font-size: var(--boxel-font-size-md);
         }
       }
     </style>
