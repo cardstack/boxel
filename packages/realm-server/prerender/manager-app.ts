@@ -462,7 +462,7 @@ export function buildPrerenderManagerApp(): {
       }
     }
     if (lruRealm) {
-      let arr = registry.realms.get(lruRealm) || [];
+      let arr = [...(registry.realms.get(lruRealm) || [])];
       while (arr.length > 0) {
         let url = arr.shift()!;
         let info = registry.servers.get(url);
@@ -555,8 +555,13 @@ export function buildPrerenderManagerApp(): {
         };
         return;
       }
+      if (registry.servers.size === 0) {
+        ctxt.status = 503;
+        ctxt.body = { errors: [{ status: 503, message: 'No servers' }] };
+        return;
+      }
       let attempts = new Set<string>();
-      while (attempts.size <= registry.servers.size) {
+      while (attempts.size < registry.servers.size) {
         let target = chooseServerForRealm(realm, { exclude: attempts });
         if (!target) {
           ctxt.status = 503;

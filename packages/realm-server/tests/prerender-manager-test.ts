@@ -289,8 +289,11 @@ module(basename(__filename), function () {
         'id header',
       );
 
+      let missingInferenceResponse = await request
+        .post('/prerender-servers')
+        .send({});
       assert.strictEqual(
-        (await request.post('/prerender-servers').send({})).status,
+        missingInferenceResponse.status,
         400,
         'missing url rejected',
       );
@@ -840,6 +843,25 @@ module(basename(__filename), function () {
       assert.true(
         registry.servers.get(serverUrlA!)?.activeRealms.has(realm3) as boolean,
         'realm assigned after capacity restored',
+      );
+    });
+
+    test('returns 503 when no prerender servers are registered', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let res = await request
+        .post('/prerender-card')
+        .send(
+          makeBody(
+            'https://realm.example/none',
+            'https://realm.example/none/1',
+          ),
+        );
+      assert.strictEqual(res.status, 503, '503 when no servers available');
+      assert.strictEqual(
+        res.body?.errors?.[0]?.message,
+        'No servers',
+        'response includes helpful message',
       );
     });
   });

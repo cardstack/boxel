@@ -21,6 +21,8 @@ import {
 import { Deferred } from '@cardstack/runtime-common';
 
 module(basename(__filename), function () {
+  // Keep a generous timeout to catch genuine hangs; timers are unref'd in tests/index.ts
+  // so the suite should still exit promptly once work completes.
   QUnit.config.testTimeout = 60000;
   module('Prerender server', function (hooks) {
     let request: SuperTest<Test>;
@@ -335,6 +337,58 @@ module(basename(__filename), function () {
       execDeferred.fulfill();
       (built.prerenderer as any).prerenderCard = originalPrerender;
       await built.prerenderer.stop();
+    });
+
+    test('draining race does not leak unhandled rejection from execute', async function (assert) {
+      let unhandled = 0;
+      let onUnhandled = () => unhandled++;
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        let built = buildPrerenderApp(realmSecretSeed, {
+          serverURL: 'http://127.0.0.1:4223',
+          isDraining: () => true,
+          drainingPromise: Promise.resolve(),
+          silent: true,
+        });
+        let localRequest = supertest(built.app.callback());
+        let originalPrerender = (built.prerenderer as any).prerenderCard;
+        (built.prerenderer as any).prerenderCard = async () => {
+          throw new Error('boom');
+        };
+
+        let permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> =
+          { [testRealmHref]: ['read', 'write', 'realm-owner'] };
+        let res = await localRequest
+          .post('/prerender-card')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .send({
+            data: {
+              type: 'prerender-request',
+              attributes: {
+                url: `${testRealmHref}drain-unhandled`,
+                userId: testUserId,
+                permissions,
+                realm: testRealmHref,
+              },
+            },
+          });
+
+        assert.strictEqual(res.status, PRERENDER_SERVER_DRAINING_STATUS_CODE);
+        assert.strictEqual(
+          res.headers[PRERENDER_SERVER_STATUS_HEADER],
+          PRERENDER_SERVER_STATUS_DRAINING,
+        );
+
+        // allow promise rejection to settle
+        await Promise.resolve();
+        assert.strictEqual(unhandled, 0, 'no unhandled rejections raised');
+
+        (built.prerenderer as any).prerenderCard = originalPrerender;
+        await built.prerenderer.stop();
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
     });
   });
 });

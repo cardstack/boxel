@@ -175,6 +175,10 @@ export function buildPrerenderApp(
           ? await Promise.race([execPromise, drainPromise])
           : await execPromise;
         if ('draining' in raceResult) {
+          // Ensure execute completion does not raise unhandled rejections after we respond.
+          execPromise.catch((e) =>
+            log.debug('prerender execute settled after drain (ignored):', e),
+          );
           ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
           ctxt.set(
             PRERENDER_SERVER_STATUS_HEADER,
@@ -470,15 +474,16 @@ export function createPrerenderHttpServer(options?: {
       drainingDeferred.fulfill();
     }
     void sendHeartbeat('draining');
-    setTimeout(() => {
+    const shutdownTimer = setTimeout(() => {
       if (isClosing) return;
       isClosing = true;
       server.close(() => {
         log.info(
           `prerender server HTTP on port ${options?.port ?? defaultPrerenderServerPort} has stopped.`,
         );
+        clearTimeout(shutdownTimer);
       });
-    }, shutdownGraceMs).unref?.();
+    }, shutdownGraceMs);
   };
   process.on('SIGTERM', shutdownHandler);
   process.on('SIGINT', shutdownHandler);
