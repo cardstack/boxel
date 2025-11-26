@@ -71,6 +71,7 @@ export function normalizeRenderError(
     instanceId: context?.cardId,
     moduleUrl: resolveModuleUrl(context?.cardId),
   });
+  normalized = applyAuthMessageOverrides(normalized);
   return applyMissingLinkOverrides(normalized, context);
 }
 
@@ -100,6 +101,20 @@ function applyMissingLinkOverrides(
   renderError.error.id = errorId;
   renderError.error.title = 'Link Not Found';
   renderError.error.message = `missing file ${errorId}`;
+  return renderError;
+}
+
+function applyAuthMessageOverrides(renderError: RenderError): RenderError {
+  let message = renderError.error.message;
+  if (
+    typeof message === 'string' &&
+    message.trim().endsWith('Missing Authorization header')
+  ) {
+    renderError.error.message = message.replace(
+      /Missing Authorization header\s*$/,
+      'No authorized access - 401',
+    );
+  }
   return renderError;
 }
 

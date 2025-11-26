@@ -37,6 +37,7 @@ export interface PrerenderMeta {
 
 export interface RenderResponse extends PrerenderMeta {
   isolatedHTML: string | null;
+  headHTML: string | null;
   atomHTML: string | null;
   embeddedHTML: Record<string, string> | null;
   fittedHTML: Record<string, string> | null;

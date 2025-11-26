@@ -1413,6 +1413,52 @@ module(`Integration | realm indexing`, function (hooks) {
     );
   });
 
+  test('can capture head html when indexing a card', async function (assert) {
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+
+      static head = class Head extends Component<typeof this> {
+        <template>
+          <title>{{@model.firstName}}!</title>
+        </template>
+      };
+    }
+
+    let { realm } = await setupIntegrationTestRealm({
+      usePrerenderer: false,
+      mockMatrixUtils,
+      contents: {
+        'person.gts': { Person },
+        'vangogh.json': {
+          data: {
+            attributes: {
+              firstName: 'Van Gogh',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person',
+                name: 'Person',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let { headHtml } =
+      (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
+
+    assert.strictEqual(
+      cleanWhiteSpace(stripScopedCSSAttributes(headHtml!)),
+      cleanWhiteSpace(`<title>Van Gogh!</title>`),
+      'head html is correct',
+    );
+    assert.false(
+      headHtml!.includes('id="ember'),
+      `head HTML does not include ember ID's`,
+    );
+  });
+
   test(`can generate embedded HTML for instance's card class hierarchy`, async function (assert) {
     class Person extends CardDef {
       static displayName = 'Person';
@@ -3863,6 +3909,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/default-templates/embedded',
         'https://cardstack.com/base/default-templates/field-edit',
         'https://cardstack.com/base/default-templates/fitted',
+        'https://cardstack.com/base/default-templates/head',
         'https://cardstack.com/base/default-templates/isolated-and-edit',
         'https://cardstack.com/base/default-templates/markdown',
         'https://cardstack.com/base/default-templates/missing-template',
@@ -3992,6 +4039,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/default-templates/embedded',
         'https://cardstack.com/base/default-templates/field-edit',
         'https://cardstack.com/base/default-templates/fitted',
+        'https://cardstack.com/base/default-templates/head',
         'https://cardstack.com/base/default-templates/isolated-and-edit',
         'https://cardstack.com/base/default-templates/markdown',
         'https://cardstack.com/base/default-templates/missing-template',

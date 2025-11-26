@@ -86,6 +86,7 @@ export interface IndexedInstance {
   lastModified: number | null;
   resourceCreatedAt: number;
   isolatedHtml: string | null;
+  headHtml: string | null;
   embeddedHtml: { [refURL: string]: string } | null;
   fittedHtml: { [refURL: string]: string } | null;
   atomHtml: string | null;
@@ -312,6 +313,7 @@ export class IndexQueryEngine {
       url: canonicalURL,
       pristine_doc: instance,
       isolated_html: isolatedHtml,
+      head_html: headHtml,
       atom_html: atomHtml,
       embedded_html: embeddedHtml,
       fitted_html: fittedHtml,
@@ -329,6 +331,7 @@ export class IndexQueryEngine {
       realmURL,
       instance,
       isolatedHtml,
+      headHtml,
       embeddedHtml,
       fittedHtml,
       atomHtml,
