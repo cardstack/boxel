@@ -80,7 +80,7 @@ export interface InstanceEntry {
   resource: CardResource;
   searchData: Record<string, any>;
   isolatedHtml?: string;
-  headHtml?: string | null;
+  headHtml?: string;
   embeddedHtml?: Record<string, string>;
   fittedHtml?: Record<string, string>;
   atomHtml?: string;
