@@ -1,8 +1,16 @@
-import { Component } from 'https://cardstack.com/base/card-api';
-import BaseDatetimeField from 'https://cardstack.com/base/datetime';
-import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import {
+  FieldDef,
+  Component,
+  primitive,
+  serialize,
+  queryableValue,
+} from 'https://cardstack.com/base/card-api';
+import { fn } from '@ember/helper';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { not, eq } from '@cardstack/boxel-ui/helpers';
 import { formatDateTime } from '@cardstack/boxel-ui/helpers';
+import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event';
+import { format, parseISO, isValid } from 'date-fns';
 
 import { Countdown } from './components/countdown';
 import { Timeline } from './components/timeline';
@@ -35,9 +43,31 @@ interface DateTimeConfiguration {
   };
 }
 
-export class DatetimeField extends BaseDatetimeField {
+// Local datetime format (no timezone)
+const localDatetimeFormat = "yyyy-MM-dd'T'HH:mm:ss";
+
+export class DatetimeField extends FieldDef {
   static displayName = 'Date & Time';
   static icon = CalendarEventIcon;
+  static [primitive]: Date;
+
+  // Custom serialization to store WITHOUT timezone (local datetime)
+  static [serialize](value: Date | null | undefined): string | null {
+    if (!value || !(value instanceof Date) || !isValid(value)) {
+      return null;
+    }
+    // Format as local datetime without timezone
+    return format(value, localDatetimeFormat);
+  }
+
+  // Custom queryable value to store WITHOUT timezone
+  static [queryableValue](value: Date | null | undefined): string | null {
+    if (!value || !(value instanceof Date) || !isValid(value)) {
+      return null;
+    }
+    // Format as local datetime without timezone
+    return format(value, localDatetimeFormat);
+  }
 
   static embedded = class Embedded extends Component<typeof this> {
     get formatted() {
@@ -157,6 +187,40 @@ export class DatetimeField extends BaseDatetimeField {
         }
       </style>
     </template>
+  };
+
+  static edit = class Edit extends Component<typeof this> {
+    <template>
+      <BoxelInput
+        type='datetime-local'
+        @value={{this.formatted}}
+        @onInput={{fn this.parseInput @set}}
+        @max='9999-12-31T23:59:59'
+        @disabled={{not @canEdit}}
+        data-test-datetime-field-editor
+      />
+    </template>
+
+    parseInput(set: Function, date: string) {
+      if (!date?.length) {
+        return set(null);
+      }
+      let parsed = parseISO(date);
+      if (!isValid(parsed)) {
+        return;
+      }
+      return set(parsed);
+    }
+
+    get formatted() {
+      if (!this.args.model) {
+        return;
+      }
+      if (!(this.args.model instanceof Date) || !isValid(this.args.model)) {
+        return;
+      }
+      return format(this.args.model, localDatetimeFormat);
+    }
   };
 }
 

@@ -12,6 +12,8 @@ import StringField from 'https://cardstack.com/base/string';
 import DateField from '../fields/date';
 import TimeField from '../fields/time';
 import DatetimeField from '../fields/date-time';
+import DatetimeStampField from '../fields/datetime-stamp';
+import DayField from '../fields/date/day';
 import DateRangeField from '../fields/date/date-range';
 import TimeRangeField from '../fields/time/time-range';
 import DurationField from '../fields/time/duration';
@@ -19,6 +21,7 @@ import RelativeTimeField from '../fields/time/relative-time';
 import MonthDayField from '../fields/date/month-day';
 import QuarterField from '../fields/date/quarter';
 import RecurringPatternField from '../fields/recurring-pattern';
+import TimePeriodField from '../fields/time-period';
 import YearField from '../fields/date/year';
 import MonthField from '../fields/date/month';
 import MonthYearField from '../fields/date/month-year';
@@ -145,6 +148,8 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       'timeline',
       'expirationWarning',
     ],
+    datetimeStamp: ['standard'],
+    day: ['standard'],
     dateRange: ['standard', 'businessDays'],
     year: ['standard'],
     month: ['standard'],
@@ -156,6 +161,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
     monthDay: ['standard'],
     quarter: ['standard'],
     recurringPattern: ['standard'],
+    timePeriod: ['standard'],
     number: [
       'standard',
       'progress-bar',
@@ -181,6 +187,16 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
           value: 'datetime',
           label: 'DatetimeField',
           fieldName: 'playgroundDatetime',
+        },
+        {
+          value: 'datetimeStamp',
+          label: 'DatetimeStampField',
+          fieldName: 'playgroundDatetimeStamp',
+        },
+        {
+          value: 'day',
+          label: 'DayField',
+          fieldName: 'playgroundDay',
         },
         { value: 'year', label: 'YearField', fieldName: 'playgroundYear' },
         { value: 'month', label: 'MonthField', fieldName: 'playgroundMonth' },
@@ -224,6 +240,11 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
           value: 'recurringPattern',
           label: 'RecurringPatternField',
           fieldName: 'playgroundRecurringPattern',
+        },
+        {
+          value: 'timePeriod',
+          label: 'TimePeriodField',
+          fieldName: 'playgroundTimePeriod',
         },
       ],
     },
@@ -351,6 +372,30 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
           config:
             '@field eventDateTimeCustom = contains(DatetimeField, { configuration: { format: "ddd, MMM D [at] h:mm A" } });',
           fieldName: 'eventDateTimeCustom',
+        },
+      ],
+      duration: [
+        {
+          name: 'General Duration',
+          description:
+            'All time units (years, months, days, hours, minutes, seconds)',
+          config:
+            '@field projectDuration = contains(DurationField, { configuration: { includeYears: true, includeMonths: true, includeDays: true, includeHours: true, includeMinutes: true, includeSeconds: true } });',
+          fieldName: 'projectDurationFull',
+        },
+        {
+          name: 'Day-Time Duration',
+          description: 'No years/months (avoids month-length ambiguity)',
+          config:
+            '@field taskDuration = contains(DurationField, { configuration: { includeDays: true, includeHours: true, includeMinutes: true, includeSeconds: true } });',
+          fieldName: 'taskDurationDayTime',
+        },
+        {
+          name: 'Year-Month Duration',
+          description: 'Calendar-based periods (contracts, subscriptions)',
+          config:
+            '@field contractDuration = contains(DurationField, { configuration: { includeYears: true, includeMonths: true } });',
+          fieldName: 'contractDurationYearMonth',
         },
       ],
     };
@@ -1174,6 +1219,14 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
                   (eq this.currentPlaygroundField 'playgroundDatetime')
                 }}
                   <@fields.playgroundDatetime @format={{this.selectedFormat}} />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundDatetimeStamp')
+                }}
+                  <@fields.playgroundDatetimeStamp
+                    @format={{this.selectedFormat}}
+                  />
+                {{else if (eq this.currentPlaygroundField 'playgroundDay')}}
+                  <@fields.playgroundDay @format={{this.selectedFormat}} />
                 {{else if (eq this.currentPlaygroundField 'playgroundYear')}}
                   <@fields.playgroundYear @format={{this.selectedFormat}} />
                 {{else if (eq this.currentPlaygroundField 'playgroundMonth')}}
@@ -1224,6 +1277,12 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
                   <@fields.playgroundNumber @format={{this.selectedFormat}} />
                 {{else if (eq this.currentPlaygroundField 'playgroundRating')}}
                   <@fields.playgroundRating @format={{this.selectedFormat}} />
+                {{else if
+                  (eq this.currentPlaygroundField 'playgroundTimePeriod')
+                }}
+                  <@fields.playgroundTimePeriod
+                    @format={{this.selectedFormat}}
+                  />
                 {{else if
                   (eq this.currentPlaygroundField 'playgroundQuantity')
                 }}
@@ -1442,6 +1501,20 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
                           />
                         {{else if (eq example.fieldName 'eventDateTimeCustom')}}
                           <@fields.eventDateTimeCustom
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if (eq example.fieldName 'projectDurationFull')}}
+                          <@fields.projectDurationFull
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if (eq example.fieldName 'taskDurationDayTime')}}
+                          <@fields.taskDurationDayTime
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if
+                          (eq example.fieldName 'contractDurationYearMonth')
+                        }}
+                          <@fields.contractDurationYearMonth
                             @format={{this.selectedFormat}}
                           />
                         {{/if}}
@@ -2754,6 +2827,9 @@ export class FieldShowcase extends CardDef {
     },
   });
 
+  @field playgroundDatetimeStamp = contains(DatetimeStampField);
+  @field playgroundDay = contains(DayField);
+
   @field playgroundYear = contains(YearField);
   @field playgroundMonth = contains(MonthField);
   @field playgroundMonthYear = contains(MonthYearField);
@@ -2771,6 +2847,7 @@ export class FieldShowcase extends CardDef {
   @field playgroundMonthDay = contains(MonthDayField);
   @field playgroundQuarter = contains(QuarterField);
   @field playgroundRecurringPattern = contains(RecurringPatternField);
+  @field playgroundTimePeriod = contains(TimePeriodField);
 
   // Playground number fields - 4 fields total
   @field playgroundNumber = contains(NumberField, {
@@ -2854,6 +2931,38 @@ export class FieldShowcase extends CardDef {
   });
   @field eventDateTimeCustom = contains(DatetimeField, {
     configuration: { format: 'ddd, MMM D [at] h:mm A' },
+  });
+
+  // DurationField examples - showing different duration types
+  @field projectDurationFull = contains(DurationField, {
+    configuration: {
+      includeYears: true,
+      includeMonths: true,
+      includeDays: true,
+      includeHours: true,
+      includeMinutes: true,
+      includeSeconds: true,
+    },
+  });
+  @field taskDurationDayTime = contains(DurationField, {
+    configuration: {
+      includeYears: false,
+      includeMonths: false,
+      includeDays: true,
+      includeHours: true,
+      includeMinutes: true,
+      includeSeconds: true,
+    },
+  });
+  @field contractDurationYearMonth = contains(DurationField, {
+    configuration: {
+      includeYears: true,
+      includeMonths: true,
+      includeDays: false,
+      includeHours: false,
+      includeMinutes: false,
+      includeSeconds: false,
+    },
   });
 
   static isolated = FieldShowcaseIsolated;

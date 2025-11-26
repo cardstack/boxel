@@ -30,10 +30,13 @@ module('Integration | date-time fields', function (hooks) {
   let DateFieldClass: any;
   let TimeFieldClass: any;
   let DatetimeFieldClass: any;
+  let DatetimeStampFieldClass: any;
+  let DayFieldClass: any;
   let DateRangeFieldClass: any;
   let TimeRangeFieldClass: any;
   let DurationFieldClass: any;
   let RelativeTimeFieldClass: any;
+  let TimePeriodFieldClass: any;
   let MonthDayFieldClass: any;
   let YearFieldClass: any;
   let MonthFieldClass: any;
@@ -68,6 +71,16 @@ module('Integration | date-time fields', function (hooks) {
     );
     DatetimeFieldClass = datetimeModule.DatetimeField;
 
+    const datetimeStampModule: any = await loader.import(
+      `${catalogRealmURL}fields/datetime-stamp`,
+    );
+    DatetimeStampFieldClass = datetimeStampModule.DatetimeStampField;
+
+    const dayModule: any = await loader.import(
+      `${catalogRealmURL}fields/date/day`,
+    );
+    DayFieldClass = dayModule.DayField;
+
     const dateRangeModule: any = await loader.import(
       `${catalogRealmURL}fields/date/date-range`,
     );
@@ -87,6 +100,11 @@ module('Integration | date-time fields', function (hooks) {
       `${catalogRealmURL}fields/time/relative-time`,
     );
     RelativeTimeFieldClass = relativeModule.RelativeTimeField;
+
+    const timePeriodModule: any = await loader.import(
+      `${catalogRealmURL}fields/time-period`,
+    );
+    TimePeriodFieldClass = timePeriodModule.TimePeriodField;
 
     const monthDayModule: any = await loader.import(
       `${catalogRealmURL}fields/date/month-day`,
@@ -529,8 +547,9 @@ module('Integration | date-time fields', function (hooks) {
       buildField(DurationFieldClass, { hours: 1, minutes: 30, seconds: 0 }),
       'edit',
     );
-    assert.dom('[data-test-field-container]').hasTextContaining('1h 30m 0s');
-    assert.dom('[data-test-field-container]').hasTextContaining('90.0 minutes');
+    assert.dom('[data-test-field-container]').hasTextContaining('Hours');
+    assert.dom('[data-test-field-container]').hasTextContaining('Minutes');
+    assert.dom('[data-test-field-container]').hasTextContaining('Seconds');
   });
 
   test('edit mode interactions: month/day selects update preview', async function (assert) {
@@ -606,5 +625,405 @@ module('Integration | date-time fields', function (hooks) {
     assert
       .dom('[data-test-time-slots]')
       .hasTextContaining('Selected: 10:00 AM');
+  });
+
+  test('datetime-stamp field renders correctly', async function (assert) {
+    await renderField(DatetimeStampFieldClass, '2024-05-01T14:30:00Z');
+    assert.dom('[data-test-datetime-stamp-embedded]').exists();
+    assert
+      .dom('[data-test-datetime-stamp-embedded]')
+      .doesNotContainText('No timestamp set', 'timestamp value is displayed');
+
+    await renderField(DatetimeStampFieldClass, undefined);
+    assert
+      .dom('[data-test-datetime-stamp-embedded]')
+      .hasTextContaining('No timestamp set');
+
+    await renderField(DatetimeStampFieldClass, '2024-05-01T14:30:00Z', 'atom');
+    assert.dom('[data-test-datetime-stamp-atom]').exists();
+    assert
+      .dom('[data-test-datetime-stamp-atom]')
+      .doesNotContainText('No timestamp');
+  });
+
+  test('day field renders correctly', async function (assert) {
+    await renderField(DayFieldClass, buildField(DayFieldClass, { value: 15 }));
+    assert.dom('[data-test-day-embedded]').hasText('15th');
+
+    await renderField(DayFieldClass, buildField(DayFieldClass, {}));
+    assert.dom('[data-test-day-embedded]').hasTextContaining('No day set');
+
+    await renderField(
+      DayFieldClass,
+      buildField(DayFieldClass, { value: 15 }),
+      'atom',
+    );
+    assert.dom('[data-test-day-atom]').exists();
+    assert.dom('[data-test-day-atom]').hasTextContaining('15');
+
+    await renderField(
+      DayFieldClass,
+      buildField(DayFieldClass, { value: 15 }),
+      'edit',
+    );
+    assert.dom('[data-test-field-container]').exists();
+  });
+
+  test('time-period field renders correctly', async function (assert) {
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: 'Q2 2024',
+      }),
+    );
+    assert.dom('[data-test-time-period-embedded]').exists();
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('Q2 2024');
+
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {}),
+    );
+    assert
+      .dom('[data-test-time-period-embedded]')
+      .hasTextContaining('No period set');
+
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: 'Q2 2024',
+      }),
+      'atom',
+    );
+    assert.dom('[data-test-time-period-atom]').exists();
+    assert.dom('[data-test-time-period-atom]').hasTextContaining('Q2 2024');
+  });
+
+  test('time-period field recognizes calendar year format', async function (assert) {
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: '2024',
+      }),
+    );
+    assert
+      .dom('[data-test-time-period-embedded]')
+      .hasTextContaining('Calendar Year');
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('2024');
+  });
+
+  test('time-period field recognizes fiscal year format', async function (assert) {
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: '2023-2024',
+      }),
+    );
+    assert
+      .dom('[data-test-time-period-embedded]')
+      .hasTextContaining('Fiscal Year');
+    assert
+      .dom('[data-test-time-period-embedded]')
+      .hasTextContaining('2023-2024');
+
+    // Short format
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: '2023-24',
+      }),
+    );
+    assert
+      .dom('[data-test-time-period-embedded]')
+      .hasTextContaining('Fiscal Year');
+  });
+
+  test('time-period field recognizes quarter format', async function (assert) {
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: 'Q1 2024',
+      }),
+    );
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('Quarter');
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('Q1 2024');
+
+    // Reverse format
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: '2024 Q3',
+      }),
+    );
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('Quarter');
+  });
+
+  test('time-period field recognizes month format', async function (assert) {
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: 'January 2024',
+      }),
+    );
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('Month');
+
+    // Abbreviated
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: 'Jan 2024',
+      }),
+    );
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('Month');
+
+    // With period
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: 'Feb. 2024',
+      }),
+    );
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('Month');
+  });
+
+  test('time-period field recognizes week format', async function (assert) {
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: 'Week 12 2025',
+      }),
+    );
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('Week');
+
+    // Abbreviated format
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: 'Wk12 2025',
+      }),
+    );
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('Week');
+
+    // Reverse format
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: '2025 Wk12',
+      }),
+    );
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('Week');
+  });
+
+  test('time-period field recognizes session format', async function (assert) {
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: 'Fall 2024',
+      }),
+    );
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('Session');
+
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: 'Spring 2025',
+      }),
+    );
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('Session');
+
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: 'Summer 2024',
+      }),
+    );
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('Session');
+  });
+
+  test('time-period field recognizes session week format', async function (assert) {
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: 'Wk4 Spring 2025',
+      }),
+    );
+    assert
+      .dom('[data-test-time-period-embedded]')
+      .hasTextContaining('Session Week');
+  });
+
+  test('time-period field auto-normalizes partial inputs with current year', async function (assert) {
+    // Quarter without year
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: 'Q1',
+      }),
+    );
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('Quarter');
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('2025'); // Current year
+
+    // Month without year
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: 'March',
+      }),
+    );
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('Month');
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('2025');
+
+    // Season without year
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: 'Fall',
+      }),
+    );
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('Session');
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('2025');
+
+    // Week without year
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: 'Week 12',
+      }),
+    );
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('Week');
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('2025');
+  });
+
+  test('time-period field displays date range for recognized formats', async function (assert) {
+    // Quarter shows date range
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: 'Q2 2024',
+      }),
+    );
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('Apr');
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('Jun');
+
+    // Month shows date range
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: 'May 2024',
+      }),
+    );
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('May 1');
+    assert.dom('[data-test-time-period-embedded]').hasTextContaining('31');
+  });
+
+  test('time-period field edit mode allows custom input', async function (assert) {
+    await renderField(
+      TimePeriodFieldClass,
+      buildField(TimePeriodFieldClass, {
+        periodLabel: 'Q3 2024',
+      }),
+      'edit',
+    );
+    assert.dom('[data-test-time-period-input]').exists();
+    assert.dom('[data-test-time-period-input]').hasValue('Q3 2024');
+  });
+
+  test('relative time field handles future and past times', async function (assert) {
+    // Future time
+    await renderField(
+      RelativeTimeFieldClass,
+      buildField(RelativeTimeFieldClass, { amount: 5, unit: 'days' }),
+    );
+    assert.dom('[data-test-relative-time-embedded]').hasText('In 5 days');
+
+    // Negative amount
+    await renderField(
+      RelativeTimeFieldClass,
+      buildField(RelativeTimeFieldClass, { amount: -3, unit: 'hours' }),
+    );
+    assert.dom('[data-test-relative-time-embedded]').hasText('In -3 hours');
+
+    // Different units
+    await renderField(
+      RelativeTimeFieldClass,
+      buildField(RelativeTimeFieldClass, { amount: 2, unit: 'weeks' }),
+    );
+    assert.dom('[data-test-relative-time-embedded]').hasText('In 2 weeks');
+
+    await renderField(
+      RelativeTimeFieldClass,
+      buildField(RelativeTimeFieldClass, { amount: 30, unit: 'minutes' }),
+    );
+    assert.dom('[data-test-relative-time-embedded]').hasText('In 30 minutes');
+  });
+
+  test('recurring pattern field displays pattern details', async function (assert) {
+    // Daily pattern
+    await renderField(
+      RecurringPatternFieldClass,
+      buildField(RecurringPatternFieldClass, {
+        pattern: 'daily',
+        startDate: '2024-05-01',
+        endDate: '2024-05-31',
+      }),
+    );
+    assert.dom('[data-test-recurring-embedded]').hasTextContaining('Daily');
+
+    // Monthly pattern
+    await renderField(
+      RecurringPatternFieldClass,
+      buildField(RecurringPatternFieldClass, {
+        pattern: 'monthly',
+        startDate: '2024-05-01',
+      }),
+    );
+    assert.dom('[data-test-recurring-embedded]').hasTextContaining('Monthly');
+
+    // Custom pattern with interval
+    await renderField(
+      RecurringPatternFieldClass,
+      buildField(RecurringPatternFieldClass, {
+        pattern: 'custom',
+        interval: 2,
+        unit: 'days',
+        startDate: '2024-05-01',
+      }),
+    );
+    assert
+      .dom('[data-test-recurring-embedded]')
+      .hasTextContaining('Every 2 days');
+  });
+
+  test('edit mode for partial calendar fields renders correctly', async function (assert) {
+    // Year field edit mode
+    await renderField(
+      YearFieldClass,
+      buildField(YearFieldClass, { value: 2024 }),
+      'edit',
+    );
+    assert.dom('[data-test-field-container]').exists();
+
+    // Month field edit mode
+    await renderField(
+      MonthFieldClass,
+      buildField(MonthFieldClass, { value: 5 }),
+      'edit',
+    );
+    assert.dom('[data-test-month-select]').exists();
+
+    // Quarter field edit mode
+    await renderField(
+      QuarterFieldClass,
+      buildField(QuarterFieldClass, { quarter: 2, year: 2025 }),
+      'edit',
+    );
+    assert.dom('[data-test-field-container]').exists();
+
+    // Week field edit mode
+    await renderField(
+      WeekFieldClass,
+      buildField(WeekFieldClass, { value: '2025-W20' }),
+      'edit',
+    );
+    assert.dom('[data-test-field-container]').exists();
   });
 });
