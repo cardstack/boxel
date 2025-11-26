@@ -1158,6 +1158,7 @@ module(basename(__filename), function () {
         let definitionLookup = new CachingDefinitionLookup(
           dbAdapter,
           prerenderer,
+          virtualNetwork,
         );
         virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 

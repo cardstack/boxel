@@ -16,6 +16,7 @@ import {
   type RealmInfo,
 } from '@cardstack/runtime-common';
 import { CachingDefinitionLookup } from '@cardstack/runtime-common/definition-lookup';
+import { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
 
 import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 import type LocalIndexer from '@cardstack/host/services/local-indexer';
@@ -56,10 +57,12 @@ module('Unit | index-writer', function (hooks) {
     let owner = (getContext() as TestContext).owner;
     await makeRenderer();
     let localIndexer = owner.lookup('service:local-indexer') as LocalIndexer;
+    let virtualNetwork = new VirtualNetwork();
 
     let definitionLookup = new CachingDefinitionLookup(
       adapter,
       localIndexer.prerenderer,
+      virtualNetwork,
     );
 
     definitionLookup.registerRealm({

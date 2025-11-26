@@ -778,7 +778,11 @@ async function setupTestRealm({
     if (!definitionLookup) {
       owner.register(
         'definition-lookup:main',
-        new CachingDefinitionLookup(dbAdapter, localIndexer.prerenderer),
+        new CachingDefinitionLookup(
+          dbAdapter,
+          localIndexer.prerenderer,
+          virtualNetwork,
+        ),
         {
           instantiate: false,
         },

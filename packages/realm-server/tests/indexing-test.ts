@@ -67,6 +67,7 @@ module(basename(__filename), function () {
         let definitionLookup = new CachingDefinitionLookup(
           dbAdapter,
           prerenderer,
+          virtualNetwork,
         );
         dir = dirSync().name;
         ({ realm, adapter } = await createRealm({

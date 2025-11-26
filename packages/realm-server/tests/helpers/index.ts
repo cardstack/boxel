@@ -438,7 +438,11 @@ export async function runBaseRealmServer(
   }
 
   let prerenderer = await getTestPrerenderer();
-  let definitionLookup = new CachingDefinitionLookup(dbAdapter, prerenderer);
+  let definitionLookup = new CachingDefinitionLookup(
+    dbAdapter,
+    prerenderer,
+    virtualNetwork,
+  );
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue: runner,
@@ -533,7 +537,11 @@ export async function runTestRealmServer({
     (globalThis as any).__useHeadlessChromePrerender = true;
   }
   let prerenderer = await getTestPrerenderer();
-  let definitionLookup = new CachingDefinitionLookup(dbAdapter, prerenderer);
+  let definitionLookup = new CachingDefinitionLookup(
+    dbAdapter,
+    prerenderer,
+    virtualNetwork,
+  );
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue: runner,

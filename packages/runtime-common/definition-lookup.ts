@@ -9,6 +9,7 @@ import {
   type Realm,
   type ResolvedCodeRef,
 } from './index';
+import type { VirtualNetwork } from './virtual-network';
 
 const MODULES_TABLE = 'modules';
 const modulesTableCoerceTypes: TypeCoercion = Object.freeze({
@@ -65,11 +66,17 @@ interface LookupContext {
 export class CachingDefinitionLookup implements DefinitionLookup {
   #dbAdapter: DBAdapter;
   #prerenderer: Prerenderer;
+  #fetch: typeof fetch;
   #realms: LocalRealm[] = [];
 
-  constructor(dbAdapter: DBAdapter, prerenderer: Prerenderer) {
+  constructor(
+    dbAdapter: DBAdapter,
+    prerenderer: Prerenderer,
+    virtualNetwork: VirtualNetwork,
+  ) {
     this.#dbAdapter = dbAdapter;
     this.#prerenderer = prerenderer;
+    this.#fetch = virtualNetwork.fetch;
   }
 
   async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
@@ -221,7 +228,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     resolvedRealmURL?: string;
   } | null> {
     try {
-      let response = await fetch(moduleURL, {
+      let response = await this.#fetch(moduleURL, {
         method: 'HEAD',
         headers,
       });

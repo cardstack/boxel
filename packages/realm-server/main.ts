@@ -224,7 +224,11 @@ let autoMigrate = migrateDB || undefined;
   });
   let prerenderer = createRemotePrerenderer(prerendererUrl);
 
-  let definitionLookup = new CachingDefinitionLookup(dbAdapter, prerenderer);
+  let definitionLookup = new CachingDefinitionLookup(
+    dbAdapter,
+    prerenderer,
+    virtualNetwork,
+  );
 
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];

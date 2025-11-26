@@ -2,6 +2,7 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import {
   CachingDefinitionLookup,
+  VirtualNetwork,
   type ModulePrerenderArgs,
   type Prerenderer,
 } from '@cardstack/runtime-common';
@@ -9,6 +10,7 @@ import {
   matrixURL,
   setupBaseRealmServer,
   setupPermissionedRealms,
+  createVirtualNetwork,
 } from './helpers';
 import {} from '../prerender/prerenderer';
 import type { PgAdapter } from '@cardstack/postgres/pg-adapter';
@@ -22,11 +24,13 @@ module(basename(__filename), function () {
     let mockRemotePrerenderer: Prerenderer;
     let dbAdapter: PgAdapter;
     let prerenderModuleCalls: number = 0;
+    let virtualNetwork: VirtualNetwork;
 
     hooks.beforeEach(async () => {
       prerenderModuleCalls = 0;
     });
     hooks.before(async () => {
+      virtualNetwork = createVirtualNetwork();
       mockRemotePrerenderer = {
         async prerenderCard() {
           throw new Error('Not implemented in mock');
@@ -74,6 +78,7 @@ module(basename(__filename), function () {
       definitionLookup = new CachingDefinitionLookup(
         dbAdapter,
         mockRemotePrerenderer,
+        virtualNetwork,
       );
       definitionLookup.registerRealm({
         url: realmURL,
@@ -135,6 +140,7 @@ module(basename(__filename), function () {
         definitionLookup = new CachingDefinitionLookup(
           dbAdapter,
           mockRemotePrerenderer,
+          virtualNetwork,
         );
         definitionLookup.registerRealm({
           url: realmURL,
@@ -223,6 +229,7 @@ module(basename(__filename), function () {
       definitionLookup = new CachingDefinitionLookup(
         dbAdapter,
         mockRemotePrerenderer,
+        virtualNetwork,
       );
       definitionLookup.registerRealm({
         url: realmURL,
