@@ -59,9 +59,6 @@ module(basename(__filename), function () {
 
     hooks.before(function () {
       QUnit.config.testTimeout = 60000;
-    });
-
-    hooks.before(function () {
       draining = false;
       let built = buildPrerenderApp(realmSecretSeed, {
         serverURL: 'http://127.0.0.1:4221',
@@ -73,9 +70,6 @@ module(basename(__filename), function () {
 
     hooks.after(async function () {
       await prerenderer.stop();
-    });
-
-    hooks.after(function () {
       QUnit.config.testTimeout = originalTestTimeout;
     });
 
