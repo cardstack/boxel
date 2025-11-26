@@ -6,6 +6,7 @@ import {
   visit,
   settled,
 } from '@ember/test-helpers';
+import { buildWaiter } from '@ember/test-waiters';
 import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -405,6 +406,8 @@ async function makeRenderer() {
   );
 }
 
+const indexerWaiter = buildWaiter('local-indexer');
+
 class MockLocalIndexer extends Service {
   @tracked renderError: string | undefined;
   @tracked prerenderStatus: 'ready' | 'loading' | 'unusable' | undefined;
@@ -443,8 +446,8 @@ class MockLocalIndexer extends Service {
     this.#adapter = adapter;
     this.#indexWriter = indexWriter;
     await registerRunner(
-      this.#fromScratch.bind(this),
-      this.#incremental.bind(this),
+      this.wrapIndexRun(this.#fromScratch.bind(this)),
+      this.wrapIndexRun(this.#incremental.bind(this)),
     );
   }
   get adapter() {
@@ -470,6 +473,20 @@ class MockLocalIndexer extends Service {
   }
   setRenderError(error: string) {
     this.renderError = error;
+  }
+
+  private wrapIndexRun<Args, Result>(
+    fn: (args: Args) => Promise<Result>,
+  ): (args: Args) => Promise<Result> {
+    return async (args: Args) => {
+      let token = indexerWaiter.beginAsync();
+
+      try {
+        return await fn(args);
+      } finally {
+        indexerWaiter.endAsync(token);
+      }
+    };
   }
 }
 
