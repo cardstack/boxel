@@ -407,6 +407,7 @@ async function makeRenderer() {
 }
 
 const indexerWaiter = buildWaiter('local-indexer');
+const setupRealmWaiter = buildWaiter('setup-test-realm');
 
 class MockLocalIndexer extends Service {
   @tracked renderError: string | undefined;
@@ -748,6 +749,8 @@ async function setupTestRealm({
     '__useHeadlessChromePrerender',
   );
   let previousHeadlessFlag = (globalThis as any).__useHeadlessChromePrerender;
+  let setupRealmWaiterToken = setupRealmWaiter.beginAsync();
+
   // default to all tests using headless chrome
   if (usePrerenderer) {
     (globalThis as any).__useHeadlessChromePrerender = true;
@@ -840,6 +843,8 @@ async function setupTestRealm({
 
     return { realm, adapter };
   } finally {
+    setupRealmWaiter.endAsync(setupRealmWaiterToken);
+
     if (hadHeadlessFlag) {
       (globalThis as any).__useHeadlessChromePrerender = previousHeadlessFlag;
     } else {
