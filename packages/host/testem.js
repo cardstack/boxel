@@ -44,7 +44,9 @@ const config = {
 if (chromeHttpCacheDir) {
   fs.mkdirSync(chromeHttpCacheDir, { recursive: true });
   fs.mkdirSync(path.join(chromeHttpCacheDir, 'profile'), { recursive: true });
-  fs.mkdirSync(path.join(chromeHttpCacheDir, 'disk-cache'), { recursive: true });
+  fs.mkdirSync(path.join(chromeHttpCacheDir, 'disk-cache'), {
+    recursive: true,
+  });
 }
 
 if (process.env.CI) {

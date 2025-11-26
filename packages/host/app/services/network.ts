@@ -19,6 +19,9 @@ import type RealmService from './realm';
 import type ResetService from './reset';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
+const cacheableExternalHosts = new Set(
+  (config.cacheableExternalHosts || []).map((host) => host.toLowerCase()),
+);
 
 function getNativeFetch(): typeof fetch {
   if (isFastBoot) {
@@ -77,7 +80,9 @@ export default class NetworkService extends Service {
   }
 
   private makeVirtualNetwork() {
-    let virtualNetwork = new VirtualNetwork(getNativeFetch());
+    let virtualNetwork = new VirtualNetwork(
+      buildCacheAwareFetch(getNativeFetch()),
+    );
     if (!this.fastboot.isFastBoot) {
       let resolvedBaseRealmURL = new URL(
         withTrailingSlash(config.resolvedBaseRealmURL),
@@ -111,4 +116,28 @@ declare module '@ember/service' {
 
 function withTrailingSlash(url: string): string {
   return url.endsWith('/') ? url : `${url}/`;
+}
+
+function buildCacheAwareFetch(nativeFetch: typeof fetch): typeof fetch {
+  if (!cacheableExternalHosts.size) {
+    return nativeFetch;
+  }
+
+  return async (input: RequestInfo | URL, init?: RequestInit) => {
+    let request =
+      input instanceof Request ? input : new Request(input as RequestInfo, init);
+
+    let defaultBase =
+      typeof window !== 'undefined' && window.location?.href
+        ? window.location.href
+        : 'http://localhost';
+    let url = new URL(request.url, defaultBase);
+    let host = url.host.toLowerCase();
+
+    if (host && !cacheableExternalHosts.has(host)) {
+      request = new Request(request, { cache: 'no-store' });
+    }
+
+    return nativeFetch(request);
+  };
 }
