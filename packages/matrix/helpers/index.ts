@@ -530,7 +530,27 @@ export async function sendMessage(
   // can we check it's higher than before?
   await page.waitForSelector(`[data-test-room-settled]`);
   await page.waitForSelector(`[data-test-can-send-msg]`);
-  await page.locator('[data-test-send-message-btn]').click();
+  let sendButton = page.locator('[data-test-send-message-btn]');
+  let messages = page.locator('[data-test-message-idx]');
+  let existingMessageCount = await messages.count();
+
+  await expect(sendButton).toBeEnabled();
+  await sendButton.click();
+
+  let newMessage = page.locator(
+    `[data-test-message-idx="${existingMessageCount}"]`,
+  );
+
+  await expect(messages).toHaveCount(existingMessageCount + 1, {
+    timeout: 15_000,
+  });
+  await expect(newMessage).toHaveAttribute(
+    'data-test-ai-assistant-message-pending',
+    'false',
+    { timeout: 30_000 },
+  );
+  await expect(newMessage.locator('[data-test-card-error]')).toHaveCount(0);
+  await expect(sendButton).toBeEnabled();
 }
 
 export async function assertMessages(
