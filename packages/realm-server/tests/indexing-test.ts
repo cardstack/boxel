@@ -93,6 +93,13 @@ module(basename(__filename), function () {
                   <h1><@fields.firstName /> \${{@model.hourlyRate}}</h1>
                 </template>
               }
+
+              static head = class Head extends Component<typeof this> {
+                <template>
+                  <title>{{@model.firstName}}!</title>
+                </template>
+              }
+
               static embedded = class Embedded extends Component<typeof this> {
                 <template>
                   <h1> Embedded Card Person: <@fields.firstName/></h1>
@@ -471,6 +478,13 @@ module(basename(__filename), function () {
           cleanWhiteSpace(`<h1> Mango $</h1>`),
           'pre-rendered isolated format html is correct',
         );
+
+        assert.strictEqual(
+          trimCardContainer(stripScopedCSSAttributes(entry!.headHtml!)),
+          cleanWhiteSpace(`<title>Mango!</title>`),
+          'pre-rendered head format html is correct',
+        );
+
         assert.strictEqual(
           trimCardContainer(
             stripScopedCSSAttributes(
