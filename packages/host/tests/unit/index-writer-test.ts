@@ -957,6 +957,7 @@ module('Unit | index-writer', function (hooks) {
         error_doc: {
           message: 'test error',
           status: 500,
+          id: `${testRealmURL}1.json`,
           additionalErrors: [],
         },
         search_doc: { name: 'Mango' },
@@ -1020,6 +1021,7 @@ module('Unit | index-writer', function (hooks) {
         error_doc: {
           message: 'test error',
           status: 500,
+          id: `${testRealmURL}1.json`,
           additionalErrors: [],
         },
         search_doc: null,
@@ -1040,6 +1042,48 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  test('normalizes error doc id and deps', async function (assert) {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [],
+    );
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    await batch.updateEntry(new URL(`${testRealmURL}nested/1.json`), {
+      type: 'error',
+      error: {
+        id: null,
+        message: 'test error',
+        status: 404,
+        deps: ['../headless-skill-set', `${testRealmURL}other-card`],
+        additionalErrors: null,
+      },
+    });
+    await batch.done();
+
+    let [{ error_doc: errorDoc, deps }] = (await adapter.execute(
+      'SELECT error_doc, deps FROM boxel_index WHERE realm_version = 2 ORDER BY url COLLATE "POSIX"',
+      { coerceTypes },
+    )) as Pick<BoxelIndexTable, 'error_doc' | 'deps'>[];
+
+    assert.strictEqual(
+      errorDoc?.id,
+      `${testRealmURL}nested/1.json`,
+      'id defaults to entry url',
+    );
+    assert.deepEqual(
+      errorDoc?.deps,
+      [`${testRealmURL}headless-skill-set`, `${testRealmURL}other-card`],
+
+      'error doc deps are canonicalized',
+    );
+    assert.deepEqual(
+      deps,
+      [`${testRealmURL}headless-skill-set`, `${testRealmURL}other-card`],
+      'entry deps include normalized error deps',
+    );
+  });
+
   test('can get an error doc', async function (assert) {
     await setupIndex(adapter, [
       {
@@ -1050,6 +1094,7 @@ module('Unit | index-writer', function (hooks) {
         error_doc: {
           message: 'test error',
           status: 500,
+          id: `${testRealmURL}1.json`,
           additionalErrors: [],
         },
       },
@@ -1063,6 +1108,7 @@ module('Unit | index-writer', function (hooks) {
         error: {
           message: 'test error',
           status: 500,
+          id: `${testRealmURL}1.json`,
           additionalErrors: [],
         },
         canonicalURL: `${testRealmURL}1.json`,
@@ -1588,6 +1634,7 @@ module('Unit | index-writer', function (hooks) {
         error_doc: {
           message: 'test error',
           status: 500,
+          id: `${testRealmURL}person.gts`,
           additionalErrors: [],
         },
       },
@@ -1601,6 +1648,7 @@ module('Unit | index-writer', function (hooks) {
         error: {
           message: 'test error',
           status: 500,
+          id: `${testRealmURL}person.gts`,
           additionalErrors: [],
         },
       });

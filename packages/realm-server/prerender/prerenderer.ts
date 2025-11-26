@@ -147,7 +147,7 @@ export class Prerenderer {
           error: {
             status: 500,
             title: 'Render capture parse error',
-            message: `Error result could not be during prerendering: "${capture.value}"`,
+            message: `Error during prerendering: "${capture.value}"`,
             additionalErrors: null,
           },
         };
@@ -160,221 +160,6 @@ export class Prerenderer {
       }
     }
     return undefined;
-  }
-
-  async #collectTimeoutDiagnostics(
-    page: Page,
-    fallbackHtml?: string | null,
-  ): Promise<{
-    hasContainer: boolean;
-    status: string | null;
-    hasError: boolean;
-    docsInFlight: number | null;
-    childCount: number;
-    html: string | null;
-  }> {
-    let [domInfo, docsInFlight] = await Promise.all([
-      page.evaluate(() => {
-        let container = document.querySelector(
-          '[data-prerender]',
-        ) as HTMLElement | null;
-        let errorElement = document.querySelector(
-          '[data-prerender-error]',
-        ) as HTMLElement | null;
-        let errorText = (
-          errorElement?.textContent ??
-          errorElement?.innerHTML ??
-          ''
-        ).trim();
-        return {
-          hasContainer: Boolean(container),
-          status: container?.dataset.prerenderStatus ?? null,
-          childCount: container?.children.length ?? 0,
-          hasError: Boolean(errorElement && errorText.length > 0),
-          html: container?.outerHTML ?? errorElement?.outerHTML ?? null,
-        };
-      }),
-      page
-        .evaluate(() => {
-          try {
-            return (globalThis as any).__docsInFlight();
-          } catch {
-            return null;
-          }
-        })
-        .catch(() => null),
-    ]);
-    return {
-      hasContainer: domInfo.hasContainer,
-      status: domInfo.status,
-      hasError: domInfo.hasError,
-      docsInFlight: typeof docsInFlight === 'number' ? docsInFlight : null,
-      childCount: domInfo.childCount,
-      html: domInfo.html ?? fallbackHtml ?? null,
-    };
-  }
-
-  async #captureDomWithoutReady(
-    page: Page,
-    capture: 'textContent' | 'innerHTML' | 'outerHTML',
-    captureOptions: CaptureOptions,
-  ): Promise<RenderCapture | null> {
-    return await page
-      .evaluate(
-        (
-          captureKind: 'textContent' | 'innerHTML' | 'outerHTML',
-          expectedId: string | undefined,
-          expectedNonce: string | undefined,
-        ) => {
-          let container = document.querySelector(
-            '[data-prerender]',
-          ) as HTMLElement | null;
-          if (!container) {
-            return null;
-          }
-          let errorElement = container.querySelector(
-            '[data-prerender-error]',
-          ) as HTMLElement | null;
-          let errorText = (
-            errorElement?.textContent ??
-            errorElement?.innerHTML ??
-            ''
-          ).trim();
-          if (errorElement && errorText.length > 0) {
-            return null;
-          }
-          let resolved: {
-            textContent: string;
-            innerHTML: string;
-            outerHTML: string;
-          };
-          if (container.children.length > 0) {
-            resolved = container.children[0] as HTMLElement & {
-              textContent: string;
-              innerHTML: string;
-              outerHTML: string;
-            };
-          } else {
-            resolved = {
-              textContent: container.textContent ?? '',
-              innerHTML: container.innerHTML ?? '',
-              outerHTML: container.outerHTML ?? '',
-            };
-          }
-          return {
-            status: 'ready' as const,
-            value: resolved[captureKind] ?? '',
-            alive:
-              container.dataset.emberAlive === 'true' ||
-              container.dataset.emberAlive === 'false'
-                ? (container.dataset.emberAlive as 'true' | 'false')
-                : undefined,
-            id: container.dataset.prerenderId ?? expectedId,
-            nonce: container.dataset.prerenderNonce ?? expectedNonce,
-            timedOut: true,
-          } satisfies RenderCapture;
-        },
-        capture,
-        captureOptions.expectedId,
-        captureOptions.expectedNonce,
-      )
-      .catch(() => null);
-  }
-
-  async #captureSerializedDom(
-    page: Page,
-    html: string,
-    capture: 'textContent' | 'innerHTML' | 'outerHTML',
-    opts: CaptureOptions,
-  ): Promise<RenderCapture | null> {
-    if (!html) {
-      return null;
-    }
-    return await page
-      .evaluate(
-        (
-          html: string,
-          captureKind: 'textContent' | 'innerHTML' | 'outerHTML',
-          expectedId: string | undefined,
-          expectedNonce: string | undefined,
-        ) => {
-          let template = document.createElement('template');
-          template.innerHTML = html;
-          let container = template.content.querySelector(
-            '[data-prerender]',
-          ) as HTMLElement | null;
-          let errorElement = template.content.querySelector(
-            '[data-prerender-error]',
-          ) as HTMLElement | null;
-          const errorText = (
-            errorElement?.textContent ??
-            errorElement?.innerHTML ??
-            ''
-          ).trim();
-          if (!container && errorElement && errorText.length > 0) {
-            let raw = errorElement.textContent ?? errorElement.innerHTML ?? '';
-            let start = raw.indexOf('{');
-            let end = raw.lastIndexOf('}');
-            let json =
-              start !== -1 && end !== -1 && end > start
-                ? raw.slice(start, end + 1)
-                : raw;
-            return {
-              status: 'error',
-              value: json.trim(),
-              id: errorElement.getAttribute('data-prerender-id') ?? undefined,
-              nonce:
-                errorElement.getAttribute('data-prerender-nonce') ?? undefined,
-            } as RenderCapture;
-          }
-          if (!container) {
-            return null;
-          }
-          if (errorElement && errorText.length > 0) {
-            return null;
-          }
-          let firstChild = container.firstElementChild as HTMLElement | null;
-          let value: string;
-          if (firstChild) {
-            if (captureKind === 'textContent') {
-              value = firstChild.textContent ?? '';
-            } else if (captureKind === 'innerHTML') {
-              value = firstChild.innerHTML ?? '';
-            } else {
-              value = firstChild.outerHTML ?? '';
-            }
-          } else {
-            if (captureKind === 'textContent') {
-              value = container.textContent ?? '';
-            } else if (captureKind === 'innerHTML') {
-              value = container.innerHTML ?? '';
-            } else {
-              value = container.outerHTML ?? '';
-            }
-          }
-          let idAttr =
-            container.getAttribute('data-prerender-id') ?? expectedId;
-          let nonceAttr =
-            container.getAttribute('data-prerender-nonce') ?? expectedNonce;
-          let aliveAttr = container.getAttribute('data-ember-alive');
-          return {
-            status: 'ready',
-            value,
-            alive:
-              aliveAttr === 'true' || aliveAttr === 'false'
-                ? (aliveAttr as 'true' | 'false')
-                : undefined,
-            id: idAttr ?? undefined,
-            nonce: nonceAttr ?? undefined,
-            timedOut: true,
-          } as RenderCapture;
-        },
-        html,
-        capture,
-        opts.expectedId,
-        opts.expectedNonce,
-      )
-      .catch(() => null);
   }
 
   #attachPageConsole(page: Page, realm: string, pageId: string): void {
@@ -842,16 +627,6 @@ export class Prerenderer {
         poolInfo.timedOut = true;
       }
     };
-    let pendingEviction: RenderError | undefined;
-    const finalizePendingEviction = async () => {
-      if (!pendingEviction) {
-        return;
-      }
-      if (await this.#maybeEvict(realm, 'timeout recovery', pendingEviction)) {
-        poolInfo.evicted = true;
-      }
-      pendingEviction = undefined;
-    };
 
     if (!reused) {
       page.evaluateOnNewDocument((auth) => {
@@ -877,6 +652,10 @@ export class Prerenderer {
       simulateTimeoutMs: opts?.simulateTimeoutMs,
     };
 
+    log.debug(
+      `manually visit prerendered url ${url} at: ${boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}/html/isolated/0 with localStorage boxel-session=${auth}`,
+    );
+
     // We need to render the isolated HTML view first, as the template will pull linked fields.
     let result = await withTimeout(
       page,
@@ -900,46 +679,6 @@ export class Prerenderer {
       },
       opts?.timeoutMs,
     );
-    let recoveredFromTimeout = false;
-    let timeoutErrorForEviction: RenderError | undefined;
-    let shouldEvictAfterTimeout = true;
-    if (isRenderError(result) && result.error.title === 'Render timeout') {
-      timeoutErrorForEviction = result;
-      let capturedDom = (result as any)?.capturedDom as string | undefined;
-      let diagnostics = await this.#collectTimeoutDiagnostics(
-        page,
-        capturedDom,
-      );
-      const docsSettled =
-        diagnostics.docsInFlight !== null && diagnostics.docsInFlight === 0;
-      if (!diagnostics.hasError && docsSettled) {
-        let recovered: RenderCapture | null = null;
-        if (diagnostics.hasContainer) {
-          recovered = await this.#captureDomWithoutReady(
-            page,
-            'innerHTML',
-            captureOptions,
-          );
-        }
-        if (!recovered && diagnostics.html) {
-          recovered = await this.#captureSerializedDom(
-            page,
-            diagnostics.html,
-            'innerHTML',
-            captureOptions,
-          );
-        }
-        if (recovered) {
-          recoveredFromTimeout = true;
-          result = recovered;
-          shouldEvictAfterTimeout = false;
-          captureOptions.simulateTimeoutMs = undefined;
-          log.warn(
-            `Recovered prerender output for ${url} after timeout; proceeding with captured DOM`,
-          );
-        }
-      }
-    }
     let isolatedHTML: string | null = null;
     if (isRenderError(result)) {
       error = result;
@@ -957,14 +696,6 @@ export class Prerenderer {
       let capture = result as RenderCapture;
       if (capture.status === 'ready') {
         isolatedHTML = capture.value;
-        if (recoveredFromTimeout && timeoutErrorForEviction) {
-          markTimeout(timeoutErrorForEviction);
-          poolInfo.timedOut = true;
-          capture.timedOut = true;
-          if (shouldEvictAfterTimeout) {
-            pendingEviction = pendingEviction ?? timeoutErrorForEviction;
-          }
-        }
       } else {
         let capErr = this.#captureToError(capture);
         if (!error && capErr) {
@@ -980,7 +711,6 @@ export class Prerenderer {
     }
 
     if (shortCircuit) {
-      await finalizePendingEviction();
       let meta: PrerenderMeta = {
         serialized: null,
         searchDoc: null,
@@ -1114,7 +844,6 @@ export class Prerenderer {
       embeddedHTML,
       fittedHTML,
     };
-    await finalizePendingEviction();
     return {
       response,
       timings: { launchMs, renderMs: Date.now() - renderStart },
