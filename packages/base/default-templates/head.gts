@@ -9,22 +9,20 @@ export default class DefaultHeadTemplate extends GlimmerComponent<{
 }> {
   get title() {
     return (
-      this.args.model?.title ??
-      this.args.cardOrField.displayName ??
-      'Card'
+      this.args.model?.title ?? this.args.cardOrField.displayName ?? 'Card'
     );
   }
 
   get description(): string | undefined {
-    return this.args.model?.description ?? undefined;
+    return this.args.model?.description;
   }
 
   get image(): string | undefined {
-    return this.args.model?.thumbnailURL ?? undefined;
+    return this.args.model?.thumbnailURL;
   }
 
   get url(): string | undefined {
-    return this.args.model?.id ?? undefined;
+    return this.args.model?.id;
   }
 
   <template>
