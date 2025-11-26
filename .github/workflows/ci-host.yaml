@@ -37,7 +37,7 @@ jobs:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
     env:
-      CHROME_HTTP_CACHE_DIR: ${{ runner.temp }}/chrome-http-cache/host/shard-${{ matrix.shardIndex }}
+      CHROME_HTTP_CACHE_DIR: ${{ github.workspace }}/.cache/chrome-http-cache/host/shard-${{ matrix.shardIndex }}
       CHROME_HTTP_CACHE_ALLOWLIST: esm.run,esm.sh,cdn.jsdelivr.net
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
