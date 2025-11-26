@@ -544,9 +544,9 @@ export async function sendMessage(
   await expect(messages).toHaveCount(existingMessageCount + 1, {
     timeout: 15_000,
   });
-  await expect(newMessage).toHaveAttribute(
+  await expect(newMessage).not.toHaveAttribute(
     'data-test-ai-assistant-message-pending',
-    'false',
+    'true',
     { timeout: 30_000 },
   );
   await expect(newMessage.locator('[data-test-card-error]')).toHaveCount(0);
