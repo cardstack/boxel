@@ -17,6 +17,7 @@ import {
   PUBLISHED_DIRECTORY_NAME,
   fetchSessionRoom,
   REALM_SERVER_REALM,
+  userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import {
   ensureDirSync,
@@ -458,7 +459,14 @@ export class RealmServer {
       },
     });
 
-    let realm = this.createAndMountRealm(realmPath, url, username);
+    let realm = this.createAndMountRealm(
+      realmPath,
+      url,
+      username,
+      undefined,
+      undefined,
+      userInitiatedPriority,
+    );
     await realm.ensureSessionRoom(ownerUserId);
 
     return {
@@ -473,11 +481,22 @@ export class RealmServer {
     username: string,
     copiedFromRealm?: URL,
     enableFileWatcher?: boolean,
+    fromScratchIndexPriority?: number,
   ) => {
     let adapter = new NodeAdapter(
       resolve(path),
       enableFileWatcher ?? this.enableFileWatcher,
     );
+    const realmOptions: {
+      copiedFromRealm?: URL;
+      fromScratchIndexPriority?: number;
+    } = {};
+    if (copiedFromRealm) {
+      realmOptions.copiedFromRealm = copiedFromRealm;
+    }
+    if (fromScratchIndexPriority !== undefined) {
+      realmOptions.fromScratchIndexPriority = fromScratchIndexPriority;
+    }
     let realm = new Realm(
       {
         url,
@@ -493,7 +512,7 @@ export class RealmServer {
         realmServerMatrixClient: this.matrixClient,
         definitionLookup: this.definitionLookup,
       },
-      copiedFromRealm ? { copiedFromRealm } : undefined,
+      Object.keys(realmOptions).length ? realmOptions : undefined,
     );
     this.realms.push(realm);
     this.virtualNetwork.mount(realm.handle);

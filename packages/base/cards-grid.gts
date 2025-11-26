@@ -98,33 +98,12 @@ class Isolated extends Component<typeof CardsGrid> {
 
   private cardTypeFilters: FilterOption[] = new TrackedArray();
   private highlightsCards: BoxComponent[] = new TrackedArray();
-  private filterOptions: FilterOption[] = [
-    {
-      displayName: 'Highlights',
-      icon: HighlightIcon,
-      cards: this.highlightsCards,
-    },
-    {
-      displayName: 'All Cards',
-      icon: AllCardsIcon,
-      query: {
-        filter: {
-          not: {
-            eq: {
-              _cardType: 'Cards Grid',
-            },
-          },
-        },
-      },
-      filters: this.cardTypeFilters,
-      isExpanded: true,
-    },
-  ];
+  private filterOptions: FilterOption[] = [];
   private viewOptions: ViewOption[] = new TrackedArray([StripView, GridView]);
   private sortOptions: SortOption[] = new TrackedArray(SORT_OPTIONS);
 
   @tracked private activeViewId: ViewOption['id'] = this.viewOptions[1].id;
-  @tracked private activeFilter: FilterOption = this.filterOptions[0];
+  @tracked private activeFilter!: FilterOption;
   @tracked private activeSort: SortOption = this.sortOptions[0];
 
   #unsubscribeFromRealm: (() => void) | undefined;
@@ -132,6 +111,8 @@ class Isolated extends Component<typeof CardsGrid> {
 
   constructor(owner: any, args: any) {
     super(owner, args);
+    this.setupFilterOptions();
+    this.activeFilter = this.filterOptions[0];
     this.loadHighlightsCards.perform();
     registerDestructor(this, () => this.teardownRealmSubscription());
   }
@@ -156,6 +137,45 @@ class Isolated extends Component<typeof CardsGrid> {
 
   private get primaryRealm(): string | undefined {
     return this.realms[0];
+  }
+
+  private get isPersonalRealm(): boolean {
+    let realmHref = this.args.model[realmURL]?.href;
+    return realmHref?.includes('/personal/') ?? false;
+  }
+
+  private get highlightFilter(): FilterOption {
+    return {
+      displayName: 'Highlights',
+      icon: HighlightIcon,
+      cards: this.highlightsCards,
+    };
+  }
+
+  private get allCardsFilter(): FilterOption {
+    return {
+      displayName: 'All Cards',
+      icon: AllCardsIcon,
+      query: {
+        filter: {
+          not: {
+            eq: {
+              _cardType: 'Cards Grid',
+            },
+          },
+        },
+      },
+      filters: this.cardTypeFilters,
+      isExpanded: true,
+    };
+  }
+
+  private setupFilterOptions() {
+    this.filterOptions.splice(0, this.filterOptions.length);
+    if (this.isPersonalRealm) {
+      this.filterOptions.push(this.highlightFilter);
+    }
+    this.filterOptions.push(this.allCardsFilter);
   }
 
   private teardownRealmSubscription() {

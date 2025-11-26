@@ -49,6 +49,7 @@ import {
   type LintResult,
   codeRefWithAbsoluteURL,
   userInitiatedPriority,
+  systemInitiatedPriority,
   userIdFromUsername,
   isCardDocumentString,
   isBrowserTestEnv,
@@ -285,6 +286,7 @@ interface Options {
   disableModuleCaching?: true;
   copiedFromRealm?: URL;
   fullIndexOnStartup?: true;
+  fromScratchIndexPriority?: number;
 }
 
 interface UpdateItem {
@@ -315,6 +317,7 @@ export class Realm {
   #realmSecretSeed: string;
   #disableModuleCaching = false;
   #fullIndexOnStartup = false;
+  #fromScratchIndexPriority = systemInitiatedPriority;
   #realmServerMatrixUserId: string;
   #definitionLookup: DefinitionLookup;
   #copiedFromRealm: URL | undefined;
@@ -376,6 +379,8 @@ export class Realm {
     this.#adapter = adapter;
     this.#queue = queue;
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
+    this.#fromScratchIndexPriority =
+      opts?.fromScratchIndexPriority ?? systemInitiatedPriority;
     this.#realmServerMatrixClient = realmServerMatrixClient;
     this.#realmServerMatrixUserId = userIdFromUsername(
       realmServerMatrixClient.username,
@@ -598,8 +603,8 @@ export class Realm {
     await this.#startedUp.promise;
   }
 
-  async fullIndex() {
-    await this.realmIndexUpdater.fullIndex();
+  async fullIndex(priority?: number) {
+    await this.realmIndexUpdater.fullIndex(priority);
   }
 
   async flushUpdateEvents() {
@@ -1147,7 +1152,9 @@ export class Realm {
     } else {
       let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
       if (isNewIndex || this.#fullIndexOnStartup) {
-        let promise = this.#realmIndexUpdater.fullIndex();
+        let promise = this.#realmIndexUpdater.fullIndex(
+          this.#fromScratchIndexPriority,
+        );
         if (isNewIndex) {
           // we only await the full indexing at boot if this is a brand new index
           await promise;

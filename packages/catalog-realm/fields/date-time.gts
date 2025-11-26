@@ -95,9 +95,6 @@ export class DatetimeField extends BaseDatetimeField {
         .datetime-embedded {
           display: flex;
           align-items: center;
-          padding: 0.5rem;
-          font-size: 0.875rem;
-          color: var(--foreground, #1a1a1a);
         }
 
         .datetime-value {
@@ -117,9 +114,12 @@ export class DatetimeField extends BaseDatetimeField {
 
       try {
         const date = new Date(String(this.args.model));
+        const preset = this.args.configuration?.preset || 'short';
+        const customFormat = this.args.configuration?.format;
         return formatDateTime(date, {
           kind: 'datetime',
-          preset: 'short',
+          preset: customFormat ? undefined : preset,
+          format: customFormat,
           fallback: 'Invalid date',
         });
       } catch {

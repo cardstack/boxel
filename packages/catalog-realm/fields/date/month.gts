@@ -6,12 +6,9 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import NumberField from 'https://cardstack.com/base/number';
 import { action } from '@ember/object';
-import { on } from '@ember/modifier';
-import { add } from '@cardstack/boxel-ui/helpers';
 import { formatDateTime } from '@cardstack/boxel-ui/helpers';
-
+import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
-import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down';
 
 class MonthFieldEdit extends Component<typeof MonthField> {
   months = [
@@ -29,101 +26,35 @@ class MonthFieldEdit extends Component<typeof MonthField> {
     'December',
   ];
 
+  get monthOptions() {
+    return this.months.map((name, index) => ({
+      value: index + 1,
+      label: name,
+    }));
+  }
+
+  get selectedMonth() {
+    const value = this.args.model?.value;
+    return this.monthOptions.find((opt) => opt.value === value) || null;
+  }
+
   @action
-  updateValue(event: Event) {
-    const target = event.target as HTMLSelectElement;
-    this.args.model.value = Number(target.value);
+  updateValue(option: { value: number; label: string } | null) {
+    this.args.model.value = option?.value ?? undefined;
   }
 
   <template>
-    <div class='select-wrapper'>
-      <label for='month-select-input' class='sr-only'>Month</label>
-      <div class='input-icon'>
-        <CalendarIcon class='icon' />
-      </div>
-      <select
-        id='month-select-input'
-        value={{@model.value}}
-        {{on 'change' this.updateValue}}
-        class='datetime-select'
-        data-test-month-select
-      >
-        {{#each this.months as |monthName index|}}
-          <option value={{add index 1}}>
-            {{monthName}}
-          </option>
-        {{/each}}
-      </select>
-      <div class='select-icon'>
-        <ChevronDownIcon class='icon' />
-      </div>
-    </div>
-
-    <style scoped>
-      .select-wrapper {
-        position: relative;
-        width: 100%;
-      }
-
-      .input-icon {
-        position: absolute;
-        left: 0.75rem;
-        top: 50%;
-        transform: translateY(-50%);
-        pointer-events: none;
-        display: flex;
-        align-items: center;
-        color: var(--muted-foreground, #9ca3af);
-      }
-
-      .select-icon {
-        position: absolute;
-        right: 0.75rem;
-        top: 50%;
-        transform: translateY(-50%);
-        pointer-events: none;
-        display: flex;
-        align-items: center;
-        color: var(--muted-foreground, #9ca3af);
-      }
-
-      .icon {
-        width: 1.25rem;
-        height: 1.25rem;
-      }
-
-      .datetime-select {
-        width: 100%;
-        padding: 0.5rem 2.5rem;
-        border: 1px solid var(--border, #e0e0e0);
-        border-radius: var(--radius, 0.375rem);
-        font-family: var(--font-sans, system-ui, sans-serif);
-        font-size: 0.875rem;
-        color: var(--foreground, #1a1a1a);
-        background: var(--input, #ffffff);
-        appearance: none;
-        cursor: pointer;
-        transition: all 0.15s ease;
-      }
-
-      .datetime-select:focus {
-        outline: none;
-        border-color: var(--ring, #3b82f6);
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-      }
-
-      .sr-only {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border-width: 0;
-      }
-    </style>
+    <BoxelSelect
+      @options={{this.monthOptions}}
+      @selected={{this.selectedMonth}}
+      @onChange={{this.updateValue}}
+      @placeholder='Select month'
+      @dropdownClass='month-dropdown'
+      data-test-month-select
+      as |option|
+    >
+      {{option.label}}
+    </BoxelSelect>
   </template>
 }
 

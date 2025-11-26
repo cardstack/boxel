@@ -259,10 +259,8 @@ export default class RenderRoute extends Route<Model> {
         this.#cardTypeTracker.set({ cardId: canonicalId, nonce }, undefined);
         throw new Error(JSON.stringify(doc.errors[0], null, 2));
       }
-      let derivedCardType = await deriveCardTypeFromDoc(
-        doc,
-        id,
-        this.loaderService.loader,
+      let derivedCardType = await this.#authGuard.race(() =>
+        deriveCardTypeFromDoc(doc, id, this.loaderService.loader),
       );
       this.#cardTypeTracker.set(
         { cardId: canonicalId, nonce },
@@ -286,11 +284,13 @@ export default class RenderRoute extends Route<Model> {
         },
       };
 
-      instance = await this.store.add(enhancedDoc, {
-        relativeTo: new URL(id),
-        realm: realmURL,
-        doNotPersist: true,
-      });
+      instance = await this.#authGuard.race(() =>
+        this.store.add(enhancedDoc, {
+          relativeTo: new URL(id),
+          realm: realmURL,
+          doNotPersist: true,
+        }),
+      );
       model.instance = instance;
     } catch (e: any) {
       console.warn(
@@ -300,9 +300,9 @@ export default class RenderRoute extends Route<Model> {
       throw e;
     }
     if (instance) {
-      await this.#touchIsUsedFields(instance);
+      await this.#authGuard.race(() => this.#touchIsUsedFields(instance));
     }
-    await this.store.loaded();
+    await this.#authGuard.race(() => this.store.loaded());
     if (instance) {
       model.instance = instance;
     }

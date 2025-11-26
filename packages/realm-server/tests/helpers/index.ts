@@ -814,8 +814,10 @@ export function setupMatrixRoom(
     matrixClient,
     getMessagesSince: async function (since: number) {
       let allMessages = await matrixClient.roomMessages(testAuthRoomId!);
+      // Allow same-ms clock values between the test process and matrix so we don't
+      // miss events that are emitted immediately after we record the start time.
       let messagesAfterSentinel = allMessages.filter(
-        (m) => m.origin_server_ts > since,
+        (m) => m.origin_server_ts >= since,
       );
 
       return messagesAfterSentinel;
