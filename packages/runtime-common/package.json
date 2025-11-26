@@ -65,7 +65,7 @@
     "transform-modules-amd-plugin": "workspace:*",
     "typescript-memoize": "catalog:",
     "uuid": "catalog:",
-    "zod": "^4.1.13"
+    "zod": "^3.24.4"
   },
   "devDependencies": {
     "@babel/core": "catalog:",
