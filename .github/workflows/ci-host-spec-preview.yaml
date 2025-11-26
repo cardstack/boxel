@@ -1,0 +1,94 @@
+name: CI Host Spec Preview Focus
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "packages/host/tests/acceptance/code-submode/spec-test.gts"
+      - ".github/workflows/ci-host-spec-preview.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  spec-preview-single-test:
+    name: Spec preview focused run (${{ matrix.run }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        run: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    concurrency:
+      group: boxel-host-spec-preview-${{ github.head_ref || github.run_id }}-${{ matrix.run }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: ./.github/actions/init
+      - name: Build boxel-icons
+        run: pnpm build
+        working-directory: packages/boxel-icons
+      - name: Serve boxel-icons
+        run: pnpm serve &> /tmp/icon-server.log &
+        working-directory: packages/boxel-icons
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
+      - name: Disable TCP/UDP network offloading
+        run: sudo ethtool -K eth0 tx off rx off
+      - name: Start host to serve assets for fastboot
+        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        with:
+          run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
+          working-directory: packages/host
+          wait-for: 3m
+          wait-on: http-get://localhost:4200
+      - name: Start realm servers
+        run: pnpm start:skip-experiments | tee -a /tmp/server.log &
+        working-directory: packages/realm-server
+      - name: create realm users
+        run: pnpm register-realm-users
+        working-directory: packages/matrix
+      - name: Install D-Bus helpers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dbus-x11 upower
+          sudo service dbus restart
+          sudo service upower restart
+      - name: Run spec preview test only
+        run: dbus-run-session -- pnpm ember-test-pre-built -- --filter "view when there are multiple spec instances"
+        env:
+          HOST_TEST_PARTITION: 1
+          HOST_TEST_PARTITION_COUNT: 1
+          DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
+        working-directory: packages/host
+      - name: Upload junit report to GitHub Actions Artifacts
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: host-spec-preview-report-${{ matrix.run }}
+          path: junit/host-1.xml
+          retention-days: 30
+      - name: Print realm server logs
+        if: always()
+        run: cat /tmp/server.log
+      - name: Upload realm server log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: host-spec-preview-realm-server-log-${{ matrix.run }}
+          path: /tmp/server.log
+          retention-days: 30
+      - name: Upload testem log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: host-spec-preview-testem-log-${{ matrix.run }}
+          path: junit/host-testem.log
+          retention-days: 30
+      - name: Upload icon server log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: host-spec-preview-icon-server-log-${{ matrix.run }}
+          path: /tmp/icon-server.log
+          retention-days: 30
