@@ -122,7 +122,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
       .remove:hover + :deep(.boxel-card-container.fitted-format) {
         box-shadow:
           0 0 0 1px var(--border, var(--boxel-300)),
-          var(--shadow-lg, var(--boxel-box-shadow));
+          var(--boxel-box-shadow);
       }
       .add-new {
         width: fit-content;

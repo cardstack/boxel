@@ -8,7 +8,6 @@ import { isMeta, type CardResource } from './resource-types';
 import type { LocalPath } from './paths';
 import { RealmPaths, ensureTrailingSlash, join } from './paths';
 import { persistFileMeta, removeFileMeta, getCreatedTime } from './file-meta';
-import type { ErrorDetails } from './error';
 import {
   systemError,
   notFound,
@@ -51,6 +50,7 @@ import {
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
   userInitiatedPriority,
+  systemInitiatedPriority,
   userIdFromUsername,
   isCardDocumentString,
   isBrowserTestEnv,
@@ -80,6 +80,7 @@ import type { Readable } from 'stream';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
+import { getCardDirectoryName } from './helpers/card-directory-name';
 import {
   MatrixClient,
   ensureFullMatrixUserId,
@@ -287,6 +288,7 @@ interface Options {
   disableModuleCaching?: true;
   copiedFromRealm?: URL;
   fullIndexOnStartup?: true;
+  fromScratchIndexPriority?: number;
 }
 
 interface UpdateItem {
@@ -317,6 +319,7 @@ export class Realm {
   #realmSecretSeed: string;
   #disableModuleCaching = false;
   #fullIndexOnStartup = false;
+  #fromScratchIndexPriority = systemInitiatedPriority;
   #realmServerMatrixUserId: string;
   #definitionsCache: DefinitionsCache;
   #copiedFromRealm: URL | undefined;
@@ -376,6 +379,8 @@ export class Realm {
     this.#adapter = adapter;
     this.#queue = queue;
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
+    this.#fromScratchIndexPriority =
+      opts?.fromScratchIndexPriority ?? systemInitiatedPriority;
     this.#realmServerMatrixClient = realmServerMatrixClient;
     this.#realmServerMatrixUserId = userIdFromUsername(
       realmServerMatrixClient.username,
@@ -597,8 +602,8 @@ export class Realm {
     await this.#startedUp.promise;
   }
 
-  async fullIndex() {
-    await this.realmIndexUpdater.fullIndex();
+  async fullIndex(priority?: number) {
+    await this.realmIndexUpdater.fullIndex(priority);
   }
 
   async flushUpdateEvents() {
@@ -744,6 +749,59 @@ export class Realm {
     await removeFileMeta(this.#dbAdapter, this.url, paths);
   }
 
+  private lowestStatusCode(errors: AtomicPayloadValidationError[]): number {
+    let statuses = errors
+      .map((e) => e.status)
+      .filter((status) => typeof status === 'number') as number[];
+    return statuses.length > 0 ? Math.min(...statuses) : 400;
+  }
+
+  private async checkBeforeAtomicWrite(
+    operations: AtomicOperation[],
+  ): Promise<AtomicPayloadValidationError[]> {
+    let errors: AtomicPayloadValidationError[] = [];
+    await Promise.all(
+      operations.map(async (operation) => {
+        if (
+          (operation.op !== 'add' && operation.op !== 'update') ||
+          !operation.href
+        ) {
+          return;
+        }
+
+        let localPath: LocalPath;
+        try {
+          localPath = this.paths.local(new URL(operation.href, this.paths.url));
+        } catch (error: any) {
+          errors.push({
+            title: 'Invalid atomic:operations format',
+            detail:
+              error?.message ??
+              `Request operation contains invalid href '${operation.href}'`,
+            status: error?.status ?? 400,
+          });
+          return;
+        }
+
+        let exists = await this.#adapter.exists(localPath);
+        if (operation.op === 'add' && exists) {
+          errors.push({
+            title: 'Resource already exists',
+            detail: `Resource ${operation.href} already exists`,
+            status: 409,
+          });
+        } else if (operation.op === 'update' && !exists) {
+          errors.push({
+            title: 'Resource does not exist',
+            detail: `Resource ${operation.href} does not exist`,
+            status: 404,
+          });
+        }
+      }),
+    );
+    return errors;
+  }
+
   validate(json: any): AtomicPayloadValidationError[] {
     let operations = json['atomic:operations'];
     let title = 'Invalid atomic:operations format';
@@ -758,8 +816,8 @@ export class Realm {
       return errors;
     }
     for (let operation of operations) {
-      if (operation.op !== 'add') {
-        let detail = `You tried to use an unsupported operation type: '${operation.op}'. Only 'add' operations are currently supported`;
+      if (operation.op !== 'add' && operation.op !== 'update') {
+        let detail = `You tried to use an unsupported operation type: '${operation.op}'. Only 'add' and 'update' operations are currently supported`;
         errors.push({
           title,
           detail,
@@ -787,35 +845,6 @@ export class Realm {
       }
     }
     return errors;
-  }
-
-  // this method carefully checks before writing with the intent of
-  // stopping failed operations that depend on others
-  private async checkBeforeAtomicWrite(
-    operations: AtomicOperation[],
-  ): Promise<ErrorDetails[]> {
-    let promises = [];
-    for (let { href } of operations) {
-      let localPath = this.paths.local(new URL(href, this.paths.url));
-      promises.push(this.#adapter.exists(localPath));
-    }
-    let booleanFlags = await Promise.all(promises);
-    return operations
-      .filter((_, i) => booleanFlags[i])
-      .map(({ href }) => {
-        return {
-          title: 'Resource already exists',
-          detail: `Resource ${href} already exists`,
-          status: 409,
-        };
-      });
-  }
-
-  private lowestStatusCode(errors: ErrorDetails[]): number {
-    let statuses = errors
-      .filter((e) => e.status)
-      .map((e) => e.status) as number[];
-    return Math.min(...statuses);
   }
 
   private async handleAtomicOperations(
@@ -856,8 +885,8 @@ export class Realm {
         requestContext,
       });
     }
-    let operations = filterAtomicOperations(json['atomic:operations']);
-    let atomicCheckErrors = await this.checkBeforeAtomicWrite(operations);
+    let atomicOperations = json['atomic:operations'] as AtomicOperation[];
+    let atomicCheckErrors = await this.checkBeforeAtomicWrite(atomicOperations);
     if (atomicCheckErrors.length > 0) {
       return createResponse({
         body: JSON.stringify({ errors: atomicCheckErrors }),
@@ -868,6 +897,8 @@ export class Realm {
         requestContext,
       });
     }
+
+    let operations = filterAtomicOperations(atomicOperations);
     let files = new Map<LocalPath, string>();
     let writeResults: FileWriteResult[] = [];
 
@@ -875,6 +906,43 @@ export class Realm {
       let resource = operation.data;
       let href = operation.href;
       let localPath = this.paths.local(new URL(href, this.paths.url));
+      let exists = await this.#adapter.exists(localPath);
+      if (operation.op === 'add' && exists) {
+        return createResponse({
+          body: JSON.stringify({
+            errors: [
+              {
+                title: 'Resource already exists',
+                detail: `Resource ${href} already exists`,
+                status: 409,
+              },
+            ],
+          }),
+          init: {
+            status: 409,
+            headers: { 'content-type': SupportedMimeType.JSONAPI },
+          },
+          requestContext,
+        });
+      }
+      if (operation.op === 'update' && !exists) {
+        return createResponse({
+          body: JSON.stringify({
+            errors: [
+              {
+                title: 'Resource does not exist',
+                detail: `Resource ${href} does not exist`,
+                status: 404,
+              },
+            ],
+          }),
+          init: {
+            status: 404,
+            headers: { 'content-type': SupportedMimeType.JSONAPI },
+          },
+          requestContext,
+        });
+      }
       if (isModuleResource(resource)) {
         files.set(localPath, resource.attributes?.content ?? '');
       } else if (isCardResource(resource)) {
@@ -1083,7 +1151,9 @@ export class Realm {
     } else {
       let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
       if (isNewIndex || this.#fullIndexOnStartup) {
-        let promise = this.#realmIndexUpdater.fullIndex();
+        let promise = this.#realmIndexUpdater.fullIndex(
+          this.#fromScratchIndexPriority,
+        );
         if (isNewIndex) {
           // we only await the full indexing at boot if this is a brand new index
           await promise;
@@ -1980,10 +2050,7 @@ export class Realm {
       ) {
         continue;
       }
-      let name =
-        'name' in resource.meta.adoptsFrom
-          ? resource.meta.adoptsFrom.name
-          : 'cards';
+      let name = getCardDirectoryName(resource.meta?.adoptsFrom, this.paths);
 
       let fileURL = this.paths.fileURL(
         `/${join(new URL(request.url).pathname, name, (resource.lid ?? uuidV4()) + '.json')}`,
@@ -2181,10 +2248,7 @@ export class Realm {
       ) {
         continue;
       }
-      let name =
-        'name' in resource.meta.adoptsFrom
-          ? resource.meta.adoptsFrom.name
-          : 'cards';
+      let name = getCardDirectoryName(resource.meta?.adoptsFrom, this.paths);
       let fileURL =
         i === 0
           ? new URL(`${url}.json`)
@@ -3180,6 +3244,15 @@ export class Realm {
       if (!tracked || tracked.isTracked) {
         return;
       }
+
+      let localPath = this.paths.local(tracked.url);
+      this.#sourceCache.invalidate(localPath);
+
+      if (hasExecutableExtension(localPath)) {
+        this.#moduleCache.invalidate(localPath);
+        this.#definitionsCache.invalidate();
+      }
+
       this.broadcastRealmEvent(data);
       this.#updateItems.push({
         operation: ('added' in data
@@ -3361,10 +3434,7 @@ function promoteLocalIdsToRemoteIds({
     ) {
       return;
     }
-    let name =
-      'name' in sideLoadedResource.meta.adoptsFrom
-        ? sideLoadedResource.meta.adoptsFrom.name
-        : 'cards';
+    let name = getCardDirectoryName(sideLoadedResource.meta?.adoptsFrom, paths);
     relationships[field].links = {
       self: paths.fileURL(`${name}/${lid}`).href,
     };

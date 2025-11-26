@@ -12,6 +12,7 @@ import {
 import config from '@cardstack/host/config/environment';
 
 import { shimExternals } from '../lib/externals';
+import { authErrorEventMiddleware } from '../utils/auth-error-guard';
 
 import type LoaderService from './loader-service';
 import type RealmService from './realm';
@@ -67,6 +68,7 @@ export default class NetworkService extends Service {
         return next(req);
       },
       authorizationMiddleware(this.realm),
+      authErrorEventMiddleware(),
     ]);
   }
 

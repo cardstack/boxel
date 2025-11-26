@@ -16,6 +16,8 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import config from '@cardstack/host/config/environment';
 
+import { authErrorEventMiddleware } from '../utils/auth-error-guard';
+
 import type NetworkService from './network';
 import type RealmService from './realm';
 import type RealmInfoService from './realm-info-service';
@@ -115,6 +117,7 @@ export default class LoaderService extends Service {
 
     if (!this.fastboot.isFastBoot) {
       middlewareStack.push(authorizationMiddleware(this.realm));
+      middlewareStack.push(authErrorEventMiddleware());
     }
     let fetch = fetcher(this.network.fetch, middlewareStack);
     let loader = new Loader(fetch, this.network.resolveImport);

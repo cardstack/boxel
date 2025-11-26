@@ -2,27 +2,28 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "ImageFieldCard",
-        "module": "../image-field-card"
+        "name": "DatetimeFieldsPreview",
+        "module": "../datetime-fields"
       }
     },
     "type": "card",
     "attributes": {
-      "image": {
-        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1760452066007",
-        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1760452066007/public"
-      },
       "cardInfo": {
         "notes": null,
         "title": null,
         "description": null,
         "thumbnailURL": null
+      },
+      "datetimeField": "2025-11-27T10:16:00.000Z",
+      "relativeTimeField": {
+        "unit": "minutes",
+        "amount": 4
       }
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": null
+          "self": "../../Theme/cardstack"
         }
       }
     }

@@ -12,7 +12,7 @@ on:
 
 permissions:
   contents: read
-  issues: read
+  issues: write
   checks: write
   pull-requests: write
   id-token: write
@@ -68,6 +68,7 @@ jobs:
           AWS_CLOUDFRONT_DISTRIBUTION: EU4RGLH4EOCHJ
           PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: staging.boxel.dev
           PUBLISHED_REALM_BOXEL_SITE_DOMAIN: staging.boxel.build
+        # If you change these, change the equivalent line in preview-comment.yml
         with:
           package: boxel-host
           environment: staging
@@ -102,6 +103,19 @@ jobs:
           AWS_CLOUDFRONT_DISTRIBUTION: E2PZR9CIAW093B
           PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: boxel.space
           PUBLISHED_REALM_BOXEL_SITE_DOMAIN: boxel.site
+        # If you change these, change the equivalent line in preview-comment.yml
         with:
           package: boxel-host
           environment: production
+
+  post-preview-comment:
+    name: Update preview comment
+    needs:
+      - deploy-host-preview-staging
+      - deploy-host-preview-production
+    if: ${{ always() && (needs.deploy-host-preview-staging.result == 'success' || needs.deploy-host-preview-production.result == 'success') }}
+    uses: ./.github/workflows/preview-comment.yml
+    with:
+      pr-number: ${{ github.event.pull_request.number }}
+      head-sha: ${{ github.event.pull_request.head.sha }}
+    secrets: inherit

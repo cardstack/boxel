@@ -4304,11 +4304,11 @@ new
       promptPartsWithAutoCorrectnessChecksDisabled.messages?.filter(
         (message) => message.role === 'user',
       ) ?? [];
-    assert.true(
+    assert.false(
       disabledUserMessages.some(
         (message) => message.content === summaryMessage,
       ),
-      'When disabled the automated summary should be included',
+      'When disabled the automated summary should be omitted',
     );
     assert.true(
       disabledUserMessages.some((message) =>
@@ -4329,9 +4329,9 @@ new
       promptPartsWithAutoCorrectnessChecksEnabled.messages?.filter(
         (message) => message.role === 'user',
       ) ?? [];
-    assert.false(
+    assert.true(
       enabledUserMessages.some((message) => message.content === summaryMessage),
-      'When enabled the summary should be omitted',
+      'When enabled the summary should be included',
     );
     assert.false(
       enabledUserMessages.some((message) =>

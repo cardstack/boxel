@@ -54,8 +54,12 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
 
-import type { CardSaveSubscriber } from './card-service';
+import {
+  enableRenderTimerStub,
+  withTimersBlocked,
+} from '../utils/render-timer-stub';
 
+import type { CardSaveSubscriber } from './card-service';
 import type CardService from './card-service';
 import type CommandService from './command-service';
 import type EnvironmentService from './environment-service';
@@ -151,6 +155,10 @@ export default class StoreService extends Service implements StoreInterface {
     this.autoSavePromises = new Map();
     this.store = new CardStore(this.referenceCount, this.network.authedFetch);
     this.ready = this.setup();
+  }
+
+  async ensureSetupComplete(): Promise<void> {
+    await this.ready;
   }
 
   resetCache(opts?: { preserveReferences?: boolean }) {
@@ -617,9 +625,15 @@ export default class StoreService extends Service implements StoreInterface {
     relativeTo?: URL | undefined,
   ): Promise<T> {
     let api = await this.cardService.getAPI();
-    let card = (await api.createFromSerialized(resource, doc, relativeTo, {
-      store: this.store,
-    })) as T;
+    let shouldStubTimers =
+      this.renderContextBlocksPersistence() && !isTesting();
+    let performCreate = async () =>
+      (await api.createFromSerialized(resource, doc, relativeTo, {
+        store: this.store,
+      })) as T;
+    let card = shouldStubTimers
+      ? await withStubbedRenderTimers(performCreate)
+      : await performCreate();
     if (!(globalThis as any).__lazilyLoadLinks) {
       // TODO we should be able to get rid of this when we decommission the old prerender
       await api.ensureLinksLoaded(card);
@@ -989,7 +1003,7 @@ export default class StoreService extends Service implements StoreInterface {
       let cardError = errorResponse.errors[0];
       deferred?.fulfill(cardError);
       console.error(
-        `error getting instance ${JSON.stringify(idOrDoc, null, 2)}`,
+        `error getting instance ${JSON.stringify(idOrDoc, null, 2)}: ${JSON.stringify(error, null, 2)}`,
         error,
       );
       return cardError;
@@ -1451,6 +1465,22 @@ export function asURL(urlOrDoc: string | LooseSingleCardDocument) {
   return typeof urlOrDoc === 'string'
     ? urlOrDoc.replace(/\.json$/, '')
     : urlOrDoc.data.id;
+}
+
+async function withStubbedRenderTimers<T>(cb: () => Promise<T>): Promise<T> {
+  if (typeof window === 'undefined' || isTesting()) {
+    return await cb();
+  }
+  // Prevent cards that use timers (e.g. timers-card.gts) from continuing to
+  // execute after we capture their HTML during prerender. In the browser we
+  // normally let timers run, but in the render route we need deterministic,
+  // single-shot renders so runaway timers don't crash indexing.
+  let restore = enableRenderTimerStub();
+  try {
+    return await withTimersBlocked(cb);
+  } finally {
+    restore();
+  }
 }
 
 // Resolves either to

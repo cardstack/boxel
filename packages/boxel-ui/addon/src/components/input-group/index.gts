@@ -201,7 +201,6 @@ export default class InputGroup extends Component<Signature> {
         background-color: var(--background, var(--boxel-light));
         color: var(--foreground, var(--boxel-dark));
         border: 1px solid var(--boxel-input-group-border-color);
-        box-shadow: var(--shadow);
       }
 
       @layer boxelComponentL1 {
