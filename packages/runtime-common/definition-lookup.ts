@@ -1,6 +1,7 @@
 import type { DBAdapter, TypeCoercion } from './db';
 import {
   fetchUserPermissions,
+  internalKeyFor,
   type Definition,
   type ErrorEntry,
   type ModuleDefinitionResult,
@@ -127,7 +128,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       });
     }
 
-    const moduleId = [codeRef.module, codeRef.name].join('/');
+    const moduleId = internalKeyFor(codeRef, undefined);
     let defOrError = moduleEntry.definitions[moduleId];
     if (!defOrError) {
       throw new FilterRefersToNonexistentTypeError(codeRef, {
