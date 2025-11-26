@@ -299,7 +299,7 @@ module('Acceptance | theme-card-test', function (hooks) {
         stacks: [[{ id: themeCardId, format: 'isolated' }]],
       });
       assert
-        .dom(`[data-test-card="${themeCardId}"] h1`)
+        .dom(`[data-test-card="${themeCardId}"] [data-test-field="cardTitle"]`)
         .hasText('Starry Night');
       assert.dom('[data-test-css-vars]').containsText('--radius: 0.75rem;');
       assert
@@ -336,7 +336,7 @@ module('Acceptance | theme-card-test', function (hooks) {
         submode: 'code',
       });
       assert
-        .dom(`[data-test-card="${themeCardId}"] h1`)
+        .dom(`[data-test-card="${themeCardId}"] [data-test-field="cardTitle"]`)
         .hasText('Starry Night');
       assert.dom('[data-test-css-vars]').containsText('--radius: 0.75rem;');
       assert
@@ -379,6 +379,7 @@ module('Acceptance | theme-card-test', function (hooks) {
 
       assert.dom('[data-test-css-vars]').containsText('No CSS defined');
 
+      await click('[data-test-import-css-button]');
       await fillIn('[data-test-custom-css-variables]', SOFT_POP_VARS);
 
       assert
@@ -466,6 +467,7 @@ module('Acceptance | theme-card-test', function (hooks) {
         .dom('[data-test-dark-vars] [data-test-var-value="background"]')
         .containsText('#050813');
 
+      await click('[data-test-import-css-button]');
       await fillIn(
         '[data-test-custom-css-variables]',
         ':root { --background: #455A68; --foreground: #FCD2A7; } .dark { --card: black; }',

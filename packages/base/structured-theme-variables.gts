@@ -22,6 +22,7 @@ export function dasherize(str?: string): string {
     str
       ?.trim()
       .replace(/\s+/g, '-')
+      .replace(/([a-zA-Z])(\d)/g, '$1-$2')
       .replace(/([a-z\d])([A-Z])/g, '$1-$2')
       .replace(/([A-Z]+)([A-Z][a-z\d]+)/g, '$1-$2')
       .toLowerCase() ?? ''
@@ -114,12 +115,15 @@ class Embedded extends Component<typeof ThemeVarField> {
           font-style: italic;
         }
         .copy-button {
-          color: var(--primary);
+          color: var(--foreground);
           opacity: 0;
         }
         .code-preview:focus-within .copy-button,
         .code-preview:hover .copy-button {
           opacity: 1;
+        }
+        .code-preview:focus-within .copy-button {
+          color: var(--muted-foreground);
         }
       }
     </style>

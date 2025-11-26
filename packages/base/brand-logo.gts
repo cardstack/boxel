@@ -44,7 +44,7 @@ class Embedded extends Component<typeof BrandLogo> {
       <FieldContainer @label='Minimum Size' @vertical={{true}}>
         <div class='preview-field'>
           <p>For screen use</p>
-          <div class='preview-grid border-container'>
+          <div class='preview-flex-container border-container'>
             <div class='preview-container'>
               <span class='annotation'><@fields.primaryMarkMinHeight /></span>
               <@fields.primaryMark1
@@ -198,6 +198,15 @@ class Embedded extends Component<typeof BrandLogo> {
         display: grid;
         grid-template-columns: 1fr 1fr;
       }
+      .preview-flex-container {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-around;
+      }
+      .preview-flex-container > .preview-container {
+        flex-wrap: nowrap;
+      }
       .border-container {
         border: var(--container-border);
         border-radius: var(--boxel-border-radius);
@@ -221,8 +230,8 @@ class Embedded extends Component<typeof BrandLogo> {
         border-radius: var(--boxel-border-radius);
       }
       .dark-container {
-        background-color: var(--foreground);
-        color: var(--background);
+        background-color: var(--foreground, var(--boxel-dark));
+        color: var(--background, var(--boxel-light));
       }
       .greyscale-group {
         justify-content: space-evenly;
