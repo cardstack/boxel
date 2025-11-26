@@ -2560,7 +2560,7 @@ module('Unit | query', function (hooks) {
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
     assert.strictEqual(prerenderedCards[0].url, `${testRealmURL}jimmy.json`);
     assert.strictEqual(prerenderedCards[0].html, '<title>Jimmy</title>'); // head template
-    assert.deepEqual(prerenderedCards[0].usedRenderType, fancyPersonCard);
+    assert.deepEqual(prerenderedCards[0].usedRenderType, personCard);
 
     // Define renderType argument
     ({ prerenderedCards, meta } = await indexQueryEngine.searchPrerendered(
