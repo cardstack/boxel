@@ -1757,7 +1757,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                 let content: string | undefined;
                 if (
                   systemLower.includes(
-                    'respond only with one token: card, app, or skill',
+                    'respond only with one token: card, app, skill, or theme',
                   )
                 ) {
                   // Heuristic moved from production code into test mock:
@@ -1771,6 +1771,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                     )
                   ) {
                     content = 'app';
+                  } else if (/theme/.test(userLower)) {
+                    content = 'theme';
                   } else if (/skill/.test(userLower)) {
                     content = 'skill';
                   } else {
