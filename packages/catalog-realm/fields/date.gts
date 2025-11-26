@@ -104,7 +104,7 @@ export class DateField extends BaseDateField {
       try {
         const date = new Date(String(this.args.model));
         return formatDateTime(date, {
-          preset: 'medium',
+          preset: this.args.configuration?.preset || 'medium',
           fallback: 'Invalid date',
         });
       } catch {

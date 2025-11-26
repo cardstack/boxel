@@ -1,0 +1,102 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "AI Theme Generator Tool",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/ai-theme-generator-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/ai-theme-generator-listing/screenshot_02.png"
+      ],
+      "summary": "A theme creation tool that enables users to generate, preview, and manage AI-driven theme cards across different realms, leveraging language models and customizable prompts for diverse design systems. Its primary purpose is to facilitate automated theme generation and curation within a digital environment.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/ai-theme-generator-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "tags.0": {
+        "links": {
+          "self": "../Tag/51de249c-516a-4c4d-bd88-76e88274c483"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/631d1b5d-fcd0-465c-964e-e535fc6bb893"
+        }
+      },
+      "license": {
+        "links": {
+          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/ad6f1780-b283-4078-9710-d02a6028ef2b"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/6f1780b2-8330-4817-90d0-2a6028ef2be8"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/1780b283-3078-4710-902a-6028ef2be83b"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/80b28330-7817-40d0-aa60-28ef2be83b6d"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/6dbd3410-0fc1-413d-b328-23f48d834dc7"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/theme-templates"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../theme-generation/ThemeCreator/f29cce63-ba80-4afd-8a32-8f4e43d62a65"
+        }
+      },
+      "skills.0": {
+        "links": {
+          "self": "../theme-generation/Skill/theme-design"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/product-catalogs"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/professional-services"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
