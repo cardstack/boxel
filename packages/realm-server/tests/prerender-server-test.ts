@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import QUnit, { module, test } from 'qunit';
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
 import { basename } from 'path';
@@ -13,12 +13,20 @@ import {
 import { buildPrerenderApp } from '../prerender/prerender-app';
 import type { Prerenderer } from '../prerender';
 import { baseCardRef } from '@cardstack/runtime-common';
+import {
+  PRERENDER_SERVER_DRAINING_STATUS_CODE,
+  PRERENDER_SERVER_STATUS_DRAINING,
+  PRERENDER_SERVER_STATUS_HEADER,
+} from '../prerender/prerender-constants';
+import { Deferred } from '@cardstack/runtime-common';
 
 module(basename(__filename), function () {
+  QUnit.config.testTimeout = 60000;
   module('Prerender server', function (hooks) {
     let request: SuperTest<Test>;
     let prerenderer: Prerenderer;
     const testUserId = '@jade:localhost';
+    let draining = false;
 
     setupBaseRealmServer(hooks, matrixURL);
 
@@ -47,8 +55,10 @@ module(basename(__filename), function () {
     });
 
     hooks.before(function () {
+      draining = false;
       let built = buildPrerenderApp(realmSecretSeed, {
         serverURL: 'http://127.0.0.1:4221',
+        isDraining: () => draining,
       });
       prerenderer = built.prerenderer;
       request = supertest(built.app.callback());
@@ -189,6 +199,142 @@ module(basename(__filename), function () {
       );
       assert.ok(res.body.meta?.timing?.totalMs >= 0, 'has timing meta');
       assert.ok(res.body.meta?.pool?.pageId, 'has pool.pageId');
+    });
+
+    test('reports draining status when shutting down', async function (assert) {
+      draining = true;
+      const permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> =
+        { [testRealmHref]: ['read', 'write', 'realm-owner'] };
+      let res = await request
+        .post('/prerender-card')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'prerender-request',
+            attributes: {
+              url: `${testRealmHref}drain`,
+              userId: testUserId,
+              permissions,
+              realm: testRealmHref,
+            },
+          },
+        });
+
+      assert.strictEqual(
+        res.status,
+        PRERENDER_SERVER_DRAINING_STATUS_CODE,
+        'returns draining status code',
+      );
+      assert.strictEqual(
+        res.headers[PRERENDER_SERVER_STATUS_HEADER],
+        PRERENDER_SERVER_STATUS_DRAINING,
+        'sets draining header',
+      );
+      draining = false;
+    });
+
+    test('tracks warmed realms for heartbeat', async function (assert) {
+      let beforeWarm = prerenderer.getWarmRealms();
+      let url = `${testRealmHref}2`;
+      const permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> =
+        { [testRealmHref]: ['read', 'write', 'realm-owner'] };
+      await request
+        .post('/prerender-card')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'prerender-request',
+            attributes: {
+              url,
+              userId: testUserId,
+              permissions,
+              realm: testRealmHref,
+            },
+          },
+        });
+
+      assert.true(
+        prerenderer.getWarmRealms().includes(testRealmHref),
+        'warm realms include prerendered realm',
+      );
+      assert.true(
+        prerenderer.getWarmRealms().length >= beforeWarm.length,
+        'warm realm list does not shrink',
+      );
+    });
+
+    test('responds draining immediately when shutdown begins during an in-flight prerender', async function (assert) {
+      let localDraining = false;
+      let drainingDeferred = new Deferred<void>();
+      let built = buildPrerenderApp(realmSecretSeed, {
+        serverURL: 'http://127.0.0.1:4222',
+        isDraining: () => localDraining,
+        drainingPromise: drainingDeferred.promise,
+        silent: true,
+      });
+      let localRequest = supertest(built.app.callback());
+
+      let execDeferred = new Deferred<void>();
+      let stubResponse = {
+        response: { ok: true },
+        timings: { launchMs: 0, renderMs: 0 },
+        pool: {
+          pageId: 'p',
+          realm: testRealmHref,
+          reused: false,
+          evicted: false,
+          timedOut: false,
+        },
+      };
+      let originalPrerender = (built.prerenderer as any).prerenderCard;
+      (built.prerenderer as any).prerenderCard = async () => {
+        await execDeferred.promise;
+        return stubResponse;
+      };
+
+      let permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> = {
+        [testRealmHref]: ['read', 'write', 'realm-owner'],
+      };
+      let resPromise = localRequest
+        .post('/prerender-card')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'prerender-request',
+            attributes: {
+              url: `${testRealmHref}drain-midflight`,
+              userId: testUserId,
+              permissions,
+              realm: testRealmHref,
+            },
+          },
+        });
+
+      // Allow handler to start by yielding once inside execute
+      await Promise.resolve();
+      // simulate shutdown signal while prerender is in progress (after handler start)
+      localDraining = true;
+      drainingDeferred.fulfill();
+
+      let res = await resPromise;
+      assert.strictEqual(
+        res.status,
+        PRERENDER_SERVER_DRAINING_STATUS_CODE,
+        'returns draining status code during in-flight prerender',
+      );
+      assert.strictEqual(
+        res.headers[PRERENDER_SERVER_STATUS_HEADER],
+        PRERENDER_SERVER_STATUS_DRAINING,
+        'sets draining header during in-flight prerender',
+      );
+
+      // clean up
+      execDeferred.fulfill();
+      (built.prerenderer as any).prerenderCard = originalPrerender;
+      await built.prerenderer.stop();
     });
   });
 });

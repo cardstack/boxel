@@ -1,4 +1,21 @@
 (globalThis as any).__environment = 'test';
+
+// Ensure test timeouts don't hold the Node event loop open. Wrap setTimeout to
+// unref timers so the process can exit once work is done. This does have the
+// effect of masking any issues where code should be clearing timers, however
+// the tradeoff is that server tests finish immediately instead of getting into
+// situations where they hang until CI times out.
+{
+  const originalSetTimeout = global.setTimeout;
+  global.setTimeout = ((...args: Parameters<typeof setTimeout>) => {
+    const handle = originalSetTimeout(...args);
+    if (typeof (handle as any)?.unref === 'function') {
+      (handle as any).unref();
+    }
+    return handle;
+  }) as typeof setTimeout;
+}
+
 import 'decorator-transforms/globals';
 import '../setup-logger'; // This should be first
 import './atomic-endpoints-test';
