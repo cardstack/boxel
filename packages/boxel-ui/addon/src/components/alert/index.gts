@@ -67,10 +67,10 @@ const Messages: TemplateOnlyComponent<MessagesSignature> = <template>
     .alert-icon {
       min-width: 20px;
       height: 20px;
-      --icon-background-color: var(--boxel-error-400);
+      --icon-background-color: var(--boxel-danger);
     }
     .failure-icon {
-      --icon-background-color: var(--destructive, var(--boxel-error-400));
+      --icon-background-color: var(--destructive, var(--boxel-danger));
       --icon-color: var(--destructive-foreground, var(--boxel-light));
     }
     .message {
@@ -132,7 +132,7 @@ const Alert: TemplateOnlyComponent<Signature> = <template>
       padding: var(--boxel-sp-sm);
       font: 500 var(--boxel-font-xs);
       letter-spacing: var(--boxel-lsp-sm);
-      border-radius: var(--boxel-border-radius-xxl);
+      border-radius: var(--boxel-border-radius-2xl);
     }
     .error-container {
       background-color: var(--destructive-foreground, var(--boxel-650));

@@ -310,7 +310,7 @@ export default class CardsGridLayout extends Component<Signature> {
         font-size: var(--typescale-h1, var(--boxel-font-size-lg));
         font-weight: 600;
         line-height: calc(30 / 22);
-        letter-spacing: var(--boxel-lsp-xxs);
+        letter-spacing: var(--boxel-lsp-2xs);
       }
 
       .highlights-layout {

@@ -605,7 +605,7 @@ class BenefitUsageTrackingEmbedded extends Component<
         justify-content: space-between;
         align-items: center;
         gap: calc(var(--spacing, var(--boxel-sp-xs)) * 2);
-        background: var(--secondary, var(--boxel-50));
+        background: var(--secondary, var(--boxel-150));
         border-bottom: 1px solid var(--border, var(--boxel-border-color));
       }
 
@@ -662,7 +662,7 @@ class BenefitUsageTrackingEmbedded extends Component<
       .progress-bar {
         width: 60px;
         height: 4px;
-        background: var(--muted, var(--boxel-50));
+        background: var(--muted, var(--boxel-150));
         border-radius: calc(var(--radius, var(--boxel-radius)) * 0.5);
         overflow: hidden;
       }
@@ -767,7 +767,7 @@ class BenefitUsageTrackingEmbedded extends Component<
         gap: 0.5rem;
         padding: 1rem;
         border-radius: 8px;
-        background: var(--accent, var(--boxel-light-100));
+        background: var(--accent, var(--boxel-150));
         cursor: pointer;
         user-select: none;
         transition: all 0.2s ease;
@@ -796,7 +796,7 @@ class BenefitUsageTrackingEmbedded extends Component<
         padding: 0.75rem;
         border: 1px solid var(--border, var(--boxel-border-color));
         border-radius: 6px;
-        background: var(--muted, var(--boxel-50));
+        background: var(--muted, var(--boxel-150));
         transition: all 0.2s ease;
       }
 
@@ -825,7 +825,7 @@ class BenefitUsageTrackingEmbedded extends Component<
         padding: 0.75rem;
         border: 1px solid var(--border, var(--boxel-border-color));
         border-radius: 6px;
-        background: var(--muted, var(--boxel-50));
+        background: var(--muted, var(--boxel-150));
         transition: all 0.2s ease;
       }
 
@@ -833,7 +833,7 @@ class BenefitUsageTrackingEmbedded extends Component<
         padding: 0.75rem;
         border: 1px solid var(--border, var(--boxel-border-color));
         border-radius: 6px;
-        background: var(--muted, var(--boxel-50));
+        background: var(--muted, var(--boxel-150));
         transition: all 0.2s ease;
       }
 
@@ -893,7 +893,7 @@ class BenefitUsageTrackingEmbedded extends Component<
 
       .last-used {
         padding: 0.75rem;
-        background: var(--accent, var(--boxel-light-100));
+        background: var(--accent, var(--boxel-150));
         border-radius: 6px;
         display: flex;
         justify-content: space-between;
@@ -917,7 +917,7 @@ class BenefitUsageTrackingEmbedded extends Component<
         padding: 0.75rem;
         border: 1px solid var(--border, var(--boxel-border-color));
         border-radius: 6px;
-        background: var(--muted, var(--boxel-50));
+        background: var(--muted, var(--boxel-150));
         font-size: 0.8125rem;
         line-height: 1.4;
       }
@@ -1414,12 +1414,12 @@ export class RewardCardProgramTracker extends CardDef {
           border: 1px solid var(--border, var(--boxel-border-color));
           border-radius: 0.375rem;
           background: var(--muted, var(--boxel-700));
-          color: var(--foreground, var(--boxel-50));
+          color: var(--foreground, var(--boxel-150));
           font-size: 0.75rem;
           font-weight: 600;
         }
         .year-chip {
-          background: var(--accent, var(--boxel-50));
+          background: var(--accent, var(--boxel-150));
           color: var(--foreground, var(--boxel-700));
         }
 

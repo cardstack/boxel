@@ -174,7 +174,7 @@ export default class Tooltip extends Component<Signature> {
         );
         --tooltip-border-color: var(
           --boxel-tooltip-border-color,
-          var(--border, var(--boxel-light-500))
+          var(--border, var(--boxel-300))
         );
 
         background-color: var(--tooltip-background-color);
@@ -207,7 +207,7 @@ export default class Tooltip extends Component<Signature> {
         );
         --tooltip-border-color: var(
           --boxel-tooltip-border-color,
-          var(--border, var(--boxel-light-500))
+          var(--border, var(--boxel-300))
         );
       }
 

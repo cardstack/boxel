@@ -57,7 +57,7 @@ export default class ProgressBar extends Component<Signature> {
         .boxel-progress-bar {
           --progress-bar-background-color: var(
             --boxel-progress-bar-background-color,
-            var(--muted, var(--boxel-light-200))
+            var(--muted, var(--boxel-200))
           );
           --progress-bar-border-radius: var(
             --boxel-progress-bar-border-radius,

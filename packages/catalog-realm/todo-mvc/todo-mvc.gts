@@ -530,7 +530,7 @@ class IsolatedTemplate extends Component<typeof TodoMvc> {
         font-family:
           -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
           Arial, sans-serif;
-        background: var(--boxel-50);
+        background: var(--boxel-150);
         min-height: 100%;
         display: flex;
         flex-direction: column;
@@ -648,7 +648,7 @@ class IsolatedTemplate extends Component<typeof TodoMvc> {
       }
 
       .empty-state {
-        background: var(--boxel-50);
+        background: var(--boxel-150);
         padding: 1rem;
         text-align: center;
         color: #9ca3af;

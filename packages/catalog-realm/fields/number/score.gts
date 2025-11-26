@@ -105,8 +105,8 @@ export default class ScoreField extends NumberField {
           gap: var(--boxel-sp-5xs, 0.25rem);
         }
         .chart-icon {
-          width: var(--boxel-icon-xxs, 0.75rem);
-          height: var(--boxel-icon-xxs, 0.75rem);
+          width: var(--boxel-icon-2xs, 0.75rem);
+          height: var(--boxel-icon-2xs, 0.75rem);
           color: var(--primary, var(--boxel-purple, #6638ff));
         }
         .value {

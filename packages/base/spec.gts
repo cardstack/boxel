@@ -324,8 +324,8 @@ class Isolated extends Component<typeof Spec> {
       }
       .header-icon-container {
         flex-shrink: 0;
-        height: var(--boxel-icon-xxl);
-        width: var(--boxel-icon-xxl);
+        height: var(--boxel-icon-2xl);
+        width: var(--boxel-icon-2xl);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -691,8 +691,8 @@ class Edit extends Component<typeof Spec> {
       }
       .header-icon-container {
         flex-shrink: 0;
-        height: var(--boxel-icon-xxl);
-        width: var(--boxel-icon-xxl);
+        height: var(--boxel-icon-2xl);
+        width: var(--boxel-icon-2xl);
         display: flex;
         align-items: center;
         justify-content: center;

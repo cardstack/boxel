@@ -145,8 +145,8 @@ export default class AiAssistantChatInput extends Component<Signature> {
         border-color: transparent;
       }
       .send-button {
-        width: var(--boxel-icon-med);
-        height: var(--boxel-icon-med);
+        width: var(--boxel-icon-md);
+        height: var(--boxel-icon-md);
         border-radius: var(--boxel-border-radius-sm);
         margin-top: 2px;
       }

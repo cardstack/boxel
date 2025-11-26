@@ -894,7 +894,7 @@ export default class CodeSubmode extends Component<Signature> {
       }
 
       .empty-container {
-        background-color: var(--boxel-light-100);
+        background-color: var(--boxel-150);
         align-items: center;
         justify-content: center;
       }

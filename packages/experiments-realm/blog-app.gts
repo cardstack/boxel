@@ -272,7 +272,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         flex-grow: 1;
         margin: 0;
         font: 600 var(--boxel-font-lg);
-        letter-spacing: var(--boxel-lsp-xxs);
+        letter-spacing: var(--boxel-lsp-2xs);
       }
       .blog-app-card-list {
         --embedded-card-max-width: 715px;

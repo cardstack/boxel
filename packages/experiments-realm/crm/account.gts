@@ -604,8 +604,8 @@ class IsolatedTemplate extends Component<typeof Account> {
         container-name: tasks-summary-card;
       }
       .upcoming-tasks-title {
-        font: 600 var(--boxel-font-med);
-        letter-spacing: var(--boxel-lsp-xxs);
+        font: 600 var(--boxel-font-md);
+        letter-spacing: var(--boxel-lsp-2xs);
       }
       .tasks-summary-card :deep(.task-card) {
         --task-card-padding: var(--boxel-sp) var(--boxel-sp) var(--boxel-sp)
@@ -613,8 +613,8 @@ class IsolatedTemplate extends Component<typeof Account> {
         border-top: 1px solid var(--boxel-200);
       }
       .task-title {
-        font: 600 var(--boxel-font-med);
-        letter-spacing: var(--boxel-lsp-xxs);
+        font: 600 var(--boxel-font-md);
+        letter-spacing: var(--boxel-lsp-2xs);
         margin: 0;
       }
       .task-pill {
@@ -1057,7 +1057,7 @@ class EmbeddedTemplate extends Component<typeof Account> {
       label {
         font: 500 var(--boxel-font-sm);
         color: var(--boxel-500);
-        letter-spacing: var(--boxel-lsp-xxs);
+        letter-spacing: var(--boxel-lsp-2xs);
         margin: 0;
       }
       .next-steps-display {
@@ -1065,7 +1065,7 @@ class EmbeddedTemplate extends Component<typeof Account> {
         --entity-display-content-gap: var(--boxel-sp-xs);
         display: table;
         padding: var(--boxel-sp-sm);
-        background: var(--boxel-light-300);
+        background: var(--boxel-200);
         border-radius: var(--boxel-border-radius-sm);
       }
       .primary-tag {
@@ -1152,7 +1152,7 @@ class FittedTemplate extends Component<typeof Account> {
       }
 
       .account-name {
-        font: 600 var(--boxel-font-med);
+        font: 600 var(--boxel-font-md);
         overflow: hidden;
         text-overflow: ellipsis;
         display: -webkit-box;
