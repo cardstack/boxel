@@ -58,6 +58,7 @@ export interface DefinitionLookup {
   lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition>;
   invalidate(realmURL: string): Promise<void>;
   registerRealm(realm: LocalRealm): void;
+  forRealm(realm: LocalRealm): DefinitionLookup;
 }
 
 interface LookupContext {
@@ -407,6 +408,10 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
 
   registerRealm(realm: LocalRealm): void {
     this.#inner.registerRealm(realm);
+  }
+
+  forRealm(realm: LocalRealm): DefinitionLookup {
+    return this.#inner.forRealm(realm);
   }
 }
 

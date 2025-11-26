@@ -231,6 +231,9 @@ module('Unit | query', function (hooks) {
         // no-op for tests
       },
       registerRealm() {},
+      forRealm() {
+        return this;
+      },
     };
     indexQueryEngine = new IndexQueryEngine(dbAdapter, mockDefinitionLookup);
   });
