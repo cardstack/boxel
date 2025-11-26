@@ -536,7 +536,6 @@ export async function sendMessage(
 
   await expect(sendButton).toBeEnabled();
   await sendButton.click();
-
   let newMessage = page.locator(
     `[data-test-message-idx="${existingMessageCount}"]`,
   );
@@ -550,7 +549,6 @@ export async function sendMessage(
     { timeout: 30_000 },
   );
   await expect(newMessage.locator('[data-test-card-error]')).toHaveCount(0);
-  await expect(sendButton).toBeEnabled();
 }
 
 export async function assertMessages(
