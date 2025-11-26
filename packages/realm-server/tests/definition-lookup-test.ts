@@ -2,9 +2,9 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import {
   CachingDefinitionLookup,
-  VirtualNetwork,
   type ModulePrerenderArgs,
   type Prerenderer,
+  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
   matrixURL,
@@ -12,7 +12,6 @@ import {
   setupPermissionedRealms,
   createVirtualNetwork,
 } from './helpers';
-import {} from '../prerender/prerenderer';
 import type { PgAdapter } from '@cardstack/postgres/pg-adapter';
 
 module(basename(__filename), function () {
