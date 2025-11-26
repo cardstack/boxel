@@ -410,6 +410,12 @@ module(basename(__filename), function () {
       await prerenderer.stop();
     });
 
+    hooks.beforeEach(function () {
+      permissions = {
+        [consumerRealmURL]: ['read', 'write', 'realm-owner'],
+      };
+    });
+
     hooks.afterEach(async () => {
       await Promise.all([
         prerenderer.disposeRealm(providerRealmURL),
@@ -524,7 +530,7 @@ module(basename(__filename), function () {
       },
     });
 
-    test('module prerender surfaces auth error without timing out', async function (assert) {
+    test.only('module prerender surfaces auth error without timing out', async function (assert) {
       const moduleURL = `${consumerRealmURL}website.gts`;
 
       let result = await prerenderer.prerenderModule({

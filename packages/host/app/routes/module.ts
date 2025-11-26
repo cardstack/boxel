@@ -93,7 +93,11 @@ export default class ModuleRoute extends Route<Model> {
   #releaseTimerBlock: (() => void) | undefined;
 
   deactivate() {
-    (globalThis as any).__lazilyLoadLinks = undefined;
+    // Only unset lazilyLoadLinks if we last set it
+    if ((globalThis as any).__lazilyLoadLinksOwner === 'module') {
+      (globalThis as any).__lazilyLoadLinks = undefined;
+      (globalThis as any).__lazilyLoadLinksOwner = undefined;
+    }
     (globalThis as any).__boxelRenderContext = undefined;
     this.lastStoreResetKey = undefined;
     this.#authGuard.unregister();
@@ -108,6 +112,7 @@ export default class ModuleRoute extends Route<Model> {
     // activate() doesn't run early enough for this to be set before the model()
     // hook is run
     (globalThis as any).__lazilyLoadLinks = true;
+    (globalThis as any).__lazilyLoadLinksOwner = 'module';
     (globalThis as any).__boxelRenderContext = true;
     this.#authGuard.register();
     if (!isTesting()) {
@@ -455,12 +460,27 @@ export function modelWithError({
     hoisted.additionalErrors = null;
     baseError = serializableError(hoisted);
   } else {
+    let additional = err !== undefined ? serializableError(err) : null;
+    let nestedStatus: number | undefined;
+    if (additional) {
+      if (typeof additional.status === 'number') {
+        nestedStatus = additional.status;
+      } else if (
+        typeof additional.status === 'string' &&
+        /^\d+$/.test(additional.status)
+      ) {
+        nestedStatus = Number(additional.status);
+      }
+    }
     baseError = {
       status: status ?? err?.status ?? 500,
       message,
-      additionalErrors: err !== undefined ? [serializableError(err)] : null,
+      additionalErrors: additional ? [additional] : null,
       deps: stripSelfDeps(deps, id, id),
     };
+    if (nestedStatus && !status && !err?.status) {
+      baseError.status = nestedStatus;
+    }
   }
   return {
     id,
