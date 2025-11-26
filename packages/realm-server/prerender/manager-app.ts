@@ -520,7 +520,7 @@ export function buildPrerenderManagerApp(): {
   // won't keep the Node.js process alive on shutdown.
   if (heartbeatSweepIntervalMs > 0) {
     const timer = setInterval(() => {
-      sweepServers().catch((e) => log.warn('Health sweep error:', e));
+      sweepServers().catch((e) => log.warn('Heartbeat sweep error:', e));
     }, heartbeatSweepIntervalMs);
     (timer as any).unref?.();
   }
