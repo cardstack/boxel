@@ -25,7 +25,7 @@ NODE_ENV=development \
   --port=4201 \
   --matrixURL='http://localhost:8008' \
   --realmsRootPath='./realms/localhost_4201_base' \
-  --prerendererUrl="${PRERENDER_URL}"` \
+  --prerendererUrl="${PRERENDER_URL}" \
   --migrateDB \
   $1 \
   \
