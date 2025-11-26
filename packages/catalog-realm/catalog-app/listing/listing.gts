@@ -32,7 +32,8 @@ import {
   CardContainer,
 } from '@cardstack/boxel-ui/components';
 import { eq, type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
-import { AiBw as AiBwIcon } from '@cardstack/boxel-ui/icons';
+import Wand from '@cardstack/boxel-icons/wand';
+import Upload from '@cardstack/boxel-icons/upload';
 
 import AppListingHeader from '../components/app-listing-header';
 import ChooseRealmAction from '../components/choose-realm-action';
@@ -159,6 +160,12 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       : undefined;
   }
 
+  get themeActions() {
+    return this.listingActions?.type === 'theme'
+      ? this.listingActions
+      : undefined;
+  }
+
   get skillActions() {
     return this.listingActions?.type === 'skill'
       ? this.listingActions
@@ -212,6 +219,14 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                     @name='Remix'
                     @writableRealms={{this.writableRealms}}
                     @onAction={{this.regularActions.remix}}
+                  />
+                {{/if}}
+              {{else if this.themeActions}}
+                {{#if this.themeActions.remix}}
+                  <ChooseRealmAction
+                    @name='Remix'
+                    @onAction={{this.themeActions.remix}}
+                    @writableRealms={{this.writableRealms}}
                   />
                 {{/if}}
               {{/if}}
@@ -591,18 +606,29 @@ export class Listing extends CardDef {
           console.warn('Failed to generate listing example', { error });
         }
       },
-      icon: AiBwIcon,
+      icon: Wand,
       id: 'generate-listing-example',
     };
   }
 
   [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
-    let menuItems = super[getCardMenuItems](params);
+    let menuItems = super[getCardMenuItems](params).filter(
+      (item) => item.label?.toLowerCase() !== 'create listing with ai',
+    );
     if (params.menuContext === 'interact') {
       const extra = this.getGenerateExampleMenuItem(params);
       if (extra) {
         menuItems = [...menuItems, extra];
       }
+      menuItems = [
+        ...menuItems,
+        {
+          label: 'Publish to Catalog',
+          action: async () => {},
+          disabled: true,
+          icon: Upload,
+        },
+      ];
     }
     return menuItems;
   }
@@ -627,6 +653,10 @@ export class FieldListing extends Listing {
 
 export class SkillListing extends Listing {
   static displayName = 'SkillListing';
+}
+
+export class ThemeListing extends Listing {
+  static displayName = 'ThemeListing';
 }
 
 function specBreakdown(specs: Spec[]): Record<string, Spec[]> {
