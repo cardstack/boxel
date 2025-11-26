@@ -57,7 +57,7 @@ jobs:
       - name: Disable TCP/UDP network offloading
         run: sudo ethtool -K eth0 tx off rx off
       - name: Restore Chrome HTTP cache
-        uses: actions/cache@13aacd865c20de90d75de3b19f0bc992e1b501e1 # 4.1.0
+        uses: actions/cache@v4
         with:
           path: ${{ env.CHROME_HTTP_CACHE_DIR }}
           key: host-chrome-http-cache-${{ runner.os }}-v1-shard-${{ matrix.shardIndex }}-${{ github.run_number }}
