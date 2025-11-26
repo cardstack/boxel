@@ -31,10 +31,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        shardIndex: [15]
+        repeat: [1, 2, 3, 4, 5]
         shardTotal: [16]
     concurrency:
-      group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
+      group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}-run${{ matrix.repeat }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
@@ -74,7 +75,7 @@ jobs:
           sudo service dbus restart
           sudo service upower restart
 
-      - name: host test suite (shard ${{ matrix.shardIndex }})
+      - name: host test suite (shard ${{ matrix.shardIndex }}, run ${{ matrix.repeat }})
         run: dbus-run-session -- pnpm test-with-percy
         env:
           PERCY_GZIP: true
@@ -89,7 +90,7 @@ jobs:
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
         with:
-          name: host-test-report-${{ matrix.shardIndex }}
+          name: host-test-report-${{ matrix.shardIndex }}-run-${{ matrix.repeat }}
           path: junit/host-${{ matrix.shardIndex }}.xml
           retention-days: 30
       - name: Print realm server logs
@@ -99,21 +100,21 @@ jobs:
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
         with:
-          name: realm-server-log-${{ matrix.shardIndex }}
+          name: realm-server-log-${{ matrix.shardIndex }}-run-${{ matrix.repeat }}
           path: /tmp/server.log
           retention-days: 30
       - name: Upload testem log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
         with:
-          name: testem-log-${{ matrix.shardIndex }}
+          name: testem-log-${{ matrix.shardIndex }}-run-${{ matrix.repeat }}
           path: junit/host-testem.log
           retention-days: 30
       - name: Upload icon server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
         with:
-          name: icon-server-log-${{ matrix.shardIndex }}
+          name: icon-server-log-${{ matrix.shardIndex }}-run-${{ matrix.repeat }}
           path: /tmp/icon-server.log
           retention-days: 30
 
