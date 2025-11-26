@@ -222,8 +222,8 @@ module(basename(__filename), function () {
 
       test('non-owner cannot patch realm config', async function (assert) {
         let response = await request
-          .patch('/_info')
-          .set('Accept', SupportedMimeType.RealmInfo)
+          .patch('/_config')
+          .set('Accept', SupportedMimeType.JSON)
           .set(
             'Authorization',
             `Bearer ${createJWT(testRealm, 'carol', ['read', 'write'])}`,
@@ -247,8 +247,8 @@ module(basename(__filename), function () {
 
       test('realm-owner can patch allowed realm config property', async function (assert) {
         let response = await request
-          .patch('/_info')
-          .set('Accept', SupportedMimeType.RealmInfo)
+          .patch('/_config')
+          .set('Accept', SupportedMimeType.JSON)
           .set(
             'Authorization',
             `Bearer ${createJWT(testRealm, 'user', [
@@ -287,10 +287,10 @@ module(basename(__filename), function () {
         );
       });
 
-      test('disallowed property returns bad request', async function (assert) {
+      test('allows any property except showAsCatalog', async function (assert) {
         let response = await request
-          .patch('/_info')
-          .set('Accept', SupportedMimeType.RealmInfo)
+          .patch('/_config')
+          .set('Accept', SupportedMimeType.JSON)
           .set(
             'Authorization',
             `Bearer ${createJWT(testRealm, 'user', [
@@ -306,20 +306,16 @@ module(basename(__filename), function () {
             },
           });
 
-        assert.strictEqual(response.status, 400, 'HTTP 400 status');
-        if (initialConfig) {
-          assert.deepEqual(
-            readJSONSync(realmConfigPath),
-            initialConfig,
-            '.realm.json remains unchanged',
-          );
-        }
-      });
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          readJSONSync(realmConfigPath),
+          { ...(initialConfig ?? {}), publishable: true },
+          '.realm.json contains the updated property',
+        );
 
-      test('invalid value type returns bad request', async function (assert) {
-        let response = await request
-          .patch('/_info')
-          .set('Accept', SupportedMimeType.RealmInfo)
+        let showAsCatalogResponse = await request
+          .patch('/_config')
+          .set('Accept', SupportedMimeType.JSON)
           .set(
             'Authorization',
             `Bearer ${createJWT(testRealm, 'user', [
@@ -331,18 +327,20 @@ module(basename(__filename), function () {
           .send({
             data: {
               type: 'realm-info',
-              attributes: { property: 'backgroundURL', value: true },
+              attributes: { property: 'showAsCatalog', value: true },
             },
           });
 
-        assert.strictEqual(response.status, 400, 'HTTP 400 status');
-        if (initialConfig) {
-          assert.deepEqual(
-            readJSONSync(realmConfigPath),
-            initialConfig,
-            '.realm.json remains unchanged',
-          );
-        }
+        assert.strictEqual(
+          showAsCatalogResponse.status,
+          400,
+          'HTTP 400 status when attempting to set showAsCatalog',
+        );
+        assert.deepEqual(
+          readJSONSync(realmConfigPath),
+          { ...(initialConfig ?? {}), publishable: true },
+          '.realm.json remains unchanged after disallowed property',
+        );
       });
     });
 

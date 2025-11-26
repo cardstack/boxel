@@ -440,9 +440,9 @@ export class Realm {
     this.#router = new Router(new URL(url))
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
       .patch(
-        '/_info',
-        SupportedMimeType.RealmInfo,
-        this.patchRealmInfo.bind(this),
+        '/_config',
+        SupportedMimeType.JSON,
+        this.patchRealmConfig.bind(this),
       )
       .query('/_lint', SupportedMimeType.JSON, this.lint.bind(this))
       .get('/_mtimes', SupportedMimeType.Mtimes, this.realmMtimes.bind(this))
@@ -1303,6 +1303,7 @@ export class Realm {
     }
 
     let requestContext = await this.createRequestContext(); // Cache realm permissions for the duration of the request so that we don't have to fetch them multiple times
+    let localPath = this.paths.local(new URL(request.url));
 
     try {
       if (!isLocal) {
@@ -1331,10 +1332,9 @@ export class Realm {
         }
 
         let requiredPermission: RealmAction;
-        let localPath = this.paths.local(new URL(request.url));
         if (
           ['_permissions'].includes(localPath) ||
-          (localPath === '_info' && request.method === 'PATCH')
+          (localPath === '_config' && request.method === 'PATCH')
         ) {
           requiredPermission = 'realm-owner';
         } else if (
@@ -3119,7 +3119,7 @@ export class Realm {
     return realmInfo;
   }
 
-  private async patchRealmInfo(
+  private async patchRealmConfig(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
@@ -3136,50 +3136,25 @@ export class Realm {
     }
 
     const realmConfigPatchSchema = z.object({
-      property: z.enum([
-        'backgroundURL',
-        'iconURL',
-        'interactHome',
-        'hostHome',
-      ]),
+      property: z
+        .string()
+        .min(1)
+        .refine(
+          (property: any) => property !== 'showAsCatalog',
+          'showAsCatalog cannot be updated',
+        ),
       value: z.unknown(),
     });
-
-    type RealmConfigPatchProperty = z.infer<
-      typeof realmConfigPatchSchema
-    >['property'];
 
     let parsed = realmConfigPatchSchema.safeParse(json.data?.attributes ?? {});
     if (!parsed.success) {
       let message =
-        parsed.error.issues.map((issue) => issue.message).join(', ') ||
+        parsed.error.issues.map((issue: any) => issue.message).join(', ') ||
         'The request body was invalid';
       return badRequest({ message, requestContext });
     }
 
-    const stringOrNull = z.string().nullable();
-    const propertySchemas: Record<
-      RealmConfigPatchProperty,
-      z.ZodNullable<z.ZodString>
-    > = {
-      backgroundURL: stringOrNull,
-      iconURL: stringOrNull,
-      interactHome: stringOrNull,
-      hostHome: stringOrNull,
-    };
-
-    let valueResult = propertySchemas[parsed.data.property].safeParse(
-      parsed.data.value,
-    );
-    if (!valueResult.success) {
-      let message =
-        valueResult.error.issues.map((issue) => issue.message).join(', ') ||
-        'The request body was invalid';
-      return badRequest({ message, requestContext });
-    }
-
-    let { property } = parsed.data;
-    let value = valueResult.data;
+    let { property, value } = parsed.data;
 
     let fileURL = this.paths.fileURL(`.realm.json`);
     let realmConfigPath: LocalPath = this.paths.local(fileURL);
