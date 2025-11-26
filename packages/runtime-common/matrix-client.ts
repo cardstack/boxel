@@ -55,6 +55,7 @@ export class MatrixClient {
     includeAuth = true,
   ) {
     options.method = method;
+
     if (includeAuth) {
       if (!this.access) {
         throw new Error(`Missing matrix access token`);

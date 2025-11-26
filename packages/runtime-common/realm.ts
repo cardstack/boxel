@@ -1262,6 +1262,10 @@ export class Realm {
             this.#realmSecretSeed,
           );
         },
+        ensureSessionRoom: async (userId: string) =>
+          this.ensureSessionRoom(userId),
+        setSessionRoom: (userId: string, roomId: string) =>
+          upsertSessionRoom(this.#dbAdapter, this.url, userId, roomId),
       } as Utils,
     );
 

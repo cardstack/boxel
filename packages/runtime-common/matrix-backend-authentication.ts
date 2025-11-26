@@ -6,7 +6,8 @@ export interface Utils {
     body: BodyInit | null,
     responseInit: ResponseInit | undefined,
   ): Response;
-  createJWT(user: string): Promise<string>;
+  createJWT(user: string, sessionRoom?: string): Promise<string>;
+  ensureSessionRoom(user: string): Promise<string>;
 }
 
 export class MatrixBackendAuthentication {
@@ -36,7 +37,8 @@ export class MatrixBackendAuthentication {
     const user = await this.matrixClient.getUserIdFromOpenIdToken(accessToken);
 
     if (user) {
-      let jwt = await this.utils.createJWT(user);
+      let roomId = await this.utils.ensureSessionRoom(user);
+      let jwt = await this.utils.createJWT(user, roomId);
       return this.utils.createResponse(null, {
         status: 201,
         headers: {
