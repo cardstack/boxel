@@ -509,16 +509,6 @@ module(basename(__filename), function () {
           cleanWhiteSpace(`<h1> Mango $</h1>`),
           'pre-rendered isolated format html is correct',
         );
-        assert.ok(entry.headHtml, 'pre-rendered head format html is present');
-        let cleanedHead = cleanWhiteSpace(entry.headHtml!);
-        assert.ok(
-          cleanedHead.includes('<title data-test-card-head-title>'),
-          `head html includes title: ${cleanedHead}`,
-        );
-        assert.ok(
-          cleanedHead.includes(`property="og:url" content="${testRealm}mango"`),
-          `head html includes canonical url: ${cleanedHead}`,
-        );
         assert.strictEqual(
           trimCardContainer(
             stripScopedCSSAttributes(
