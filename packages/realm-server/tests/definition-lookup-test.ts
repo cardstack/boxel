@@ -14,7 +14,7 @@ import {} from '../prerender/prerenderer';
 import type { PgAdapter } from '@cardstack/postgres/pg-adapter';
 
 module(basename(__filename), function () {
-  module.only('DefinitionLookup', function (hooks) {
+  module('DefinitionLookup', function (hooks) {
     let definitionLookup: CachingDefinitionLookup;
     let realmURL = 'http://127.0.0.1:4450/';
     let testUserId = '@user1:localhost';

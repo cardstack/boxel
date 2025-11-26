@@ -67,6 +67,9 @@ module('Unit | index-writer', function (hooks) {
       async getRealmOwnerUserId() {
         return '@user1:localhost';
       },
+      async visibility() {
+        return 'private';
+      },
     });
 
     indexQueryEngine = new IndexQueryEngine(adapter, definitionLookup);

@@ -18,11 +18,6 @@ const modulesTableCoerceTypes: TypeCoercion = Object.freeze({
 });
 
 type CacheScope = 'public' | 'realm-auth';
-type AuthHeaderProvider = (
-  realmURL: string,
-  userId: string,
-) => Promise<HeadersInit | undefined>;
-
 type LocalRealm = Pick<Realm, 'url' | 'getRealmOwnerUserId' | 'visibility'>;
 
 interface ModuleCacheEntry {
