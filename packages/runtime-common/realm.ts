@@ -1237,7 +1237,6 @@ export class Realm {
   ) {
     let matrixBackendAuthentication = new MatrixBackendAuthentication(
       this.#matrixClient,
-      this.#realmSecretSeed,
       {
         badRequest: function (message: string) {
           return badRequest({ message, requestContext });
