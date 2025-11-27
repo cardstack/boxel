@@ -2,6 +2,7 @@ import {
   CardDef,
   field,
   contains,
+  containsMany,
   Component,
 } from 'https://cardstack.com/base/card-api';
 import { fn } from '@ember/helper';
@@ -25,7 +26,6 @@ import MonthYearField from '../fields/date/month-year';
 import WeekField from '../fields/date/week';
 import NumberField from '../fields/number';
 import ImageField from '../fields/image-field';
-import MultipleImageField from '../fields/multiple-image-field';
 import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
 import CubeIcon from '@cardstack/boxel-icons/cube';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
@@ -172,7 +172,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
     'number-score': ['standard'],
     'number-progress-circle': ['standard'],
     image: ['standard', 'image', 'inline', 'card'],
-    multipleImage: ['standard', 'grid', 'carousel'],
+    imageCollection: ['standard', 'grid', 'carousel'],
   };
 
   fieldTypeOptions = [
@@ -304,12 +304,16 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
     {
       groupName: 'Image Fields',
       options: [
-        { value: 'image', label: 'ImageField', fieldName: 'playgroundImage' },
         {
-          value: 'multipleImage',
-          label: 'MultipleImageField',
-          fieldName: 'playgroundMultipleImage',
+          value: 'image',
+          label: 'ImageField (Single)',
+          fieldName: 'playgroundImage',
         },
+        // {
+        //   value: 'imageCollection',
+        //   label: 'ImageField (Collection)',
+        //   fieldName: 'playgroundImageCollection',
+        // },
       ],
     },
   ];
@@ -349,7 +353,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
     );
 
     // For image fields, return the filtered options (no 'standard' fallback)
-    if (fieldType === 'image' || fieldType === 'multipleImage') {
+    if (fieldType === 'image' || fieldType === 'imageCollection') {
       return filtered.length > 0 ? filtered : [];
     }
 
@@ -442,27 +446,27 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
           fieldName: 'imageDropzone',
         },
       ],
-      multipleImage: [
+      imageCollection: [
         {
           name: 'List Variant',
           description: 'Standard list view with grid display',
           config:
-            '@field myImages = contains(MultipleImageField, { configuration: { variant: "list", presentation: "grid" } });',
-          fieldName: 'multipleImageList',
+            '@field myImages = containsMany(ImageField, { configuration: { variant: "list", presentation: "grid" } });',
+          fieldName: 'imageCollectionList',
         },
         {
           name: 'Gallery Variant',
           description: 'Grid edit with carousel display and reordering',
           config:
-            '@field myGallery = contains(MultipleImageField, { configuration: { variant: "gallery", presentation: "carousel", options: { allowReorder: true, maxFiles: 4 } } });',
-          fieldName: 'multipleImageGallery',
+            '@field myGallery = containsMany(ImageField, { configuration: { variant: "gallery", presentation: "carousel", options: { allowReorder: true, maxFiles: 4 } } });',
+          fieldName: 'imageCollectionGallery',
         },
         {
           name: 'Dropzone Variant',
           description: 'Drag and drop multiple images with carousel',
           config:
-            '@field myDropzoneImages = contains(MultipleImageField, { configuration: { variant: "dropzone", presentation: "carousel", maxFiles: 10 } });',
-          fieldName: 'multipleImageDropzone',
+            '@field myDropzoneImages = containsMany(ImageField, { configuration: { variant: "dropzone", presentation: "carousel", options: { maxFiles: 10 } } });',
+          fieldName: 'imageCollectionDropzone',
         },
       ],
     };
@@ -489,7 +493,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       const fieldType = this.args.model?.playgroundFieldType || 'date';
       if (
         fieldType === 'image' ||
-        fieldType === 'multipleImage' ||
+        fieldType === 'imageCollection' ||
         option.value !== 'standard'
       ) {
         this.selectedFormat = 'embedded';
@@ -699,13 +703,13 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
 });`;
     }
 
-    if (fieldType === 'multipleImage') {
+    if (fieldType === 'imageCollection') {
       const presentation =
         this.args.model?.playgroundPresentation || 'standard';
       if (presentation === 'standard') {
-        return `@field myField = contains(MultipleImageField);`;
+        return `@field myField = containsMany(ImageField);`;
       }
-      return `@field myField = contains(MultipleImageField, {
+      return `@field myField = containsMany(ImageField, {
   configuration: {
     presentation: '${presentation}'
   }
@@ -859,9 +863,10 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
               {{else if (eq this.currentPlaygroundField 'playgroundImage')}}
                 Single image upload field with multiple presentation modes
               {{else if
-                (eq this.currentPlaygroundField 'playgroundMultipleImage')
+                (eq this.currentPlaygroundField 'playgroundImageCollection')
               }}
                 Multiple image upload field with grid and carousel presentations
+                using containsMany
               {{else}}
                 Explore the interactive demo below
               {{/if}}
@@ -1046,9 +1051,9 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
                 {{else if (eq this.currentPlaygroundField 'playgroundImage')}}
                   <@fields.playgroundImage @format={{this.selectedFormat}} />
                 {{else if
-                  (eq this.currentPlaygroundField 'playgroundMultipleImage')
+                  (eq this.currentPlaygroundField 'playgroundImageCollection')
                 }}
-                  <@fields.playgroundMultipleImage
+                  <@fields.playgroundImageCollection
                     @format={{this.selectedFormat}}
                   />
                 {{/if}}
@@ -1212,24 +1217,8 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
                           <@fields.imageAvatar
                             @format={{this.selectedFormat}}
                           />
-                        {{else if (eq example.fieldName 'imageDropzone')}}
+                        {{else}}
                           <@fields.imageDropzone
-                            @format={{this.selectedFormat}}
-                          />
-                        {{else if (eq example.fieldName 'multipleImageList')}}
-                          <@fields.multipleImageList
-                            @format={{this.selectedFormat}}
-                          />
-                        {{else if
-                          (eq example.fieldName 'multipleImageGallery')
-                        }}
-                          <@fields.multipleImageGallery
-                            @format={{this.selectedFormat}}
-                          />
-                        {{else if
-                          (eq example.fieldName 'multipleImageDropzone')
-                        }}
-                          <@fields.multipleImageDropzone
                             @format={{this.selectedFormat}}
                           />
                         {{/if}}
@@ -2630,8 +2619,8 @@ export class FieldShowcase extends CardDef {
     },
   });
 
-  // MultipleImageField playground field
-  @field playgroundMultipleImage = contains(MultipleImageField, {
+  // ImageField collection playground field (using containsMany)
+  @field playgroundImageCollection = containsMany(ImageField, {
     configuration: function (this: FieldShowcase) {
       const presentation = this.playgroundPresentation || 'standard';
       return {
@@ -2690,38 +2679,38 @@ export class FieldShowcase extends CardDef {
     },
   });
 
-  // MultipleImageField examples - variant configurations
-  @field multipleImageList = contains(MultipleImageField, {
-    configuration: {
-      variant: 'list',
-      presentation: 'grid',
-    },
-  });
-  @field multipleImageGallery = contains(MultipleImageField, {
-    configuration: {
-      variant: 'gallery',
-      presentation: 'carousel',
-      options: {
-        autoUpload: false,
-        allowBatchSelect: true,
-        allowReorder: true,
-        maxFiles: 4,
-        showProgress: true,
-      },
-    },
-  });
-  @field multipleImageDropzone = contains(MultipleImageField, {
-    configuration: {
-      variant: 'dropzone',
-      presentation: 'carousel',
-      options: {
-        autoUpload: false,
-        allowBatchSelect: true,
-        showProgress: true,
-        maxFiles: 10,
-      },
-    },
-  });
+  // ImageField collection examples - variant configurations using containsMany
+  // @field imageCollectionList = containsMany(ImageField, {
+  //   configuration: {
+  //     variant: 'list',
+  //     presentation: 'grid',
+  //   },
+  // });
+  // @field imageCollectionGallery = containsMany(ImageField, {
+  //   configuration: {
+  //     variant: 'gallery',
+  //     presentation: 'carousel',
+  //     options: {
+  //       autoUpload: false,
+  //       allowBatchSelect: true,
+  //       allowReorder: true,
+  //       maxFiles: 4,
+  //       showProgress: true,
+  //     },
+  //   },
+  // });
+  // @field imageCollectionDropzone = containsMany(ImageField, {
+  //   configuration: {
+  //     variant: 'dropzone',
+  //     presentation: 'carousel',
+  //     options: {
+  //       autoUpload: false,
+  //       allowBatchSelect: true,
+  //       showProgress: true,
+  //       maxFiles: 10,
+  //     },
+  //   },
+  // });
 
   static isolated = FieldShowcaseIsolated;
 }

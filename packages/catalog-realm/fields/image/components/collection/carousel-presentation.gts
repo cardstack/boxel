@@ -128,7 +128,11 @@ export default class CarouselPresentation extends GlimmerComponent<CarouselPrese
         transform: translateY(-50%);
         width: 2.5rem;
         height: 2.5rem;
-        background: color-mix(in srgb, var(--background, #ffffff) 90%, transparent);
+        background: color-mix(
+          in srgb,
+          var(--background, #ffffff) 90%,
+          transparent
+        );
         border: none;
         border-radius: 9999px;
         display: flex;
@@ -200,4 +204,3 @@ export default class CarouselPresentation extends GlimmerComponent<CarouselPrese
     </style>
   </template>
 }
-

@@ -41,4 +41,3 @@ export default class GridPresentation extends GlimmerComponent<GridPresentationS
     </style>
   </template>
 }
-

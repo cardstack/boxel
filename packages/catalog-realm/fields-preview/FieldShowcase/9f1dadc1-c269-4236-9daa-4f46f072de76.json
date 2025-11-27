@@ -19,8 +19,8 @@
         "uploadedImageUrl": null
       },
       "imageBrowse": {
-        "uploadUrl": null,
-        "uploadedImageUrl": null
+        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764167493490",
+        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764167493490/public"
       },
       "imageDropzone": {
         "uploadUrl": null,
@@ -49,9 +49,6 @@
       "meetingTime24Hour": {
         "value": "14:30"
       },
-      "multipleImageList": {
-        "images": []
-      },
       "playgroundQuarter": {
         "year": null,
         "quarter": null
@@ -72,7 +69,7 @@
         "end": null,
         "start": null
       },
-      "playgroundFieldType": "multipleImage",
+      "playgroundFieldType": "image",
       "playgroundMonthYear": {
         "value": "2025-10"
       },
@@ -84,27 +81,8 @@
           "value": null
         }
       },
-      "multipleImageGallery": {
-        "images": [
-          {
-            "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764090026309/public"
-          },
-          {
-            "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764090033434/public"
-          },
-          {
-            "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764090035611/public"
-          }
-        ]
-      },
       "playgroundNumberStat": null,
       "appointmentDateCustom": "2025-12-15",
-      "multipleImageDropzone": {
-        "images": []
-      },
       "playgroundNumberBasic": null,
       "playgroundNumberGauge": null,
       "playgroundNumberScore": null,
@@ -116,20 +94,9 @@
         "unit": null,
         "amount": null
       },
-      "playgroundMultipleImage": {
-        "images": [
-          {
-            "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764089989880/public"
-          },
-          {
-            "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764089992240/public"
-          }
-        ]
-      },
       "playgroundNumberProgress": null,
       "playgroundNumberQuantity": null,
+      "playgroundImageCollection": [],
       "playgroundNumberPercentage": null,
       "playgroundRecurringPattern": {
         "endDate": null,

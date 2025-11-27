@@ -203,6 +203,7 @@ export type FieldsTypeFor<T extends BaseDef> = {
 };
 export { formats, type Format };
 export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
+
 // Opaque configuration passed to field format components and validators
 export type FieldConfiguration = Record<string, any>;
 // Configuration may be provided as a static object or a function of the parent instance
@@ -2187,6 +2188,7 @@ export type BaseDefComponent = ComponentLike<{
     model: any;
     set: Setter;
     fieldName: string | undefined;
+    fieldType?: FieldType | undefined;
     context?: CardContext;
     canEdit?: boolean;
     typeConstraint?: ResolvedCodeRef;

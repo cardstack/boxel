@@ -10,12 +10,12 @@ import StringField from 'https://cardstack.com/base/string';
 import CameraIcon from '@cardstack/boxel-icons/camera';
 import Grid3x3Icon from '@cardstack/boxel-icons/grid-3x3';
 // Single image components
-import SingleEmbeddedPresentation from './image/components/single/single-embedded-presentation';
-import SingleImageFieldEdit from './image/components/single/single-image-field-edit';
+import SingleEmbeddedPresentation from './components/single/single-embedded-presentation';
+import SingleImageFieldEdit from './components/single/single-image-field-edit';
 
 // Collection (multiple image) components
-import CollectionEmbeddedPresentation from './image/components/collection/collection-embedded-presentation';
-import CollectionImageFieldEdit from './image/components/collection/collection-image-field-edit';
+import CollectionEmbeddedPresentation from './components/collection/collection-embedded-presentation';
+import CollectionImageFieldEdit from './components/collection/collection-image-field-edit';
 
 // Type definitions
 type ImagePresentationType = 'standard' | 'image' | 'inline' | 'card';
@@ -77,26 +77,39 @@ export type BoxWithState<T> = {
   name?: string | number;
 };
 
+function isInContainsManyContext(model: any): boolean {
+  return Array.isArray(model) && model.length >= 0;
+}
+
 class ImageFieldEdit extends Component<typeof ImageField> {
+  // Detect if we're in a containsMany context
   get isCollectionMode(): boolean {
-    // Detect collection mode by checking if @model is an array (fallback if fieldType is not set)
-    let fieldType = (this.args as any).fieldType as string | undefined;
-    if (fieldType) {
-      return fieldType === 'containsMany';
-    }
-    return Array.isArray(this.args.model);
+    console.log('collection mode', this.args.model);
+    return isInContainsManyContext(this.args.model);
+  }
+
+  // Only the first item in a collection should render the collection UI
+  get shouldRenderCollection(): boolean {
+    if (!this.isCollectionMode) return false;
+    const model = this.args.model as unknown as BoxWithState<ImageField>;
+    const modelName = model.name;
+    return modelName === '0' || modelName === 0;
   }
 
   <template>
     {{#if this.isCollectionMode}}
-      <CollectionImageFieldEdit
-        @model={{@model}}
-        @fields={{@fields}}
-        @set={{@set}}
-        @fieldName={{@fieldName}}
-        @context={{@context}}
-        @configuration={{@configuration}}
-      />
+      {{#if this.shouldRenderCollection}}
+        <CollectionImageFieldEdit
+          @model={{@model}}
+          @fields={{@fields}}
+          @set={{@set}}
+          @fieldName={{@fieldName}}
+          @context={{@context}}
+          @configuration={{@configuration}}
+        />
+      {{else}}
+        <div style='display: none;' aria-hidden='true'></div>
+      {{/if}}
     {{else}}
       <SingleImageFieldEdit
         @model={{@model}}
@@ -112,9 +125,7 @@ class ImageFieldEdit extends Component<typeof ImageField> {
 
 class ImageFieldEmbedded extends Component<typeof ImageField> {
   get isCollectionMode(): boolean {
-    // Prefer explicit field type when available (comes from base FieldComponent)
-    let fieldType = (this.args as any).fieldType as string | undefined;
-    return fieldType === 'containsMany';
+    return isInContainsManyContext(this.args.model);
   }
 
   get parentArray(): ImageField[] | undefined {
@@ -162,13 +173,25 @@ class ImageFieldEmbedded extends Component<typeof ImageField> {
       : (presentation as ImagePresentationType);
   }
 
+  get shouldRenderCollection(): boolean {
+    if (!this.isCollectionMode) return false;
+    const model = this.args.model as unknown as BoxWithState<ImageField>;
+    const modelName = model.name;
+    return modelName === '0' || modelName === 0;
+  }
+
   <template>
+    {{! Collection mode (containsMany) or single image mode (contains) }}
     {{#if this.isCollectionMode}}
-      <CollectionEmbeddedPresentation
-        @images={{this.parentArray}}
-        @presentation={{this.collectionPresentation}}
-        @hasImages={{this.hasCollectionImages}}
-      />
+      {{#if this.shouldRenderCollection}}
+        <CollectionEmbeddedPresentation
+          @images={{this.parentArray}}
+          @presentation={{this.collectionPresentation}}
+          @hasImages={{this.hasCollectionImages}}
+        />
+      {{else}}
+        <div style='display: none;' aria-hidden='true'></div>
+      {{/if}}
     {{else}}
       <SingleEmbeddedPresentation
         @imageUrl={{@model.uploadedImageUrl}}
@@ -204,10 +227,9 @@ class ImageFieldEmbedded extends Component<typeof ImageField> {
 }
 
 class ImageFieldAtom extends Component<typeof ImageField> {
+  // Check if we're in collection mode
   get isCollectionMode(): boolean {
-    // Prefer explicit field type when available (comes from base FieldComponent)
-    let fieldType = (this.args as any).fieldType as string | undefined;
-    return fieldType === 'containsMany';
+    return isInContainsManyContext(this.args.model);
   }
 
   // Get parent array when in collection mode
@@ -222,6 +244,15 @@ class ImageFieldAtom extends Component<typeof ImageField> {
       }
     }
     return undefined;
+  }
+
+  // Only the first item in a collection should render the collection UI
+  // This prevents duplicate UIs when containsMany creates multiple component instances
+  get shouldRenderCollection(): boolean {
+    if (!this.isCollectionMode) return false;
+    const model = this.args.model as unknown as BoxWithState<ImageField>;
+    const modelName = model.name;
+    return modelName === '0' || modelName === 0;
   }
 
   get hasImage() {
@@ -240,20 +271,25 @@ class ImageFieldAtom extends Component<typeof ImageField> {
 
   <template>
     {{#if this.isCollectionMode}}
-      <span class='image-atom multiple-image-atom'>
-        {{#if this.firstImage}}
-          <img
-            src={{this.firstImage.uploadedImageUrl}}
-            alt=''
-            class='atom-thumbnail'
-          />
-          <span class='atom-count'>{{this.imageCount}}
-            {{if (eq this.imageCount 1) 'image' 'images'}}</span>
-        {{else}}
-          <Grid3x3Icon class='atom-icon' />
-          <span>No images</span>
-        {{/if}}
-      </span>
+      {{#if this.shouldRenderCollection}}
+        {{! Collection mode - show count with first image }}
+        <span class='image-atom multiple-image-atom'>
+          {{#if this.firstImage}}
+            <img
+              src={{this.firstImage.uploadedImageUrl}}
+              alt=''
+              class='atom-thumbnail'
+            />
+            <span class='atom-count'>{{this.imageCount}}
+              {{if (eq this.imageCount 1) 'image' 'images'}}</span>
+          {{else}}
+            <Grid3x3Icon class='atom-icon' />
+            <span>No images</span>
+          {{/if}}
+        </span>
+        {{! Collection mode but not first item - render nothing }}
+        <span style='display: none;'></span>
+      {{/if}}
     {{else}}
       {{! Single image mode }}
       <span class='image-atom'>
@@ -327,9 +363,9 @@ export class ImageField extends FieldDef {
   @field uploadUrl = contains(StringField); // Temporary upload URL from Cloudflare
   @field uploadedImageUrl = contains(StringField); // Permanent CDN URL
 
-  static embedded = ImageFieldEmbedded;
-  static atom = ImageFieldAtom;
-  static edit = ImageFieldEdit;
+  // static embedded = ImageFieldEmbedded;
+  // static atom = ImageFieldAtom;
+  // static edit = ImageFieldEdit;
 }
 
 export default ImageField;

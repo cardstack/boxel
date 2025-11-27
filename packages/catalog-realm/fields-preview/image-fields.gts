@@ -1,6 +1,11 @@
 import ImageIcon from '@cardstack/boxel-icons/image';
-import { ImageField } from '../fields/image-field';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import ImageField from '../fields/image-field';
+import {
+  CardDef,
+  field,
+  contains,
+  containsMany,
+} from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 
 export class ImageFieldsPreview extends CardDef {
@@ -26,9 +31,21 @@ export class ImageFieldsPreview extends CardDef {
    *       showProgress: true,
    *       autoUpload: false
    *     }
+   * - multipleImages: uses containsMany for multiple image upload
+   *     variant = 'gallery' (or 'list' | 'dropzone'),
+   *     presentation = 'grid' (or 'carousel' | 'standard'),
+   *     options = {
+   *       autoUpload: true,
+   *       allowReorder: true,
+   *       allowBatchSelect: true,
+   *       maxFiles: 10,
+   *       showProgress: false
+   *     }
    *
-   * Valid variants: 'browse' | 'dropzone' | 'avatar'
-   * Valid presentations: 'image' | 'inline' | 'card'
+   * Valid variants (single): 'browse' | 'dropzone' | 'avatar'
+   * Valid presentations (single): 'image' | 'inline' | 'card'
+   * Valid variants (collection): 'list' | 'gallery' | 'dropzone'
+   * Valid presentations (collection): 'standard' | 'grid' | 'carousel'
    * Options: showImageModal (browse/dropzone only), autoUpload, showProgress
    */
 
@@ -53,6 +70,20 @@ export class ImageFieldsPreview extends CardDef {
         showImageModal: true,
         showProgress: true,
         autoUpload: false,
+      },
+    },
+  });
+
+  @field multipleImages = containsMany(ImageField, {
+    configuration: {
+      variant: 'list',
+      presentation: 'grid',
+      options: {
+        autoUpload: true,
+        allowReorder: true,
+        allowBatchSelect: true,
+        maxFiles: 10,
+        showProgress: false,
       },
     },
   });
@@ -163,6 +194,41 @@ export class ImageFieldsPreview extends CardDef {
                 <div class='display-item'>
                   <p>Embedded:</p>
                   <@fields.dropzoneImage @format='embedded' />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class='field-section'>
+          <div class='section-header'>
+            <h2 class='section-title'>4. Multiple Images (containsMany)</h2>
+            <p class='section-description'>Upload and manage multiple images
+              using containsMany. Supports gallery, list, and dropzone variants
+              with grid or carousel presentations. Features include
+              drag-and-drop reordering, batch selection, and file limits.</p>
+          </div>
+          <div class='field-layout'>
+            <div class='edit-column'>
+              <div class='column-header'>Edit Mode</div>
+              <p class='column-subtitle'>Upload multiple images, reorder by
+                dragging, and manage your collection</p>
+              <@fields.multipleImages @format='edit' />
+            </div>
+            <div class='display-column'>
+              <div class='column-header'>Display View</div>
+              <div class='display-group'>
+                <div class='display-item'>
+                  <p>Atom:</p>
+                  <div class='field-box'>
+                    <@fields.multipleImages @format='atom' />
+                  </div>
+                </div>
+              </div>
+              <div class='display-group'>
+                <div class='display-item'>
+                  <p>Embedded:</p>
+                  <@fields.multipleImages @format='embedded' />
                 </div>
               </div>
             </div>

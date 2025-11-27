@@ -23,9 +23,15 @@
         "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764080605793/public"
       },
       "dropzoneImage": {
-        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764082013110",
-        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764082013110/public"
-      }
+        "uploadUrl": null,
+        "uploadedImageUrl": null
+      },
+      "multipleImages": [
+        {
+          "uploadUrl": null,
+          "uploadedImageUrl": null
+        }
+      ]
     },
     "relationships": {
       "cardInfo.theme": {

@@ -334,6 +334,7 @@ export function getBoxComponent(
                             @model={{card}}
                             @fields={{c.fields}}
                             @format={{effectiveFormats.cardDef}}
+                            @fieldType={{field.fieldType}}
                             @set={{model.set}}
                             @fieldName={{model.name}}
                             @context={{context}}
@@ -367,6 +368,7 @@ export function getBoxComponent(
                           @model={{model.value}}
                           @fields={{c.fields}}
                           @format={{effectiveFormats.fieldDef}}
+                          @fieldType={{field.fieldType}}
                           @set={{model.set}}
                           @fieldName={{model.name}}
                           @context={{context}}
@@ -392,6 +394,7 @@ export function getBoxComponent(
                         @model={{model.value}}
                         @fields={{c.fields}}
                         @format={{effectiveFormats.fieldDef}}
+                        @fieldType={{field.fieldType}}
                         @set={{model.set}}
                         @fieldName={{model.name}}
                         @context={{context}}
