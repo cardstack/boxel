@@ -1,10 +1,10 @@
-import type Controller from '@ember/controller';
 import { action } from '@ember/object';
 import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
 import type Transition from '@ember/routing/transition';
 import { join, scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
+import type Controller from '@ember/controller';
 
 import { isTesting } from '@embroider/macros';
 
@@ -103,7 +103,11 @@ export default class RenderRoute extends Route<Model> {
       currentURL: this.router.currentURL,
     });
     this.#setAllModelStatuses('unusable');
-    (globalThis as any).__lazilyLoadLinks = undefined;
+    // Only unset lazilyLoadLinks if we last set it
+    if ((globalThis as any).__lazilyLoadLinksOwner === 'render') {
+      (globalThis as any).__lazilyLoadLinks = undefined;
+      (globalThis as any).__lazilyLoadLinksOwner = undefined;
+    }
     (globalThis as any).__boxelRenderContext = undefined;
   };
 
@@ -115,7 +119,11 @@ export default class RenderRoute extends Route<Model> {
   }
 
   deactivate() {
-    (globalThis as any).__lazilyLoadLinks = undefined;
+    // Only unset lazilyLoadLinks if we last set it
+    if ((globalThis as any).__lazilyLoadLinksOwner === 'render') {
+      (globalThis as any).__lazilyLoadLinks = undefined;
+      (globalThis as any).__lazilyLoadLinksOwner = undefined;
+    }
     (globalThis as any).__boxelRenderContext = undefined;
     (globalThis as any).__renderInstance = undefined;
     window.removeEventListener('error', this.errorHandler);
@@ -141,6 +149,7 @@ export default class RenderRoute extends Route<Model> {
     // activate() doesn't run early enough for this to be set before the model()
     // hook is run
     (globalThis as any).__lazilyLoadLinks = true;
+    (globalThis as any).__lazilyLoadLinksOwner = 'render';
     (globalThis as any).__boxelRenderContext = true;
     this.#authGuard.register();
     if (!isTesting()) {
