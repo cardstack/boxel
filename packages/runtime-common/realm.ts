@@ -143,6 +143,8 @@ export type RealmInfo = {
   lastPublishedAt: string | Record<string, string> | null;
 };
 
+const PROTECTED_REALM_CONFIG_PROPERTIES = ['showAsCatalog'];
+
 export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
@@ -3130,9 +3132,7 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let json: {
-      data?: { attributes?: { property?: string; value?: unknown } };
-    };
+    let json: unknown;
     try {
       json = await request.json();
     } catch (e: any) {
@@ -3143,17 +3143,13 @@ export class Realm {
     }
 
     const realmConfigPatchSchema = z.object({
-      property: z
-        .string()
-        .min(1)
-        .refine(
-          (property: any) => property !== 'showAsCatalog',
-          'showAsCatalog cannot be updated',
-        ),
-      value: z.unknown(),
+      data: z.object({
+        type: z.literal('realm-config'),
+        attributes: z.record(z.unknown()),
+      }),
     });
 
-    let parsed = realmConfigPatchSchema.safeParse(json.data?.attributes ?? {});
+    let parsed = realmConfigPatchSchema.safeParse(json);
     if (!parsed.success) {
       let message =
         parsed.error.issues.map((issue: any) => issue.message).join(', ') ||
@@ -3161,7 +3157,35 @@ export class Realm {
       return badRequest({ message, requestContext });
     }
 
-    let { property, value } = parsed.data;
+    let { attributes } = parsed.data.data;
+
+    if (Object.keys(attributes).length === 0) {
+      return badRequest({
+        message: 'At least one property must be provided',
+        requestContext,
+      });
+    }
+
+    let emptyProperty = Object.keys(attributes).find(
+      (property) => property.trim().length === 0,
+    );
+    if (emptyProperty !== undefined) {
+      return badRequest({
+        message: 'Property names cannot be empty',
+        requestContext,
+      });
+    }
+
+    let protectedProperty = Object.keys(attributes).find((property) =>
+      PROTECTED_REALM_CONFIG_PROPERTIES.includes(property),
+    );
+
+    if (protectedProperty) {
+      return badRequest({
+        message: `${protectedProperty} cannot be updated`,
+        requestContext,
+      });
+    }
 
     let fileURL = this.paths.fileURL(`.realm.json`);
     let realmConfigPath: LocalPath = this.paths.local(fileURL);
@@ -3178,11 +3202,25 @@ export class Realm {
       }
     }
 
-    realmConfig[property] = value;
+    Object.assign(realmConfig, attributes);
     let serializedConfig = JSON.stringify(realmConfig, null, 2) + '\n';
     await this.write(realmConfigPath, serializedConfig);
 
-    return await this.realmInfo(request, requestContext);
+    let realmInfo = await this.parseRealmInfo();
+    let doc = {
+      data: {
+        id: this.url,
+        type: 'realm-config',
+        attributes: realmInfo,
+      },
+    };
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.JSON },
+      },
+      requestContext,
+    });
   }
 
   private async realmInfo(
