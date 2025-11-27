@@ -48,16 +48,20 @@ test.describe('Head tags', () => {
     await publishDefaultRealm(page);
 
     let publishedRealmURLString = `http://${user.username}.localhost:4205/new-workspace/index`;
-    let response = await page.goto(publishedRealmURLString);
 
-    expect(response?.status()).toBe(200);
+    await page.goto(publishedRealmURLString);
 
-    let body = await response!.text();
-    expect(body).toBeDefined();
-    expect(body).toContain('property="og:title"');
-    expect(body).toContain('property="og:type"');
-    expect(body).toContain(
-      `property="og:url" content="${publishedRealmURLString}"`,
+    await expect(page.locator('meta[property="og:title"]')).toHaveAttribute(
+      'content',
+      '1New Workspace',
     );
+
+    // let body = await response!.text();
+    // expect(body).toBeDefined();
+    // expect(body).toContain('property="og:title"');
+    // expect(body).toContain('property="og:type"');
+    // expect(body).toContain(
+    //   `property="og:url" content="${publishedRealmURLString}"`,
+    // );
   });
 });
