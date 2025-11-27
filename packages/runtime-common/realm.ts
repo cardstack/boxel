@@ -58,6 +58,7 @@ import {
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
+import { z } from 'zod';
 import type { CardFields } from './resource-types';
 import {
   fileContentToText,
@@ -134,11 +135,15 @@ export type RealmInfo = {
   backgroundURL: string | null;
   iconURL: string | null;
   showAsCatalog: boolean | null;
+  interactHome: string | null;
+  hostHome: string | null;
   visibility: RealmVisibility;
   realmUserId?: string;
   publishable: boolean | null;
   lastPublishedAt: string | Record<string, string> | null;
 };
+
+const PROTECTED_REALM_CONFIG_PROPERTIES = ['showAsCatalog'];
 
 export interface FileRef {
   path: LocalPath;
@@ -441,6 +446,11 @@ export class Realm {
 
     this.#router = new Router(new URL(url))
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
+      .patch(
+        '/_config',
+        SupportedMimeType.JSON,
+        this.patchRealmConfig.bind(this),
+      )
       .query('/_lint', SupportedMimeType.JSON, this.lint.bind(this))
       .get('/_mtimes', SupportedMimeType.Mtimes, this.realmMtimes.bind(this))
       .get('/_search', SupportedMimeType.CardJson, this.search.bind(this))
@@ -1302,6 +1312,7 @@ export class Realm {
     }
 
     let requestContext = await this.createRequestContext(); // Cache realm permissions for the duration of the request so that we don't have to fetch them multiple times
+    let localPath = this.paths.local(new URL(request.url));
 
     try {
       if (!isLocal) {
@@ -1330,7 +1341,10 @@ export class Realm {
         }
 
         let requiredPermission: RealmAction;
-        if (['_permissions'].includes(this.paths.local(new URL(request.url)))) {
+        if (
+          ['_permissions'].includes(localPath) ||
+          (localPath === '_config' && request.method === 'PATCH')
+        ) {
           requiredPermission = 'realm-owner';
         } else if (
           ['PUT', 'PATCH', 'POST', 'DELETE'].includes(request.method)
@@ -3072,6 +3086,8 @@ export class Realm {
       backgroundURL: null,
       iconURL: null,
       showAsCatalog: null,
+      interactHome: null,
+      hostHome: null,
       visibility: await this.visibility(),
       realmUserId: ensureFullMatrixUserId(
         this.#matrixClient.getUserId()! || this.#matrixClient.username,
@@ -3093,6 +3109,9 @@ export class Realm {
         realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
         realmInfo.showAsCatalog =
           realmConfigJson.showAsCatalog ?? realmInfo.showAsCatalog;
+        realmInfo.interactHome =
+          realmConfigJson.interactHome ?? realmInfo.interactHome;
+        realmInfo.hostHome = realmConfigJson.hostHome ?? realmInfo.hostHome;
         realmInfo.realmUserId = ensureFullMatrixUserId(
           realmConfigJson.realmUserId ??
             (this.#matrixClient.getUserId()! || this.#matrixClient.username),
@@ -3107,6 +3126,101 @@ export class Realm {
       }
     }
     return realmInfo;
+  }
+
+  private async patchRealmConfig(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let json: unknown;
+    try {
+      json = await request.json();
+    } catch (e: any) {
+      return badRequest({
+        message: `The request body was not json: ${e.message}`,
+        requestContext,
+      });
+    }
+
+    const realmConfigPatchSchema = z.object({
+      data: z.object({
+        type: z.literal('realm-config'),
+        attributes: z.record(z.unknown()),
+      }),
+    });
+
+    let parsed = realmConfigPatchSchema.safeParse(json);
+    if (!parsed.success) {
+      let message =
+        parsed.error.issues.map((issue: any) => issue.message).join(', ') ||
+        'The request body was invalid';
+      return badRequest({ message, requestContext });
+    }
+
+    let { attributes } = parsed.data.data;
+
+    if (Object.keys(attributes).length === 0) {
+      return badRequest({
+        message: 'At least one property must be provided',
+        requestContext,
+      });
+    }
+
+    let emptyProperty = Object.keys(attributes).find(
+      (property) => property.trim().length === 0,
+    );
+    if (emptyProperty !== undefined) {
+      return badRequest({
+        message: 'Property names cannot be empty',
+        requestContext,
+      });
+    }
+
+    let protectedProperty = Object.keys(attributes).find((property) =>
+      PROTECTED_REALM_CONFIG_PROPERTIES.includes(property),
+    );
+
+    if (protectedProperty) {
+      return badRequest({
+        message: `${protectedProperty} cannot be updated`,
+        requestContext,
+      });
+    }
+
+    let fileURL = this.paths.fileURL(`.realm.json`);
+    let realmConfigPath: LocalPath = this.paths.local(fileURL);
+    let realmConfig: Record<string, unknown> = {};
+    let existingConfig = await this.readFileAsText(realmConfigPath, undefined);
+    if (existingConfig?.content) {
+      try {
+        realmConfig = JSON.parse(existingConfig.content);
+      } catch (e: any) {
+        return systemError({
+          requestContext,
+          message: `Unable to parse existing realm config: ${e.message}`,
+        });
+      }
+    }
+
+    Object.assign(realmConfig, attributes);
+    let serializedConfig = JSON.stringify(realmConfig, null, 2) + '\n';
+    await this.write(realmConfigPath, serializedConfig);
+
+    let realmInfo = await this.parseRealmInfo();
+    let doc = {
+      data: {
+        id: this.url,
+        type: 'realm-config',
+        attributes: realmInfo,
+      },
+    };
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.JSON },
+      },
+      requestContext,
+    });
   }
 
   private async realmInfo(
