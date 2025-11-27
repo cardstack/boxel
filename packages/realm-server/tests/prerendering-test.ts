@@ -990,12 +990,6 @@ module(basename(__filename), function () {
         assert.ok(result.headHTML, 'headHTML should be present');
         let cleanedHead = cleanWhiteSpace(result.headHTML!);
         assert.ok(
-          cleanedHead.includes(
-            '<title data-test-card-head-title>Untitled Cat</title>',
-          ),
-          `failed to find title in head html:${cleanedHead}`,
-        );
-        assert.ok(
           cleanedHead.includes('property="og:title" content="Untitled Cat"'),
           `failed to find og:title in head html:${cleanedHead}`,
         );

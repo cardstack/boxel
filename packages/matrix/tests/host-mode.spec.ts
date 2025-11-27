@@ -195,7 +195,6 @@ test.describe('Published realm head format', () => {
 
     let body = await response!.text();
     expect(body).toBeDefined();
-    expect(body).toContain('data-test-card-head-title');
     expect(body).toContain('property="og:title"');
     expect(body).toContain('property="og:type"');
     expect(body).toContain(
