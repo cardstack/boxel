@@ -13,7 +13,7 @@
         "module": "../fields/number/badge-metric"
       },
       "title": "Badge Metric Field",
-      "readMe": null,
+      "readMe": "A pill-shaped badge for displaying key metrics and statistics with optional icon.\n\n**Features:**\n- Pill-shaped design with rounded edges\n- Icon support for visual context\n- Custom label text\n- Decimal precision control (default: 2 decimals)\n- Configurable range (default: 0-1000)\n\n**Display Style:**\n- Compact pill badge (atom view): Icon + value\n- Larger badge (embedded view): Icon + value + label\n- Background: Muted gray\n- Border: Subtle outline\n\n**Use Cases:**\n- KPIs and dashboard metrics (\"42 Users\")\n- Statistics display (\"3.5k Views\")\n- Performance indicators\n- Quick data summaries",
       "cardInfo": {
         "notes": null,
         "title": null,

@@ -13,7 +13,7 @@
         "module": "../fields/number/badge-counter"
       },
       "title": "Badge Counter Field",
-      "readMe": null,
+      "readMe": "A badge-style counter for displaying numeric counts with label (e.g., items in cart, tasks completed, notifications).\n\n**Features:**\n- Colored badge with label and value\n- Supports integer counts (default: 0 decimals)\n- Configurable range (default: 0-9999)\n- Custom label text\n\n**Display Style:**\n- Compact inline badge (atom view)\n- Larger badge with clear label/value separation (embedded view)\n- Color: Primary blue background\n- White text for contrast\n\n**Use Cases:**\n- Item counts (\"ITEMS: 5\")\n- Task counters (\"TASKS: 12\")\n- Inventory tracking\n- Progress tracking",
       "cardInfo": {
         "notes": null,
         "title": null,

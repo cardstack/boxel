@@ -58,10 +58,18 @@ export default class StatField extends NumberField {
       return getFormattedDisplayValue(this.args.model, this.config);
     }
 
+    get hasValue() {
+      return hasValue(this.args.model);
+    }
+
+    get valueText() {
+      return this.hasValue ? this.displayValue : '—';
+    }
+
     <template>
       <span class='stat-field-atom'>
         <span class='stat-indicator'></span>
-        <span class='stat-text'>{{this.displayValue}}</span>
+        <span class='stat-text'>{{this.valueText}}</span>
       </span>
 
       <style scoped>
@@ -111,10 +119,7 @@ export default class StatField extends NumberField {
     }
 
     get valueText() {
-      if (this.hasValue) {
-        return this.displayValue;
-      }
-      return this.config.placeholder ?? '—';
+      return this.hasValue ? this.displayValue : '—';
     }
 
     get labelText() {

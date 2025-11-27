@@ -5,7 +5,7 @@ import BaseNumberField, {
 } from 'https://cardstack.com/base/number';
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
-import { getFieldClass, getFormattedDisplayValue } from './number/util/index';
+import { getFieldClass } from './number/util/index';
 
 import NumberInput from './number/components/number-input';
 import HashIcon from '@cardstack/boxel-icons/hash';
@@ -60,7 +60,7 @@ export default class NumberField extends BaseNumberField {
     }
 
     get displayValue() {
-      return getFormattedDisplayValue(this.args.model, this.config);
+      return this.args.model ?? 0;
     }
 
     <template>
@@ -98,7 +98,7 @@ export default class NumberField extends BaseNumberField {
     }
 
     get displayValue() {
-      return getFormattedDisplayValue(this.args.model, this.config);
+      return this.args.model ?? 0;
     }
 
     <template>
