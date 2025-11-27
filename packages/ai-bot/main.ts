@@ -88,6 +88,7 @@ class Assistant {
     if (trackAiUsageCostPromises.has(matrixUserId)) {
       return;
     }
+    // intentionally do not await saveUsageCost promise - it has a backoff mechanism to retry if the cost is not immediately available so we don't want to block the main thread
     trackAiUsageCostPromises.set(
       matrixUserId,
       saveUsageCost(
