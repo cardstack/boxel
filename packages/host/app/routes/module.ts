@@ -93,7 +93,11 @@ export default class ModuleRoute extends Route<Model> {
   #releaseTimerBlock: (() => void) | undefined;
 
   deactivate() {
-    (globalThis as any).__lazilyLoadLinks = undefined;
+    // Only unset lazilyLoadLinks if we last set it
+    if ((globalThis as any).__lazilyLoadLinksOwner === 'module') {
+      (globalThis as any).__lazilyLoadLinks = undefined;
+      (globalThis as any).__lazilyLoadLinksOwner = undefined;
+    }
     (globalThis as any).__boxelRenderContext = undefined;
     this.lastStoreResetKey = undefined;
     this.#authGuard.unregister();
@@ -107,7 +111,9 @@ export default class ModuleRoute extends Route<Model> {
     await super.beforeModel?.(transition);
     // activate() doesn't run early enough for this to be set before the model()
     // hook is run
+    console.log('ModuleRoute beforeModel __lazilyLoadLinks set');
     (globalThis as any).__lazilyLoadLinks = true;
+    (globalThis as any).__lazilyLoadLinksOwner = 'module';
     (globalThis as any).__boxelRenderContext = true;
     this.#authGuard.register();
     if (!isTesting()) {
