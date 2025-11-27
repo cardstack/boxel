@@ -1,0 +1,66 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "MultipleImageFieldsPreview",
+        "module": "../multiple-image-fields"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Multiple Image Fields Showcase",
+        "description": "Comprehensive preview of multiple image field types with configurations",
+        "thumbnailURL": null
+      },
+      "galleryImages": {
+        "images": [
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1763988364991/public"
+          },
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1763987999378/public"
+          }
+        ]
+      },
+      "dropzoneImages": {
+        "images": [
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1763988240557/public"
+          },
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1763988472618/public"
+          }
+        ]
+      },
+      "basicMultipleImages": {
+        "images": [
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764053441228/public"
+          },
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764079483535/public"
+          },
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764079526038/public"
+          }
+        ]
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
