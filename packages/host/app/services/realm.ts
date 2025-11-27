@@ -288,12 +288,12 @@ class RealmResource {
       Authorization: `Bearer ${this.token}`,
       'Content-Type': SupportedMimeType.JSONAPI,
     };
-    let response = await this.network.authedFetch(`${this.realmURL}_info`, {
+    let response = await this.network.authedFetch(`${this.realmURL}_config`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({
         data: {
-          type: 'realm-info',
+          type: 'realm-config',
           id: this.url,
           attributes: { property, value },
         },
@@ -302,7 +302,7 @@ class RealmResource {
 
     if (response.status !== 200) {
       throw new Error(
-        `Failed to set realm info property '${property}' for realm ${this.url}: ${response.status}`,
+        `Failed to set realm config property '${property}' for realm ${this.url}: ${response.status}`,
       );
     }
     let json = await waitForPromise(response.json());
