@@ -25,8 +25,9 @@ import CodeIcon from '@cardstack/boxel-icons/code';
 import ArrowLeft from '@cardstack/boxel-icons/arrow-left';
 import Eye from '@cardstack/boxel-icons/eye';
 import LinkIcon from '@cardstack/boxel-icons/link';
+import Package from '@cardstack/boxel-icons/package';
 import Trash2Icon from '@cardstack/boxel-icons/trash-2';
-import { AiBw as AiBwIcon } from '@cardstack/boxel-ui/icons';
+import Wand from '@cardstack/boxel-icons/wand';
 
 const GENERATED_EXAMPLE_COUNT = 3;
 
@@ -140,16 +141,18 @@ export function getDefaultCardMenuItems(
       disabled: !cardId,
     });
     menuItems = [...menuItems, ...getSampleDataMenuItems(card, params)];
-    menuItems.push({
-      label: `Create listing with AI`,
-      action: async () => {
-        await new ListingCreateCommand(params.commandContext).execute({
-          openCardId: cardId,
-        });
-      },
-      icon: AiBwIcon,
-      disabled: !params.canEdit,
-    });
+    if (!isListingCard(card)) {
+      menuItems.push({
+        label: `Create listing with AI`,
+        action: async () => {
+          await new ListingCreateCommand(params.commandContext).execute({
+            openCardId: cardId,
+          });
+        },
+        icon: Package,
+        disabled: !params.canEdit,
+      });
+    }
   }
   return menuItems;
 }
@@ -167,7 +170,7 @@ function getSampleDataMenuItems(
         await new PopulateWithSampleDataCommand(commandContext).execute({
           cardId: card.id,
         }),
-      icon: AiBwIcon,
+      icon: Wand,
       tags: ['playground-sample-data'],
     });
   }
@@ -183,7 +186,7 @@ function getSampleDataMenuItems(
           exampleCard: card,
         });
       },
-      icon: AiBwIcon,
+      icon: Wand,
       tags: ['playground-sample-data'],
     });
   }
@@ -196,4 +199,8 @@ function isIndexCard(card: CardDef): boolean {
     return false;
   }
   return (card.id as unknown as string) === `${cardRealmURL.href}index`;
+}
+
+function isListingCard(card: CardDef): boolean {
+  return card?.constructor?.name?.endsWith?.('Listing') ?? false;
 }
