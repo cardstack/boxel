@@ -7,6 +7,7 @@ import {
   type DBAdapter,
   MINIMUM_AI_CREDITS_TO_CONTINUE,
   logger,
+  delay,
 } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 
@@ -16,6 +17,7 @@ const CREDITS_PER_USD = 1000;
 const MAX_FETCH_ATTEMPTS = 10;
 const MAX_FETCH_RUNTIME_MS = 10 * 60 * 1000; // 10 minutes
 const INITIAL_BACKOFF_MS = 1000;
+const MAX_BACKOFF_DELAY_MS = 60 * 1000; // 60 seconds
 
 export interface AICreditValidationResult {
   hasEnoughCredits: boolean;
@@ -76,11 +78,11 @@ export async function saveUsageCost(
     );
 
     if (costInUsd === null) {
-      let error = new Error(
-        `Failed to fetch generation cost after retries (generationId: ${generationId})`,
+      Sentry.captureException(
+        new Error(
+          `Failed to fetch generation cost after retries (generationId: ${generationId})`,
+        ),
       );
-      log.error(error);
-      Sentry.captureException(error);
       return;
     }
 
@@ -132,13 +134,14 @@ async function fetchGenerationCostWithBackoff(
 
     let remainingTime = MAX_FETCH_RUNTIME_MS - elapsed;
     let sleepMs = Math.min(delayMs, remainingTime);
-    await new Promise((resolve) => setTimeout(resolve, sleepMs));
-    delayMs = Math.min(delayMs * 2, MAX_FETCH_RUNTIME_MS);
+    await delay(sleepMs);
+    delayMs = Math.min(delayMs * 2, MAX_BACKOFF_DELAY_MS);
   }
 
-  throw new Error(
-    `Failed to fetch generation cost within ${MAX_FETCH_ATTEMPTS} attempts or ${MAX_FETCH_RUNTIME_MS / 60000} minutes (generationId: ${generationId})`,
+  log.error(
+    `Failed to fetch generation cost within ${MAX_FETCH_ATTEMPTS} attempts or ${Math.round(MAX_FETCH_RUNTIME_MS / 60000)} minutes (generationId: ${generationId})`,
   );
+  return null;
 }
 
 async function fetchGenerationCost(
@@ -146,7 +149,7 @@ async function fetchGenerationCost(
   openRouterApiKey: string,
 ): Promise<number | null> {
   const response = await fetch(
-    `https://openrouter.ai/api/v1/generation?id=${generationId}`,
+    `https://openrouter.ai/api/v1/generation?id=${generationId}aaa`,
     {
       headers: {
         Authorization: `Bearer ${openRouterApiKey}`,
@@ -154,11 +157,26 @@ async function fetchGenerationCost(
     },
   );
 
-  const data = await response.json();
-
-  if (data.error && data.error.message.includes('not found')) {
+  // 404 means generation data probably isn't available yet - return null to trigger retry
+  if (response.status === 404) {
     return null;
   }
+
+  if (!response.ok) {
+    throw new Error(
+      `OpenRouter API returned ${response.status}: ${response.statusText}`,
+    );
+  }
+
+  const data = await response.json();
+
+  if (data.error) {
+    if (data.error.message?.includes('not found')) {
+      return null;
+    }
+    throw new Error(`OpenRouter API error: ${data.error.message}`);
+  }
+
   return data.data.total_cost;
 }
 
