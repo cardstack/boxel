@@ -252,10 +252,15 @@ export function getField<T extends BaseDef>(
       if (fieldOverride) {
         let cardThunk = fieldOverride;
         let { computeVia, name, isUsed } = result;
-        result = new (result.constructor as unknown as Field & {
+        let originalField = result;
+        let declaredCardThunk =
+          (originalField as any).declaredCardResolver ??
+          (() => originalField.card as BaseDefConstructor);
+        result = new (originalField.constructor as unknown as Field & {
           new (args: FieldConstructor<unknown>): Field;
         })({
           cardThunk: () => cardThunk,
+          declaredCardThunk,
           computeVia,
           name,
           isUsed,

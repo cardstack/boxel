@@ -101,7 +101,7 @@ class Embedded extends Component<typeof ThemeVarField> {
           word-break: break-word;
         }
         .css-label {
-          font-weight: var(--boxel-font-weight-medium);
+          font-weight: 500;
         }
         .css-value {
           display: flex;

@@ -55,7 +55,7 @@ module(basename(__filename), function () {
     let realm: Realm;
     let adapter: RealmAdapter;
 
-    setupBaseRealmServer(hooks, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL, { disablePrerenderer: true });
 
     setupDB(hooks, {
       beforeEach: async (dbAdapter, publisher, runner) => {
@@ -63,6 +63,7 @@ module(basename(__filename), function () {
         let virtualNetwork = createVirtualNetwork();
         dir = dirSync().name;
         ({ realm, adapter } = await createRealm({
+          disablePrerenderer: true,
           withWorker: true,
           dir,
           virtualNetwork,
@@ -83,6 +84,13 @@ module(basename(__filename), function () {
                   <h1><@fields.firstName /> \${{@model.hourlyRate}}</h1>
                 </template>
               }
+
+              static head = class Head extends Component<typeof this> {
+                <template>
+                  <title>{{@model.firstName}}!</title>
+                </template>
+              }
+
               static embedded = class Embedded extends Component<typeof this> {
                 <template>
                   <h1> Embedded Card Person: <@fields.firstName/></h1>
@@ -461,6 +469,13 @@ module(basename(__filename), function () {
           cleanWhiteSpace(`<h1> Mango $</h1>`),
           'pre-rendered isolated format html is correct',
         );
+
+        assert.strictEqual(
+          trimCardContainer(stripScopedCSSAttributes(entry!.headHtml!)),
+          cleanWhiteSpace(`<title>Mango!</title>`),
+          'pre-rendered head format html is correct',
+        );
+
         assert.strictEqual(
           trimCardContainer(
             stripScopedCSSAttributes(
@@ -2468,7 +2483,7 @@ module(basename(__filename), function () {
   });
 
   module('permissioned realm', function (hooks) {
-    setupBaseRealmServer(hooks, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL, { disablePrerenderer: true });
 
     let testRealm1URL = 'http://127.0.0.1:4447/';
     let testRealm2URL = 'http://127.0.0.1:4448/';
@@ -2482,6 +2497,7 @@ module(basename(__filename), function () {
       },
     ) {
       setupPermissionedRealms(hooks, {
+        disablePrerenderer: true,
         // provider
         realms: [
           {

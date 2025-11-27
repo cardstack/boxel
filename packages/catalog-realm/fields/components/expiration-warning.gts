@@ -1,5 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { Button } from '@cardstack/boxel-ui/components';
+import AlertCircleIcon from '@cardstack/boxel-icons/alert-circle';
 
 interface ExpirationConfiguration {
   expirationOptions?: {
@@ -98,17 +100,7 @@ export class ExpirationWarning extends GlimmerComponent<ExpirationSignature> {
       data-test-expiration-warning
     >
       <div class='warning-icon'>
-        <svg
-          class='icon'
-          viewBox='0 0 24 24'
-          fill='none'
-          stroke='currentColor'
-          stroke-width='2'
-        >
-          <circle cx='12' cy='12' r='10'></circle>
-          <line x1='12' y1='8' x2='12' y2='12'></line>
-          <line x1='12' y1='16' x2='12.01' y2='16'></line>
-        </svg>
+        <AlertCircleIcon class='icon' />
       </div>
       <div class='warning-content'>
         <div class='warning-title'>
@@ -128,9 +120,14 @@ export class ExpirationWarning extends GlimmerComponent<ExpirationSignature> {
           {{/if}}
         </div>
         {{#unless this.timeUntilExpiration.expired}}
-          <button type='button' class='renew-button'>
+          <Button
+            @kind='text-only'
+            @size='auto'
+            class='renew-button'
+            data-test-renew-button
+          >
             Renew Now →
-          </button>
+          </Button>
         {{/unless}}
       </div>
     </div>
@@ -222,13 +219,7 @@ export class ExpirationWarning extends GlimmerComponent<ExpirationSignature> {
 
       .renew-button {
         align-self: flex-start;
-        padding: 0.25rem 0;
-        background: none;
-        border: none;
         font-size: 0.8125rem;
-        font-weight: 500;
-        cursor: pointer;
-        transition: opacity 0.15s ease;
       }
 
       .expiration-warning.info .renew-button {
@@ -241,10 +232,6 @@ export class ExpirationWarning extends GlimmerComponent<ExpirationSignature> {
 
       .expiration-warning.critical .renew-button {
         color: var(--destructive, #ef4444);
-      }
-
-      .renew-button:hover {
-        opacity: 0.8;
       }
     </style>
   </template>

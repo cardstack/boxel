@@ -10,7 +10,7 @@ import type { Page } from 'puppeteer';
 
 const log = logger('prerenderer');
 
-export const renderTimeoutMs = Number(process.env.RENDER_TIMEOUT_MS ?? 20_000);
+export const renderTimeoutMs = Number(process.env.RENDER_TIMEOUT_MS ?? 30_000);
 
 export type RenderStatus = 'ready' | 'error' | 'unusable';
 
@@ -59,7 +59,7 @@ export async function renderHTML(
   await transitionTo(page, 'render.html', format, String(ancestorLevel));
   let result = await captureResult(
     page,
-    ['isolated', 'atom'].includes(format) ? 'innerHTML' : 'outerHTML',
+    ['isolated', 'atom', 'head'].includes(format) ? 'innerHTML' : 'outerHTML',
     opts,
   );
   if (result.status === 'error' || result.status === 'unusable') {

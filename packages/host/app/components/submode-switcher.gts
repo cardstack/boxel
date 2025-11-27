@@ -92,7 +92,6 @@ export default class SubmodeSwitcher extends Component<Signature> {
       }
       .submode-switcher-dropdown-trigger {
         --icon-color: var(--boxel-highlight);
-        --boxel-button-font: 500 var(--boxel-font-sm);
 
         padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
         background-color: var(--boxel-dark);

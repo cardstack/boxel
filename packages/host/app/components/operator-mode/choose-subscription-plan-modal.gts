@@ -150,7 +150,7 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
       }
 
       .plan-name {
-        font: var(--boxel-font-med);
+        font: var(--boxel-font-md);
         font-weight: 600;
         margin: 0 0 var(--boxel-sp-xs) 0;
       }

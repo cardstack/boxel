@@ -60,6 +60,7 @@ export default {
         { src: '../README.md', dest: '.' },
         { src: '../LICENSE.md', dest: '.' },
         { src: './src/styles/*.{css,woff2,otf}', dest: './dist/styles' },
+        { src: './src/styles/LICENSE.txt', dest: './dist/styles' },
       ],
       // this makes it late enough that the `clean()` hook above doesn't remove
       // our copied files

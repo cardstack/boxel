@@ -1242,7 +1242,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
 
     // Test with AI assistant opened
-    operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -1252,12 +1252,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         ],
       ],
       aiAssistantOpen: true,
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
     assert.dom('[data-test-ai-assistant-panel]').exists();
   });
 

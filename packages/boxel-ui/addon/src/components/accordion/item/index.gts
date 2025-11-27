@@ -78,11 +78,8 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
 
       .boxel-accordion-item-title {
         margin: 0;
-        font-weight: var(
-          --boxel-accordion-title-font-weight,
-          var(--boxel-font-weight-semibold)
-        );
-        font-size: inherit;
+        font-size: var(--boxel-accordion-title-font-size, inherit);
+        font-weight: var(--boxel-accordion-title-font-weight, 700);
         line-height: inherit;
         letter-spacing: inherit;
       }

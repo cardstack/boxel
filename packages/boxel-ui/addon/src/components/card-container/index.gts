@@ -66,39 +66,62 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
     }
 
     :global(.boxel-card-container--themed) {
-      /* convert variable names */
-      --theme-spacing: calc(var(--spacing) * 4);
-      --typescale-h1: var(--brand-heading-font-size);
-      --typescale-body: var(--brand-body-font-size);
-      --font-family-base: var(--brand-body-font-family);
-      --font-weight-body: var(--brand-body-font-weight);
-      --lineheight-base: var(--brand-body-line-height);
+      --_theme-spacing: calc(var(--spacing) * 4);
       /* setting boxel base css variable overrides, with boxel defaults as fallback */
-      --boxel-font-size: var(--typescale-body, var(--_boxel-font-size));
-      --boxel-spacing: var(--theme-spacing, var(--_boxel-spacing));
+      --boxel-font-size: var(--brand-body-font-size, var(--_boxel-font-size));
+      --boxel-spacing: var(--_theme-spacing, var(--_boxel-spacing));
       --boxel-radius: var(--radius, var(--_boxel-radius));
-
+      --boxel-body-font-family: var(
+        --brand-body-font-family,
+        var(--font-sans, var(--boxel-font-family))
+      );
+      --boxel-body-font-size: var(
+        --brand-body-font-size,
+        var(--boxel-font-size-sm)
+      );
+      --boxel-body-line-height: var(
+        --brand-body-line-height,
+        var(--boxel-line-height-sm)
+      );
+      --boxel-body-font-weight: var(--brand-body-font-weight, 400);
+      --boxel-heading-font-family: var(
+        --brand-heading-font-family,
+        var(--font-sans, var(--boxel-font-family))
+      );
+      --boxel-heading-font-size: var(
+        --brand-heading-font-size,
+        var(--boxel-font-size-lg)
+      );
+      --boxel-heading-line-height: var(
+        --brand-heading-line-height,
+        var(--boxel-line-height-lg)
+      );
+      --boxel-heading-font-weight: var(--brand-heading-font-weight, 700);
+      --boxel-caption-font-size: var(--boxel-font-size-xs);
       /*** code below this line is from "variables.css". values will be recalculated based on theming variable values ***/
       /* font-sizes */
-      --boxel-font-size-xxl: calc(var(--boxel-font-size) * 2.5);
+      --boxel-font-size-2xl: calc(var(--boxel-font-size) * 2.25);
       --boxel-font-size-xl: calc(var(--boxel-font-size) * 2);
       --boxel-font-size-lg: calc(var(--boxel-font-size) * 1.375);
-      --boxel-font-size-med: calc(var(--boxel-font-size) * 1.25);
-      --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.8125);
-      --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.6875);
+      --boxel-font-size-md: calc(var(--boxel-font-size) * 1.25);
+      --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.875);
+      --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.75);
       /* spacing */
       --boxel-sp-6xs: calc(var(--boxel-sp-5xs) / var(--boxel-ratio));
       --boxel-sp-5xs: calc(var(--boxel-sp-4xs) / var(--boxel-ratio));
-      --boxel-sp-4xs: calc(var(--boxel-sp-xxxs) / var(--boxel-ratio));
-      --boxel-sp-xxxs: calc(var(--boxel-sp-xxs) / var(--boxel-ratio));
-      --boxel-sp-xxs: calc(var(--boxel-sp-xs) / var(--boxel-ratio));
+      --boxel-sp-4xs: calc(var(--boxel-sp-3xs) / var(--boxel-ratio));
+      --boxel-sp-3xs: calc(var(--boxel-sp-2xs) / var(--boxel-ratio));
+      --boxel-sp-2xs: calc(var(--boxel-sp-xs) / var(--boxel-ratio));
       --boxel-sp-xs: calc(var(--boxel-sp-sm) / var(--boxel-ratio));
       --boxel-sp-sm: calc(var(--boxel-sp) / var(--boxel-ratio));
       --boxel-sp: var(--boxel-spacing); /* base */
       --boxel-sp-lg: calc(var(--boxel-sp) * var(--boxel-ratio));
       --boxel-sp-xl: calc(var(--boxel-sp-lg) * var(--boxel-ratio));
-      --boxel-sp-xxl: calc(var(--boxel-sp-xl) * var(--boxel-ratio));
-      --boxel-sp-xxxl: calc(var(--boxel-sp-xxl) * var(--boxel-ratio));
+      --boxel-sp-2xl: calc(var(--boxel-sp-xl) * var(--boxel-ratio));
+      --boxel-sp-3xl: calc(var(--boxel-sp-2xl) * var(--boxel-ratio));
+      --boxel-sp-4xl: calc(var(--boxel-sp-3xl) * var(--boxel-ratio));
+      --boxel-sp-5xl: calc(var(--boxel-sp-4xl) * var(--boxel-ratio));
+      --boxel-sp-6xl: calc(var(--boxel-sp-5xl) * var(--boxel-ratio));
       /* border-radius */
       --boxel-border-radius-xxs: calc(var(--boxel-border-radius-xs) - 2.5px);
       --boxel-border-radius-xs: calc(var(--boxel-border-radius-sm) - 3px);
@@ -109,11 +132,11 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       --boxel-border-radius-xxl: calc(var(--boxel-border-radius-xl) + 5px);
       --boxel-form-control-border-radius: var(--boxel-border-radius);
 
-      font-family: var(--font-family-base, var(--font-sans));
-      font-size: var(--typescale-body);
-      font-weight: var(--font-weight-body);
+      font-family: var(--boxel-body-font-family);
+      font-size: var(--boxel-body-font-size);
+      font-weight: var(--boxel-body-font-weight);
       letter-spacing: var(--tracking-normal);
-      line-height: var(--lineheight-base);
+      line-height: var(--boxel-body-line-height);
     }
   </style>
 </template>;

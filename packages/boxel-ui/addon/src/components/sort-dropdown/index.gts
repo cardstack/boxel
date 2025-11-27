@@ -24,7 +24,7 @@ interface Signature {
 export default class SortDropdown extends Component<Signature> {
   <template>
     <div class='sort-options-group' ...attributes>
-      Sort by
+      <span class='sort-options-label'>Sort by</span>
       <div>
         <BoxelDropdown>
           <:trigger as |bindings|>
@@ -54,6 +54,9 @@ export default class SortDropdown extends Component<Signature> {
           align-items: center;
           gap: var(--boxel-sp-xxs) var(--boxel-sp-sm);
           text-wrap: nowrap;
+        }
+        .sort-options-label {
+          font-weight: 500;
         }
         .sort-button {
           border-radius: var(--boxel-border-radius);

@@ -82,7 +82,7 @@ export default class LLMSelect extends Component<Signature> {
 
       .selected-llm {
         color: var(--boxel-dark);
-        font: 600 var(--boxel-font-xs);
+        font: 700 var(--boxel-font-xs);
       }
 
       .llm-list {

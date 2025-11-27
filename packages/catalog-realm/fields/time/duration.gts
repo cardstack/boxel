@@ -7,145 +7,55 @@ import {
 } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
 import NumberField from 'https://cardstack.com/base/number';
 import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
-import { on } from '@ember/modifier';
 import HourglassIcon from '@cardstack/boxel-icons/hourglass'; // ² Hourglass icon
+import AlertCircleIcon from '@cardstack/boxel-icons/alert-circle';
 
 class DurationFieldEdit extends Component<typeof DurationField> {
-  @tracked hours = 0;
-  @tracked minutes = 0;
-  @tracked seconds = 0;
   @tracked validationError = '';
 
-  constructor(owner: any, args: any) {
-    super(owner, args);
-    // ¹⁰ Initialize from model or set defaults
-    this.hours = this.args.model?.hours ?? 0;
-    this.minutes = this.args.model?.minutes ?? 0;
-    this.seconds = this.args.model?.seconds ?? 0;
-  }
-
-  @action
-  updateHours(event: Event) {
-    const target = event.target as HTMLInputElement;
-    const value = parseInt(target.value);
-
-    // ¹¹ Validate hours (0 or greater)
-    if (isNaN(value) || value < 0) {
-      this.validationError = 'Hours must be 0 or greater';
-      return;
-    }
-
-    this.hours = value;
-    this.validationError = '';
-    this.args.model.hours = value;
-  }
-
-  @action
-  updateMinutes(event: Event) {
-    const target = event.target as HTMLInputElement;
-    const value = parseInt(target.value);
-
-    // ¹² Validate minutes (0-59)
-    if (isNaN(value) || value < 0 || value > 59) {
-      this.validationError = 'Minutes must be between 0-59';
-      return;
-    }
-
-    this.minutes = value;
-    this.validationError = '';
-    this.args.model.minutes = value;
-  }
-
-  @action
-  updateSeconds(event: Event) {
-    const target = event.target as HTMLInputElement;
-    const value = parseInt(target.value);
-
-    // ¹³ Validate seconds (0-59)
-    if (isNaN(value) || value < 0 || value > 59) {
-      this.validationError = 'Seconds must be between 0-59';
-      return;
-    }
-
-    this.seconds = value;
-    this.validationError = '';
-    this.args.model.seconds = value;
-  }
-
   get totalMinutes() {
-    return (this.hours * 60 + this.minutes + this.seconds / 60).toFixed(1);
+    const h = this.args.model?.hours ?? 0;
+    const m = this.args.model?.minutes ?? 0;
+    const s = this.args.model?.seconds ?? 0;
+    return (h * 60 + m + s / 60).toFixed(1);
   }
 
   get totalSeconds() {
-    return this.hours * 3600 + this.minutes * 60 + this.seconds;
+    const h = this.args.model?.hours ?? 0;
+    const m = this.args.model?.minutes ?? 0;
+    const s = this.args.model?.seconds ?? 0;
+    return h * 3600 + m * 60 + s;
   }
 
   <template>
     <div class='duration-edit'>
       {{#if this.validationError}}
         <div class='validation-error' data-test-validation-error>
-          <svg
-            class='error-icon'
-            viewBox='0 0 24 24'
-            fill='none'
-            stroke='currentColor'
-            stroke-width='2'
-          >
-            <circle cx='12' cy='12' r='10'></circle>
-            <line x1='12' y1='8' x2='12' y2='12'></line>
-            <line x1='12' y1='16' x2='12.01' y2='16'></line>
-          </svg>
+          <AlertCircleIcon class='error-icon' />
           {{this.validationError}}
         </div>
       {{/if}}
       <div class='duration-inputs'>
         <div class='duration-field'>
-          <label for='duration-hours' class='input-label'>Hours</label>
-          <input
-            id='duration-hours'
-            type='number'
-            value={{this.hours}}
-            min='0'
-            {{on 'input' this.updateHours}}
-            class='duration-input {{if this.validationError "error" ""}}'
-            data-test-duration-hours
-          />
+          <label class='input-label'>Hours</label>
+          <@fields.hours @format='edit' />
         </div>
         <span class='duration-separator'>:</span>
         <div class='duration-field'>
-          <label for='duration-minutes' class='input-label'>Minutes</label>
-          <input
-            id='duration-minutes'
-            type='number'
-            value={{this.minutes}}
-            min='0'
-            max='59'
-            {{on 'input' this.updateMinutes}}
-            class='duration-input {{if this.validationError "error" ""}}'
-            data-test-duration-minutes
-          />
+          <label class='input-label'>Minutes</label>
+          <@fields.minutes @format='edit' />
         </div>
         <span class='duration-separator'>:</span>
         <div class='duration-field'>
-          <label for='duration-seconds' class='input-label'>Seconds</label>
-          <input
-            id='duration-seconds'
-            type='number'
-            value={{this.seconds}}
-            min='0'
-            max='59'
-            {{on 'input' this.updateSeconds}}
-            class='duration-input {{if this.validationError "error" ""}}'
-            data-test-duration-seconds
-          />
+          <label class='input-label'>Seconds</label>
+          <@fields.seconds @format='edit' />
         </div>
       </div>
       <div class='duration-info'>
         <span class='info-text'>Total:
-          {{this.hours}}h
-          {{this.minutes}}m
-          {{this.seconds}}s</span>
+          {{@model.hours}}h
+          {{@model.minutes}}m
+          {{@model.seconds}}s</span>
         <span class='info-text'>=
           {{this.totalMinutes}}
           minutes ({{this.totalSeconds}}s)</span>
@@ -176,33 +86,6 @@ class DurationFieldEdit extends Component<typeof DurationField> {
         font-size: 0.75rem;
         color: var(--muted-foreground, #9ca3af);
         font-weight: 500;
-      }
-
-      .duration-input {
-        width: 100%;
-        padding: 0.5rem 0.75rem;
-        border: 1px solid var(--border, #e0e0e0);
-        border-radius: var(--radius, 0.375rem);
-        font-family: var(--font-sans, system-ui, sans-serif);
-        font-size: 0.875rem;
-        color: var(--foreground, #1a1a1a);
-        background: var(--input, #ffffff);
-        text-align: center;
-        transition: all 0.15s ease;
-      }
-
-      .duration-input:focus {
-        outline: none;
-        border-color: var(--ring, #3b82f6);
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-      }
-
-      .duration-input.error {
-        border-color: var(--destructive, #ef4444);
-      }
-
-      .duration-input.error:focus {
-        box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
       }
 
       .validation-error {
@@ -278,9 +161,6 @@ export class DurationField extends FieldDef {
         .duration-embedded {
           display: flex;
           align-items: center;
-          padding: 0.5rem;
-          font-size: 0.875rem;
-          color: var(--foreground, #1a1a1a);
         }
 
         .duration-value {

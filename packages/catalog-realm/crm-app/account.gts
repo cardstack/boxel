@@ -604,7 +604,7 @@ class IsolatedTemplate extends Component<typeof Account> {
         container-name: tasks-summary-card;
       }
       .upcoming-tasks-title {
-        font: 600 var(--boxel-font-med);
+        font: 600 var(--boxel-font-md);
         letter-spacing: var(--boxel-lsp-xxs);
       }
       .tasks-summary-card :deep(.task-card) {
@@ -613,7 +613,7 @@ class IsolatedTemplate extends Component<typeof Account> {
         border-top: 1px solid var(--boxel-200);
       }
       .task-title {
-        font: 600 var(--boxel-font-med);
+        font: 600 var(--boxel-font-md);
         letter-spacing: var(--boxel-lsp-xxs);
         margin: 0;
       }
@@ -1152,7 +1152,7 @@ class FittedTemplate extends Component<typeof Account> {
       }
 
       .account-name {
-        font: 600 var(--boxel-font-med);
+        font: 600 var(--boxel-font-md);
         overflow: hidden;
         text-overflow: ellipsis;
         display: -webkit-box;

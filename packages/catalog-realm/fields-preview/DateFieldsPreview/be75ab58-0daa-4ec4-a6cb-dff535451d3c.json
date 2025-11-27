@@ -1,0 +1,51 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "DateFieldsPreview",
+        "module": "../date-fields"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "dateField": "2025-10-08",
+      "weekField": {
+        "value": "2025-W49"
+      },
+      "yearField": {
+        "value": 2028
+      },
+      "monthField": {
+        "value": 3
+      },
+      "quarterField": {
+        "year": 2022,
+        "quarter": 4
+      },
+      "monthDayField": {
+        "day": 8,
+        "month": 9
+      },
+      "dateRangeField": {
+        "end": "2025-12-24",
+        "start": "2025-11-06"
+      },
+      "monthYearField": {
+        "value": "2025-10"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../../Theme/cardstack"
+        }
+      }
+    }
+  }
+}

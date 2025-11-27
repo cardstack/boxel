@@ -54,6 +54,7 @@ export type CreateRoutesArgs = {
     username: string,
     copiedFromRealm?: URL,
     enableFileWatcher?: boolean,
+    fromScratchIndexPriority?: number,
   ) => Realm;
   createRealm: ({
     ownerUserId,

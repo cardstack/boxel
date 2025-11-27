@@ -148,7 +148,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         background-color: var(--boxel-button-color);
 
         /* size variants */
-        font: var(--boxel-button-font, 600 var(--boxel-font-sm));
+        font: var(--boxel-button-font, 700 var(--boxel-font-sm));
         font-family: inherit;
         min-height: var(--boxel-button-min-height);
         min-width: var(--boxel-button-min-width);
@@ -364,7 +364,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         --boxel-button-min-height: var(--boxel-button-xs);
         --boxel-button-min-width: 5rem;
         --boxel-button-loading-icon-size: var(--boxel-icon-xxs);
-        --boxel-button-font: 600 var(--boxel-font-xs);
+        --boxel-button-font: 700 var(--boxel-font-xs);
         --boxel-button-letter-spacing: var(--boxel-lsp-lg);
       }
       .size-extra-small.rectangular {
@@ -402,7 +402,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         --boxel-button-min-height: var(--boxel-button-touch);
         --boxel-button-min-width: 5rem;
         --boxel-button-loading-icon-size: var(--boxel-icon-sm);
-        --boxel-button-font: 600 var(--boxel-font);
+        --boxel-button-font: 700 var(--boxel-font);
         --boxel-button-letter-spacing: var(--boxel-lsp-xs);
       }
 

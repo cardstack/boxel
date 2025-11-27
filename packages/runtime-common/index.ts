@@ -37,6 +37,7 @@ export interface PrerenderMeta {
 
 export interface RenderResponse extends PrerenderMeta {
   isolatedHTML: string | null;
+  headHTML: string | null;
   atomHTML: string | null;
   embeddedHTML: Record<string, string> | null;
   fittedHTML: Record<string, string> | null;
@@ -592,3 +593,4 @@ export function isBrowserTestEnv() {
 }
 
 export * from './prerendered-card-search';
+export { DEFAULT_LLM_ID_TO_NAME } from './matrix-constants';

@@ -106,7 +106,11 @@ Environment Variables (required):
   MATRIX_PASSWORD  Your Matrix password (or use REALM_SECRET_SEED for realm users)
   
 Environment Variables (optional):
-  REALM_SECRET_SEED  Secret for generating realm user passwords (alternative to MATRIX_PASSWORD)
+  REALM_SECRET_SEED  Secret for generating realm user credentials. If MATRIX_USERNAME
+                     is omitted, it will be derived from WORKSPACE_URL:
+                       /<owner>/<endpoint>/  -> realm/<owner>_<endpoint>
+                       /base/, /skills/, ... -> <slug>_realm
+                       /published/<id>/      -> realm/published_<id>
 
 File Filtering:
   - Files starting with a dot (.) are always ignored
@@ -140,7 +144,8 @@ async function main() {
   const { workspaceUrl, localDir, deleteRemote, dryRun } = parseArgs();
 
   // Get environment variables for Matrix authentication
-  const { matrixUrl, username, password } = await validateMatrixEnvVars();
+  const { matrixUrl, username, password } =
+    await validateMatrixEnvVars(workspaceUrl);
 
   if (!fs.existsSync(localDir)) {
     console.error(`Local directory does not exist: ${localDir}`);

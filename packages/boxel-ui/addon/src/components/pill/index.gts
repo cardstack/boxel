@@ -89,7 +89,7 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
         );
         font: var(
           --boxel-pill-font,
-          var(--pill-font, 600 var(--boxel-font-sm))
+          var(--pill-font, 700 var(--boxel-font-xs))
         );
         font-family: inherit;
         letter-spacing: var(--boxel-lsp-xs);

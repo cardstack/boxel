@@ -134,6 +134,7 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
         text-overflow: ellipsis;
         flex-shrink: 1;
         min-width: 0;
+        font-weight: 700;
       }
 
       .code-block-diff-header .right-section {

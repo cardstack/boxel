@@ -236,7 +236,7 @@ class Embedded extends Component<typeof BrandLogo> {
       }
       .annotation {
         color: var(--annotation-foreground);
-        font-weight: var(--boxel-font-weight-bold);
+        font-weight: 700;
         white-space: nowrap;
       }
       .height-annotation-border {
@@ -274,7 +274,7 @@ class Embedded extends Component<typeof BrandLogo> {
         overflow: hidden;
       }
       .media-handle {
-        font-weight: var(--boxel-font-weight-semibold);
+        font-weight: 600;
       }
     </style>
   </template>

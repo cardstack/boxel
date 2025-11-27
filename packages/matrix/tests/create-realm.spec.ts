@@ -34,7 +34,7 @@ test.describe('Create Realm via Dashboard', () => {
     ).toBeVisible();
     await expect(
       page.locator(`[data-test-boxel-filter-list-button]`),
-    ).toHaveCount(2);
+    ).toHaveCount(1);
 
     await page.locator('[data-test-submode-switcher] button').click();
     await page.locator('[data-test-boxel-menu-item-text="Host"]').click();

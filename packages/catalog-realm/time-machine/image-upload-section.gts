@@ -174,7 +174,7 @@ export class ImageUploadSection extends Component<ImageUploadSectionSignature> {
       {{#if this.showNotification}}
         <div class='notification-bubble-wrapper'>
           <NotificationBubble
-            @type='warning'
+            @type='error'
             @message='Please upload an image or provide an image URL before generating.'
           />
         </div>

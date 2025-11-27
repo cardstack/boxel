@@ -768,6 +768,56 @@ module('Acceptance | Commands tests', function (hooks) {
       .containsText('Finding and opening Hassan card');
   });
 
+  test('command description is visible while tool call is preparing', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/useful-commands"]',
+    );
+    await click('[data-test-card-catalog-go-button]');
+
+    let roomId = getRoomIds().pop()!;
+    let description = 'Switching to code submode during preparation';
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: '',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'preparing-command-id',
+          name: 'switch-submode_dd88',
+          arguments: JSON.stringify({
+            description,
+            attributes: {
+              submode: 'code',
+            },
+          }),
+        },
+      ],
+    });
+
+    await waitFor('[data-test-message-idx="0"]');
+    assert
+      .dom('[data-test-message-idx="0"] .command-description')
+      .containsText(description);
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .exists();
+  });
+
   test('ShowCard command added from a skill, can be automatically executed when agentId matches', async function (assert) {
     await visitOperatorMode({
       stacks: [

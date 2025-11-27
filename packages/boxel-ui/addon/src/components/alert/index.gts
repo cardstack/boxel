@@ -100,7 +100,6 @@ const Action: TemplateOnlyComponent<ActionSignature> = <template>
       --boxel-button-min-width: max-content;
       width: fit-content;
       margin-left: auto;
-      font-weight: 500;
     }
   </style>
 </template>;

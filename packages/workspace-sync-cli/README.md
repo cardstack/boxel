@@ -36,6 +36,13 @@ Both commands require Matrix credentials to authenticate with the workspace:
 export MATRIX_URL="https://matrix.boxel.ai"
 export MATRIX_USERNAME="your-username"
 export MATRIX_PASSWORD="your-password"
+
+# Optionally you can provide the realm's secret seed and the CLI will derive
+# the matrix credentials from the workspace URL:
+#   /<owner>/<endpoint>/  -> realm/<owner>_<endpoint>
+#   /base/, /skills/, ... -> <slug>_realm
+#   /published/<id>/      -> realm/published_<id>
+export REALM_SECRET_SEED="super-secret-seed"
 ```
 
 ## Usage

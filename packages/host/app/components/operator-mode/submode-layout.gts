@@ -572,12 +572,6 @@ export default class SubmodeLayout extends Component<Signature> {
         gap: var(--operator-mode-spacing);
       }
 
-      .boxel-title {
-        color: var(--boxel-light);
-        font: 900 var(--boxel-font-size-med) 'Rustica';
-        letter-spacing: 3px;
-      }
-
       .submode-switcher {
         border: none;
         border-radius: var(--submode-bar-item-border-radius);

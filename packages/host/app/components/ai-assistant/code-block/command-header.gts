@@ -1,5 +1,6 @@
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
+
+import Component from '@glimmer/component';
 
 import { CopyButton } from '@cardstack/boxel-ui/components';
 
@@ -14,25 +15,34 @@ export interface CodeBlockCommandHeaderSignature {
     code: string;
     commandDescription: string;
     commandState: ApplyButtonState;
-    isDisplayingCode: boolean;
-    toggleCode: () => void;
+    hideCodeActions?: boolean;
+    isDisplayingCode?: boolean;
+    toggleCode?: () => void;
   };
   Blocks: { default: [] };
   Element: HTMLElement;
 }
 
-const CodeBlockCommandHeader: TemplateOnlyComponent<CodeBlockCommandHeaderSignature> =
+export default class CodeBlockCommandHeader extends Component<CodeBlockCommandHeaderSignature> {
+  get isDisplayingCode() {
+    return this.args.isDisplayingCode ?? false;
+  }
+
   <template>
     <header class='code-block-header'>
       <div class='command-description'>{{@commandDescription}}</div>
       <div class='actions'>
-        {{#if @isDisplayingCode}}
-          <CopyButton @textToCopy={{@code}} @variant='text-only' />
-        {{/if}}
-        <ViewCodeButton
-          @isDisplayingCode={{@isDisplayingCode}}
-          @toggleViewCode={{@toggleCode}}
-        />
+        {{#unless @hideCodeActions}}
+          {{#if @isDisplayingCode}}
+            <CopyButton @textToCopy={{@code}} @variant='text-only' />
+          {{/if}}
+          {{#if @toggleCode}}
+            <ViewCodeButton
+              @isDisplayingCode={{this.isDisplayingCode}}
+              @toggleViewCode={{@toggleCode}}
+            />
+          {{/if}}
+        {{/unless}}
         <ApplyButton
           class='command-action'
           @actionVerb={{@actionVerb}}
@@ -74,6 +84,5 @@ const CodeBlockCommandHeader: TemplateOnlyComponent<CodeBlockCommandHeaderSignat
         margin-left: var(--boxel-sp-5xs);
       }
     </style>
-  </template>;
-
-export default CodeBlockCommandHeader;
+  </template>
+}

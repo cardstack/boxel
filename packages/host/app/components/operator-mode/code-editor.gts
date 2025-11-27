@@ -612,7 +612,7 @@ export default class CodeEditor extends Component<Signature> {
               onSetup=this.setupFormatAction
               onDispose=this.onEditorDispose
               readOnly=@isReadOnly
-              editorDisplayOptions=(hash lineNumbersMinChars=3 fontSize=13)
+              editorDisplayOptions=(hash lineNumbersMinChars=3 fontSize=12)
             }}
           ></div>
         </div>
@@ -659,6 +659,9 @@ export default class CodeEditor extends Component<Signature> {
         min-width: 100%;
         padding-top: var(--boxel-sp-xxs);
         background-color: var(--monaco-background);
+        font-family: var(--boxel-monospace-font-family);
+        font-size: var(--boxel-caption-font-size);
+        font-weight: 500;
       }
       .monaco-container:not(.readonly) {
         filter: contrast(1.05) brightness(1.05);

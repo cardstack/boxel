@@ -15,7 +15,9 @@ export const commonEditorOptions: MonacoEditorOptions = {
   theme: 'vs-dark',
 
   automaticLayout: true,
-  fontSize: 10,
+  fontSize: 12,
+  fontFamily: 'IBM Plex Mono',
+  fontWeight: '500',
   lineNumbers: 'off',
   readOnly: true,
   scrollbar: {

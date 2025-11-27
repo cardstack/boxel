@@ -158,6 +158,20 @@ module('Acceptance | prerender | module', function (hooks) {
       'compile error surfaces as 406',
     );
     assert.strictEqual(
+      model.error.error.message,
+      `Parse Error at broken.gts:1:23: 1:24 (${testRealmURL}broken.gts)`,
+      'message includes enough information for AI to fix the problem',
+    );
+    assert.ok(
+      model.error.error.stack?.includes('at transpileJS'),
+      `stack should include "at transpileJS" but was ${model.error.error.stack}`,
+    );
+    assert.strictEqual(
+      model.error.error.additionalErrors,
+      null,
+      'error is primary and not nested in additionalErrors',
+    );
+    assert.strictEqual(
       Object.keys(model.definitions).length,
       0,
       'no definitions produced when module fails to compile',

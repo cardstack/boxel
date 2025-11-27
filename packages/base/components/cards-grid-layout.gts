@@ -286,30 +286,30 @@ export default class CardsGridLayout extends Component<Signature> {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 24px;
-        height: 24px;
+        width: 1.5rem;
+        height: 1.5rem;
         flex-shrink: 0;
       }
 
       .filter-icon-svg {
-        width: 24px;
-        height: 24px;
+        width: 1.5rem;
+        height: 1.5rem;
         display: flex;
         align-items: center;
         justify-content: center;
       }
 
       .filter-icon-svg svg {
-        width: 24px;
-        height: 24px;
+        width: 1.5rem;
+        height: 1.5rem;
       }
 
       .content-title {
         flex-grow: 1;
         margin-block: 0;
-        font-size: var(--typescale-h1, var(--boxel-font-size-lg));
-        font-weight: 600;
-        line-height: calc(30 / 22);
+        font-size: var(--boxel-heading-font-size);
+        font-weight: 500;
+        line-height: var(--boxel-heading-line-height);
         letter-spacing: var(--boxel-lsp-xxs);
       }
 

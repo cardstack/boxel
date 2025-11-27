@@ -1,0 +1,42 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "TimeFieldsPreview",
+        "module": "../time-fields"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "timeField": {
+        "value": "00:06"
+      },
+      "durationField": {
+        "hours": 18,
+        "minutes": 55,
+        "seconds": 33
+      },
+      "timeRangeField": {
+        "end": {
+          "value": "09:00"
+        },
+        "start": {
+          "value": "10:00"
+        }
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../../Theme/cardstack"
+        }
+      }
+    }
+  }
+}

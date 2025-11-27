@@ -716,6 +716,7 @@ export class CurrentRun {
       let searchData: Record<string, any> | undefined;
       let cardType: typeof CardDef | undefined;
       let isolatedHtml: string | undefined;
+      let headHtml: string | undefined;
       let atomHtml: string | undefined;
       let iconHTML: string | undefined;
       let card: CardDef | undefined;
@@ -779,6 +780,19 @@ export class CurrentRun {
             }),
           ),
         );
+
+        headHtml = unwrap(
+          sanitizeHTML(
+            await this.renderCard({
+              card,
+              format: 'head',
+              visit: this.visitFile.bind(this),
+              store,
+              realmPath: this.#realmPaths,
+            }),
+          ),
+        );
+
         iconHTML = unwrap(sanitizeHTML(this.#render(cardTypeIcon(card))));
         cardType = Reflect.getPrototypeOf(card)?.constructor as typeof CardDef;
         let data = api.serializeCard(card, { includeComputeds: true });
@@ -903,6 +917,7 @@ export class CurrentRun {
           resource: doc.data,
           searchData,
           isolatedHtml,
+          headHtml,
           atomHtml,
           embeddedHtml,
           fittedHtml,

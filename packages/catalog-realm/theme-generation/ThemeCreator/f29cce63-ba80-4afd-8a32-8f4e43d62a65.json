@@ -1,0 +1,44 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "ThemeCreator",
+        "module": "../theme-creator"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "realm": "http://localhost:4201/experiments/",
+      "prompt": "Create a theme in deep crimson, with bold contrast, minimal typography, and clean UI surfaces suitable for dashboards.",
+      "codeRef": {
+        "name": "default",
+        "module": "https://cardstack.com/base/structured-theme"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": "Boxel Theme Creator",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "llmModel": "anthropic/claude-sonnet-4.5",
+      "numberOfVariants": null
+    },
+    "relationships": {
+      "previewCard": {
+        "links": {
+          "self": null
+        }
+      },
+      "skillCards.0": {
+        "links": {
+          "self": "../Skill/theme-design"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

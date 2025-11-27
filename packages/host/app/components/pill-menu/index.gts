@@ -100,7 +100,7 @@ export default class PillMenu extends Component<Signature> {
         background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius-xl);
         color: var(--boxel-dark);
-        font: var(--boxel-font-sm);
+        font: 700 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp);
         box-shadow: var(--boxel-box-shadow);
         transition: width 0.2s ease-in;
@@ -110,7 +110,7 @@ export default class PillMenu extends Component<Signature> {
       .pill-menu-button {
         display: flex;
         align-items: center;
-        font: 600 var(--boxel-font-xs);
+        font: 700 var(--boxel-font-xs);
         gap: var(--boxel-sp-xxs);
         padding: var(
           --boxel-pill-menu-button-padding,
@@ -129,10 +129,10 @@ export default class PillMenu extends Component<Signature> {
       .menu-header {
         overflow: hidden;
         padding: var(--chat-input-area-bottom-padding);
-        font: 600 var(--boxel-font-xs);
+        font: 700 var(--boxel-font-xs);
       }
       .menu-header :deep(.title) {
-        font: 600 var(--boxel-font);
+        font: 700 var(--boxel-font);
       }
       .header-button {
         margin: var(--button-outline);
@@ -140,7 +140,7 @@ export default class PillMenu extends Component<Signature> {
         background: none;
         border: none;
         border-radius: var(--boxel-border-radius-xl);
-        font: 600 var(--boxel-font-xs);
+        font: 700 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-xs);
         display: flex;
         align-items: center;

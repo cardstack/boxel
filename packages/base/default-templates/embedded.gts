@@ -54,12 +54,14 @@ export default class DefaultEmbeddedTemplate extends GlimmerComponent<{
       }
       .card-title {
         margin: 10px 0 0 0;
-        font: 500 var(--boxel-font-size-med);
+        font-size: var(--boxel-heading-font-size);
+        font-weight: 500;
         line-height: 1.25;
         letter-spacing: 0.16px;
       }
       .card-display-name {
-        font: 500 var(--boxel-font-xs);
+        font-size: var(--boxel-caption-font-size);
+        font-weight: 500;
         color: var(--boxel-450);
         line-height: 1.27;
         letter-spacing: 0.11px;
