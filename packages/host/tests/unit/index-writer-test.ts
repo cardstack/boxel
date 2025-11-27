@@ -639,6 +639,7 @@ module('Unit | index-writer', function (hooks) {
           ),
           isolated_html: `<div class="isolated">Isolated HTML</div>`,
           atom_html: `<span class="atom">Atom HTML</span>`,
+          head_html: `<span class="head">Head HTML</span>`,
           icon_html: '<svg>test icon</svg>',
         },
         {
@@ -653,6 +654,7 @@ module('Unit | index-writer', function (hooks) {
           types: null,
           last_modified: String(modified),
           resource_created_at: String(modified),
+          head_html: null,
           embedded_html: null,
           fitted_html: null,
           isolated_html: null,
@@ -674,6 +676,7 @@ module('Unit | index-writer', function (hooks) {
           types,
           last_modified: String(modified),
           resource_created_at: String(modified),
+          head_html: null,
           embedded_html: null,
           fitted_html: null,
           isolated_html: null,
@@ -773,6 +776,7 @@ module('Unit | index-writer', function (hooks) {
         ),
         isolated_html: `<div class="isolated">Isolated HTML</div>`,
         atom_html: `<span class="atom">Atom HTML</span>`,
+        head_html: `<span class="head">Head HTML</span>`,
         icon_html: '<svg>test icon</svg>',
         is_deleted: null,
         definition: null,
@@ -799,6 +803,7 @@ module('Unit | index-writer', function (hooks) {
         fitted_html: null,
         isolated_html: null,
         atom_html: null,
+        head_html: null,
         icon_html: null,
         is_deleted: null,
         definition: null,
@@ -829,6 +834,7 @@ module('Unit | index-writer', function (hooks) {
         fitted_html: null,
         isolated_html: null,
         atom_html: null,
+        head_html: null,
         icon_html: null,
         is_deleted: null,
         definition: {
@@ -924,6 +930,7 @@ module('Unit | index-writer', function (hooks) {
           ),
           isolated_html: `<div class="isolated">Isolated HTML</div>`,
           atom_html: `<span class="atom">Atom HTML</span>`,
+          head_html: null,
           icon_html: '<svg>test icon</svg>',
         },
       ],
@@ -976,6 +983,7 @@ module('Unit | index-writer', function (hooks) {
         ),
         isolated_html: `<div class="isolated">Isolated HTML</div>`,
         atom_html: `<span class="atom">Atom HTML</span>`,
+        head_html: null,
         last_modified: String(modified),
         resource_created_at: String(modified),
         is_deleted: null,
@@ -1030,6 +1038,7 @@ module('Unit | index-writer', function (hooks) {
         fitted_html: null,
         isolated_html: null,
         atom_html: null,
+        head_html: null,
         last_modified: null,
         resource_created_at: null,
         is_deleted: false,
@@ -1119,6 +1128,7 @@ module('Unit | index-writer', function (hooks) {
         embeddedHtml: null,
         fittedHtml: null,
         atomHtml: null,
+        headHtml: null,
         searchDoc: null,
         types: null,
         indexedAt: null,
@@ -1215,6 +1225,7 @@ module('Unit | index-writer', function (hooks) {
         atomHtml: null,
         embeddedHtml: null,
         fittedHtml: null,
+        headHtml: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be an error document`);
@@ -1308,6 +1319,7 @@ module('Unit | index-writer', function (hooks) {
         embeddedHtml: null,
         fittedHtml: null,
         atomHtml: null,
+        headHtml: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be an error document`);
