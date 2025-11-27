@@ -9,6 +9,8 @@ if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
   export MATRIX_REGISTRATION_SHARED_SECRET
 fi
 
+PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
+
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   PGPORT=5435 \
@@ -23,6 +25,7 @@ NODE_ENV=development \
   --port=4201 \
   --matrixURL='http://localhost:8008' \
   --realmsRootPath='./realms/localhost_4201_base' \
+  --prerendererUrl="${PRERENDER_URL}" \
   --migrateDB \
   $1 \
   \

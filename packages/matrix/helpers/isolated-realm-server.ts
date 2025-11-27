@@ -267,6 +267,7 @@ export async function startServer({
     `--matrixURL='${matrixURL}'`,
     `--realmsRootPath='${dir.name}'`,
     `--workerManagerPort=${workerManagerPort}`,
+    `--prerendererUrl="${prerenderURL}"`,
     `--useRegistrationSecretFunction`,
 
     `--path='${testRealmDir}'`,

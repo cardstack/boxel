@@ -9,25 +9,20 @@ import {
   IndexQueryEngine,
   fetcher,
   maybeHandleScopedCSSRequest,
-  parseQuery,
   internalKeyFor,
   identifyCard,
-  SupportedMimeType,
   getFieldDefinitions,
   type ResolvedCodeRef,
   type Definition,
   type LooseCardResource,
+  FilterRefersToNonexistentTypeError,
 } from '@cardstack/runtime-common';
-import { DefinitionsCache } from '@cardstack/runtime-common/definitions-cache';
 
 import ENV from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
-import type {
-  JSONAPISingleResourceDocument,
-  CardDef,
-} from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import {
@@ -52,7 +47,6 @@ module('Unit | query', function (hooks) {
   let indexQueryEngine: IndexQueryEngine;
   let loader: Loader;
   let testCards: { [name: string]: CardDef } = {};
-  let definitionsCache: DefinitionsCache;
 
   hooks.before(async function () {
     dbAdapter = await getDbAdapter();
@@ -204,50 +198,44 @@ module('Unit | query', function (hooks) {
 
     let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
 
-    async function serveDefinition(cardDef: typeof CardDef) {
-      let doc: JSONAPISingleResourceDocument = { data: { type: 'definition' } };
-      doc.data.attributes = {
+    async function buildDefinition(cardDef: typeof CardDef) {
+      return {
         codeRef: identifyCard(cardDef),
         displayName: cardDef.displayName,
         fields: getFieldDefinitions(api, cardDef),
       } as Definition;
-      return new Response(JSON.stringify(doc), {
-        headers: { 'content-type': SupportedMimeType.JSONAPI },
-      });
     }
 
-    // mock the realm server serving definitions
-    virtualNetwork.mount(async (req) => {
-      if (req.method === 'HEAD') {
-        return new Response(null, {
-          headers: { 'X-Boxel-Realm-Url': testRealmURL },
-        });
-      }
-      if (req.url.includes('/_definition?')) {
-        let query = new URL(req.url).search.slice(1);
-        let { codeRef } = parseQuery(query) as { codeRef: ResolvedCodeRef };
+    await dbAdapter.reset();
+    let mockDefinitionLookup = {
+      async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
         let key = internalKeyFor(codeRef, undefined);
         switch (key) {
           case `${testRealmURL}person/Person`:
-            return await serveDefinition(Person);
+            return await buildDefinition(Person);
           case `${testRealmURL}fancy-person/FancyPerson`:
-            return await serveDefinition(FancyPerson);
+            return await buildDefinition(FancyPerson);
           case `${testRealmURL}cat/Cat`:
-            return await serveDefinition(Cat);
+            return await buildDefinition(Cat);
           case `${testRealmURL}spec/SimpleSpec`:
-            return await serveDefinition(SimpleSpec);
+            return await buildDefinition(SimpleSpec);
           case `${testRealmURL}event/Event`:
-            return await serveDefinition(Event);
+            return await buildDefinition(Event);
           default:
-            return null;
+            throw new FilterRefersToNonexistentTypeError(codeRef, {
+              cause: `Definition for ${stringify(codeRef)} not found`,
+            });
         }
-      }
-      return null;
-    });
-
-    await dbAdapter.reset();
-    definitionsCache = new DefinitionsCache(virtualNetwork.fetch);
-    indexQueryEngine = new IndexQueryEngine(dbAdapter, definitionsCache);
+      },
+      async invalidate(_realmURL: string): Promise<void> {
+        // no-op for tests
+      },
+      registerRealm() {},
+      forRealm() {
+        return this;
+      },
+    };
+    indexQueryEngine = new IndexQueryEngine(dbAdapter, mockDefinitionLookup);
   });
 
   test('can get all cards with empty filter', async function (assert) {

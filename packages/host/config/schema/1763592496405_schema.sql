@@ -53,6 +53,18 @@
    PRIMARY KEY ( url, realm_url ) 
 );
 
+ CREATE TABLE IF NOT EXISTS modules (
+   url TEXT NOT NULL,
+   cache_scope TEXT NOT NULL,
+   auth_user_id TEXT NOT NULL,
+   resolved_realm_url TEXT NOT NULL,
+   definitions BLOB,
+   deps BLOB,
+   error_doc BLOB,
+   created_at,
+   PRIMARY KEY ( url, cache_scope, auth_user_id ) 
+);
+
  CREATE TABLE IF NOT EXISTS published_realms (
    id DEFAULT (hex(randomblob(16))) NOT NULL,
    owner_username TEXT NOT NULL,

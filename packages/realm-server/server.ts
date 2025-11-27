@@ -1,7 +1,7 @@
 import Koa from 'koa';
 import cors from '@koa/cors';
 import { Memoize } from 'typescript-memoize';
-import type { RealmInfo } from '@cardstack/runtime-common';
+import type { DefinitionLookup, RealmInfo } from '@cardstack/runtime-common';
 import {
   Realm,
   logger,
@@ -62,6 +62,7 @@ export class RealmServer {
   private realmsRootPath: string;
   private dbAdapter: DBAdapter;
   private queue: QueuePublisher;
+  private definitionLookup: DefinitionLookup;
   private assetsURL: URL;
   private getIndexHTML: () => Promise<string>;
   private serverURL: URL;
@@ -89,6 +90,7 @@ export class RealmServer {
     realmsRootPath,
     dbAdapter,
     queue,
+    definitionLookup,
     assetsURL,
     getIndexHTML,
     matrixRegistrationSecret,
@@ -106,6 +108,7 @@ export class RealmServer {
     realmsRootPath: string;
     dbAdapter: DBAdapter;
     queue: QueuePublisher;
+    definitionLookup: DefinitionLookup;
     assetsURL: URL;
     getIndexHTML: () => Promise<string>;
     matrixRegistrationSecret?: string;
@@ -134,6 +137,7 @@ export class RealmServer {
     this.realmsRootPath = realmsRootPath;
     this.dbAdapter = dbAdapter;
     this.queue = queue;
+    this.definitionLookup = definitionLookup;
     this.assetsURL = assetsURL;
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
@@ -506,6 +510,7 @@ export class RealmServer {
           username,
         },
         realmServerMatrixClient: this.matrixClient,
+        definitionLookup: this.definitionLookup,
       },
       Object.keys(realmOptions).length ? realmOptions : undefined,
     );
@@ -573,6 +578,7 @@ export class RealmServer {
               username,
             },
             realmServerMatrixClient: this.matrixClient,
+            definitionLookup: this.definitionLookup,
           });
           this.virtualNetwork.mount(realm.handle);
           realms.push(realm);
@@ -701,6 +707,7 @@ export class RealmServer {
               username,
             },
             realmServerMatrixClient: this.matrixClient,
+            definitionLookup: this.definitionLookup,
           });
 
           this.virtualNetwork.mount(realm.handle);
