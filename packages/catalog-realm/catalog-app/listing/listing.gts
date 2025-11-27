@@ -33,7 +33,6 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { eq, type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 import Wand from '@cardstack/boxel-icons/wand';
-import Upload from '@cardstack/boxel-icons/upload';
 
 import AppListingHeader from '../components/app-listing-header';
 import ChooseRealmAction from '../components/choose-realm-action';
@@ -612,9 +611,9 @@ export class Listing extends CardDef {
   }
 
   [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
-    let menuItems = super[getCardMenuItems](params).filter(
-      (item) => item.label?.toLowerCase() !== 'create listing with ai',
-    );
+    let menuItems = super
+      [getCardMenuItems](params)
+      .filter((item) => item.label?.toLowerCase() !== 'create listing with ai');
     if (params.menuContext === 'interact') {
       const extra = this.getGenerateExampleMenuItem(params);
       if (extra) {
