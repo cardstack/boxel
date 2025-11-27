@@ -434,6 +434,12 @@ export default class OperatorModeStateService extends Service {
     return this._state.version ?? 0;
   }
 
+  // Only used in host tests to avoid version conflict issues
+  // since in host tests the `visit` is not fully refreshing the page
+  resetVersion() {
+    this._state.version = 0;
+  }
+
   private getRealmURLFromItemId(itemId: string): string {
     try {
       const url = new URL(itemId);

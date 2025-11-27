@@ -196,9 +196,6 @@ export default class Card extends Route {
     } else {
       let incomingVersion = operatorModeStateObject?.version ?? 0;
       let currentVersion = this.operatorModeStateService.version ?? 0;
-      console.log(
-        `Operator mode state version: incoming=${incomingVersion}, current=${currentVersion}`,
-      );
       if (
         this.operatorModeStateService.serialize() === operatorModeState ||
         incomingVersion < currentVersion
