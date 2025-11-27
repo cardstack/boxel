@@ -4097,7 +4097,6 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         'https://packages/@cardstack/boxel-host/commands/copy-card',
         'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
         'https://packages/@cardstack/boxel-host/commands/generate-example-cards',
-        'https://packages/@cardstack/boxel-host/commands/generate-readme-spec',
         'https://packages/@cardstack/boxel-host/commands/listing-create',
         'https://packages/@cardstack/boxel-host/commands/open-in-interact-mode',
         'https://packages/@cardstack/boxel-host/commands/patch-theme',
