@@ -11,7 +11,6 @@ import { triggerEvent } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
-import stringify from 'safe-stable-stringify';
 
 import {
   Deferred,
@@ -170,59 +169,51 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
 
       await click('[data-test-operator-mode-stack] [data-test-pet="Mango"]');
-      let expectedURL = `/?operatorModeState=${encodeURIComponent(
-        stringify({
-          stacks: [
-            [
-              {
-                id: `${testRealmURL}Person/fadhlan`,
-                format: 'isolated',
-              },
-              {
-                id: `${testRealmURL}Pet/mango`,
-                format: 'isolated',
-              },
-            ],
+      assert.operatorModeParametersMatch(currentURL(), {
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+            {
+              id: `${testRealmURL}Pet/mango`,
+              format: 'isolated',
+            },
           ],
-          submode: 'interact',
-          cardPreviewFormat: 'isolated',
-          fileView: 'inspector',
-          openDirs: {},
-          moduleInspector: 'schema',
-          trail: [],
-        })!,
-      )}`;
-      assert.strictEqual(currentURL(), expectedURL);
+        ],
+        submode: 'interact',
+        cardPreviewFormat: 'isolated',
+        fileView: 'inspector',
+        openDirs: {},
+        moduleInspector: 'schema',
+        trail: [],
+      });
 
       // Click Edit on the top card
       await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
 
       // The edit format should be reflected in the URL
-      assert.strictEqual(
-        currentURL(),
-        `/?operatorModeState=${encodeURIComponent(
-          stringify({
-            stacks: [
-              [
-                {
-                  id: `${testRealmURL}Person/fadhlan`,
-                  format: 'isolated',
-                },
-                {
-                  id: `${testRealmURL}Pet/mango`,
-                  format: 'edit',
-                },
-              ],
-            ],
-            submode: 'interact',
-            fileView: 'inspector',
-            openDirs: {},
-            cardPreviewFormat: 'isolated',
-            moduleInspector: 'schema',
-            trail: [],
-          })!,
-        )}`,
-      );
+      assert.operatorModeParametersMatch(currentURL(), {
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+            {
+              id: `${testRealmURL}Pet/mango`,
+              format: 'edit',
+            },
+          ],
+        ],
+        submode: 'interact',
+        fileView: 'inspector',
+        openDirs: {},
+        cardPreviewFormat: 'isolated',
+        moduleInspector: 'schema',
+        trail: [],
+      });
     });
 
     test<TestContextWithSave>('a realm event with known clientRequestId is ignored', async function (assert) {
