@@ -46,7 +46,7 @@ export default class ViewSelector extends Component<Signature> {
   <template>
     <div class={{cn 'view-options-group' is-disabled=@disabled}} ...attributes>
       {{! TODO: refactor styling of RadioInput component to display legend instead of repeating it here }}
-      View as
+      <span class='view-options-label'>View as</span>
       <RadioInput
         class='view-options'
         @groupDescription='View as'
@@ -87,6 +87,9 @@ export default class ViewSelector extends Component<Signature> {
           );
           row-gap: var(--boxel-view-option-group-row-gap);
           text-wrap: nowrap;
+        }
+        .view-options-label {
+          font-weight: 500;
         }
         .view-options {
           display: flex;

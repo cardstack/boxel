@@ -882,7 +882,7 @@ class EmbeddedTemplate extends Component<typeof Deal> {
         gap: var(--boxel-sp-xxs);
       }
       .account-name {
-        font: 600 var(--boxel-font-med);
+        font: 600 var(--boxel-font-md);
         overflow: hidden;
         text-overflow: ellipsis;
         display: -webkit-box;
@@ -1161,7 +1161,7 @@ class FittedTemplate extends Component<typeof Deal> {
         gap: var(--boxel-sp-xxs);
       }
       .account-name {
-        font: 600 var(--boxel-font-med);
+        font: 600 var(--boxel-font-md);
         overflow: hidden;
         text-overflow: ellipsis;
         display: -webkit-box;
@@ -1383,7 +1383,7 @@ class FittedTemplate extends Component<typeof Deal> {
           --account-header-info-content-display: none;
         }
         .account-name {
-          font: 600 var(--boxel-font-med);
+          font: 600 var(--boxel-font-md);
           -webkit-line-clamp: 1;
         }
 

@@ -724,6 +724,7 @@ export class Prerenderer {
           ...(error ? { error } : {}),
           iconHTML: null,
           isolatedHTML,
+          headHTML: null,
           atomHTML: null,
           embeddedHTML: null,
           fittedHTML: null,
@@ -773,10 +774,32 @@ export class Prerenderer {
     } else {
       meta = metaMaybeError;
     }
-    let atomHTML: string | null = null,
+    let headHTML: string | null = null,
+      atomHTML: string | null = null,
       iconHTML: string | null = null,
       embeddedHTML: Record<string, string> | null = null,
       fittedHTML: Record<string, string> | null = null;
+
+    if (!shortCircuit) {
+      let headHTMLResult = await this.#step(realm, 'head render', () =>
+        withTimeout(
+          page,
+          () => renderHTML(page, 'head', 0, captureOptions),
+          opts?.timeoutMs,
+        ),
+      );
+      if (headHTMLResult.ok) {
+        headHTML = headHTMLResult.value as string;
+      } else {
+        error = error ?? headHTMLResult.error;
+        markTimeout(headHTMLResult.error);
+        if (headHTMLResult.evicted) {
+          poolInfo.evicted = true;
+          shortCircuit = true;
+        }
+      }
+    }
+
     if (!shortCircuit && meta.types) {
       // Render sequentially and short-circuit on unusable page/timeout
       const steps: Array<{
@@ -840,6 +863,7 @@ export class Prerenderer {
       ...(error ? { error } : {}),
       iconHTML,
       isolatedHTML,
+      headHTML,
       atomHTML,
       embeddedHTML,
       fittedHTML,

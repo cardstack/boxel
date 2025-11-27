@@ -370,7 +370,7 @@ export default class RenderRoute extends Route<Model> {
     if (!modelState || modelState.isReady) {
       return;
     }
-    await this.store.loaded();
+    await this.#authGuard.race(() => this.store.loaded());
     modelState.state.set('status', 'ready');
     modelState.isReady = true;
     modelState.readyDeferred.fulfill();

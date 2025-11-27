@@ -302,7 +302,7 @@ class TaskIsolated extends Component<typeof SprintTask> {
         align-items: center;
       }
       .task-title {
-        font-size: var(--boxel-font-size-med);
+        font-size: var(--boxel-font-size-md);
         font-weight: var(--task-font-weight-600);
       }
       .status-label {

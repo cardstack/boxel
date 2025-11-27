@@ -1,4 +1,10 @@
-export type Format = 'isolated' | 'embedded' | 'fitted' | 'edit' | 'atom';
+export type Format =
+  | 'isolated'
+  | 'embedded'
+  | 'fitted'
+  | 'edit'
+  | 'atom'
+  | 'head';
 
 export function isValidFormat(
   format: string,
@@ -13,6 +19,7 @@ export const formats: Format[] = [
   'fitted',
   'atom',
   'edit',
+  'head',
 ];
 
 export const FITTED_FORMATS = [
