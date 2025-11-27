@@ -322,7 +322,6 @@ ${REPLACE_MARKER}
     );
     await failingCommandContainer.waitFor();
 
-    // TODO: why is this taking 15 seconds to apply?
     await failingCommandContainer
       .locator('[data-test-apply-state="applied"]')
       .waitFor();
