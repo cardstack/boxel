@@ -56,6 +56,11 @@ test.describe('Head tags', () => {
       '1New Workspace',
     );
 
+    await expect(page.locator('meta[property="og:url"]')).toHaveAttribute(
+      'content',
+      publishedRealmURLString,
+    );
+
     // let body = await response!.text();
     // expect(body).toBeDefined();
     // expect(body).toContain('property="og:title"');
