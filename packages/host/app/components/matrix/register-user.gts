@@ -226,7 +226,7 @@ export default class RegisterUser extends Component<Signature> {
     {{/if}}
     <style scoped>
       .title {
-        font: 600 var(--boxel-font-med);
+        font: 600 var(--boxel-font-md);
         margin-bottom: var(--boxel-sp-sm);
       }
       .button-wrapper {
@@ -251,7 +251,7 @@ export default class RegisterUser extends Component<Signature> {
         margin-top: var(--boxel-sp);
       }
       .registration-field :deep(.text-accessory) {
-        color: var(--boxel-highlight);
+        color: var(--boxel-450);
       }
       .registration-field :deep(.validation-icon-container.invalid) {
         display: none;
