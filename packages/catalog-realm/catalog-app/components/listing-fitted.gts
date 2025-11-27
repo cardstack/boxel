@@ -307,7 +307,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
       /* Vertical Cards */
       @container fitted-card (aspect-ratio <= 1.0) and (400px <= width) {
         .card-title {
-          font-size: var(--boxel-font-size-med);
+          font-size: var(--boxel-font-size-md);
           -webkit-line-clamp: 4;
         }
       }
@@ -403,7 +403,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
       /* Full Card (400 x 275) */
       @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (275px <= height) {
         .card-title {
-          font-size: var(--boxel-font-size-med);
+          font-size: var(--boxel-font-size-md);
         }
         .info-section {
           padding: var(--boxel-sp);
