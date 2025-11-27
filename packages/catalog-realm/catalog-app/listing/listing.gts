@@ -620,15 +620,6 @@ export class Listing extends CardDef {
       if (extra) {
         menuItems = [...menuItems, extra];
       }
-      menuItems = [
-        ...menuItems,
-        {
-          label: 'Publish to Catalog',
-          action: async () => {},
-          disabled: true,
-          icon: Upload,
-        },
-      ];
     }
     return menuItems;
   }
