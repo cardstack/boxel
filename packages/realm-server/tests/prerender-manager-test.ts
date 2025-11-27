@@ -7,16 +7,23 @@ import Router from '@koa/router';
 import type { Server } from 'http';
 import { createServer } from 'http';
 import { buildPrerenderManagerApp } from '../prerender/manager-app';
+import {
+  PRERENDER_SERVER_DRAINING_STATUS_CODE,
+  PRERENDER_SERVER_STATUS_DRAINING,
+  PRERENDER_SERVER_STATUS_HEADER,
+} from '../prerender/prerender-constants';
 
 module(basename(__filename), function () {
   module('Prerender manager', function (hooks) {
     let previousMultiplex: string | undefined;
+    let previousHeartbeatTimeout: string | undefined;
     let mockPrerenderA: ReturnType<typeof makeMockPrerender> | undefined;
     let mockPrerenderB: ReturnType<typeof makeMockPrerender> | undefined;
     let serverUrlA: string | undefined;
     let serverUrlB: string | undefined;
     hooks.beforeEach(function () {
       previousMultiplex = process.env.PRERENDER_MULTIPLEX;
+      previousHeartbeatTimeout = process.env.PRERENDER_HEARTBEAT_TIMEOUT_MS;
       // create two mock prerender servers available for tests
       mockPrerenderA = makeMockPrerender();
       mockPrerenderB = makeMockPrerender();
@@ -28,6 +35,11 @@ module(basename(__filename), function () {
         delete process.env.PRERENDER_MULTIPLEX;
       } else {
         process.env.PRERENDER_MULTIPLEX = previousMultiplex;
+      }
+      if (previousHeartbeatTimeout === undefined) {
+        delete process.env.PRERENDER_HEARTBEAT_TIMEOUT_MS;
+      } else {
+        process.env.PRERENDER_HEARTBEAT_TIMEOUT_MS = previousHeartbeatTimeout;
       }
       // ensure mock servers are stopped
       if (mockPrerenderA) {
@@ -159,6 +171,15 @@ module(basename(__filename), function () {
         assignedServerData.attributes.realms[0].lastUsed,
         'has realm lastUsed timestamp',
       );
+      assert.strictEqual(
+        assignedServerData.attributes.status,
+        'active',
+        'status reflects heartbeat',
+      );
+      assert.ok(
+        Array.isArray(assignedServerData.attributes.warmedRealms),
+        'warmed realms included',
+      );
 
       // Verify the other server has no realms
       let otherServerUrl =
@@ -246,14 +267,19 @@ module(basename(__filename), function () {
       );
     });
 
-    test('registration: explicit url passes and returns 204', async function (assert) {
+    test('heartbeat: url required; heartbeat updates warmed realms and status', async function (assert) {
       let { app } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());
-      // use mockPrerenderA to satisfy ping
+
       let registrationResponse = await request.post('/prerender-servers').send({
         data: {
           type: 'prerender-server',
-          attributes: { capacity: 2, url: serverUrlA },
+          attributes: {
+            capacity: 2,
+            url: serverUrlA,
+            status: 'active',
+            warmedRealms: ['https://realm.example/warmed'],
+          },
         },
       });
       assert.strictEqual(registrationResponse.status, 204, '204 No Content');
@@ -262,36 +288,14 @@ module(basename(__filename), function () {
         serverUrlA,
         'id header',
       );
-    });
 
-    test('registration: unreachable url rejected; missing url fails', async function (assert) {
-      let { app } = buildPrerenderManagerApp();
-      let request: SuperTest<Test> = supertest(app.callback());
-
-      // unreachable
-      let unreachable = `http://127.0.0.1:59999`;
-      let unreachableRegistrationResponse = await request
-        .post('/prerender-servers')
-        .send({
-          data: {
-            type: 'prerender-server',
-            attributes: { url: unreachable },
-          },
-        });
-      assert.strictEqual(
-        unreachableRegistrationResponse.status,
-        400,
-        'unreachable rejected',
-      );
-
-      // missing header & body cannot infer
       let missingInferenceResponse = await request
         .post('/prerender-servers')
         .send({});
       assert.strictEqual(
         missingInferenceResponse.status,
         400,
-        'cannot infer URL rejected',
+        'missing url rejected',
       );
     });
 
@@ -597,6 +601,359 @@ module(basename(__filename), function () {
         'does not target unreachable after sweep',
       );
     });
+
+    test('stale heartbeat removes server from routing', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '2';
+      process.env.PRERENDER_HEARTBEAT_TIMEOUT_MS = '1';
+      let { app, sweepServers, registry } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlA },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlB },
+        },
+      });
+
+      // age server A heartbeat
+      let infoA = registry.servers.get(serverUrlA as string);
+      assert.ok(infoA, 'server A registered');
+      if (infoA) {
+        infoA.lastSeenAt = Date.now() - 10_000;
+      }
+
+      await sweepServers();
+
+      let realm2RequestBody = makeBody(
+        'https://realm.example/R2',
+        'https://realm.example/R2/1',
+      );
+      let proxyResponse = await request
+        .post('/prerender-card')
+        .send(realm2RequestBody);
+      assert.strictEqual(proxyResponse.status, 201, 'proxy ok');
+      assert.notStrictEqual(
+        proxyResponse.headers['x-boxel-prerender-target'],
+        serverUrlA,
+        'stale server not targeted after sweep',
+      );
+    });
+
+    test('manager retries another server when one is draining', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      mockPrerenderA?.setResponder(async (ctxt) => {
+        ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+        ctxt.set(
+          PRERENDER_SERVER_STATUS_HEADER,
+          PRERENDER_SERVER_STATUS_DRAINING,
+        );
+        ctxt.body = 'draining';
+      });
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlA },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlB },
+        },
+      });
+
+      let body = makeBody(
+        'https://realm.example/retry',
+        'https://realm.example/retry/1',
+      );
+      let response = await request.post('/prerender-card').send(body);
+      assert.strictEqual(response.status, 201, 'proxy succeeds');
+      assert.strictEqual(
+        response.headers['x-boxel-prerender-target'],
+        serverUrlB,
+        'draining server skipped in favor of healthy one',
+      );
+    });
+
+    test('manager prefers warmed realm when available', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let realm = 'https://realm.example/warmed';
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlA,
+            warmedRealms: [realm],
+          },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlB },
+        },
+      });
+
+      let response = await request
+        .post('/prerender-card')
+        .send(makeBody(realm, `${realm}/1`));
+
+      assert.strictEqual(response.status, 201, 'proxy ok');
+      assert.strictEqual(
+        response.headers['x-boxel-prerender-target'],
+        serverUrlA,
+        'manager prefers warmed server for realm',
+      );
+    });
+
+    test('pressure mode skips unusable LRU server and falls back to healthy', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app, registry, chooseServerForRealm } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlA },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlB },
+        },
+      });
+
+      // seed LRU realm with both servers so pressure mode has multiple candidates
+      let lruRealm = 'https://realm.example/lru';
+      registry.realms.set(lruRealm, [
+        serverUrlA as string,
+        serverUrlB as string,
+      ]);
+      registry.lastAccessByRealm.set(lruRealm, Date.now() - 1000);
+      registry.servers.get(serverUrlA!)!.activeRealms.add(lruRealm);
+      registry.servers.get(serverUrlB!)!.activeRealms.add(lruRealm);
+
+      // make A unusable
+      let infoA = registry.servers.get(serverUrlA!);
+      if (infoA) {
+        infoA.status = 'draining';
+      }
+
+      // simulate full capacity to bypass earlier capacity selection
+      registry.servers.get(serverUrlA!)!.activeRealms.add('fillA');
+      registry.servers.get(serverUrlB!)!.activeRealms.add('fillB');
+
+      // choose for new realm should drop A and pick B from LRU set
+      let realm = 'https://realm.example/new';
+      let target = chooseServerForRealm(realm);
+      assert.strictEqual(
+        target,
+        serverUrlB,
+        'selects healthy server after dropping unusable LRU entry',
+      );
+      assert.false(
+        registry.servers.get(serverUrlA!)?.activeRealms.has(lruRealm),
+        'unusable server activeRealms cleaned up',
+      );
+      let lruMapping = registry.realms.get(lruRealm) || [];
+      assert.false(
+        lruMapping.includes(serverUrlA as string),
+        'LRU mapping drops unusable',
+      );
+      if (lruMapping.length === 0) {
+        assert.deepEqual(
+          lruMapping,
+          [],
+          'LRU mapping can be empty after pruning',
+        );
+      } else {
+        assert.deepEqual(
+          lruMapping,
+          [serverUrlB],
+          'LRU mapping pruned to healthy server',
+        );
+      }
+    });
+
+    test('cleanup keeps activeRealms in sync so capacity is restored after draining', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '1';
+      let { app, registry } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlA },
+        },
+      });
+
+      // initial assignment
+      let realm1 = 'https://realm.example/one';
+      let res1 = await request
+        .post('/prerender-card')
+        .send(makeBody(realm1, `${realm1}/1`));
+      assert.strictEqual(res1.status, 201, 'first prerender ok');
+      assert.strictEqual(
+        registry.servers.get(serverUrlA!)?.activeRealms.size,
+        1,
+        'activeRealms tracked',
+      );
+
+      // mark draining and trigger cleanup via a new request (will 503)
+      let info = registry.servers.get(serverUrlA!);
+      assert.ok(info, 'server info present');
+      if (info) {
+        info.status = 'draining';
+      }
+      let realm2 = 'https://realm.example/two';
+      let res2 = await request
+        .post('/prerender-card')
+        .send(makeBody(realm2, `${realm2}/1`));
+      assert.strictEqual(res2.status, 503, 'no servers while draining');
+      assert.strictEqual(
+        registry.servers.get(serverUrlA!)?.activeRealms.size,
+        0,
+        'activeRealms cleared when assignments dropped',
+      );
+
+      // back to active; capacity should allow new assignment
+      if (info) {
+        info.status = 'active';
+        info.lastSeenAt = Date.now();
+      }
+      let realm3 = 'https://realm.example/three';
+      let res3 = await request
+        .post('/prerender-card')
+        .send(makeBody(realm3, `${realm3}/1`));
+      assert.strictEqual(res3.status, 201, 'prerender ok after recovery');
+      assert.true(
+        registry.servers.get(serverUrlA!)?.activeRealms.has(realm3) as boolean,
+        'realm assigned after capacity restored',
+      );
+    });
+
+    test('pressure mode assignment updates activeRealms for capacity accounting', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '1';
+      let { app, registry, chooseServerForRealm } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlA },
+        },
+      });
+
+      let lruRealm = 'https://realm.example/lru';
+      let first = chooseServerForRealm(lruRealm);
+      assert.strictEqual(first, serverUrlA, 'initial realm assigned');
+      registry.lastAccessByRealm.set(lruRealm, Date.now() - 1000);
+
+      let newRealm = 'https://realm.example/new-capacity';
+      let target = chooseServerForRealm(newRealm, {
+        exclude: [serverUrlA as string],
+      });
+      assert.strictEqual(
+        target,
+        serverUrlA,
+        'pressure mode selects server even when excluded',
+      );
+      assert.true(
+        registry.servers
+          .get(serverUrlA!)
+          ?.activeRealms.has(newRealm) as boolean,
+        'activeRealms updated for new realm',
+      );
+    });
+
+    test('returns draining response if all targets are draining', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      // Both responders return draining
+      mockPrerenderA?.setResponder(async (ctxt) => {
+        ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+        ctxt.set(
+          PRERENDER_SERVER_STATUS_HEADER,
+          PRERENDER_SERVER_STATUS_DRAINING,
+        );
+      });
+      mockPrerenderB?.setResponder(async (ctxt) => {
+        ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+        ctxt.set(
+          PRERENDER_SERVER_STATUS_HEADER,
+          PRERENDER_SERVER_STATUS_DRAINING,
+        );
+      });
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlA },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlB },
+        },
+      });
+
+      let realm = 'https://realm.example/draining';
+      let res = await request
+        .post('/prerender-card')
+        .send(makeBody(realm, `${realm}/1`));
+
+      assert.strictEqual(
+        res.status,
+        PRERENDER_SERVER_DRAINING_STATUS_CODE,
+        'returns draining when all servers draining',
+      );
+      assert.strictEqual(
+        res.headers[PRERENDER_SERVER_STATUS_HEADER.toLowerCase()],
+        PRERENDER_SERVER_STATUS_DRAINING,
+        'sets draining header',
+      );
+      assert.strictEqual(
+        res.body?.errors?.[0]?.message,
+        'All prerender servers draining',
+        'helpful message',
+      );
+    });
+
+    test('returns 503 when no prerender servers are registered', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let res = await request
+        .post('/prerender-card')
+        .send(
+          makeBody(
+            'https://realm.example/none',
+            'https://realm.example/none/1',
+          ),
+        );
+      assert.strictEqual(res.status, 503, '503 when no servers available');
+      assert.strictEqual(
+        res.body?.errors?.[0]?.message,
+        'No servers',
+        'response includes helpful message',
+      );
+    });
   });
 });
 
@@ -605,6 +962,13 @@ function makeMockPrerender(): {
   router: Router;
   server: Server;
   stop: () => Promise<void>;
+  setResponder: (
+    responder: (
+      ctxt: Koa.Context,
+      body: any,
+      type: 'card' | 'module',
+    ) => Promise<void> | void,
+  ) => void;
 } {
   let app = new Koa();
   let router = new Router();
@@ -612,6 +976,11 @@ function makeMockPrerender(): {
     ctxt.status = 200;
     ctxt.body = 'OK';
   });
+  let responder: (
+    ctxt: Koa.Context,
+    body: any,
+    type: 'card' | 'module',
+  ) => Promise<void> | void = defaultResponder;
   async function readBody(ctxt: Koa.Context) {
     return await new Promise<string>((resolve) => {
       let buf: Buffer[] = [];
@@ -619,59 +988,67 @@ function makeMockPrerender(): {
       ctxt.req.on('end', () => resolve(Buffer.concat(buf).toString('utf8')));
     });
   }
+  function defaultResponder(
+    ctxt: Koa.Context,
+    body: any,
+    type: 'card' | 'module',
+  ) {
+    ctxt.status = 201;
+    ctxt.set('Content-Type', 'application/vnd.api+json');
+    if (type === 'card') {
+      ctxt.body = JSON.stringify({
+        data: {
+          type: 'prerender-result',
+          id: body?.data?.attributes?.url || 'x',
+          attributes: { ok: true },
+        },
+        meta: {
+          timing: { launchMs: 0, renderMs: 0, totalMs: 0 },
+          pool: {
+            pageId: 'p',
+            realm: body?.data?.attributes?.realm,
+            reused: false,
+            evicted: false,
+          },
+        },
+      });
+    } else {
+      ctxt.body = JSON.stringify({
+        data: {
+          type: 'prerender-module-result',
+          id: body?.data?.attributes?.url || 'x',
+          attributes: {
+            id: body?.data?.attributes?.url || 'x',
+            status: 'ready',
+            isShimmed: false,
+            nonce: '1',
+            lastModified: 0,
+            createdAt: 0,
+            deps: [],
+            definitions: {},
+          },
+        },
+        meta: {
+          timing: { launchMs: 0, renderMs: 0, totalMs: 0 },
+          pool: {
+            pageId: 'p',
+            realm: body?.data?.attributes?.realm,
+            reused: false,
+            evicted: false,
+          },
+        },
+      });
+    }
+  }
   router.post('/prerender-card', async (ctxt) => {
     let raw = await readBody(ctxt);
     let body = raw ? JSON.parse(raw) : {};
-    ctxt.status = 201;
-    ctxt.set('Content-Type', 'application/vnd.api+json');
-    // echo back a minimal valid response
-    ctxt.body = JSON.stringify({
-      data: {
-        type: 'prerender-result',
-        id: body?.data?.attributes?.url || 'x',
-        attributes: { ok: true },
-      },
-      meta: {
-        timing: { launchMs: 0, renderMs: 0, totalMs: 0 },
-        pool: {
-          pageId: 'p',
-          realm: body?.data?.attributes?.realm,
-          reused: false,
-          evicted: false,
-        },
-      },
-    });
+    await responder(ctxt, body, 'card');
   });
   router.post('/prerender-module', async (ctxt) => {
     let raw = await readBody(ctxt);
     let body = raw ? JSON.parse(raw) : {};
-    ctxt.status = 201;
-    ctxt.set('Content-Type', 'application/vnd.api+json');
-    ctxt.body = JSON.stringify({
-      data: {
-        type: 'prerender-module-result',
-        id: body?.data?.attributes?.url || 'x',
-        attributes: {
-          id: body?.data?.attributes?.url || 'x',
-          status: 'ready',
-          isShimmed: false,
-          nonce: '1',
-          lastModified: 0,
-          createdAt: 0,
-          deps: [],
-          definitions: {},
-        },
-      },
-      meta: {
-        timing: { launchMs: 0, renderMs: 0, totalMs: 0 },
-        pool: {
-          pageId: 'p',
-          realm: body?.data?.attributes?.realm,
-          reused: false,
-          evicted: false,
-        },
-      },
-    });
+    await responder(ctxt, body, 'module');
   });
   app.use(router.routes());
   let server = createServer(app.callback()).listen(0);
@@ -686,6 +1063,9 @@ function makeMockPrerender(): {
         stopped = true;
         server.close(() => resolve());
       }),
+    setResponder: (r) => {
+      responder = r;
+    },
   };
 }
 

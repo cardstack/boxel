@@ -329,6 +329,10 @@ export class Prerenderer {
     }
   }
 
+  getWarmRealms(): string[] {
+    return [...this.#pool.keys()];
+  }
+
   async prerenderCard({
     realm,
     url,
