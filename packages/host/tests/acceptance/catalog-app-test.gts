@@ -1771,7 +1771,11 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                     )
                   ) {
                     content = 'app';
-                  } else if (/theme/.test(userLower)) {
+                  } else if (
+                    /(cssvariables|css imports|theme card|themecreator|theme listing)/.test(
+                      userLower,
+                    )
+                  ) {
                     content = 'theme';
                   } else if (/skill/.test(userLower)) {
                     content = 'skill';
