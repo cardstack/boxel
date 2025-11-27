@@ -8,6 +8,8 @@ import {
   createRealm,
   postNewCard,
 } from '../helpers';
+import { getMatrixTestContext } from '../helpers';
+import { registerUser, loginUser } from '../docker/synapse';
 import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
@@ -20,6 +22,7 @@ import {
   SEPARATOR_MARKER,
   REPLACE_MARKER,
 } from '@cardstack/runtime-common/constants';
+import { aiBotUsername } from '@cardstack/runtime-common/constants';
 import { appURL } from '../helpers/isolated-realm-server';
 
 const serverIndexUrl = new URL(appURL).origin;
@@ -60,6 +63,13 @@ test.describe('Correctness Checks', () => {
 
     await page.goto(realmURL);
     let roomId = await getRoomId(page);
+    await showAllCards(page);
+    let testCard = page.locator(`[data-test-cards-grid-item="${cardId}"]`);
+    await testCard.waitFor();
+    await testCard.click();
+    await expect(
+      page.locator(`[data-test-stack-card="${cardId}"]`),
+    ).toHaveCount(1);
 
     // Use the existing agentId from sessionStorage (same source the host uses) so the command auto-applies
     let agentId = await page.evaluate(() => {
@@ -75,6 +85,23 @@ test.describe('Correctness Checks', () => {
     });
 
     const commandRequestId = `check-correctness-${Date.now()}`;
+
+    // Ensure bot user exists and is in the room
+    const { synapse } = getMatrixTestContext();
+    const botPassword = 'bot-password';
+    try {
+      await registerUser(synapse, aiBotUsername, botPassword);
+    } catch {
+      // user may already exist
+    }
+    let botCredentials = await loginUser(aiBotUsername, botPassword);
+    await fetch(
+      `http://localhost:${synapse.port}/_matrix/client/v3/rooms/${roomId}/join`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${botCredentials.accessToken}` },
+      },
+    );
 
     // Simulate a correctness check message from the AI bot (same approach as commands.spec.ts)
     let commandRequests = [
@@ -168,6 +195,7 @@ test.describe('Correctness Checks', () => {
 
     // Fetch the actual CorrectnessResultCard content from the matrix server
     let cardUrl = commandResultData.card.url;
+    let cardFileUrl = `${cardId}.json`;
 
     let response: Response | undefined;
     await expect(async () => {
@@ -195,65 +223,61 @@ test.describe('Correctness Checks', () => {
     expect(cardJson.data.attributes.correct).toBe(true);
     expect(cardJson.data.attributes.errors).toHaveLength(0);
 
-    // --- Break the card using a patch command ---
-    let originalResponse = await fetch(cardUrl, {
+    // --- Break the card using a search/replace code patch message ---
+    let realmToken = await page.evaluate((realmURL) => {
+      let sessions = JSON.parse(
+        window.localStorage.getItem('boxel-session') ?? '{}',
+      );
+      return sessions[realmURL];
+    }, realmURL);
+    expect(realmToken).toBeDefined();
+
+    let originalResponse = await fetch(cardFileUrl, {
       headers: {
-        Authorization: `Bearer ${credentials.accessToken}`,
+        Authorization: realmToken as string,
       },
     });
-    expect(originalResponse.ok).toBe(true);
+
     let originalContent = await originalResponse.text();
     let brokenContent = originalContent.replace(
       `"hasError": false`,
       `"hasError": true`,
     );
 
-    const patchCommandRequestId = `patch-card-${Date.now()}`;
-    let patchCommandRequests = [
-      {
-        id: patchCommandRequestId,
-        name: 'patchCardInstance',
-        arguments: {
-          description: 'Break the card by setting hasError to true',
-          attributes: {
-            cardId,
-            roomId,
-            patch: {
-              attributes: {
-                hasError: true,
-              },
-            },
-          },
-        },
-      },
-    ];
+    const breakMessageBody = `\`\`\`
+${cardId}.json
+${SEARCH_MARKER}
+${originalContent}
+${SEPARATOR_MARKER}
+${brokenContent}
+${REPLACE_MARKER}
+\`\`\``;
 
     await putEvent(
-      credentials.accessToken,
+      botCredentials.accessToken,
       roomId,
       'm.room.message',
-      patchCommandRequestId,
+      'break',
       {
-        body: '',
+        body: breakMessageBody,
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
-        data: {
+        data: JSON.stringify({
           context: {
             agentId,
           },
-        },
-        [APP_BOXEL_COMMAND_REQUESTS_KEY]: patchCommandRequests,
+        }),
       },
     );
 
-    let patchCommandContainer = page.locator(
-      `[data-test-command-id="${patchCommandRequestId}"]`,
-    );
-    await patchCommandContainer.waitFor();
-    await patchCommandContainer.locator('[data-test-command-apply]').click();
-    await patchCommandContainer
-      .locator('[data-test-apply-state="applied"]')
+    let acceptAllButton = page.locator('[data-test-accept-all]');
+    await acceptAllButton.waitFor();
+    await acceptAllButton.click();
+    await page
+      .locator(
+        `[data-test-message-idx="1"] [data-test-code-block-index="0"] [data-test-apply-state="applied"]`,
+      )
       .waitFor();
 
     // --- Run correctness check again; this time expect errors ---
@@ -350,12 +374,17 @@ test.describe('Correctness Checks', () => {
       ),
     ).toBe(true);
 
-    // The card should be flagged with an instance error in the grid
-    await showAllCards(page);
-    let errorCard = page.locator(`[data-test-cards-grid-item="${cardId}"]`);
+    // The card should be flagged with an instance error when viewed on the stack
+    let errorCard = page.locator(`[data-test-stack-card="${cardId}"]`);
     await errorCard.waitFor();
-    let errorAttr = await errorCard.getAttribute('data-test-instance-error');
-    expect(errorAttr).not.toBeNull();
+
+    await expect(
+      page
+        .locator(`[data-test-stack-card="${cardId}"] [data-test-error-message]`)
+        .first(),
+    ).toContainText(
+      'Encountered error rendering HTML for card: hasError was set to true',
+    );
 
     // --- Revert the card using a search/replace code patch message and verify correctness is restored ---
     const revertMessageBody = `\`\`\`
@@ -368,7 +397,7 @@ ${REPLACE_MARKER}
 \`\`\``;
 
     await putEvent(
-      credentials.accessToken,
+      botCredentials.accessToken,
       roomId,
       'm.room.message',
       'revert',
@@ -377,20 +406,21 @@ ${REPLACE_MARKER}
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
-        data: {
+        data: JSON.stringify({
           context: {
             agentId,
           },
-        },
+        }),
       },
     );
 
-    let applyCodeButton = page.locator('[data-test-apply-code-button]').first();
-    await applyCodeButton.waitFor();
-    await applyCodeButton.click();
+    acceptAllButton = page.locator('[data-test-accept-all]');
+    await acceptAllButton.waitFor();
+    await acceptAllButton.click();
     await page
-      .locator('[data-test-apply-code-button][data-test-apply-state="applied"]')
-      .first()
+      .locator(
+        `[data-test-message-idx="3"] [data-test-code-block-index="0"] [data-test-apply-state="applied"]`,
+      )
       .waitFor();
 
     // Run correctness check again
