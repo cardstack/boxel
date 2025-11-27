@@ -149,7 +149,7 @@ async function fetchGenerationCost(
   openRouterApiKey: string,
 ): Promise<number | null> {
   const response = await fetch(
-    `https://openrouter.ai/api/v1/generation?id=${generationId}aaa`,
+    `https://openrouter.ai/api/v1/generation?id=${generationId}`,
     {
       headers: {
         Authorization: `Bearer ${openRouterApiKey}`,
