@@ -201,7 +201,8 @@ module('Integration | card-delete', function (hooks) {
     await click(
       `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
     );
-    await percySnapshot(assert);
+    // TODO: dropdown position keeps changing in snapshots, restore in CS-9808
+    // await percySnapshot(assert);
     await click('[data-test-boxel-menu-item-text="Delete"]');
     await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
     assert
