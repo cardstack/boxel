@@ -111,7 +111,6 @@ export default class AiAssistantChatInput extends Component<Signature> {
       .clone {
         width: 100%;
         padding: var(--boxel-sp-4xs);
-        padding-top: 10px;
 
         max-height: 150px;
         overflow-y: auto;

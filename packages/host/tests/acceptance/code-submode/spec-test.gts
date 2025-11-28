@@ -745,14 +745,14 @@ module('Acceptance | Spec preview', function (hooks) {
       codePath: `${testRealmURL}person.gts`,
     });
     await click('[data-test-module-inspector-view="spec"]');
-    assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Person');
+    assert.dom('[data-test-module-href]').hasText(`${testRealmURL}person`);
     await click('[data-test-file-browser-toggle]');
     await waitFor('[data-test-file="pet.gts"]');
     await click('[data-test-file="pet.gts"]');
     await click('[data-test-module-inspector-view="spec"]');
-    assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Pet2');
+    assert.dom('[data-test-module-href]').hasText(`${testRealmURL}pet`);
     await click('[data-test-file="person.gts"]');
-    assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Person');
+    assert.dom('[data-test-module-href]').hasText(`${testRealmURL}person`);
   });
   test('does not lose input field focus when editing spec', async function (assert) {
     const receivedEventDeferred = new Deferred<void>();
