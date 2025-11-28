@@ -1,32 +1,9 @@
-import SliderField from '../slider';
-import RatingField from '../rating';
-import QuantityField from '../quantity';
-import PercentageField from '../percentage';
-import StatField from '../stat';
-import BadgeNotificationField from '../badge-notification';
-import BadgeMetricField from '../badge-metric';
-import BadgeCounterField from '../badge-counter';
-import ScoreField from '../score';
-import ProgressBarField from '../progress-bar';
-import ProgressCircleField from '../progress-circle';
-import GaugeField from '../gauge';
-
-import {
-  NumberDisplayConfig,
-  NumericFormattingConfig,
-  SliderConfig,
-  RatingConfig,
-  QuantityConfig,
-  PercentageConfig,
-  StatConfig,
-  BadgeNotificationConfig,
-  BadgeMetricConfig,
-  BadgeCounterConfig,
-  ScoreConfig,
-  ProgressBarConfig,
-  ProgressCircleConfig,
-  GaugeConfig,
-} from './types';
+// Types are now defined in component files
+export interface NumberFormattingOptions {
+  decimals?: number;
+  prefix?: string;
+  suffix?: string;
+}
 
 export function hasValue(model: any): boolean {
   return model != null;
@@ -67,15 +44,12 @@ export function getNumericValue(model: any): number {
  */
 export function getFormattedDisplayValue(
   model: any,
-  config: NumberDisplayConfig = {},
+  config: NumberFormattingOptions | Record<string, any> = {},
 ): string {
-  // Type guard: check if config has formatting properties
-  const formattingConfig = config as Partial<NumericFormattingConfig>;
-
-  // Safely extract formatting properties, with defaults for configs that don't have them
-  const decimals = formattingConfig.decimals ?? 0;
-  const prefix = formattingConfig.prefix ?? '';
-  const suffix = formattingConfig.suffix ?? '';
+  // Safely extract formatting properties, with defaults
+  const decimals = config.decimals ?? 0;
+  const prefix = config.prefix ?? '';
+  const suffix = config.suffix ?? '';
 
   // Always default to 0 for empty values
   const numericValue = getNumericValue(model);
@@ -102,41 +76,4 @@ export function calculatePercentage(
  */
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
-}
-
-// Map each field type to its config type for clarity
-export type FieldConfigMap = {
-  slider: SliderConfig;
-  rating: RatingConfig;
-  quantity: QuantityConfig;
-  percentage: PercentageConfig;
-  stat: StatConfig;
-  'badge-notification': BadgeNotificationConfig;
-  'badge-metric': BadgeMetricConfig;
-  'badge-counter': BadgeCounterConfig;
-  score: ScoreConfig;
-  'progress-bar': ProgressBarConfig;
-  'progress-circle': ProgressCircleConfig;
-  gauge: GaugeConfig;
-};
-
-// Map each field type to its class
-const FIELD_TYPE_MAP: Record<keyof FieldConfigMap, any> = {
-  slider: SliderField,
-  rating: RatingField,
-  quantity: QuantityField,
-  percentage: PercentageField,
-  stat: StatField,
-  'badge-notification': BadgeNotificationField,
-  'badge-metric': BadgeMetricField,
-  'badge-counter': BadgeCounterField,
-  score: ScoreField,
-  'progress-bar': ProgressBarField,
-  'progress-circle': ProgressCircleField,
-  gauge: GaugeField,
-};
-
-export function getFieldClass(type?: keyof FieldConfigMap): any | null {
-  if (!type) return null;
-  return FIELD_TYPE_MAP[type] ?? null;
 }

@@ -10,42 +10,41 @@ import NumberField, {
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
 
-import { getNumericValue, hasValue } from './util/index';
-import type { RatingConfig } from './util/types';
+import { getNumericValue, hasValue } from './number/util/index';
 
-interface Configuration {
-  presentation: RatingConfig;
+// Options interface for rating field
+export interface RatingOptions {
+  maxStars?: number;
 }
+
+// TypeScript configuration interface
+export type RatingFieldConfiguration = {
+  presentation?: 'rating';
+  options?: RatingOptions;
+};
 
 export default class RatingField extends NumberField {
   static displayName = 'Rating Number Field';
 
-  static configuration: Configuration = {
-    presentation: {
-      type: 'rating',
-      maxStars: 5,
-    },
-  };
-
   static edit = class Edit extends Component<typeof this> {
-    get config(): RatingConfig {
-      const defaultConfig: RatingConfig = {
-        type: 'rating',
-        maxStars: 5,
-      };
-      const userConfig = this.args.configuration?.presentation;
-      return {
-        ...defaultConfig,
-        ...userConfig,
-      } as RatingConfig;
+    get config() {
+      return (this.args.configuration as RatingFieldConfiguration) ?? {};
+    }
+
+    get options() {
+      return this.config.options ?? {};
     }
 
     get numericValue() {
       return getNumericValue(this.args.model);
     }
 
+    get maxStars() {
+      return this.options.maxStars ?? 5;
+    }
+
     get stars() {
-      return Array.from({ length: this.config.maxStars }, (_, idx) => idx + 1);
+      return Array.from({ length: this.maxStars }, (_, idx) => idx + 1);
     }
 
     setRating = (rating: number) => {
@@ -63,7 +62,7 @@ export default class RatingField extends NumberField {
         {{/each}}
         <span
           class='rating-value'
-        >{{this.numericValue}}/{{this.config.maxStars}}</span>
+        >{{this.numericValue}}/{{this.maxStars}}</span>
       </div>
 
       <style scoped>
@@ -107,16 +106,12 @@ export default class RatingField extends NumberField {
   };
 
   static atom = class Atom extends Component<typeof this> {
-    get config(): RatingConfig {
-      const defaultConfig: RatingConfig = {
-        type: 'rating',
-        maxStars: 5,
-      };
-      const userConfig = this.args.configuration?.presentation;
-      return {
-        ...defaultConfig,
-        ...userConfig,
-      } as RatingConfig;
+    get config() {
+      return (this.args.configuration as RatingFieldConfiguration) ?? {};
+    }
+
+    get options() {
+      return this.config.options ?? {};
     }
 
     get hasValue() {
@@ -154,31 +149,31 @@ export default class RatingField extends NumberField {
         .atom-value {
           font-size: 0.6875rem;
           font-weight: 600;
-          color: var(--foreground, #1a1a1a);
+          color: var(--foreground, #0f172a);
         }
       </style>
     </template>
   };
 
   static embedded = class Embedded extends Component<typeof this> {
-    get config(): RatingConfig {
-      const defaultConfig: RatingConfig = {
-        type: 'rating',
-        maxStars: 5,
-      };
-      const userConfig = this.args.configuration?.presentation;
-      return {
-        ...defaultConfig,
-        ...userConfig,
-      } as RatingConfig;
+    get config() {
+      return (this.args.configuration as RatingFieldConfiguration) ?? {};
+    }
+
+    get options() {
+      return this.config.options ?? {};
     }
 
     get numericValue() {
       return getNumericValue(this.args.model);
     }
 
+    get maxStars() {
+      return this.options.maxStars ?? 5;
+    }
+
     get stars() {
-      return Array.from({ length: this.config.maxStars }, (_, idx) => ({
+      return Array.from({ length: this.maxStars }, (_, idx) => ({
         value: idx + 1,
         filled: idx + 1 <= this.numericValue,
       }));
@@ -190,7 +185,7 @@ export default class RatingField extends NumberField {
           <span class='rating-title'>Rating</span>
           <span
             class='rating-score'
-          >{{this.numericValue}}/{{this.config.maxStars}}</span>
+          >{{this.numericValue}}/{{this.maxStars}}</span>
         </div>
         <div class='stars'>
           {{#each this.stars as |star|}}
