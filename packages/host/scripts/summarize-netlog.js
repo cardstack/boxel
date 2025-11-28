@@ -13,7 +13,7 @@ const path = require('path');
 
 const MAX_URL_SAMPLES = 200;
 
-function main() {
+async function main() {
   let netlogPath = process.argv[2];
   if (!netlogPath) {
     console.log('No netlog path provided; skipping cache summary.');
@@ -30,7 +30,7 @@ function main() {
   let totals = { events: 0, parsed: 0, errors: 0 };
 
   try {
-    streamEvents(netlogPath, (ev) => {
+    await streamEvents(netlogPath, (ev) => {
       totals.events++;
       if (!ev || typeof ev !== 'object') {
         return;
@@ -133,83 +133,86 @@ function streamEvents(filePath, onEvent) {
   let escape = false;
   let startIndex = null;
 
-  stream.on('data', (chunk) => {
-    buffer += chunk;
+  return new Promise((resolve, reject) => {
+    stream.on('data', (chunk) => {
+      buffer += chunk;
 
-    if (!inEvents) {
-      let idx = buffer.indexOf('"events"');
-      if (idx !== -1) {
-        let bracketIdx = buffer.indexOf('[', idx);
-        if (bracketIdx !== -1) {
-          inEvents = true;
-          buffer = buffer.slice(bracketIdx + 1);
+      if (!inEvents) {
+        let idx = buffer.indexOf('"events"');
+        if (idx !== -1) {
+          let bracketIdx = buffer.indexOf('[', idx);
+          if (bracketIdx !== -1) {
+            inEvents = true;
+            buffer = buffer.slice(bracketIdx + 1);
+          } else {
+            // wait for next chunk
+            buffer = buffer.slice(Math.max(0, idx - 10));
+            return;
+          }
         } else {
-          // wait for next chunk
-          buffer = buffer.slice(Math.max(0, idx - 10));
+          // keep last few chars in case "events" spans chunks
+          buffer = buffer.slice(-10);
           return;
         }
-      } else {
-        // keep last few chars in case "events" spans chunks
-        buffer = buffer.slice(-10);
-        return;
       }
-    }
 
-    let i = 0;
-    while (i < buffer.length) {
-      let ch = buffer[i];
-      if (startIndex === null) {
-        if (ch === '{') {
-          startIndex = i;
-          depth = 1;
-          inString = false;
-          escape = false;
+      let i = 0;
+      while (i < buffer.length) {
+        let ch = buffer[i];
+        if (startIndex === null) {
+          if (ch === '{') {
+            startIndex = i;
+            depth = 1;
+            inString = false;
+            escape = false;
+          }
+          i++;
+          continue;
         }
-        i++;
-        continue;
-      }
 
-      // Inside an object
-      if (escape) {
-        escape = false;
-      } else if (ch === '\\') {
-        escape = true;
-      } else if (ch === '"' && !escape) {
-        inString = !inString;
-      } else if (!inString) {
-        if (ch === '{') {
-          depth++;
-        } else if (ch === '}') {
-          depth--;
-          if (depth === 0) {
-            let objText = buffer.slice(startIndex, i + 1);
-            try {
-              onEvent(JSON.parse(objText));
-            } catch (_e) {
-              // ignore individual parse errors
+        // Inside an object
+        if (escape) {
+          escape = false;
+        } else if (ch === '\\') {
+          escape = true;
+        } else if (ch === '"' && !escape) {
+          inString = !inString;
+        } else if (!inString) {
+          if (ch === '{') {
+            depth++;
+          } else if (ch === '}') {
+            depth--;
+            if (depth === 0) {
+              let objText = buffer.slice(startIndex, i + 1);
+              try {
+                onEvent(JSON.parse(objText));
+              } catch (_e) {
+                // ignore individual parse errors
+              }
+              startIndex = null;
+              // drop processed chunk
+              buffer = buffer.slice(i + 1);
+              i = 0;
+              continue;
             }
-            startIndex = null;
-            // drop processed chunk
-            buffer = buffer.slice(i + 1);
-            i = 0;
-            continue;
           }
         }
+        i++;
       }
-      i++;
-    }
 
-    // Trim buffer to avoid unbounded growth; keep partial object if present.
-    if (startIndex !== null && startIndex > 0) {
-      buffer = buffer.slice(startIndex);
-      startIndex = 0;
-    } else if (startIndex === null) {
-      buffer = '';
-    }
-  });
+      // Trim buffer to avoid unbounded growth; keep partial object if present.
+      if (startIndex !== null && startIndex > 0) {
+        buffer = buffer.slice(startIndex);
+        startIndex = 0;
+      } else if (startIndex === null) {
+        buffer = '';
+      }
+    });
 
-  stream.on('end', () => {
-    // finished
+    stream.on('end', () => {
+      resolve();
+    });
+    stream.on('error', (err) => reject(err));
   });
 }
 
