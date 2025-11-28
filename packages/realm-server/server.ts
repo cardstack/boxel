@@ -367,13 +367,19 @@ export class RealmServer {
     if (candidates.length === 0) {
       return null;
     }
-    let candidateExpressions = () =>
+    let candidateExpressions = (): Expression =>
       any(
         candidates.flatMap((candidate) => [
-          ['url =', param(candidate)],
-          ['file_alias =', param(candidate)],
+          [
+            "regexp_replace(url, '^https?://', '') =",
+            param(this.stripProtocol(candidate)),
+          ],
+          [
+            "regexp_replace(file_alias, '^https?://', '') =",
+            param(this.stripProtocol(candidate)),
+          ],
         ]),
-      );
+      ) as Expression;
 
     console.log('head html candidates', JSON.stringify(candidates, null, 2));
 
@@ -391,25 +397,19 @@ export class RealmServer {
     return headRow?.head_html ?? null;
   }
 
-  private headURLCandidates(cardURL: URL): string[] {
-    // Some reverse proxies terminate TLS and forward requests as http, which
-    // means the incoming URL protocol can differ from the realm URL stored in
-    // the index (https). Include both protocols so we still find head_html.
-    let variants = [cardURL];
-    if (cardURL.protocol === 'http:' || cardURL.protocol === 'https:') {
-      let swapped = new URL(cardURL.href);
-      swapped.protocol = cardURL.protocol === 'http:' ? 'https:' : 'http:';
-      variants.push(swapped);
-    }
+  private stripProtocol(href: string): string {
+    return href.replace(/^https?:\/\//, '');
+  }
 
-    let candidates = variants.flatMap((url) => {
-      let href = url.href.replace(/\?.*/, '');
+  private headURLCandidates(cardURL: URL): string[] {
+    let href = cardURL.href.replace(/\?.*/, '');
+    let candidates = [href].flatMap((url) => {
       // strip trailing slash, but keep root realm URLs that end with slash
-      let trimmed = href.endsWith('/') ? href.slice(0, -1) : href;
-      let withIndex = href.endsWith('/') ? `${trimmed}/index` : `${href}/index`;
-      let withJson = `${href.replace(/\/?$/, '')}.json`;
+      let trimmed = url.endsWith('/') ? url.slice(0, -1) : url;
+      let withIndex = url.endsWith('/') ? `${trimmed}/index` : `${url}/index`;
+      let withJson = `${url.replace(/\/?$/, '')}.json`;
       let withIndexJson = `${withIndex}.json`;
-      return [href, trimmed, withIndex, withJson, withIndexJson];
+      return [url, trimmed, withIndex, withJson, withIndexJson];
     });
 
     return [...new Set(candidates)];
