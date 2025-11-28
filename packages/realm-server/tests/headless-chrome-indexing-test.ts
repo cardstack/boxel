@@ -523,6 +523,11 @@ module(basename(__filename), function () {
 
         let cleanedHead = cleanWhiteSpace(entry.headHtml!);
 
+        // TODO: restore in CS-9807
+        // assert.ok(
+        //   cleanedHead.includes('<title data-test-card-head-title>'),
+        //   `head html includes title: ${cleanedHead}`,
+        // );
         assert.ok(
           cleanedHead.includes(`property="og:url" content="${testRealm}mango"`),
           `head html includes canonical url: ${cleanedHead}`,
