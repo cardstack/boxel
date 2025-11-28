@@ -1,22 +1,44 @@
 {
   "data": {
-    "meta": {
-      "adoptsFrom": {
-        "name": "GardenDesign",
-        "module": "../garden-design"
-      }
-    },
     "type": "card",
     "attributes": {
       "rows": 10,
-      "items": [],
       "columns": 9,
-      "cardInfo": {
-        "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
-      }
+      "items": [
+        {
+          "coordinate": {
+            "x": 6,
+            "y": 2
+          }
+        },
+        {
+          "coordinate": {
+            "x": 6,
+            "y": 4
+          }
+        },
+        {
+          "coordinate": {
+            "x": 7,
+            "y": 7
+          }
+        },
+        {
+          "coordinate": {
+            "x": 9,
+            "y": 1
+          }
+        },
+        {
+          "coordinate": {
+            "x": 9,
+            "y": 3
+          }
+        }
+      ],
+      "title": "Wildflower Garden",
+      "description": null,
+      "thumbnailURL": null
     },
     "relationships": {
       "items.0.card": {
@@ -43,11 +65,12 @@
         "links": {
           "self": "../GardenItem/b338d1d7-823a-4eda-ac02-db4c46580c33"
         }
-      },
-      "cardInfo.theme": {
-        "links": {
-          "self": null
-        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../garden-design",
+        "name": "GardenDesign"
       }
     }
   }
