@@ -705,16 +705,17 @@ export default class StoreService extends Service implements StoreInterface {
         // we already dealt with this
         continue;
       }
+      let clientRequestId = event.clientRequestId ?? undefined;
+      this.commandService.markAiAssistantClientRequestReceivedInvalidation(
+        clientRequestId,
+      );
+
       let instance = this.peekLive(invalidation);
       if (instance && isCardInstance(instance)) {
         // Do not reload if the event is a result of an instance-editing request that we made. Otherwise we risk
         // overwriting the inputs with past values. This can happen if the user makes edits in the time between
         // the auto save request and the arrival realm event.
 
-        let clientRequestId = event.clientRequestId ?? undefined;
-        this.commandService.markAiAssistantClientRequestReceivedInvalidation(
-          clientRequestId,
-        );
         let reloadFile = false;
 
         if (!clientRequestId) {
