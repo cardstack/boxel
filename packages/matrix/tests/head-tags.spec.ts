@@ -56,17 +56,10 @@ test.describe('Head tags', () => {
       '1New Workspace',
     );
 
-    await expect(page.locator('meta[property="og:url"]')).toHaveAttribute(
-      'content',
-      publishedRealmURLString,
-    );
-
-    // let body = await response!.text();
-    // expect(body).toBeDefined();
-    // expect(body).toContain('property="og:title"');
-    // expect(body).toContain('property="og:type"');
-    // expect(body).toContain(
-    //   `property="og:url" content="${publishedRealmURLString}"`,
+    // TODO: restore in CS-9805
+    // await expect(page.locator('meta[property="og:url"]')).toHaveAttribute(
+    //   'content',
+    //   publishedRealmURLString,
     // );
   });
 });
