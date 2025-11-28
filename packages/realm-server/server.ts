@@ -41,7 +41,7 @@ import { resolve, join } from 'path';
 import merge from 'lodash/merge';
 
 import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
-import { any } from '@cardstack/runtime-common/expression';
+import { any, type Expression } from '@cardstack/runtime-common/expression';
 import * as Sentry from '@sentry/node';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
