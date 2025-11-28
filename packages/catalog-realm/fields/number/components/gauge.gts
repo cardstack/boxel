@@ -191,6 +191,10 @@ export class GaugeEmbedded extends GlimmerComponent<GaugeSignature> {
     return this.options.max ?? 100;
   }
 
+  get shouldShowValue() {
+    return this.options.showValue !== false;
+  }
+
   <template>
     <div class='gauge-embedded'>
       {{#if this.options.label}}
@@ -255,7 +259,7 @@ export class GaugeEmbedded extends GlimmerComponent<GaugeSignature> {
             transform-origin='100 100'
           />
         </svg>
-        {{#if this.options.showValue}}
+        {{#if this.shouldShowValue}}
           <div class='gauge-value'>{{this.displayValue}}</div>
         {{/if}}
       </div>

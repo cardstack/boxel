@@ -50,7 +50,7 @@
         "day": null,
         "month": null
       },
-      "playgroundQuantity": 50,
+      "playgroundQuantity": 100,
       "eventDateTimeCustom": "2025-12-01T18:00:00.000Z",
       "playgroundDateRange": {
         "end": null,
@@ -70,7 +70,7 @@
       },
       "appointmentDateCustom": "2025-12-15",
       "appointmentDateCompact": "2025-11-28",
-      "playgroundPresentation": "standard",
+      "playgroundPresentation": "gauge",
       "playgroundRelativeTime": {
         "unit": null,
         "amount": null
