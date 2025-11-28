@@ -12,6 +12,8 @@ const fs = require('fs');
 const path = require('path');
 
 const MAX_URL_SAMPLES = 200;
+const PROGRESS_BYTES_INTERVAL = 25 * 1024 * 1024; // 25MB
+const PROGRESS_EVENTS_INTERVAL = 100_000;
 
 async function main() {
   let netlogPath = process.argv[2];
@@ -25,54 +27,78 @@ async function main() {
     return;
   }
 
+  let statsObj = fs.statSync(netlogPath);
+  console.log(
+    `Parsing netlog at ${netlogPath} (size=${statsObj.size} bytes ~ ${(statsObj.size / (1024 * 1024)).toFixed(1)} MB)`,
+  );
+
   let stats = new Map(); // host -> {hits, misses, writes, reads, others, urls:Set}
   let urlBySource = new Map();
   let totals = { events: 0, parsed: 0, errors: 0 };
+  let maxEvents = parseInt(process.env.NETLOG_MAX_EVENTS || '', 10);
+  if (!Number.isFinite(maxEvents) || maxEvents <= 0) {
+    maxEvents = null;
+  }
+  let maxBytes = parseInt(process.env.NETLOG_MAX_BYTES || '', 10);
+  if (!Number.isFinite(maxBytes) || maxBytes <= 0) {
+    maxBytes = null;
+  }
 
   try {
-    await streamEvents(netlogPath, (ev) => {
-      totals.events++;
-      if (!ev || typeof ev !== 'object') {
-        return;
-      }
-      let sourceId = ev.source?.id;
-      let url = extractUrl(ev);
-      if (!url && sourceId != null) {
-        url = urlBySource.get(sourceId);
-      }
-      if (url && sourceId != null && !urlBySource.has(sourceId)) {
-        urlBySource.set(sourceId, url);
-      }
+    let streamResult = await streamEvents(
+      netlogPath,
+      (ev) => {
+        totals.events++;
+        if (!ev || typeof ev !== 'object') {
+          return;
+        }
+        let sourceId = ev.source?.id;
+        let url = extractUrl(ev);
+        if (!url && sourceId != null) {
+          url = urlBySource.get(sourceId);
+        }
+        if (url && sourceId != null && !urlBySource.has(sourceId)) {
+          urlBySource.set(sourceId, url);
+        }
 
-      let host = safeHost(url);
-      if (!host) {
-        return;
-      }
+        let host = safeHost(url);
+        if (!host) {
+          return;
+        }
 
-      let bucket = getOrCreateHost(stats, host);
-      let classification = classifyEvent(ev.type);
-      switch (classification) {
-        case 'hit':
-          bucket.hits++;
-          break;
-        case 'miss':
-          bucket.misses++;
-          break;
-        case 'write':
-          bucket.writes++;
-          if (bucket.urls.size < MAX_URL_SAMPLES) {
-            bucket.urls.add(url);
-          }
-          break;
-        case 'read':
-          bucket.reads++;
-          break;
-        default:
-          bucket.others++;
-          break;
-      }
-      totals.parsed++;
-    });
+        let bucket = getOrCreateHost(stats, host);
+        let classification = classifyEvent(ev.type);
+        switch (classification) {
+          case 'hit':
+            bucket.hits++;
+            break;
+          case 'miss':
+            bucket.misses++;
+            break;
+          case 'write':
+            bucket.writes++;
+            if (bucket.urls.size < MAX_URL_SAMPLES) {
+              bucket.urls.add(url);
+            }
+            break;
+          case 'read':
+            bucket.reads++;
+            break;
+          default:
+            bucket.others++;
+            break;
+        }
+        totals.parsed++;
+      },
+      { maxEvents, maxBytes },
+    );
+    totals.events = streamResult.eventCount;
+    console.log(
+      `Netlog parsed: events=${totals.events} parsed=${totals.parsed} bytesRead=${streamResult.bytesRead} (~${(
+        streamResult.bytesRead /
+        (1024 * 1024)
+      ).toFixed(1)} MB) duration=${streamResult.durationMs}ms truncated=${streamResult.truncated}`,
+    );
   } catch (e) {
     console.log(`Failed to parse netlog at ${netlogPath}: ${e.message}`);
     return;
@@ -124,7 +150,11 @@ async function main() {
   }
 }
 
-function streamEvents(filePath, onEvent) {
+function streamEvents(
+  filePath,
+  onEvent,
+  { maxEvents = null, maxBytes = null } = {},
+) {
   let stream = fs.createReadStream(filePath, { encoding: 'utf8' });
   let buffer = '';
   let inEvents = false;
@@ -132,10 +162,51 @@ function streamEvents(filePath, onEvent) {
   let inString = false;
   let escape = false;
   let startIndex = null;
+  let eventCount = 0;
+  let bytesRead = 0;
+  let nextByteProgress = PROGRESS_BYTES_INTERVAL;
+  let nextEventProgress = PROGRESS_EVENTS_INTERVAL;
+  let start = Date.now();
+  let truncated = false;
 
   return new Promise((resolve, reject) => {
+    let finished = false;
+    let finish = (err) => {
+      if (finished) return;
+      finished = true;
+      if (err) {
+        reject(err);
+      } else {
+        resolve({
+          eventCount,
+          bytesRead,
+          durationMs: Date.now() - start,
+          truncated,
+        });
+      }
+    };
+
     stream.on('data', (chunk) => {
       buffer += chunk;
+      bytesRead += chunk.length;
+
+      if (bytesRead >= nextByteProgress) {
+        console.log(
+          `[netlog] read ${(bytesRead / (1024 * 1024)).toFixed(
+            1,
+          )} MB so far (events=${eventCount})`,
+        );
+        nextByteProgress += PROGRESS_BYTES_INTERVAL;
+      }
+      if (maxBytes && bytesRead >= maxBytes) {
+        truncated = true;
+        console.log(
+          `[netlog] reached maxBytes=${maxBytes} bytes, stopping early`,
+        );
+        finish();
+        stream.destroy();
+        return;
+      }
 
       if (!inEvents) {
         let idx = buffer.indexOf('"events"');
@@ -182,18 +253,33 @@ function streamEvents(filePath, onEvent) {
             depth++;
           } else if (ch === '}') {
             depth--;
-            if (depth === 0) {
-              let objText = buffer.slice(startIndex, i + 1);
-              try {
-                onEvent(JSON.parse(objText));
-              } catch (_e) {
-                // ignore individual parse errors
-              }
-              startIndex = null;
-              // drop processed chunk
-              buffer = buffer.slice(i + 1);
-              i = 0;
-              continue;
+          if (depth === 0) {
+            let objText = buffer.slice(startIndex, i + 1);
+            try {
+              onEvent(JSON.parse(objText));
+              eventCount++;
+            } catch (_e) {
+              // ignore individual parse errors
+            }
+            if (eventCount >= nextEventProgress) {
+              console.log(
+                `[netlog] processed ${eventCount} events (bytesRead=${(bytesRead / (1024 * 1024)).toFixed(1)} MB)`,
+              );
+              nextEventProgress += PROGRESS_EVENTS_INTERVAL;
+            }
+            if (maxEvents && eventCount >= maxEvents) {
+              console.log(
+                `[netlog] reached maxEvents=${maxEvents}, stopping early`,
+              );
+              finish();
+              stream.destroy();
+              return;
+            }
+            startIndex = null;
+            // drop processed chunk
+            buffer = buffer.slice(i + 1);
+            i = 0;
+            continue;
             }
           }
         }
@@ -210,9 +296,14 @@ function streamEvents(filePath, onEvent) {
     });
 
     stream.on('end', () => {
-      resolve();
+      if (!inEvents) {
+        console.log(
+          '[netlog] Warning: did not find "events" array in netlog file.',
+        );
+      }
+      finish();
     });
-    stream.on('error', (err) => reject(err));
+    stream.on('error', (err) => finish(err));
   });
 }
 
