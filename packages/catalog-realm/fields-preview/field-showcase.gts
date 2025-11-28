@@ -24,8 +24,9 @@ import MonthField from '../fields/date/month';
 import MonthYearField from '../fields/date/month-year';
 import WeekField from '../fields/date/week';
 import NumberField from '../fields/number';
-import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
-import CubeIcon from '@cardstack/boxel-icons/cube';
+import SliderField from '../fields/slider';
+import RatingField from '../fields/rating';
+import QuantityField from '../fields/quantity';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
 import ChevronRightIcon from '@cardstack/boxel-icons/chevron-right';
 import ChevronLeftIcon from '@cardstack/boxel-icons/chevron-left';
@@ -42,7 +43,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
   @tracked isSidebarCollapsed = false;
   @tracked searchQuery = '';
   @tracked expandedGroups = new Set(['Date & Time Fields']); // Sidebar groups expanded by default
-  @tracked expandedSections = new Set(['configuration', 'variants']); // Hero sections expanded by default
+  @tracked expandedSections = new Set(['configuration', 'variants', 'options']); // Hero sections expanded by default
   @tracked selectedFormat: 'edit' | 'embedded' | 'atom' = 'edit'; // Format switcher
 
   @action
@@ -156,19 +157,20 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
     monthDay: ['standard'],
     quarter: ['standard'],
     recurringPattern: ['standard'],
-    'number-basic': ['standard'],
-    'number-slider': ['standard'],
-    'number-rating': ['standard'],
-    'number-progress': ['standard'],
-    'number-gauge': ['standard'],
-    'number-quantity': ['standard'],
-    'number-percentage': ['standard'],
-    'number-stat': ['standard'],
-    'number-badge-notification': ['standard'],
-    'number-badge-metric': ['standard'],
-    'number-badge-counter': ['standard'],
-    'number-score': ['standard'],
-    'number-progress-circle': ['standard'],
+    number: [
+      'standard',
+      'progress-bar',
+      'progress-circle',
+      'stat',
+      'score',
+      'badge-notification',
+      'badge-metric',
+      'badge-counter',
+      'gauge',
+    ],
+    slider: ['standard'],
+    rating: ['standard'],
+    quantity: ['standard'],
   };
 
   fieldTypeOptions = [
@@ -231,69 +233,24 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       groupName: 'Number Fields',
       options: [
         {
-          value: 'number-basic',
-          label: 'Number (Basic)',
-          fieldName: 'playgroundNumberBasic',
+          value: 'number',
+          label: 'NumberField',
+          fieldName: 'playgroundNumber',
         },
         {
-          value: 'number-slider',
-          label: 'Slider',
-          fieldName: 'playgroundNumberSlider',
+          value: 'slider',
+          label: 'SliderField',
+          fieldName: 'playgroundSlider',
         },
         {
-          value: 'number-rating',
-          label: 'Rating',
-          fieldName: 'playgroundNumberRating',
+          value: 'rating',
+          label: 'RatingField',
+          fieldName: 'playgroundRating',
         },
         {
-          value: 'number-progress',
-          label: 'Progress Bar',
-          fieldName: 'playgroundNumberProgress',
-        },
-        {
-          value: 'number-gauge',
-          label: 'Gauge',
-          fieldName: 'playgroundNumberGauge',
-        },
-        {
-          value: 'number-quantity',
-          label: 'Quantity',
-          fieldName: 'playgroundNumberQuantity',
-        },
-        {
-          value: 'number-percentage',
-          label: 'Percentage',
-          fieldName: 'playgroundNumberPercentage',
-        },
-        {
-          value: 'number-stat',
-          label: 'Stat',
-          fieldName: 'playgroundNumberStat',
-        },
-        {
-          value: 'number-badge-notification',
-          label: 'Badge Notification',
-          fieldName: 'playgroundNumberBadgeNotification',
-        },
-        {
-          value: 'number-badge-metric',
-          label: 'Badge Metric',
-          fieldName: 'playgroundNumberBadgeMetric',
-        },
-        {
-          value: 'number-badge-counter',
-          label: 'Badge Counter',
-          fieldName: 'playgroundNumberBadgeCounter',
-        },
-        {
-          value: 'number-score',
-          label: 'Score',
-          fieldName: 'playgroundNumberScore',
-        },
-        {
-          value: 'number-progress-circle',
-          label: 'Progress Circle',
-          fieldName: 'playgroundNumberProgressCircle',
+          value: 'quantity',
+          label: 'QuantityField',
+          fieldName: 'playgroundQuantity',
         },
       ],
     },
@@ -308,6 +265,15 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
     { value: 'timeline', label: 'Timeline Event' },
     { value: 'timeSlots', label: 'Time Slots' },
     { value: 'expirationWarning', label: 'Expiration Warning' },
+    // NumberField presentation modes
+    { value: 'progress-bar', label: 'Progress Bar' },
+    { value: 'progress-circle', label: 'Progress Circle' },
+    { value: 'stat', label: 'Stat' },
+    { value: 'score', label: 'Score' },
+    { value: 'badge-notification', label: 'Badge Notification' },
+    { value: 'badge-metric', label: 'Badge Metric' },
+    { value: 'badge-counter', label: 'Badge Counter' },
+    { value: 'gauge', label: 'Gauge' },
   ];
 
   get selectedPresentation() {
@@ -425,6 +391,598 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
     this.selectedFormat = format as 'edit' | 'embedded' | 'atom';
   }
 
+  get hasAvailableOptions() {
+    return !!this.args.model && this.availableOptions.length > 0;
+  }
+
+  get availableOptions() {
+    // Early return if model is not available (during prerender)
+    if (!this.args.model) {
+      return [];
+    }
+
+    const fieldType = this.args.model.playgroundFieldType || 'date';
+    const presentation = this.args.model.playgroundPresentation || 'standard';
+
+    // Define options for each field type and presentation with descriptions
+    const optionsMap: Record<
+      string,
+      Record<
+        string,
+        Array<{
+          key: string;
+          label: string;
+          type: 'number' | 'text' | 'boolean';
+          description: string;
+          default?: any;
+        }>
+      >
+    > = {
+      number: {
+        'progress-bar': [
+          {
+            key: 'min',
+            label: 'Min',
+            type: 'number',
+            description: 'Minimum value for the progress bar range',
+            default: '(uses component default: 0)',
+          },
+          {
+            key: 'max',
+            label: 'Max',
+            type: 'number',
+            description: 'Maximum value for the progress bar range',
+            default: '(uses component default: 100)',
+          },
+          {
+            key: 'decimals',
+            label: 'Decimals',
+            type: 'number',
+            description: 'Number of decimal places to display',
+            default: '(none)',
+          },
+          {
+            key: 'prefix',
+            label: 'Prefix',
+            type: 'text',
+            description: 'Text displayed before the number value',
+            default: '(none)',
+          },
+          {
+            key: 'suffix',
+            label: 'Suffix',
+            type: 'text',
+            description:
+              'Text displayed after the number value (e.g., "%" for percentage)',
+            default: '(none)',
+          },
+          {
+            key: 'label',
+            label: 'Label',
+            type: 'text',
+            description:
+              'Custom label text displayed on the progress bar (overrides value display)',
+            default: '(none)',
+          },
+          {
+            key: 'useGradient',
+            label: 'Use Gradient',
+            type: 'boolean',
+            description:
+              'Whether to use gradient colors (red → orange → yellow → green) based on percentage',
+            default: '(uses component default: true)',
+          },
+          {
+            key: 'showValue',
+            label: 'Show Value',
+            type: 'boolean',
+            description:
+              'Whether to display the current value on the progress bar',
+            default: '(uses component default: true)',
+          },
+          {
+            key: 'valueFormat',
+            label: 'Value Format',
+            type: 'text',
+            description:
+              'Format for displaying the value: "percentage" or "fraction"',
+            default: '(uses component default: "percentage")',
+          },
+        ],
+        'progress-circle': [
+          {
+            key: 'min',
+            label: 'Min',
+            type: 'number',
+            description: 'Minimum value for the progress circle range',
+            default: '(uses component default: 0)',
+          },
+          {
+            key: 'max',
+            label: 'Max',
+            type: 'number',
+            description: 'Maximum value for the progress circle range',
+            default: '(uses component default: 100)',
+          },
+          {
+            key: 'decimals',
+            label: 'Decimals',
+            type: 'number',
+            description: 'Number of decimal places to display',
+            default: '(none)',
+          },
+          {
+            key: 'prefix',
+            label: 'Prefix',
+            type: 'text',
+            description: 'Text displayed before the number value',
+            default: '(none)',
+          },
+          {
+            key: 'suffix',
+            label: 'Suffix',
+            type: 'text',
+            description:
+              'Text displayed after the number value (e.g., "%" for percentage)',
+            default: '(none)',
+          },
+          {
+            key: 'useGradient',
+            label: 'Use Gradient',
+            type: 'boolean',
+            description:
+              'Whether to use gradient colors (red → orange → yellow → green) based on percentage',
+            default: '(uses component default: true)',
+          },
+          {
+            key: 'showValue',
+            label: 'Show Value',
+            type: 'boolean',
+            description:
+              'Whether to display the current value in the center of the circle',
+            default: '(uses component default: true)',
+          },
+          {
+            key: 'valueFormat',
+            label: 'Value Format',
+            type: 'text',
+            description:
+              'Format for displaying the value: "percentage" or "fraction"',
+            default: '(uses component default: "percentage")',
+          },
+        ],
+        stat: [
+          {
+            key: 'decimals',
+            label: 'Decimals',
+            type: 'number',
+            description: 'Number of decimal places to display',
+            default: '(uses default formatting)',
+          },
+          {
+            key: 'prefix',
+            label: 'Prefix',
+            type: 'text',
+            description: 'Text displayed before the number value',
+            default: '(none)',
+          },
+          {
+            key: 'suffix',
+            label: 'Suffix',
+            type: 'text',
+            description: 'Text displayed after the number value',
+            default: '(none)',
+          },
+          {
+            key: 'min',
+            label: 'Min',
+            type: 'number',
+            description: 'Minimum value for the stat range (shown in footer)',
+            default: '(none, hides range)',
+          },
+          {
+            key: 'max',
+            label: 'Max',
+            type: 'number',
+            description: 'Maximum value for the stat range (shown in footer)',
+            default: '(none, hides range)',
+          },
+          {
+            key: 'label',
+            label: 'Label',
+            type: 'text',
+            description: 'Main label text displayed above the stat value',
+            default: 'Key metric',
+          },
+          {
+            key: 'subtitle',
+            label: 'Subtitle',
+            type: 'text',
+            description:
+              'Subtitle text displayed below the value (e.g., comparison text)',
+            default: '(none)',
+          },
+          {
+            key: 'placeholder',
+            label: 'Placeholder',
+            type: 'text',
+            description: 'Text to show when value is null or undefined',
+            default: '—',
+          },
+          {
+            key: 'icon',
+            label: 'Icon',
+            type: 'text',
+            description:
+              'Icon component to display (imported from @cardstack/boxel-icons)',
+            default: '(none)',
+          },
+        ],
+        score: [
+          {
+            key: 'decimals',
+            label: 'Decimals',
+            type: 'number',
+            description: 'Number of decimal places to display',
+            default: '(none)',
+          },
+          {
+            key: 'prefix',
+            label: 'Prefix',
+            type: 'text',
+            description: 'Text displayed before the number value',
+            default: '(none)',
+          },
+          {
+            key: 'suffix',
+            label: 'Suffix',
+            type: 'text',
+            description: 'Text displayed after the number value',
+            default: '(none)',
+          },
+          {
+            key: 'min',
+            label: 'Min',
+            type: 'number',
+            description: 'Minimum value for the score range',
+            default: '(uses component default: 0)',
+          },
+          {
+            key: 'max',
+            label: 'Max',
+            type: 'number',
+            description: 'Maximum value for the score range',
+            default: '(uses component default: 100)',
+          },
+        ],
+        'badge-notification': [
+          {
+            key: 'decimals',
+            label: 'Decimals',
+            type: 'number',
+            description: 'Number of decimal places to display',
+            default: '(uses default formatting)',
+          },
+          {
+            key: 'prefix',
+            label: 'Prefix',
+            type: 'text',
+            description: 'Text displayed before the number value',
+            default: '(none)',
+          },
+          {
+            key: 'suffix',
+            label: 'Suffix',
+            type: 'text',
+            description: 'Text displayed after the number value',
+            default: '(none)',
+          },
+          {
+            key: 'min',
+            label: 'Min',
+            type: 'number',
+            description: 'Minimum value for the notification range',
+            default: '(none)',
+          },
+          {
+            key: 'max',
+            label: 'Max',
+            type: 'number',
+            description:
+              'Maximum value before showing "+" indicator (e.g., 99+)',
+            default: '(uses component default: 99)',
+          },
+          {
+            key: 'label',
+            label: 'Label',
+            type: 'text',
+            description: 'Label text displayed below the badge icon',
+            default: 'Notifications',
+          },
+          {
+            key: 'placeholder',
+            label: 'Placeholder',
+            type: 'text',
+            description: 'Text to show when value is null or undefined',
+            default: '(none)',
+          },
+          {
+            key: 'icon',
+            label: 'Icon',
+            type: 'text',
+            description:
+              'Icon component to display (imported from @cardstack/boxel-icons)',
+            default: '(none)',
+          },
+        ],
+        'badge-metric': [
+          {
+            key: 'decimals',
+            label: 'Decimals',
+            type: 'number',
+            description: 'Number of decimal places to display',
+            default: '(uses default formatting)',
+          },
+          {
+            key: 'prefix',
+            label: 'Prefix',
+            type: 'text',
+            description: 'Text displayed before the number value',
+            default: '(none)',
+          },
+          {
+            key: 'suffix',
+            label: 'Suffix',
+            type: 'text',
+            description: 'Text displayed after the number value',
+            default: '(none)',
+          },
+          {
+            key: 'min',
+            label: 'Min',
+            type: 'number',
+            description: 'Minimum value for the metric range',
+            default: '(none)',
+          },
+          {
+            key: 'max',
+            label: 'Max',
+            type: 'number',
+            description: 'Maximum value for the metric range',
+            default: '(none)',
+          },
+          {
+            key: 'label',
+            label: 'Label',
+            type: 'text',
+            description: 'Label text displayed on the right side of the badge',
+            default: '(empty string)',
+          },
+          {
+            key: 'placeholder',
+            label: 'Placeholder',
+            type: 'text',
+            description: 'Text to show when value is null or undefined',
+            default: '(none)',
+          },
+          {
+            key: 'icon',
+            label: 'Icon',
+            type: 'text',
+            description:
+              'Icon component to display (imported from @cardstack/boxel-icons)',
+            default: '(none)',
+          },
+        ],
+        'badge-counter': [
+          {
+            key: 'decimals',
+            label: 'Decimals',
+            type: 'number',
+            description: 'Number of decimal places to display',
+            default: '(uses default formatting)',
+          },
+          {
+            key: 'prefix',
+            label: 'Prefix',
+            type: 'text',
+            description: 'Text displayed before the number value',
+            default: '(none)',
+          },
+          {
+            key: 'suffix',
+            label: 'Suffix',
+            type: 'text',
+            description: 'Text displayed after the number value',
+            default: '(none)',
+          },
+          {
+            key: 'min',
+            label: 'Min',
+            type: 'number',
+            description: 'Minimum value for the counter range',
+            default: '(none)',
+          },
+          {
+            key: 'max',
+            label: 'Max',
+            type: 'number',
+            description: 'Maximum value before showing "+" indicator',
+            default: '(none)',
+          },
+          {
+            key: 'label',
+            label: 'Label',
+            type: 'text',
+            description: 'Label text displayed on the left side',
+            default: '(empty string)',
+          },
+          {
+            key: 'placeholder',
+            label: 'Placeholder',
+            type: 'text',
+            description: 'Text to show when value is null or undefined',
+            default: '(none)',
+          },
+          {
+            key: 'icon',
+            label: 'Icon',
+            type: 'text',
+            description:
+              'Icon component to display (imported from @cardstack/boxel-icons)',
+            default: '(none)',
+          },
+        ],
+        gauge: [
+          {
+            key: 'decimals',
+            label: 'Decimals',
+            type: 'number',
+            description: 'Number of decimal places to display',
+            default: '(uses default formatting)',
+          },
+          {
+            key: 'prefix',
+            label: 'Prefix',
+            type: 'text',
+            description: 'Text displayed before the number value',
+            default: '(none)',
+          },
+          {
+            key: 'suffix',
+            label: 'Suffix',
+            type: 'text',
+            description: 'Text displayed after the number value',
+            default: '(none)',
+          },
+          {
+            key: 'min',
+            label: 'Min',
+            type: 'number',
+            description: 'Minimum value for the gauge range',
+            default: '(uses component default: 0)',
+          },
+          {
+            key: 'max',
+            label: 'Max',
+            type: 'number',
+            description: 'Maximum value for the gauge range',
+            default: '(uses component default: 100)',
+          },
+          {
+            key: 'label',
+            label: 'Label',
+            type: 'text',
+            description: 'Label text displayed above the gauge',
+            default: '(none)',
+          },
+          {
+            key: 'showValue',
+            label: 'Show Value',
+            type: 'boolean',
+            description: 'Whether to display the current value below the gauge',
+            default: '(uses component default: true)',
+          },
+          {
+            key: 'warningThreshold',
+            label: 'Warning Threshold',
+            type: 'number',
+            description:
+              'Value at which the gauge changes to warning color (orange)',
+            default: '(none)',
+          },
+          {
+            key: 'dangerThreshold',
+            label: 'Danger Threshold',
+            type: 'number',
+            description:
+              'Value at which the gauge changes to danger color (red)',
+            default: '(none)',
+          },
+        ],
+      },
+      slider: {
+        standard: [
+          {
+            key: 'min',
+            label: 'Min',
+            type: 'number',
+            description: 'Minimum value for the slider range',
+            default: '(none)',
+          },
+          {
+            key: 'max',
+            label: 'Max',
+            type: 'number',
+            description: 'Maximum value for the slider range',
+            default: '(none)',
+          },
+          {
+            key: 'decimals',
+            label: 'Decimals',
+            type: 'number',
+            description: 'Number of decimal places to display',
+            default: '(none)',
+          },
+          {
+            key: 'prefix',
+            label: 'Prefix',
+            type: 'text',
+            description: 'Text displayed before the number value',
+            default: '(none)',
+          },
+          {
+            key: 'suffix',
+            label: 'Suffix',
+            type: 'text',
+            description: 'Text displayed after the number value',
+            default: '(none)',
+          },
+          {
+            key: 'showValue',
+            label: 'Show Value',
+            type: 'boolean',
+            description:
+              'Whether to display the current value below the slider',
+            default: '(uses component default: true)',
+          },
+        ],
+      },
+      rating: {
+        standard: [
+          {
+            key: 'maxStars',
+            label: 'Max Stars',
+            type: 'number',
+            description:
+              'Maximum number of stars in the rating (e.g., 5 for 5-star rating)',
+            default: '(uses component default: 5)',
+          },
+        ],
+      },
+      quantity: {
+        standard: [
+          {
+            key: 'min',
+            label: 'Min',
+            type: 'number',
+            description: 'Minimum value for the quantity range',
+            default: '(uses component default: 0)',
+          },
+          {
+            key: 'max',
+            label: 'Max',
+            type: 'number',
+            description: 'Maximum value for the quantity range',
+            default: '(none)',
+          },
+        ],
+      },
+    };
+
+    return optionsMap[fieldType]?.[presentation] || [];
+  }
+
   get formatOptions() {
     return [
       { value: 'edit', label: 'Edit' },
@@ -455,158 +1013,29 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
 
     const fieldTypeName = option?.label || 'DateField';
 
-    if (fieldType === 'number-slider') {
+    // Number fields, slider, rating, quantity - just show presentation without options
+    if (fieldType === 'number') {
+      if (presentation === 'standard') {
+        return `@field myField = contains(NumberField);`;
+      }
+
       return `@field myField = contains(NumberField, {
   configuration: {
-    presentation: {
-      type: 'slider',
-      min: 0,
-      max: 100,
-      suffix: '%',
-      showValue: true
-    }
+    presentation: '${presentation}'
   }
 });`;
     }
 
-    if (fieldType === 'number-rating') {
-      return `@field myField = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'rating',
-      maxStars: 5
-    }
-  }
-});`;
+    if (fieldType === 'slider') {
+      return `@field myField = contains(SliderField);`;
     }
 
-    if (fieldType === 'number-progress') {
-      return `@field myField = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'progress-bar',
-      min: 0,
-      max: 100,
-      label: 'Progress'
-    }
-  }
-});`;
+    if (fieldType === 'rating') {
+      return `@field myField = contains(RatingField);`;
     }
 
-    if (fieldType === 'number-gauge') {
-      return `@field myField = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'gauge',
-      min: 0,
-      max: 100,
-      suffix: '%',
-      label: 'CPU Usage',
-      warningThreshold: 70,
-      dangerThreshold: 90
-    }
-  }
-});`;
-    }
-
-    if (fieldType === 'number-quantity') {
-      return `@field myField = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'quantity',
-      min: 0,
-      max: 999
-    }
-  }
-});`;
-    }
-
-    if (fieldType === 'number-percentage') {
-      return `@field myField = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'percentage',
-      min: 0,
-      max: 200
-    }
-  }
-});`;
-    }
-
-    if (fieldType === 'number-stat') {
-      return `@field myField = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'stat',
-      label: 'Total Revenue',
-      subtitle: '↑ 12.5% vs last month'
-    }
-  }
-});`;
-    }
-
-    if (fieldType === 'number-badge-notification') {
-      return `@field myField = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'badge-notification',
-      label: 'Notifications',
-      max: 99
-    }
-  }
-});`;
-    }
-
-    if (fieldType === 'number-badge-metric') {
-      return `@field myField = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'badge-metric',
-      label: 'Items',
-      decimals: 2
-    }
-  }
-});`;
-    }
-
-    if (fieldType === 'number-badge-counter') {
-      return `@field myField = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'badge-counter',
-      label: 'Stocks',
-      max: 9999
-    }
-  }
-});`;
-    }
-
-    if (fieldType === 'number-score') {
-      return `@field myField = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'score',
-      min: 0,
-      max: 1000
-    }
-  }
-});`;
-    }
-
-    if (fieldType === 'number-progress-circle') {
-      return `@field myField = contains(NumberField, {
-  configuration: {
-    presentation: {
-      type: 'progress-circle',
-      min: 0,
-      max: 100
-    }
-  }
-});`;
-    }
-
-    if (fieldType === 'number-basic') {
-      return `@field myField = contains(NumberField);`;
+    if (fieldType === 'quantity') {
+      return `@field myField = contains(QuantityField);`;
     }
 
     const simpleFields = [
@@ -849,91 +1278,16 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
                   <@fields.playgroundRecurringPattern
                     @format={{this.selectedFormat}}
                   />
+                {{else if (eq this.currentPlaygroundField 'playgroundNumber')}}
+                  <@fields.playgroundNumber @format={{this.selectedFormat}} />
+                {{else if (eq this.currentPlaygroundField 'playgroundSlider')}}
+                  <@fields.playgroundSlider @format={{this.selectedFormat}} />
+                {{else if (eq this.currentPlaygroundField 'playgroundRating')}}
+                  <@fields.playgroundRating @format={{this.selectedFormat}} />
                 {{else if
-                  (eq this.currentPlaygroundField 'playgroundNumberBasic')
+                  (eq this.currentPlaygroundField 'playgroundQuantity')
                 }}
-                  <@fields.playgroundNumberBasic
-                    @format={{this.selectedFormat}}
-                  />
-                {{else if
-                  (eq this.currentPlaygroundField 'playgroundNumberSlider')
-                }}
-                  <@fields.playgroundNumberSlider
-                    @format={{this.selectedFormat}}
-                  />
-                {{else if
-                  (eq this.currentPlaygroundField 'playgroundNumberRating')
-                }}
-                  <@fields.playgroundNumberRating
-                    @format={{this.selectedFormat}}
-                  />
-                {{else if
-                  (eq this.currentPlaygroundField 'playgroundNumberProgress')
-                }}
-                  <@fields.playgroundNumberProgress
-                    @format={{this.selectedFormat}}
-                  />
-                {{else if
-                  (eq this.currentPlaygroundField 'playgroundNumberGauge')
-                }}
-                  <@fields.playgroundNumberGauge
-                    @format={{this.selectedFormat}}
-                  />
-                {{else if
-                  (eq this.currentPlaygroundField 'playgroundNumberQuantity')
-                }}
-                  <@fields.playgroundNumberQuantity
-                    @format={{this.selectedFormat}}
-                  />
-                {{else if
-                  (eq this.currentPlaygroundField 'playgroundNumberPercentage')
-                }}
-                  <@fields.playgroundNumberPercentage
-                    @format={{this.selectedFormat}}
-                  />
-                {{else if
-                  (eq this.currentPlaygroundField 'playgroundNumberStat')
-                }}
-                  <@fields.playgroundNumberStat
-                    @format={{this.selectedFormat}}
-                  />
-                {{else if
-                  (eq
-                    this.currentPlaygroundField
-                    'playgroundNumberBadgeNotification'
-                  )
-                }}
-                  <@fields.playgroundNumberBadgeNotification
-                    @format={{this.selectedFormat}}
-                  />
-                {{else if
-                  (eq this.currentPlaygroundField 'playgroundNumberBadgeMetric')
-                }}
-                  <@fields.playgroundNumberBadgeMetric
-                    @format={{this.selectedFormat}}
-                  />
-                {{else if
-                  (eq
-                    this.currentPlaygroundField 'playgroundNumberBadgeCounter'
-                  )
-                }}
-                  <@fields.playgroundNumberBadgeCounter
-                    @format={{this.selectedFormat}}
-                  />
-                {{else if
-                  (eq this.currentPlaygroundField 'playgroundNumberScore')
-                }}
-                  <@fields.playgroundNumberScore
-                    @format={{this.selectedFormat}}
-                  />
-                {{else if
-                  (eq
-                    this.currentPlaygroundField 'playgroundNumberProgressCircle'
-                  )
-                }}
-                  <@fields.playgroundNumberProgressCircle
-                    @format={{this.selectedFormat}}
-                  />
+                  <@fields.playgroundQuantity @format={{this.selectedFormat}} />
                 {{/if}}
               </div>
             </div>
@@ -1016,6 +1370,69 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
                       {{option.label}}
                     </Pill>
                   {{/each}}
+                </div>
+              </div>
+            {{/if}}
+          </section>
+        {{/if}}
+
+        {{! Collapsible Available Options Section }}
+        {{#if this.hasAvailableOptions}}
+          <section class='collapsible-section'>
+            <Button
+              @kind='text-only'
+              class='section-toggle'
+              {{on 'click' (fn this.toggleSection 'options')}}
+            >
+              <ChevronDownIcon
+                class='section-chevron
+                  {{if (this.isSectionExpanded "options") "expanded"}}'
+                width='20'
+                height='20'
+              />
+              <span class='section-title'>
+                Available Options
+                <span
+                  class='count-badge'
+                >{{this.availableOptions.length}}</span>
+              </span>
+            </Button>
+
+            {{#if (this.isSectionExpanded 'options')}}
+              <div class='section-content'>
+                <div class='options-table-wrapper'>
+                  <table class='options-table'>
+                    <thead>
+                      <tr>
+                        <th>Option</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                        <th>Default</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {{#each this.availableOptions as |option|}}
+                        <tr>
+                          <td class='option-key'>
+                            <code>{{option.key}}</code>
+                          </td>
+                          <td class='option-type'>{{option.type}}</td>
+                          <td
+                            class='option-description'
+                          >{{option.description}}</td>
+                          <td class='option-default'>
+                            {{#if (eq option.type 'boolean')}}
+                              {{if option.default 'true' 'false'}}
+                            {{else if option.default}}
+                              <code>{{option.default}}</code>
+                            {{else}}
+                              <span class='muted'>—</span>
+                            {{/if}}
+                          </td>
+                        </tr>
+                      {{/each}}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             {{/if}}
@@ -1322,6 +1739,91 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         line-height: 1.6;
         color: var(--foreground, #1e293b);
         white-space: pre;
+      }
+
+      /* Options Table Styles */
+      .options-table-wrapper {
+        overflow-x: auto;
+        padding: calc(var(--spacing, 0.25rem) * 2) 0;
+      }
+
+      .options-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+      }
+
+      .options-table thead {
+        background: var(--muted, #f1f5f9);
+        border-bottom: 2px solid var(--border, #e2e8f0);
+      }
+
+      .options-table th {
+        padding: calc(var(--spacing, 0.25rem) * 3)
+          calc(var(--spacing, 0.25rem) * 4);
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--muted-foreground, #64748b);
+      }
+
+      .options-table tbody tr {
+        border-bottom: 1px solid var(--border, #e2e8f0);
+        transition: background-color 0.2s ease;
+      }
+
+      .options-table tbody tr:hover {
+        background: var(--muted, #f8fafc);
+      }
+
+      .options-table td {
+        padding: calc(var(--spacing, 0.25rem) * 3)
+          calc(var(--spacing, 0.25rem) * 4);
+        vertical-align: top;
+      }
+
+      .options-table .option-key {
+        font-weight: 600;
+      }
+
+      .options-table .option-key code {
+        font-family: var(--font-mono, 'Courier New', monospace);
+        font-size: 0.8125rem;
+        background: var(--muted, #f1f5f9);
+        color: var(--primary, #3b82f6);
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+      }
+
+      .options-table .option-type {
+        color: var(--muted-foreground, #64748b);
+        font-size: 0.8125rem;
+      }
+
+      .options-table .option-description {
+        color: var(--foreground, #0f172a);
+        line-height: 1.5;
+      }
+
+      .options-table .option-default {
+        color: var(--muted-foreground, #64748b);
+        font-size: 0.8125rem;
+      }
+
+      .options-table .option-default code {
+        font-family: var(--font-mono, 'Courier New', monospace);
+        font-size: 0.75rem;
+        background: var(--muted, #f1f5f9);
+        color: var(--foreground, #0f172a);
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+      }
+
+      .options-table .option-default .muted {
+        color: var(--muted-foreground, #94a3b8);
+        font-style: italic;
       }
 
       /* Variants Grid Styles */
@@ -2330,135 +2832,63 @@ export class FieldShowcase extends CardDef {
   @field playgroundQuarter = contains(QuarterField);
   @field playgroundRecurringPattern = contains(RecurringPatternField);
 
-  // Playground number fields
-  @field playgroundNumberBasic = contains(NumberField);
-  @field playgroundNumberSlider = contains(NumberField, {
-    configuration: {
-      presentation: {
-        type: 'slider',
-        min: 0,
-        max: 100,
-        suffix: '%',
-        showValue: true,
-      },
+  // Playground number fields - 4 fields total
+  @field playgroundNumber = contains(NumberField, {
+    configuration: function (this: FieldShowcase) {
+      const presentation = this.playgroundPresentation || 'standard';
+
+      if (presentation === 'standard') {
+        return {};
+      }
+
+      // Get default values - only presentation-specific defaults that make sense
+      const getDefaultOptions = (pres: string): Record<string, any> => {
+        const defaults: Record<string, Record<string, any>> = {
+          // Only keep presentation-specific defaults that are meaningful
+          // Most options (prefix, suffix, decimals, min, max) should default to empty/none
+          stat: {
+            label: 'Total Revenue',
+            subtitle: '↑ 12.5% vs last month',
+          },
+          'badge-notification': {
+            label: 'Notifications',
+          },
+          'badge-metric': {
+            label: 'Items',
+          },
+          'badge-counter': {
+            label: 'Stocks',
+          },
+          gauge: {
+            label: 'CPU Usage',
+            warningThreshold: 70,
+            dangerThreshold: 90,
+          },
+        };
+        return defaults[pres] || {};
+      };
+
+      const finalOptions = getDefaultOptions(presentation);
+
+      // Remove undefined values
+      Object.keys(finalOptions).forEach((key) => {
+        if (finalOptions[key] === undefined) {
+          delete finalOptions[key];
+        }
+      });
+
+      return {
+        presentation,
+        options: finalOptions,
+      };
     },
   });
-  @field playgroundNumberRating = contains(NumberField, {
+  @field playgroundSlider = contains(SliderField);
+  @field playgroundRating = contains(RatingField);
+  @field playgroundQuantity = contains(QuantityField, {
     configuration: {
-      presentation: {
-        type: 'rating',
-        maxStars: 5,
-      },
-    },
-  });
-  @field playgroundNumberProgress = contains(NumberField, {
-    configuration: {
-      presentation: {
-        type: 'progress-bar',
-        min: 0,
-        max: 100,
-        label: 'Progress',
-      },
-    },
-  });
-  @field playgroundNumberGauge = contains(NumberField, {
-    configuration: {
-      presentation: {
-        type: 'gauge',
-        min: 0,
-        max: 100,
-        suffix: '%',
-        label: 'CPU Usage',
-        warningThreshold: 70,
-        dangerThreshold: 90,
-      },
-    },
-  });
-  @field playgroundNumberQuantity = contains(NumberField, {
-    configuration: {
-      presentation: {
-        type: 'quantity',
-        min: 0,
-        max: 999,
-      },
-    },
-  });
-  @field playgroundNumberPercentage = contains(NumberField, {
-    configuration: {
-      presentation: {
-        type: 'percentage',
-        min: 0,
-        max: 200,
-      },
-    },
-  });
-  @field playgroundNumberStat = contains(NumberField, {
-    configuration: {
-      presentation: {
-        type: 'stat',
-        prefix: '+',
-        suffix: '',
-        min: 0,
-        max: 100,
-        label: 'Total Revenue',
-        subtitle: '↑ 12.5% vs last month',
-        placeholder: '$0.00',
-        icon: TrendingUpIcon,
-      },
-    },
-  });
-  @field playgroundNumberBadgeNotification = contains(NumberField, {
-    configuration: {
-      presentation: {
-        type: 'badge-notification',
-        decimals: 0,
-        min: 0,
-        max: 99,
-        label: 'Notifications',
-        icon: CubeIcon,
-      },
-    },
-  });
-  @field playgroundNumberBadgeMetric = contains(NumberField, {
-    configuration: {
-      presentation: {
-        type: 'badge-metric',
-        decimals: 2,
-        min: 0,
-        max: 1000,
-        label: 'Items',
-        icon: TrendingUpIcon,
-      },
-    },
-  });
-  @field playgroundNumberBadgeCounter = contains(NumberField, {
-    configuration: {
-      presentation: {
-        type: 'badge-counter',
-        decimals: 0,
-        min: 0,
-        max: 9999,
-        label: 'Stocks',
-        icon: CubeIcon,
-      },
-    },
-  });
-  @field playgroundNumberScore = contains(NumberField, {
-    configuration: {
-      presentation: {
-        type: 'score',
-        decimals: 0,
-        min: 0,
-        max: 1000,
-      },
-    },
-  });
-  @field playgroundNumberProgressCircle = contains(NumberField, {
-    configuration: {
-      presentation: {
-        type: 'progress-circle',
-        min: 0,
-        max: 100,
+      options: {
+        min: 0, // Presentation-specific default for quantity
       },
     },
   });

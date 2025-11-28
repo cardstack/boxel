@@ -30,6 +30,9 @@
       "playgroundMonth": {
         "value": 4
       },
+      "playgroundNumber": 20,
+      "playgroundRating": 4,
+      "playgroundSlider": 47,
       "meetingTime24Hour": {
         "value": "14:30"
       },
@@ -48,12 +51,13 @@
         "day": null,
         "month": null
       },
+      "playgroundQuantity": 50,
       "eventDateTimeCustom": "2025-12-01T18:00:00.000Z",
       "playgroundDateRange": {
         "end": null,
         "start": null
       },
-      "playgroundFieldType": "date",
+      "playgroundFieldType": "number",
       "playgroundMonthYear": {
         "value": "2025-10"
       },
@@ -65,22 +69,13 @@
           "value": null
         }
       },
-      "playgroundNumberStat": null,
       "appointmentDateCustom": "2025-12-15",
-      "playgroundNumberBasic": null,
-      "playgroundNumberGauge": null,
-      "playgroundNumberScore": null,
       "appointmentDateCompact": "2025-11-28",
-      "playgroundNumberRating": null,
-      "playgroundNumberSlider": null,
-      "playgroundPresentation": "standard",
+      "playgroundPresentation": "progress-bar",
       "playgroundRelativeTime": {
         "unit": null,
         "amount": null
       },
-      "playgroundNumberProgress": null,
-      "playgroundNumberQuantity": null,
-      "playgroundNumberPercentage": null,
       "playgroundRecurringPattern": {
         "endDate": null,
         "pattern": null,
@@ -91,11 +86,7 @@
         "daysOfWeek": null,
         "monthOfYear": null,
         "occurrences": null
-      },
-      "playgroundNumberBadgeMetric": null,
-      "playgroundNumberBadgeCounter": null,
-      "playgroundNumberProgressCircle": null,
-      "playgroundNumberBadgeNotification": null
+      }
     },
     "relationships": {
       "cardInfo.theme": {
