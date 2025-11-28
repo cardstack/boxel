@@ -7,8 +7,13 @@ export default class ResponseState {
   latestContent: string = '';
   toolCalls: ChatCompletionSnapshot.Choice.Message.ToolCall[] = [];
   private toolCallsJson: string | undefined;
+  private allowedToolNames: Set<string> | undefined;
   isStreamingFinished = false;
   isCanceled = false;
+
+  setAllowedToolNames(names: Iterable<string> | undefined) {
+    this.allowedToolNames = names ? new Set(names) : undefined;
+  }
 
   update(
     newReasoning: string | undefined,
@@ -32,6 +37,20 @@ export default class ResponseState {
       | undefined,
   ) {
     if (toolCallsSnapshot?.length) {
+      // LLM will sometimes call checkCorrectness tool on its own; ignore it. We only allow it to be called by the system after user accepts card/code patches.
+      toolCallsSnapshot = toolCallsSnapshot.filter((call) => {
+        let name = (call as any)?.function?.name;
+        if (!name) {
+          return false;
+        }
+        if (name === 'checkCorrectness') {
+          return false;
+        }
+        if (this.allowedToolNames && !this.allowedToolNames.has(name)) {
+          return false;
+        }
+        return true;
+      });
       let latestToolCallsJson = JSON.stringify(toolCallsSnapshot);
       if (this.toolCallsJson !== latestToolCallsJson) {
         this.toolCalls = toolCallsSnapshot;

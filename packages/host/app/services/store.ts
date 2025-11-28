@@ -61,6 +61,7 @@ import {
 
 import type { CardSaveSubscriber } from './card-service';
 import type CardService from './card-service';
+import type CommandService from './command-service';
 import type EnvironmentService from './environment-service';
 
 import type HostModeService from './host-mode-service';
@@ -86,6 +87,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private cardService: CardService;
+  @service declare private commandService: CommandService;
   @service declare private hostModeService: HostModeService;
   @service declare private network: NetworkService;
   @service declare private environmentService: EnvironmentService;
@@ -102,6 +104,7 @@ export default class StoreService extends Service implements StoreInterface {
   private inflightGetCards: Map<string, Promise<CardDef | CardErrorJSONAPI>> =
     new Map();
   private inflightCardMutations: Map<string, Promise<void>> = new Map();
+  private inflightCardLoads: Map<string, Deferred<void>> = new Map();
   private store: CardStore;
   protected isRenderStore = false;
 
@@ -147,6 +150,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.autoSaveStates = new TrackedMap();
     this.inflightGetCards = new Map();
     this.inflightCardMutations = new Map();
+    this.inflightCardLoads = new Map();
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
     this.store = new CardStore(this.referenceCount, this.network.authedFetch);
@@ -166,6 +170,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.newReferencePromises = [];
     this.inflightGetCards = new Map();
     this.inflightCardMutations = new Map();
+    this.inflightCardLoads = new Map();
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
     this.store = new CardStore(this.referenceCount, this.network.authedFetch);
@@ -352,6 +357,13 @@ export default class StoreService extends Service implements StoreInterface {
     return await this.getInstance<T>({ idOrDoc: id });
   }
 
+  // Bypass cached state and fetch from source of truth
+  async getWithoutCache<T extends CardDef>(
+    id: string,
+  ): Promise<T | CardErrorJSONAPI> {
+    return await this.getInstance<T>({ idOrDoc: id, opts: { noCache: true } });
+  }
+
   async delete(id: string): Promise<void> {
     if (!id) {
       // the card isn't actually saved yet, so do nothing
@@ -534,6 +546,50 @@ export default class StoreService extends Service implements StoreInterface {
     return a === b || this.peek(a) === this.peek(b);
   }
 
+  async waitForCardLoad(cardId: string): Promise<void> {
+    let normalizedId = asURL(cardId);
+    if (!normalizedId) {
+      return;
+    }
+    let inflightLoad = this.inflightCardLoads.get(normalizedId);
+    if (inflightLoad) {
+      await inflightLoad.promise;
+    }
+  }
+
+  private startTrackingCardLoad(
+    cardId: string | undefined,
+  ): Deferred<void> | undefined {
+    if (!cardId) {
+      return;
+    }
+    let normalizedId = asURL(cardId);
+    if (!normalizedId) {
+      return;
+    }
+    let deferred = new Deferred<void>();
+    this.inflightCardLoads.set(normalizedId, deferred);
+    return deferred;
+  }
+
+  private finishTrackingCardLoad(
+    cardId: string | undefined,
+    deferred?: Deferred<void>,
+  ) {
+    if (!cardId || !deferred) {
+      return;
+    }
+    let normalizedId = asURL(cardId);
+    if (!normalizedId) {
+      return;
+    }
+    let current = this.inflightCardLoads.get(normalizedId);
+    if (current === deferred) {
+      this.inflightCardLoads.delete(normalizedId);
+    }
+    deferred.fulfill();
+  }
+
   private async wireUpNewReference(url: string) {
     let deferred = new Deferred<void>();
     await this.withTestWaiters(async () => {
@@ -649,13 +705,17 @@ export default class StoreService extends Service implements StoreInterface {
         // we already dealt with this
         continue;
       }
+      let clientRequestId = event.clientRequestId ?? undefined;
+      this.commandService.markAiAssistantClientRequestReceivedInvalidation(
+        clientRequestId,
+      );
+
       let instance = this.peekLive(invalidation);
       if (instance && isCardInstance(instance)) {
         // Do not reload if the event is a result of an instance-editing request that we made. Otherwise we risk
         // overwriting the inputs with past values. This can happen if the user makes edits in the time between
         // the auto save request and the arrival realm event.
 
-        let clientRequestId = event.clientRequestId;
         let reloadFile = false;
 
         if (!clientRequestId) {
@@ -705,16 +765,21 @@ export default class StoreService extends Service implements StoreInterface {
   private loadInstanceTask = task(
     async (idOrDoc: string | LooseSingleCardDocument) => {
       let url = asURL(idOrDoc);
-      let oldInstance = url ? this.store.get(url) : undefined;
-      let instanceOrError = await this.getInstance({
-        idOrDoc,
-        opts: { noCache: true },
-      });
-      if (oldInstance) {
-        await this.stopAutoSaving(oldInstance);
+      let reloadTracker = this.startTrackingCardLoad(url);
+      try {
+        let oldInstance = url ? this.store.get(url) : undefined;
+        let instanceOrError = await this.getInstance({
+          idOrDoc,
+          opts: { noCache: true },
+        });
+        if (oldInstance) {
+          await this.stopAutoSaving(oldInstance);
+        }
+        this.setIdentityContext(instanceOrError);
+        await this.startAutoSaving(instanceOrError);
+      } finally {
+        this.finishTrackingCardLoad(url, reloadTracker);
       }
-      this.setIdentityContext(instanceOrError);
-      await this.startAutoSaving(instanceOrError);
     },
   );
 
@@ -745,31 +810,37 @@ export default class StoreService extends Service implements StoreInterface {
   });
 
   private reloadTask = task(async (instance: CardDef) => {
+    let reloadTracker = this.startTrackingCardLoad(instance.id);
     let maybeReloadedInstance: CardDef | CardErrorJSONAPI | undefined;
     let isDelete = false;
+
     try {
-      await this.reloadInstance(instance);
-      maybeReloadedInstance = instance;
-    } catch (err: any) {
-      if (err.status === 404) {
-        // in this case the document was invalidated in the index because the
-        // file was deleted
-        isDelete = true;
-      } else {
-        let errorResponse = processCardError(instance.id, err);
-        maybeReloadedInstance = errorResponse.errors[0];
+      try {
+        await this.reloadInstance(instance);
+        maybeReloadedInstance = instance;
+      } catch (err: any) {
+        if (err.status === 404) {
+          // in this case the document was invalidated in the index because the
+          // file was deleted
+          isDelete = true;
+        } else {
+          let errorResponse = processCardError(instance.id, err);
+          maybeReloadedInstance = errorResponse.errors[0];
+        }
       }
-    }
-    if (!isCardInstance(maybeReloadedInstance)) {
-      await this.stopAutoSaving(instance);
-    }
-    if (maybeReloadedInstance) {
-      this.setIdentityContext(maybeReloadedInstance);
-      await this.startAutoSaving(maybeReloadedInstance);
-    }
-    if (isDelete) {
-      await this.stopAutoSaving(instance);
-      this.store.delete(instance.id);
+      if (!isCardInstance(maybeReloadedInstance)) {
+        await this.stopAutoSaving(instance);
+      }
+      if (maybeReloadedInstance) {
+        this.setIdentityContext(maybeReloadedInstance);
+        await this.startAutoSaving(maybeReloadedInstance);
+      }
+      if (isDelete) {
+        await this.stopAutoSaving(instance);
+        this.store.delete(instance.id);
+      }
+    } finally {
+      this.finishTrackingCardLoad(instance.id, reloadTracker);
     }
   });
 
