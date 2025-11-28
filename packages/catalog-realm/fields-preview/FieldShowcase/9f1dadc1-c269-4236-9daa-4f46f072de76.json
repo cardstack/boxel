@@ -32,7 +32,6 @@
       },
       "playgroundNumber": 20,
       "playgroundRating": 4,
-      "playgroundSlider": 47,
       "meetingTime24Hour": {
         "value": "14:30"
       },
@@ -71,7 +70,7 @@
       },
       "appointmentDateCustom": "2025-12-15",
       "appointmentDateCompact": "2025-11-28",
-      "playgroundPresentation": "progress-bar",
+      "playgroundPresentation": "standard",
       "playgroundRelativeTime": {
         "unit": null,
         "amount": null

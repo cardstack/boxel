@@ -24,7 +24,6 @@ import MonthField from '../fields/date/month';
 import MonthYearField from '../fields/date/month-year';
 import WeekField from '../fields/date/week';
 import NumberField from '../fields/number';
-import SliderField from '../fields/slider';
 import RatingField from '../fields/rating';
 import QuantityField from '../fields/quantity';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
@@ -168,7 +167,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       'badge-counter',
       'gauge',
     ],
-    slider: ['standard'],
     rating: ['standard'],
     quantity: ['standard'],
   };
@@ -236,11 +234,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
           value: 'number',
           label: 'NumberField',
           fieldName: 'playgroundNumber',
-        },
-        {
-          value: 'slider',
-          label: 'SliderField',
-          fieldName: 'playgroundSlider',
         },
         {
           value: 'rating',
@@ -901,53 +894,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
           },
         ],
       },
-      slider: {
-        standard: [
-          {
-            key: 'min',
-            label: 'Min',
-            type: 'number',
-            description: 'Minimum value for the slider range',
-            default: '(none)',
-          },
-          {
-            key: 'max',
-            label: 'Max',
-            type: 'number',
-            description: 'Maximum value for the slider range',
-            default: '(none)',
-          },
-          {
-            key: 'decimals',
-            label: 'Decimals',
-            type: 'number',
-            description: 'Number of decimal places to display',
-            default: '(none)',
-          },
-          {
-            key: 'prefix',
-            label: 'Prefix',
-            type: 'text',
-            description: 'Text displayed before the number value',
-            default: '(none)',
-          },
-          {
-            key: 'suffix',
-            label: 'Suffix',
-            type: 'text',
-            description: 'Text displayed after the number value',
-            default: '(none)',
-          },
-          {
-            key: 'showValue',
-            label: 'Show Value',
-            type: 'boolean',
-            description:
-              'Whether to display the current value below the slider',
-            default: '(uses component default: true)',
-          },
-        ],
-      },
       rating: {
         standard: [
           {
@@ -1013,7 +959,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
 
     const fieldTypeName = option?.label || 'DateField';
 
-    // Number fields, slider, rating, quantity - just show presentation without options
+    // Number fields, rating, quantity - just show presentation without options
     if (fieldType === 'number') {
       if (presentation === 'standard') {
         return `@field myField = contains(NumberField);`;
@@ -1024,10 +970,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
     presentation: '${presentation}'
   }
 });`;
-    }
-
-    if (fieldType === 'slider') {
-      return `@field myField = contains(SliderField);`;
     }
 
     if (fieldType === 'rating') {
@@ -1280,8 +1222,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
                   />
                 {{else if (eq this.currentPlaygroundField 'playgroundNumber')}}
                   <@fields.playgroundNumber @format={{this.selectedFormat}} />
-                {{else if (eq this.currentPlaygroundField 'playgroundSlider')}}
-                  <@fields.playgroundSlider @format={{this.selectedFormat}} />
                 {{else if (eq this.currentPlaygroundField 'playgroundRating')}}
                   <@fields.playgroundRating @format={{this.selectedFormat}} />
                 {{else if
@@ -2883,7 +2823,6 @@ export class FieldShowcase extends CardDef {
       };
     },
   });
-  @field playgroundSlider = contains(SliderField);
   @field playgroundRating = contains(RatingField);
   @field playgroundQuantity = contains(QuantityField, {
     configuration: {
