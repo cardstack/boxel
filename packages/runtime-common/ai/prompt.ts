@@ -1218,6 +1218,12 @@ function collectPendingCodePatchCorrectnessCheck(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): PendingCodePatchCorrectnessCheck | undefined {
+  // If any bot message has unresolved code patches or card patch commands,
+  // defer correctness entirely until all are applied/failed.
+  if (hasUnresolvedCodePatches(history, aiBotUserId)) {
+    return undefined;
+  }
+
   for (let index = history.length - 1; index >= 0; index--) {
     let event = history[index];
     if (
@@ -1227,6 +1233,52 @@ function collectPendingCodePatchCorrectnessCheck(
     ) {
       continue;
     }
+
+    // Only consider messages that contain code patches or card patch commands.
+    let content = event.content as CardMessageContent;
+    let codePatchBlocks = extractCodePatchBlocks(content.body || '');
+    let commandRequests = (content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
+      (request) => decodeCommandRequest(request),
+    );
+    let relevantCommands = commandRequests.filter((request) =>
+      isCardPatchCommand(request.name),
+    );
+    let hasRelevantChanges =
+      codePatchBlocks.length > 0 || relevantCommands.length > 0;
+    if (!hasRelevantChanges) {
+      continue;
+    }
+
+    let codePatchResults = getCodePatchResults(
+      event as CardMessageEvent,
+      history,
+    );
+    let commandResults = getCommandResults(event as CardMessageEvent, history);
+
+    let appliedCodePatchResults = codePatchResults.filter(
+      (result) => result.content['m.relates_to']?.key === 'applied',
+    );
+    let allCodePatchesResolved =
+      codePatchBlocks.length === 0 ||
+      codePatchBlocks.every((_block, index) =>
+        appliedCodePatchResults.some(
+          (result) => result.content.codeBlockIndex === index,
+        ),
+      );
+    let allRelevantCommandsResolved =
+      relevantCommands.length === 0 ||
+      relevantCommands.every((request) =>
+        commandResults.some(
+          (result) => result.content.commandRequestId === request.id,
+        ),
+      );
+
+    // If the most recent message with patches/commands isn't resolved yet,
+    // don't walk back to earlier messages—wait for the current one to finish.
+    if (!allCodePatchesResolved || !allRelevantCommandsResolved) {
+      return undefined;
+    }
+
     let correctnessCheck = buildCodePatchCorrectnessMessage(
       event as CardMessageEvent,
       history,
@@ -1236,6 +1288,62 @@ function collectPendingCodePatchCorrectnessCheck(
     }
   }
   return undefined;
+}
+
+function hasUnresolvedCodePatches(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): boolean {
+  for (let event of history) {
+    if (
+      event.type !== 'm.room.message' ||
+      event.sender !== aiBotUserId ||
+      event.content.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
+    ) {
+      continue;
+    }
+    let content = event.content as CardMessageContent;
+    let codePatchBlocks = extractCodePatchBlocks(content.body || '');
+    let commandRequests = (content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
+      (request) => decodeCommandRequest(request),
+    );
+    let relevantCommands = commandRequests.filter((request) =>
+      isCardPatchCommand(request.name),
+    );
+    let hasRelevantChanges =
+      codePatchBlocks.length > 0 || relevantCommands.length > 0;
+    if (!hasRelevantChanges) {
+      continue;
+    }
+
+    let codePatchResults = getCodePatchResults(
+      event as CardMessageEvent,
+      history,
+    );
+    let commandResults = getCommandResults(event as CardMessageEvent, history);
+    let appliedCodePatchResults = codePatchResults.filter(
+      (result) => result.content['m.relates_to']?.key === 'applied',
+    );
+    let allCodePatchesResolved =
+      codePatchBlocks.length === 0 ||
+      codePatchBlocks.every((_block, index) =>
+        appliedCodePatchResults.some(
+          (result) => result.content.codeBlockIndex === index,
+        ),
+      );
+    let allRelevantCommandsResolved =
+      relevantCommands.length === 0 ||
+      relevantCommands.every((request) =>
+        commandResults.some(
+          (result) => result.content.commandRequestId === request.id,
+        ),
+      );
+
+    if (!allCodePatchesResolved || !allRelevantCommandsResolved) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function buildCodePatchCorrectnessMessage(
@@ -1266,10 +1374,13 @@ function buildCodePatchCorrectnessMessage(
   let codePatchResults = getCodePatchResults(messageEvent, history);
   let commandResults = getCommandResults(messageEvent, history);
 
+  let appliedCodePatchResults = codePatchResults.filter(
+    (result) => result.content['m.relates_to']?.key === 'applied',
+  );
   let allCodePatchesResolved =
     codePatchBlocks.length === 0 ||
     codePatchBlocks.every((_block, index) =>
-      codePatchResults.some(
+      appliedCodePatchResults.some(
         (result) => result.content.codeBlockIndex === index,
       ),
     );
