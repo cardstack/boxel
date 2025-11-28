@@ -38,8 +38,9 @@ jobs:
       cancel-in-progress: true
     env:
       CHROME_HTTP_CACHE_DIR: ${{ github.workspace }}/.cache/chrome-http-cache/host/shard-${{ matrix.shardIndex }}
-      CHROME_HTTP_CACHE_ALLOWLIST: esm.run,esm.sh,cdn.jsdelivr.net
+      CHROME_HTTP_CACHE_ALLOWLIST: esm.run,esm.sh,cdn.jsdelivr.net,cdn.jsdeliver.net
       CHROME_HTTP_CACHE_DEBUG: true
+      CHROME_NET_LOG: ${{ github.workspace }}/.cache/chrome-http-cache/host/netlog-shard-${{ matrix.shardIndex }}.json
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - uses: ./.github/actions/init
@@ -98,6 +99,12 @@ jobs:
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
           DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
           CHROME_HTTP_CACHE_DIR: ${{ env.CHROME_HTTP_CACHE_DIR }}
+          CHROME_NET_LOG: ${{ env.CHROME_NET_LOG }}
+        working-directory: packages/host
+
+      - name: Summarize Chrome net log cache usage
+        if: always()
+        run: node scripts/summarize-netlog.js "$CHROME_NET_LOG" | tee chrome-netlog-summary.txt
         working-directory: packages/host
 
       - name: Upload junit report to GitHub Actions Artifacts
@@ -131,6 +138,20 @@ jobs:
           name: icon-server-log-${{ matrix.shardIndex }}
           path: /tmp/icon-server.log
           retention-days: 30
+      - name: Upload Chrome net log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: chrome-net-log-${{ matrix.shardIndex }}
+          path: ${{ env.CHROME_NET_LOG }}
+          retention-days: 7
+      - name: Upload Chrome net log summary
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: chrome-net-log-summary-${{ matrix.shardIndex }}
+          path: packages/host/chrome-netlog-summary.txt
+          retention-days: 7
       - name: Upload Chrome HTTP cache
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()

@@ -9,6 +9,8 @@ const path = require('path');
 const chromeHttpCacheDir =
   process.env.CHROME_HTTP_CACHE_DIR &&
   path.resolve(process.env.CHROME_HTTP_CACHE_DIR);
+const chromeNetLogPath =
+  process.env.CHROME_NET_LOG && path.resolve(process.env.CHROME_NET_LOG);
 
 const config = {
   test_page: 'tests/index.html?hidepassed',
@@ -36,6 +38,8 @@ const config = {
         chromeHttpCacheDir
           ? `--disk-cache-dir=${path.join(chromeHttpCacheDir, 'disk-cache')}`
           : null,
+        chromeNetLogPath ? `--log-net-log=${chromeNetLogPath}` : null,
+        chromeNetLogPath ? '--net-log-capture-mode=Everything' : null,
       ].filter(Boolean),
     },
   },
@@ -47,6 +51,10 @@ if (chromeHttpCacheDir) {
   fs.mkdirSync(path.join(chromeHttpCacheDir, 'disk-cache'), {
     recursive: true,
   });
+}
+
+if (chromeNetLogPath) {
+  fs.mkdirSync(path.dirname(chromeNetLogPath), { recursive: true });
 }
 
 if (process.env.CI) {
