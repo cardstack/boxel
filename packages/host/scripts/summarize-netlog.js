@@ -2,14 +2,16 @@
 
 /**
  * Summarize Chrome netlog to surface cache hits/misses/writes by host and list
- * which URLs were written to cache. This is a lightweight parser and will
- * gracefully handle missing files or unexpected shapes.
+ * which URLs were written to cache. This uses a streaming parser to avoid
+ * loading very large netlogs into memory.
  *
  * Usage: node packages/host/scripts/summarize-netlog.js /path/to/netlog.json
  */
 
 const fs = require('fs');
 const path = require('path');
+
+const MAX_URL_SAMPLES = 200;
 
 function main() {
   let netlogPath = process.argv[2];
@@ -23,57 +25,57 @@ function main() {
     return;
   }
 
-  let raw = fs.readFileSync(netlogPath, 'utf8');
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (e) {
-    console.log(`Failed to parse netlog JSON at ${netlogPath}: ${e.message}`);
-    return;
-  }
-
-  let events = Array.isArray(parsed.events) ? parsed.events : [];
   let stats = new Map(); // host -> {hits, misses, writes, reads, others, urls:Set}
   let urlBySource = new Map();
+  let totals = { events: 0, parsed: 0, errors: 0 };
 
-  for (let ev of events) {
-    if (!ev || typeof ev !== 'object') {
-      continue;
-    }
-    let sourceId = ev.source?.id;
-    let url = extractUrl(ev);
-    if (!url && sourceId != null) {
-      url = urlBySource.get(sourceId);
-    }
-    if (url && sourceId != null && !urlBySource.has(sourceId)) {
-      urlBySource.set(sourceId, url);
-    }
+  try {
+    streamEvents(netlogPath, (ev) => {
+      totals.events++;
+      if (!ev || typeof ev !== 'object') {
+        return;
+      }
+      let sourceId = ev.source?.id;
+      let url = extractUrl(ev);
+      if (!url && sourceId != null) {
+        url = urlBySource.get(sourceId);
+      }
+      if (url && sourceId != null && !urlBySource.has(sourceId)) {
+        urlBySource.set(sourceId, url);
+      }
 
-    let host = safeHost(url);
-    if (!host) {
-      continue;
-    }
+      let host = safeHost(url);
+      if (!host) {
+        return;
+      }
 
-    let bucket = getOrCreateHost(stats, host);
-    let classification = classifyEvent(ev.type);
-    switch (classification) {
-      case 'hit':
-        bucket.hits++;
-        break;
-      case 'miss':
-        bucket.misses++;
-        break;
-      case 'write':
-        bucket.writes++;
-        bucket.urls.add(url);
-        break;
-      case 'read':
-        bucket.reads++;
-        break;
-      default:
-        bucket.others++;
-        break;
-    }
+      let bucket = getOrCreateHost(stats, host);
+      let classification = classifyEvent(ev.type);
+      switch (classification) {
+        case 'hit':
+          bucket.hits++;
+          break;
+        case 'miss':
+          bucket.misses++;
+          break;
+        case 'write':
+          bucket.writes++;
+          if (bucket.urls.size < MAX_URL_SAMPLES) {
+            bucket.urls.add(url);
+          }
+          break;
+        case 'read':
+          bucket.reads++;
+          break;
+        default:
+          bucket.others++;
+          break;
+      }
+      totals.parsed++;
+    });
+  } catch (e) {
+    console.log(`Failed to parse netlog at ${netlogPath}: ${e.message}`);
+    return;
   }
 
   if (!stats.size) {
@@ -105,6 +107,11 @@ function main() {
     summaryLines.push(`- ${entry.host} :: ${entry.url}`);
   }
 
+  summaryLines.push('');
+  summaryLines.push(
+    `Processed events: ${totals.parsed}/${totals.events} (errors=${totals.errors})`,
+  );
+
   let summaryText = summaryLines.join('\n');
   console.log(summaryText);
 
@@ -115,6 +122,95 @@ function main() {
       `\n\n### Chrome cache summary\n\n\`\`\`\n${summaryText}\n\`\`\`\n`,
     );
   }
+}
+
+function streamEvents(filePath, onEvent) {
+  let stream = fs.createReadStream(filePath, { encoding: 'utf8' });
+  let buffer = '';
+  let inEvents = false;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  let startIndex = null;
+
+  stream.on('data', (chunk) => {
+    buffer += chunk;
+
+    if (!inEvents) {
+      let idx = buffer.indexOf('"events"');
+      if (idx !== -1) {
+        let bracketIdx = buffer.indexOf('[', idx);
+        if (bracketIdx !== -1) {
+          inEvents = true;
+          buffer = buffer.slice(bracketIdx + 1);
+        } else {
+          // wait for next chunk
+          buffer = buffer.slice(Math.max(0, idx - 10));
+          return;
+        }
+      } else {
+        // keep last few chars in case "events" spans chunks
+        buffer = buffer.slice(-10);
+        return;
+      }
+    }
+
+    let i = 0;
+    while (i < buffer.length) {
+      let ch = buffer[i];
+      if (startIndex === null) {
+        if (ch === '{') {
+          startIndex = i;
+          depth = 1;
+          inString = false;
+          escape = false;
+        }
+        i++;
+        continue;
+      }
+
+      // Inside an object
+      if (escape) {
+        escape = false;
+      } else if (ch === '\\') {
+        escape = true;
+      } else if (ch === '"' && !escape) {
+        inString = !inString;
+      } else if (!inString) {
+        if (ch === '{') {
+          depth++;
+        } else if (ch === '}') {
+          depth--;
+          if (depth === 0) {
+            let objText = buffer.slice(startIndex, i + 1);
+            try {
+              onEvent(JSON.parse(objText));
+            } catch (_e) {
+              // ignore individual parse errors
+            }
+            startIndex = null;
+            // drop processed chunk
+            buffer = buffer.slice(i + 1);
+            i = 0;
+            continue;
+          }
+        }
+      }
+      i++;
+    }
+
+    // Trim buffer to avoid unbounded growth; keep partial object if present.
+    if (startIndex !== null && startIndex > 0) {
+      buffer = buffer.slice(startIndex);
+      startIndex = 0;
+    } else if (startIndex === null) {
+      buffer = '';
+    }
+  });
+
+  stream.on('end', () => {
+    // finished
+  });
 }
 
 function extractUrl(ev) {
