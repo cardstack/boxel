@@ -392,13 +392,27 @@ export class RealmServer {
   }
 
   private headURLCandidates(cardURL: URL): string[] {
-    let href = cardURL.href.replace(/\?.*/, '');
-    // strip trailing slash, but keep root realm URLs that end with slash
-    let trimmed = href.endsWith('/') ? href.slice(0, -1) : href;
-    let withIndex = href.endsWith('/') ? `${trimmed}/index` : `${href}/index`;
-    let withJson = `${href.replace(/\/?$/, '')}.json`;
-    let withIndexJson = `${withIndex}.json`;
-    return [...new Set([href, trimmed, withIndex, withJson, withIndexJson])];
+    // Some reverse proxies terminate TLS and forward requests as http, which
+    // means the incoming URL protocol can differ from the realm URL stored in
+    // the index (https). Include both protocols so we still find head_html.
+    let variants = [cardURL];
+    if (cardURL.protocol === 'http:' || cardURL.protocol === 'https:') {
+      let swapped = new URL(cardURL.href);
+      swapped.protocol = cardURL.protocol === 'http:' ? 'https:' : 'http:';
+      variants.push(swapped);
+    }
+
+    let candidates = variants.flatMap((url) => {
+      let href = url.href.replace(/\?.*/, '');
+      // strip trailing slash, but keep root realm URLs that end with slash
+      let trimmed = href.endsWith('/') ? href.slice(0, -1) : href;
+      let withIndex = href.endsWith('/') ? `${trimmed}/index` : `${href}/index`;
+      let withJson = `${href.replace(/\/?$/, '')}.json`;
+      let withIndexJson = `${withIndex}.json`;
+      return [href, trimmed, withIndex, withJson, withIndexJson];
+    });
+
+    return [...new Set(candidates)];
   }
 
   private injectHeadHTML(indexHTML: string, headHTML: string): string {
