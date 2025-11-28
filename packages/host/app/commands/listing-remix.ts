@@ -1,9 +1,12 @@
 import { service } from '@ember/service';
 
-import { isResolvedCodeRef, RealmPaths } from '@cardstack/runtime-common';
+import {
+  isResolvedCodeRef,
+  RealmPaths,
+  type ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 import { DEFAULT_CODING_LLM } from '@cardstack/runtime-common/matrix-constants';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -28,17 +31,6 @@ export default class RemixCommand extends HostBaseCommand<
 
   static actionVerb = 'Remix';
 
-  #cardAPI?: typeof CardAPI;
-
-  async loadCardAPI() {
-    if (!this.#cardAPI) {
-      this.#cardAPI = await this.loaderService.loader.import<typeof CardAPI>(
-        'https://cardstack.com/base/card-api',
-      );
-    }
-    return this.#cardAPI;
-  }
-
   description =
     'Install catalog listing with bringing them to code mode, and then remixing them via AI';
 
@@ -50,26 +42,28 @@ export default class RemixCommand extends HostBaseCommand<
 
   requireInputFields = ['realm', 'listing'];
 
-  protected async run(
-    input: BaseCommandModule.ListingInstallInput,
-  ): Promise<undefined> {
-    let realmUrls = this.realmServer.availableRealmURLs;
-    let { realm, listing: listingInput } = input;
-    let realmUrl = new RealmPaths(new URL(realm)).url;
+  private isThemeListing(listing: Listing): boolean {
+    return listing?.constructor?.name === 'ThemeListing';
+  }
 
-    // Make sure realm is valid
-    if (!realmUrls.includes(realmUrl)) {
-      throw new Error(`Invalid realm: ${realmUrl}`);
+  private async navigateView(options: {
+    listing: Listing;
+    selectedCodeRef?: ResolvedCodeRef;
+    exampleCardId?: string;
+    skillCardId?: string;
+  }) {
+    const { listing, selectedCodeRef, exampleCardId, skillCardId } = options;
+
+    if (this.isThemeListing(listing)) {
+      if (exampleCardId) {
+        await new SwitchSubmodeCommand(this.commandContext).execute({
+          submode: 'code',
+          codePath: `${exampleCardId}.json`,
+        });
+      }
+      return;
     }
 
-    // this is intentionally to type because base command cannot interpret Listing type from catalog
-    const listing = listingInput as Listing;
-
-    const { selectedCodeRef, exampleCardId, skillCardId } =
-      await new ListingInstallCommand(this.commandContext).execute({
-        realm: realmUrl,
-        listing,
-      });
     if (selectedCodeRef && isResolvedCodeRef(selectedCodeRef)) {
       const codePath = selectedCodeRef.module;
 
@@ -113,6 +107,34 @@ export default class RemixCommand extends HostBaseCommand<
         });
       }
     }
+  }
+
+  protected async run(
+    input: BaseCommandModule.ListingInstallInput,
+  ): Promise<undefined> {
+    let realmUrls = this.realmServer.availableRealmURLs;
+    let { realm, listing: listingInput } = input;
+    let realmUrl = new RealmPaths(new URL(realm)).url;
+
+    // Make sure realm is valid
+    if (!realmUrls.includes(realmUrl)) {
+      throw new Error(`Invalid realm: ${realmUrl}`);
+    }
+
+    // this is intentionally to type because base command cannot interpret Listing type from catalog
+    const listing = listingInput as Listing;
+
+    const { selectedCodeRef, exampleCardId, skillCardId } =
+      await new ListingInstallCommand(this.commandContext).execute({
+        realm: realmUrl,
+        listing,
+      });
+    await this.navigateView({
+      listing,
+      selectedCodeRef,
+      exampleCardId,
+      skillCardId,
+    });
 
     let prompt =
       'Remix done! Please suggest two example prompts on how to edit this card.';
