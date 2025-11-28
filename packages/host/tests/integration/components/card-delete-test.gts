@@ -15,7 +15,6 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
-  percySnapshot,
   testRealmURL,
   testModuleRealm,
   setupCardLogs,
