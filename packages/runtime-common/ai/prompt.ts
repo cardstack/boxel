@@ -1164,6 +1164,11 @@ export async function buildPromptForModel(
     });
   }
   let systemMessage = `${SYSTEM_MESSAGE}\n`;
+
+  if (autoCorrectnessChecksEnabled) {
+    systemMessage +=
+      'Never call the checkCorrectness tool on your own; correctness checks are handled automatically by the system.\n';
+  }
   if (skillCards.length) {
     systemMessage += SKILL_INSTRUCTIONS_MESSAGE;
     systemMessage += skillCardsToMessage(skillCards);
