@@ -298,12 +298,6 @@ export class RealmServer {
         new URL(`${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`),
       );
 
-      console.log('head html?', headHTML);
-      console.log(
-        'for',
-        new URL(`${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`),
-      );
-
       ctxt.body =
         headHTML != null ? this.injectHeadHTML(indexHTML, headHTML) : indexHTML;
       return;
@@ -380,8 +374,6 @@ export class RealmServer {
           ],
         ]),
       ) as Expression;
-
-    console.log('head html candidates', JSON.stringify(candidates, null, 2));
 
     let rows = await query(this.dbAdapter, [
       `SELECT head_html, realm_version FROM boxel_index_working WHERE head_html IS NOT NULL AND`,
