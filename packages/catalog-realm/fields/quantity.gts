@@ -9,6 +9,7 @@ import NumberField, {
 } from 'https://cardstack.com/base/number';
 import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
+import Grid2x2Icon from '@cardstack/boxel-icons/grid-2x2';
 
 import { getNumericValue, clamp } from './number/util/index';
 
@@ -183,18 +184,7 @@ export default class QuantityField extends NumberField {
 
     <template>
       <span class='quantity-field-embedded'>
-        <svg
-          class='qty-icon'
-          viewBox='0 0 24 24'
-          fill='none'
-          stroke='currentColor'
-          stroke-width='2'
-        >
-          <rect x='3' y='3' width='7' height='7' rx='1' />
-          <rect x='14' y='3' width='7' height='7' rx='1' />
-          <rect x='14' y='14' width='7' height='7' rx='1' />
-          <rect x='3' y='14' width='7' height='7' rx='1' />
-        </svg>
+        <Grid2x2Icon class='qty-icon' />
         <span class='qty-value'>{{this.numericValue}}</span>
       </span>
 
