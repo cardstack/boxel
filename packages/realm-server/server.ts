@@ -299,6 +299,10 @@ export class RealmServer {
       );
 
       console.log('head html?', headHTML);
+      console.log(
+        'for',
+        new URL(`${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`),
+      );
 
       ctxt.body =
         headHTML != null ? this.injectHeadHTML(indexHTML, headHTML) : indexHTML;
