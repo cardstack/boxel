@@ -1792,7 +1792,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         font-family: var(--font-mono, 'Courier New', monospace);
         font-size: 0.8125rem;
         background: var(--muted, #f1f5f9);
-        color: var(--primary, #3b82f6);
+        color: var(--boxel-dark);
         padding: 0.125rem 0.375rem;
         border-radius: 0.25rem;
       }
