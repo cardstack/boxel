@@ -361,6 +361,8 @@ export class RealmServer {
     if (candidates.length === 0) {
       return null;
     }
+
+    // Proxying means the apparent request URL will be http but in the database it’s https
     let candidateExpressions = (): Expression =>
       any(
         candidates.flatMap((candidate) => [
