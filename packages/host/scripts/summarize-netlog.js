@@ -14,6 +14,10 @@ const path = require('path');
 const MAX_URL_SAMPLES = 200;
 const PROGRESS_BYTES_INTERVAL = 25 * 1024 * 1024; // 25MB
 const PROGRESS_EVENTS_INTERVAL = 100_000;
+const STALL_TIMEOUT_MS =
+  parseInt(process.env.NETLOG_STALL_TIMEOUT_MS || '', 10) || 60_000; // bail if no progress for 60s
+const MAX_DURATION_MS =
+  parseInt(process.env.NETLOG_MAX_DURATION_MS || '', 10) || 5 * 60_000; // hard cap 5 minutes
 
 async function main() {
   let netlogPath = process.argv[2];
@@ -97,7 +101,7 @@ async function main() {
       `Netlog parsed: events=${totals.events} parsed=${totals.parsed} bytesRead=${streamResult.bytesRead} (~${(
         streamResult.bytesRead /
         (1024 * 1024)
-      ).toFixed(1)} MB) duration=${streamResult.durationMs}ms truncated=${streamResult.truncated}`,
+      ).toFixed(1)} MB) duration=${streamResult.durationMs}ms truncated=${streamResult.truncated} reason=${streamResult.stopReason}`,
     );
   } catch (e) {
     console.log(`Failed to parse netlog at ${netlogPath}: ${e.message}`);
@@ -168,12 +172,16 @@ function streamEvents(
   let nextEventProgress = PROGRESS_EVENTS_INTERVAL;
   let start = Date.now();
   let truncated = false;
+  let lastProgressAt = Date.now();
+  let stopReason = 'completed';
 
   return new Promise((resolve, reject) => {
     let finished = false;
     let finish = (err) => {
       if (finished) return;
       finished = true;
+      clearInterval(stallTimer);
+      clearTimeout(maxDurationTimer);
       if (err) {
         reject(err);
       } else {
@@ -182,13 +190,37 @@ function streamEvents(
           bytesRead,
           durationMs: Date.now() - start,
           truncated,
+          stopReason,
         });
       }
     };
 
+    let stallTimer = setInterval(() => {
+      if (Date.now() - lastProgressAt > STALL_TIMEOUT_MS) {
+        truncated = true;
+        stopReason = `stall>${STALL_TIMEOUT_MS}ms`;
+        console.log(
+          `[netlog] stall detected (no progress for ${STALL_TIMEOUT_MS}ms), stopping early`,
+        );
+        finish();
+        stream.destroy();
+      }
+    }, Math.max(5_000, STALL_TIMEOUT_MS / 2));
+
+    let maxDurationTimer = setTimeout(() => {
+      truncated = true;
+      stopReason = `duration>${MAX_DURATION_MS}ms`;
+      console.log(
+        `[netlog] max duration ${MAX_DURATION_MS}ms exceeded, stopping early`,
+      );
+      finish();
+      stream.destroy();
+    }, MAX_DURATION_MS);
+
     stream.on('data', (chunk) => {
       buffer += chunk;
       bytesRead += chunk.length;
+      lastProgressAt = Date.now();
 
       if (bytesRead >= nextByteProgress) {
         console.log(
@@ -200,6 +232,7 @@ function streamEvents(
       }
       if (maxBytes && bytesRead >= maxBytes) {
         truncated = true;
+        stopReason = `maxBytes=${maxBytes}`;
         console.log(
           `[netlog] reached maxBytes=${maxBytes} bytes, stopping early`,
         );
@@ -258,6 +291,7 @@ function streamEvents(
             try {
               onEvent(JSON.parse(objText));
               eventCount++;
+              lastProgressAt = Date.now();
             } catch (_e) {
               // ignore individual parse errors
             }
@@ -271,6 +305,7 @@ function streamEvents(
               console.log(
                 `[netlog] reached maxEvents=${maxEvents}, stopping early`,
               );
+              stopReason = `maxEvents=${maxEvents}`;
               finish();
               stream.destroy();
               return;
@@ -301,6 +336,7 @@ function streamEvents(
           '[netlog] Warning: did not find "events" array in netlog file.',
         );
       }
+      stopReason = 'eof';
       finish();
     });
     stream.on('error', (err) => finish(err));

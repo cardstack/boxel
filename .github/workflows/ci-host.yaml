@@ -104,7 +104,7 @@ jobs:
 
       - name: Summarize Chrome net log cache usage
         if: always()
-        run: NETLOG_MAX_EVENTS=500000 NETLOG_MAX_BYTES=150000000 node scripts/summarize-netlog.js "$CHROME_NET_LOG" | tee chrome-netlog-summary.txt
+        run: NETLOG_MAX_EVENTS=300000 NETLOG_MAX_BYTES=100000000 NETLOG_MAX_DURATION_MS=180000 NETLOG_STALL_TIMEOUT_MS=30000 node scripts/summarize-netlog.js "$CHROME_NET_LOG" | tee chrome-netlog-summary.txt
         working-directory: packages/host
 
       - name: Upload junit report to GitHub Actions Artifacts
