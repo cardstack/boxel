@@ -1,10 +1,10 @@
 import type { VirtualNetwork } from '@cardstack/runtime-common';
 
 import * as AddFieldToCardDefinitionCommandModule from './add-field-to-card-definition';
-import * as AddSkillsToRoomCommandModule from './add-skills-to-room';
 import * as UseAiAssistantCommandModule from './ai-assistant';
 import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-block';
 import * as AskAiCommandModule from './ask-ai';
+import * as CheckCorrectnessCommandModule from './check-correctness';
 import * as CopyCardToRealmModule from './copy-card';
 import * as CopyCardToStackCommandModule from './copy-card-to-stack';
 import * as CopySourceCommandModule from './copy-source';
@@ -12,6 +12,7 @@ import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room'
 import * as CreateSpecCommandModule from './create-specs';
 import * as GenerateExampleCardsCommandModule from './generate-example-cards';
 import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
+import * as GenerateThemeExampleCommandModule from './generate-theme-example';
 import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
 import * as GetCardCommandModule from './get-card';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
@@ -30,6 +31,7 @@ import * as OpenWorkspaceCommandModule from './open-workspace';
 import * as PatchCardInstanceCommandModule from './patch-card-instance';
 import * as PatchCodeCommandModule from './patch-code';
 import * as PatchFieldsCommandModule from './patch-fields';
+import * as PatchThemeCommandModule from './patch-theme';
 import * as PopulateWithSampleDataCommandModule from './populate-with-sample-data';
 import * as PreviewFormatCommandModule from './preview-format';
 import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assistant';
@@ -42,6 +44,7 @@ import * as SearchGoogleImagesCommandModule from './search-google-images';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
 import * as SendRequestViaProxyCommandModule from './send-request-via-proxy';
 import * as SetActiveLlmModule from './set-active-llm';
+import * as SetSiteConfigCommandModule from './set-site-config';
 import * as SetUserSystemCardCommandModule from './set-user-system-card';
 import * as ShowCardCommandModule from './show-card';
 import * as SummarizeSessionCommandModule from './summarize-session';
@@ -49,7 +52,7 @@ import * as SwitchSubmodeCommandModule from './switch-submode';
 import * as TransformCardsCommandModule from './transform-cards';
 import * as UpdateCodePathWithSelectionCommandModule from './update-code-path-with-selection';
 import * as UpdatePlaygroundSelectionCommandModule from './update-playground-selection';
-import * as UpdateSkillActivationCommandModule from './update-skill-activation';
+import * as UpdateRoomSkillsCommandModule from './update-room-skills';
 import * as CommandUtilsModule from './utils';
 import * as WriteTextFileCommandModule from './write-text-file';
 
@@ -59,10 +62,6 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/add-field-to-card-definition',
     AddFieldToCardDefinitionCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/add-skills-to-room',
-    AddSkillsToRoomCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/ask-ai',
@@ -91,6 +90,14 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/create-specs',
     CreateSpecCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/check-correctness',
+    CheckCorrectnessCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/generate-theme-example',
+    GenerateThemeExampleCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-events-from-room',
@@ -143,6 +150,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/patch-fields',
     PatchFieldsCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/patch-theme',
+    PatchThemeCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/preview-format',
@@ -209,8 +220,8 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     UpdatePlaygroundSelectionCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/update-skill-activation',
-    UpdateSkillActivationCommandModule,
+    '@cardstack/boxel-host/commands/update-room-skills',
+    UpdateRoomSkillsCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/send-request-via-proxy',
@@ -268,12 +279,15 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     '@cardstack/boxel-host/commands/set-user-system-card',
     SetUserSystemCardCommandModule,
   );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/set-site-config',
+    SetSiteConfigCommandModule,
+  );
 }
 
 // Note - this is used for the tests
 export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   AddFieldToCardDefinitionCommandModule.default,
-  AddSkillsToRoomCommandModule.default,
   ApplySearchReplaceBlockCommandModule.default,
   AskAiCommandModule.default,
   CopyCardToRealmModule.default,
@@ -298,8 +312,10 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   OpenAiAssistantRoomCommandModule.default,
   OpenInInteractModeModule.default,
   OpenWorkspaceCommandModule.default,
+  GenerateThemeExampleCommandModule.default,
   PatchCodeCommandModule.default,
   PatchFieldsCommandModule.default,
+  PatchThemeCommandModule.default,
   PopulateWithSampleDataCommandModule.default,
   PreviewFormatCommandModule.default,
   ReadCardForAiAssistantCommandModule.default,
@@ -313,14 +329,16 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   SendAiAssistantMessageModule.default,
   SendRequestViaProxyCommandModule.default,
   SetActiveLlmModule.default,
+  SetSiteConfigCommandModule.default,
   SetUserSystemCardCommandModule.default,
   ShowCardCommandModule.default,
   SummarizeSessionCommandModule.default,
   SwitchSubmodeCommandModule.default,
   TransformCardsCommandModule.default,
+  CheckCorrectnessCommandModule.default,
   UpdateCodePathWithSelectionCommandModule.default,
   UpdatePlaygroundSelectionCommandModule.default,
-  UpdateSkillActivationCommandModule.default,
+  UpdateRoomSkillsCommandModule.default,
   UseAiAssistantCommandModule.default,
   WriteTextFileCommandModule.default,
 ];

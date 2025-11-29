@@ -41,8 +41,6 @@ import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import CodeBlock from '../ai-assistant/code-block';
 import CardRenderer from '../card-renderer';
 
-import PreparingRoomMessageCommand from './preparing-room-message-command';
-
 interface Signature {
   Element: HTMLDivElement;
   Args: {
@@ -129,6 +127,13 @@ export default class RoomMessageCommand extends Component<Signature> {
     return '';
   }
 
+  private get shouldDisplayResultCard() {
+    return (
+      !!this.commandResultCard.card &&
+      this.args.messageCommand.name !== 'checkCorrectness'
+    );
+  }
+
   private get moreOptionsMenuItems() {
     let menuItems =
       this.commandResultCard.card?.[getCardMenuItems]?.({
@@ -138,6 +143,13 @@ export default class RoomMessageCommand extends Component<Signature> {
         commandContext: this.commandService.commandContext,
       }) ?? [];
     return toMenuItems(menuItems);
+  }
+
+  private get commandResultCardForRendering(): CardDef {
+    if (!this.commandResultCard.card) {
+      throw new Error('Command result card is not available');
+    }
+    return this.commandResultCard.card;
   }
 
   @cached
@@ -157,6 +169,10 @@ export default class RoomMessageCommand extends Component<Signature> {
     );
   }
 
+  private get commandDescription() {
+    return this.args.messageCommand.description ?? 'Preparing tool call...';
+  }
+
   <template>
     <div
       class={{cn
@@ -169,7 +185,23 @@ export default class RoomMessageCommand extends Component<Signature> {
       ...attributes
     >
       {{#if @isStreaming}}
-        <PreparingRoomMessageCommand />
+        <CodeBlock
+          class='command-code-block'
+          @monacoSDK={{@monacoSDK}}
+          @codeData={{hash code=this.previewCommandCode language='json'}}
+          data-test-command-card-idle={{not
+            (eq @messageCommand.status 'applying')
+          }}
+          as |codeBlock|
+        >
+          <codeBlock.commandHeader
+            @commandDescription={{this.commandDescription}}
+            @action={{@runCommand}}
+            @actionVerb={{@messageCommand.actionVerb}}
+            @code={{this.previewCommandCode}}
+            @commandState='preparing'
+          />
+        </CodeBlock>
       {{else}}
         <CodeBlock
           class='command-code-block'
@@ -207,7 +239,7 @@ export default class RoomMessageCommand extends Component<Signature> {
             <Alert.Action @action={{@runCommand}} @actionName='Try Anyway' />
           </Alert>
         {{/if}}
-        {{#if this.commandResultCard.card}}
+        {{#if this.shouldDisplayResultCard}}
           <CardContainer
             @displayBoundaries={{false}}
             class='command-result-card-preview'
@@ -215,13 +247,13 @@ export default class RoomMessageCommand extends Component<Signature> {
           >
             <CardHeader
               @cardTypeDisplayName={{this.headerTitle}}
-              @cardTypeIcon={{cardTypeIcon this.commandResultCard.card}}
+              @cardTypeIcon={{cardTypeIcon this.commandResultCardForRendering}}
               @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
               class='command-result-card-header'
               data-test-command-result-header
             />
             <CardRenderer
-              @card={{this.commandResultCard.card}}
+              @card={{this.commandResultCardForRendering}}
               @format='embedded'
               @displayContainer={{false}}
               data-test-boxel-command-result

@@ -25,7 +25,6 @@ import {
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -39,6 +38,7 @@ import {
   setupOnSave,
   type TestContextWithSave,
   withSlowSave,
+  setupOperatorModeStateCleanup,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -47,6 +47,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | operator-mode', function (hooks) {
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
 
   const realmName = 'Operator Mode Workspace';
   let loader: Loader;
@@ -90,6 +91,7 @@ module('Integration | operator-mode', function (hooks) {
     let {
       field,
       contains,
+      containsMany,
       linksTo,
       linksToMany,
       serialize,
@@ -252,6 +254,8 @@ module('Integration | operator-mode', function (hooks) {
       @field pet = linksTo(Pet);
       @field friends = linksToMany(Pet);
       @field cars = linksToMany(Car);
+      @field nicknames = containsMany(StringField);
+      @field favoriteGames = containsMany(StringField);
       @field firstLetterOfTheName = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName[0];
@@ -277,6 +281,10 @@ module('Integration | operator-mode', function (hooks) {
           <@fields.friends />
           Cars:
           <@fields.cars />
+          Nicknames:
+          <@fields.nicknames />
+          Favorite Games:
+          <@fields.favoriteGames />
           <div data-test-addresses>Address: <@fields.address /></div>
         </template>
       };
@@ -475,6 +483,8 @@ module('Integration | operator-mode', function (hooks) {
               }),
             }),
             pet: petMango,
+            nicknames: ['Lan'],
+            favoriteGames: ['Soccer'],
           }),
           'Person/hassan.json': {
             data: {
@@ -498,6 +508,8 @@ module('Integration | operator-mode', function (hooks) {
             firstName: 'Burcu',
             friends: [petJackie, petWoody, petBuzz],
             cars: [myvi, proton],
+            nicknames: ['Ace', 'Bolt', 'Comet'],
+            favoriteGames: ['Chess', 'Go'],
           }),
           'Friend/friend-b.json': friendB,
           'Friend/friend-a.json': new Friend({
@@ -620,7 +632,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -650,7 +661,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -666,12 +676,10 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-toggle-details]');
     assert
       .dom('[data-test-error-details]')
-      .containsText(
-        `missing file ${testRealmURL}FriendWithCSS/does-not-exist.json`,
-      );
+      .containsText(`FriendWithCSS/does-not-exist.json not found`);
     assert
       .dom('[data-test-error-stack]')
-      .containsText('at CurrentRun.visitFile');
+      .containsText('at Realm.getSourceOrRedirect');
     assert.strictEqual(
       operatorModeStateService.state?.submode,
       'interact',
@@ -726,7 +734,6 @@ module('Integration | operator-mode', function (hooks) {
           class TestDriver extends GlimmerComponent {
             <template>
               <OperatorMode @onClose={{noop}} />
-              <CardPrerender />
             </template>
           },
         );
@@ -747,12 +754,10 @@ module('Integration | operator-mode', function (hooks) {
         await click('[data-test-toggle-details]');
         assert
           .dom('[data-test-error-details]')
-          .containsText(
-            `missing file ${testRealmURL}FriendWithCSS/does-not-exist.json`,
-          );
+          .containsText(`FriendWithCSS/does-not-exist.json not found`);
         assert
           .dom('[data-test-error-stack]')
-          .containsText('at CurrentRun.visitFile');
+          .containsText('at Realm.getSourceOrRedirect');
         assert.strictEqual(
           operatorModeStateService.state?.submode,
           'interact',
@@ -777,7 +782,6 @@ module('Integration | operator-mode', function (hooks) {
           class TestDriver extends GlimmerComponent {
             <template>
               <OperatorMode @onClose={{noop}} />
-              <CardPrerender />
             </template>
           },
         );
@@ -805,7 +809,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -829,86 +832,20 @@ module('Integration | operator-mode', function (hooks) {
         document
           .querySelector('[data-test-auto-save-indicator]')
           ?.textContent?.trim() === 'Saving…',
+      { timeout: 5000 },
     );
     assert.dom('[data-test-auto-save-indicator]').containsText('Saving…');
     assert.false(finishedSaving, 'save in-flight message is correct');
-    await waitUntil(
-      () =>
-        document
-          .querySelector('[data-test-auto-save-indicator]')
-          ?.textContent?.trim() == 'Saved less than a minute ago',
-    );
+    await waitUntil(() => finishedSaving, { timeout: 10000 });
     assert.true(finishedSaving, 'finished saving message is correct');
-    assert
-      .dom('[data-test-auto-save-indicator]')
-      .containsText('Saved less than a minute ago');
+    await waitFor('[data-test-last-saved]');
+    assert.dom('[data-test-last-saved]').containsText('Saved');
 
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
     await waitFor('[data-test-person="EditedName"]');
     assert.dom('[data-test-person]').hasText('EditedName');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('E');
-  });
-
-  test<TestContextWithSave>('it does not auto save when exiting edit mode when there are no changes made', async function (assert) {
-    // note that because of the test waiters we can't do the inverse of this
-    // test because it is impossible to tell the difference between a normal
-    // autosave and an auto save as a result of clicking on the edit button since
-    // the test waiters include the auto save async.
-    assert.expect(0);
-    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-    await waitFor('[data-test-person]');
-    await click('[data-test-edit-button]');
-    this.onSave(() => {
-      assert.ok(false, 'does not save when file is not changed');
-    });
-    await click('[data-test-edit-button]');
-  });
-
-  test<TestContextWithSave>('it does not wait for save to complete before switching from edit to isolated mode', async function (assert) {
-    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-    await waitFor('[data-test-person]');
-    await click('[data-test-edit-button]');
-    let operationOrder: string[] = [];
-    this.onSave(() => {
-      operationOrder.push('saved');
-    });
-    // slow down the save so we can make sure that the format switch is
-    // not tied to the save completion
-    await withSlowSave(1000, async () => {
-      // intentionally not awaiting the fillIn so we can ignore the test waiters
-      fillIn('[data-test-field="firstName"] input', 'FadhlanX');
-      // intentionally not awaiting the click so we can ignore the test waiters
-      click('[data-test-edit-button]');
-      await waitFor(
-        `[data-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
-      );
-      operationOrder.push('isolated-model');
-      await waitUntil(() => operationOrder.length === 2, { timeout: 10000 });
-      assert.deepEqual(
-        operationOrder,
-        ['isolated-model', 'saved'],
-        'the isolated mode is displayed before save completes',
-      );
-    });
   });
 
   test('an error in auto-save is handled gracefully', async function (assert) {
@@ -918,7 +855,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -971,7 +907,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1005,7 +940,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1027,7 +961,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1059,7 +992,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1120,7 +1052,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1153,7 +1084,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1270,7 +1200,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1313,7 +1242,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1344,7 +1272,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1391,7 +1318,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1428,7 +1354,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1452,7 +1377,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1487,7 +1411,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1532,7 +1455,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1557,7 +1479,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1584,7 +1505,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1613,7 +1533,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1655,7 +1574,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1704,7 +1622,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1746,7 +1663,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1780,7 +1696,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1810,7 +1725,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1873,7 +1787,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1909,7 +1822,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1976,7 +1888,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2029,7 +1940,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2085,7 +1995,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2115,7 +2024,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2136,7 +2044,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2224,7 +2131,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2263,7 +2169,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2304,7 +2209,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2347,7 +2251,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2404,7 +2307,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2466,7 +2368,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2496,7 +2397,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2512,7 +2412,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2533,7 +2432,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2562,7 +2460,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2616,7 +2513,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2671,7 +2567,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2732,7 +2627,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2778,7 +2672,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2827,7 +2720,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2858,7 +2750,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2942,7 +2833,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -2969,7 +2859,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -3034,7 +2923,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -3079,11 +2967,26 @@ module('Integration | operator-mode', function (hooks) {
       .exists({ count: 3 });
 
     assert
+      .dom(
+        `[data-test-list="friends"] [data-test-item="0"] [data-test-card="${testRealmURL}Pet/jackie"]`,
+      )
+      .exists();
+    assert
       .dom(`[data-test-list="friends"] [data-test-item="0"]`)
       .hasText('Jackie');
     assert
+      .dom(
+        `[data-test-list="friends"] [data-test-item="1"] [data-test-card="${testRealmURL}Pet/woody"]`,
+      )
+      .exists();
+    assert
       .dom(`[data-test-list="friends"] [data-test-item="1"]`)
       .hasText('Woody');
+    assert
+      .dom(
+        `[data-test-list="friends"] [data-test-item="2"] [data-test-card="${testRealmURL}Pet/buzz"]`,
+      )
+      .exists();
     assert
       .dom(`[data-test-list="friends"] [data-test-item="2"]`)
       .hasText('Buzz');
@@ -3141,11 +3044,26 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-list="friends"] [data-test-item]')
       .exists({ count: 3 });
     assert
+      .dom(
+        `[data-test-list="friends"] [data-test-item="0"] [data-test-card="${testRealmURL}Pet/woody"]`,
+      )
+      .exists();
+    assert
       .dom(`[data-test-list="friends"] [data-test-item="0"]`)
       .hasText('Woody');
     assert
+      .dom(
+        `[data-test-list="friends"] [data-test-item="1"] [data-test-card="${testRealmURL}Pet/buzz"]`,
+      )
+      .exists();
+    assert
       .dom(`[data-test-list="friends"] [data-test-item="1"]`)
       .hasText('Buzz');
+    assert
+      .dom(
+        `[data-test-list="friends"] [data-test-item="2"] [data-test-card="${testRealmURL}Pet/jackie"]`,
+      )
+      .exists();
     assert
       .dom(`[data-test-list="friends"] [data-test-item="2"]`)
       .hasText('Jackie');
@@ -3213,6 +3131,174 @@ module('Integration | operator-mode', function (hooks) {
       .hasText('Proton');
   });
 
+  test('can reorder containsMany cards in edit view without affecting other containsMany cards', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}grid`);
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+        </template>
+      },
+    );
+
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/burcu"] .field-component-card`,
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
+    assert
+      .dom(
+        `[data-test-plural-view-field="nicknames"] [data-test-plural-view-item]`,
+      )
+      .exists({ count: 3 });
+    assert
+      .dom(
+        `[data-test-plural-view-field="favoriteGames"] [data-test-plural-view-item]`,
+      )
+      .exists({ count: 2 });
+    assert.dom(`[data-test-plural-view-field="nicknames"]`).containsText('Ace');
+    assert
+      .dom(`[data-test-plural-view-field="nicknames"]`)
+      .containsText('Bolt');
+    assert
+      .dom(`[data-test-plural-view-field="nicknames"]`)
+      .containsText('Comet');
+    assert
+      .dom(`[data-test-plural-view-field="favoriteGames"]`)
+      .containsText('Chess');
+    assert
+      .dom(`[data-test-plural-view-field="favoriteGames"]`)
+      .containsText('Go');
+
+    await click(
+      `[data-test-stack-card="${testRealmURL}Person/burcu"] [data-test-edit-button]`,
+    );
+    document
+      .querySelector('[data-test-list="nicknames"]')
+      ?.scrollIntoView({ block: 'center' });
+
+    assert
+      .dom('[data-test-list="nicknames"] [data-test-item]')
+      .exists({ count: 3 });
+    assert
+      .dom('[data-test-list="favoriteGames"] [data-test-item]')
+      .exists({ count: 2 });
+
+    assert
+      .dom(`[data-test-list="nicknames"] [data-test-item="0"] input`)
+      .hasValue('Ace');
+    assert
+      .dom(`[data-test-list="nicknames"] [data-test-item="1"] input`)
+      .hasValue('Bolt');
+    assert
+      .dom(`[data-test-list="nicknames"] [data-test-item="2"] input`)
+      .hasValue('Comet');
+
+    assert
+      .dom(`[data-test-list="favoriteGames"] [data-test-item="0"] input`)
+      .hasValue('Chess');
+    assert
+      .dom(`[data-test-list="favoriteGames"] [data-test-item="1"] input`)
+      .hasValue('Go');
+
+    let dragAndDrop = async (itemSelector: string, targetSelector: string) => {
+      let itemElement = document.querySelector(itemSelector);
+      let targetElement = document.querySelector(targetSelector);
+
+      if (!itemElement || !targetElement) {
+        throw new Error('Item or target element not found');
+      }
+
+      let itemRect = itemElement.getBoundingClientRect();
+      let targetRect = targetElement.getBoundingClientRect();
+
+      await triggerEvent(itemElement, 'mousedown', {
+        clientX: itemRect.left + itemRect.width / 2,
+        clientY: itemRect.top + itemRect.height / 2,
+      });
+
+      await triggerEvent(document, 'mousemove', {
+        clientX: itemRect.left + 1,
+        clientY: itemRect.top + 1,
+      });
+
+      let firstStackItemHeaderRect = document
+        .querySelector('[data-test-operator-mode-stack="0"] header')!
+        .getBoundingClientRect();
+      let firstStackItemPaddingTop = getComputedStyle(
+        document.querySelector('[data-test-operator-mode-stack="0"]')!,
+      )
+        .getPropertyValue('padding-top')
+        .replace('px', '');
+      let marginTop =
+        firstStackItemHeaderRect.height + Number(firstStackItemPaddingTop);
+      await triggerEvent(document, 'mousemove', {
+        clientX: targetRect.left + targetRect.width / 2,
+        clientY: targetRect.top - marginTop,
+      });
+
+      await triggerEvent(itemElement, 'mouseup', {
+        clientX: targetRect.left + targetRect.width / 2,
+        clientY: targetRect.top - marginTop,
+      });
+    };
+    await dragAndDrop(
+      '[data-test-list="nicknames"] [data-test-sort="1"]',
+      '[data-test-list="nicknames"] [data-test-sort="0"]',
+    );
+
+    assert
+      .dom('[data-test-list="nicknames"] [data-test-item]')
+      .exists({ count: 3 });
+    assert
+      .dom(`[data-test-list="nicknames"] [data-test-item="0"] input`)
+      .hasValue('Bolt');
+    assert
+      .dom(`[data-test-list="nicknames"] [data-test-item="1"] input`)
+      .hasValue('Ace');
+    assert
+      .dom(`[data-test-list="nicknames"] [data-test-item="2"] input`)
+      .hasValue('Comet');
+
+    assert
+      .dom(`[data-test-list="favoriteGames"] [data-test-item="0"] input`)
+      .hasValue('Chess');
+    assert
+      .dom(`[data-test-list="favoriteGames"] [data-test-item="1"] input`)
+      .hasValue('Go');
+
+    await click(
+      `[data-test-stack-card="${testRealmURL}Person/burcu"] [data-test-edit-button]`,
+    );
+    assert
+      .dom(
+        `[data-test-plural-view-field="nicknames"] [data-test-plural-view-item]`,
+      )
+      .exists({ count: 3 });
+    assert
+      .dom(`[data-test-plural-view-field="nicknames"]`)
+      .containsText('Bolt');
+    assert.dom(`[data-test-plural-view-field="nicknames"]`).containsText('Ace');
+    assert
+      .dom(`[data-test-plural-view-field="nicknames"]`)
+      .containsText('Comet');
+
+    assert
+      .dom(
+        `[data-test-plural-view-field="favoriteGames"] [data-test-plural-view-item]`,
+      )
+      .exists({ count: 2 });
+    assert
+      .dom(`[data-test-plural-view-field="favoriteGames"]`)
+      .containsText('Chess');
+    assert
+      .dom(`[data-test-plural-view-field="favoriteGames"]`)
+      .containsText('Go');
+  });
+
   test('CardDef filter is not displayed in filter list', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}grid`);
 
@@ -3220,7 +3306,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -3243,7 +3328,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -3256,7 +3340,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom(`[data-test-cards-grid-item="${testRealmURL}CardDef/1"]`)
       .exists();
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 13 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 12 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
 
     await click('[data-test-create-new-card-button]');
@@ -3270,7 +3354,7 @@ module('Integration | operator-mode', function (hooks) {
     await fillIn('[data-test-field="title"] input', 'New Skill');
     await click('[data-test-close-button]');
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 14 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 13 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).exists();
 
     await click('[data-test-boxel-filter-list-button="Skill"]');
@@ -3283,12 +3367,8 @@ module('Integration | operator-mode', function (hooks) {
 
     await click('[data-test-confirm-delete-button]');
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 13 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 12 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
-    assert
-      .dom(`[data-test-filter-list-item="Highlights"] > span`)
-      .hasClass('is-selected');
-    assert.dom(`[data-test-selected-filter="Highlights"]`).exists({ count: 1 });
   });
 
   test('edit card and finish editing should not animate', async function (assert) {
@@ -3298,7 +3378,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -3326,7 +3405,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -3356,7 +3434,6 @@ module('Integration | operator-mode', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );

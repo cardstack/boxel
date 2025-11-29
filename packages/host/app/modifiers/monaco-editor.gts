@@ -15,7 +15,9 @@ export const commonEditorOptions: MonacoEditorOptions = {
   theme: 'vs-dark',
 
   automaticLayout: true,
-  fontSize: 10,
+  fontSize: 12,
+  fontFamily: 'IBM Plex Mono',
+  fontWeight: '500',
   lineNumbers: 'off',
   readOnly: true,
   scrollbar: {
@@ -124,12 +126,6 @@ export default class MonacoEditorModifier extends Modifier<MonacoEditorSignature
         editorDisplayOptions,
       );
 
-      // Track editor initialization for test waiters
-      if (this.waiterManager) {
-        const operationId = `monaco-editor-modifier-init-${editor.getId()}`;
-        this.waiterManager.trackEditorInit(editor, operationId);
-      }
-
       let model = editor.getModel()!;
       monacoSDK.editor.setModelLanguage(model, language);
 
@@ -150,6 +146,12 @@ export default class MonacoEditorModifier extends Modifier<MonacoEditorSignature
       this.monacoState = {
         editor,
       };
+
+      // Track editor initialization for test waiters after models and language are ready
+      if (this.waiterManager) {
+        const operationId = `monaco-editor-modifier-init-${editor.getId()}`;
+        this.waiterManager.trackEditorInit(editor, operationId);
+      }
     }
 
     registerDestructor(this, () => {

@@ -74,7 +74,7 @@ module(basename(__filename), function () {
         )[],
       };
       let res = await request
-        .post('/prerender')
+        .post('/prerender-card')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/json')
         .send({
@@ -140,6 +140,55 @@ module(basename(__filename), function () {
         testRealmHref,
         'pool realm ok',
       );
+    });
+
+    test('it handles module prerender request', async function (assert) {
+      let url = `${testRealmHref}pet.gts`;
+      let permissions = {
+        [testRealmHref]: ['read', 'write', 'realm-owner'] as (
+          | 'read'
+          | 'write'
+          | 'realm-owner'
+        )[],
+      };
+      let res = await request
+        .post('/prerender-module')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'prerender-module-request',
+            attributes: {
+              url,
+              userId: testUserId,
+              permissions,
+              realm: testRealmHref,
+            },
+          },
+        });
+
+      assert.strictEqual(res.status, 201, 'HTTP 201');
+      assert.strictEqual(
+        res.body.data.type,
+        'prerender-module-result',
+        'type ok',
+      );
+      assert.strictEqual(res.body.data.id, url, 'id is module url');
+      assert.strictEqual(
+        res.body.data.attributes.status,
+        'ready',
+        'module status ready',
+      );
+      assert.false(
+        res.body.data.attributes.isShimmed,
+        'module not shimmed by default',
+      );
+      assert.true(
+        Object.keys(res.body.data.attributes.definitions || {}).length > 0,
+        'definitions captured',
+      );
+      assert.ok(res.body.meta?.timing?.totalMs >= 0, 'has timing meta');
+      assert.ok(res.body.meta?.pool?.pageId, 'has pool.pageId');
     });
   });
 });

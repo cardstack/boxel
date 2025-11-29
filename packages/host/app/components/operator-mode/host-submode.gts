@@ -1,6 +1,7 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -12,13 +13,18 @@ import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
-import { BoxelButton, Tooltip } from '@cardstack/boxel-ui/components';
+import {
+  BoxelButton,
+  LoadingIndicator,
+  Tooltip,
+} from '@cardstack/boxel-ui/components';
 import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 
 import OpenSitePopover from '@cardstack/host/components/operator-mode/host-submode/open-site-popover';
 import PublishingRealmPopover from '@cardstack/host/components/operator-mode/host-submode/publishing-realm-popover';
 import PublishRealmModal from '@cardstack/host/components/operator-mode/publish-realm-modal';
 
+import type HomePageResolverService from '@cardstack/host/services/home-page-resolver';
 import HostModeService from '@cardstack/host/services/host-mode-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -42,10 +48,16 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   @service private declare store: StoreService;
   @service private declare realm: RealmService;
   @service private declare hostModeService: HostModeService;
+  @service private declare homePageResolver: HomePageResolverService;
 
   @tracked isPublishRealmModalOpen = false;
   @tracked isPublishingRealmPopoverOpen = false;
   @tracked isOpenSitePopoverOpen = false;
+
+  constructor(owner: Owner, args: HostSubmodeSignature['Args']) {
+    super(owner, args);
+    this.ensureHomePageCardTask.perform();
+  }
 
   @action
   openPublishRealmModal() {
@@ -81,6 +93,10 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
   get publishedRealmURLs() {
     return this.hostModeService.publishedRealmURLs;
+  }
+
+  get publishButtonLabel() {
+    return this.hasPublishedSites ? 'Republish Site' : 'Publish Site';
   }
 
   get defaultPublishedRealmURL(): string | undefined {
@@ -130,6 +146,29 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
   handleUnpublish = restartableTask(async (publishedRealmURL: string) => {
     await this.realm.unpublish(this.realmURL, publishedRealmURL);
+  });
+
+  // Ensure host mode shows the resolved home page card when the operator switches
+  // realms so the primary card state always matches the realm's configured entry point.
+  private ensureHomePageCardTask = restartableTask(async () => {
+    let realmURL = this.operatorModeStateService.realmURL.href;
+    let homePage = await this.homePageResolver.resolve(realmURL);
+    let homePageCardId = homePage?.cardId;
+    if (homePageCardId) {
+      // Prefer the resolved home page card whenever host mode is empty or still
+      // pointing at the realm index so operators always land on the realm's
+      // configured entry card instead of a stale default.
+      let currentPrimary =
+        this.operatorModeStateService.hostModePrimaryCard ?? undefined;
+      let normalizedRealm = realmURL.endsWith('/') ? realmURL : `${realmURL}/`;
+      let isRealmIndex = homePageCardId === `${normalizedRealm}index`;
+      let shouldUseHome =
+        !currentPrimary ||
+        (!isRealmIndex && currentPrimary === `${normalizedRealm}index`);
+      if (shouldUseHome && currentPrimary !== homePageCardId) {
+        this.operatorModeStateService.setHostModePrimaryCard(homePageCardId);
+      }
+    }
   });
 
   get defaultPublishedSiteURL(): string | undefined {
@@ -196,7 +235,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
               data-test-publish-realm-button
             >
               <PublishSiteIcon width='22' height='22' class='publish-icon' />
-              Publish Site
+              {{this.publishButtonLabel}}
             </BoxelButton>
           {{/if}}
           <PublishingRealmPopover
@@ -239,14 +278,21 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
       </:topBar>
       <:default as |layout|>
-        <HostModeContent
-          @primaryCardId={{this.operatorModeStateService.hostModePrimaryCard}}
-          @stackItemCardIds={{this.operatorModeStateService.hostModeStack}}
-          @removeCardFromStack={{this.removeCardFromStack}}
-          @openInteractSubmode={{fn layout.updateSubmode 'interact'}}
-          @viewCard={{this.viewCard}}
-          class='host-submode-content'
-        />
+        {{#if this.ensureHomePageCardTask.isRunning}}
+          <div class='host-submode-loading' data-test-host-submode-loading>
+            <LoadingIndicator @color='var(--boxel-teal)' />
+            <div class='loading-text'>Loading…</div>
+          </div>
+        {{else}}
+          <HostModeContent
+            @primaryCardId={{this.operatorModeStateService.hostModePrimaryCard}}
+            @stackItemCardIds={{this.operatorModeStateService.hostModeStack}}
+            @removeCardFromStack={{this.removeCardFromStack}}
+            @openInteractSubmode={{fn layout.updateSubmode 'interact'}}
+            @viewCard={{this.viewCard}}
+            class='host-submode-content'
+          />
+        {{/if}}
       </:default>
     </SubmodeLayout>
 
@@ -259,6 +305,23 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     />
 
     <style scoped>
+      .host-submode-loading {
+        background-color: #686283;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100vh;
+        gap: var(--boxel-sp-xs);
+      }
+
+      .loading-text {
+        color: var(--boxel-light);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
       .host-submode-layout {
         --host-submode-background: var(--boxel-700);
         --submode-bar-item-border-radius: var(--boxel-border-radius);

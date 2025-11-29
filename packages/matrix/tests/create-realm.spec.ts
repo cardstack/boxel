@@ -1,53 +1,21 @@
-import { test, expect } from '@playwright/test';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-  registerUser,
-} from '../docker/synapse';
-import {
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-  appURL,
-} from '../helpers/isolated-realm-server';
+import { test, expect } from './fixtures';
+import { appURL } from '../helpers/isolated-realm-server';
 import {
   clearLocalStorage,
   createRealm,
-  login,
-  registerRealmUsers,
-  setupUserSubscribed,
+  createSubscribedUserAndLogin,
 } from '../helpers';
 
 test.describe('Create Realm via Dashboard', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
-
-  test.beforeEach(async () => {
-    // synapse defaults to 30s for beforeEach to finish, we need a bit more time
-    // to safely start the realm
-    test.setTimeout(120_000);
-    synapse = await synapseStart({
-      template: 'test',
-    });
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
-    await registerUser(synapse, 'user1', 'pass');
-  });
-
-  test.afterEach(async () => {
-    await realmServer?.stop();
-    await synapseStop(synapse.synapseId);
-  });
-
   test('it can create a new realm', async ({ page }) => {
     let serverIndexUrl = new URL(appURL).origin;
     await clearLocalStorage(page, serverIndexUrl);
 
-    await setupUserSubscribed('@user1:localhost', realmServer);
-
-    await login(page, 'user1', 'pass', {
-      url: serverIndexUrl,
-    });
+    let { username } = await createSubscribedUserAndLogin(
+      page,
+      'realm-creator',
+      serverIndexUrl,
+    );
 
     await createRealm(page, 'new-workspace', '1New Workspace');
 
@@ -59,13 +27,14 @@ test.describe('Create Realm via Dashboard', () => {
     ).toHaveCount(0);
 
     await page.locator('[data-test-workspace="1New Workspace"]').click();
-    let newRealmURL = new URL('user1/new-workspace/', serverIndexUrl).href;
+    let newRealmURL = new URL(`${username}/new-workspace/`, serverIndexUrl)
+      .href;
     await expect(
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toBeVisible();
     await expect(
       page.locator(`[data-test-boxel-filter-list-button]`),
-    ).toHaveCount(2);
+    ).toHaveCount(1);
 
     await page.locator('[data-test-submode-switcher] button').click();
     await page.locator('[data-test-boxel-menu-item-text="Host"]').click();

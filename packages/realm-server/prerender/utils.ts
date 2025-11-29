@@ -10,7 +10,7 @@ import type { Page } from 'puppeteer';
 
 const log = logger('prerenderer');
 
-export const renderTimeoutMs = Number(process.env.RENDER_TIMEOUT_MS ?? 15_000);
+export const renderTimeoutMs = Number(process.env.RENDER_TIMEOUT_MS ?? 30_000);
 
 export type RenderStatus = 'ready' | 'error' | 'unusable';
 
@@ -27,6 +27,13 @@ export interface CaptureOptions {
   expectedId?: string;
   expectedNonce?: string;
   simulateTimeoutMs?: number;
+}
+
+export interface ModuleCapture {
+  status: 'ready' | 'error';
+  value: string;
+  id?: string;
+  nonce?: string;
 }
 
 export async function transitionTo(
@@ -52,7 +59,7 @@ export async function renderHTML(
   await transitionTo(page, 'render.html', format, String(ancestorLevel));
   let result = await captureResult(
     page,
-    ['isolated', 'atom'].includes(format) ? 'innerHTML' : 'outerHTML',
+    ['isolated', 'atom', 'head'].includes(format) ? 'innerHTML' : 'outerHTML',
     opts,
   );
   if (result.status === 'error' || result.status === 'unusable') {
@@ -168,6 +175,32 @@ function buildInvalidRenderResponseError(
   };
 }
 
+export function buildInvalidModuleResponseError(
+  page: Page,
+  message: string,
+  options?: { title?: string; evict?: boolean },
+): RenderError {
+  let id: string | null = null;
+  try {
+    let pathname = new URL(page.url()).pathname;
+    let match = /\/module\/([^/]+)\//.exec(pathname);
+    id = match?.[1] ? decodeURIComponent(match[1]) : null;
+  } catch {
+    id = null;
+  }
+  return {
+    type: 'error',
+    error: {
+      id,
+      status: 500,
+      title: options?.title ?? 'Invalid module response',
+      message,
+      additionalErrors: null,
+    },
+    ...(options?.evict ? { evict: true } : {}),
+  };
+}
+
 export async function renderAncestors(
   page: Page,
   format: 'embedded' | 'fitted',
@@ -183,9 +216,105 @@ export async function renderAncestors(
   return ancestors;
 }
 
-// TODO i think comparing the id and nonce between the URL and DOM is overkill.
-// at one point the AI was getting paranoid about the URL and DOM being out of
-// sync. let's remove that logic its just bloat...
+export async function captureModule(
+  page: Page,
+  opts?: CaptureOptions,
+): Promise<ModuleCapture | RenderError> {
+  try {
+    await page.waitForFunction(
+      (expectedId: string | null, expectedNonce: string | null) => {
+        let container = document.querySelector(
+          '[data-prerender-module]',
+        ) as HTMLElement | null;
+        if (!container) {
+          return false;
+        }
+        let status = container.dataset.prerenderModuleStatus ?? '';
+        let id = container.dataset.prerenderModuleId ?? null;
+        let nonce = container.dataset.prerenderModuleNonce ?? null;
+        if (expectedId && id !== expectedId) {
+          return false;
+        }
+        if (expectedNonce && nonce !== expectedNonce) {
+          return false;
+        }
+        if (!status) {
+          return false;
+        }
+        if (!id || !nonce) {
+          return false;
+        }
+        let pre = container.querySelector('pre');
+        let value = pre?.textContent ?? '';
+        return value.trim().length > 0;
+      },
+      { timeout: renderTimeoutMs },
+      opts?.expectedId ?? null,
+      opts?.expectedNonce ?? null,
+    );
+  } catch (_e) {
+    return buildInvalidModuleResponseError(
+      page,
+      'module prerender timed out waiting for module output',
+      { title: 'Module capture timeout', evict: true },
+    );
+  }
+
+  let capture = await page.evaluate(() => {
+    let container = document.querySelector(
+      '[data-prerender-module]',
+    ) as HTMLElement | null;
+    if (!container) {
+      return null;
+    }
+    let pre = container.querySelector('pre');
+    let value = pre?.textContent ?? '';
+    let status = (container.dataset.prerenderModuleStatus ?? 'ready') as
+      | 'ready'
+      | 'error';
+    return {
+      status,
+      value,
+      id: container.dataset.prerenderModuleId ?? undefined,
+      nonce: container.dataset.prerenderModuleNonce ?? undefined,
+    } satisfies ModuleCapture;
+  });
+
+  if (!capture) {
+    return buildInvalidModuleResponseError(
+      page,
+      'module prerender did not produce output',
+      { title: 'Invalid module response' },
+    );
+  }
+
+  if (opts?.expectedId && capture.id !== opts.expectedId) {
+    return buildInvalidModuleResponseError(
+      page,
+      `module prerender captured stale output for ${capture.id ?? 'unknown id'} (expected ${opts.expectedId})`,
+      { title: 'Stale module response', evict: true },
+    );
+  }
+  if (opts?.expectedNonce && capture.nonce !== opts.expectedNonce) {
+    return buildInvalidModuleResponseError(
+      page,
+      `module prerender captured stale nonce ${capture.nonce ?? 'unknown'} (expected ${opts.expectedNonce})`,
+      { title: 'Stale module response', evict: true },
+    );
+  }
+
+  if (opts?.simulateTimeoutMs) {
+    await delay(opts.simulateTimeoutMs);
+  }
+
+  return capture;
+}
+
+// captureResult is only used by card prerenders. Cards surface their id/nonce
+// through `[data-prerender]` elements, but those attributes can appear after
+// the DOM has settled so we tolerate them being absent while waiting. Module
+// prerenders capture via `captureModule`, which performs strict id/nonce parity
+// checks once the module container is present.
 export async function captureResult(
   page: Page,
   capture: 'textContent' | 'innerHTML' | 'outerHTML',
@@ -293,7 +422,7 @@ export async function captureResult(
       }
       return false;
     },
-    {},
+    { timeout: renderTimeoutMs },
     statuses,
     opts?.expectedId ?? null,
     opts?.expectedNonce ?? null,

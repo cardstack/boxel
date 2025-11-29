@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "name": "Adventure ",
+      "name": "Adventure",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/adventure-listing/screenshot_01.png",
         "https://boxel-images.boxel.ai/app-assets/catalog/adventure-listing/screenshot_02.png",
@@ -24,11 +24,6 @@
       }
     },
     "relationships": {
-      "skills.0": {
-        "links": {
-          "self": "../adventure/Skill/adventure-game-master"
-        }
-      },
       "tags.0": {
         "links": {
           "self": "../Tag/51de249c-516a-4c4d-bd88-76e88274c483"
@@ -82,6 +77,26 @@
       "specs.7": {
         "links": {
           "self": "../Spec/a377bdf6-c1c4-487b-9431-5a93feea3e51"
+        }
+      },
+      "specs.8": {
+        "links": {
+          "self": "../Spec/ff1afd63-a1a2-46fd-b00b-aee460e04bf3"
+        }
+      },
+      "specs.9": {
+        "links": {
+          "self": "../Spec/1afd63a1-a236-4df0-8bae-e460e04bf343"
+        }
+      },
+      "skills.0": {
+        "links": {
+          "self": "../adventure/Skill/adventure-game-master"
+        }
+      },
+      "skills.1": {
+        "links": {
+          "self": "../adventure/Skill/suggestion-action-helper"
         }
       },
       "publisher": {

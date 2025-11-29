@@ -71,6 +71,7 @@ import type IndexController from '../controllers';
 // This is because we don't have a way to serialize a stack configuration of linked cards that have not been saved yet.
 
 export interface OperatorModeState {
+  version: number;
   stacks: Stack[];
   submode: Submode;
   codePath: URL | null;
@@ -98,6 +99,7 @@ type SerializedItem = CardItem;
 type SerializedStack = SerializedItem[];
 
 export type SerializedState = {
+  version?: number;
   stacks: SerializedStack[];
   submode?: Submode;
   codePath?: string;
@@ -121,6 +123,7 @@ export const DEFAULT_MODULE_INSPECTOR_VIEW: ModuleInspectorView = 'schema';
 
 export default class OperatorModeStateService extends Service {
   @tracked private _state: OperatorModeState = new TrackedObject({
+    version: 0,
     stacks: new TrackedArray<Stack>([]),
     submode: Submodes.Interact,
     codePath: null,
@@ -176,6 +179,7 @@ export default class OperatorModeStateService extends Service {
 
   get state() {
     return {
+      version: this._state.version,
       stacks: this._state.stacks,
       submode: this._state.submode,
       codePath: this._state.codePath,
@@ -218,6 +222,7 @@ export default class OperatorModeStateService extends Service {
 
   resetState() {
     this._state = new TrackedObject({
+      version: 0,
       stacks: new TrackedArray([]),
       submode: Submodes.Interact,
       codePath: null,
@@ -293,8 +298,15 @@ export default class OperatorModeStateService extends Service {
 
   trimItemsFromStack(item: StackItem) {
     let stackIndex = item.stackIndex;
-    let itemIndex = this._state.stacks[stackIndex].indexOf(item);
-    this._state.stacks[stackIndex].splice(itemIndex); // Remove anything above the item
+    let stack = this._state.stacks[stackIndex];
+    if (!stack) {
+      return;
+    }
+    let itemIndex = stack.indexOf(item);
+    if (itemIndex === -1) {
+      return;
+    }
+    stack.splice(itemIndex); // Remove anything above the item
 
     // If the resulting stack is now empty, remove it
     if (this.stackIsEmpty(stackIndex) && this._state.stacks.length >= 1) {
@@ -416,6 +428,16 @@ export default class OperatorModeStateService extends Service {
 
   get hostModePrimaryCard(): string | null {
     return this._state.hostModePrimaryCard ?? null;
+  }
+
+  get version(): number {
+    return this._state.version ?? 0;
+  }
+
+  // Only used in host tests to avoid version conflict issues
+  // since in host tests the `visit` is not fully refreshing the page
+  resetVersion() {
+    this._state.version = 0;
   }
 
   private getRealmURLFromItemId(itemId: string): string {
@@ -760,6 +782,7 @@ export default class OperatorModeStateService extends Service {
     // we get into a async race condition where the change to cardController.operatorModeState will reload the route and
     // restore the state from the query param in a way that is out of sync with the state in the service. To avoid this,
     // we do the change to the query param only after all modifications to the state have been rendered.
+    this._state.version = (this._state.version ?? 0) + 1;
     scheduleOnce('afterRender', this, this.persist);
   }
 
@@ -784,6 +807,7 @@ export default class OperatorModeStateService extends Service {
       ...this._state.hostModeStack.map((item) => item),
     ].filter(Boolean) as string[];
     let state: SerializedState = {
+      version: this._state.version,
       stacks: [],
       submode: this._state.submode,
       codePath: this._state.codePath?.toString(),
@@ -853,6 +877,7 @@ export default class OperatorModeStateService extends Service {
     );
 
     let newState: OperatorModeState = new TrackedObject({
+      version: rawState.version ?? 0,
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submodes.Interact,
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,

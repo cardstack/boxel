@@ -27,7 +27,7 @@ permissions:
 jobs:
   host-test:
     name: Host Tests
-    runs-on: ubuntu-latest-8-core
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -101,6 +101,13 @@ jobs:
         with:
           name: realm-server-log-${{ matrix.shardIndex }}
           path: /tmp/server.log
+          retention-days: 30
+      - name: Upload testem log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: testem-log-${{ matrix.shardIndex }}
+          path: junit/host-testem.log
           retention-days: 30
       - name: Upload icon server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1

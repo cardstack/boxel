@@ -255,12 +255,12 @@ jobs:
     name: Matrix Client Tests
     needs: change-check
     if: needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest-8-core
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-        shardTotal: [12]
+        shardIndex: [1, 2, 3]
+        shardTotal: [3]
     concurrency:
       group: matrix-client-test-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -392,13 +392,20 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          MATRIX_TEST_RESULT: ${{ needs.matrix-client-test.result }}
         run: |
+          state="success"
+          description=""
+          if [ "$MATRIX_TEST_RESULT" = "failure" ]; then
+            state="failure"
+            description="Matrix Playwright shard failures"
+          fi
           curl \
             -X POST \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/$REPOSITORY/statuses/$HEAD_SHA \
-            -d '{"context":"Matrix Playwright tests report","description":"","target_url":"'"$PLAYWRIGHT_REPORT_URL"'","state":"success"}'
+            -d '{"context":"Matrix Playwright tests report","description":"'"$description"'","target_url":"'"$PLAYWRIGHT_REPORT_URL"'","state":"'"$state"'"}'
 
   realm-server-test:
     name: Realm Server Tests

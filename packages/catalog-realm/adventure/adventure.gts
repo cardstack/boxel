@@ -34,6 +34,7 @@ import UploadImageCommand from '../commands/upload-image';
 import { ChipsEditor } from '../components/chips-editor';
 import { CloudflareImage } from '../cloudflare-image';
 import { AdventureScenario } from './adventure-scenario'; // ¹ᵇ Linked Scenarios
+import { MultipleChoice } from '../multiple-choice/multiple-choice';
 
 class CustomAdventureField extends FieldDef {
   @field title = contains(StringField);
@@ -266,6 +267,11 @@ class AdventureIsolated extends Component<typeof Adventure> {
 
       // Patch selected scenario + initialize
       const patch = new PatchCardInstanceCommand(ctx, { cardType: Adventure });
+
+      // Create Date object explicitly before converting to ISO string
+      const now = new Date();
+      const startedAtTimestamp = now.toISOString();
+
       await patch.execute({
         cardId: this.args.model.id,
         patch: {
@@ -277,7 +283,7 @@ class AdventureIsolated extends Component<typeof Adventure> {
             gameStatus: 'playing',
             autoGenerateImages: true,
             currentTurn: 1,
-            startedAt: new Date().toISOString(),
+            startedAt: startedAtTimestamp,
           },
           relationships: {
             selectedScenario: {
@@ -292,6 +298,10 @@ class AdventureIsolated extends Component<typeof Adventure> {
 
       const gmSkillId = new URL(
         './Skill/adventure-game-master',
+        import.meta.url,
+      ).href;
+      const suggestionSkillId = new URL(
+        './Skill/suggestion-action-helper',
         import.meta.url,
       ).href;
       const kickoffPrompt = `Let's begin the adventure`;
@@ -318,7 +328,7 @@ class AdventureIsolated extends Component<typeof Adventure> {
         prompt: kickoffPrompt,
         llmModel: 'anthropic/claude-sonnet-4.5',
         llmMode: 'act',
-        skillCardIds: [gmSkillId],
+        skillCardIds: [gmSkillId, suggestionSkillId],
       };
       if (this.args.model?.chatRoomId) {
         opts.roomId = this.args.model.chatRoomId;
@@ -363,6 +373,13 @@ class AdventureIsolated extends Component<typeof Adventure> {
         throw new Error(
           'Command context does not exist. Please switch to Interact Mode',
         );
+
+      const relationships: any = {
+        lastCloudflareImage: { links: { self: null } },
+        selectedScenario: { links: { self: null } },
+        lastChoiceOffered: { links: { self: null } },
+      };
+
       const patch = new PatchCardInstanceCommand(ctx, { cardType: Adventure });
       await patch.execute({
         cardId: this.args.model.id,
@@ -380,10 +397,7 @@ class AdventureIsolated extends Component<typeof Adventure> {
             lastIsPlayerTurn: null,
             lastImagePrompt: null,
           },
-          relationships: {
-            lastCloudflareImage: { links: { self: null } },
-            selectedScenario: { links: { self: null } },
-          },
+          relationships,
         },
       });
       this.selectedScenarioKey = null;
@@ -902,6 +916,13 @@ class AdventureIsolated extends Component<typeof Adventure> {
                   <p>The narrator is crafting Turn {{@model.currentTurn}}...</p>
                   <div class='placeholder-hint'>Open the AI Chat to continue
                     your journey</div>
+                </div>
+              {{/if}}
+
+              {{! Display the current choices if available }}
+              {{#if @model.lastChoiceOffered}}
+                <div class='choices-section'>
+                  <@fields.lastChoiceOffered @format='embedded' />
                 </div>
               {{/if}}
             </div>
@@ -1717,6 +1738,12 @@ class AdventureIsolated extends Component<typeof Adventure> {
         display: inline-block;
       }
 
+      .choices-section {
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid #e5e7eb;
+      }
+
       .chip-input {
         width: 100%;
         border: 1px solid var(--border, #e5e7eb);
@@ -1798,11 +1825,11 @@ export class Adventure extends CardDef {
   @field lastCloudflareImage = linksTo(CloudflareImage);
   @field autoGenerateImages = contains(BooleanField);
 
+  @field lastChoiceOffered = linksTo(() => MultipleChoice);
+
   @field title = contains(StringField, {
     computeVia: function (this: Adventure) {
       try {
-        console.log('this.selectedScenario', this.selectedScenario);
-        console.log('this.customAdventure', this.customAdventure);
         if (this.selectedScenario) {
           return this.selectedScenario.title;
         }

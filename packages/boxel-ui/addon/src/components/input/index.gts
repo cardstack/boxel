@@ -62,6 +62,7 @@ export interface Signature {
     helperText?: string;
     id?: string;
     max?: string | number;
+    min?: string | number;
     onBlur?: (ev: Event) => void;
     onChange?: (ev: Event) => void;
     onFocus?: (ev: Event) => void;
@@ -161,6 +162,7 @@ export default class BoxelInput extends Component<Signature> {
           value={{@value}}
           checked={{if (and (eq @type 'checkbox') (bool @value)) @value}}
           placeholder={{@placeholder}}
+          min={{@min}}
           max={{@max}}
           required={{@required}}
           disabled={{@disabled}}
@@ -260,7 +262,7 @@ export default class BoxelInput extends Component<Signature> {
           border: 1px solid
             var(--border, var(--boxel-form-control-border-color));
           border-radius: var(--boxel-form-control-border-radius);
-          box-shadow: var(--shadow);
+          box-shadow: var(--boxel-form-control-box-shadow);
           outline: 1px solid transparent;
           transition:
             var(--boxel-transition-properties),

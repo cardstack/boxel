@@ -177,9 +177,20 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
     this.args.arrayField.set(items);
   }
 
+  get decoratedChildren() {
+    // Returning a fresh wrapper object with a nonce-backed key ensures we refresh
+    // the child component identity after reordering. That keeps templates that
+    // read directly from @model (instead of <@fields>) in sync.
+    return this.args.arrayField.children.map((child, index) => ({
+      box: child,
+      index,
+      key: index,
+    }));
+  }
+
   <template>
     <PermissionsConsumer as |permissions|>
-      {{#if @arrayField.children.length}}
+      {{#if this.decoratedChildren.length}}
         <ul
           {{sortableGroup
             groupName=this.sortableGroupId
@@ -189,13 +200,13 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
           data-test-list={{@field.name}}
           ...attributes
         >
-          {{#each @arrayField.children as |boxedElement i|}}
+          {{#each this.decoratedChildren key='key' as |entry|}}
             <li
               class='editor {{if permissions.canWrite "can-write" "read-only"}}'
-              data-test-item={{i}}
+              data-test-item={{entry.index}}
               {{sortableItem
                 groupName=this.sortableGroupId
-                model=boxedElement.value
+                model=entry.box.value
               }}
             >
               {{#if permissions.canWrite}}
@@ -207,22 +218,22 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
                   class='sort'
                   aria-label='Sort'
                   data-test-sort-card
-                  data-test-sort={{i}}
+                  data-test-sort={{entry.index}}
                 />
                 <IconButton
                   @icon={{IconMinusCircle}}
                   @width='20px'
                   @height='20px'
                   class='remove'
-                  {{on 'click' (fn @remove i)}}
+                  {{on 'click' (fn @remove entry.index)}}
                   aria-label='Remove'
                   data-test-remove-card
-                  data-test-remove={{i}}
+                  data-test-remove={{entry.index}}
                 />
               {{/if}}
               {{#let
                 (getBoxComponent
-                  (@cardTypeFor @field boxedElement) boxedElement @field
+                  (@cardTypeFor @field entry.box) entry.box @field
                 )
                 as |Item|
               }}
@@ -287,7 +298,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       .sort:hover ~ :deep(.boxel-card-container) {
         box-shadow:
           0 0 0 1px var(--border, var(--boxel-300)),
-          var(--shadow-lg, var(--boxel-box-shadow));
+          var(--boxel-box-shadow);
       }
       .add-new {
         gap: var(--boxel-sp-xxxs);
@@ -553,16 +564,20 @@ export function getLinksToManyComponent({
     get(target, property, received) {
       // proxying the bare minimum of an Array in order to render within a
       // template. add more getters as necessary...
-      let components = getComponents();
-
       if (property === Symbol.iterator) {
+        // getComponents() is in the "hot" path, don't touch it unless absolutely necessary
+        let components = getComponents();
         return components[Symbol.iterator];
       }
       if (property === 'length') {
-        return components.length;
+        return arrayField.children.length;
       }
       if (typeof property === 'string' && property.match(/\d+/)) {
-        return components[parseInt(property)];
+        let child = arrayField.children[parseInt(property)];
+        if (!child) {
+          return undefined;
+        }
+        return getBoxComponent(cardTypeFor(field, child), child, field);
       }
       return Reflect.get(target, property, received);
     },

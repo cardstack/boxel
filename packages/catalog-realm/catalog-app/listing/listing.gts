@@ -32,7 +32,7 @@ import {
   CardContainer,
 } from '@cardstack/boxel-ui/components';
 import { eq, type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
-import { AiBw as AiBwIcon } from '@cardstack/boxel-ui/icons';
+import Wand from '@cardstack/boxel-icons/wand';
 
 import AppListingHeader from '../components/app-listing-header';
 import ChooseRealmAction from '../components/choose-realm-action';
@@ -159,6 +159,12 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       : undefined;
   }
 
+  get themeActions() {
+    return this.listingActions?.type === 'theme'
+      ? this.listingActions
+      : undefined;
+  }
+
   get skillActions() {
     return this.listingActions?.type === 'skill'
       ? this.listingActions
@@ -212,6 +218,14 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                     @name='Remix'
                     @writableRealms={{this.writableRealms}}
                     @onAction={{this.regularActions.remix}}
+                  />
+                {{/if}}
+              {{else if this.themeActions}}
+                {{#if this.themeActions.remix}}
+                  <ChooseRealmAction
+                    @name='Remix'
+                    @onAction={{this.themeActions.remix}}
+                    @writableRealms={{this.writableRealms}}
                   />
                 {{/if}}
               {{/if}}
@@ -348,11 +362,13 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         <h2>Includes These Boxels</h2>
         {{#if this.hasNonEmptySpecBreakdown}}
           <Accordion
+            @displayContainer={{true}}
             data-test-selected-accordion-item={{this.selectedAccordionItem}}
             as |A|
           >
             {{#each-in this.specBreakdown as |specType specs|}}
               <A.Item
+                @id={{specType}}
                 @onClick={{fn this.selectAccordionItem specType}}
                 @isOpen={{eq this.selectedAccordionItem specType}}
                 data-test-accordion-item={{specType}}
@@ -365,6 +381,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                   {{#each specs as |card|}}
                     {{#let (this.getComponent card) as |CardComponent|}}
                       <CardContainer
+                        class='listing-accordion-content'
                         {{@context.cardComponentModifier
                           cardId=card.id
                           format='data'
@@ -516,8 +533,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         min-width: 0;
       }
 
-      .app-listing-spec-breakdown :deep(.accordion) {
-        --accordion-border-radius: var(--boxel-border-radius);
+      .listing-accordion-content {
+        height: 40px;
       }
 
       @container app-listing-embedded (inline-size <= 600px) {
@@ -588,13 +605,15 @@ export class Listing extends CardDef {
           console.warn('Failed to generate listing example', { error });
         }
       },
-      icon: AiBwIcon,
+      icon: Wand,
       id: 'generate-listing-example',
     };
   }
 
   [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
-    let menuItems = super[getCardMenuItems](params);
+    let menuItems = super
+      [getCardMenuItems](params)
+      .filter((item) => item.label?.toLowerCase() !== 'create listing with ai');
     if (params.menuContext === 'interact') {
       const extra = this.getGenerateExampleMenuItem(params);
       if (extra) {
@@ -624,6 +643,10 @@ export class FieldListing extends Listing {
 
 export class SkillListing extends Listing {
   static displayName = 'SkillListing';
+}
+
+export class ThemeListing extends Listing {
+  static displayName = 'ThemeListing';
 }
 
 function specBreakdown(specs: Spec[]): Record<string, Spec[]> {

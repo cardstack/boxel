@@ -202,7 +202,10 @@ export function serializeCard(
       ...(model.id != null ? { id: model.id } : { lid: model[localId] }),
     },
   };
-  let modelRelativeTo = model[relativeTo];
+  let modelRelativeTo =
+    model.id != null
+      ? new URL(model.id)
+      : (model[relativeTo] as URL | undefined);
   let data = serializeCardResource(model, doc, {
     ...opts,
     ...{

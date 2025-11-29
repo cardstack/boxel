@@ -86,7 +86,7 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 | :4211 | Test Worker Manager (spins up 1 worker by default)                                            | ✅                  | 🚫                   |
 | :4212 | Worker Manager for matrix client tests (playwright controlled - 1 worker)                     | ✅                  | 🚫                   |
 | :4213 | Worker Manager for matrix client tests - base realm server (playwright controlled - 1 worker) | ✅                  | 🚫                   |
-| :4221 | Prerender  server                                                                             | 🚫                  | 🚫                   |
+| :4221 | Prerender server                                                                              | 🚫                  | 🚫                   |
 | :4222 | Prerender manager                                                                             | 🚫                  | 🚫                   |
 | :5001 | Mail user interface for viewing emails sent to local SMTP                                     | ✅                  | 🚫                   |
 | :5435 | Postgres DB                                                                                   | ✅                  | 🚫                   |
@@ -107,21 +107,23 @@ The realm server also uses FastBoot to pre-render card html. The realm server bo
 
 Boxel supports server-side rendering of cards via a lightweight prerender service and an optional manager that coordinates multiple services.
 
-- Prerender server: Handles POST /prerender requests that include user/session permissions and a target card URL. It launches a headless browser and maintains a small pool of per-realm pages (LRU-evicted) to speed up subsequent renders. Each page keeps a logged-in session for its realm and reuses the page for repeated renders of that realm.
+- Prerender server: Handles POST `/prerender-card` (cards) and `/prerender-module` (modules) requests that include user/session permissions and a target URL. It launches a headless browser and maintains a small pool of per-realm pages (LRU-evicted) to speed up subsequent renders. Each page keeps a logged-in session for its realm and reuses the page for repeated renders of that realm.
 - Pooling: Each prerender server maintains up to PRERENDER_PAGE_POOL_SIZE pages (default 4). When the pool is full, the least-recently-used realm is evicted (its browser context is closed). When a page becomes unusable (timeout or explicit unusable signal), the realm is evicted proactively.
-- Prerender manager: When multiple prerender servers are running, a central manager receives /prerender requests and routes them to a suitable server. The manager tracks which servers are registered and which realms they actively handle. It supports realm affinity, multiplexing the same realm across multiple servers to handle high prerender throughput, capacity-aware selection, and health-based eviction of unreachable servers.
+- Prerender manager: When multiple prerender servers are running, a central manager receives `/prerender-card` and `/prerender-module` requests and routes them to a suitable server. The manager tracks which servers are registered and which realms they actively handle. It supports realm affinity, multiplexing the same realm across multiple servers to handle high prerender throughput, capacity-aware selection, and health-based eviction of unreachable servers.
 
 #### Pre-rendering start scripts
 
 From `packages/realm-server`:
 
 1. Prerender manager
-  - `pnpm start:prerender-manager-dev` (defaults to port 4222)
+
+- `pnpm start:prerender-manager-dev` (defaults to port 4222)
+
 2. Prerender server
-  - `pnpm start:prerender-dev` (defaults to port 4221)
+
+- `pnpm start:prerender-dev` (defaults to port 4221)
 
 First start the pre-rendering manager. Then start the prerender server. (TBD: incorporate into start:all)
-
 
 #### Pre-rendering Environment variables
 
@@ -318,7 +320,8 @@ STRIPE_WEBHOOK_SECRET=... STRIPE_API_KEY=... pnpm start:all
 You should be able to subscribe successfully after you perform the steps above.
 
 ## External API Proxy Setup
-The realm server provides a proxy endpoint that allows applications to make requests to external APIs through the realm server. This is useful for features like AI model calls, external service integrations, and other API interactions. To use any host features that depend on the proxy endpoint, you need to configure your api key inside the `proxy_endpoints` db. 
+
+The realm server provides a proxy endpoint that allows applications to make requests to external APIs through the realm server. This is useful for features like AI model calls, external service integrations, and other API interactions. To use any host features that depend on the proxy endpoint, you need to configure your api key inside the `proxy_endpoints` db.
 
 #### Setup api key in DB locally
 
@@ -328,7 +331,7 @@ INSERT INTO proxy_endpoints (
   auth_method, auth_parameter_name, created_at, updated_at
 ) VALUES (
   gen_random_uuid(),
-  'https://openrouter.ai/api/v1/chat/completions', 
+  'https://openrouter.ai/api/v1/chat/completions',
   '<your-openrouter-api-key>',
   'openrouter',
   true,
@@ -437,7 +440,9 @@ Then to run the tests from the CLI execute the following from `packages/matrix`:
 pnpm test
 ```
 
-Alternatively you can also run these tests from VS Code using the VS Code Playwright plugin (which is very strongly recommended). From the "test tube" icon, you can click on the play button to run a single test or all the tests.
+Alternatively you can also run these tests from VS Code using the VS Code Playwright plugin (which is very strongly recommended). You may need to open the matrix package as a workspace folder in order for the Playwright plugin to recognize the tests and set the paths correctly.
+
+From the "test tube" icon, you can click on the play button to run a single test or all the tests.
 
 ![Screenshot_20230427_161250](https://user-images.githubusercontent.com/61075/234980198-fe049b61-917d-4dc8-a9eb-ddc54b36b160.png)
 
@@ -445,3 +450,14 @@ or click on the play button in the left margin next to the test itself to run a 
 ![Screenshot_20230428_150147](https://user-images.githubusercontent.com/61075/235231663-6fabfc41-8294-4674-adf1-f3793b83e516.png)
 
 you can additionally set a breakpoint in code, and playwright will break at the breakpoint.
+
+Also recommended is to use the playwright UI:
+
+`pnpm playwright test --ui`
+
+This runs the setup one and you can iterate on a test while viewing the browser interactions and digging into things.
+
+Mutliple workers are supported, two are used in CI and up to 4 or 8 can be used locally with `--workers x`.
+Depending on load this can cause slowdowns enough to trigger failures in some tests, so if you see flakiness try reducing the number of workers.
+
+If the isolated realm server fails to get stopped you may see an error about port 4205 already being in use. You can find the process with `lsof -i :4205` and kill the server.

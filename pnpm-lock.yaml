@@ -881,6 +881,9 @@ importers:
       '@types/lodash':
         specifier: 'catalog:'
         version: 4.17.15
+      awesome-phonenumber:
+        specifier: 'catalog:'
+        version: 7.2.0
       concurrently:
         specifier: 'catalog:'
         version: 8.2.2
@@ -2188,6 +2191,9 @@ importers:
       ajv:
         specifier: 'catalog:'
         version: 8.17.1
+      awesome-phonenumber:
+        specifier: 'catalog:'
+        version: 7.2.0
       broccoli-asset-rev:
         specifier: 'catalog:'
         version: 3.0.0
@@ -2539,6 +2545,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.3.0
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.11.5
       '@types/uuid':
         specifier: 'catalog:'
         version: 9.0.8
@@ -2548,6 +2557,9 @@ importers:
       jsonwebtoken:
         specifier: 'catalog:'
         version: 9.0.2
+      pg:
+        specifier: 'catalog:'
+        version: 8.11.5
       start-server-and-test:
         specifier: 'catalog:'
         version: 1.14.0
@@ -2907,6 +2919,9 @@ importers:
       '@types/uuid':
         specifier: 'catalog:'
         version: 9.0.8
+      awesome-phonenumber:
+        specifier: 'catalog:'
+        version: 7.2.0
       babel-import-util:
         specifier: ^1.2.2
         version: 1.2.2

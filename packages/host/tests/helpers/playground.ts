@@ -1,9 +1,16 @@
 import { click } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
+
 import window from 'ember-window-mock';
 
+import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type { PlaygroundSelection } from '@cardstack/host/services/playground-panel-service';
-import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
+import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
+import {
+  PlaygroundSelections,
+  SpecSelection,
+} from '@cardstack/host/utils/local-storage-keys';
 
 import type { Format } from 'https://cardstack.com/base/card-api';
 
@@ -95,4 +102,24 @@ export function setPlaygroundSelections(
 
 export function removePlaygroundSelections() {
   window.localStorage.removeItem(PlaygroundSelections);
+  try {
+    let service = getService('playground-panel-service') as
+      | PlaygroundPanelService
+      | undefined;
+    service?.resetSelections();
+  } catch (_err) {
+    // service may not be registered yet (e.g. before app boot); ignore
+  }
+}
+
+export function removeSpecSelection() {
+  window.localStorage.removeItem(SpecSelection);
+  try {
+    let service = getService('spec-panel-service') as
+      | SpecPanelService
+      | undefined;
+    service?.resetSelection();
+  } catch (_err) {
+    // service may not be registered yet
+  }
 }

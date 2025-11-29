@@ -1,6 +1,7 @@
 import type { CardResource, Meta } from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
+import type { Definition } from './index-structure';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import type { ErrorEntry } from './index-writer';
@@ -36,6 +37,7 @@ export interface PrerenderMeta {
 
 export interface RenderResponse extends PrerenderMeta {
   isolatedHTML: string | null;
+  headHTML: string | null;
   atomHTML: string | null;
   embeddedHTML: Record<string, string> | null;
   fittedHTML: Record<string, string> | null;
@@ -47,13 +49,41 @@ export interface RenderError extends ErrorEntry {
   evict?: boolean;
 }
 
-export type Prerenderer = (args: {
+export interface ModuleDefinitionResult {
+  type: 'definition';
+  moduleURL: string; // node resolution w/o extension
+  definition: Definition;
+  types: string[];
+}
+
+export interface ModulePrerenderModel {
+  id: string;
+  status: 'ready' | 'error';
+  nonce: string;
+  isShimmed: boolean;
+  lastModified: number;
+  createdAt: number;
+  deps: string[];
+  definitions: Record<string, ModuleDefinitionResult | ErrorEntry>;
+  error?: ErrorEntry;
+}
+
+export interface ModuleRenderResponse extends ModulePrerenderModel {}
+
+export type ModulePrerenderArgs = {
   realm: string;
   url: string;
   userId: string;
   permissions: RealmPermissions;
   renderOptions?: RenderRouteOptions;
-}) => Promise<RenderResponse>;
+};
+
+export type PrerenderCardArgs = ModulePrerenderArgs;
+
+export interface Prerenderer {
+  prerenderCard(args: PrerenderCardArgs): Promise<RenderResponse>;
+  prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
+}
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
 
@@ -131,7 +161,7 @@ export * from './index-query-engine';
 export * from './index-writer';
 export * from './index-structure';
 export * from './db';
-export * from './lint';
+export * from './tasks';
 export * from './worker';
 export * from './stream';
 export * from './realm';
@@ -399,6 +429,7 @@ export interface Store {
   patch<T extends CardDef>(
     id: string,
     patchData: PatchData,
+    opts?: { doNotPersist?: boolean; clientRequestId?: string },
   ): Promise<T | CardErrorJSONAPI | undefined>;
   search(query: Query, realmURL?: URL): Promise<CardDef[]>;
   getSaveState(id: string): AutoSaveState | undefined;
@@ -557,4 +588,9 @@ export function isLocalId(id: string) {
   return !id.startsWith('http');
 }
 
+export function isBrowserTestEnv() {
+  return typeof window !== 'undefined' && Boolean((globalThis as any).QUnit);
+}
+
 export * from './prerendered-card-search';
+export { DEFAULT_LLM_ID_TO_NAME } from './matrix-constants';

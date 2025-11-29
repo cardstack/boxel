@@ -5,6 +5,7 @@ import {
   generateJsonSchemaForCardType,
   basicMappings,
 } from '@cardstack/runtime-common/helpers/ai';
+import { Loader } from '@cardstack/runtime-common/loader';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
@@ -155,10 +156,14 @@ export default class PatchFieldsCommand extends HostBaseCommand<
       // Only apply changes if at least some fields were updated successfully
       if (successfulUpdates.length > 0) {
         // Apply the updated data node (attributes and relationships)
-        const result = await this.store.patch(input.cardId, {
-          attributes: workingData.attributes,
-          relationships: workingData.relationships,
-        });
+        const result = await this.store.patch(
+          input.cardId,
+          {
+            attributes: workingData.attributes,
+            relationships: workingData.relationships,
+          },
+          { doNotWaitForPersist: true },
+        );
 
         if (result && 'errors' in result) {
           // Store operation failed - mark all attempted updates as failed
@@ -206,13 +211,26 @@ export default class PatchFieldsCommand extends HostBaseCommand<
 
   async getInputJsonSchema(): Promise<any> {
     // If we have a cardType configured, generate a detailed schema based on that card type
-    if (this.configuration?.cardType) {
-      const cardApi = await this.loaderService.loader.import<
+    let configuredCardType = this.configuration?.cardType;
+    let loaderForSchema =
+      (configuredCardType && Loader.getLoaderFor(configuredCardType)) ??
+      this.loaderService.loader;
+
+    if (configuredCardType) {
+      const cardApi = await loaderForSchema.import<
         typeof import('https://cardstack.com/base/card-api')
       >('https://cardstack.com/base/card-api');
-      const mappings = await basicMappings(this.loaderService.loader);
+      const cardFields = cardApi.getFields(configuredCardType, {
+        usedLinksToFieldsOnly: false,
+      });
+      let loaderFromFirstField = Object.values(cardFields)
+        .map((field) => Loader.getLoaderFor(field.card))
+        .find(Boolean);
+      const mappings = await basicMappings(
+        loaderFromFirstField ?? loaderForSchema,
+      );
       const cardTypeSchema = generateJsonSchemaForCardType(
-        this.configuration.cardType,
+        configuredCardType,
         cardApi,
         mappings,
       );

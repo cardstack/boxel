@@ -21,6 +21,7 @@ import {
   RealmIcon,
   BoxelInput,
   BoxelButton,
+  BasicFitted,
 } from '@cardstack/boxel-ui/components';
 import {
   getCardMenuItems,
@@ -230,8 +231,10 @@ class Isolated extends Component<typeof Spec> {
               <span>{{PRIMITIVE_INCOMPATIBILITY_MESSAGE}}</span>
             </p>
           {{else}}
-            <@fields.containedExamples @typeConstraint={{this.absoluteRef}} />
+            <@fields.containedExamples />
           {{/if}}
+        {{else}}
+          <@fields.linkedExamples />
         {{/if}}
       </section>
       <section class='module section'>
@@ -432,223 +435,28 @@ class Fitted extends Component<typeof Spec> {
   });
 
   <template>
-    <div class='fitted-template'>
-      <div class='thumbnail-section'>
+    <BasicFitted
+      class='spec-fitted'
+      @primary={{@model.title}}
+      @secondary={{@model.description}}
+    >
+      <:thumbnail>
         {{#if this.icon}}
           <this.icon width='35' height='35' role='presentation' />
         {{else if this.defaultIcon}}
           <this.defaultIcon width='35' height='35' role='presentation' />
         {{/if}}
-      </div>
-      <div class='info-section'>
-        <h3 class='card-title' data-test-card-title><@fields.title /></h3>
-        <h4 class='card-description' data-test-card-description>
-          <@fields.description />
-        </h4>
-      </div>
-      {{#if @model.specType}}
-        <SpecTag @specType={{@model.specType}} />
-      {{/if}}
-    </div>
+      </:thumbnail>
+      <:default>
+        {{#if @model.specType}}
+          <SpecTag @specType={{@model.specType}} />
+        {{/if}}
+      </:default>
+    </BasicFitted>
     <style scoped>
       @layer {
-        .fitted-template {
-          width: 100%;
-          height: 100%;
-          display: flex;
-          gap: var(--boxel-sp-xs);
-          padding: var(--boxel-sp-xs);
-          overflow: hidden;
+        .spec-fitted {
           align-items: center;
-        }
-        .thumbnail-section {
-          flex-shrink: 0;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          overflow: hidden;
-        }
-        .info-section {
-          width: 100%;
-          overflow: hidden;
-        }
-        .card-title {
-          margin-block: 0;
-          font: 600 var(--boxel-font-sm);
-          letter-spacing: var(--boxel-lsp-sm);
-          line-height: 1.25;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          overflow: hidden;
-        }
-        .card-description {
-          margin-top: var(--boxel-sp-4xs);
-          margin-bottom: 0;
-          color: var(--boxel-450);
-          font: 500 var(--boxel-font-xs);
-          letter-spacing: var(--boxel-lsp-xs);
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          overflow: hidden;
-        }
-      }
-
-      /* Aspect Ratio <= 1.0 (Vertical) */
-      @container fitted-card (aspect-ratio <= 1.0) {
-        .fitted-template {
-          flex-direction: column;
-        }
-        .thumbnail-section {
-          width: 100%;
-          height: 50cqmin;
-        }
-        .info-section {
-          text-align: center;
-        }
-      }
-
-      @container fitted-card (aspect-ratio <= 1.0) and (height <= 118px) {
-        .thumbnail-section {
-          display: none;
-        }
-      }
-      /* Vertical Tiles*/
-      /* Small Tile (150 x 170) */
-      @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (170px <= height) {
-        .thumbnail-section {
-          min-height: 70px;
-        }
-        .card-title {
-          -webkit-line-clamp: 3;
-        }
-      }
-      /* CardsGrid Tile (170 x 250) */
-      @container fitted-card (aspect-ratio <= 1.0) and (150px < width < 250px ) and (170px < height < 275px) {
-        .thumbnail-section {
-          height: auto;
-          aspect-ratio: 1 / 1;
-        }
-        .card-title {
-          -webkit-line-clamp: 2;
-        }
-      }
-      /* Tall Tile (150 x 275) */
-      @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (275px <= height) {
-        .thumbnail-section {
-          min-height: 85px;
-        }
-        .card-title {
-          font-size: var(--boxel-font-size);
-          -webkit-line-clamp: 4;
-        }
-      }
-      /* Large Tile (250 x 275) */
-      @container fitted-card (aspect-ratio <= 1.0) and (250px <= width ) and (275px <= height) {
-        .thumbnail-section {
-          min-height: 150px;
-        }
-        .card-title {
-          font-size: var(--boxel-font-size-sm);
-          -webkit-line-clamp: 3;
-        }
-      }
-      /* Vertical Cards */
-      @container fitted-card (aspect-ratio <= 1.0) and (400px <= width) {
-        .fitted-template {
-          padding: var(--boxel-sp);
-          gap: var(--boxel-sp);
-        }
-        .thumbnail-section {
-          min-height: 236px;
-        }
-        .card-title {
-          font-size: var(--boxel-font-size-med);
-          -webkit-line-clamp: 4;
-        }
-      }
-      /* Expanded Card (400 x 445) */
-
-      /* 1.0 < Aspect Ratio (Horizontal) */
-      @container fitted-card (1.0 < aspect-ratio) {
-        .thumbnail-section {
-          aspect-ratio: 1;
-        }
-      }
-      @container fitted-card (1.0 < aspect-ratio) and (height <= 65px) {
-        .info-section {
-          align-self: center;
-        }
-      }
-      /* Badges */
-      @container fitted-card (1.0 < aspect-ratio) and (width < 250px) {
-        .fitted-template {
-          padding: var(--boxel-sp-xxxs);
-        }
-        .thumbnail-section {
-          display: none;
-        }
-      }
-      /* Small Badge (150 x 40) */
-      @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (height < 65px) {
-        .card-title {
-          -webkit-line-clamp: 1;
-          font: 600 var(--boxel-font-xs);
-        }
-        .card-display-name {
-          margin-top: 0;
-        }
-      }
-      /* Medium Badge (150 x 65) */
-
-      /* Large Badge (150 x 105) */
-      @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (105px <= height) {
-        .card-title {
-          -webkit-line-clamp: 3;
-        }
-      }
-
-      /* Strips */
-      /* Single Strip (250 x 40) */
-      @container fitted-card (1.0 < aspect-ratio) and (250px <= width) and (height < 65px) {
-        .fitted-template {
-          padding: var(--boxel-sp-xxxs);
-        }
-      }
-      /* Double Strip (250 x 65) */
-      /* Triple Strip (250 x 105) */
-      /* Double Wide Strip (400 x 65) */
-      /* Triple Wide Strip (400 x 105) */
-
-      /* Horizontal Tiles */
-      /* Regular Tile (250 x 170) */
-      @container fitted-card (1.0 < aspect-ratio) and (250px <= width < 400px) and (170px <= height) {
-        .thumbnail-section {
-          height: 40%;
-        }
-        .card-title {
-          -webkit-line-clamp: 4;
-          font-size: var(--boxel-font-size);
-        }
-      }
-
-      /* Horizontal Cards */
-      /* Compact Card (400 x 170) */
-      @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (170px <= height) {
-        .thumbnail-section {
-          height: 100%;
-        }
-      }
-      /* Full Card (400 x 275) */
-      @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (275px <= height) {
-        .fitted-template {
-          padding: var(--boxel-sp);
-          gap: var(--boxel-sp);
-        }
-        .thumbnail-section {
-          max-width: 44%;
-        }
-        .card-title {
-          font-size: var(--boxel-font-size-med);
         }
       }
     </style>

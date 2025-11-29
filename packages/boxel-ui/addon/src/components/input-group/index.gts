@@ -7,7 +7,7 @@ import { and, bool, eq, or } from '../../helpers/truth-helpers.ts';
 import FailureBordered from '../../icons/failure-bordered.gts';
 import SuccessBordered from '../../icons/success-bordered.gts';
 import type { Icon } from '../../icons/types.ts';
-import { type InputValidationState } from '../input/index.gts';
+import { type InputType, type InputValidationState } from '../input/index.gts';
 import LoadingIndicator from '../loading-indicator/index.gts';
 import {
   type AccessoriesBlockArg,
@@ -42,6 +42,7 @@ export interface Signature {
     readonly?: boolean;
     required?: boolean;
     state?: InputValidationState;
+    type?: InputType;
     validIcon?: Icon;
     value?: string;
   };
@@ -81,7 +82,7 @@ export default class InputGroup extends Component<Signature> {
     {{#let
       (and (eq @state 'invalid') (bool @errorMessage))
       (hash
-        Button=(component ButtonAccessory kind='secondary-light')
+        Button=(component ButtonAccessory kind='secondary' disabled=@disabled)
         IconButton=IconButtonAccessory
         Select=SelectAccessory
         Text=TextAccessory
@@ -110,8 +111,9 @@ export default class InputGroup extends Component<Signature> {
           {{else}}
             <InputControl
               id={{this.elementId}}
+              type={{@type}}
               @placeholder={{@placeholder}}
-              @disabled={{or @disabled (eq @state 'loading')}}
+              @disabled={{@disabled}}
               @readonly={{@readonly}}
               @required={{@required}}
               @value={{@value}}
@@ -175,10 +177,13 @@ export default class InputGroup extends Component<Signature> {
         --boxel-input-group-border-radius: var(
           --boxel-form-control-border-radius
         );
+        --boxel-input-group-inner-border-radius: calc(
+          var(--boxel-input-group-border-radius) - 1px
+        );
         --boxel-input-group-interior-border-width: 0;
-        --boxel-input-group-height: calc(
-          (var(--boxel-ratio) * var(--boxel-font-size)) +
-            (2 * var(--boxel-input-group-padding-y)) + 2px
+        --boxel-input-group-height: var(
+          --boxel-input-height,
+          var(--boxel-form-control-height)
         );
         --boxel-input-group-icon-length: calc(
           var(--boxel-icon-sm) + var(--boxel-sp-xs) * 2
@@ -191,19 +196,72 @@ export default class InputGroup extends Component<Signature> {
         flex-wrap: wrap;
         align-items: stretch;
         width: 100%;
+        max-width: 100%;
         min-height: var(--boxel-input-group-height);
         background-color: var(--background, var(--boxel-light));
         color: var(--foreground, var(--boxel-dark));
+        border: 1px solid var(--boxel-input-group-border-color);
       }
 
-      .boxel-input-group :deep(.boxel-button--size-base) {
-        /* TODO: do this in a way that doesn't violate Boxel::Button */
-        --boxel-button-min-height: var(--boxel-input-group-height);
+      @layer boxelComponentL1 {
+        .boxel-input-group > :deep(.form-control) {
+          -moz-appearance: none;
+          -webkit-appearance: none;
+          appearance: none;
+          background-clip: padding-box;
+          display: block;
+          flex: 1 1 auto;
+          min-width: 0;
+          padding: var(--boxel-input-group-padding-y)
+            var(--boxel-input-group-padding-x);
+          width: 1%;
+          background-color: inherit;
+          color: inherit;
+        }
+        .boxel-input-group > :deep(.accessory),
+        .boxel-input-group > :deep(.form-control) {
+          position: relative;
+          z-index: 1;
+          outline-offset: 0;
+          margin: 0;
+          min-height: inherit;
+          box-shadow: none;
+          border: none;
+        }
+        .boxel-input-group > :deep(.button-accessory.kind-secondary) {
+          --boxel-button-color: var(--secondary, var(--boxel-100));
+        }
+        .boxel-input-group
+          > :deep(.button-accessory.kind-secondary:not(.disabled):hover) {
+          background-color: color-mix(
+            in oklab,
+            var(--boxel-button-color) 95%,
+            var(--boxel-button-text-color)
+          );
+        }
+        .boxel-input-group > :deep(* + .button-accessory),
+        .boxel-input-group
+          > :deep(.button-accessory + *:not(.button-accessory)) {
+          border-left: 1px solid var(--boxel-input-group-border-color);
+        }
+        .boxel-input-group > :deep(.accessory:focus-visible),
+        .boxel-input-group > :deep(.form-control:focus-visible) {
+          z-index: 5;
+        }
       }
 
-      .boxel-input-group:not(.boxel-input-group--invalid):focus-within {
+      .boxel-input-group:not(:has(.accessory)):focus-within:not(
+          .boxel-input-group--invalid
+        ) {
         outline: 1px solid var(--ring, var(--boxel-highlight));
-        --boxel-input-group-border-color: var(--ring, var(--boxel-highlight));
+        border-color: var(--ring, var(--boxel-highlight));
+      }
+      :deep(.form-control:focus-visible),
+      :deep(.accessory ~ .form-control:focus-visible) {
+        outline: 2px solid var(--ring, var(--boxel-highlight));
+      }
+      :deep(.form-control:not(:has(~ .accessory))) {
+        outline: none;
       }
 
       .boxel-input-group--disabled :deep(.form-control),
@@ -215,26 +273,25 @@ export default class InputGroup extends Component<Signature> {
       }
 
       .boxel-input-group > :last-child {
-        border-top-right-radius: var(--boxel-input-group-border-radius);
-        border-bottom-right-radius: var(--boxel-input-group-border-radius);
+        border-top-right-radius: var(--boxel-input-group-inner-border-radius);
+        border-bottom-right-radius: var(
+          --boxel-input-group-inner-border-radius
+        );
       }
 
       .boxel-input-group > :not(:last-child) {
         border-top-right-radius: 0;
         border-bottom-right-radius: 0;
-        border-right-width: var(--boxel-input-group-interior-border-width);
       }
 
       .boxel-input-group > :first-child {
-        border-top-left-radius: var(--boxel-input-group-border-radius);
-        border-bottom-left-radius: var(--boxel-input-group-border-radius);
+        border-top-left-radius: var(--boxel-input-group-inner-border-radius);
+        border-bottom-left-radius: var(--boxel-input-group-inner-border-radius);
       }
 
       .boxel-input-group > :not(:first-child) {
-        margin-left: -1px;
         border-top-left-radius: 0;
         border-bottom-left-radius: 0;
-        border-left-width: var(--boxel-input-group-interior-border-width);
       }
 
       .helper-text {
@@ -278,7 +335,6 @@ export default class InputGroup extends Component<Signature> {
 
       .validation-icon-container {
         display: flex;
-        border: 1px solid var(--boxel-input-group-border-color);
         align-items: center;
         justify-content: center;
         user-select: none;

@@ -85,7 +85,7 @@ export class RealmIndexUpdater {
   // TODO consider triggering realm events for invalidations now that we can
   // calculate fine grained invalidations for from-scratch indexing by passing
   // in an onInvalidation callback
-  async fullIndex() {
+  async fullIndex(priority = systemInitiatedPriority) {
     this.#indexingDeferred = new Deferred<void>();
     let startedAt = performance.now();
     try {
@@ -100,7 +100,7 @@ export class RealmIndexUpdater {
         jobType: `from-scratch-index`,
         concurrencyGroup: `indexing:${this.#realm.url}`,
         timeout: FROM_SCRATCH_JOB_TIMEOUT_SEC,
-        priority: systemInitiatedPriority,
+        priority,
         args,
       });
       let { ignoreData, stats } = await job.done;
@@ -126,7 +126,11 @@ export class RealmIndexUpdater {
 
   async update(
     urls: URL[],
-    opts?: { delete?: true; onInvalidation?: (invalidatedURLs: URL[]) => void },
+    opts?: {
+      delete?: true;
+      onInvalidation?: (invalidatedURLs: URL[]) => void;
+      clientRequestId?: string | null;
+    },
   ): Promise<void> {
     this.#indexingDeferred = new Deferred<void>();
     try {
@@ -136,6 +140,7 @@ export class RealmIndexUpdater {
         realmUsername: await this.#realm.getRealmOwnerUsername(),
         operation: opts?.delete ? 'delete' : 'update',
         ignoreData: { ...this.#ignoreData },
+        clientRequestId: opts?.clientRequestId ?? null,
       };
       let job = await this.#queue.publish<IncrementalResult>({
         jobType: `incremental-index`,
@@ -214,7 +219,12 @@ export function isIgnored(
   if (url.href === realmURL.href) {
     return false; // you can't ignore the entire realm
   }
-  if (url.href === realmURL.href + '.realm.json') {
+  if (
+    [
+      `${realmURL.href}.realm.json`,
+      `${realmURL.href}.template-lintrc.js`,
+    ].includes(url.href)
+  ) {
     return true;
   }
   if (ignoreMap.size === 0) {

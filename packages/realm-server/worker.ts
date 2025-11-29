@@ -95,15 +95,22 @@ let {
   .parseSync();
 
 log.info(`starting worker with pid ${process.pid} and priority ${priority}`);
+let useHeadlessChromePrerender =
+  process.env.USE_HEADLESS_CHROME_INDEXING === 'true' &&
+  Boolean(prerendererUrl);
 let prerenderer: Prerenderer;
-if (process.env.USE_HEADLESS_CHROME_INDEXING === 'true' && prerendererUrl) {
-  // in node context this is a boolean
+if (useHeadlessChromePrerender && prerendererUrl) {
   (globalThis as any).__useHeadlessChromePrerender = true;
   log.info(`Using prerender server ${prerendererUrl}`);
   prerenderer = createRemotePrerenderer(prerendererUrl);
 } else {
-  prerenderer = async () => {
-    throw new Error(`Prerenderer server has not been configured/enabled`);
+  prerenderer = {
+    async prerenderCard() {
+      throw new Error(`Prerenderer server has not been configured/enabled`);
+    },
+    async prerenderModule() {
+      throw new Error(`Prerenderer server has not been configured/enabled`);
+    },
   };
 }
 
@@ -154,6 +161,7 @@ let autoMigrate = migrateDB || undefined;
     dbAdapter,
     queuePublisher: new PgQueuePublisher(dbAdapter),
     prerenderer,
+    useHeadlessChromePrerender,
   });
 
   await worker.run();

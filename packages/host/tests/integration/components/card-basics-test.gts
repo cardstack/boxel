@@ -72,6 +72,7 @@ import {
   MarkdownField,
   MaybeBase64Field,
   NumberField,
+  PhoneNumberField,
   queryableValue,
   setupBaseRealm,
   StringField,
@@ -114,6 +115,7 @@ module('Integration | card-basics', function (hooks) {
         @field markdown = contains(MarkdownField);
         @field textArea = contains(TextAreaField);
         @field email = contains(EmailField);
+        @field phone = contains(PhoneNumberField);
       }
       let person = new Person();
       await renderCard(loader, person, 'edit');
@@ -122,6 +124,7 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-field="number"] input').hasAttribute('disabled');
       assert.dom('[data-test-field="bigInt"] input').hasAttribute('disabled');
       assert.dom('[data-test-field="email"] input').hasAttribute('disabled');
+      assert.dom('[data-test-field="phone"] input').hasAttribute('disabled');
 
       assert
         .dom('[data-test-field="boolean"] .boxel-radio-fieldset')
@@ -270,6 +273,44 @@ module('Integration | card-basics', function (hooks) {
         )
         .exists('computed linksTo field is rendered in fitted format');
     });
+  });
+
+  test('linksToMany declared with CardDef accepts heterogeneous polymorphic card instances', async function (assert) {
+    class DrumKitCard extends CardDef {
+      @field name = contains(StringField);
+    }
+
+    class BeatMakerCard extends CardDef {
+      @field title = contains(StringField);
+    }
+
+    class Listing extends CardDef {
+      @field examples = linksToMany(() => CardDef);
+    }
+
+    loader.shimModule(`${testRealmURL}test-cards`, {
+      Listing,
+      DrumKitCard,
+      BeatMakerCard,
+    });
+
+    let e1 = new DrumKitCard({ name: '808 Analog Kit' });
+    let e2 = new BeatMakerCard({ title: 'Beat Maker Studio' });
+
+    await saveCard(e1, `${testRealmURL}e1`, loader);
+    await saveCard(e2, `${testRealmURL}e2`, loader);
+
+    let listing = new Listing({ examples: [e1, e2] });
+
+    assert.strictEqual(listing.examples.length, 2, 'both cards are accepted');
+    assert.ok(
+      listing.examples[0] instanceof DrumKitCard,
+      'first example preserves its concrete type',
+    );
+    assert.ok(
+      listing.examples[1] instanceof BeatMakerCard,
+      'second example preserves its concrete type',
+    );
   });
 
   module('cards allowed to be edited', function (hooks) {
@@ -3928,6 +3969,13 @@ module('Integration | card-basics', function (hooks) {
       assert.strictEqual(
         getFieldDescription(Person, 'hometown'),
         'The place where the person was born',
+        'getFieldDescription works for class',
+      );
+
+      assert.strictEqual(
+        getFieldDescription(new Person(), 'hometown'),
+        'The place where the person was born',
+        'getFieldDescription works for instance',
       );
     });
 

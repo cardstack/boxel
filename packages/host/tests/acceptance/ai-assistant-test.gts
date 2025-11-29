@@ -31,7 +31,9 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import ENV from '@cardstack/host/config/environment';
+import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
+import { AiAssistantMessageDrafts } from '@cardstack/host/utils/local-storage-keys';
 
 import { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 
@@ -79,6 +81,19 @@ async function selectCardFromCatalog(cardId: string) {
   await fillIn('[data-test-search-field]', cardId);
   await click(`[data-test-select="${cardId}"]`);
   await click('[data-test-card-catalog-go-button]');
+}
+
+async function waitForSessionPreparationToFinish(
+  timeout = 30_000,
+): Promise<void> {
+  const aiAssistantPanelService = getService(
+    'ai-assistant-panel-service',
+  ) as AiAssistantPanelService;
+
+  // Background tasks post messages asynchronously; wait until they are done.
+  await waitUntil(() => !aiAssistantPanelService.isPreparingSession, {
+    timeout,
+  });
 }
 
 let countryDefinition = `import { field, contains, CardDef } from 'https://cardstack.com/base/card-api';
@@ -1227,7 +1242,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
 
     // Test with AI assistant opened
-    operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -1237,12 +1252,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         ],
       ],
       aiAssistantOpen: true,
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
     assert.dom('[data-test-ai-assistant-panel]').exists();
   });
 
@@ -2383,6 +2393,93 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     }
   });
 
+  test('manually attached cards and files persist through reload without duplicating auto attachments', async function (assert) {
+    window.localStorage.removeItem(AiAssistantMessageDrafts);
+
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}plant.gts`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      aiAssistantOpen: true,
+    });
+
+    await waitFor(`[data-room-settled]`);
+    await click('[data-test-module-inspector-view="spec"]');
+    await waitFor('[data-test-spec-selector-item-path]');
+
+    let autoAttachedSpecId: string | undefined;
+    await waitUntil(() => {
+      let autoAttachedCards = document.querySelectorAll(
+        '[data-test-autoattached-card]',
+      );
+      let specCard = Array.from(autoAttachedCards).find((card) => {
+        let cardId = card.getAttribute('data-test-attached-card');
+        return cardId?.includes('Spec/');
+      });
+      if (specCard) {
+        autoAttachedSpecId = specCard.getAttribute(
+          'data-test-attached-card',
+        ) as string;
+        return true;
+      }
+      return false;
+    });
+
+    assert.ok(autoAttachedSpecId, 'expected a spec card to be auto-attached');
+
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-card-btn]');
+    await fillIn('[data-test-search-field]', 'Plant spec');
+    await click(`[data-test-select="${autoAttachedSpecId}"]`);
+    await click('[data-test-card-catalog-go-button]');
+
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-file-btn]');
+    await click('[data-test-file="plant.gts"]');
+    await click('[data-test-choose-file-modal-add-button]');
+
+    await fillIn('[data-test-message-field]', 'Reload keeps my draft');
+
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}plant.gts`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      aiAssistantOpen: true,
+    });
+
+    await waitFor(`[data-test-room-settled]`);
+    await click('[data-test-module-inspector-view="spec"]');
+    await waitFor('[data-test-spec-selector-item-path]');
+
+    assert.dom('[data-test-message-field]').hasValue('Reload keeps my draft');
+    assert
+      .dom(`[data-test-attached-card="${autoAttachedSpecId}"]`)
+      .exists({ count: 1 });
+    assert
+      .dom(
+        `[data-test-autoattached-card][data-test-attached-card="${autoAttachedSpecId}"]`,
+      )
+      .doesNotExist();
+    assert
+      .dom(`[data-test-attached-file="${testRealmURL}plant.gts"]`)
+      .exists({ count: 1 });
+    assert.dom('[data-test-autoattached-file]').doesNotExist();
+  });
+
   test('auto-attached spec card can be removed', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
@@ -2581,6 +2678,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .dom(`[data-test-skill-toggle="${testRealmURL}Skill/example2-on"`)
       .exists();
     await click(`[data-test-skill-toggle="${testRealmURL}Skill/example2-on"`);
+    await waitFor(
+      `[data-test-skill-toggle="${testRealmURL}Skill/example2-off"`,
+    );
     assert
       .dom(`[data-test-skill-toggle="${testRealmURL}Skill/example2-off"`)
       .exists();
@@ -2751,6 +2851,11 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-new-session-settings-option="Copy File History"]');
     await click('[data-test-new-session-settings-create-button]');
     await waitFor(`[data-room-settled]`);
+    await waitForSessionPreparationToFinish();
+    await waitUntil(() => {
+      // Wait until the informational message for the cloned session appears.
+      return document.querySelectorAll('[data-test-message-idx]').length === 1;
+    });
 
     assertMessages(assert, [
       {
@@ -2758,7 +2863,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         message:
           'This session includes files and cards from the previous conversation for context.',
         cards: [
-          { id: `${testRealmURL}Pet/mango`, title: 'Mango' },
+          { id: `${testRealmURL}Person/hassan`, title: 'Hassan' },
           { id: `${testRealmURL}Pet/mango`, title: 'Mango' },
         ],
         files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
@@ -2824,6 +2929,15 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
     await click('[data-test-new-session-settings-create-button]');
     await waitFor(`[data-room-settled]`);
+    await waitForSessionPreparationToFinish();
+    await waitUntil(
+      () => document.querySelectorAll('[data-test-message-idx]').length >= 1,
+      {
+        timeout: 5000,
+        timeoutMessage:
+          'timed out waiting for summary message to arrive in new session',
+      },
+    );
 
     // Verify the summary message was sent to the new room
     assertMessages(assert, [
@@ -2890,7 +3004,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       {
         from: 'testuser',
         message: 'Can you help me understand this structure?',
-        files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
       },
     ]);
 
@@ -2901,6 +3014,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
     await click('[data-test-new-session-settings-create-button]');
     await waitFor(`[data-room-settled]`);
+    await waitForSessionPreparationToFinish();
+    await waitUntil(
+      () => document.querySelectorAll('[data-test-message-idx]').length >= 1,
+      {
+        timeoutMessage:
+          'timed out waiting for summary message to arrive in new session',
+      },
+    );
 
     // Verify the summary message was sent to the new room
     assertMessages(assert, [
@@ -2946,6 +3067,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
     await click('[data-test-new-session-settings-create-button]');
     await waitFor(`[data-room-settled]`);
+    await waitForSessionPreparationToFinish();
 
     // Verify that the new session was created without the summary (graceful fallback)
     assertMessages(assert, []);
@@ -2958,10 +3080,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     // Mock the matrix service getPromptParts method to block summarization
     const matrixService = getService('matrix-service');
     const originalGetPromptParts = matrixService.getPromptParts;
+    let summarizationDeferred = new Deferred<void>();
     matrixService.getPromptParts = async (roomId: string) => {
-      if (summarizationDeferred) {
-        await summarizationDeferred.promise;
-      }
+      await summarizationDeferred.promise;
       return originalGetPromptParts.call(matrixService, roomId);
     };
 
@@ -2984,7 +3105,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await fillIn('[data-test-message-field]', 'Test message for summarization');
     await click('[data-test-send-message-btn]');
 
-    let summarizationDeferred = new Deferred<void>();
     // Create new session with "Summarize Current Session" option
     await click('[data-test-create-room-btn]', { shiftKey: true });
     await click(
@@ -2992,31 +3112,37 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
     await click('[data-test-new-session-settings-create-button]');
 
-    // Verify the session preparation message is shown with correct wording
-    assert
-      .dom('[data-test-session-preparation]')
-      .includesText('Summarizing previous session');
-    assert
-      .dom('[data-test-session-preparation]')
-      .includesText('Takes 10-20 seconds');
-    assert.dom('[data-test-session-preparation-skip-button]').exists();
-    assert.dom('[data-test-session-preparation-skip-button]').hasText('Skip');
-    // Click the skip button to skip session preparation
-    await click('[data-test-session-preparation-skip-button]');
+    try {
+      await waitFor('[data-test-session-preparation]');
+      // Verify the session preparation message is shown with correct wording
+      assert
+        .dom('[data-test-session-preparation]')
+        .includesText('Summarizing previous session');
+      assert
+        .dom('[data-test-session-preparation]')
+        .includesText('Takes 10-20 seconds');
+      await waitFor('[data-test-session-preparation-skip-button]');
+      assert.dom('[data-test-session-preparation-skip-button]').hasText('Skip');
 
-    // Verify that the session preparation UI is no longer shown
-    assert.dom('[data-test-session-preparation]').doesNotExist();
+      // Click the skip button to skip session preparation
+      await click('[data-test-session-preparation-skip-button]');
 
-    // Verify that the message input is now enabled (canSend should be true)
-    assert.dom('[data-test-message-field]').isNotDisabled();
+      // Verify that the session preparation UI is no longer shown
+      await waitFor('[data-test-session-preparation]', { count: 0 });
 
-    assertMessages(assert, []);
+      // Verify that the message input is now enabled (canSend should be true)
+      await waitFor('[data-test-message-field]');
+      await waitUntil(() => {
+        let field = document.querySelector('[data-test-message-field]');
+        return Boolean(field && !field.hasAttribute('disabled'));
+      });
+      assert.dom('[data-test-message-field]').isNotDisabled();
 
-    // Resolve the deferred promise to clean up
-    summarizationDeferred.fulfill();
-
-    // Restore the original getPromptParts method
-    matrixService.getPromptParts = originalGetPromptParts;
+      assertMessages(assert, []);
+    } finally {
+      summarizationDeferred.fulfill();
+      matrixService.getPromptParts = originalGetPromptParts;
+    }
   });
 
   test('ai assistant panel width persists to localStorage', async function (assert) {
@@ -3238,6 +3364,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-new-session-settings-option="Copy File History"]');
     await click('[data-test-new-session-settings-create-button]');
     await waitFor(`[data-room-settled]`);
+    await waitForSessionPreparationToFinish();
     await waitFor('[data-test-user-message]');
 
     const thirdRoomId = matrixService.currentRoomId;

@@ -1,16 +1,18 @@
+import ChevronRight from '@cardstack/boxel-icons/chevron-right';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 
 import cn from '../../../helpers/cn.ts';
 import optional from '../../../helpers/optional.ts';
-import DropdownArrowDown from '../../../icons/dropdown-arrow-down.gts';
 
 export interface AccordionItemSignature {
   Args: {
     className?: string;
     contentClass?: string;
+    disabled?: boolean;
+    id: string;
     isOpen: boolean;
-    onClick?: (event: MouseEvent) => void;
+    onClick?: (event: Event) => void;
   };
   Blocks: {
     content: [];
@@ -20,71 +22,133 @@ export interface AccordionItemSignature {
 }
 
 const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
-  <div class={{cn 'accordion-item' @className open=@isOpen}} ...attributes>
-    <button
-      class='title'
-      {{on 'click' (optional @onClick)}}
-      disabled={{if @onClick false true}}
+  <div
+    class={{cn 'boxel-accordion-item' @className open=@isOpen}}
+    ...attributes
+  >
+    <h3 class='boxel-accordion-item-title'>
+      <button
+        class='boxel-accordion-item-trigger'
+        {{on 'click' (optional @onClick)}}
+        id={{@id}}
+        aria-controls='section-{{@id}}'
+        aria-expanded={{@isOpen}}
+        disabled={{@disabled}}
+      >
+        <ChevronRight
+          class='boxel-accordion-item-icon'
+          width='14'
+          height='14'
+        />
+        {{yield to='title'}}
+      </button>
+    </h3>
+    <div
+      class={{cn 'boxel-accordion-item-content' @contentClass}}
+      data-state={{if @isOpen 'open' 'closed'}}
+      id='section-{{@id}}'
+      role='region'
+      aria-labelledby={{@id}}
+      aria-hidden={{if @isOpen 'false' 'true'}}
     >
-      <DropdownArrowDown class='caret' width='12' height='12' />
-      {{yield to='title'}}
-    </button>
-    <div class={{cn 'content' @contentClass}}>
-      {{yield to='content'}}
+      <div class='boxel-accordion-item-content-inner'>
+        {{yield to='content'}}
+      </div>
     </div>
   </div>
   <style scoped>
-    .accordion-item {
-      --accordion-item-closed-height: var(--boxel-form-control-height);
-      --accordion-item-open-height: 8rem;
-      --accordion-item-border: var(--accordion-border);
-      --accordion-item-title-font: 600 var(--boxel-font);
-      --accordion-item-title-letter-spacing: var(--boxel-lsp-xs);
-      --accordion-item-title-padding: var(--boxel-sp-xs);
+    @layer boxelComponentL1 {
+      .boxel-accordion-item {
+        min-height: var(
+          --boxel-accordion-item-min-height,
+          var(--boxel-form-control-height)
+        );
+        padding-inline: var(--boxel-accordion-item-padding-inline, 0);
+        padding-block: var(--boxel-accordion-item-padding-block, 2px);
+      }
+      .boxel-accordion-item:not(:first-child) {
+        border-top: var(
+          --boxel-accordion-item-border,
+          var(
+            --accordion-border,
+            1px solid var(--border, var(--boxel-border-color))
+          )
+        );
+      }
 
-      height: var(--accordion-item-closed-height);
-      display: flex;
-      flex-direction: column;
-      transition: all var(--boxel-transition);
-    }
-    .accordion-item.open {
-      height: var(--accordion-item-open-height);
-      flex: 1;
-    }
-    .content {
-      flex: 1;
-      opacity: 0;
-      display: none;
-    }
-    .accordion-item.open > .content {
-      display: block;
-      opacity: 1;
-      border-top: var(--accordion-item-border);
-      transition: all var(--boxel-transition);
-    }
-    .title {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--boxel-sp-xxs);
-      padding: var(--accordion-item-title-padding);
-      color: inherit;
-      font: var(--accordion-item-title-font);
-      letter-spacing: var(--accordion-item-title-letter-spacing);
-      background-color: transparent;
-      border: none;
-      text-align: left;
-    }
-    .title:hover:not(:disabled) {
-      cursor: pointer;
-    }
-    .caret {
-      flex-shrink: 0;
-      transform: rotate(-90deg);
-      transition: transform var(--boxel-transition);
-    }
+      .boxel-accordion-item-title {
+        margin: 0;
+        font-size: var(--boxel-accordion-title-font-size, inherit);
+        font-weight: var(--boxel-accordion-title-font-weight, 700);
+        line-height: inherit;
+        letter-spacing: inherit;
+      }
 
-    .accordion-item.open > .title > .caret {
-      transform: rotate(0deg);
+      .boxel-accordion-item-trigger {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+        width: 100%;
+        max-width: 100%;
+        padding-block: var(
+          --boxel-accordion-trigger-padding-block,
+          var(--boxel-sp-xs)
+        );
+        padding-inline: var(--boxel-accordion-trigger-padding-inline, 0);
+        color: inherit;
+        background-color: transparent;
+        border: none;
+        text-align: start;
+      }
+      .boxel-accordion-item-trigger:focus-visible {
+        outline-color: var(--ring, var(--boxel-highlight));
+      }
+      .boxel-accordion-item-trigger:hover:not(:disabled) {
+        cursor: pointer;
+      }
+      .boxel-accordion-item-trigger:disabled {
+        opacity: 0.5;
+      }
+
+      .boxel-accordion-item-icon {
+        flex-shrink: 0;
+      }
+      [aria-expanded] .boxel-accordion-item-icon {
+        transform: rotate(90deg);
+      }
+
+      .boxel-accordion-item-content {
+        display: grid;
+        grid-template-rows: 0fr;
+      }
+      .boxel-accordion-item-content[data-state='open'] {
+        grid-template-rows: 1fr;
+      }
+      .boxel-accordion-item-content-inner {
+        overflow: hidden;
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .boxel-accordion-item {
+          --_bai-transition: var(--boxel-accordion-transition, 200ms ease-out);
+        }
+
+        .boxel-accordion-item-icon {
+          transition: transform var(--_bai-transition);
+        }
+
+        .boxel-accordion-item-content {
+          transition: grid-template-rows var(--_bai-transition);
+        }
+        .boxel-accordion-item-content-inner {
+          transition: opacity var(--_bai-transition);
+          opacity: 0;
+        }
+        .boxel-accordion-item-content[data-state='open']
+          .boxel-accordion-item-content-inner {
+          opacity: 1;
+        }
+      }
     }
   </style>
 </template>;

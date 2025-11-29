@@ -15,6 +15,7 @@ import type * as EnumModule from 'https://cardstack.com/base/enum';
 import type * as EthereumAddressModule from 'https://cardstack.com/base/ethereum-address';
 import type * as MarkdownFieldModule from 'https://cardstack.com/base/markdown';
 import type * as NumberFieldModule from 'https://cardstack.com/base/number';
+import type * as PhoneNumberFieldModule from 'https://cardstack.com/base/phone-number';
 import type * as RealmFieldModule from 'https://cardstack.com/base/realm';
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 import type * as StringFieldModule from 'https://cardstack.com/base/string';
@@ -60,6 +61,9 @@ let TextAreaField: TextAreaField;
 type RealmField = (typeof RealmFieldModule)['default'];
 let RealmField: RealmField;
 
+type PhoneNumberField = (typeof PhoneNumberFieldModule)['default'];
+let PhoneNumberField: PhoneNumberField;
+
 type CardsGrid = (typeof CardsGridModule)['CardsGrid'];
 let CardsGrid: CardsGrid;
 
@@ -93,6 +97,7 @@ let subscribeToChanges: (typeof CardAPIModule)['subscribeToChanges'];
 let unsubscribeFromChanges: (typeof CardAPIModule)['unsubscribeFromChanges'];
 let flushLogs: (typeof CardAPIModule)['flushLogs'];
 let queryableValue: (typeof CardAPIModule)['queryableValue'];
+let getFields: (typeof CardAPIModule)['getFields'];
 let getFieldDescription: (typeof CardAPIModule)['getFieldDescription'];
 let ReadOnlyField: (typeof CardAPIModule)['ReadOnlyField'];
 let instanceOf: (typeof CardAPIModule)['instanceOf'];
@@ -161,6 +166,12 @@ async function initialize() {
     await loader.import<typeof RealmFieldModule>(`${baseRealm.url}realm`)
   ).default;
 
+  PhoneNumberField = (
+    await loader.import<typeof PhoneNumberFieldModule>(
+      `${baseRealm.url}phone-number`,
+    )
+  ).default;
+
   CardsGrid = (
     await loader.import<typeof CardsGridModule>(`${baseRealm.url}cards-grid`)
   ).CardsGrid;
@@ -190,6 +201,7 @@ async function initialize() {
     isCard,
     linksTo,
     linksToMany,
+    getFields,
     ensureLinksLoaded,
     createFromSerialized,
     updateFromSerialized,
@@ -236,6 +248,7 @@ export {
   MarkdownField,
   TextAreaField,
   RealmField,
+  PhoneNumberField,
   CardsGrid,
   SystemCard,
   ModelConfiguration,
@@ -260,6 +273,7 @@ export {
   unsubscribeFromChanges,
   flushLogs,
   queryableValue,
+  getFields,
   getFieldDescription,
   ReadOnlyField,
   Skill,

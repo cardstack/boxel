@@ -72,6 +72,7 @@ import DefaultFittedTemplate from './default-templates/fitted';
 import DefaultEmbeddedTemplate from './default-templates/embedded';
 import DefaultCardDefTemplate from './default-templates/isolated-and-edit';
 import DefaultAtomViewTemplate from './default-templates/atom';
+import DefaultHeadTemplate from './default-templates/head';
 import MissingTemplate from './default-templates/missing-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import MarkdownTemplate from './default-templates/markdown';
@@ -82,7 +83,9 @@ import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 import ImportIcon from '@cardstack/boxel-icons/import';
+import WandIcon from '@cardstack/boxel-icons/wand';
 // normalizeEnumOptions used by enum moved to packages/base/enum.gts
+import PatchThemeCommand from '@cardstack/boxel-host/commands/patch-theme';
 
 import {
   callSerializeHook,
@@ -157,7 +160,6 @@ export {
 
 export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
 export const fieldDecorator = Symbol.for('cardstack-field-decorator');
-export const fieldType = Symbol.for('cardstack-field-type');
 export const queryableValue = Symbol.for('cardstack-queryable-value');
 export const formatQuery = Symbol.for('cardstack-format-query');
 export const realmInfo = Symbol.for('cardstack-realm-info');
@@ -165,23 +167,33 @@ export const emptyValue = Symbol.for('cardstack-empty-value');
 // intentionally not exporting this so that the outside world
 // cannot mark a card as being saved
 const isSavedInstance = Symbol.for('cardstack-is-saved-instance');
-const fieldDescription = Symbol.for('cardstack-field-description');
 
 export type BaseInstanceType<T extends BaseDefConstructor> = T extends {
   [primitive]: infer P;
 }
   ? P
   : InstanceType<T>;
+
+// this is expressing the idea that the fields of a
+// card may contain undefined, but even when that's
+// true all the symbols and the `constructor` property
+// can still be relied on.
+type PartialFields<T> = {
+  [Property in keyof T]: Property extends symbol
+    ? T[Property]
+    : Property extends 'constructor'
+    ? T[Property]
+    : T[Property] | undefined;
+};
+
 export type PartialBaseInstanceType<T extends BaseDefConstructor> = T extends {
   [primitive]: infer P;
 }
   ? P | null
-  : Partial<
-      InstanceType<T> & {
-        [fields]: Record<string, BaseDefConstructor>;
-        [fieldsUntracked]: Record<string, BaseDefConstructor>;
-      }
-    >;
+  : PartialFields<InstanceType<T>> & {
+      [fields]: Record<string, BaseDefConstructor>;
+      [fieldsUntracked]: Record<string, BaseDefConstructor>;
+    };
 export type FieldsTypeFor<T extends BaseDef> = {
   [Field in keyof T]: BoxComponent &
     (T[Field] extends ArrayLike<unknown>
@@ -241,9 +253,9 @@ export interface FieldConstructor<T> {
   cardThunk: () => T;
   computeVia: undefined | (() => unknown);
   name: string;
-  description: string | undefined;
   isUsed?: true;
   isPolymorphic?: true;
+  declaredCardThunk?: () => T;
 }
 
 type CardChangeSubscriber = (
@@ -276,6 +288,9 @@ export function instanceOf(instance: BaseDef, clazz: typeof BaseDef): boolean {
   let instanceClazz: typeof BaseDef | null = instance.constructor;
   let codeRefInstance: CodeRef | undefined;
   let codeRefClazz = identifyCard(clazz);
+  if (!codeRefClazz) {
+    return instance instanceof (clazz as any);
+  }
   do {
     codeRefInstance = instanceClazz ? identifyCard(instanceClazz) : undefined;
     if (isEqual(codeRefInstance, codeRefClazz)) {
@@ -340,7 +355,6 @@ export interface Field<
   name: string;
   fieldType: FieldType;
   computeVia: undefined | (() => unknown);
-  description: undefined | string;
   // Optional per-usage configuration stored on the field descriptor
   configuration?: ConfigurationInput<any>;
   // there exists cards that we only ever run in the host without
@@ -422,14 +436,12 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     cardThunk,
     computeVia,
     name,
-    description,
     isUsed,
     isPolymorphic,
   }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
     this.name = name;
-    this.description = description;
     this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
   }
@@ -734,14 +746,12 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     cardThunk,
     computeVia,
     name,
-    description,
     isUsed,
     isPolymorphic,
   }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
     this.name = name;
-    this.description = description;
     this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
   }
@@ -830,7 +840,10 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
         }
       }
 
-      if (this.card === Reflect.getPrototypeOf(value)!.constructor) {
+      if (
+        this.card === Reflect.getPrototypeOf(value)!.constructor &&
+        !this.isPolymorphic
+      ) {
         // when our implementation matches the default we don't need to include
         // meta.adoptsFrom
         delete serialized.meta.adoptsFrom;
@@ -903,9 +916,10 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
 
   validate(_instance: BaseDef, value: any) {
     if (!(primitive in this.card)) {
-      if (value != null && !instanceOf(value, this.card)) {
+      let expectedCard = this.card;
+      if (value != null && !instanceOf(value, expectedCard)) {
         throw new Error(
-          `field validation error: tried set instance of ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
+          `field validation error: tried set instance of ${value.constructor.name} as field '${this.name}' but it is not an instance of ${expectedCard.name}`,
         );
       }
     }
@@ -924,6 +938,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
 class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly fieldType = 'linksTo';
   private cardThunk: () => CardT;
+  private declaredCardThunk: () => CardT;
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly description: string | undefined;
@@ -932,22 +947,26 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly configuration?: ConfigurationInput<any>;
   constructor({
     cardThunk,
+    declaredCardThunk,
     computeVia,
     name,
-    description,
     isUsed,
     isPolymorphic,
   }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
+    this.declaredCardThunk = declaredCardThunk ?? cardThunk;
     this.computeVia = computeVia;
     this.name = name;
-    this.description = description;
     this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
   }
 
   get card(): CardT {
     return this.cardThunk();
+  }
+
+  get declaredCardResolver(): () => CardT {
+    return this.declaredCardThunk;
   }
 
   getter(instance: CardDef): BaseInstanceType<CardT> | undefined {
@@ -1148,6 +1167,13 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         return value;
       }
       if (!instanceOf(value, this.card)) {
+        console.warn(
+          'linksTo instance mismatch',
+          JSON.stringify({
+            expected: identifyCard(this.card),
+            actual: identifyCard(value.constructor as typeof BaseDef),
+          }),
+        );
         throw new Error(
           `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
         );
@@ -1290,30 +1316,42 @@ class LinksToMany<FieldT extends CardDefConstructor>
 {
   readonly fieldType = 'linksToMany';
   private cardThunk: () => FieldT;
+  private declaredCardThunk: () => FieldT;
+  private declaredCardCache: FieldT | undefined;
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
-  readonly description: string | undefined;
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   readonly configuration?: ConfigurationInput<any>;
   constructor({
     cardThunk,
+    declaredCardThunk,
     computeVia,
     name,
-    description,
     isUsed,
     isPolymorphic,
   }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
+    this.declaredCardThunk = declaredCardThunk ?? cardThunk;
     this.computeVia = computeVia;
     this.name = name;
-    this.description = description;
     this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
   }
 
   get card(): FieldT {
     return this.cardThunk();
+  }
+
+  private get declaredCard(): FieldT {
+    if (!this.declaredCardCache) {
+      this.declaredCardCache = this.declaredCardThunk();
+    }
+    return this.declaredCardCache;
+  }
+
+  get declaredCardResolver(): () => FieldT {
+    return this.declaredCardThunk;
   }
 
   getter(instance: CardDef): BaseInstanceType<FieldT> {
@@ -1390,8 +1428,11 @@ class LinksToMany<FieldT extends CardDefConstructor>
       if (!(globalThis as any).__lazilyLoadLinks) {
         throw new NotLoaded(instance, notLoadedRefs, this.name);
       }
-      for (let reference of notLoadedRefs) {
-        lazilyLoadLink(instance, this, reference, { value });
+      for (let entry of value) {
+        if (isNotLoadedValue(entry) && !(entry as any).loading) {
+          lazilyLoadLink(instance, this, entry.reference, { value });
+          (entry as any).loading = true;
+        }
       }
     }
 
@@ -1667,14 +1708,15 @@ class LinksToMany<FieldT extends CardDefConstructor>
       );
     }
 
+    let expectedCard = this.declaredCard;
     for (let value of values) {
       if (
         !isNotLoadedValue(value) &&
         value != null &&
-        !instanceOf(value, this.card)
+        !instanceOf(value, expectedCard)
       ) {
         throw new Error(
-          `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
+          `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${expectedCard.name}`,
         );
       }
     }
@@ -1839,6 +1881,15 @@ function fieldComponent(
   return getBoxComponent(card, innerModel, field);
 }
 
+interface InternalFieldInitializer {
+  setupField(name: string): {
+    enumerable?: boolean;
+    get(): unknown;
+    set(value: unknown): void;
+  };
+  description: string | undefined;
+}
+
 // our decorators are implemented by Babel, not TypeScript, so they have a
 // different signature than Typescript thinks they do.
 export const field = function (
@@ -1846,13 +1897,15 @@ export const field = function (
   key: string | symbol,
   { initializer }: { initializer(): any },
 ) {
-  let descriptor = initializer().setupField(key);
-  if (descriptor[fieldDescription]) {
-    setFieldDescription(
-      target.constructor,
-      key as string,
-      descriptor[fieldDescription],
+  if (typeof key === 'symbol') {
+    throw new Error(
+      `the @field decorator only supports string field names, not symbols`,
     );
+  }
+  let init = initializer() as InternalFieldInitializer;
+  let descriptor = init.setupField(key);
+  if (init.description) {
+    setFieldDescription(target.constructor, key as string, init.description);
   }
   return descriptor;
 } as unknown as PropertyDecorator;
@@ -1864,20 +1917,19 @@ export function containsMany<FieldT extends FieldDefConstructor>(
 ): BaseInstanceType<FieldT>[] {
   return {
     setupField(fieldName: string) {
-      let { computeVia, description, isUsed } = options ?? {};
+      let { computeVia, isUsed } = options ?? {};
       let instance = new ContainsMany({
         cardThunk: cardThunk(field),
         computeVia,
         name: fieldName,
-        description,
         isUsed,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
     },
-  } as any;
+    description: options?.description,
+  } satisfies InternalFieldInitializer as any;
 }
-containsMany[fieldType] = 'contains-many' as FieldType;
 
 export function contains<FieldT extends FieldDefConstructor>(
   field: FieldT,
@@ -1885,20 +1937,19 @@ export function contains<FieldT extends FieldDefConstructor>(
 ): BaseInstanceType<FieldT> {
   return {
     setupField(fieldName: string) {
-      let { computeVia, description, isUsed } = options ?? {};
+      let { computeVia, isUsed } = options ?? {};
       let instance = new Contains({
         cardThunk: cardThunk(field),
         computeVia,
         name: fieldName,
-        description,
         isUsed,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
     },
-  } as any;
+    description: options?.description,
+  } satisfies InternalFieldInitializer as any;
 }
-contains[fieldType] = 'contains' as FieldType;
 
 export function linksTo<CardT extends CardDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
@@ -1906,20 +1957,21 @@ export function linksTo<CardT extends CardDefConstructor>(
 ): BaseInstanceType<CardT> {
   return {
     setupField(fieldName: string) {
-      let { computeVia, description, isUsed } = options ?? {};
+      let { computeVia, isUsed } = options ?? {};
+      let fieldCardThunk = cardThunk(cardOrThunk);
       let instance = new LinksTo({
-        cardThunk: cardThunk(cardOrThunk),
+        cardThunk: fieldCardThunk,
+        declaredCardThunk: fieldCardThunk,
         computeVia,
         name: fieldName,
-        description,
         isUsed,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
     },
-  } as any;
+    description: options?.description,
+  } satisfies InternalFieldInitializer as any;
 }
-linksTo[fieldType] = 'linksTo' as FieldType;
 
 export function linksToMany<CardT extends CardDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
@@ -1927,20 +1979,21 @@ export function linksToMany<CardT extends CardDefConstructor>(
 ): BaseInstanceType<CardT>[] {
   return {
     setupField(fieldName: string) {
-      let { computeVia, description, isUsed } = options ?? {};
+      let { computeVia, isUsed } = options ?? {};
+      let fieldCardThunk = cardThunk(cardOrThunk);
       let instance = new LinksToMany({
-        cardThunk: cardThunk(cardOrThunk),
+        cardThunk: fieldCardThunk,
+        declaredCardThunk: fieldCardThunk,
         computeVia,
         name: fieldName,
-        description,
         isUsed,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
     },
-  } as any;
+    description: options?.description,
+  } satisfies InternalFieldInitializer as any;
 }
-linksToMany[fieldType] = 'linksToMany' as FieldType;
 
 // (moved below BaseDef & FieldDef declarations)
 
@@ -2105,6 +2158,7 @@ export type ViewCardFn = (
   format?: Format,
   opts?: {
     openCardInRightMostStack?: boolean;
+    stackIndex?: number;
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
     fieldName?: string;
   },
@@ -2375,6 +2429,7 @@ export class CardDef extends BaseDef {
   static isolated: BaseDefComponent = DefaultCardDefTemplate;
   static edit: BaseDefComponent = DefaultCardDefTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
+  static head: BaseDefComponent = DefaultHeadTemplate;
 
   static prefersWideFormat = false; // whether the card is full-width in the stack
   static headerColor: string | null = null; // set string color value if the stack-item header has a background color
@@ -2420,6 +2475,27 @@ export class Theme extends CardDef {
   static icon = ThemeIcon;
   @field cssVariables = contains(CSSField);
   @field cssImports = containsMany(CssImportField);
+
+  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
+    let menuItems = super[getCardMenuItems](params);
+    if (params.menuContext === 'interact' && params.commandContext && this.id) {
+      menuItems = [
+        ...menuItems,
+        {
+          label: 'Modify theme via AI',
+          action: async () => {
+            let cmd = new PatchThemeCommand(params.commandContext);
+            await cmd.execute({
+              cardId: this.id as unknown as string,
+            });
+          },
+          icon: WandIcon,
+          disabled: !this.id,
+        },
+      ];
+    }
+    return menuItems;
+  }
 }
 
 export type BaseDefConstructor = typeof BaseDef;
@@ -2658,11 +2734,38 @@ function lazilyLoadLink(
         // TODO in the future consider recording some link meta that this reference is actually missing
         (instance as any)[field.name] = null;
 
+        let error = e as Error;
+        let isMissingFile =
+          typeof error?.message === 'string' &&
+          /not found/i.test(error.message);
+        let payloadError: {
+          title: string;
+          status: number;
+          message: string;
+          stack?: string;
+          deps?: string[];
+        } = {
+          title: isMissingFile
+            ? 'Link Not Found'
+            : error?.message ?? 'Card Error',
+          status: isMissingFile ? 404 : (error as any)?.status ?? 500,
+          message: isMissingFile
+            ? `missing file ${reference}.json`
+            : error?.message ?? String(e),
+          stack: error?.stack,
+        };
+        if (isCardError(error) && error.deps?.length) {
+          payloadError.deps = [...new Set(error.deps)];
+        }
+        let payload = JSON.stringify({
+          type: 'error',
+          error: payloadError,
+        });
         // We use a custom event for render errors--otherwise QUnit will report a "global error"
         // when we use a promise rejection to signal to the prerender that there was an error
         // even though everything is working as designed. QUnit is very noisy about these errors...
         const event = new CustomEvent('boxel-render-error', {
-          detail: { reason: e },
+          detail: { reason: payload },
         });
         globalThis.dispatchEvent(event);
       } finally {
@@ -2972,21 +3075,114 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
 
   let existingOverrides = getFieldOverrides(instance);
   let loadedValues = getDataBucket(instance);
+  let instanceRelativeTo =
+    ('id' in instance && typeof instance.id === 'string'
+      ? new URL(instance.id)
+      : instance[relativeTo]) ?? undefined;
+
+  function getFieldMeta(
+    fieldsMeta: CardFields | undefined,
+    key: string,
+  ): Partial<Meta> | undefined {
+    let entry = fieldsMeta?.[key];
+    return Array.isArray(entry) ? undefined : entry;
+  }
+
+  function getFieldMetaArray(
+    fieldsMeta: CardFields | undefined,
+    key: string,
+  ): Partial<Meta>[] | undefined {
+    let entry = fieldsMeta?.[key];
+    return Array.isArray(entry) ? entry : undefined;
+  }
+  function isAssignableToField(
+    overrideCard: typeof BaseDef,
+    fieldCard: typeof BaseDef,
+  ): boolean {
+    let current: typeof BaseDef | undefined = overrideCard;
+    while (current) {
+      if (current === fieldCard) {
+        return true;
+      }
+      current = getAncestor(current) ?? undefined;
+    }
+    return false;
+  }
+
+  function applyFieldOverride(
+    fieldName: string,
+    overrideCard?: typeof BaseDef,
+    field?: Field<typeof BaseDef, any>,
+  ): boolean {
+    if (!overrideCard) {
+      return false;
+    }
+    if (
+      field &&
+      !isAssignableToField(overrideCard, field.card as typeof BaseDef)
+    ) {
+      return false;
+    }
+    if (existingOverrides.get(fieldName) === overrideCard) {
+      return false;
+    }
+    existingOverrides.set(fieldName, overrideCard);
+    return true;
+  }
   async function setDeserializedFieldOverride(
     fieldName: string,
     resource: LooseCardResource,
-  ) {
-    let serializedFieldOverride = resource.meta.fields?.[fieldName];
-    if (
-      !Array.isArray(serializedFieldOverride) &&
-      serializedFieldOverride?.adoptsFrom
-    ) {
-      let override = await loadCardDef(serializedFieldOverride.adoptsFrom, {
-        loader: myLoader(),
-        relativeTo: resource.id ? new URL(resource.id) : undefined,
-      });
-      existingOverrides.set(fieldName, override);
+    field: Field<typeof BaseDef, any>,
+    serializedFieldOverride?: Partial<Meta>,
+  ): Promise<boolean> {
+    let overrideMeta = serializedFieldOverride;
+    if (!overrideMeta) {
+      overrideMeta = getFieldMeta(resource.meta?.fields, fieldName);
     }
+    if (!overrideMeta || !overrideMeta.adoptsFrom) {
+      return false;
+    }
+    let override = await loadCardDef(overrideMeta.adoptsFrom, {
+      loader: myLoader(),
+      relativeTo:
+        resource.id && typeof resource.id === 'string'
+          ? new URL(resource.id)
+          : instanceRelativeTo,
+    });
+    if (!override) {
+      return false;
+    }
+    return applyFieldOverride(fieldName, override, field);
+  }
+
+  function applyLinkOverrideFromValue(
+    fieldName: string,
+    field: Field<typeof BaseDef, any>,
+    value: any,
+  ): Field<typeof BaseDef, any> {
+    let changed = false;
+    if (field.fieldType === 'linksTo') {
+      if (isCardInstance(value)) {
+        changed = applyFieldOverride(
+          fieldName,
+          value.constructor as typeof BaseDef,
+        );
+      }
+    } else if (field.fieldType === 'linksToMany') {
+      if (Array.isArray(value)) {
+        let linked = value.find((entry) => isCardInstance(entry));
+        if (linked) {
+          changed = applyFieldOverride(
+            fieldName,
+            linked.constructor as typeof BaseDef,
+          );
+        }
+      }
+    }
+    if (changed) {
+      return (getField(instance, fieldName) ?? field) as Field<T>;
+    }
+    return field;
   }
 
   let values = (await Promise.all(
@@ -3004,37 +3200,79 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         // and have a chance to fix it so that it adheres to the definition
         return [];
       }
-      if (primitive in field.card) {
-        if (Array.isArray(value)) {
-          for (let [index] of value.entries()) {
-            await setDeserializedFieldOverride(
-              `${fieldName}.${index}`,
-              resource,
-            );
+      let resourceMetaFields = resource.meta?.fields;
+      let overrideApplied = false;
+      if (field.fieldType === 'containsMany') {
+        if (primitive in field.card) {
+          if (Array.isArray(value)) {
+            for (let [index] of value.entries()) {
+              let key = `${fieldName}.${index}`;
+              overrideApplied =
+                (await setDeserializedFieldOverride(
+                  key,
+                  resource,
+                  field,
+                  getFieldMeta(resourceMetaFields, key),
+                )) || overrideApplied;
+            }
+          } else {
+            overrideApplied =
+              (await setDeserializedFieldOverride(
+                fieldName,
+                resource,
+                field,
+                getFieldMeta(resourceMetaFields, fieldName),
+              )) || overrideApplied;
           }
         } else {
-          await setDeserializedFieldOverride(fieldName, resource);
+          let metas = getFieldMetaArray(resourceMetaFields, fieldName);
+          if (metas) {
+            for (let [index, meta] of metas.entries()) {
+              overrideApplied =
+                (await setDeserializedFieldOverride(
+                  `${fieldName}.${index}`,
+                  resource,
+                  field,
+                  meta,
+                )) || overrideApplied;
+            }
+          }
         }
+      } else if (field.fieldType === 'contains') {
+        overrideApplied =
+          (await setDeserializedFieldOverride(
+            fieldName,
+            resource,
+            field,
+            getFieldMeta(resourceMetaFields, fieldName),
+          )) || overrideApplied;
+      }
+      if (overrideApplied) {
+        field = (getField(instance, fieldName) ?? field) as Field<T>;
       }
       let relativeToVal =
         'id' in instance && typeof instance.id === 'string'
           ? new URL(instance.id)
           : instance[relativeTo];
-      return [
+      let deserializedValue = await getDeserializedValue({
+        card,
+        loadedValue: loadedValues.get(fieldName),
+        fieldName,
+        value,
+        resource,
+        modelPromise: deferred.promise,
+        doc,
+        store,
+        relativeTo: relativeToVal,
+        opts,
+      });
+
+      field = applyLinkOverrideFromValue(
+        fieldName,
         field,
-        await getDeserializedValue({
-          card,
-          loadedValue: loadedValues.get(fieldName),
-          fieldName,
-          value,
-          resource,
-          modelPromise: deferred.promise,
-          doc,
-          store,
-          relativeTo: relativeToVal,
-          opts,
-        }),
-      ];
+        deserializedValue,
+      ) as Field<T>;
+      return [field, deserializedValue];
     }),
   )) as [Field<T>, any][];
 
@@ -3144,9 +3382,6 @@ function makeDescriptor<
       }
       setField(this, field, value);
     };
-  }
-  if (field.description) {
-    (descriptor as any)[fieldDescription] = field.description;
   }
   (descriptor.get as any)[isField] = field;
   return descriptor;
@@ -3415,7 +3650,7 @@ export class Box<T> {
       }
     });
     this.prevChildren = newChildren;
-    this.prevValues = newChildren.map((child) => child.value);
+    this.prevValues = value.slice();
     return newChildren;
   }
 }

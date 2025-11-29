@@ -1,7 +1,6 @@
 import { service } from '@ember/service';
 
 import { isCardInstance, logger } from '@cardstack/runtime-common';
-
 // Conventional module-scoped logger (pattern used elsewhere like store & realm events)
 const oneShotLogger = logger('llm:oneshot');
 
@@ -10,6 +9,7 @@ import type { Skill } from 'https://cardstack.com/base/skill';
 
 import HostBaseCommand from '../lib/host-base-command';
 
+import { prettifyMessages } from '../utils/prettify-messages';
 import { prettifyPrompts } from '../utils/prettify-prompts';
 
 import ReadTextFileCommand from './read-text-file';
@@ -117,12 +117,18 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
         );
       }
 
-      // Build system prompt with skill cards if provided
+      let skillInstructions =
+        loadedSkillCards.length > 0
+          ? `Available Skills:\n${skillsToMessage(loadedSkillCards)}`
+          : '';
+
       let systemPrompt = input.systemPrompt;
-      if (loadedSkillCards.length > 0) {
-        systemPrompt += '\n\nAvailable Skills:\n';
-        systemPrompt += skillCardsToMessage(loadedSkillCards);
-      }
+
+      const fileSection = `${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : ''}${attachedFilesContent ? attachedFilesContent : ''}${!fileContent && !attachedFilesContent ? 'No file content available.' : ''}`;
+
+      let userContent = [input.userPrompt, skillInstructions, fileSection]
+        .filter((section) => section && section.trim().length > 0)
+        .join('\n\n');
 
       const generationMessages = [
         {
@@ -131,14 +137,23 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
         },
         {
           role: 'user' as const,
-          content: `${input.userPrompt}
-
-${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : ''}${attachedFilesContent ? attachedFilesContent : ''}${!fileContent && !attachedFilesContent ? 'No file content available.' : ''}`,
+          content: userContent,
         },
       ];
+      oneShotLogger.debug(
+        prettifyMessages(
+          generationMessages.map((message) => ({
+            role: message.role,
+            content:
+              typeof message.content === 'string'
+                ? message.content
+                : String(message.content),
+          })),
+        ),
+      );
       oneShotLogger.debug('prepared messages', {
         systemPromptLength: systemPrompt.length,
-        userPromptLength: input.userPrompt.length,
+        userPromptLength: userContent.length,
         fileContentIncluded: !!fileContent,
         attachedFilesCount: input.attachedFileURLs?.length || 0,
         skillCards: loadedSkillCards.map((c) => c.id),
@@ -170,9 +185,7 @@ ${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : ''}${attachedFilesContent ? a
         usage: responseData.usage || null,
       });
       const output = responseData.choices?.[0]?.message?.content || null;
-      oneShotLogger.debug('llm request complete', {
-        outputPreview: output ? String(output).slice(0, 120) : null,
-      });
+      oneShotLogger.debug('llm request complete', output);
 
       return new OneShotLLMRequestResult({
         output: output,
@@ -184,11 +197,14 @@ ${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : ''}${attachedFilesContent ? a
   }
 }
 
-export const skillCardsToMessage = (cards: Skill[]) => {
+const skillsToMessage = (cards: Skill[]) => {
   return cards
     .map((card) => {
-      return `Skill (id: ${card.id}):
-${card.instructions}`;
+      let instructions =
+        typeof (card as any).instructions === 'string'
+          ? (card as any).instructions.trim()
+          : '';
+      return `Skill (id: ${card.id}):\n${instructions || '[no instructions]'}`;
     })
     .join('\n\n');
 };

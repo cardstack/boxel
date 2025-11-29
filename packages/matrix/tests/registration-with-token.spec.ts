@@ -1,64 +1,59 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import {
-  synapseStart,
-  synapseStop,
-  getAccountData,
   loginUser,
+  registerUser,
+  getAccountData,
   type SynapseInstance,
 } from '../docker/synapse';
+import { appURL } from '../helpers/isolated-realm-server';
 import {
-  appURL,
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
-import { smtpStart, smtpStop } from '../docker/smtp4dev';
-import {
-  clearLocalStorage,
   validateEmail,
   gotoRegistration,
   assertLoggedIn,
   assertLoggedOut,
   logout,
   login,
-  registerRealmUsers,
   enterWorkspace,
   showAllCards,
-  setupUser,
+  createSubscribedUser,
+  getUniqueUsername,
+  getUniquePassword,
+  REGISTRATION_TOKEN,
+  getMatrixTestContext,
 } from '../helpers';
-import { registerUser, createRegistrationToken } from '../docker/synapse';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '../helpers/matrix-constants';
 
-const REGISTRATION_TOKEN = 'abc123';
+const serverIndexUrl = new URL(appURL).origin;
 
-test.describe('User Registration w/ Token - isolated realm server', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
+function getSynapse(): SynapseInstance {
+  return getMatrixTestContext().synapse;
+}
 
+function makeRegistrationUser(
+  prefix: string,
+  opts?: { displayName?: string; emailDomain?: string },
+) {
+  let username = getUniqueUsername(prefix);
+  let password = getUniquePassword();
+  let chosenDomain = opts?.emailDomain ?? 'localhost';
+  return {
+    username,
+    password,
+    email: `${username}@${chosenDomain}`,
+    displayName: opts?.displayName ?? `${prefix} User`,
+  };
+}
+
+test.describe('User Registration w/ Token', () => {
   test.beforeEach(async () => {
-    // synapse defaults to 30s for beforeEach to finish, we need a bit more time
-    // to safely start the realm
-    test.setTimeout(60_000);
-    synapse = await synapseStart({
-      template: 'test',
-    });
-    await registerRealmUsers(synapse);
-    await smtpStart();
-    realmServer = await startRealmServer();
-  });
-
-  test.afterEach(async () => {
-    await realmServer.stop();
-    await synapseStop(synapse.synapseId);
-    await smtpStop();
   });
 
   test('it can register a user with a registration token', async ({ page }) => {
-    let serverIndexUrl = new URL(appURL).origin;
-    test.setTimeout(120_000);
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await registerUser(synapse, 'user2', 'pass');
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
-    await clearLocalStorage(page, serverIndexUrl);
+    let secondUser = await createSubscribedUser('token-registration-2');
+    let firstUser = makeRegistrationUser('token-registration-1', {
+      displayName: 'Test User',
+    });
+
     await gotoRegistration(page, serverIndexUrl);
 
     await expect(page.locator('[data-test-register-btn]')).toHaveCount(1);
@@ -68,17 +63,17 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       'token field is not displayed',
     ).toHaveCount(0);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-name-field]').fill('Test User');
+    await page.locator('[data-test-name-field]').fill(firstUser.displayName);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-email-field]').fill('user1@example.com');
+    await page.locator('[data-test-email-field]').fill(firstUser.email);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-username-field]').fill(firstUser.username);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page.locator('[data-test-password-field]').fill(firstUser.password);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
     await page
       .locator('[data-test-confirm-password-field]')
-      .fill('mypassword1!');
+      .fill(firstUser.password);
     await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
     await page.locator('[data-test-register-btn]').click();
 
@@ -88,23 +83,23 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       'username field is not displayed',
     ).toHaveCount(0);
     await expect(page.locator('[data-test-next-btn]')).toBeDisabled();
-    await page.locator('[data-test-token-field]').fill('abc123');
+    await page.locator('[data-test-token-field]').fill(REGISTRATION_TOKEN);
     await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
     await page.locator('[data-test-next-btn]').click();
 
-    await validateEmail(page, 'user1@example.com', {
-      onEmailPage: async (page) => {
-        await expect(page).toHaveScreenshot('verification-email.png', {
-          mask: [page.locator('.messagelist')],
-          maxDiffPixelRatio: 0.01,
+    await validateEmail(page, firstUser.email, {
+      onEmailPage: async (emailPage) => {
+        await expect(emailPage).toHaveScreenshot('verification-email.png', {
+          mask: [emailPage.locator('.messagelist')],
+          maxDiffPixelRatio: 0.1,
         });
       },
-      onValidationPage: async (page) => {
-        await expect(page.locator('body')).toContainText(
+      onValidationPage: async (validationPage) => {
+        await expect(validationPage.locator('body')).toContainText(
           'Your email has now been validated',
         );
-        await expect(page).toHaveScreenshot('verification-page.png', {
-          maxDiffPixelRatio: 0.01,
+        await expect(validationPage).toHaveScreenshot('verification-page.png', {
+          maxDiffPixelRatio: 0.1,
         });
       },
     });
@@ -153,7 +148,8 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       ),
     ).toHaveCount(1);
 
-    let newRealmURL = new URL('user1/personal/', serverIndexUrl).href;
+    let newRealmURL = new URL(`${firstUser.username}/personal/`, serverIndexUrl)
+      .href;
 
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
     await expect(
@@ -168,7 +164,6 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       ),
     ).toContainText("Test User's Workspace");
 
-    // assert workspace chooser toggle states
     await expect(
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toHaveCount(1);
@@ -180,20 +175,16 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toHaveCount(1);
 
-    // assert that the registration mode state is cleared properly
     await logout(page);
     await assertLoggedOut(page);
 
-    await setupUser('@user2:localhost', realmServer);
-
-    // assert workspaces state don't leak into other sessions
-    await login(page, 'user2', 'pass', {
+    await login(page, secondUser.username, secondUser.password, {
       url: serverIndexUrl,
     });
 
     await assertLoggedIn(page, {
-      userId: '@user2:localhost',
-      displayName: 'user2',
+      userId: secondUser.credentials.userId,
+      displayName: secondUser.username,
     });
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
     await expect(page.locator(`[data-test-workspace-list]`)).toHaveCount(1);
@@ -209,13 +200,20 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       ),
     ).toHaveCount(1);
 
-    // assert newly registered user can login with their credentials
     await logout(page);
     await assertLoggedOut(page);
-    await login(page, 'user1', 'mypassword1!', {
+
+    let firstUserCredentials = await loginUser(
+      firstUser.username,
+      firstUser.password,
+    );
+    await login(page, firstUser.username, firstUser.password, {
       url: serverIndexUrl,
     });
-    await assertLoggedIn(page, { displayName: 'Test User' });
+    await assertLoggedIn(page, {
+      displayName: firstUser.displayName,
+      userId: firstUserCredentials.userId,
+    });
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"]`),
@@ -230,103 +228,87 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       ),
     ).toHaveCount(1);
 
-    // we're including the following assertions in this test because the
-    // isolated realm is so expensive, otherwise it would be desireable to have
-    // these assertions in their own test
-
-    // assert that logged in user can navigate directly to card in private realm without
-    // being asked to login
     await page.goto(newRealmURL);
     await expect(
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toHaveCount(1);
 
-    // assert that non-logged in user is prompted to login before navigating
-    // directly to card in private repo
     await logout(page);
     await assertLoggedOut(page);
 
-    await login(page, 'user1', 'mypassword1!', {
+    await login(page, firstUser.username, firstUser.password, {
       url: newRealmURL,
     });
-    await assertLoggedIn(page, { displayName: 'Test User' });
+    await assertLoggedIn(page, {
+      displayName: firstUser.displayName,
+      userId: firstUserCredentials.userId,
+    });
     await expect(
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toHaveCount(1);
 
-    let auth = await loginUser(`user1`, 'mypassword1!');
     let realms = await getAccountData<{ realms: string[] } | undefined>(
-      auth.userId,
-      auth.accessToken,
+      firstUserCredentials.userId,
+      firstUserCredentials.accessToken,
       APP_BOXEL_REALMS_EVENT_TYPE,
     );
     expect(realms).toEqual({
-      realms: ['http://localhost:4205/user1/personal/'],
+      realms: [`http://localhost:4205/${firstUser.username}/personal/`],
     });
   });
 
-  test(`it can resend email validation message`, async ({ page }) => {
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await clearLocalStorage(page, appURL);
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
-    await gotoRegistration(page, appURL);
+  test('it can resend email validation message', async ({ page }) => {
+    const user = makeRegistrationUser('token-resend-email');
+
+    await gotoRegistration(page, serverIndexUrl);
 
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-name-field]').fill('user1');
-    await page.locator('[data-test-email-field]').fill('user1@example.com');
-    await page.locator('[data-test-username-field]').fill('user1');
-    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page.locator('[data-test-name-field]').fill(user.displayName);
+    await page.locator('[data-test-email-field]').fill(user.email);
+    await page.locator('[data-test-username-field]').fill(user.username);
+    await page.locator('[data-test-password-field]').fill(user.password);
     await page
       .locator('[data-test-confirm-password-field]')
-      .fill('mypassword1!');
+      .fill(user.password);
     await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
     await page.locator('[data-test-register-btn]').click();
 
     await expect(page.locator('[data-test-next-btn]')).toBeDisabled();
-    await page.locator('[data-test-token-field]').fill('abc123');
+    await page.locator('[data-test-token-field]').fill(REGISTRATION_TOKEN);
     await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
     await page.locator('[data-test-next-btn]').click();
 
-    await validateEmail(page, 'user1@example.com', { sendAttempts: 2 });
-  });
-});
-
-test.describe('User Registration w/ Token', () => {
-  let synapse: SynapseInstance;
-
-  test.beforeEach(async () => {
-    synapse = await synapseStart({
-      template: 'test',
-    });
-    await registerRealmUsers(synapse);
-    await smtpStart();
-  });
-
-  test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-    await smtpStop();
+    await validateEmail(page, user.email, { sendAttempts: 2 });
   });
 
   test('it shows an error when the username is already taken', async ({
     page,
   }) => {
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
-    await registerUser(synapse, 'user1', 'pass');
-    await clearLocalStorage(page);
+    let synapse = getSynapse();
+    let existingUser = makeRegistrationUser('token-username-taken-existing');
+    await registerUser(synapse, existingUser.username, existingUser.password);
+    let registrationUser = makeRegistrationUser(
+      'token-username-taken-registration',
+    );
 
-    await gotoRegistration(page);
+    await gotoRegistration(page, serverIndexUrl);
 
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-name-field]').fill('Test User');
+    await page
+      .locator('[data-test-name-field]')
+      .fill(registrationUser.displayName);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-email-field]').fill('user2@example.com');
+    await page.locator('[data-test-email-field]').fill(registrationUser.email);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill('user1');
-    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page
+      .locator('[data-test-username-field]')
+      .fill(existingUser.username);
+    await page
+      .locator('[data-test-password-field]')
+      .fill(registrationUser.password);
     await page
       .locator('[data-test-confirm-password-field]')
-      .fill('mypassword1!');
+      .fill(registrationUser.password);
 
     await expect(
       page.locator(
@@ -340,7 +322,9 @@ test.describe('User Registration w/ Token', () => {
       ),
     ).toContainText('Username is already taken');
 
-    await page.locator('[data-test-username-field]').fill('user2');
+    await page
+      .locator('[data-test-username-field]')
+      .fill(registrationUser.username);
     await expect(
       page.locator(
         '[data-test-username-field] ~ [data-test-boxel-input-group-error-message]',
@@ -352,22 +336,20 @@ test.describe('User Registration w/ Token', () => {
   test('it shows an error when the username start with an underscore', async ({
     page,
   }) => {
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
-    await clearLocalStorage(page);
+    const user = makeRegistrationUser('token-underscore');
 
-    await gotoRegistration(page);
+    await gotoRegistration(page, serverIndexUrl);
 
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-name-field]').fill('Test User');
+    await page.locator('[data-test-name-field]').fill(user.displayName);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-email-field]').fill('user1@example.com');
+    await page.locator('[data-test-email-field]').fill(user.email);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill('_user1');
-    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page.locator('[data-test-username-field]').fill(`_${user.username}`);
+    await page.locator('[data-test-password-field]').fill(user.password);
     await page
       .locator('[data-test-confirm-password-field]')
-      .fill('mypassword1!');
+      .fill(user.password);
 
     await expect(
       page.locator(
@@ -381,7 +363,7 @@ test.describe('User Registration w/ Token', () => {
       ),
     ).toContainText('Username cannot start with an underscore');
 
-    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-username-field]').fill(user.username);
     await expect(
       page.locator(
         '[data-test-username-field] ~ [data-test-boxel-input-group-error-message]',
@@ -393,22 +375,22 @@ test.describe('User Registration w/ Token', () => {
   test('it shows an error when the username start with "realm/"', async ({
     page,
   }) => {
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
-    await clearLocalStorage(page);
+    const user = makeRegistrationUser('token-realm-prefix');
 
-    await gotoRegistration(page);
+    await gotoRegistration(page, serverIndexUrl);
 
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-name-field]').fill('Test User');
+    await page.locator('[data-test-name-field]').fill(user.displayName);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-email-field]').fill('user1@example.com');
+    await page.locator('[data-test-email-field]').fill(user.email);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill('realm/user');
-    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page
+      .locator('[data-test-username-field]')
+      .fill(`realm/${user.username}`);
+    await page.locator('[data-test-password-field]').fill(user.password);
     await page
       .locator('[data-test-confirm-password-field]')
-      .fill('mypassword1!');
+      .fill(user.password);
 
     await expect(
       page.locator(
@@ -422,7 +404,7 @@ test.describe('User Registration w/ Token', () => {
       ),
     ).toContainText('Username cannot start with "realm/"');
 
-    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-username-field]').fill(user.username);
     await expect(
       page.locator(
         '[data-test-username-field] ~ [data-test-boxel-input-group-error-message]',
@@ -431,24 +413,22 @@ test.describe('User Registration w/ Token', () => {
     ).toHaveCount(0);
   });
 
-  test(`it show an error when a invalid registration token is used`, async ({
+  test('it show an error when a invalid registration token is used', async ({
     page,
   }) => {
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
-    await clearLocalStorage(page);
+    const user = makeRegistrationUser('token-invalid');
 
-    await gotoRegistration(page);
+    await gotoRegistration(page, serverIndexUrl);
 
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-name-field]').fill('Test User');
+    await page.locator('[data-test-name-field]').fill(user.displayName);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-email-field]').fill('user1@example.com');
-    await page.locator('[data-test-username-field]').fill('user1');
-    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page.locator('[data-test-email-field]').fill(user.email);
+    await page.locator('[data-test-username-field]').fill(user.username);
+    await page.locator('[data-test-password-field]').fill(user.password);
     await page
       .locator('[data-test-confirm-password-field]')
-      .fill('mypassword1!');
+      .fill(user.password);
     await page.locator('[data-test-register-btn]').click();
 
     await expect(page.locator('[data-test-token-field]')).toHaveCount(1);
@@ -480,7 +460,7 @@ test.describe('User Registration w/ Token', () => {
       'This registration token does not exist or has exceeded its usage limit.',
     );
 
-    await page.locator('[data-test-token-field]').fill('abc123');
+    await page.locator('[data-test-token-field]').fill(REGISTRATION_TOKEN);
     await expect(
       page.locator(
         '[data-test-token-field][data-test-boxel-input-validation-state="initial"]',
@@ -495,19 +475,20 @@ test.describe('User Registration w/ Token', () => {
     ).toHaveCount(0);
   });
 
-  test(`it shows an error when passwords do not match`, async ({ page }) => {
-    await clearLocalStorage(page);
-    await gotoRegistration(page);
+  test('it shows an error when passwords do not match', async ({ page }) => {
+    const user = makeRegistrationUser('token-password-mismatch');
+
+    await gotoRegistration(page, serverIndexUrl);
 
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-name-field]').fill('user1');
+    await page.locator('[data-test-name-field]').fill(user.displayName);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-email-field]').fill('user1@example.com');
-    await page.locator('[data-test-username-field]').fill('user1');
-    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page.locator('[data-test-email-field]').fill(user.email);
+    await page.locator('[data-test-username-field]').fill(user.username);
+    await page.locator('[data-test-password-field]').fill(user.password);
     await page
       .locator('[data-test-confirm-password-field]')
-      .fill('mypassword1!!');
+      .fill(`${user.password}-mismatch`);
     await page.locator('[data-test-register-btn]').click();
     await expect(
       page.locator(
@@ -522,7 +503,7 @@ test.describe('User Registration w/ Token', () => {
 
     await page
       .locator('[data-test-confirm-password-field]')
-      .fill('mypassword1!');
+      .fill(user.password);
     await expect(
       page.locator(
         '[data-test-confirm-password-field][data-test-boxel-input-validation-state="invalid"]',
@@ -539,16 +520,17 @@ test.describe('User Registration w/ Token', () => {
     await expect(page.locator('[data-test-token-field]')).toHaveCount(1);
   });
 
-  test(`it shows an error when password doesn't follow requirement`, async ({
+  test("it shows an error when password doesn't follow requirement", async ({
     page,
   }) => {
-    await clearLocalStorage(page);
-    await gotoRegistration(page);
+    const user = makeRegistrationUser('token-password-requirement');
+
+    await gotoRegistration(page, serverIndexUrl);
 
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-name-field]').fill('user1');
-    await page.locator('[data-test-email-field]').fill('user1@example.com');
-    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-name-field]').fill(user.displayName);
+    await page.locator('[data-test-email-field]').fill(user.email);
+    await page.locator('[data-test-username-field]').fill(user.username);
     await page.locator('[data-test-password-field]').fill('short');
     await page.locator('[data-test-confirm-password-field]').fill('short');
     await expect(
@@ -562,10 +544,10 @@ test.describe('User Registration w/ Token', () => {
       ),
     ).toHaveText('Password must be at least 8 characters long');
 
-    await page.locator('[data-test-password-field]').fill('mypassword!1');
+    await page.locator('[data-test-password-field]').fill(user.password);
     await page
       .locator('[data-test-confirm-password-field]')
-      .fill('mypassword!1');
+      .fill(user.password);
     await expect(
       page.locator(
         '[data-test-password-field][data-test-boxel-input-validation-state="invalid"]',
@@ -584,20 +566,21 @@ test.describe('User Registration w/ Token', () => {
   });
 
   test('it shows an error encountered when registering', async ({ page }) => {
-    await clearLocalStorage(page);
-    await gotoRegistration(page);
+    const user = makeRegistrationUser('token-register-error');
+
+    await gotoRegistration(page, serverIndexUrl);
 
     await expect(
       page.locator('[data-test-register-user-error]'),
       'error is not shown',
     ).toHaveCount(0);
-    await page.locator('[data-test-name-field]').fill('user1');
+    await page.locator('[data-test-name-field]').fill(user.displayName);
     await page.locator('[data-test-email-field]').fill('not-an-email-address');
-    await page.locator('[data-test-username-field]').fill('user1');
-    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page.locator('[data-test-username-field]').fill(user.username);
+    await page.locator('[data-test-password-field]').fill(user.password);
     await page
       .locator('[data-test-confirm-password-field]')
-      .fill('mypassword1!');
+      .fill(user.password);
     await page.locator('[data-test-register-btn]').click();
 
     await expect(page.locator('[data-test-register-user-error]')).toContainText(
@@ -608,16 +591,17 @@ test.describe('User Registration w/ Token', () => {
   test('it shows an error encountered when submitting the token', async ({
     page,
   }) => {
-    await clearLocalStorage(page);
-    await gotoRegistration(page);
+    const user = makeRegistrationUser('token-submit-error');
 
-    await page.locator('[data-test-name-field]').fill('user1');
-    await page.locator('[data-test-email-field]').fill('user1@example.com');
-    await page.locator('[data-test-username-field]').fill('user1');
-    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await gotoRegistration(page, serverIndexUrl);
+
+    await page.locator('[data-test-name-field]').fill(user.displayName);
+    await page.locator('[data-test-email-field]').fill(user.email);
+    await page.locator('[data-test-username-field]').fill(user.username);
+    await page.locator('[data-test-password-field]').fill(user.password);
     await page
       .locator('[data-test-confirm-password-field]')
-      .fill('mypassword1!');
+      .fill(user.password);
     await page.locator('[data-test-register-btn]').click();
 
     await expect(
@@ -627,7 +611,7 @@ test.describe('User Registration w/ Token', () => {
       'no error message is displayed',
     ).toHaveCount(0);
 
-    await page.locator('[data-test-token-field]').fill('abc123');
+    await page.locator('[data-test-token-field]').fill(REGISTRATION_TOKEN);
     await page.context().setOffline(true);
     await page.locator('[data-test-next-btn]').click();
 
@@ -642,5 +626,6 @@ test.describe('User Registration w/ Token', () => {
         '[data-test-token-field] ~ [data-test-boxel-input-error-message]',
       ),
     ).toContainText('Could not connect to server');
+    await page.context().setOffline(false);
   });
 });

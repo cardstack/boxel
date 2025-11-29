@@ -15,6 +15,8 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
+import type CommandService from '../services/command-service';
+
 import type StoreService from '../services/store';
 
 interface Configuration {
@@ -25,6 +27,7 @@ export default class PatchCardInstanceCommand extends HostBaseCommand<
   undefined
 > {
   @service declare private store: StoreService;
+  @service declare private commandService: CommandService;
 
   description = `Propose a patch to an existing card instance to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making. Do NOT leave out the cardId or patch fields or this tool will not work.`;
   static actionVerb = 'Update Card';
@@ -52,10 +55,19 @@ export default class PatchCardInstanceCommand extends HostBaseCommand<
         "Patch command can't run because it doesn't have all the fields in arguments returned by open ai",
       );
     }
-    await this.store.patch(input.cardId, {
-      attributes: input.patch.attributes,
-      relationships: input.patch.relationships,
-    });
+    let clientRequestId =
+      this.commandService.registerAiAssistantClientRequestId(
+        'patch-instance',
+        input.roomId,
+      );
+    await this.store.patch(
+      input.cardId,
+      {
+        attributes: input.patch.attributes,
+        relationships: input.patch.relationships,
+      },
+      { doNotWaitForPersist: true, clientRequestId },
+    );
   }
 
   async getInputJsonSchema(

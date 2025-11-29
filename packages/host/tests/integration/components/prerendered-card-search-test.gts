@@ -17,7 +17,6 @@ import {
   CardContextName,
 } from '@cardstack/runtime-common';
 
-import CardPrerender from '@cardstack/host/components/card-prerender';
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
 
 import {
@@ -605,9 +604,6 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           <div data-test-meta-page-total={{meta.page.total}}></div>
         </:meta>
       </PrerenderedCardSearch>
-
-      {{! to support incremental indexing }}
-      <CardPrerender />
     </template>);
     await waitFor('#ember-testing > [data-test-boxel-card-container]');
     assert

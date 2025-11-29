@@ -2,7 +2,7 @@ import GlimmerComponent from '@glimmer/component';
 
 export interface NotificationBubbleSignature {
   Args: {
-    type?: 'info' | 'success' | 'warning' | 'error';
+    type?: 'idle' | 'pending' | 'success' | 'error';
     message: string;
   };
 }
@@ -28,20 +28,20 @@ export default class NotificationBubble extends GlimmerComponent<NotificationBub
           background 0.2s,
           color 0.2s;
       }
-      .notification-bubble.info {
-        background: #eaf4ff;
-        color: #1a3a5d;
-        border-color: #b6d6f6;
+      .notification-bubble.idle {
+        background: #f5f7fa;
+        color: #4a5568;
+        border-color: #e0e4ea;
+      }
+      .notification-bubble.pending {
+        background: #f3f0ff;
+        color: #5b21b6;
+        border-color: #c4b5fd;
       }
       .notification-bubble.success {
         background: #e6f9ed;
         color: #1b4d2b;
         border-color: #a7e7c1;
-      }
-      .notification-bubble.warning {
-        background: #fff8e1;
-        color: #7a5a00;
-        border-color: #ffe6a1;
       }
       .notification-bubble.error {
         background: #ffeaea;

@@ -19,6 +19,7 @@ import {
 
 import { type HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
 import { type Message } from '@cardstack/host/lib/matrix-classes/message';
+import type MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -61,7 +62,10 @@ interface Signature {
     isDebugMessage?: boolean;
     isPending?: boolean;
     retryAction?: () => void;
+    waitAction?: () => void;
     hideMeta?: boolean;
+    isCodePatchCorrectness?: boolean;
+    commands?: MessageCommand[];
   };
   Blocks: { default: [] };
 }
@@ -294,9 +298,17 @@ export default class AiAssistantMessage extends Component<Signature> {
           {{else}}
             <Alert @type='error' as |Alert|>
               <Alert.Messages @messages={{this.errorMessages}} />
-              {{#if @retryAction}}
-                <Alert.Action @actionName='Retry' @action={{@retryAction}} />
-              {{/if}}
+              <div class='alert-action-buttons-row'>
+                {{#if @waitAction}}
+                  <Alert.Action
+                    @actionName='Wait longer'
+                    @action={{@waitAction}}
+                  />
+                {{/if}}
+                {{#if @retryAction}}
+                  <Alert.Action @actionName='Retry' @action={{@retryAction}} />
+                {{/if}}
+              </div>
             </Alert>
           {{/if}}
         {{/if}}
@@ -326,6 +338,16 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
       :deep(code) {
         overflow-wrap: break-word;
+      }
+
+      .alert-action-buttons-row {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--boxel-sp-sm);
+      }
+
+      .alert-action-buttons-row > :deep(.action-button) {
+        margin-left: 0;
       }
 
       .add-more-credits-button {

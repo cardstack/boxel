@@ -6,9 +6,10 @@ import type Transition from '@ember/routing/transition';
 import { join, scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 
+import { isTesting } from '@embroider/macros';
+
 import { TrackedMap } from 'tracked-built-ins';
 
-import type { CardError } from '@cardstack/runtime-common';
 import {
   formattedError,
   baseRealm,
@@ -30,13 +31,25 @@ import {
   windowErrorHandler,
   errorJsonApiToErrorEntry,
 } from '../lib/window-error-handler';
+import { createAuthErrorGuard } from '../utils/auth-error-guard';
+import {
+  RenderCardTypeTracker,
+  deriveCardTypeFromDoc,
+  withCardType,
+  coerceRenderError,
+  normalizeRenderError,
+} from '../utils/render-error';
+import {
+  enableRenderTimerStub,
+  beginTimerBlock,
+} from '../utils/render-timer-stub';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type RenderErrorStateService from '../services/render-error-state';
-import type StoreService from '../services/store';
+import type RenderStoreService from '../services/render-store';
 
 type RenderStatus = 'loading' | 'ready' | 'error' | 'unusable';
 
@@ -56,7 +69,7 @@ type ModelState = {
 };
 
 export default class RenderRoute extends Route<Model> {
-  @service declare store: StoreService;
+  @service('render-store') declare store: RenderStoreService;
   @service declare router: RouterService;
   @service declare loaderService: LoaderService;
   @service declare realm: RealmService;
@@ -68,9 +81,13 @@ export default class RenderRoute extends Route<Model> {
   private lastStoreResetKey: string | undefined;
   private renderBaseParams: [string, string, string] | undefined;
   private lastRenderErrorSignature: string | undefined;
+  #cardTypeTracker = new RenderCardTypeTracker();
   #modelStates = new Map<Model, ModelState>();
   #pendingReadyModels = new Set<Model>();
   #modelPromises = new Map<string, Promise<Model>>();
+  #authGuard = createAuthErrorGuard();
+  #restoreRenderTimers: (() => void) | undefined;
+  #releaseTimerBlock: (() => void) | undefined;
 
   errorHandler = (event: Event) => {
     windowErrorHandler({
@@ -111,13 +128,26 @@ export default class RenderRoute extends Route<Model> {
     this.#modelStates.clear();
     this.#pendingReadyModels.clear();
     this.#modelPromises.clear();
+    this.#authGuard.unregister();
+    this.#cardTypeTracker.clear();
+    this.#restoreRenderTimers?.();
+    this.#restoreRenderTimers = undefined;
+    this.#releaseTimerBlock?.();
+    this.#releaseTimerBlock = undefined;
   }
 
-  beforeModel() {
+  async beforeModel(transition: Transition) {
+    await super.beforeModel?.(transition);
     // activate() doesn't run early enough for this to be set before the model()
     // hook is run
     (globalThis as any).__lazilyLoadLinks = true;
     (globalThis as any).__boxelRenderContext = true;
+    this.#authGuard.register();
+    if (!isTesting()) {
+      await this.store.ensureSetupComplete();
+      this.#restoreRenderTimers = enableRenderTimerStub();
+      this.#releaseTimerBlock = beginTimerBlock();
+    }
   }
 
   async model(
@@ -158,8 +188,6 @@ export default class RenderRoute extends Route<Model> {
         clearFetchCache: true,
         reason: 'render-route clearCache',
       });
-    }
-    if (parsedOptions.clearCache) {
       let resetKey = `${id}:${nonce}`;
       if (this.lastStoreResetKey !== resetKey) {
         this.store.resetCache();
@@ -169,17 +197,30 @@ export default class RenderRoute extends Route<Model> {
     // This is for host tests
     (globalThis as any).__renderInstance = undefined;
 
-    let response = await this.network.authedFetch(id, {
-      method: 'GET',
-      headers: {
-        Accept: SupportedMimeType.CardSource,
-      },
-    });
+    let response: Response;
+    try {
+      response = await this.#authGuard.race(() =>
+        this.network.authedFetch(id, {
+          method: 'GET',
+          headers: {
+            Accept: SupportedMimeType.CardSource,
+          },
+        }),
+      );
+    } catch (err: any) {
+      if (this.#authGuard.isAuthError(err)) {
+        this.#processRenderError(err);
+        throw err;
+      }
+      throw err;
+    }
 
     let realmURL = response.headers.get('x-boxel-realm-url')!;
     let lastModified = new Date(response.headers.get('last-modified')!);
     let doc: LooseSingleCardDocument | CardErrorsJSONAPI =
       await response.json();
+    let canonicalId = id.replace(/\.json$/, '');
+
     let state = new TrackedMap<string, unknown>();
     state.set('status', 'loading');
 
@@ -197,7 +238,6 @@ export default class RenderRoute extends Route<Model> {
       readyDeferred,
       isReady: false,
     };
-    let canonicalId = id.replace(/\.json$/, '');
     let model: Model = {
       instance: undefined as unknown as CardDef,
       nonce,
@@ -216,8 +256,16 @@ export default class RenderRoute extends Route<Model> {
     try {
       if ('errors' in doc) {
         this.#dispositionModel(model, 'error');
+        this.#cardTypeTracker.set({ cardId: canonicalId, nonce }, undefined);
         throw new Error(JSON.stringify(doc.errors[0], null, 2));
       }
+      let derivedCardType = await this.#authGuard.race(() =>
+        deriveCardTypeFromDoc(doc, id, this.loaderService.loader),
+      );
+      this.#cardTypeTracker.set(
+        { cardId: canonicalId, nonce },
+        derivedCardType,
+      );
 
       await this.realm.ensureRealmMeta(realmURL);
 
@@ -236,11 +284,13 @@ export default class RenderRoute extends Route<Model> {
         },
       };
 
-      instance = await this.store.add(enhancedDoc, {
-        relativeTo: new URL(id),
-        realm: realmURL,
-        doNotPersist: true,
-      });
+      instance = await this.#authGuard.race(() =>
+        this.store.add(enhancedDoc, {
+          relativeTo: new URL(id),
+          realm: realmURL,
+          doNotPersist: true,
+        }),
+      );
       model.instance = instance;
     } catch (e: any) {
       console.warn(
@@ -250,9 +300,9 @@ export default class RenderRoute extends Route<Model> {
       throw e;
     }
     if (instance) {
-      await this.#touchIsUsedFields(instance);
+      await this.#authGuard.race(() => this.#touchIsUsedFields(instance));
     }
-    await this.store.loaded();
+    await this.#authGuard.race(() => this.store.loaded());
     if (instance) {
       model.instance = instance;
     }
@@ -320,7 +370,7 @@ export default class RenderRoute extends Route<Model> {
     if (!modelState || modelState.isReady) {
       return;
     }
-    await this.store.loaded();
+    await this.#authGuard.race(() => this.store.loaded());
     modelState.state.set('status', 'ready');
     modelState.isReady = true;
     modelState.readyDeferred.fulfill();
@@ -408,6 +458,11 @@ export default class RenderRoute extends Route<Model> {
 
   @action
   error(error: any, transition: Transition) {
+    if (isTesting() && !(globalThis as any).__doNotSuppressRenderRouteError) {
+      // don't hijack routing in the host tests
+      return false;
+    }
+
     transition.abort();
     this.handleRenderError(error, transition);
     return false;
@@ -434,7 +489,16 @@ export default class RenderRoute extends Route<Model> {
     this.currentTransition?.abort();
     this.#rejectAllModelStates('error');
     let context = this.#deriveErrorContext(transition);
-    let serializedError = this.#serializeRenderError(error, transition);
+    let cardType = this.#cardTypeTracker.get({
+      cardId: context.cardId,
+      nonce: context.nonce,
+    });
+    let serializedError = this.#serializeRenderError(
+      error,
+      transition,
+      cardType,
+      context,
+    );
     let signature = this.#makeErrorSignature(serializedError, context);
     if (signature === this.lastRenderErrorSignature) {
       return;
@@ -449,44 +513,60 @@ export default class RenderRoute extends Route<Model> {
     this.#transitionToErrorRoute(transition);
   }
 
-  #serializeRenderError(error: any, transition?: Transition): string {
-    try {
-      let cardError: CardError = JSON.parse(error.message);
-      return JSON.stringify(
-        this.#stripLastKnownGoodHtml({
-          type: 'error',
-          error: cardError,
-        } as RenderError),
-        null,
-        2,
+  #serializeRenderError(
+    error: any,
+    transition?: Transition,
+    cardType?: string,
+    context?: { cardId?: string; nonce?: string },
+  ): string {
+    let normalizationContext = {
+      cardId: context?.cardId,
+      normalizeCardId: (id: string) => this.#normalizeCardId(id),
+    };
+    let coerceFromMessage =
+      typeof error?.message === 'string'
+        ? coerceRenderError(error.message)
+        : undefined;
+    let coerceFromValue = coerceFromMessage ?? coerceRenderError(error);
+    if (coerceFromValue) {
+      let normalized = normalizeRenderError(
+        coerceFromValue,
+        normalizationContext,
       );
-    } catch (_e) {
-      let current: Transition['to'] | null = transition?.to;
-      let id: string | undefined;
-      do {
-        id = current?.params?.id as string | undefined;
-        if (!id) {
-          current = current?.parent;
-        }
-      } while (current && !id);
-      if (isCardError(error)) {
-        return JSON.stringify(
-          this.#stripLastKnownGoodHtml({
-            type: 'error',
-            error: serializableError(error),
-          }),
-          null,
-          2,
-        );
-      }
-      let errorJSONAPI = formattedError(id, error).errors[0];
-      let errorPayload = errorJsonApiToErrorEntry(errorJSONAPI);
-      return JSON.stringify(
-        this.#stripLastKnownGoodHtml(errorPayload),
-        null,
-        2,
-      );
+      let withType = withCardType(normalized, cardType);
+      return JSON.stringify(this.#stripLastKnownGoodHtml(withType), null, 2);
     }
+    let current: Transition['to'] | null = transition?.to;
+    let id: string | undefined;
+    do {
+      id = current?.params?.id as string | undefined;
+      if (!id) {
+        current = current?.parent;
+      }
+    } while (current && !id);
+    if (isCardError(error)) {
+      let normalized = normalizeRenderError(
+        {
+          type: 'error',
+          error: serializableError(error),
+        },
+        normalizationContext,
+      );
+      let withType = withCardType(normalized, cardType);
+      return JSON.stringify(this.#stripLastKnownGoodHtml(withType), null, 2);
+    }
+    let errorJSONAPI = formattedError(id, error).errors[0];
+    let errorPayload = normalizeRenderError(
+      errorJsonApiToErrorEntry(errorJSONAPI) as RenderError,
+      normalizationContext,
+    );
+    return JSON.stringify(
+      this.#stripLastKnownGoodHtml(
+        withCardType(errorPayload as RenderError, cardType),
+      ),
+      null,
+      2,
+    );
   }
 
   #stripLastKnownGoodHtml<T>(value: T): T {

@@ -4,8 +4,6 @@ import {
   type CssRuleMap,
 } from '@cardstack/boxel-ui/helpers';
 
-import { getField } from '@cardstack/runtime-common';
-
 import {
   field,
   contains,
@@ -13,7 +11,7 @@ import {
   Component,
   FieldDef,
   StringField,
-  type BaseDef,
+  getFieldDescription,
 } from './card-api';
 import {
   dasherize,
@@ -21,13 +19,6 @@ import {
   type CssVariableFieldEntry,
 } from './structured-theme-variables';
 import URLField from './url';
-
-const getFieldValue = (model?: Partial<BrandLogo>, fieldName?: string) => {
-  if (!model || !fieldName) {
-    return;
-  }
-  return getField(model as BaseDef, fieldName);
-};
 
 class Embedded extends Component<typeof BrandLogo> {
   <template>
@@ -75,8 +66,11 @@ class Embedded extends Component<typeof BrandLogo> {
       <GridContainer class='preview-grid'>
         <FieldContainer @label='Primary Mark 1' @vertical={{true}}>
           <div class='preview-field'>
-            {{#let (getFieldValue @model 'primaryMark1') as |f|}}
-              <p>{{f.description}}</p>
+            {{#let
+              (getFieldDescription @model 'primaryMark1')
+              as |description|
+            }}
+              <p>{{description}}</p>
             {{/let}}
             <div class='preview-container border-container'>
               <@fields.primaryMark1 class='primary-mark' />
@@ -85,8 +79,11 @@ class Embedded extends Component<typeof BrandLogo> {
         </FieldContainer>
         <FieldContainer @label='Primary Mark 2' @vertical={{true}}>
           <div class='preview-field'>
-            {{#let (getFieldValue @model 'primaryMark2') as |f|}}
-              <p>{{f.description}}</p>
+            {{#let
+              (getFieldDescription @model 'primaryMark2')
+              as |description|
+            }}
+              <p>{{description}}</p>
             {{/let}}
             <div class='preview-container border-container dark-container'>
               <@fields.primaryMark2 class='primary-mark' />
@@ -98,8 +95,11 @@ class Embedded extends Component<typeof BrandLogo> {
       <GridContainer class='preview-grid'>
         <FieldContainer @label='Secondary Mark 1' @vertical={{true}}>
           <div class='preview-field'>
-            {{#let (getFieldValue @model 'secondaryMark1') as |f|}}
-              <p>{{f.description}}</p>
+            {{#let
+              (getFieldDescription @model 'secondaryMark1')
+              as |description|
+            }}
+              <p>{{description}}</p>
             {{/let}}
             <div class='preview-container border-container'>
               <@fields.secondaryMark1 class='secondary-mark' />
@@ -108,8 +108,11 @@ class Embedded extends Component<typeof BrandLogo> {
         </FieldContainer>
         <FieldContainer @label='Secondary Mark 2' @vertical={{true}}>
           <div class='preview-field'>
-            {{#let (getFieldValue @model 'secondaryMark2') as |f|}}
-              <p>{{f.description}}</p>
+            {{#let
+              (getFieldDescription @model 'secondaryMark2')
+              as |description|
+            }}
+              <p>{{description}}</p>
             {{/let}}
             <div class='preview-container border-container dark-container'>
               <@fields.secondaryMark2 class='secondary-mark' />
@@ -153,8 +156,11 @@ class Embedded extends Component<typeof BrandLogo> {
       {{! social media icon }}
       <FieldContainer @label='Social media/profile icon' @vertical={{true}}>
         <div class='preview-field'>
-          {{#let (getFieldValue @model 'socialMediaProfileIcon') as |field|}}
-            <p>{{field.description}}</p>
+          {{#let
+            (getFieldDescription @model 'socialMediaProfileIcon')
+            as |description|
+          }}
+            <p>{{description}}</p>
           {{/let}}
           <div class='preview-grid border-container border-group'>
             <div class='preview-container'>
@@ -230,7 +236,7 @@ class Embedded extends Component<typeof BrandLogo> {
       }
       .annotation {
         color: var(--annotation-foreground);
-        font-weight: var(--boxel-font-weight-bold);
+        font-weight: 700;
         white-space: nowrap;
       }
       .height-annotation-border {
@@ -268,7 +274,7 @@ class Embedded extends Component<typeof BrandLogo> {
         overflow: hidden;
       }
       .media-handle {
-        font-weight: var(--boxel-font-weight-semibold);
+        font-weight: 600;
       }
     </style>
   </template>

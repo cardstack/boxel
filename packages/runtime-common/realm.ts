@@ -8,7 +8,6 @@ import { isMeta, type CardResource } from './resource-types';
 import type { LocalPath } from './paths';
 import { RealmPaths, ensureTrailingSlash, join } from './paths';
 import { persistFileMeta, removeFileMeta, getCreatedTime } from './file-meta';
-import type { ErrorDetails } from './error';
 import {
   systemError,
   notFound,
@@ -46,11 +45,15 @@ import {
   type FieldDefinition,
   type RealmPermissions,
   type RealmAction,
+  type LintArgs,
+  type LintResult,
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
   userInitiatedPriority,
+  systemInitiatedPriority,
   userIdFromUsername,
   isCardDocumentString,
+  isBrowserTestEnv,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -77,6 +80,7 @@ import type { Readable } from 'stream';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
+import { getCardDirectoryName } from './helpers/card-directory-name';
 import {
   MatrixClient,
   ensureFullMatrixUserId,
@@ -101,7 +105,6 @@ import type {
   RealmEventContent,
   UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
-import type { LintArgs, LintResult } from './lint';
 import type {
   AtomicOperation,
   AtomicOperationResult,
@@ -148,6 +151,8 @@ export interface FileRef {
 const CACHE_HEADER = 'X-Boxel-Cache';
 const CACHE_HIT_VALUE = 'hit';
 const CACHE_MISS_VALUE = 'miss';
+const MODULE_ETAG_VARIANT = 'module';
+const SOURCE_ETAG_VARIANT = 'source';
 
 type CachedSourceFileEntry = {
   type: 'file';
@@ -186,6 +191,17 @@ type ModuleLoadResult =
       body: string;
       headers: Record<string, string>;
     };
+
+function buildEtag(
+  lastModified: number | undefined,
+  variant?: string,
+): string | undefined {
+  if (lastModified == null) {
+    return undefined;
+  }
+  let base = String(lastModified);
+  return variant ? `${base}:${variant}` : base;
+}
 
 export interface TokenClaims {
   user: string;
@@ -272,6 +288,7 @@ interface Options {
   disableModuleCaching?: true;
   copiedFromRealm?: URL;
   fullIndexOnStartup?: true;
+  fromScratchIndexPriority?: number;
 }
 
 interface UpdateItem {
@@ -302,6 +319,7 @@ export class Realm {
   #realmSecretSeed: string;
   #disableModuleCaching = false;
   #fullIndexOnStartup = false;
+  #fromScratchIndexPriority = systemInitiatedPriority;
   #realmServerMatrixUserId: string;
   #definitionsCache: DefinitionsCache;
   #copiedFromRealm: URL | undefined;
@@ -361,6 +379,8 @@ export class Realm {
     this.#adapter = adapter;
     this.#queue = queue;
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
+    this.#fromScratchIndexPriority =
+      opts?.fromScratchIndexPriority ?? systemInitiatedPriority;
     this.#realmServerMatrixClient = realmServerMatrixClient;
     this.#realmServerMatrixUserId = userIdFromUsername(
       realmServerMatrixClient.username,
@@ -582,8 +602,8 @@ export class Realm {
     await this.#startedUp.promise;
   }
 
-  async fullIndex() {
-    await this.realmIndexUpdater.fullIndex();
+  async fullIndex(priority?: number) {
+    await this.realmIndexUpdater.fullIndex(priority);
   }
 
   async flushUpdateEvents() {
@@ -627,16 +647,16 @@ export class Realm {
     let lastWriteType: 'module' | 'instance' | undefined;
     let currentWriteType: 'module' | 'instance' | undefined;
     let invalidations: Set<string> = new Set();
-    let clientRequestId: string | null | undefined;
+    let clientRequestId: string | null = options?.clientRequestId ?? null;
     let performIndex = async () => {
       await this.#realmIndexUpdater.update(urls, {
+        clientRequestId,
         onInvalidation: (invalidatedURLs: URL[]) => {
           this.handleExecutableInvalidations(invalidatedURLs);
           invalidations = new Set([
             ...invalidations,
             ...invalidatedURLs.map((u) => u.href),
           ]);
-          clientRequestId = clientRequestId ?? options?.clientRequestId;
         },
       });
     };
@@ -729,6 +749,59 @@ export class Realm {
     await removeFileMeta(this.#dbAdapter, this.url, paths);
   }
 
+  private lowestStatusCode(errors: AtomicPayloadValidationError[]): number {
+    let statuses = errors
+      .map((e) => e.status)
+      .filter((status) => typeof status === 'number') as number[];
+    return statuses.length > 0 ? Math.min(...statuses) : 400;
+  }
+
+  private async checkBeforeAtomicWrite(
+    operations: AtomicOperation[],
+  ): Promise<AtomicPayloadValidationError[]> {
+    let errors: AtomicPayloadValidationError[] = [];
+    await Promise.all(
+      operations.map(async (operation) => {
+        if (
+          (operation.op !== 'add' && operation.op !== 'update') ||
+          !operation.href
+        ) {
+          return;
+        }
+
+        let localPath: LocalPath;
+        try {
+          localPath = this.paths.local(new URL(operation.href, this.paths.url));
+        } catch (error: any) {
+          errors.push({
+            title: 'Invalid atomic:operations format',
+            detail:
+              error?.message ??
+              `Request operation contains invalid href '${operation.href}'`,
+            status: error?.status ?? 400,
+          });
+          return;
+        }
+
+        let exists = await this.#adapter.exists(localPath);
+        if (operation.op === 'add' && exists) {
+          errors.push({
+            title: 'Resource already exists',
+            detail: `Resource ${operation.href} already exists`,
+            status: 409,
+          });
+        } else if (operation.op === 'update' && !exists) {
+          errors.push({
+            title: 'Resource does not exist',
+            detail: `Resource ${operation.href} does not exist`,
+            status: 404,
+          });
+        }
+      }),
+    );
+    return errors;
+  }
+
   validate(json: any): AtomicPayloadValidationError[] {
     let operations = json['atomic:operations'];
     let title = 'Invalid atomic:operations format';
@@ -743,8 +816,8 @@ export class Realm {
       return errors;
     }
     for (let operation of operations) {
-      if (operation.op !== 'add') {
-        let detail = `You tried to use an unsupported operation type: '${operation.op}'. Only 'add' operations are currently supported`;
+      if (operation.op !== 'add' && operation.op !== 'update') {
+        let detail = `You tried to use an unsupported operation type: '${operation.op}'. Only 'add' and 'update' operations are currently supported`;
         errors.push({
           title,
           detail,
@@ -772,35 +845,6 @@ export class Realm {
       }
     }
     return errors;
-  }
-
-  // this method carefully checks before writing with the intent of
-  // stopping failed operations that depend on others
-  private async checkBeforeAtomicWrite(
-    operations: AtomicOperation[],
-  ): Promise<ErrorDetails[]> {
-    let promises = [];
-    for (let { href } of operations) {
-      let localPath = this.paths.local(new URL(href, this.paths.url));
-      promises.push(this.#adapter.exists(localPath));
-    }
-    let booleanFlags = await Promise.all(promises);
-    return operations
-      .filter((_, i) => booleanFlags[i])
-      .map(({ href }) => {
-        return {
-          title: 'Resource already exists',
-          detail: `Resource ${href} already exists`,
-          status: 409,
-        };
-      });
-  }
-
-  private lowestStatusCode(errors: ErrorDetails[]): number {
-    let statuses = errors
-      .filter((e) => e.status)
-      .map((e) => e.status) as number[];
-    return Math.min(...statuses);
   }
 
   private async handleAtomicOperations(
@@ -841,8 +885,8 @@ export class Realm {
         requestContext,
       });
     }
-    let operations = filterAtomicOperations(json['atomic:operations']);
-    let atomicCheckErrors = await this.checkBeforeAtomicWrite(operations);
+    let atomicOperations = json['atomic:operations'] as AtomicOperation[];
+    let atomicCheckErrors = await this.checkBeforeAtomicWrite(atomicOperations);
     if (atomicCheckErrors.length > 0) {
       return createResponse({
         body: JSON.stringify({ errors: atomicCheckErrors }),
@@ -853,6 +897,8 @@ export class Realm {
         requestContext,
       });
     }
+
+    let operations = filterAtomicOperations(atomicOperations);
     let files = new Map<LocalPath, string>();
     let writeResults: FileWriteResult[] = [];
 
@@ -860,6 +906,43 @@ export class Realm {
       let resource = operation.data;
       let href = operation.href;
       let localPath = this.paths.local(new URL(href, this.paths.url));
+      let exists = await this.#adapter.exists(localPath);
+      if (operation.op === 'add' && exists) {
+        return createResponse({
+          body: JSON.stringify({
+            errors: [
+              {
+                title: 'Resource already exists',
+                detail: `Resource ${href} already exists`,
+                status: 409,
+              },
+            ],
+          }),
+          init: {
+            status: 409,
+            headers: { 'content-type': SupportedMimeType.JSONAPI },
+          },
+          requestContext,
+        });
+      }
+      if (operation.op === 'update' && !exists) {
+        return createResponse({
+          body: JSON.stringify({
+            errors: [
+              {
+                title: 'Resource does not exist',
+                detail: `Resource ${href} does not exist`,
+                status: 404,
+              },
+            ],
+          }),
+          init: {
+            status: 404,
+            headers: { 'content-type': SupportedMimeType.JSONAPI },
+          },
+          requestContext,
+        });
+      }
       if (isModuleResource(resource)) {
         files.set(localPath, resource.attributes?.content ?? '');
       } else if (isCardResource(resource)) {
@@ -1068,7 +1151,9 @@ export class Realm {
     } else {
       let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
       if (isNewIndex || this.#fullIndexOnStartup) {
-        let promise = this.#realmIndexUpdater.fullIndex();
+        let promise = this.#realmIndexUpdater.fullIndex(
+          this.#fromScratchIndexPriority,
+        );
         if (isNewIndex) {
           // we only await the full indexing at boot if this is a brand new index
           await promise;
@@ -1448,22 +1533,27 @@ export class Realm {
     if (fileRef[Symbol.for('shimmed-module')]) {
       let response = createResponse({
         requestContext,
+        init: {
+          headers: {
+            'X-Boxel-Canonical-Path': fileRef.path,
+          },
+        },
       }) as ResponseWithNodeStream;
       (response as any)[Symbol.for('shimmed-module')] =
         fileRef[Symbol.for('shimmed-module')];
       return { kind: 'shimmed', response };
     }
 
-    let etag =
-      fileRef.lastModified != null ? String(fileRef.lastModified) : undefined;
+    let etag = buildEtag(fileRef.lastModified, MODULE_ETAG_VARIANT);
     if (etag && request.headers.get('if-none-match') === etag) {
       let headers: Record<string, string> = {
         'cache-control': 'public, max-age=0',
-        etag,
       };
+      headers.etag = etag;
       if (fileRef.lastModified != null) {
         headers['last-modified'] = formatRFC7231(fileRef.lastModified * 1000);
       }
+      headers['X-Boxel-Canonical-Path'] = fileRef.path;
       return {
         kind: 'not-modified',
         canonicalPath: fileRef.path,
@@ -1498,6 +1588,7 @@ export class Realm {
     if (fileRef.lastModified != null) {
       headers['last-modified'] = formatRFC7231(fileRef.lastModified * 1000);
     }
+    headers['X-Boxel-Canonical-Path'] = fileRef.path;
 
     return {
       kind: 'module',
@@ -1536,12 +1627,11 @@ export class Realm {
     requestContext: RequestContext,
     options?: {
       defaultHeaders?: Record<string, string>;
+      etagVariant?: string;
     },
   ): Promise<ResponseWithNodeStream> {
-    if (
-      ref.lastModified != null &&
-      request.headers.get('if-none-match') === String(ref.lastModified)
-    ) {
+    let etag = buildEtag(ref.lastModified, options?.etagVariant);
+    if (etag && request.headers.get('if-none-match') === etag) {
       return createResponse({
         body: null,
         init: { status: 304 },
@@ -1555,7 +1645,7 @@ export class Realm {
       ...(Symbol.for('shimmed-module') in ref
         ? { 'X-Boxel-Shimmed-Module': 'true' }
         : {}),
-      etag: String(ref.lastModified),
+      ...(etag ? { etag } : {}),
       'cache-control': 'public, max-age=0', // instructs the browser to check with server before using cache
     };
     if (createdFromDb != null) {
@@ -1610,7 +1700,7 @@ export class Realm {
     let authorizationString = request.headers.get('Authorization');
     if (!authorizationString) {
       this.#log.warn(
-        `auth failed for ${request.method} ${request.url} missing auth header`,
+        `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) missing auth header`,
       );
       throw new AuthenticationError(
         AuthenticationErrorMessages.MissingAuthHeader,
@@ -1651,7 +1741,7 @@ export class Realm {
           JSON.stringify(userPermissions.sort())
       ) {
         this.#log.warn(
-          `auth failed for ${request.method} ${request.url}, for user ${user} token permissions do not match realm permissions for user. token permissions: ${JSON.stringify(token.permissions?.sort())}, user's realm permissions: ${JSON.stringify(userPermissions.sort())}`,
+          `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), for user ${user} token permissions do not match realm permissions for user. token permissions: ${JSON.stringify(token.permissions?.sort())}, user's realm permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
         throw new AuthenticationError(
           AuthenticationErrorMessages.PermissionMismatch,
@@ -1660,7 +1750,7 @@ export class Realm {
 
       if (!(await realmPermissionChecker.can(user, requiredPermission))) {
         this.#log.warn(
-          `auth failed for ${request.method} ${request.url}, for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
+          `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
         throw new AuthorizationError(
           'Insufficient permissions to perform this action',
@@ -1669,13 +1759,13 @@ export class Realm {
     } catch (e: any) {
       if (e instanceof TokenExpiredError) {
         this.#log.warn(
-          `JWT verification failed for ${request.method} ${request.url} with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
+          `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
       if (e instanceof JsonWebTokenError) {
         this.#log.warn(
-          `JWT verification failed for ${request.method} ${request.url} with token string ${tokenString}. ${e.message}`,
+          `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }
@@ -1750,6 +1840,7 @@ export class Realm {
                 ...cached.defaultHeaders,
                 [CACHE_HEADER]: CACHE_HIT_VALUE,
               },
+              etagVariant: SOURCE_ETAG_VARIANT,
             },
           );
         } finally {
@@ -1803,6 +1894,7 @@ export class Realm {
       if (bypassCache) {
         return await this.serveLocalFile(request, handle, requestContext, {
           defaultHeaders,
+          etagVariant: SOURCE_ETAG_VARIANT,
         });
       } else {
         let cachedRef = await this.materializeFileRef(handle);
@@ -1814,6 +1906,7 @@ export class Realm {
         });
         return await this.serveLocalFile(request, cachedRef, requestContext, {
           defaultHeaders,
+          etagVariant: SOURCE_ETAG_VARIANT,
         });
       }
     } finally {
@@ -1957,10 +2050,7 @@ export class Realm {
       ) {
         continue;
       }
-      let name =
-        'name' in resource.meta.adoptsFrom
-          ? resource.meta.adoptsFrom.name
-          : 'cards';
+      let name = getCardDirectoryName(resource.meta?.adoptsFrom, this.paths);
 
       let fileURL = this.paths.fileURL(
         `/${join(new URL(request.url).pathname, name, (resource.lid ?? uuidV4()) + '.json')}`,
@@ -2052,6 +2142,7 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    let primarySerialization: LooseSingleCardDocument | undefined;
     let localPath = this.paths.local(new URL(request.url));
     if (localPath.startsWith('_')) {
       return methodNotAllowed(request, requestContext);
@@ -2157,10 +2248,7 @@ export class Realm {
       ) {
         continue;
       }
-      let name =
-        'name' in resource.meta.adoptsFrom
-          ? resource.meta.adoptsFrom.name
-          : 'cards';
+      let name = getCardDirectoryName(resource.meta?.adoptsFrom, this.paths);
       let fileURL =
         i === 0
           ? new URL(`${url}.json`)
@@ -2201,6 +2289,9 @@ export class Realm {
       }
       let path = this.paths.local(fileURL);
       files.set(path, JSON.stringify(fileSerialization, null, 2));
+      if (i === 0) {
+        primarySerialization = fileSerialization;
+      }
     }
     let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
@@ -2211,22 +2302,41 @@ export class Realm {
         loadLinks: true,
       },
     );
+    let doc: SingleCardDocument;
     if (!entry || entry?.type === 'error') {
-      return systemError({
-        requestContext,
-        message: `Unable to index card: can't find patched instance, ${instanceURL} in index`,
-        id: instanceURL,
-        additionalError: entry
-          ? CardError.fromSerializableError(entry.error)
-          : undefined,
+      if (
+        primarySerialization &&
+        isBrowserTestEnv() &&
+        !(globalThis as any).__emulateServerPatchFailure
+      ) {
+        doc = merge({}, primarySerialization, {
+          data: {
+            id: instanceURL,
+            links: { self: instanceURL },
+            meta: {
+              ...(primarySerialization.data.meta ?? {}),
+              lastModified,
+            },
+          },
+        }) as SingleCardDocument;
+      } else {
+        return systemError({
+          requestContext,
+          message: `Unable to index card: can't find patched instance, ${instanceURL} in index`,
+          id: instanceURL,
+          additionalError: entry
+            ? CardError.fromSerializableError(entry.error)
+            : undefined,
+        });
+      }
+    } else {
+      doc = merge({}, entry.doc, {
+        data: {
+          links: { self: instanceURL },
+          meta: { lastModified },
+        },
       });
     }
-    let doc: SingleCardDocument = merge({}, entry.doc, {
-      data: {
-        links: { self: instanceURL },
-        meta: { lastModified },
-      },
-    });
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
@@ -3134,6 +3244,15 @@ export class Realm {
       if (!tracked || tracked.isTracked) {
         return;
       }
+
+      let localPath = this.paths.local(tracked.url);
+      this.#sourceCache.invalidate(localPath);
+
+      if (hasExecutableExtension(localPath)) {
+        this.#moduleCache.invalidate(localPath);
+        this.#definitionsCache.invalidate();
+      }
+
       this.broadcastRealmEvent(data);
       this.#updateItems.push({
         operation: ('added' in data
@@ -3315,10 +3434,7 @@ function promoteLocalIdsToRemoteIds({
     ) {
       return;
     }
-    let name =
-      'name' in sideLoadedResource.meta.adoptsFrom
-        ? sideLoadedResource.meta.adoptsFrom.name
-        : 'cards';
+    let name = getCardDirectoryName(sideLoadedResource.meta?.adoptsFrom, paths);
     relationships[field].links = {
       self: paths.fileURL(`${name}/${lid}`).href,
     };
