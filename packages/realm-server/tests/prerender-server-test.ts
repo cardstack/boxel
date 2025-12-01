@@ -1,4 +1,4 @@
-import QUnit, { module, test } from 'qunit';
+import { module, test } from 'qunit';
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
 import { basename } from 'path';
@@ -20,11 +20,7 @@ import {
 } from '../prerender/prerender-constants';
 import { Deferred } from '@cardstack/runtime-common';
 
-const originalTestTimeout = QUnit.config.testTimeout;
-
 module(basename(__filename), function () {
-  // Keep a generous timeout to catch genuine hangs; timers are unref'd in tests/index.ts
-  // so the suite should still exit promptly once work completes.
   module('Prerender server', function (hooks) {
     let request: SuperTest<Test>;
     let prerenderer: Prerenderer;
@@ -58,7 +54,6 @@ module(basename(__filename), function () {
     });
 
     hooks.before(function () {
-      QUnit.config.testTimeout = 60000;
       draining = false;
       let built = buildPrerenderApp(realmSecretSeed, {
         serverURL: 'http://127.0.0.1:4221',
@@ -70,7 +65,6 @@ module(basename(__filename), function () {
 
     hooks.after(async function () {
       await prerenderer.stop();
-      QUnit.config.testTimeout = originalTestTimeout;
     });
 
     test('liveness', async function (assert) {

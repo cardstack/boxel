@@ -16,6 +16,10 @@
   }) as typeof setTimeout;
 }
 
+import QUnit from 'qunit';
+
+QUnit.config.testTimeout = 60000;
+
 import 'decorator-transforms/globals';
 import '../setup-logger'; // This should be first
 import './atomic-endpoints-test';
