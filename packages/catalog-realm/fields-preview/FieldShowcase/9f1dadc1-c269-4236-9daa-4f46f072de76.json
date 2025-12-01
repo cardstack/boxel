@@ -14,6 +14,9 @@
         "description": null,
         "thumbnailURL": null
       },
+      "playgroundDay": {
+        "value": 2
+      },
       "playgroundDate": "2025-11-20",
       "playgroundTime": {
         "value": "13:00"
@@ -39,10 +42,13 @@
         "year": null,
         "quarter": null
       },
-      "eventDateTimeShort": "2025-11-25T15:30:00.000Z",
-      "playgroundDatetime": "2025-11-22T05:19:00.000Z",
+      "eventDateTimeShort": null,
+      "playgroundDatetime": null,
       "playgroundDuration": {
+        "days": null,
         "hours": null,
+        "years": null,
+        "months": null,
         "minutes": null,
         "seconds": null
       },
@@ -51,12 +57,12 @@
         "month": null
       },
       "playgroundQuantity": 100,
-      "eventDateTimeCustom": "2025-12-01T18:00:00.000Z",
+      "eventDateTimeCustom": null,
       "playgroundDateRange": {
         "end": null,
         "start": null
       },
-      "playgroundFieldType": "number",
+      "playgroundFieldType": "date",
       "playgroundMonthYear": {
         "value": "2025-10"
       },
@@ -68,12 +74,40 @@
           "value": null
         }
       },
+      "projectDurationFull": {
+        "days": 88,
+        "hours": 8,
+        "years": 2,
+        "months": 3,
+        "minutes": 30,
+        "seconds": 45
+      },
+      "taskDurationDayTime": {
+        "days": 5,
+        "hours": 3,
+        "years": null,
+        "months": null,
+        "minutes": 45,
+        "seconds": 30
+      },
+      "playgroundTimePeriod": {
+        "periodLabel": "2023-2024"
+      },
       "appointmentDateCustom": "2025-12-15",
       "appointmentDateCompact": "2025-11-28",
-      "playgroundPresentation": "gauge",
+      "playgroundPresentation": "standard",
       "playgroundRelativeTime": {
         "unit": null,
         "amount": null
+      },
+      "playgroundDatetimeStamp": "2025-11-28T16:44:00.000Z",
+      "contractDurationYearMonth": {
+        "days": null,
+        "hours": null,
+        "years": 3,
+        "months": 6,
+        "minutes": null,
+        "seconds": null
       },
       "playgroundRecurringPattern": {
         "endDate": null,
