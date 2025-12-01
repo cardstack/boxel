@@ -28,8 +28,14 @@ export class StackItem {
     | undefined;
 
   constructor(args: Args) {
-    let { format, request, stackIndex, id, closeAfterSaving, relationshipContext } =
-      args;
+    let {
+      format,
+      request,
+      stackIndex,
+      id,
+      closeAfterSaving,
+      relationshipContext,
+    } = args;
 
     this.#id = id.replace(/\.json$/, '');
     this.format = format;
@@ -44,8 +50,14 @@ export class StackItem {
   }
 
   clone(args: Partial<Args>) {
-    let { id, format, request, closeAfterSaving, stackIndex, relationshipContext } =
-      this;
+    let {
+      id,
+      format,
+      request,
+      closeAfterSaving,
+      stackIndex,
+      relationshipContext,
+    } = this;
     return new StackItem({
       format,
       request,

@@ -1,4 +1,5 @@
 import { settled } from '@ember/test-helpers';
+
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -177,7 +178,6 @@ module('Integration | commands | copy-and-edit', function (hooks) {
         'new child is in same realm as source',
       );
     }
-
   });
 
   test('copies card without linked parent (query-derived stack) and does not throw', async function (assert) {
@@ -256,7 +256,9 @@ module('Integration | commands | copy-and-edit', function (hooks) {
     let operatorModeStateService = getService('operator-mode-state-service');
 
     let parentCard = (await store.get(`${testRealmURL}Parent/root`)) as CardDef;
-    let remoteChild = (await store.get(`${otherRealmURL}Child/remote`)) as CardDef;
+    let remoteChild = (await store.get(
+      `${otherRealmURL}Child/remote`,
+    )) as CardDef;
 
     operatorModeStateService.addItemToStack(
       new StackItem({
@@ -306,7 +308,9 @@ module('Integration | commands | copy-and-edit', function (hooks) {
     let operatorModeStateService = getService('operator-mode-state-service');
 
     let parentCard = (await store.get(`${testRealmURL}Parent/root`)) as CardDef;
-    let remoteChild = (await store.get(`${otherRealmURL}Child/remote`)) as CardDef;
+    let remoteChild = (await store.get(
+      `${otherRealmURL}Child/remote`,
+    )) as CardDef;
 
     // seed parent children with remote child
     (parentCard as any).children = [remoteChild];

@@ -1,8 +1,13 @@
 import { service } from '@ember/service';
 
+import {
+  isCardInstance,
+  realmURL as realmURLSymbol,
+} from '@cardstack/runtime-common';
+
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
@@ -11,8 +16,6 @@ import CopyCardToRealmCommand from './copy-card';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
-
-import { isCardInstance, realmURL as realmURLSymbol } from '@cardstack/runtime-common';
 
 export default class CopyAndEditCommand extends HostBaseCommand<
   typeof CardDef,
@@ -89,9 +92,7 @@ export default class CopyAndEditCommand extends HostBaseCommand<
 
       let newCard = await this.store.get(newCardId);
       if (isCardInstance(newCard)) {
-        let stackIndex = this.findStackIndexForCard(
-          input.card.id as string,
-        );
+        let stackIndex = this.findStackIndexForCard(input.card.id as string);
 
         // Prefer replacing the original card in-place; fall back to the parent's stack
         if (stackIndex === undefined) {
@@ -117,11 +118,8 @@ export default class CopyAndEditCommand extends HostBaseCommand<
       return;
     }
     let suffix =
-      newCardId
-        .split('/')
-        .filter(Boolean)
-        .pop()
-        ?.slice(-4) ?? newCardId.slice(-4);
+      newCardId.split('/').filter(Boolean).pop()?.slice(-4) ??
+      newCardId.slice(-4);
     let renamed = false;
     if (
       newCard.cardInfo &&
@@ -140,7 +138,10 @@ export default class CopyAndEditCommand extends HostBaseCommand<
     parentCardId: string,
     originalCardId: string,
     newCardId: string,
-    relationshipContext?: { fieldName?: string; fieldType?: 'linksTo' | 'linksToMany' },
+    relationshipContext?: {
+      fieldName?: string;
+      fieldType?: 'linksTo' | 'linksToMany';
+    },
   ): Promise<void> {
     let parentCard = await this.store.get(parentCardId);
     if (!isCardInstance(parentCard)) {
@@ -167,7 +168,10 @@ export default class CopyAndEditCommand extends HostBaseCommand<
     // but the copied card is still created/added and can be used independently.
     // Only update parent relationships that are defined as fields (linksTo/linksToMany)
     for (let [fieldName, fieldDef] of Object.entries(fields)) {
-      if (relationshipContext?.fieldName && fieldName !== relationshipContext.fieldName) {
+      if (
+        relationshipContext?.fieldName &&
+        fieldName !== relationshipContext.fieldName
+      ) {
         continue;
       }
       if (
@@ -203,10 +207,7 @@ export default class CopyAndEditCommand extends HostBaseCommand<
         let found = false;
         for (let item of currentValue) {
           let itemId = item?.id ?? item;
-          if (
-            itemId &&
-            itemId.replace(/\.json$/, '') === normalizedOriginal
-          ) {
+          if (itemId && itemId.replace(/\.json$/, '') === normalizedOriginal) {
             replaced.push(newCard);
             found = true;
           } else {
@@ -224,7 +225,15 @@ export default class CopyAndEditCommand extends HostBaseCommand<
     }
   }
 
-  deriveLinkedParent(cardId: string): { parentId: string; relationshipContext?: { fieldName?: string; fieldType?: 'linksTo' | 'linksToMany' } } | undefined {
+  deriveLinkedParent(cardId: string):
+    | {
+        parentId: string;
+        relationshipContext?: {
+          fieldName?: string;
+          fieldType?: 'linksTo' | 'linksToMany';
+        };
+      }
+    | undefined {
     let stacks = this.operatorModeStateService.state?.stacks ?? [];
     let normalizedId = cardId.replace(/\.json$/, '');
     for (let stackIndex = 0; stackIndex < stacks.length; stackIndex++) {
