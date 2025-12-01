@@ -27,11 +27,12 @@ import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 
-type ListingType = 'card' | 'app' | 'skill';
+type ListingType = 'card' | 'app' | 'skill' | 'theme';
 const listingSubClass: Record<ListingType, string> = {
   card: 'CardListing',
   app: 'AppListing',
   skill: 'SkillListing',
+  theme: 'ThemeListing',
 };
 
 export default class ListingCreateCommand extends HostBaseCommand<
@@ -185,12 +186,15 @@ export default class ListingCreateCommand extends HostBaseCommand<
   private async guessListingType(
     exampleCard: CardAPI.CardDef,
   ): Promise<ListingType> {
+    if (this.isTheme()) {
+      return 'theme';
+    }
     try {
       const oneShot = new OneShotLlmRequestCommand(this.commandContext);
       const name = (exampleCard as any).name || '';
       const summary = (exampleCard as any).summary || '';
       const systemPrompt =
-        'Respond ONLY with one token: card, app, or skill. No JSON, no punctuation.';
+        'Respond ONLY with one token: card, app, skill, or theme. No JSON, no punctuation.';
       const serializedSnippet = this.serializedCardString
         ? this.serializedCardString.slice(0, 1500)
         : '';
@@ -202,11 +206,47 @@ export default class ListingCreateCommand extends HostBaseCommand<
         ...(this.adoptedCodeRef ? { codeRef: this.adoptedCodeRef } : {}),
       });
       const maybeType = parseResponseToSingleWord(result.output, true);
-      if (maybeType === 'app' || maybeType === 'skill') return maybeType;
+      if (
+        maybeType === 'app' ||
+        maybeType === 'skill' ||
+        maybeType === 'theme'
+      ) {
+        return maybeType;
+      }
       return 'card';
     } catch {
       return 'card';
     }
+  }
+
+  private isTheme(): boolean {
+    const codeRefModule = this.adoptedCodeRef?.module?.toLowerCase();
+    const codeRefName = this.adoptedCodeRef?.name?.toLowerCase();
+    const knownBaseModules = [
+      'https://cardstack.com/base/structured-theme',
+      'https://cardstack.com/base/style-reference',
+      'https://cardstack.com/base/brand-guide',
+    ];
+    if (
+      codeRefModule &&
+      knownBaseModules.some((base) => codeRefModule.includes(base))
+    ) {
+      return true;
+    }
+    if (codeRefName) {
+      const normalizedName = codeRefName
+        .split('')
+        .filter((char) => char !== '-' && char !== '_' && char !== ' ')
+        .join('');
+      if (
+        ['theme', 'structuredtheme', 'stylereference', 'brandguide'].includes(
+          normalizedName,
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private async linkSpecs(

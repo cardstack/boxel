@@ -92,6 +92,12 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
       : undefined;
   }
 
+  get themeActions() {
+    return this.listingActions?.type === 'theme'
+      ? this.listingActions
+      : undefined;
+  }
+
   viewDetails = () => {
     this.listingActions?.view();
   };
@@ -155,6 +161,16 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
                   @name='Remix'
                   @writableRealms={{this.writableRealms}}
                   @onAction={{this.regularActions.remix}}
+                  @context={{@context}}
+                  @size='extra-small'
+                />
+              {{/if}}
+            {{else if this.themeActions}}
+              {{#if this.themeActions.remix}}
+                <ChooseRealmAction
+                  @name='Remix'
+                  @writableRealms={{this.writableRealms}}
+                  @onAction={{this.themeActions.remix}}
                   @context={{@context}}
                   @size='extra-small'
                 />

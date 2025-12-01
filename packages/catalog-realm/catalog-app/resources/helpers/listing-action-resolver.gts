@@ -30,7 +30,17 @@ export interface RegularActions extends BaseAction {
   remix?: (realmUrl: string) => Promise<void>;
 }
 
-export type ListingActions = SkillActions | StubActions | RegularActions;
+export interface ThemeActions extends BaseAction {
+  readonly type: 'theme';
+  preview?: () => Promise<void>;
+  remix?: (realmUrl: string) => Promise<void>;
+}
+
+export type ListingActions =
+  | SkillActions
+  | StubActions
+  | RegularActions
+  | ThemeActions;
 
 /**
  * Resolves listing type and returns appropriate action configuration
@@ -44,6 +54,7 @@ export function resolveListingActions(
   const hasSkills = Boolean(listing.skills?.length);
   const isStub = listing.tags?.some((tag) => tag.name === 'Stub') ?? false;
   const isSkillListing = listing.constructor?.name === 'SkillListing';
+  const isThemeListing = listing.constructor?.name === 'ThemeListing';
 
   // Create appropriate adapter instances
   const cardOrFieldAdapter = new CardOrFieldListingAdapter(context);
@@ -78,6 +89,20 @@ export function resolveListingActions(
     } as StubActions;
   }
 
+  if (isThemeListing) {
+    return {
+      type: 'theme',
+      ...(hasExamples && {
+        preview: () => cardOrFieldAdapter.preview(listing),
+      }),
+      ...((hasSpecs || hasSkills || hasExamples) && {
+        remix: (realmUrl: string) =>
+          cardOrFieldAdapter.remix(listing, realmUrl),
+      }),
+      view: () => cardOrFieldAdapter.view(listing),
+    } as ThemeActions;
+  }
+
   return {
     type: 'regular',
     ...(hasExamples && {
@@ -99,6 +124,7 @@ export class BaseListingAdapter {
   constructor(context: CardContext) {
     this.context = context;
   }
+
   async preview(listing: Listing): Promise<void> {
     if (!listing.examples?.length) throw new Error('No examples available');
     const commandContext = this.context.commandContext;
