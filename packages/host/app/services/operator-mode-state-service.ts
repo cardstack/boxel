@@ -913,11 +913,13 @@ export default class OperatorModeStateService extends Service {
     id: string,
     stackIndex: number,
     format: 'isolated' | 'edit' = 'isolated',
+    relationshipContext?: { fieldName?: string; fieldType?: 'linksTo' | 'linksToMany' },
   ) {
     let stackItem = new StackItem({
       id,
       stackIndex,
       format,
+      relationshipContext,
     });
     return stackItem;
   }

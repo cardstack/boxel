@@ -12,7 +12,7 @@ import type OperatorModeStateService from '../services/operator-mode-state-servi
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
-import { isCardInstance } from '@cardstack/runtime-common';
+import { isCardInstance, realmURL as realmURLSymbol } from '@cardstack/runtime-common';
 
 export default class CopyAndEditCommand extends HostBaseCommand<
   typeof CardDef,
@@ -81,9 +81,10 @@ export default class CopyAndEditCommand extends HostBaseCommand<
     let linkedParent = this.deriveLinkedParent(input.card.id as string);
     if (linkedParent) {
       await this.linkToParentCard(
-        linkedParent,
+        linkedParent.parentId,
         input.card.id as string,
         newCardId,
+        linkedParent.relationshipContext,
       );
 
       let newCard = await this.store.get(newCardId);
@@ -94,7 +95,7 @@ export default class CopyAndEditCommand extends HostBaseCommand<
 
         // Prefer replacing the original card in-place; fall back to the parent's stack
         if (stackIndex === undefined) {
-          stackIndex = this.findStackIndexForCard(linkedParent);
+          stackIndex = this.findStackIndexForCard(linkedParent.parentId);
         }
 
         if (stackIndex !== undefined) {
@@ -139,6 +140,7 @@ export default class CopyAndEditCommand extends HostBaseCommand<
     parentCardId: string,
     originalCardId: string,
     newCardId: string,
+    relationshipContext?: { fieldName?: string; fieldType?: 'linksTo' | 'linksToMany' },
   ): Promise<void> {
     let parentCard = await this.store.get(parentCardId);
     if (!isCardInstance(parentCard)) {
@@ -165,19 +167,34 @@ export default class CopyAndEditCommand extends HostBaseCommand<
     // but the copied card is still created/added and can be used independently.
     // Only update parent relationships that are defined as fields (linksTo/linksToMany)
     for (let [fieldName, fieldDef] of Object.entries(fields)) {
+      if (relationshipContext?.fieldName && fieldName !== relationshipContext.fieldName) {
+        continue;
+      }
+      if (
+        relationshipContext?.fieldType &&
+        fieldDef.fieldType !== relationshipContext.fieldType
+      ) {
+        continue;
+      }
+      if (
+        (fieldDef.fieldType === 'linksTo' ||
+          fieldDef.fieldType === 'linksToMany') &&
+        'card' in fieldDef &&
+        fieldDef.card &&
+        !(
+          newCard instanceof (fieldDef as any).card ||
+          newCard.constructor?.name === (fieldDef as any).card?.name
+        )
+      ) {
+        continue;
+      }
       let currentValue = (parentCard as any)[fieldName];
       if (fieldDef.fieldType === 'linksTo') {
-        let currentId = currentValue?.id ?? currentValue;
-        if (
-          currentId &&
-          currentId.replace(/\.json$/, '') === normalizedOriginal
-        ) {
-          (parentCard as any)[fieldName] = newCard;
-          if (parentCard.id) {
-            this.store.save(parentCard.id as string);
-          }
-          return;
+        (parentCard as any)[fieldName] = newCard;
+        if (parentCard.id) {
+          this.store.save(parentCard.id as string);
         }
+        return;
       } else if (
         fieldDef.fieldType === 'linksToMany' &&
         Array.isArray(currentValue)
@@ -207,7 +224,7 @@ export default class CopyAndEditCommand extends HostBaseCommand<
     }
   }
 
-  deriveLinkedParent(cardId: string): string | undefined {
+  deriveLinkedParent(cardId: string): { parentId: string; relationshipContext?: { fieldName?: string; fieldType?: 'linksTo' | 'linksToMany' } } | undefined {
     let stacks = this.operatorModeStateService.state?.stacks ?? [];
     let normalizedId = cardId.replace(/\.json$/, '');
     for (let stackIndex = 0; stackIndex < stacks.length; stackIndex++) {
@@ -219,7 +236,11 @@ export default class CopyAndEditCommand extends HostBaseCommand<
         );
         let itemIndex = stack.indexOf(item);
         if (itemIndex > 0) {
-          return stack[itemIndex - 1].id;
+          let parentItem = stack[itemIndex - 1];
+          return {
+            parentId: parentItem.id,
+            relationshipContext: item.relationshipContext,
+          };
         }
       } catch {
         // not in this stack, continue

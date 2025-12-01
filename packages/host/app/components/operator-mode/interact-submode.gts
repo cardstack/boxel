@@ -194,7 +194,12 @@ export default class InteractSubmode extends Component {
     stackIndex: number,
     cardOrURL: CardDef | URL | string,
     format: Format | Event = 'isolated',
-    opts?: { openCardInRightMostStack?: boolean; stackIndex?: number },
+    opts?: {
+      openCardInRightMostStack?: boolean;
+      stackIndex?: number;
+      fieldType?: 'linksTo' | 'linksToMany' | 'contains' | 'containsMany';
+      fieldName?: string;
+    },
   ): void => {
     if (format instanceof Event) {
       // common when invoked from template {{on}} modifier
@@ -227,6 +232,15 @@ export default class InteractSubmode extends Component {
       id: cardId,
       format,
       stackIndex,
+      relationshipContext: opts?.fieldName
+        ? {
+            fieldName: opts.fieldName,
+            fieldType:
+              opts.fieldType === 'linksTo' || opts.fieldType === 'linksToMany'
+                ? opts.fieldType
+                : undefined,
+          }
+        : undefined,
     });
     this.addToStack(newItem);
     this.operatorModeStateService.closeWorkspaceChooser();
