@@ -17,12 +17,6 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
 } from '../helpers/matrix-constants';
-import {
-  SEARCH_MARKER,
-  SEPARATOR_MARKER,
-  REPLACE_MARKER,
-} from '@cardstack/runtime-common/constants';
-import { aiBotUsername } from '@cardstack/runtime-common/constants';
 import { appURL } from '../helpers/isolated-realm-server';
 
 const serverIndexUrl = new URL(appURL).origin;
@@ -90,11 +84,11 @@ test.describe('Correctness Checks', () => {
     const { synapse } = getMatrixTestContext();
     const botPassword = 'bot-password';
     try {
-      await registerUser(synapse, aiBotUsername, botPassword);
+      await registerUser(synapse, 'aibot', botPassword);
     } catch {
       // user may already exist
     }
-    let botCredentials = await loginUser(aiBotUsername, botPassword);
+    let botCredentials = await loginUser('aibot', botPassword);
     await fetch(
       `http://localhost:${synapse.port}/_matrix/client/v3/rooms/${roomId}/join`,
       {
@@ -246,11 +240,11 @@ test.describe('Correctness Checks', () => {
 
     const breakMessageBody = `\`\`\`
 ${cardId}.json
-${SEARCH_MARKER}
+╔═══ SEARCH ════╗
 ${originalContent}
-${SEPARATOR_MARKER}
+╠═══════════════╣
 ${brokenContent}
-${REPLACE_MARKER}
+╚═══ REPLACE ═══╝
 \`\`\``;
 
     await putEvent(
@@ -388,11 +382,11 @@ ${REPLACE_MARKER}
     // --- Revert the card using a search/replace code patch message and verify correctness is restored ---
     const revertMessageBody = `\`\`\`
 ${cardId}.json
-${SEARCH_MARKER}
+╔═══ SEARCH ════╗
 ${brokenContent}
-${SEPARATOR_MARKER}
+╠═══════════════╣
 ${originalContent}
-${REPLACE_MARKER}
+╚═══ REPLACE ═══╝
 \`\`\``;
 
     await putEvent(
