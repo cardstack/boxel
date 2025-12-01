@@ -4,6 +4,7 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
+import { Pill } from '@cardstack/boxel-ui/components';
 import ChevronLeftIcon from '@cardstack/boxel-icons/chevron-left';
 import ChevronRightIcon from '@cardstack/boxel-icons/chevron-right';
 import ImageField from '../../image-field';
@@ -33,6 +34,14 @@ export default class CarouselPresentation extends GlimmerComponent<CarouselPrese
     return ((this.args.images || []).length || 0) > 1;
   }
 
+  get totalImages() {
+    return (this.args.images || []).length || 0;
+  }
+
+  get paginationText() {
+    return `${this.selectedIndex + 1}/${this.totalImages}`;
+  }
+
   @action
   selectImage(index: number) {
     this.selectedIndex = index;
@@ -60,6 +69,14 @@ export default class CarouselPresentation extends GlimmerComponent<CarouselPrese
           alt=''
           class='banner-image'
         />
+        {{! Pagination pill }}
+        {{#if this.hasMultipleImages}}
+          <div class='pagination-pill'>
+            <Pill @variant='muted' @tag='span' class='small-pill'>
+              {{this.paginationText}}
+            </Pill>
+          </div>
+        {{/if}}
         {{! Carousel navigation }}
         {{#if this.hasMultipleImages}}
           <button
@@ -110,7 +127,7 @@ export default class CarouselPresentation extends GlimmerComponent<CarouselPrese
       .main-banner {
         position: relative;
         width: 100%;
-        aspect-ratio: 16 / 9;
+        aspect-ratio: 1 / 1;
         background: var(--muted, #f1f5f9);
         border-radius: var(--radius, 0.5rem);
         overflow: hidden;
@@ -119,7 +136,7 @@ export default class CarouselPresentation extends GlimmerComponent<CarouselPrese
       .banner-image {
         width: 100%;
         height: 100%;
-        object-fit: cover;
+        object-fit: contain;
       }
 
       .carousel-nav {
@@ -128,7 +145,11 @@ export default class CarouselPresentation extends GlimmerComponent<CarouselPrese
         transform: translateY(-50%);
         width: 2.5rem;
         height: 2.5rem;
-        background: color-mix(in srgb, var(--background, #ffffff) 90%, transparent);
+        background: color-mix(
+          in srgb,
+          var(--background, #ffffff) 90%,
+          transparent
+        );
         border: none;
         border-radius: 9999px;
         display: flex;
@@ -197,7 +218,19 @@ export default class CarouselPresentation extends GlimmerComponent<CarouselPrese
         height: 100%;
         object-fit: cover;
       }
+
+      /* Pagination pill */
+      .pagination-pill {
+        position: absolute;
+        top: 0.75rem;
+        left: 0.75rem;
+        z-index: 2;
+      }
+
+      .small-pill {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+      }
     </style>
   </template>
 }
-

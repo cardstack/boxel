@@ -72,7 +72,7 @@
         "end": null,
         "start": null
       },
-      "playgroundFieldType": "image",
+      "playgroundFieldType": "multipleImage",
       "playgroundMonthYear": {
         "value": "2025-10"
       },
@@ -111,7 +111,7 @@
       "appointmentDateCompact": "2025-11-28",
       "playgroundNumberRating": null,
       "playgroundNumberSlider": null,
-      "playgroundPresentation": "card",
+      "playgroundPresentation": "carousel",
       "playgroundRelativeTime": {
         "unit": null,
         "amount": null
