@@ -25,7 +25,6 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
-import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import CardStore from '@cardstack/host/lib/gc-card-store';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
@@ -49,6 +48,7 @@ import {
   setupIntegrationTestRealm,
   type TestContextWithSave,
   withSlowSave,
+  setupOperatorModeStateCleanup,
 } from '../helpers';
 import { TestRealmAdapter } from '../helpers/adapter';
 import {
@@ -68,6 +68,7 @@ import { setupRenderingTest } from '../helpers/setup';
 
 module('Integration | Store', function (hooks) {
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   setupBaseRealm(hooks);
   let api: typeof CardAPI;
   let loader: Loader;
@@ -488,14 +489,6 @@ module('Integration | Store', function (hooks) {
   // been written to the realm's file system, such that an instance with this error
   // can recover from this error and the host can be notified using the lid to correlate
   test('can handle a rendering card error when creating an instance', async function (assert) {
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <CardPrerender />
-        </template>
-      },
-    );
-
     let instance = new BoomPersonDef({ name: 'Andrea' });
     let error = await storeService.add(instance, { realm: testRealmURL });
     storeService.addReference(instance[localId]);
@@ -557,6 +550,14 @@ module('Integration | Store', function (hooks) {
       await waitUntil(() => !storeService.peekError(instance[localId]), {
         timeout: 5_000,
       });
+
+      await waitUntil(
+        () => {
+          let card = storeService.peek(instance[localId]);
+          return Boolean(card && isCardInstance(card));
+        },
+        { timeout: 5_000 },
+      );
 
       let peek = storeService.peek(instance[localId])!;
       assert.strictEqual(
@@ -681,7 +682,7 @@ module('Integration | Store', function (hooks) {
     await storeService.add(instance, { doNotWaitForPersist: true });
     assert.false(didSave, 'the instance has not saved yet');
 
-    await waitUntil(() => instance.id);
+    await waitUntil(() => didSave, { timeout: 10000 });
 
     assert.ok(instance.id, 'instance has been assigned remote id');
     let peekedInstance = storeService.peek(instance.id);
@@ -853,7 +854,6 @@ module('Integration | Store', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -918,6 +918,7 @@ module('Integration | Store', function (hooks) {
 
     await waitUntil(
       () => storeService.getSaveState(instance[localId])?.lastSaved,
+      { timeout: 10000 },
     );
 
     assert.false(
@@ -936,17 +937,23 @@ module('Integration | Store', function (hooks) {
 
   test('can capture error when auto saving', async function (assert) {
     let instance = await storeService.get(`${testRealmURL}Person/hassan`);
-    (instance as any).hasError = true;
-    await waitUntil(
-      () =>
-        storeService.getSaveState(`${testRealmURL}Person/hassan`)
-          ?.lastSaveError,
-    );
-    let saveState = storeService.getSaveState(`${testRealmURL}Person/hassan`);
-    assert.ok(
-      saveState!.lastSavedErrorMsg?.includes('intentional error thrown'),
-      'error message is correct',
-    );
+    try {
+      (globalThis as any).__emulateServerPatchFailure = true;
+      (instance as any).hasError = true; // instance mutation triggers auto save
+      await waitUntil(
+        () =>
+          storeService.getSaveState(`${testRealmURL}Person/hassan`)
+            ?.lastSaveError,
+        { timeout: 10000 },
+      );
+      let saveState = storeService.getSaveState(`${testRealmURL}Person/hassan`);
+      assert.ok(
+        saveState!.lastSavedErrorMsg?.includes('intentional error thrown'),
+        'error message is correct',
+      );
+    } finally {
+      delete (globalThis as any).__emulateServerPatchFailure;
+    }
   });
 
   test('can delete card from the store', async function (assert) {
@@ -1204,7 +1211,6 @@ module('Integration | Store', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1241,7 +1247,6 @@ module('Integration | Store', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1284,7 +1289,6 @@ module('Integration | Store', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1347,7 +1351,6 @@ module('Integration | Store', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1389,7 +1392,6 @@ module('Integration | Store', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1496,7 +1498,6 @@ module('Integration | Store', function (hooks) {
           {{#if driver.showComponent}}
             <ResourceConsumer />
           {{/if}}
-          <CardPrerender />
         </template>
       },
     );
@@ -1553,7 +1554,6 @@ module('Integration | Store', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1612,7 +1612,6 @@ module('Integration | Store', function (hooks) {
           {{#if driver.showComponent}}
             <ResourceConsumer />
           {{/if}}
-          <CardPrerender />
         </template>
       },
     );
@@ -1701,7 +1700,6 @@ module('Integration | Store', function (hooks) {
           {{#if driver.showComponent}}
             <ResourceConsumer />
           {{/if}}
-          <CardPrerender />
         </template>
       },
     );
@@ -1791,7 +1789,6 @@ module('Integration | Store', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <ResourceConsumer />
-          <CardPrerender />
         </template>
       },
     );
@@ -1886,7 +1883,6 @@ module('Integration | Store', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <ResourceConsumer />
-          <CardPrerender />
         </template>
       },
     );
@@ -1978,7 +1974,6 @@ module('Integration | Store', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <ResourceConsumer />
-          <CardPrerender />
         </template>
       },
     );

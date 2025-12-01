@@ -66,6 +66,10 @@ class Isolated extends Component<typeof Catalog> {
       tabId: 'skill',
       displayName: 'Skills',
     },
+    {
+      tabId: 'theme',
+      displayName: 'Themes',
+    },
   ];
 
   @tracked activeTabId: string = this.tabFilterOptions[0].tabId;
@@ -104,7 +108,15 @@ class Isolated extends Component<typeof Catalog> {
     return {
       filter: {
         on: {
-          module: new URL('./listing/listing', import.meta.url).href,
+          // the published module URL looks like:
+          //   https://<realm>/catalog-app/catalog
+          // So when we run:
+          //   new URL('../listing/listing', import.meta.url)
+          // the browser-style URL resolver goes “one level up”
+          // from …/catalog-app/catalog to …/catalog-app/,
+          // then appends listing/listing. We end up with:
+          //   https://<realm>/catalog-app/listing/listing
+          module: new URL('../listing/listing', import.meta.url).href,
           name:
             this.activeTabId === 'showcase'
               ? 'Listing'
@@ -124,7 +136,7 @@ class Isolated extends Component<typeof Catalog> {
     return {
       filter: {
         type: {
-          module: new URL('./listing/category', import.meta.url).href,
+          module: new URL('../listing/category', import.meta.url).href,
           name: 'Category',
         },
       },
@@ -265,7 +277,7 @@ class Isolated extends Component<typeof Catalog> {
     return {
       filter: {
         type: {
-          module: new URL('./listing/tag', import.meta.url).href,
+          module: new URL('../listing/tag', import.meta.url).href,
           name: 'Tag',
         },
       },

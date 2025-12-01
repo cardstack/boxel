@@ -25,6 +25,8 @@ const testRealmInfo: RealmInfo = {
   backgroundURL: null,
   iconURL: null,
   showAsCatalog: null,
+  interactHome: null,
+  hostHome: null,
   visibility: 'public',
   publishable: null,
   lastPublishedAt: null,
@@ -639,6 +641,7 @@ module('Unit | index-writer', function (hooks) {
           ),
           isolated_html: `<div class="isolated">Isolated HTML</div>`,
           atom_html: `<span class="atom">Atom HTML</span>`,
+          head_html: `<span class="head">Head HTML</span>`,
           icon_html: '<svg>test icon</svg>',
         },
         {
@@ -653,6 +656,7 @@ module('Unit | index-writer', function (hooks) {
           types: null,
           last_modified: String(modified),
           resource_created_at: String(modified),
+          head_html: null,
           embedded_html: null,
           fitted_html: null,
           isolated_html: null,
@@ -674,6 +678,7 @@ module('Unit | index-writer', function (hooks) {
           types,
           last_modified: String(modified),
           resource_created_at: String(modified),
+          head_html: null,
           embedded_html: null,
           fitted_html: null,
           isolated_html: null,
@@ -773,6 +778,7 @@ module('Unit | index-writer', function (hooks) {
         ),
         isolated_html: `<div class="isolated">Isolated HTML</div>`,
         atom_html: `<span class="atom">Atom HTML</span>`,
+        head_html: `<span class="head">Head HTML</span>`,
         icon_html: '<svg>test icon</svg>',
         is_deleted: null,
         definition: null,
@@ -799,6 +805,7 @@ module('Unit | index-writer', function (hooks) {
         fitted_html: null,
         isolated_html: null,
         atom_html: null,
+        head_html: null,
         icon_html: null,
         is_deleted: null,
         definition: null,
@@ -829,6 +836,7 @@ module('Unit | index-writer', function (hooks) {
         fitted_html: null,
         isolated_html: null,
         atom_html: null,
+        head_html: null,
         icon_html: null,
         is_deleted: null,
         definition: {
@@ -924,6 +932,7 @@ module('Unit | index-writer', function (hooks) {
           ),
           isolated_html: `<div class="isolated">Isolated HTML</div>`,
           atom_html: `<span class="atom">Atom HTML</span>`,
+          head_html: null,
           icon_html: '<svg>test icon</svg>',
         },
       ],
@@ -955,6 +964,7 @@ module('Unit | index-writer', function (hooks) {
         error_doc: {
           message: 'test error',
           status: 500,
+          id: `${testRealmURL}1.json`,
           additionalErrors: [],
         },
         search_doc: { name: 'Mango' },
@@ -975,6 +985,7 @@ module('Unit | index-writer', function (hooks) {
         ),
         isolated_html: `<div class="isolated">Isolated HTML</div>`,
         atom_html: `<span class="atom">Atom HTML</span>`,
+        head_html: null,
         last_modified: String(modified),
         resource_created_at: String(modified),
         is_deleted: null,
@@ -1018,6 +1029,7 @@ module('Unit | index-writer', function (hooks) {
         error_doc: {
           message: 'test error',
           status: 500,
+          id: `${testRealmURL}1.json`,
           additionalErrors: [],
         },
         search_doc: null,
@@ -1028,6 +1040,7 @@ module('Unit | index-writer', function (hooks) {
         fitted_html: null,
         isolated_html: null,
         atom_html: null,
+        head_html: null,
         last_modified: null,
         resource_created_at: null,
         is_deleted: false,
@@ -1035,6 +1048,48 @@ module('Unit | index-writer', function (hooks) {
         definition: null,
       },
       'the error entry does not include last known good state of instance',
+    );
+  });
+
+  test('normalizes error doc id and deps', async function (assert) {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [],
+    );
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    await batch.updateEntry(new URL(`${testRealmURL}nested/1.json`), {
+      type: 'error',
+      error: {
+        id: null,
+        message: 'test error',
+        status: 404,
+        deps: ['../headless-skill-set', `${testRealmURL}other-card`],
+        additionalErrors: null,
+      },
+    });
+    await batch.done();
+
+    let [{ error_doc: errorDoc, deps }] = (await adapter.execute(
+      'SELECT error_doc, deps FROM boxel_index WHERE realm_version = 2 ORDER BY url COLLATE "POSIX"',
+      { coerceTypes },
+    )) as Pick<BoxelIndexTable, 'error_doc' | 'deps'>[];
+
+    assert.strictEqual(
+      errorDoc?.id,
+      `${testRealmURL}nested/1.json`,
+      'id defaults to entry url',
+    );
+    assert.deepEqual(
+      errorDoc?.deps,
+      [`${testRealmURL}headless-skill-set`, `${testRealmURL}other-card`],
+
+      'error doc deps are canonicalized',
+    );
+    assert.deepEqual(
+      deps,
+      [`${testRealmURL}headless-skill-set`, `${testRealmURL}other-card`],
+      'entry deps include normalized error deps',
     );
   });
 
@@ -1048,6 +1103,7 @@ module('Unit | index-writer', function (hooks) {
         error_doc: {
           message: 'test error',
           status: 500,
+          id: `${testRealmURL}1.json`,
           additionalErrors: [],
         },
       },
@@ -1061,6 +1117,7 @@ module('Unit | index-writer', function (hooks) {
         error: {
           message: 'test error',
           status: 500,
+          id: `${testRealmURL}1.json`,
           additionalErrors: [],
         },
         canonicalURL: `${testRealmURL}1.json`,
@@ -1073,6 +1130,7 @@ module('Unit | index-writer', function (hooks) {
         embeddedHtml: null,
         fittedHtml: null,
         atomHtml: null,
+        headHtml: null,
         searchDoc: null,
         types: null,
         indexedAt: null,
@@ -1169,6 +1227,7 @@ module('Unit | index-writer', function (hooks) {
         atomHtml: null,
         embeddedHtml: null,
         fittedHtml: null,
+        headHtml: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be an error document`);
@@ -1262,6 +1321,7 @@ module('Unit | index-writer', function (hooks) {
         embeddedHtml: null,
         fittedHtml: null,
         atomHtml: null,
+        headHtml: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be an error document`);
@@ -1586,6 +1646,7 @@ module('Unit | index-writer', function (hooks) {
         error_doc: {
           message: 'test error',
           status: 500,
+          id: `${testRealmURL}person.gts`,
           additionalErrors: [],
         },
       },
@@ -1599,6 +1660,7 @@ module('Unit | index-writer', function (hooks) {
         error: {
           message: 'test error',
           status: 500,
+          id: `${testRealmURL}person.gts`,
           additionalErrors: [],
         },
       });

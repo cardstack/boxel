@@ -74,6 +74,11 @@ export class ShowCardInput extends CardDef {
   @field format = contains(StringField);
 }
 
+export class PatchThemeInput extends CardDef {
+  @field cardId = contains(StringField);
+  @field skillCard = linksTo(Skill);
+}
+
 export class FileUrlCard extends CardDef {
   @field fileUrl = contains(StringField);
 }
@@ -115,8 +120,29 @@ export class CreateInstancesInput extends CardDef {
   @field exampleCard = linksTo(CardDef);
 }
 
+export class AskAiForCardJsonInput extends CreateInstancesInput {
+  @field prompt = contains(MarkdownField);
+  @field llmModel = contains(StringField);
+  @field skillCardIds = containsMany(StringField);
+}
+
+export class AskAiForCardJsonResult extends CardDef {
+  @field payload = contains(JsonField);
+  @field rawOutput = contains(StringField);
+}
+
 export class CreateInstanceResult extends CardDef {
   @field createdCard = linksTo(CardDef);
+}
+
+export class GenerateThemeExampleInput extends CardDef {
+  @field codeRef = contains(CodeRefField);
+  @field realm = contains(StringField);
+  @field prompt = contains(MarkdownField);
+  @field llmModel = contains(StringField);
+  @field skillCardIds = containsMany(StringField);
+  @field skillCard = linksTo(Skill);
+  @field localDir = contains(StringField);
 }
 
 export class GenerateListingExampleInput extends CardDef {
@@ -171,6 +197,19 @@ export class PatchCodeInput extends CardDef {
   @field fileUrl = contains(StringField);
   @field codeBlocks = containsMany(StringField);
   @field roomId = contains(StringField);
+}
+
+export class CheckCorrectnessInput extends CardDef {
+  @field targetType = contains(StringField);
+  @field targetRef = contains(StringField);
+  @field fileUrl = contains(StringField);
+  @field cardId = contains(StringField);
+}
+
+export class CorrectnessResultCard extends CardDef {
+  @field correct = contains(BooleanField);
+  @field errors = containsMany(StringField);
+  @field warnings = containsMany(StringField);
 }
 
 export class CreateAIAssistantRoomInput extends CardDef {

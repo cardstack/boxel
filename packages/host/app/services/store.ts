@@ -54,8 +54,12 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
 
-import type { CardSaveSubscriber } from './card-service';
+import {
+  enableRenderTimerStub,
+  withTimersBlocked,
+} from '../utils/render-timer-stub';
 
+import type { CardSaveSubscriber } from './card-service';
 import type CardService from './card-service';
 import type EnvironmentService from './environment-service';
 
@@ -99,6 +103,7 @@ export default class StoreService extends Service implements StoreInterface {
     new Map();
   private inflightCardMutations: Map<string, Promise<void>> = new Map();
   private store: CardStore;
+  protected isRenderStore = false;
 
   // This is used for tests
   private onSaveSubscriber: CardSaveSubscriber | undefined;
@@ -113,6 +118,12 @@ export default class StoreService extends Service implements StoreInterface {
     registerDestructor(this, () => {
       clearInterval(this.gcInterval);
     });
+  }
+
+  protected renderContextBlocksPersistence() {
+    return (
+      this.isRenderStore && Boolean((globalThis as any).__boxelRenderContext)
+    );
   }
 
   // used for tests only!
@@ -142,9 +153,15 @@ export default class StoreService extends Service implements StoreInterface {
     this.ready = this.setup();
   }
 
-  resetCache() {
+  async ensureSetupComplete(): Promise<void> {
+    await this.ready;
+  }
+
+  resetCache(opts?: { preserveReferences?: boolean }) {
     storeLogger.debug('resetting store cache');
-    this.referenceCount = new Map();
+    if (!opts?.preserveReferences) {
+      this.referenceCount = new Map();
+    }
     this.autoSaveStates = new TrackedMap();
     this.newReferencePromises = [];
     this.inflightGetCards = new Map();
@@ -291,7 +308,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.setIdentityContext(instance);
     await this.startAutoSaving(instance);
 
-    if ((globalThis as any).__boxelRenderContext) {
+    if (this.renderContextBlocksPersistence()) {
       return instance;
     }
 
@@ -379,7 +396,7 @@ export default class StoreService extends Service implements StoreInterface {
       clientRequestId?: string;
     },
   ): Promise<T | CardErrorJSONAPI | undefined> {
-    if ((globalThis as any).__boxelRenderContext) {
+    if (this.renderContextBlocksPersistence()) {
       return;
     }
     // eslint-disable-next-line ember/classic-decorator-no-classic-methods
@@ -552,9 +569,15 @@ export default class StoreService extends Service implements StoreInterface {
     relativeTo?: URL | undefined,
   ): Promise<T> {
     let api = await this.cardService.getAPI();
-    let card = (await api.createFromSerialized(resource, doc, relativeTo, {
-      store: this.store,
-    })) as T;
+    let shouldStubTimers =
+      this.renderContextBlocksPersistence() && !isTesting();
+    let performCreate = async () =>
+      (await api.createFromSerialized(resource, doc, relativeTo, {
+        store: this.store,
+      })) as T;
+    let card = shouldStubTimers
+      ? await withStubbedRenderTimers(performCreate)
+      : await performCreate();
     if (!(globalThis as any).__lazilyLoadLinks) {
       // TODO we should be able to get rid of this when we decommission the old prerender
       await api.ensureLinksLoaded(card);
@@ -702,7 +725,14 @@ export default class StoreService extends Service implements StoreInterface {
         continue;
       }
       if (isLocalId(id)) {
-        for (let remoteId of this.store.getRemoteIds(id)) {
+        let remoteIdsForLocal = this.store.getRemoteIds(id);
+        if (remoteIdsForLocal.length === 0) {
+          let error = this.store.getError(id);
+          if (error?.meta?.remoteId) {
+            remoteIdsForLocal = [error.meta.remoteId];
+          }
+        }
+        for (let remoteId of remoteIdsForLocal) {
           remoteIds.add(remoteId);
         }
       } else {
@@ -816,7 +846,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     try {
       if (!id) {
-        if (!(globalThis as any).__boxelRenderContext) {
+        if (!this.renderContextBlocksPersistence()) {
           // this is a new card so instantiate it and save it
           let doc = idOrDoc as LooseSingleCardDocument;
           let newInstance = await this.createFromSerialized(
@@ -860,7 +890,7 @@ export default class StoreService extends Service implements StoreInterface {
         | undefined;
       if (!doc) {
         let json: CardDocument | undefined;
-        if ((globalThis as any).__boxelRenderContext) {
+        if (this.isRenderStore && (globalThis as any).__boxelRenderContext) {
           let result = await this.cardService.getSource(new URL(`${url}.json`));
           if (result.status === 200) {
             json = JSON.parse(result.content);
@@ -903,7 +933,7 @@ export default class StoreService extends Service implements StoreInterface {
       let cardError = errorResponse.errors[0];
       deferred?.fulfill(cardError);
       console.error(
-        `error getting instance ${JSON.stringify(idOrDoc, null, 2)}`,
+        `error getting instance ${JSON.stringify(idOrDoc, null, 2)}: ${JSON.stringify(error, null, 2)}`,
         error,
       );
       return cardError;
@@ -1031,7 +1061,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private async saveInstance(instance: CardDef, opts?: { isImmediate?: true }) {
-    if ((globalThis as any).__boxelRenderContext) {
+    if (this.renderContextBlocksPersistence()) {
       // we skip saving when rendering cards in headless chrome
       return;
     }
@@ -1183,6 +1213,10 @@ export default class StoreService extends Service implements StoreInterface {
         );
         let cardError = errorResponse.errors[0];
         this.setIdentityContext(cardError);
+        let remoteId = cardError.meta?.remoteId;
+        if (remoteId && (!cardError.id || isLocalId(cardError.id))) {
+          this.store.addInstanceOrError(remoteId, cardError);
+        }
         return cardError;
       } finally {
         deferred.fulfill();
@@ -1361,6 +1395,22 @@ export function asURL(urlOrDoc: string | LooseSingleCardDocument) {
   return typeof urlOrDoc === 'string'
     ? urlOrDoc.replace(/\.json$/, '')
     : urlOrDoc.data.id;
+}
+
+async function withStubbedRenderTimers<T>(cb: () => Promise<T>): Promise<T> {
+  if (typeof window === 'undefined' || isTesting()) {
+    return await cb();
+  }
+  // Prevent cards that use timers (e.g. timers-card.gts) from continuing to
+  // execute after we capture their HTML during prerender. In the browser we
+  // normally let timers run, but in the render route we need deterministic,
+  // single-shot renders so runaway timers don't crash indexing.
+  let restore = enableRenderTimerStub();
+  try {
+    return await withTimersBlocked(cb);
+  } finally {
+    restore();
+  }
 }
 
 // Resolves either to

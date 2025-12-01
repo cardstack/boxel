@@ -1,0 +1,132 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "FieldShowcase",
+        "module": "../field-showcase"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "playgroundDay": {
+        "value": 2
+      },
+      "playgroundDate": "2025-11-20",
+      "playgroundTime": {
+        "value": "13:00"
+      },
+      "playgroundWeek": {
+        "value": null
+      },
+      "playgroundYear": {
+        "value": 2028
+      },
+      "meetingTimeLong": {
+        "value": "09:15"
+      },
+      "playgroundMonth": {
+        "value": 4
+      },
+      "playgroundNumber": 20,
+      "playgroundRating": 4,
+      "meetingTime24Hour": {
+        "value": "14:30"
+      },
+      "playgroundQuarter": {
+        "year": null,
+        "quarter": null
+      },
+      "eventDateTimeShort": null,
+      "playgroundDatetime": null,
+      "playgroundDuration": {
+        "days": null,
+        "hours": null,
+        "years": null,
+        "months": null,
+        "minutes": null,
+        "seconds": null
+      },
+      "playgroundMonthDay": {
+        "day": null,
+        "month": null
+      },
+      "playgroundQuantity": 100,
+      "eventDateTimeCustom": null,
+      "playgroundDateRange": {
+        "end": null,
+        "start": null
+      },
+      "playgroundFieldType": "date",
+      "playgroundMonthYear": {
+        "value": "2025-10"
+      },
+      "playgroundTimeRange": {
+        "end": {
+          "value": null
+        },
+        "start": {
+          "value": null
+        }
+      },
+      "projectDurationFull": {
+        "days": 88,
+        "hours": 8,
+        "years": 2,
+        "months": 3,
+        "minutes": 30,
+        "seconds": 45
+      },
+      "taskDurationDayTime": {
+        "days": 5,
+        "hours": 3,
+        "years": null,
+        "months": null,
+        "minutes": 45,
+        "seconds": 30
+      },
+      "playgroundTimePeriod": {
+        "periodLabel": "2023-2024"
+      },
+      "appointmentDateCustom": "2025-12-15",
+      "appointmentDateCompact": "2025-11-28",
+      "playgroundPresentation": "standard",
+      "playgroundRelativeTime": {
+        "unit": null,
+        "amount": null
+      },
+      "playgroundDatetimeStamp": "2025-11-28T16:44:00.000Z",
+      "contractDurationYearMonth": {
+        "days": null,
+        "hours": null,
+        "years": 3,
+        "months": 6,
+        "minutes": null,
+        "seconds": null
+      },
+      "playgroundRecurringPattern": {
+        "endDate": null,
+        "pattern": null,
+        "interval": null,
+        "startDate": null,
+        "customRule": null,
+        "dayOfMonth": null,
+        "daysOfWeek": null,
+        "monthOfYear": null,
+        "occurrences": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

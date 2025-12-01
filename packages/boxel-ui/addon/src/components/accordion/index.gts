@@ -39,7 +39,7 @@ const Accordion: TemplateOnlyComponent<Signature> = <template>
         --boxel-accordion-item-padding-block: var(--boxel-sp-xxxs);
 
         border: var(--accordion-border);
-        border-radius: var(--boxel-border-radius);
+        border-radius: var(--radius, var(--boxel-border-radius));
       }
     }
   </style>

@@ -37,6 +37,7 @@ export interface PrerenderMeta {
 
 export interface RenderResponse extends PrerenderMeta {
   isolatedHTML: string | null;
+  headHTML: string | null;
   atomHTML: string | null;
   embeddedHTML: Record<string, string> | null;
   fittedHTML: Record<string, string> | null;
@@ -587,4 +588,9 @@ export function isLocalId(id: string) {
   return !id.startsWith('http');
 }
 
+export function isBrowserTestEnv() {
+  return typeof window !== 'undefined' && Boolean((globalThis as any).QUnit);
+}
+
 export * from './prerendered-card-search';
+export { DEFAULT_LLM_ID_TO_NAME } from './matrix-constants';

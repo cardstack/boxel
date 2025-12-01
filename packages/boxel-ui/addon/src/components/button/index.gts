@@ -148,7 +148,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         background-color: var(--boxel-button-color);
 
         /* size variants */
-        font: var(--boxel-button-font, 600 var(--boxel-font-sm));
+        font: var(--boxel-button-font, 700 var(--boxel-font-sm));
         font-family: inherit;
         min-height: var(--boxel-button-min-height);
         min-width: var(--boxel-button-min-width);
@@ -246,7 +246,6 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       .kind-primary {
         --boxel-button-color: var(--primary, var(--boxel-highlight));
         --boxel-button-text-color: var(--primary-foreground, var(--boxel-dark));
-        --boxel-button-box-shadow: var(--shadow);
       }
       .kind-primary:not(:disabled):hover,
       .kind-primary:not(:disabled):active {
@@ -261,7 +260,6 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         );
         --boxel-button-border: 1px solid
           var(--secondary, var(--boxel-button-border-color));
-        --boxel-button-box-shadow: var(--shadow);
       }
       .kind-secondary:not(:disabled):hover,
       .kind-secondary:not(:disabled):active {
@@ -287,7 +285,6 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
           --destructive-foreground,
           var(--boxel-light-100)
         );
-        --boxel-button-box-shadow: var(--shadow);
       }
       .kind-destructive:not(:disabled):hover,
       .kind-destructive:not(:disabled):active,
@@ -314,7 +311,6 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         /* inverted background and foreground */
         --boxel-button-color: var(--foreground, var(--boxel-dark));
         --boxel-button-text-color: var(--background, var(--boxel-light));
-        --boxel-button-box-shadow: var(--shadow);
       }
       .kind-primary-dark:not(:disabled):hover,
       .kind-primary-dark:not(:disabled):active {
@@ -331,7 +327,6 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         --boxel-button-text-color: var(--foreground, var(--boxel-dark));
         --boxel-button-border: 1px solid
           var(--border, var(--boxel-button-border-color));
-        --boxel-button-box-shadow: var(--shadow);
       }
       .kind-secondary-dark {
         /* transparent on dark background */
@@ -339,7 +334,6 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         --boxel-button-text-color: var(--background, var(--boxel-light));
         --boxel-button-border: 1px solid
           var(--border, var(--boxel-button-border-color));
-        --boxel-button-box-shadow: var(--shadow);
       }
       .kind-secondary-light:not(:disabled):hover,
       .kind-secondary-light:not(:disabled):active,
@@ -370,7 +364,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         --boxel-button-min-height: var(--boxel-button-xs);
         --boxel-button-min-width: 5rem;
         --boxel-button-loading-icon-size: var(--boxel-icon-xxs);
-        --boxel-button-font: 600 var(--boxel-font-xs);
+        --boxel-button-font: 700 var(--boxel-font-xs);
         --boxel-button-letter-spacing: var(--boxel-lsp-lg);
       }
       .size-extra-small.rectangular {
@@ -408,7 +402,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         --boxel-button-min-height: var(--boxel-button-touch);
         --boxel-button-min-width: 5rem;
         --boxel-button-loading-icon-size: var(--boxel-icon-sm);
-        --boxel-button-font: 600 var(--boxel-font);
+        --boxel-button-font: 700 var(--boxel-font);
         --boxel-button-letter-spacing: var(--boxel-lsp-xs);
       }
 

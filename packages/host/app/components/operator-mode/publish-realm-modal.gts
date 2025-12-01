@@ -75,9 +75,11 @@ export default class PublishRealmModal extends Component<Signature> {
   @tracked private customSubdomainError: string | null = null;
   @tracked private isCheckingCustomSubdomain = false;
   @tracked private claimedDomain: ClaimedDomain | null = null;
+  private initialSelectionsSet = false;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
+    this.ensureInitialSelectionsTask.perform();
     this.fetchBoxelClaimedDomain.perform();
   }
 
@@ -263,19 +265,37 @@ export default class PublishRealmModal extends Component<Signature> {
     this.customSubdomainError = null;
   }
 
-  private applyClaimedDomain(claim: ClaimedDomain | null) {
+  private applyClaimedDomain(
+    claim: ClaimedDomain | null,
+    options: { select?: boolean } = {},
+  ) {
+    const { select = false } = options;
+    const previousSelectionUrl = this.customSubdomainSelection?.url;
     this.claimedDomain = claim;
 
     if (claim) {
+      const publishedUrl = this.buildPublishedRealmUrl(claim.hostname);
+      if (previousSelectionUrl && previousSelectionUrl !== publishedUrl) {
+        this.removePublishedRealmUrl(previousSelectionUrl);
+      }
       this.setCustomSubdomainSelection({
-        url: this.buildPublishedRealmUrl(claim.hostname),
+        url: publishedUrl,
         subdomain: claim.subdomain,
       });
+      if (select) {
+        this.addPublishedRealmUrl(publishedUrl);
+      }
       this.customSubdomain = '';
       this.isCustomSubdomainSetupVisible = false;
-    } else if (!this.isCustomSubdomainSetupVisible) {
-      this.setCustomSubdomainSelection(null);
+    } else {
+      if (previousSelectionUrl) {
+        this.removePublishedRealmUrl(previousSelectionUrl);
+      }
+      if (!this.isCustomSubdomainSetupVisible) {
+        this.setCustomSubdomainSelection(null);
+      }
     }
+    this.applyInitialSelections(claim);
   }
 
   private fetchBoxelClaimedDomain = restartableTask(async () => {
@@ -339,28 +359,48 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   @action
-  toggleDefaultDomain() {
+  toggleDefaultDomain(event: Event) {
     const defaultUrl = this.subdirectoryRealmUrl;
-    if (!this.isSubdirectoryRealmSelected) {
-      this.selectedPublishedRealmURLs = [
-        ...this.selectedPublishedRealmURLs,
-        defaultUrl,
-      ];
+    const input = event.target as HTMLInputElement;
+    if (input.checked) {
+      this.addPublishedRealmUrl(defaultUrl);
+    } else {
+      this.removePublishedRealmUrl(defaultUrl);
     }
   }
 
   @action
-  toggleCustomSubdomain() {
+  toggleCustomSubdomain(event: Event) {
     if (this.claimedDomain) {
       const customUrl = this.buildPublishedRealmUrl(
         this.claimedDomain.hostname,
       );
-      if (!this.selectedPublishedRealmURLs.includes(customUrl)) {
-        this.selectedPublishedRealmURLs = [
-          ...this.selectedPublishedRealmURLs,
-          customUrl,
-        ];
+      const input = event.target as HTMLInputElement;
+      if (input.checked) {
+        this.addPublishedRealmUrl(customUrl);
+      } else {
+        this.removePublishedRealmUrl(customUrl);
       }
+    }
+  }
+
+  private addPublishedRealmUrl(url: string) {
+    if (!this.selectedPublishedRealmURLs.includes(url)) {
+      this.selectedPublishedRealmURLs = [
+        ...this.selectedPublishedRealmURLs,
+        url,
+      ];
+    }
+  }
+
+  private removePublishedRealmUrl(url: string | undefined) {
+    if (!url) {
+      return;
+    }
+    if (this.selectedPublishedRealmURLs.includes(url)) {
+      this.selectedPublishedRealmURLs = this.selectedPublishedRealmURLs.filter(
+        (selectedUrl) => selectedUrl !== url,
+      );
     }
   }
 
@@ -429,12 +469,15 @@ export default class PublishRealmModal extends Component<Signature> {
                 };
               };
             };
-            this.applyClaimedDomain({
-              id: claimResult.data.id,
-              subdomain: claimResult.data.attributes.subdomain,
-              hostname: claimResult.data.attributes.hostname,
-              sourceRealmURL: claimResult.data.attributes.sourceRealmURL,
-            });
+            this.applyClaimedDomain(
+              {
+                id: claimResult.data.id,
+                subdomain: claimResult.data.attributes.subdomain,
+                hostname: claimResult.data.attributes.hostname,
+                sourceRealmURL: claimResult.data.attributes.sourceRealmURL,
+              },
+              { select: true },
+            );
             this.isCustomSubdomainSetupVisible = false;
           } catch (claimError) {
             let errorMessage = (claimError as Error).message;
@@ -500,6 +543,35 @@ export default class PublishRealmModal extends Component<Signature> {
       return null;
     }
     return this.getPublishErrorForUrl(this.claimedDomainPublishedUrl);
+  }
+
+  ensureInitialSelectionsTask = restartableTask(
+    async (claim: ClaimedDomain | null = null) => {
+      await this.realm.ensureRealmMeta(this.currentRealmURL);
+      this.applyInitialSelections(claim);
+    },
+  );
+
+  private applyInitialSelections(claim: ClaimedDomain | null = null) {
+    let selections = this.initialSelectionsSet
+      ? this.selectedPublishedRealmURLs
+      : [...this.hostModeService.publishedRealmURLs];
+
+    if (claim) {
+      let claimedUrl = this.buildPublishedRealmUrl(claim.hostname);
+      if (!selections.includes(claimedUrl)) {
+        selections = [...selections, claimedUrl];
+      }
+    }
+
+    if (
+      !this.initialSelectionsSet ||
+      selections !== this.selectedPublishedRealmURLs
+    ) {
+      this.selectedPublishedRealmURLs = [...selections];
+    }
+
+    this.initialSelectionsSet = true;
   }
 
   <template>

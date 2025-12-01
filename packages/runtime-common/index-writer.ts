@@ -80,6 +80,7 @@ export interface InstanceEntry {
   resource: CardResource;
   searchData: Record<string, any>;
   isolatedHtml?: string;
+  headHtml?: string;
   embeddedHtml?: Record<string, string>;
   fittedHtml?: Record<string, string>;
   atomHtml?: string;
@@ -94,6 +95,7 @@ export interface ErrorEntry {
   error: SerializedError;
   types?: string[];
   searchData?: Record<string, any>;
+  cardType?: string;
 }
 
 interface ModuleEntry {
@@ -238,6 +240,13 @@ export class Batch {
         ? this.objectWithCopiedRealmKeys(sourceRealmURL, entry.embedded_html)
         : entry.embedded_html;
       this.updateIds(entry.search_doc, sourceRealmURL);
+      if (entry.error_doc) {
+        entry.error_doc = this.normalizeErrorDoc(
+          entry.error_doc,
+          new URL(entry.url),
+          (dep) => this.copiedRealmURL(sourceRealmURL, dep),
+        );
+      }
       entry.indexed_at = now;
 
       entry.definition = entry.definition
@@ -281,6 +290,10 @@ export class Batch {
       // drop this band-aid
       return;
     }
+    let errorEntry =
+      entry.type === 'error'
+        ? { ...entry, error: this.normalizeErrorDoc(entry.error, url) }
+        : undefined;
     let href = url.href;
     this.#invalidations.add(url.href);
     let preparedEntry = {
@@ -298,6 +311,7 @@ export class Batch {
             pristine_doc: entry.resource,
             search_doc: entry.searchData,
             isolated_html: entry.isolatedHtml,
+            head_html: entry.headHtml ?? null,
             embedded_html: entry.embeddedHtml,
             fitted_html: entry.fittedHtml,
             atom_html: entry.atomHtml,
@@ -334,7 +348,7 @@ export class Batch {
                 // favor the last known good types over the types derived from the error state
                 ...((await this.getProductionVersion(url)) ?? {}),
                 type: 'error',
-                error_doc: entry.error,
+                error_doc: errorEntry?.error ?? entry.error,
               }),
     } as Omit<BoxelIndexTable, 'last_modified' | 'indexed_at'> & {
       // we do this because pg automatically casts big ints into strings, so
@@ -350,7 +364,7 @@ export class Batch {
       preparedEntry.deps = [
         ...new Set([
           ...(preparedEntry.deps ?? []),
-          ...(entry.error.deps ?? []),
+          ...(errorEntry?.error.deps ?? entry.error.deps ?? []),
         ]),
       ];
     }
@@ -775,6 +789,43 @@ export class Batch {
       }
     }
     return { ...codeRef, card: this.copiedCodeRef(fromRealm, codeRef.card) };
+  }
+
+  private normalizeErrorDoc(
+    error: SerializedError,
+    entryURL: URL,
+    depMapper?: (dep: URL) => URL,
+  ): SerializedError {
+    let deps = error.deps
+      ? [
+          ...new Set(
+            error.deps.map((dep) =>
+              this.normalizeDependency(dep, entryURL, depMapper),
+            ),
+          ),
+        ]
+      : undefined;
+    return {
+      ...error,
+      id: error.id ?? entryURL.href,
+      ...(deps ? { deps } : {}),
+    };
+  }
+
+  private normalizeDependency(
+    dep: string,
+    entryURL: URL,
+    depMapper?: (dep: URL) => URL,
+  ): string {
+    try {
+      let resolved = new URL(dep, entryURL);
+      resolved.search = '';
+      resolved.hash = '';
+      resolved = depMapper ? depMapper(resolved) : resolved;
+      return resolved.href;
+    } catch (_err) {
+      return dep;
+    }
   }
 
   private updateIds(obj: any, fromRealm: URL) {

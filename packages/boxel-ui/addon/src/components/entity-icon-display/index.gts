@@ -130,10 +130,7 @@ export default class EntityDisplayWithIcon extends GlimmerComponent<EntityDispla
           --entity-display-content-font-size,
           var(--boxel-font-size-xs)
         );
-        font-weight: var(
-          --entity-display-content-font-weight,
-          var(--boxel-font-weight-normal)
-        );
+        font-weight: var(--entity-display-content-font-weight, 400);
         overflow: hidden;
         text-overflow: ellipsis;
         display: -webkit-box;

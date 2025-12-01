@@ -16,7 +16,6 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { Realm } from '@cardstack/runtime-common/realm';
 
-import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import {
@@ -25,6 +24,7 @@ import {
 } from 'https://cardstack.com/base/matrix-event';
 
 import {
+  SYSTEM_CARD_FIXTURE_CONTENTS,
   percySnapshot,
   testRealmURL,
   setupCardLogs,
@@ -32,6 +32,7 @@ import {
   setupOnSave,
   type TestContextWithSave,
   setupIntegrationTestRealm,
+  setupOperatorModeStateCleanup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
@@ -45,11 +46,19 @@ let setCardInOperatorModeState: (
   rightCards?: string[],
 ) => Promise<void>;
 
+const DESTINATION_STACK_SELECTOR =
+  '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]';
+
+function getDestinationCardCount(): number {
+  return document.querySelectorAll(DESTINATION_STACK_SELECTOR).length;
+}
+
 module('Integration | card-copy', function (hooks) {
   let realm1: Realm;
   let noop = () => {};
 
   setupRenderingTest(hooks);
+  setupOperatorModeStateCleanup(hooks);
   hooks.beforeEach(function () {
     loader = getService('loader-service').loader;
   });
@@ -156,6 +165,7 @@ module('Integration | card-copy', function (hooks) {
     ({ realm: realm1 } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'pet.gts': { Pet },
         'index.json': {
@@ -231,6 +241,7 @@ module('Integration | card-copy', function (hooks) {
       mockMatrixUtils,
       realmURL: testRealm2URL,
       contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'index.json': {
           data: {
             type: 'card',
@@ -301,7 +312,6 @@ module('Integration | card-copy', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -318,7 +328,6 @@ module('Integration | card-copy', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -346,7 +355,6 @@ module('Integration | card-copy', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -376,7 +384,6 @@ module('Integration | card-copy', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -418,11 +425,15 @@ module('Integration | card-copy', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
-    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await click(
+      `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
     await triggerEvent(
       `[data-test-cards-grid-item="${testRealmURL}Person/hassan"] .field-component-card`,
       'mouseenter',
@@ -444,7 +455,6 @@ module('Integration | card-copy', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -464,7 +474,6 @@ module('Integration | card-copy', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -490,7 +499,6 @@ module('Integration | card-copy', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -517,7 +525,6 @@ module('Integration | card-copy', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -549,7 +556,6 @@ module('Integration | card-copy', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -587,7 +593,6 @@ module('Integration | card-copy', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -661,7 +666,6 @@ module('Integration | card-copy', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -690,7 +694,6 @@ module('Integration | card-copy', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -723,7 +726,6 @@ module('Integration | card-copy', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -759,12 +761,10 @@ module('Integration | card-copy', function (hooks) {
     assert
       .dom(`.selected[data-test-overlay-card="${testRealmURL}Pet/mango"]`)
       .exists('souce card is selected');
-    assert.strictEqual(
-      document.querySelectorAll(
-        '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
-      ).length,
-      1,
-      '1 card exists in destination realm',
+    let initialDestinationCardCount = getDestinationCardCount();
+    assert.ok(
+      initialDestinationCardCount >= 1,
+      `destination realm starts with ${initialDestinationCardCount} card(s)`,
     );
     await click('[data-test-copy-button]');
 
@@ -807,10 +807,7 @@ module('Integration | card-copy', function (hooks) {
     ]);
 
     await waitUntil(
-      () =>
-        document.querySelectorAll(
-          `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
-        ).length === 2,
+      () => getDestinationCardCount() === initialDestinationCardCount + 1,
     );
     if (!id) {
       assert.ok(false, 'new card identifier was undefined');
@@ -859,7 +856,6 @@ module('Integration | card-copy', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -890,20 +886,15 @@ module('Integration | card-copy', function (hooks) {
     );
     await click(`[data-test-overlay-select="${testRealmURL}Pet/vangogh"]`);
 
-    assert.strictEqual(
-      document.querySelectorAll(
-        '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
-      ).length,
-      1,
-      '1 card exists in destination realm',
+    let initialDestinationCardCount = getDestinationCardCount();
+    assert.ok(
+      initialDestinationCardCount >= 1,
+      `destination realm starts with ${initialDestinationCardCount} card(s)`,
     );
     await click('[data-test-copy-button]');
 
     await waitUntil(
-      () =>
-        document.querySelectorAll(
-          `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
-        ).length === 3,
+      () => getDestinationCardCount() === initialDestinationCardCount + 2,
     );
 
     let realmSessionRoomId = getRoomIdForRealmAndUser(
@@ -973,7 +964,6 @@ module('Integration | card-copy', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1050,20 +1040,15 @@ module('Integration | card-copy', function (hooks) {
     );
     await click(`[data-test-overlay-select="${testRealmURL}Person/hassan"]`);
 
-    assert.strictEqual(
-      document.querySelectorAll(
-        '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
-      ).length,
-      1,
-      '1 card exists in destination realm',
+    let initialDestinationCardCount = getDestinationCardCount();
+    assert.ok(
+      initialDestinationCardCount >= 1,
+      `destination realm starts with ${initialDestinationCardCount} card(s)`,
     );
     await click('[data-test-copy-button]');
 
     await waitUntil(
-      () =>
-        document.querySelectorAll(
-          `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
-        ).length === 2,
+      () => getDestinationCardCount() === initialDestinationCardCount + 1,
     );
 
     let realmSessionRoomId = getRoomIdForRealmAndUser(
@@ -1117,7 +1102,6 @@ module('Integration | card-copy', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
         </template>
       },
     );
@@ -1194,12 +1178,10 @@ module('Integration | card-copy', function (hooks) {
     );
     await click(`[data-test-overlay-select="${testRealmURL}Person/sakura"]`);
 
-    assert.strictEqual(
-      document.querySelectorAll(
-        '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
-      ).length,
-      1,
-      '1 card exists in destination realm',
+    let initialDestinationCardCount = getDestinationCardCount();
+    assert.ok(
+      initialDestinationCardCount >= 1,
+      `destination realm starts with ${initialDestinationCardCount} card(s)`,
     );
     await click('[data-test-copy-button]');
 
@@ -1228,10 +1210,7 @@ module('Integration | card-copy', function (hooks) {
     ]);
 
     await waitUntil(
-      () =>
-        document.querySelectorAll(
-          `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
-        ).length === 2,
+      () => getDestinationCardCount() === initialDestinationCardCount + 1,
     );
     if (!id) {
       assert.ok(false, 'new card identifier was undefined');

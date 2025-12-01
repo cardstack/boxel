@@ -541,6 +541,8 @@ export default class RealmService extends Service {
         isIndexing: false,
         isPublic: false,
         lastPublishedAt: null,
+        interactHome: null,
+        hostHome: null,
       };
     }
 
@@ -556,6 +558,8 @@ export default class RealmService extends Service {
         isIndexing: false,
         isPublic: false,
         lastPublishedAt: null,
+        interactHome: null,
+        hostHome: null,
       };
     } else {
       return resource.info;
@@ -743,7 +747,17 @@ export default class RealmService extends Service {
   // By default, this does a tracked read from currentKnownRealms so that your
   // answer can be invalidated if a new realm is discovered. Internally, we also
   // use it untracked to implement the read-through cache.
-  private knownRealm(url: string, tracked = true): RealmResource | undefined {
+  private knownRealm(
+    url: string | undefined,
+    tracked = true,
+  ): RealmResource | undefined {
+    if (!url) {
+      if (tracked) {
+        // consume a tracked property to allow invalidation when realms change
+        void this.currentKnownRealms.size;
+      }
+      return undefined;
+    }
     for (let [key, value] of this.realms) {
       if (url.startsWith(key)) {
         return value;

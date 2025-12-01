@@ -84,6 +84,7 @@ export interface IndexedInstance {
   lastModified: number | null;
   resourceCreatedAt: number;
   isolatedHtml: string | null;
+  headHtml: string | null;
   embeddedHtml: { [refURL: string]: string } | null;
   fittedHtml: { [refURL: string]: string } | null;
   atomHtml: string | null;
@@ -128,7 +129,7 @@ type GetEntryOptions = WIPOptions;
 export type QueryOptions = WIPOptions & PrerenderedCardOptions;
 
 interface PrerenderedCardOptions {
-  htmlFormat?: 'embedded' | 'fitted' | 'atom';
+  htmlFormat?: 'embedded' | 'fitted' | 'atom' | 'head';
   renderType?: ResolvedCodeRef;
   includeErrors?: true;
   cardUrls?: string[];
@@ -141,7 +142,7 @@ interface WIPOptions {
 export interface PrerenderedCard {
   url: string;
   html: string | null;
-  usedRenderType: ResolvedCodeRef;
+  usedRenderType?: ResolvedCodeRef;
   isError?: true;
 }
 
@@ -157,13 +158,15 @@ export interface QueryResultsMeta {
 export const generalSortFields: Record<string, string> = {
   lastModified: 'last_modified',
   createdAt: 'resource_created_at',
+  cardURL: 'url COLLATE "POSIX"',
 };
 
 export function isValidPrerenderedHtmlFormat(
   format: string | undefined,
 ): format is PrerenderedCardOptions['htmlFormat'] {
   return (
-    format !== undefined && ['embedded', 'fitted', 'atom'].includes(format)
+    format !== undefined &&
+    ['embedded', 'fitted', 'atom', 'head'].includes(format)
   );
 }
 
@@ -309,6 +312,7 @@ export class IndexQueryEngine {
       url: canonicalURL,
       pristine_doc: instance,
       isolated_html: isolatedHtml,
+      head_html: headHtml,
       atom_html: atomHtml,
       embedded_html: embeddedHtml,
       fitted_html: fittedHtml,
@@ -326,6 +330,7 @@ export class IndexQueryEngine {
       realmURL,
       instance,
       isolatedHtml,
+      headHtml,
       embeddedHtml,
       fittedHtml,
       atomHtml,
@@ -527,7 +532,7 @@ export class IndexQueryEngine {
   }> {
     if (!isValidPrerenderedHtmlFormat(opts.htmlFormat)) {
       throw new Error(
-        `htmlFormat must be either 'embedded', 'fitted', or 'atom'`,
+        `htmlFormat must be either 'embedded', 'fitted', 'atom', or 'head'`,
       );
     }
 
@@ -557,7 +562,7 @@ export class IndexQueryEngine {
       meta: QueryResultsMeta;
       results: (Partial<BoxelIndexTable> & {
         html: string | null;
-        used_render_type: string;
+        used_render_type: string | null;
       })[];
     };
 
@@ -569,20 +574,30 @@ export class IndexQueryEngine {
     let scopedCssUrls = new Set<string>(); // Use a set for deduplication
 
     let prerenderedCards = results.map((card) => {
-      card.deps!.forEach((dep: string) => {
+      (card.deps ?? []).forEach((dep: string) => {
         if (isScopedCSSRequest(dep)) {
           scopedCssUrls.add(dep);
         }
       });
 
-      let moduleNameSeparatorIndex = card.used_render_type.lastIndexOf('/');
+      let usedRenderType: ResolvedCodeRef | undefined;
+      if (card.used_render_type) {
+        let moduleNameSeparatorIndex = card.used_render_type.lastIndexOf('/');
+        if (moduleNameSeparatorIndex > -1) {
+          usedRenderType = {
+            module: card.used_render_type.substring(
+              0,
+              moduleNameSeparatorIndex,
+            ),
+            name: card.used_render_type.substring(moduleNameSeparatorIndex + 1),
+          };
+        }
+      }
+
       return {
         url: card.url!,
         html: card.html,
-        usedRenderType: {
-          module: card.used_render_type.substring(0, moduleNameSeparatorIndex),
-          name: card.used_render_type.substring(moduleNameSeparatorIndex + 1),
-        },
+        ...(usedRenderType ? { usedRenderType } : {}),
         ...(card.type === 'error' ? { isError: true as const } : {}),
       };
     });
@@ -594,11 +609,11 @@ export class IndexQueryEngine {
     htmlFormat,
     renderType,
   }: {
-    htmlFormat: 'embedded' | 'fitted' | 'atom' | undefined;
+    htmlFormat: 'embedded' | 'fitted' | 'atom' | 'head' | undefined;
     renderType?: ResolvedCodeRef;
   }): (string | Param | DBSpecificExpression)[] {
     let fieldName = htmlFormat ? `${htmlFormat}_html` : `atom_html`;
-    if (!htmlFormat || htmlFormat === 'atom') {
+    if (!htmlFormat || htmlFormat === 'atom' || htmlFormat === 'head') {
       return [`ANY_VALUE(${fieldName})`];
     }
 
@@ -639,11 +654,16 @@ export class IndexQueryEngine {
     htmlFormat,
     renderType,
   }: {
-    htmlFormat: 'embedded' | 'fitted' | 'atom' | undefined;
+    htmlFormat: 'embedded' | 'fitted' | 'atom' | 'head' | undefined;
     renderType?: ResolvedCodeRef;
   }): (string | Param | DBSpecificExpression)[] {
     let usedRenderTypeColumnExpression = [];
-    if (htmlFormat && htmlFormat !== 'atom' && renderType) {
+    if (
+      htmlFormat &&
+      htmlFormat !== 'atom' &&
+      htmlFormat !== 'head' &&
+      renderType
+    ) {
       usedRenderTypeColumnExpression.push(`CASE`);
       usedRenderTypeColumnExpression.push(
         `WHEN ANY_VALUE(${htmlFormat}_html) ->> `,

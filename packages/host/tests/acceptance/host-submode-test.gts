@@ -9,6 +9,8 @@ import {
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { TrackedObject } from 'tracked-built-ins';
+
 import { Deferred, baseRealm } from '@cardstack/runtime-common';
 
 import {
@@ -47,6 +49,28 @@ const personCardSource = `
     };
   }
 `;
+
+function withUpdatedTestRealmInfo(
+  updates: Partial<typeof testRealmInfo>,
+): () => void {
+  let realmService = getService('realm') as any;
+  let realmResource = realmService.realms.get(testRealmURL);
+  if (!realmResource) {
+    throw new Error('Test realm resource is not registered');
+  }
+
+  let previousInfo = realmResource.info;
+  let baseInfo = previousInfo ? { ...previousInfo } : { ...testRealmInfo };
+
+  realmResource.info = new TrackedObject({
+    ...baseInfo,
+    ...updates,
+  });
+
+  return () => {
+    realmResource.info = previousInfo;
+  };
+}
 
 module('Acceptance | host submode', function (hooks) {
   setupApplicationTest(hooks);
@@ -644,58 +668,98 @@ module('Acceptance | host submode', function (hooks) {
           .hasAttribute('target', '_blank');
       });
 
-      test('can unpublish realm', async function (assert) {
-        let mockRealmInfoResponse = async (request: Request) => {
-          console.log(request.url);
-          if (!request.url.includes('test') || !request.url.includes('_info')) {
-            return null;
-          }
+      test('preselects previously published domains on refresh', async function (assert) {
+        let now = Date.now();
+        let realmServer = getService('realm-server') as any;
+        let originalFetchClaimed = realmServer.fetchBoxelClaimedDomain;
 
-          return new Response(
-            JSON.stringify({
-              data: {
-                type: 'realm-info',
-                id: testRealmURL,
-                attributes: {
-                  ...testRealmInfo,
-                  lastPublishedAt: {
-                    ['http://testuser.localhost:4201/test/']: (
-                      new Date().getTime() -
-                      3 * 24 * 60 * 60 * 1000
-                    ).toString(), //3 days ago,
-                  },
-                },
-              },
-            }),
-            {
-              headers: {
-                'Content-Type': 'application/vnd.api+json',
-              },
-            },
-          );
-        };
-        getService('network').mount(mockRealmInfoResponse, { prepend: true });
+        realmServer.fetchBoxelClaimedDomain = async () => ({
+          id: 'claimed-domain-1',
+          hostname: 'custom-site-name.localhost:4201',
+          subdomain: 'custom-site-name',
+          sourceRealmURL: testRealmURL,
+        });
 
+        let restoreRealmInfo = withUpdatedTestRealmInfo({
+          lastPublishedAt: {
+            'http://testuser.localhost:4201/test/': String(now),
+            'http://custom-site-name.localhost:4201/': String(now),
+          },
+        });
+
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-publish-realm-modal]');
+
+          assert.dom('[data-test-default-domain-checkbox]').isChecked();
+          assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
+          assert.dom('[data-test-publish-button]').isNotDisabled();
+        } finally {
+          realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
+          restoreRealmInfo();
+        }
+      });
+
+      test('default domain checkbox can be checked and unchecked', async function (assert) {
         await visitOperatorMode({
           submode: 'host',
           trail: [`${testRealmURL}Person/1.json`],
         });
 
         await click('[data-test-publish-realm-button]');
-        assert.dom('[data-test-last-published-at]').containsText('3 days ago');
-        assert.dom('[data-test-unpublish-button]').exists();
-        assert.dom('[data-test-open-site-button]').exists();
-        await click('[data-test-unpublish-button]');
-        assert.dom('[data-test-unpublish-button]').hasText('Unpublishing…');
-        unpublishDeferred.fulfill();
-        await waitUntil(() => {
-          return !document.querySelector('[data-test-unpublish-button]');
+
+        assert.dom('[data-test-default-domain-checkbox]').isNotChecked();
+        assert.dom('[data-test-publish-button]').isDisabled();
+
+        await click('[data-test-default-domain-checkbox]');
+        assert.dom('[data-test-default-domain-checkbox]').isChecked();
+        assert.dom('[data-test-publish-button]').isNotDisabled();
+
+        await click('[data-test-default-domain-checkbox]');
+        assert.dom('[data-test-default-domain-checkbox]').isNotChecked();
+        assert.dom('[data-test-publish-button]').isDisabled();
+      });
+
+      test('can unpublish realm', async function (assert) {
+        let restoreRealmInfo = withUpdatedTestRealmInfo({
+          lastPublishedAt: {
+            ['http://testuser.localhost:4201/test/']: (
+              new Date().getTime() -
+              3 * 24 * 60 * 60 * 1000
+            ).toString(),
+          },
         });
 
-        assert.dom('[data-test-last-published-at]').doesNotExist();
-        assert.dom('[data-test-unpublish-button]').doesNotExist();
-        assert.dom('[data-test-open-site-button]').doesNotExist();
-        getService('network').resetState();
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          assert
+            .dom('[data-test-last-published-at]')
+            .containsText('3 days ago');
+          assert.dom('[data-test-unpublish-button]').exists();
+          assert.dom('[data-test-open-site-button]').exists();
+          await click('[data-test-unpublish-button]');
+          assert.dom('[data-test-unpublish-button]').hasText('Unpublishing…');
+          unpublishDeferred.fulfill();
+          await waitUntil(() => {
+            return !document.querySelector('[data-test-unpublish-button]');
+          });
+
+          assert.dom('[data-test-last-published-at]').doesNotExist();
+          assert.dom('[data-test-unpublish-button]').doesNotExist();
+          assert.dom('[data-test-open-site-button]').doesNotExist();
+        } finally {
+          restoreRealmInfo();
+        }
       });
 
       test('open site button only appears when realm is published', async function (assert) {
@@ -787,6 +851,7 @@ module('Acceptance | host submode', function (hooks) {
             'http://my-boxel-site.localhost:4201/ Not published yet',
           );
         assert.dom('[data-test-unclaim-custom-subdomain-button]').exists();
+        assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
       });
 
       test('shows error when claiming domain fails with 422', async function (assert) {
@@ -855,95 +920,82 @@ module('Acceptance | host submode', function (hooks) {
       });
 
       test('open site popover shows published realms and opens them correctly', async function (assert) {
-        // Mock realm info with published state
-        let mockRealmInfoResponse = async (request: Request) => {
-          if (!request.url.includes('test') || !request.url.includes('_info')) {
-            return null;
-          }
-
-          let now = Date.now();
-
-          return new Response(
-            JSON.stringify({
-              data: {
-                type: 'realm-info',
-                id: testRealmURL,
-                attributes: {
-                  ...testRealmInfo,
-                  lastPublishedAt: {
-                    'http://testuser.localhost:4201/test/': now,
-                    'https://another-domain.com/realm/': now - 1000,
-                  },
-                },
-              },
-            }),
-            {
-              headers: {
-                'Content-Type': 'application/vnd.api+json',
-              },
-            },
-          );
-        };
-        getService('network').mount(mockRealmInfoResponse, { prepend: true });
-
-        await visitOperatorMode({
-          submode: 'host',
-          trail: [`${testRealmURL}Person/1.json`],
+        let now = Date.now();
+        let restoreRealmInfo = withUpdatedTestRealmInfo({
+          lastPublishedAt: {
+            'http://testuser.localhost:4201/test/': String(now),
+            'https://another-domain.com/realm/': String(now - 1000),
+          },
         });
 
-        // Check that the main button has the correct href
-        assert
-          .dom('[data-test-open-site-button]')
-          .hasAttribute('href', 'http://testuser.localhost:4201/test/Person/1')
-          .hasAttribute('target', '_blank');
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
 
-        await triggerEvent('[data-test-open-site-button]', 'mouseenter');
-        await waitFor('[data-test-tooltip-content]');
-        assert
-          .dom('[data-test-tooltip-content]')
-          .hasText(
-            'Open Site in a New Tab (Shift+Click for options)',
-            'Tooltip shows correct text when menu is closed',
-          );
+          // Check that the main button has the correct href
+          assert
+            .dom('[data-test-open-site-button]')
+            .hasAttribute(
+              'href',
+              'http://testuser.localhost:4201/test/Person/1',
+            )
+            .hasAttribute('target', '_blank');
 
-        assert.dom('[data-test-open-site-popover]').doesNotExist();
+          await triggerEvent('[data-test-open-site-button]', 'mouseenter');
+          await waitFor('[data-test-tooltip-content]');
+          assert
+            .dom('[data-test-tooltip-content]')
+            .hasText(
+              'Open Site in a New Tab (Shift+Click for options)',
+              'Tooltip shows correct text when menu is closed',
+            );
 
-        await click('[data-test-open-site-button]', { shiftKey: true });
+          assert.dom('[data-test-open-site-popover]').doesNotExist();
 
-        assert.dom('[data-test-open-site-popover]').exists();
-        assert.dom('[data-test-published-realm-item]').exists({ count: 2 });
+          await click('[data-test-open-site-button]', { shiftKey: true });
 
-        assert
-          .dom('[data-test-published-realm-item] [data-test-open-site-button]')
-          .exists({ count: 2 });
+          assert.dom('[data-test-open-site-popover]').exists();
+          assert.dom('[data-test-published-realm-item]').exists({ count: 2 });
 
-        assert
-          .dom(
-            '[data-test-published-realm-item="http://testuser.localhost:4201/test/Person/1"]',
-          )
-          .exists();
-        assert
-          .dom(
-            '[data-test-published-realm-item="https://another-domain.com/realm/Person/1"]',
-          )
-          .exists();
+          assert
+            .dom(
+              '[data-test-published-realm-item] [data-test-open-site-button]',
+            )
+            .exists({ count: 2 });
 
-        // Check that popover buttons have correct href attributes
-        assert
-          .dom(
-            '[data-test-published-realm-item="http://testuser.localhost:4201/test/Person/1"] [data-test-open-site-button]',
-          )
-          .hasAttribute('href', 'http://testuser.localhost:4201/test/Person/1')
-          .hasAttribute('target', '_blank');
+          assert
+            .dom(
+              '[data-test-published-realm-item="http://testuser.localhost:4201/test/Person/1"]',
+            )
+            .exists();
+          assert
+            .dom(
+              '[data-test-published-realm-item="https://another-domain.com/realm/Person/1"]',
+            )
+            .exists();
 
-        assert
-          .dom(
-            '[data-test-published-realm-item="https://another-domain.com/realm/Person/1"] [data-test-open-site-button]',
-          )
-          .hasAttribute('href', 'https://another-domain.com/realm/Person/1')
-          .hasAttribute('target', '_blank');
+          // Check that popover buttons have correct href attributes
+          assert
+            .dom(
+              '[data-test-published-realm-item="http://testuser.localhost:4201/test/Person/1"] [data-test-open-site-button]',
+            )
+            .hasAttribute(
+              'href',
+              'http://testuser.localhost:4201/test/Person/1',
+            )
+            .hasAttribute('target', '_blank');
 
-        getService('network').resetState();
+          assert
+            .dom(
+              '[data-test-published-realm-item="https://another-domain.com/realm/Person/1"] [data-test-open-site-button]',
+            )
+            .hasAttribute('href', 'https://another-domain.com/realm/Person/1')
+            .hasAttribute('target', '_blank');
+        } finally {
+          restoreRealmInfo();
+        }
       });
 
       test('claimed custom site name displays details and reverts after unclaim', async function (assert) {
@@ -1024,6 +1076,68 @@ module('Acceptance | host submode', function (hooks) {
         } finally {
           realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
           realmServer.deleteBoxelClaimedDomain = originalDeleteClaimed;
+        }
+      });
+
+      test('claimed custom domain is preselected even before first publish', async function (assert) {
+        let realmServer = getService('realm-server') as any;
+        let originalFetchClaimed = realmServer.fetchBoxelClaimedDomain;
+        realmServer.fetchBoxelClaimedDomain = async () => ({
+          id: 'claimed-domain-1',
+          hostname: 'custom-site-name.localhost:4201',
+          subdomain: 'custom-site-name',
+          sourceRealmURL: testRealmURL,
+        });
+
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-publish-realm-modal]');
+
+          assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
+          assert.dom('[data-test-default-domain-checkbox]').isNotChecked();
+          assert.dom('[data-test-publish-button]').isNotDisabled();
+        } finally {
+          realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
+        }
+      });
+
+      test('custom site checkbox can be checked and unchecked', async function (assert) {
+        let realmServer = getService('realm-server') as any;
+        let originalFetchClaimed = realmServer.fetchBoxelClaimedDomain;
+
+        realmServer.fetchBoxelClaimedDomain = async () => ({
+          id: 'claimed-domain-1',
+          hostname: 'custom-site-name.localhost:4201',
+          subdomain: 'custom-site-name',
+          sourceRealmURL: testRealmURL,
+        });
+
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-custom-subdomain-checkbox]');
+
+          assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
+          assert.dom('[data-test-publish-button]').isNotDisabled();
+
+          await click('[data-test-custom-subdomain-checkbox]'); // uncheck
+          assert.dom('[data-test-custom-subdomain-checkbox]').isNotChecked();
+          assert.dom('[data-test-publish-button]').isDisabled();
+
+          await click('[data-test-custom-subdomain-checkbox]'); // re-check
+          assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
+          assert.dom('[data-test-publish-button]').isNotDisabled();
+        } finally {
+          realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
         }
       });
 
@@ -1115,9 +1229,11 @@ module('Acceptance | host submode', function (hooks) {
           await click('[data-test-publish-realm-button]');
           await waitFor('[data-test-publish-realm-modal]');
 
-          // Check both checkboxes
+          assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
+          assert.dom('[data-test-default-domain-checkbox]').isNotChecked();
+
+          // Check default checkbox (custom already selected)
           await click('[data-test-default-domain-checkbox]');
-          await click('[data-test-custom-subdomain-checkbox]');
 
           await click('[data-test-publish-button]');
           publishDeferred.fulfill();
@@ -1175,9 +1291,8 @@ module('Acceptance | host submode', function (hooks) {
           await click('[data-test-publish-realm-button]');
           await waitFor('[data-test-publish-realm-modal]');
 
-          // Check both checkboxes
+          // Custom is preselected; add default checkbox
           await click('[data-test-default-domain-checkbox]');
-          await click('[data-test-custom-subdomain-checkbox]');
 
           assert.dom('[data-test-default-domain-checkbox]').isChecked();
           assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
@@ -1224,6 +1339,41 @@ module('Acceptance | host submode', function (hooks) {
         }
       });
 
+      test('custom subdomain checkbox is checked when modal opens with claimed domain', async function (assert) {
+        let realmServer = getService('realm-server') as any;
+        let originalFetchClaimed = realmServer.fetchBoxelClaimedDomain;
+
+        realmServer.fetchBoxelClaimedDomain = async () => ({
+          id: 'claimed-domain-1',
+          hostname: 'my-custom-site.localhost:4201',
+          subdomain: 'my-custom-site',
+          sourceRealmURL: testRealmURL,
+        });
+
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-publish-realm-modal]');
+
+          assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
+          assert
+            .dom(
+              '[data-test-publish-realm-modal] .domain-option:nth-of-type(2)',
+            )
+            .containsText('Not published yet');
+
+          // User can still manually select it
+          await click('[data-test-custom-subdomain-checkbox]');
+          assert.dom('[data-test-custom-subdomain-checkbox]').isNotChecked();
+        } finally {
+          realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
+        }
+      });
+
       test('can unpublish claimed domain', async function (assert) {
         let realmServer = getService('realm-server') as any;
         let originalFetchClaimed = realmServer.fetchBoxelClaimedDomain;
@@ -1235,35 +1385,14 @@ module('Acceptance | host submode', function (hooks) {
           sourceRealmURL: testRealmURL,
         });
 
-        let mockRealmInfoResponse = async (request: Request) => {
-          if (!request.url.includes('test') || !request.url.includes('_info')) {
-            return null;
-          }
-
-          return new Response(
-            JSON.stringify({
-              data: {
-                type: 'realm-info',
-                id: testRealmURL,
-                attributes: {
-                  ...testRealmInfo,
-                  lastPublishedAt: {
-                    ['http://my-custom-site.localhost:4201/']: (
-                      new Date().getTime() -
-                      2 * 24 * 60 * 60 * 1000
-                    ).toString(), //2 days ago
-                  },
-                },
-              },
-            }),
-            {
-              headers: {
-                'Content-Type': 'application/vnd.api+json',
-              },
-            },
-          );
-        };
-        getService('network').mount(mockRealmInfoResponse, { prepend: true });
+        let restoreRealmInfo = withUpdatedTestRealmInfo({
+          lastPublishedAt: {
+            ['http://my-custom-site.localhost:4201/']: (
+              new Date().getTime() -
+              2 * 24 * 60 * 60 * 1000
+            ).toString(),
+          },
+        });
 
         try {
           await visitOperatorMode({
@@ -1308,8 +1437,8 @@ module('Acceptance | host submode', function (hooks) {
             )
             .containsText('Not published yet');
         } finally {
+          restoreRealmInfo();
           realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
-          getService('network').resetState();
         }
       });
     });

@@ -416,7 +416,6 @@ async function startTestRealm({
   let virtualNetwork = createVirtualNetwork();
   let dir = dirSync().name;
   let testRealmServer = await runTestRealmServer({
-    usePrerenderer: true,
     testRealmDir: dir,
     realmsRootPath: join(dir, 'realm_server_1'),
     virtualNetwork,
@@ -519,6 +518,20 @@ module(basename(__filename), function () {
           cleanWhiteSpace(`<h1> Embedded Card Person: Mango </h1>`),
           'pre-rendered embedded format html is correct',
         );
+
+        assert.ok(entry.headHtml, 'pre-rendered head format html is present');
+
+        let cleanedHead = cleanWhiteSpace(entry.headHtml!);
+
+        assert.ok(
+          cleanedHead.includes('<title data-test-card-head-title>'),
+          `head html includes title: ${cleanedHead}`,
+        );
+        assert.ok(
+          cleanedHead.includes(`property="og:url" content="${testRealm}mango"`),
+          `head html includes canonical url: ${cleanedHead}`,
+        );
+
         assert.strictEqual(
           trimCardContainer(
             stripScopedCSSAttributes(
@@ -1892,9 +1905,9 @@ module(basename(__filename), function () {
             id: `${testRealm}post`,
             isCardError: true,
             additionalErrors: null,
-            message: `${testRealm}post not found`,
+            message: `missing file ${testRealm}post`,
             status: 404,
-            title: 'Not Found',
+            title: 'Link Not Found',
             deps: [`${testRealm}post`],
           },
           'card instance is an error document',
@@ -2316,7 +2329,6 @@ module(basename(__filename), function () {
       },
     ) {
       setupPermissionedRealms(hooks, {
-        usePrerenderer: true,
         // provider
         realms: [
           {

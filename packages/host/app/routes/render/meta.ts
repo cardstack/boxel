@@ -26,6 +26,8 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 
+import { friendlyCardType } from '../../utils/render-error';
+
 import type { Model as ParentModel } from '../render';
 
 export type Model = PrerenderMeta | RenderError | undefined;
@@ -83,7 +85,7 @@ export default class RenderMetaRoute extends Route<Model> {
     // Add a "pseudo field" to the search doc for the card type. We use the
     // "_" prefix to make a decent attempt to not pollute the userland
     // namespace for cards
-    searchDoc._cardType = getFriendlyCardType(Klass);
+    searchDoc._cardType = friendlyCardType(Klass);
 
     return {
       serialized,
@@ -123,16 +125,20 @@ function getDisplayNames(klass: typeof BaseDef): string[] {
     if (!ref || isEqual(ref, baseRef)) {
       break;
     }
-    displayNames.push(current.displayName);
+    displayNames.push(normalizeDisplayName(current));
     current = Reflect.getPrototypeOf(current) as typeof BaseDef | undefined;
   }
   return displayNames;
 }
 
-function getFriendlyCardType(card: typeof CardDef) {
-  if (card.displayName === 'Card') {
-    return card.name;
-  } else {
-    return card.displayName;
+function normalizeDisplayName(current: typeof BaseDef): string {
+  let name = current.displayName;
+  if (
+    (name === 'Card' && current.name !== 'CardDef') ||
+    (name === 'Field' && current.name !== 'FieldDef') ||
+    (name === 'Base' && current.name !== 'BaseDef')
+  ) {
+    return current.name;
   }
+  return name;
 }

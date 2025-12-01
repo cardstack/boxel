@@ -73,8 +73,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
-    // in browser context this is a function
-    (globalThis as any).__useHeadlessChromePrerender = () => true;
+    (globalThis as any).__useHeadlessChromePrerender = true;
     onError = function (event: Event) {
       let localIndexer = getService('local-indexer');
       windowErrorHandler({
@@ -306,7 +305,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
       if (mango?.type === 'error') {
         assert.deepEqual(
           mango.error.errorDetail.message,
-          `Person/owner.json not found`,
+          `missing file ${testRealmURL}Person/owner.json`,
         );
         assert.deepEqual(mango.error.errorDetail.deps, [
           `${testRealmURL}Person/owner.json`,
@@ -745,6 +744,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         },
         relationships: {
           'cardInfo.theme': { links: { self: null } },
+          linkedExamples: { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -771,6 +771,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         ref: `${testRealmURL}person/Person`,
         title: 'Person Card',
         containedExamples: null,
+        linkedExamples: null,
         isCard: true,
         isComponent: false,
         isField: false,
@@ -862,6 +863,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         },
         relationships: {
           'cardInfo.theme': { links: { self: null } },
+          linkedExamples: { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -888,6 +890,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         ref: `${testRealmURL}person/Person`,
         title: 'Person Card',
         containedExamples: null,
+        linkedExamples: null,
         isCard: true,
         isComponent: false,
         isField: false,
@@ -1552,6 +1555,47 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
     assert.false(
       atomHtml!.includes('id="ember'),
       `atom HTML does not include ember ID's`,
+    );
+  });
+
+  test('can capture head html when indexing a card', async function (assert) {
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+
+      static head = class Head extends Component<typeof this> {
+        <template>
+          <title>{{@model.firstName}}!</title>
+        </template>
+      };
+    }
+
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'person.gts': { Person },
+        'vangogh.json': {
+          data: {
+            attributes: {
+              firstName: 'Van Gogh',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person',
+                name: 'Person',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let { headHtml } =
+      (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
+
+    assert.strictEqual(
+      cleanWhiteSpace(stripScopedCSSAttributes(headHtml!)),
+      cleanWhiteSpace(`<title>Van Gogh!</title>`),
+      'head html is correct',
     );
   });
 
@@ -2472,6 +2516,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
       specType: 'card',
       moduleHref: 'http://localhost:4202/test/booking',
       containedExamples: null,
+      linkedExamples: null,
       ref: 'http://localhost:4202/test/booking/Booking',
       title: 'Booking',
       isCard: true,
@@ -2858,6 +2903,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         },
         relationships: {
           'cardInfo.theme': { links: { self: null } },
+          linkedExamples: { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -2893,6 +2939,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         title: 'PetPerson',
         description: 'Spec for PetPerson',
         containedExamples: null,
+        linkedExamples: null,
         moduleHref: `${testModuleRealm}pet-person`,
         ref: `${testModuleRealm}pet-person/PetPerson`,
         specType: 'card',
@@ -3050,7 +3097,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
           friend: {
             id: `${testRealmURL}Friend/vanGogh`,
           },
-          cardInfo: {},
+          cardInfo: { theme: null },
         },
         cardInfo: { theme: null },
       });
@@ -3227,7 +3274,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
             id: `${testRealmURL}Friend/hassan`,
           },
           description: 'Dog friend',
-          cardInfo: {},
+          cardInfo: { theme: null },
         },
         title: 'Hassan',
         cardInfo: { theme: null },
@@ -3655,14 +3702,14 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
               firstName: 'Mango',
               title: 'Mango',
               friends: [{ id: hassanID }],
-              cardInfo: {},
+              cardInfo: { theme: null },
             },
             {
               id: vanGoghID,
               firstName: 'Van Gogh',
               friends: [{ id: hassanID }],
               title: 'Van Gogh',
-              cardInfo: {},
+              cardInfo: { theme: null },
             },
           ],
           cardInfo: { theme: null },
@@ -3810,7 +3857,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
                       id: hassanID,
                     },
                   ],
-                  cardInfo: {},
+                  cardInfo: { theme: null },
                 },
               ],
               cardInfo: { theme: null },
@@ -4018,9 +4065,11 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/letter-case.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/link.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/notepad-text.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/package.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/palette.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/rectangle-ellipsis.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/trash-2.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/wand.js',
         'https://cardstack.com/base/card-api',
         'https://cardstack.com/base/card-menu-items',
         'https://cardstack.com/base/card-serialization',
@@ -4030,6 +4079,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         'https://cardstack.com/base/default-templates/embedded',
         'https://cardstack.com/base/default-templates/field-edit',
         'https://cardstack.com/base/default-templates/fitted',
+        'https://cardstack.com/base/default-templates/head',
         'https://cardstack.com/base/default-templates/isolated-and-edit',
         'https://cardstack.com/base/default-templates/markdown',
         'https://cardstack.com/base/default-templates/missing-template',
@@ -4049,6 +4099,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         'https://packages/@cardstack/boxel-host/commands/generate-example-cards',
         'https://packages/@cardstack/boxel-host/commands/listing-create',
         'https://packages/@cardstack/boxel-host/commands/open-in-interact-mode',
+        'https://packages/@cardstack/boxel-host/commands/patch-theme',
         'https://packages/@cardstack/boxel-host/commands/populate-with-sample-data',
         'https://packages/@cardstack/boxel-host/commands/send-ai-assistant-message',
         'https://packages/@cardstack/boxel-host/commands/show-card',
@@ -4140,11 +4191,13 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/letter-case.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/link.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/notepad-text.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/package.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/palette.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/rectangle-ellipsis.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/stack.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/toggle-left.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/trash-2.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/wand.js',
         'https://cardstack.com/base/boolean',
         'https://cardstack.com/base/card-api',
         'https://cardstack.com/base/card-menu-items',
@@ -4156,6 +4209,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         'https://cardstack.com/base/default-templates/embedded',
         'https://cardstack.com/base/default-templates/field-edit',
         'https://cardstack.com/base/default-templates/fitted',
+        'https://cardstack.com/base/default-templates/head',
         'https://cardstack.com/base/default-templates/isolated-and-edit',
         'https://cardstack.com/base/default-templates/markdown',
         'https://cardstack.com/base/default-templates/missing-template',
@@ -4178,6 +4232,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         'https://packages/@cardstack/boxel-host/commands/generate-readme-spec',
         'https://packages/@cardstack/boxel-host/commands/listing-create',
         'https://packages/@cardstack/boxel-host/commands/open-in-interact-mode',
+        'https://packages/@cardstack/boxel-host/commands/patch-theme',
         'https://packages/@cardstack/boxel-host/commands/populate-with-sample-data',
         'https://packages/@cardstack/boxel-host/commands/send-ai-assistant-message',
         'https://packages/@cardstack/boxel-host/commands/show-card',

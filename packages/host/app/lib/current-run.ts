@@ -194,7 +194,6 @@ export class CurrentRun {
 
     await current.whileIndexing(async () => {
       let visitStart = Date.now();
-      invalidations = CurrentRun.#sortInvalidations(invalidations);
       for (let invalidation of invalidations) {
         await current.tryToVisit(invalidation);
       }
@@ -243,8 +242,8 @@ export class CurrentRun {
       current.#jobInfo,
     );
     await current.batch.invalidate(urls);
-    let invalidations = CurrentRun.#sortInvalidations(
-      current.batch.invalidations.map((href) => new URL(href)),
+    let invalidations = current.batch.invalidations.map(
+      (href) => new URL(href),
     );
     let hasExecutableInvalidation = invalidations.some((url) =>
       hasExecutableExtension(url.href),
@@ -343,21 +342,6 @@ export class CurrentRun {
       reason: `${jobIdentity(this.#jobInfo)} pending-loader-reset`,
     });
     this.#pendingLoaderReset = false;
-  }
-
-  static #sortInvalidations(urls: URL[]): URL[] {
-    if ((globalThis as any).__useHeadlessChromePrerender?.()) {
-      return urls.sort((a, b) => {
-        let aExec = hasExecutableExtension(a.href);
-        let bExec = hasExecutableExtension(b.href);
-        if (aExec === bExec) {
-          return a.href.localeCompare(b.href);
-        }
-        return aExec ? -1 : 1;
-      });
-    } else {
-      return urls;
-    }
   }
 
   @cached
@@ -732,6 +716,7 @@ export class CurrentRun {
       let searchData: Record<string, any> | undefined;
       let cardType: typeof CardDef | undefined;
       let isolatedHtml: string | undefined;
+      let headHtml: string | undefined;
       let atomHtml: string | undefined;
       let iconHTML: string | undefined;
       let card: CardDef | undefined;
@@ -795,6 +780,19 @@ export class CurrentRun {
             }),
           ),
         );
+
+        headHtml = unwrap(
+          sanitizeHTML(
+            await this.renderCard({
+              card,
+              format: 'head',
+              visit: this.visitFile.bind(this),
+              store,
+              realmPath: this.#realmPaths,
+            }),
+          ),
+        );
+
         iconHTML = unwrap(sanitizeHTML(this.#render(cardTypeIcon(card))));
         cardType = Reflect.getPrototypeOf(card)?.constructor as typeof CardDef;
         let data = api.serializeCard(card, { includeComputeds: true });
@@ -919,6 +917,7 @@ export class CurrentRun {
           resource: doc.data,
           searchData,
           isolatedHtml,
+          headHtml,
           atomHtml,
           embeddedHtml,
           fittedHtml,

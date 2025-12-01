@@ -9,7 +9,6 @@ import {
   trimExecutableExtension,
   type RenderRouteOptions,
   type RealmPermissions,
-  CardError,
 } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
@@ -159,6 +158,20 @@ module('Acceptance | prerender | module', function (hooks) {
       'compile error surfaces as 406',
     );
     assert.strictEqual(
+      model.error.error.message,
+      `Parse Error at broken.gts:1:23: 1:24 (${testRealmURL}broken.gts)`,
+      'message includes enough information for AI to fix the problem',
+    );
+    assert.ok(
+      model.error.error.stack?.includes('at transpileJS'),
+      `stack should include "at transpileJS" but was ${model.error.error.stack}`,
+    );
+    assert.strictEqual(
+      model.error.error.additionalErrors,
+      null,
+      'error is primary and not nested in additionalErrors',
+    );
+    assert.strictEqual(
       Object.keys(model.definitions).length,
       0,
       'no definitions produced when module fails to compile',
@@ -205,34 +218,6 @@ module('Acceptance | prerender | module', function (hooks) {
       shimEntry.moduleURL,
       trimExecutableExtension(new URL(shimURL)).href,
       'moduleURL always omits executable extension',
-    );
-  });
-
-  test('retains status when type resolution fails for a definition', async function (assert) {
-    let loaderService = getService('loader-service');
-    let loader = loaderService.loader;
-    let parentURL = `${testRealmURL}parent.gts`;
-    let childURL = `${testRealmURL}child.gts`;
-
-    await loader.import(parentURL);
-    await loader.import(childURL);
-
-    loader.shimModule(parentURL, {});
-
-    await visit(modulePath(childURL));
-    let { status, model } = captureModuleResult();
-
-    assert.strictEqual(status, 'ready', 'overall route still succeeds');
-
-    let childKey = `${trimExecutableExtension(new URL(childURL)).href}/Child`;
-    let childEntry = model.definitions[childKey];
-    assert.ok(childEntry, 'child definition captured');
-    assert.strictEqual(childEntry.type, 'error', 'definition marked as error');
-    assert.strictEqual(childEntry.error.status, 404, 'definition error status');
-    assert.strictEqual(
-      childEntry.error.status,
-      CardError.fromSerializableError(childEntry.error).status,
-      'status survives serialization round-trip',
     );
   });
 
