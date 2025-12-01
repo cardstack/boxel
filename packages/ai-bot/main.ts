@@ -27,6 +27,7 @@ import {
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
   SLIDING_SYNC_LIST_TIMELINE_LIMIT,
   SLIDING_SYNC_TIMEOUT,
+  APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { handleDebugCommands } from './lib/debug';
@@ -51,8 +52,14 @@ import { isShuttingDown, setActiveGenerations } from './lib/shutdown';
 import type { MatrixClient } from 'matrix-js-sdk';
 import { debug } from 'debug';
 import { profEnabled, profTime, profNote } from './lib/profiler';
+import {
+  ensureLegacyPatchSummaryPrompt,
+  publishCodePatchCorrectnessMessage,
+} from './lib/code-patch-correctness';
 
 let log = logger('ai-bot');
+const AI_PATCHING_CORRECTNESS_CHECKS_ENABLED =
+  process.env.ENABLE_AI_PATCHING_CORRECTNESS_CHECKS === 'true';
 
 let trackAiUsageCostPromises = new Map<string, Promise<void>>();
 let activeGenerations = new Map<
@@ -88,6 +95,7 @@ class Assistant {
     if (trackAiUsageCostPromises.has(matrixUserId)) {
       return;
     }
+    // intentionally do not await saveUsageCost promise - it has a backoff mechanism to retry if the cost is not immediately available so we don't want to block the main thread
     trackAiUsageCostPromises.set(
       matrixUserId,
       saveUsageCost(
@@ -245,6 +253,14 @@ Common issues are:
           return;
         }
 
+        if (
+          event.getType() === 'm.room.message' &&
+          event.getContent()?.msgtype ===
+            APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE
+        ) {
+          return;
+        }
+
         if (profEnabled()) {
           profNote(eventId, 'event:received', {
             type: event.getType(),
@@ -350,6 +366,22 @@ Common issues are:
               'history:constructPromptParts',
               async () => getPromptParts(eventList, aiBotUserId, client),
             );
+            if (
+              AI_PATCHING_CORRECTNESS_CHECKS_ENABLED &&
+              promptParts.pendingCodePatchCorrectnessChecks
+            ) {
+              return await publishCodePatchCorrectnessMessage(
+                promptParts.pendingCodePatchCorrectnessChecks,
+                client,
+              );
+            }
+
+            if (
+              !AI_PATCHING_CORRECTNESS_CHECKS_ENABLED &&
+              promptParts.pendingCodePatchCorrectnessChecks
+            ) {
+              ensureLegacyPatchSummaryPrompt(promptParts); // TODO: Remove this after the feature flag is removed
+            }
             if (!promptParts.shouldRespond) {
               return;
             }
