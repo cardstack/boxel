@@ -248,14 +248,7 @@ export class NodeAdapter implements RealmAdapter {
       return;
     }
 
-    let dmRooms;
-
-    try {
-      dmRooms = await fetchAllSessionRooms(dbAdapter, realmUrl);
-    } catch (e) {
-      realmEventsLog.error('Error getting account data', e);
-      return;
-    }
+    let dmRooms = await this.waitForSessionRooms(dbAdapter, realmUrl);
 
     realmEventsLog.debug('Sending to dm rooms', Object.values(dmRooms));
 
@@ -271,6 +264,33 @@ export class NodeAdapter implements RealmAdapter {
         );
       }
     }
+  }
+
+  private async waitForSessionRooms(
+    dbAdapter: DBAdapter,
+    realmUrl: string,
+    attempts = 3,
+    delayMs = 50,
+  ): Promise<Record<string, string>> {
+    let dmRooms: Record<string, string> = {};
+    try {
+      dmRooms = await fetchAllSessionRooms(dbAdapter, realmUrl);
+    } catch (e) {
+      realmEventsLog.error('Error getting account data', e);
+      return dmRooms;
+    }
+
+    if (Object.keys(dmRooms).length || attempts === 0) {
+      return dmRooms;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    return await this.waitForSessionRooms(
+      dbAdapter,
+      realmUrl,
+      attempts - 1,
+      delayMs,
+    );
   }
 }
 

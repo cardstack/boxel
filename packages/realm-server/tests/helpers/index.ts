@@ -75,6 +75,8 @@ export const testRealmServerMatrixUserId = `@${testRealmServerMatrixUsername}:lo
 
 export { testRealmHref, testRealmURL };
 
+const REALM_EVENT_TS_SKEW_BUFFER_MS = 2000;
+
 export async function waitUntil<T>(
   condition: () => Promise<T>,
   options: {
@@ -823,13 +825,23 @@ export async function waitForRealmEvent(
 
   let event = await waitUntil<RealmEvent | undefined>(
     async () => {
+      let findMatchingEvent = (messages: MatrixEvent[]) =>
+        messages.find((event): event is RealmEvent => {
+          if (event.type !== APP_BOXEL_REALM_EVENT_TYPE) {
+            return false;
+          }
+          return predicate(event as RealmEvent);
+        });
+
       let matrixMessages = await getMessagesSince(since);
-      let matchingEvent = matrixMessages.find((event): event is RealmEvent => {
-        if (event.type !== APP_BOXEL_REALM_EVENT_TYPE) {
-          return false;
-        }
-        return predicate(event as RealmEvent);
-      });
+      let matchingEvent = findMatchingEvent(matrixMessages);
+
+      if (!matchingEvent && REALM_EVENT_TS_SKEW_BUFFER_MS > 0) {
+        let skewedMessages = await getMessagesSince(
+          Math.max(0, since - REALM_EVENT_TS_SKEW_BUFFER_MS),
+        );
+        matchingEvent = findMatchingEvent(skewedMessages);
+      }
 
       if (matchingEvent) {
         return matchingEvent;
