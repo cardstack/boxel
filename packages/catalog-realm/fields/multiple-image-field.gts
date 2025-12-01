@@ -54,7 +54,7 @@ interface MultipleImageFieldConfiguration {
     allowReorder?: boolean; // Allow drag-drop reordering
     allowBatchSelect?: boolean; // Allow batch selection and delete (default true)
     maxFiles?: number; // Max number of files (default 10)
-    showProgress?: boolean; // Show progress during file reading
+    showProgress?: boolean; // Show progress during file reading (default: true)
   };
 }
 
@@ -117,11 +117,11 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
   }
 
   get autoUpload() {
-    return this.options.autoUpload !== false;
+    return this.options.autoUpload !== false; // Default to true
   }
 
   get allowReorder() {
-    return this.options.allowReorder === true;
+    return this.options.allowReorder !== false; // Default to true
   }
 
   get allowBatchSelect() {
@@ -133,7 +133,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
   }
 
   get showProgress() {
-    return this.options.showProgress === true;
+    return this.options.showProgress !== false; // Default to true
   }
 
   get hasSelection() {
@@ -580,7 +580,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
                   data-test-delete-selected
                 >
                   <XIcon class='delete-icon' />
-                  Delete ({{this.selectedCount}})
+                  <span>Delete ({{this.selectedCount}})</span>
                 </button>
               {{/if}}
             </div>
@@ -851,6 +851,10 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
         font-size: 0.8125rem;
         font-weight: 600;
         cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.2rem;
+        justify-content: center;
       }
       .delete-selected-button:hover {
         background: var(--destructive, #dc2626);

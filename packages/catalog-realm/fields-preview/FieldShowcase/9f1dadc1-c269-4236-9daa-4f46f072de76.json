@@ -40,17 +40,28 @@
         "value": "09:15"
       },
       "playgroundImage": {
-        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764570251469",
-        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764570251469/public"
+        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764583465205",
+        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764583465205/public"
       },
       "playgroundMonth": {
         "value": 4
       },
+      "playgroundNumber": 20,
+      "playgroundRating": 4,
       "meetingTime24Hour": {
         "value": "14:30"
       },
       "multipleImageList": {
-        "images": []
+        "images": [
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764577101407/public"
+          },
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764582386156/public"
+          }
+        ]
       },
       "playgroundQuarter": {
         "year": null,
@@ -67,12 +78,13 @@
         "day": null,
         "month": null
       },
+      "playgroundQuantity": 100,
       "eventDateTimeCustom": "2025-12-01T18:00:00.000Z",
       "playgroundDateRange": {
         "end": null,
         "start": null
       },
-      "playgroundFieldType": "multipleImage",
+      "playgroundFieldType": "image",
       "playgroundMonthYear": {
         "value": "2025-10"
       },
@@ -88,30 +100,29 @@
         "images": [
           {
             "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764090026309/public"
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764577044538/public"
           },
           {
             "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764090033434/public"
-          },
-          {
-            "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764090035611/public"
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764577042128/public"
           }
         ]
       },
-      "playgroundNumberStat": null,
       "appointmentDateCustom": "2025-12-15",
       "multipleImageDropzone": {
-        "images": []
+        "images": [
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764577019466/public"
+          },
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764577017328/public"
+          }
+        ]
       },
-      "playgroundNumberBasic": null,
-      "playgroundNumberGauge": null,
-      "playgroundNumberScore": null,
       "appointmentDateCompact": "2025-11-28",
-      "playgroundNumberRating": null,
-      "playgroundNumberSlider": null,
-      "playgroundPresentation": "carousel",
+      "playgroundPresentation": "standard",
       "playgroundRelativeTime": {
         "unit": null,
         "amount": null
@@ -120,21 +131,18 @@
         "images": [
           {
             "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764089989880/public"
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764577114030/public"
           },
           {
             "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764089992240/public"
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764577115667/public"
           },
           {
             "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764564664435/public"
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764582842082/public"
           }
         ]
       },
-      "playgroundNumberProgress": null,
-      "playgroundNumberQuantity": null,
-      "playgroundNumberPercentage": null,
       "playgroundRecurringPattern": {
         "endDate": null,
         "pattern": null,
@@ -145,11 +153,7 @@
         "daysOfWeek": null,
         "monthOfYear": null,
         "occurrences": null
-      },
-      "playgroundNumberBadgeMetric": null,
-      "playgroundNumberBadgeCounter": null,
-      "playgroundNumberProgressCircle": null,
-      "playgroundNumberBadgeNotification": null
+      }
     },
     "relationships": {
       "cardInfo.theme": {

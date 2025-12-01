@@ -58,6 +58,12 @@ export default class MultipleImageDropzonePreview extends GlimmerComponent<Multi
         disabled=@sortableDisabled
       }}
     >
+      {{#if @allowReorder}}
+        <div class='drag-handle' {{sortableHandle}}>
+          <GripVerticalIcon class='grip-icon' />
+        </div>
+      {{/if}}
+
       {{! List checkbox }}
       {{#if @allowBatchSelect}}
         <label>
@@ -70,11 +76,6 @@ export default class MultipleImageDropzonePreview extends GlimmerComponent<Multi
           />
           <span class='sr-only'>Select image</span>
         </label>
-      {{/if}}
-
-      {{#if @allowReorder}}
-        <GripVerticalIcon class='grip-icon' />
-        <div class='drag-handle' {{sortableHandle}}></div>
       {{/if}}
 
       {{#if @entry.isReading}}
@@ -164,23 +165,31 @@ export default class MultipleImageDropzonePreview extends GlimmerComponent<Multi
       .list-item.upload-success {
         border: 2px solid var(--chart2, #10b981);
         background: color-mix(in srgb, var(--chart2, #10b981) 5%, transparent);
-        box-shadow: 0 0 0 1px color-mix(in srgb, var(--chart2, #10b981) 20%, transparent);
+        box-shadow: 0 0 0 1px
+          color-mix(in srgb, var(--chart2, #10b981) 20%, transparent);
       }
 
       .list-item.upload-success:hover {
         border: 2px solid var(--chart2, #10b981);
-        box-shadow: 0 0 0 1px color-mix(in srgb, var(--chart2, #10b981) 30%, transparent);
+        box-shadow: 0 0 0 1px
+          color-mix(in srgb, var(--chart2, #10b981) 30%, transparent);
       }
 
       .list-item.upload-error {
         border: 2px solid var(--destructive, #ef4444);
-        background: color-mix(in srgb, var(--destructive, #ef4444) 5%, transparent);
-        box-shadow: 0 0 0 1px color-mix(in srgb, var(--destructive, #ef4444) 20%, transparent);
+        background: color-mix(
+          in srgb,
+          var(--destructive, #ef4444) 5%,
+          transparent
+        );
+        box-shadow: 0 0 0 1px
+          color-mix(in srgb, var(--destructive, #ef4444) 20%, transparent);
       }
 
       .list-item.upload-error:hover {
         border: 2px solid var(--destructive, #ef4444);
-        box-shadow: 0 0 0 1px color-mix(in srgb, var(--destructive, #ef4444) 30%, transparent);
+        box-shadow: 0 0 0 1px
+          color-mix(in srgb, var(--destructive, #ef4444) 30%, transparent);
       }
 
       .grip-icon {
@@ -330,7 +339,11 @@ export default class MultipleImageDropzonePreview extends GlimmerComponent<Multi
         left: 0;
         right: 0;
         bottom: 0;
-        background: color-mix(in srgb, var(--foreground, #1a1a1a) 60%, transparent);
+        background: color-mix(
+          in srgb,
+          var(--foreground, #1a1a1a) 60%,
+          transparent
+        );
         display: flex;
         align-items: center;
         justify-content: center;
@@ -341,7 +354,8 @@ export default class MultipleImageDropzonePreview extends GlimmerComponent<Multi
       .spinner-small {
         width: 1.5rem;
         height: 1.5rem;
-        border: 2px solid color-mix(in srgb, var(--background, #ffffff) 30%, transparent);
+        border: 2px solid
+          color-mix(in srgb, var(--background, #ffffff) 30%, transparent);
         border-top-color: var(--background, #ffffff);
         border-radius: 50%;
         animation: spin 0.8s linear infinite;

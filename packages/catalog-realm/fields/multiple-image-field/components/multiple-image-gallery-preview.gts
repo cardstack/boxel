@@ -252,6 +252,8 @@ export default class MultipleImageGalleryPreview extends GlimmerComponent<Multip
         opacity: 0;
         transition: all 0.2s ease;
         box-shadow: var(--shadow-lg, 0 10px 15px -3px rgb(0 0 0 / 0.1));
+        margin: 0;
+        padding: 0;
       }
 
       .gallery-item:hover .gallery-remove {

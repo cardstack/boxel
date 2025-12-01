@@ -43,7 +43,7 @@ export type ImageFieldConfiguration =
       options?: {
         showImageModal?: boolean; // Show zoom/modal button on image preview (default: false)
         autoUpload?: boolean; // Automatically upload image after file selection (default: true)
-        showProgress?: boolean; // Show progress indicator during file reading (default: false)
+        showProgress?: boolean; // Show progress indicator during file reading (default: true)
         previewImageFit?: PreviewImageFit; // How the preview image fits in container: 'contain' (show full image) or 'cover' (fill container, may crop) (default: 'contain')
       };
     }
@@ -52,7 +52,7 @@ export type ImageFieldConfiguration =
       presentation?: ImagePresentationType;
       options?: {
         autoUpload?: boolean; // Automatically upload image after file selection (default: true)
-        showProgress?: boolean; // Show progress indicator during file reading (default: false)
+        showProgress?: boolean; // Show progress indicator during file reading (default: true)
         // No showImageModal or previewImageFit allowed here (avatar always uses 'cover')
       };
     };
@@ -114,7 +114,7 @@ class ImageFieldEdit extends Component<typeof ImageField> {
   }
 
   get showProgress() {
-    return this.options.showProgress === true;
+    return this.options.showProgress !== false; // Default to true
   }
 
   get previewImageFit(): PreviewImageFit {
