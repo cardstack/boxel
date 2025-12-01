@@ -2,7 +2,6 @@ import { service } from '@ember/service';
 
 import { isCardInstance } from '@cardstack/runtime-common';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -15,7 +14,7 @@ import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
 export default class CopyAndEditCommand extends HostBaseCommand<
-  typeof CardDef,
+  typeof BaseCommandModule.CopyAndEditInput,
   undefined
 > {
   @service operatorModeStateService!: OperatorModeStateService;
@@ -23,12 +22,13 @@ export default class CopyAndEditCommand extends HostBaseCommand<
   @service store!: StoreService;
 
   #cardAPI?: typeof CardAPI;
-  #CopyAndEditInput?: typeof CardDef;
 
   static actionVerb = 'Copy and Edit';
 
   async getInputType() {
-    return (await this.getInputTypeClass()) as typeof CardDef;
+    let commandModule = await this.loadCommandModule();
+    const { CopyAndEditInput } = commandModule;
+    return CopyAndEditInput;
   }
 
   private async loadCardAPI() {
@@ -40,17 +40,9 @@ export default class CopyAndEditCommand extends HostBaseCommand<
     return this.#cardAPI;
   }
 
-  private async getInputTypeClass() {
-    if (!this.#CopyAndEditInput) {
-      let commandModule = await this.loadCommandModule();
-      this.#CopyAndEditInput = commandModule.CopyAndEditInput;
-    }
-    return this.#CopyAndEditInput;
-  }
-
   protected async run(
     input: BaseCommandModule.CopyAndEditInput,
-  ): Promise<void> {
+  ): Promise<undefined> {
     if (!input.card?.id) {
       throw new Error('copy-and-edit requires a card with an id');
     }
@@ -102,6 +94,7 @@ export default class CopyAndEditCommand extends HostBaseCommand<
         }
       }
     }
+    return;
   }
 
   private async renameNewCard(newCardId: string) {
