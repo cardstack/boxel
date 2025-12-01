@@ -30,7 +30,7 @@ export function createRemotePrerenderer(
   let prerenderURL = new URL(prerenderServerURL);
   const maxAttempts = Math.max(
     1,
-    Number(process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS ?? 5),
+    Number(process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS ?? 12),
   );
   const baseDelayMs = Math.max(
     50,
