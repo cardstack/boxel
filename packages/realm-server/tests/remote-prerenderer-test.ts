@@ -42,7 +42,9 @@ module(basename(__filename), function () {
       });
 
       assert.true((result as any).ok, 'eventually succeeds after retries');
-      server.close();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      delete process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS;
+      delete process.env.PRERENDER_MANAGER_RETRY_MAX_ELAPSED_MS;
     });
 
     test('fails after exhausting retries on 503', async function (assert) {
@@ -68,8 +70,9 @@ module(basename(__filename), function () {
         assert.ok(/status 503/.test(e.message), 'fails after retries with 503');
         assert.ok(attempts >= 2, 'retried at least configured attempts');
       } finally {
-        server.close();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
         delete process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS;
+        delete process.env.PRERENDER_MANAGER_RETRY_MAX_ELAPSED_MS;
       }
     });
   });

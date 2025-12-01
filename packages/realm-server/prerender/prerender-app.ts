@@ -498,6 +498,7 @@ export function createPrerenderHttpServer(options?: {
         clearTimeout(shutdownTimer);
       });
     }, shutdownGraceMs);
+    shutdownTimer.unref?.();
   };
   process.on('SIGTERM', shutdownHandler);
   process.on('SIGINT', shutdownHandler);

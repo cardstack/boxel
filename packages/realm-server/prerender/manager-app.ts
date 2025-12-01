@@ -132,6 +132,19 @@ export function buildPrerenderManagerApp(options?: {
     return !stale && info.status !== 'draining';
   }
 
+  function normalizeServersForLog(): string {
+    return JSON.stringify(
+      [...registry.servers.values()].map((s) => ({
+        url: s.url,
+        status: s.status,
+        capacity: s.capacity,
+        activeRealms: Array.from(s.activeRealms),
+        warmedRealms: Array.from(s.warmedRealms),
+        lastSeenAt: s.lastSeenAt,
+      })),
+    );
+  }
+
   function cleanupAssignments(): void {
     for (let [realm, list] of registry.realms) {
       let filtered: string[] = [];
@@ -610,6 +623,7 @@ export function buildPrerenderManagerApp(options?: {
         }
       }
       if (registry.servers.size === 0) {
+        log.debug('503 No servers: registry empty');
         ctxt.status = 503;
         ctxt.body = { errors: [{ status: 503, message: 'No servers' }] };
         return;
@@ -618,6 +632,12 @@ export function buildPrerenderManagerApp(options?: {
       while (attempts.size < registry.servers.size) {
         let target = chooseServerForRealm(realm, { exclude: attempts });
         if (!target) {
+          log.debug(
+            '503 No servers: no usable target for realm=%s (registered=%d): %s',
+            realm,
+            registry.servers.size,
+            normalizeServersForLog(),
+          );
           ctxt.status = 503;
           ctxt.body = { errors: [{ status: 503, message: 'No servers' }] };
           return;
