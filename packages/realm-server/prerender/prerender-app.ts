@@ -417,6 +417,9 @@ export function createPrerenderHttpServer(options?: {
           },
         },
       };
+      log.debug(
+        `POST heartbeat to ${managerURL}/prerender-servers with body:\n${JSON.stringify(body, null, 2)}`,
+      );
       await fetch(`${managerURL}/prerender-servers`, {
         method: 'POST',
         headers: {

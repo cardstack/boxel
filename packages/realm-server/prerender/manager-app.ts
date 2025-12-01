@@ -161,6 +161,9 @@ export function buildPrerenderManagerApp(): {
     status?: 'active' | 'draining';
     warmedRealms?: string[];
   }) {
+    log.debug(
+      `received heartbeat from ${url} with status=${status} capacity=${capacity} warmedRealms=${warmedRealms ? warmedRealms.join() : 'none'}`,
+    );
     let existing = registry.servers.get(url);
     if (existing) {
       existing.lastSeenAt = now();
