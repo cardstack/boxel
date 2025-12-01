@@ -17,6 +17,8 @@ module(basename(__filename), function () {
   module('Prerender manager', function (hooks) {
     let previousMultiplex: string | undefined;
     let previousHeartbeatTimeout: string | undefined;
+    let previousDiscoveryWait: string | undefined;
+    let previousDiscoveryPoll: string | undefined;
     let mockPrerenderA: ReturnType<typeof makeMockPrerender> | undefined;
     let mockPrerenderB: ReturnType<typeof makeMockPrerender> | undefined;
     let serverUrlA: string | undefined;
@@ -24,6 +26,8 @@ module(basename(__filename), function () {
     hooks.beforeEach(function () {
       previousMultiplex = process.env.PRERENDER_MULTIPLEX;
       previousHeartbeatTimeout = process.env.PRERENDER_HEARTBEAT_TIMEOUT_MS;
+      previousDiscoveryWait = process.env.PRERENDER_SERVER_DISCOVERY_WAIT_MS;
+      previousDiscoveryPoll = process.env.PRERENDER_SERVER_DISCOVERY_POLL_MS;
       // create two mock prerender servers available for tests
       mockPrerenderA = makeMockPrerender();
       mockPrerenderB = makeMockPrerender();
@@ -40,6 +44,16 @@ module(basename(__filename), function () {
         delete process.env.PRERENDER_HEARTBEAT_TIMEOUT_MS;
       } else {
         process.env.PRERENDER_HEARTBEAT_TIMEOUT_MS = previousHeartbeatTimeout;
+      }
+      if (previousDiscoveryWait === undefined) {
+        delete process.env.PRERENDER_SERVER_DISCOVERY_WAIT_MS;
+      } else {
+        process.env.PRERENDER_SERVER_DISCOVERY_WAIT_MS = previousDiscoveryWait;
+      }
+      if (previousDiscoveryPoll === undefined) {
+        delete process.env.PRERENDER_SERVER_DISCOVERY_POLL_MS;
+      } else {
+        process.env.PRERENDER_SERVER_DISCOVERY_POLL_MS = previousDiscoveryPoll;
       }
       // ensure mock servers are stopped
       if (mockPrerenderA) {
@@ -952,6 +966,50 @@ module(basename(__filename), function () {
         res.body?.errors?.[0]?.message,
         'No servers',
         'response includes helpful message',
+      );
+    });
+
+    test('waits for discovery when registry empty before returning 503', async function (assert) {
+      process.env.PRERENDER_SERVER_DISCOVERY_WAIT_MS = '500';
+      process.env.PRERENDER_SERVER_DISCOVERY_POLL_MS = '25';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      // schedule heartbeat registration shortly after request starts
+      let registration = new Promise<void>((resolve) => {
+        setTimeout(() => {
+          request
+            .post('/prerender-servers')
+            .send({
+              data: {
+                type: 'prerender-server',
+                attributes: { capacity: 2, url: serverUrlA },
+              },
+            })
+            .then(() => resolve())
+            .catch(() => resolve());
+        }, 100);
+      });
+
+      let res = await request
+        .post('/prerender-card')
+        .send(
+          makeBody(
+            'https://realm.example/discovery',
+            'https://realm.example/discovery/1',
+          ),
+        );
+      await registration;
+
+      assert.strictEqual(
+        res.status,
+        201,
+        'request succeeds after discovery wait',
+      );
+      assert.strictEqual(
+        res.headers['x-boxel-prerender-target'],
+        serverUrlA,
+        'request routed to newly registered server',
       );
     });
   });

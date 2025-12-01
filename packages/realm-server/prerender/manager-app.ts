@@ -99,7 +99,7 @@ export function buildPrerenderManagerApp(): {
   );
   const discoveryWaitMs = Math.max(
     0,
-    Number(process.env.PRERENDER_SERVER_DISCOVERY_WAIT_MS ?? 3000),
+    Number(process.env.PRERENDER_SERVER_DISCOVERY_WAIT_MS ?? 10000),
   );
   const discoveryPollMs = Math.max(
     50,
@@ -153,6 +153,10 @@ export function buildPrerenderManagerApp(): {
 
   function pruneServer(url: string) {
     registry.servers.delete(url);
+    log.debug(
+      'Registry after prune: %s',
+      JSON.stringify(Array.from(registry.servers.keys())),
+    );
     for (let [realm, list] of registry.realms) {
       let idx;
       while ((idx = list.indexOf(url)) !== -1) {
@@ -174,7 +178,7 @@ export function buildPrerenderManagerApp(): {
     warmedRealms?: string[];
   }) {
     log.debug(
-      `received heartbeat from ${url} with status=${status} capacity=${capacity} warmedRealms=${warmedRealms ? warmedRealms.join() : 'none'}`,
+      `received heartbeat from ${url} status=${status} capacity=${capacity} warmedRealms=${warmedRealms ? warmedRealms.join() : 'none'}`,
     );
     let existing = registry.servers.get(url);
     if (existing) {
@@ -182,6 +186,10 @@ export function buildPrerenderManagerApp(): {
       existing.capacity = capacity || existing.capacity;
       existing.status = status ?? 'active';
       existing.warmedRealms = new Set(warmedRealms ?? []);
+      log.debug(
+        'Registry after heartbeat: %s',
+        JSON.stringify(Array.from(registry.servers.keys())),
+      );
       return existing;
     }
 
@@ -196,6 +204,10 @@ export function buildPrerenderManagerApp(): {
       lastAssignedAt: 0,
     };
     registry.servers.set(url, info);
+    log.debug(
+      'Registry after heartbeat: %s',
+      JSON.stringify(Array.from(registry.servers.keys())),
+    );
     return info;
   }
 
@@ -528,7 +540,10 @@ export function buildPrerenderManagerApp(): {
         expired.push(url);
       }
     }
-    expired.forEach((url) => pruneServer(url));
+    expired.forEach((url) => {
+      pruneServer(url);
+      log.debug('Pruned prerender server due to missed heartbeat: %s', url);
+    });
   }
 
   // Schedule periodic heartbeat sweeps if configured. Use unref so this interval
