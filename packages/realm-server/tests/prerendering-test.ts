@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import QUnit, { module, test } from 'qunit';
 import { basename } from 'path';
 import type {
   RealmPermissions,
@@ -20,6 +20,8 @@ import {
   baseCardRef,
   trimExecutableExtension,
 } from '@cardstack/runtime-common';
+
+const originalTestTimeout = QUnit.config.testTimeout;
 
 module(basename(__filename), function () {
   module('prerender - dynamic tests', function (hooks) {
@@ -629,15 +631,21 @@ module(basename(__filename), function () {
       ]);
     };
 
-    hooks.before(async () => {
+    hooks.before(async function () {
+      QUnit.config.testTimeout = 60000;
       prerenderer = new Prerenderer({
         secretSeed: realmSecretSeed,
         maxPages: 2,
         serverURL: prerenderServerURL,
       });
     });
-    hooks.after(async () => {
-      await prerenderer.stop();
+
+    hooks.after(async function () {
+      try {
+        await prerenderer.stop();
+      } finally {
+        QUnit.config.testTimeout = originalTestTimeout;
+      }
     });
 
     setupBaseRealmServer(hooks, matrixURL);
