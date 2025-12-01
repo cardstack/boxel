@@ -9,6 +9,17 @@ import { action } from '@ember/object';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import CalendarDaysIcon from '@cardstack/boxel-icons/calendar-days';
 
+// Helper function to get ordinal suffix for a number (1st, 2nd, 3rd, etc.)
+function getOrdinalSuffix(value: number): string {
+  const v = value % 100;
+  // 11, 12, 13 always use 'th'
+  if (v >= 11 && v <= 13) return value + 'th';
+  // Otherwise use last digit: 1->st, 2->nd, 3->rd, else th
+  const lastDigit = value % 10;
+  const suffixes: Record<number, string> = { 1: 'st', 2: 'nd', 3: 'rd' };
+  return value + (suffixes[lastDigit] || 'th');
+}
+
 class DayFieldEdit extends Component<typeof DayField> {
   get dayOptions() {
     return Array.from({ length: 31 }, (_, i) => ({
@@ -65,9 +76,7 @@ export class DayField extends FieldDef {
         return String(value);
       }
 
-      const suffix = ['th', 'st', 'nd', 'rd'];
-      const v = value % 100;
-      return value + (suffix[(v - 20) % 10] || suffix[v] || suffix[0]);
+      return getOrdinalSuffix(value);
     }
 
     <template>
@@ -100,10 +109,7 @@ export class DayField extends FieldDef {
         return String(value);
       }
 
-      // Use same ordinal suffix logic as embedded
-      const suffix = ['th', 'st', 'nd', 'rd'];
-      const v = value % 100;
-      return value + (suffix[(v - 20) % 10] || suffix[v] || suffix[0]);
+      return getOrdinalSuffix(value);
     }
 
     <template>

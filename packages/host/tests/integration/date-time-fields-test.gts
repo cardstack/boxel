@@ -852,6 +852,8 @@ module('Integration | date-time fields', function (hooks) {
   });
 
   test('time-period field auto-normalizes partial inputs with current year', async function (assert) {
+    const currentYear = new Date().getFullYear().toString();
+
     // Quarter without year
     await renderField(
       TimePeriodFieldClass,
@@ -860,7 +862,9 @@ module('Integration | date-time fields', function (hooks) {
       }),
     );
     assert.dom('[data-test-time-period-embedded]').hasTextContaining('Quarter');
-    assert.dom('[data-test-time-period-embedded]').hasTextContaining('2025'); // Current year
+    assert
+      .dom('[data-test-time-period-embedded]')
+      .hasTextContaining(currentYear);
 
     // Month without year
     await renderField(
@@ -870,7 +874,9 @@ module('Integration | date-time fields', function (hooks) {
       }),
     );
     assert.dom('[data-test-time-period-embedded]').hasTextContaining('Month');
-    assert.dom('[data-test-time-period-embedded]').hasTextContaining('2025');
+    assert
+      .dom('[data-test-time-period-embedded]')
+      .hasTextContaining(currentYear);
 
     // Season without year
     await renderField(
@@ -880,7 +886,9 @@ module('Integration | date-time fields', function (hooks) {
       }),
     );
     assert.dom('[data-test-time-period-embedded]').hasTextContaining('Session');
-    assert.dom('[data-test-time-period-embedded]').hasTextContaining('2025');
+    assert
+      .dom('[data-test-time-period-embedded]')
+      .hasTextContaining(currentYear);
 
     // Week without year
     await renderField(
@@ -890,7 +898,9 @@ module('Integration | date-time fields', function (hooks) {
       }),
     );
     assert.dom('[data-test-time-period-embedded]').hasTextContaining('Week');
-    assert.dom('[data-test-time-period-embedded]').hasTextContaining('2025');
+    assert
+      .dom('[data-test-time-period-embedded]')
+      .hasTextContaining(currentYear);
   });
 
   test('time-period field displays date range for recognized formats', async function (assert) {

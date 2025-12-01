@@ -123,7 +123,7 @@ export class TimePeriodField extends FieldDef {
       }
       // Month without year: "January" → "January 2025"
       else if (
-        /^(January|February|March|April|May|June|July|August|September|October|November|December|Jan\.?|Feb\.?|Mar\.?|Apr\.?|Jun\.?|Jul\.?|Aug\.?|Sep\.?|Sept\.?|Oct\.?|Octo\.?|Nov\.?|Dec\.?)$/.test(
+        /^(January|February|March|April|May|June|July|August|September|October|November|December|Jan\.?|Feb\.?|Mar\.?|Apr\.?|Jun\.?|Jul\.?|Aug\.?|Sep\.?|Sept\.?|Oct\.?|Nov\.?|Dec\.?)$/.test(
           normalized,
         )
       ) {
@@ -177,7 +177,7 @@ export class TimePeriodField extends FieldDef {
 
       // Month: Support various formats
       const monthPattern = new RegExp(
-        `^(January|February|March|April|May|June|July|August|September|October|November|December|Jan\\.?|Feb\\.?|Mar\\.?|Apr\\.?|Jun\\.?|Jul\\.?|Aug\\.?|Sep\\.?|Sept\\.?|Oct\\.?|Octo\\.?|Nov\\.?|Dec\\.?) \\d{4}$`,
+        `^(January|February|March|April|May|June|July|August|September|October|November|December|Jan\\.?|Feb\\.?|Mar\\.?|Apr\\.?|Jun\\.?|Jul\\.?|Aug\\.?|Sep\\.?|Sept\\.?|Oct\\.?|Nov\\.?|Dec\\.?) \\d{4}$`,
       );
       if (monthPattern.test(label)) {
         return 'Month';
@@ -219,14 +219,29 @@ export class TimePeriodField extends FieldDef {
         const [startYearStr, endYearStr] = label.split(/\s*-\s*/);
         const startYear = parseInt(startYearStr.trim());
         const endYearTrimmed = endYearStr.trim();
-        const endYear =
-          endYearTrimmed.length === 2
-            ? parseInt('20' + endYearTrimmed)
-            : parseInt(endYearTrimmed);
+
+        let endYear: number;
+        if (endYearTrimmed.length === 2) {
+          // Handle century boundary: "2099-00" should be 2099-2100
+          const startYearCentury = Math.floor(startYear / 100) * 100;
+          const startYearTwoDigits = startYear % 100;
+          const endYearTwoDigits = parseInt(endYearTrimmed, 10);
+          // If end year is less than or equal to start year's last 2 digits, it's in the next century
+          if (endYearTwoDigits <= startYearTwoDigits) {
+            endYear = startYearCentury + 100 + endYearTwoDigits;
+          } else {
+            endYear = startYearCentury + endYearTwoDigits;
+          }
+        } else {
+          endYear = parseInt(endYearTrimmed, 10);
+        }
+
+        // Validate that end year is after start year
+        if (endYear <= startYear) return undefined;
 
         return {
-          start: new Date(startYear, 6, 1),
-          end: new Date(endYear, 5, 30),
+          start: new Date(startYear, 6, 1), // July 1 (US fiscal year convention)
+          end: new Date(endYear, 5, 30), // June 30
         };
       }
 
@@ -245,11 +260,17 @@ export class TimePeriodField extends FieldDef {
         const weekNum = parseInt(match[1]);
         const year = parseInt(match[2]);
 
-        const firstDay = new Date(year, 0, 1);
-        let dayOffset = 1 - firstDay.getDay();
-        if (dayOffset > 1) dayOffset -= 7;
+        // ISO 8601: Week 1 is the week containing January 4
+        // Find January 4 of the year
+        const jan4 = new Date(year, 0, 4);
+        // Find the Monday of the week containing January 4
+        const jan4DayOfWeek = jan4.getDay() || 7; // Convert Sunday (0) to 7
+        const firstMonday = new Date(jan4);
+        firstMonday.setDate(jan4.getDate() - (jan4DayOfWeek - 1));
 
-        const startDate = new Date(year, 0, 1 + dayOffset + (weekNum - 1) * 7);
+        // Calculate the start of the requested week
+        const startDate = new Date(firstMonday);
+        startDate.setDate(firstMonday.getDate() + (weekNum - 1) * 7);
         const endDate = new Date(startDate);
         endDate.setDate(startDate.getDate() + 6);
 
@@ -377,7 +398,6 @@ export class TimePeriodField extends FieldDef {
           September: 8,
           Oct: 9,
           'Oct.': 9,
-          Octo: 9,
           October: 9,
           Nov: 10,
           'Nov.': 10,
