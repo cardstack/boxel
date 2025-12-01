@@ -18,6 +18,8 @@ import {
   isResolvedCodeRef,
   isCardInstance,
   isLocalId,
+  localId as localIdSymbol,
+  Deferred,
   SupportedMimeType,
   internalKeyFor,
   realmURL as realmURLSymbol,
@@ -43,7 +45,7 @@ import type RealmServer from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import type { Format } from 'https://cardstack.com/base/card-api';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import type { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 
@@ -264,6 +266,26 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  replaceCardOnStack(
+    oldId: string,
+    newId: string,
+    stackIndex: number,
+    format: Format = 'edit',
+  ): StackItem {
+    let stack = this._state.stacks[stackIndex];
+    if (!stack) {
+      throw new Error(`Stack ${stackIndex} does not exist`);
+    }
+    let normalizedOldId = oldId.replace(/\.json$/, '');
+    let item = this.findCardInStack(normalizedOldId, stackIndex);
+    let newItem = item.clone({
+      id: newId,
+      format,
+    });
+    this.replaceItemInStack(item, newItem);
+    return newItem;
+  }
+
   async deleteCard(cardId: string) {
     let cardRealmUrl = (await this.network.authedFetch(cardId)).headers.get(
       'X-Boxel-Realm-Url',
@@ -369,6 +391,40 @@ export default class OperatorModeStateService extends Service {
 
     this._state.stacks[stackIndex].splice(itemIndex, 1, newItem);
     this.schedulePersist();
+  }
+
+  findCardInStack(card: CardDef | string, stackIndex: number): StackItem {
+    let stack = this._state.stacks[stackIndex];
+    if (!stack) {
+      throw new Error(`Stack ${stackIndex} does not exist`);
+    }
+    let cardId = typeof card === 'string' ? card : (card.id as string);
+    let normalizedId = cardId?.replace(/\.json$/, '');
+    let localId =
+      typeof card === 'string' ? undefined : (card as any)[localIdSymbol];
+    let item = stack.find(
+      (stackItem: StackItem) =>
+        stackItem.id === normalizedId ||
+        stackItem.id === cardId ||
+        (localId && stackItem.id === localId),
+    );
+    if (!item) {
+      throw new Error(
+        `Could not find card ${cardId ?? '(unknown id)'} in stack ${stackIndex}`,
+      );
+    }
+    return item;
+  }
+
+  editCardInStack(stackIndex: number, card: CardDef): void {
+    let item = this.findCardInStack(card, stackIndex);
+    this.replaceItemInStack(
+      item,
+      item.clone({
+        request: new Deferred(),
+        format: 'edit',
+      }),
+    );
   }
 
   clearStackAndAdd(stackIndex: number, newItem: StackItem) {

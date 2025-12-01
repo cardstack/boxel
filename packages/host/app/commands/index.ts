@@ -8,6 +8,7 @@ import * as CheckCorrectnessCommandModule from './check-correctness';
 import * as CopyCardToRealmModule from './copy-card';
 import * as CopyCardToStackCommandModule from './copy-card-to-stack';
 import * as CopySourceCommandModule from './copy-source';
+import * as CopyAndEditCommandModule from './copy-and-edit';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
 import * as CreateSpecCommandModule from './create-specs';
 import * as GenerateExampleCardsCommandModule from './generate-example-cards';
@@ -83,6 +84,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/copy-source',
     CopySourceCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/copy-and-edit',
+    CopyAndEditCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/create-ai-assistant-room',

@@ -233,14 +233,7 @@ export default class InteractSubmode extends Component {
   };
 
   private editCard = (stackIndex: number, card: CardDef): void => {
-    let item = this.findCardInStack(card, stackIndex);
-    this.operatorModeStateService.replaceItemInStack(
-      item,
-      item.clone({
-        request: new Deferred(),
-        format: 'edit',
-      }),
-    );
+    this.operatorModeStateService.editCardInStack(stackIndex, card);
   };
 
   private saveCard = (id: string): void => {
@@ -262,19 +255,6 @@ export default class InteractSubmode extends Component {
       );
     }
     return htmlSafe('');
-  }
-
-  private findCardInStack(card: CardDef, stackIndex: number): StackItem {
-    let item = this.stacks[stackIndex].find(
-      (item: StackItem) =>
-        item.id === card.id || item.id === card[localIdSymbol],
-    );
-    if (!item) {
-      throw new Error(
-        `Could not find card ${card.id} (localId ${card[localIdSymbol]}) in stack ${stackIndex}`,
-      );
-    }
-    return item;
   }
 
   private close = (item: StackItem) => {

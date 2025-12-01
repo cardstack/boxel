@@ -79,6 +79,10 @@ export class PatchThemeInput extends CardDef {
   @field skillCard = linksTo(Skill);
 }
 
+export class CopyAndEditInput extends CardDef {
+  @field card = linksTo(CardDef);
+}
+
 export class FileUrlCard extends CardDef {
   @field fileUrl = contains(StringField);
 }
