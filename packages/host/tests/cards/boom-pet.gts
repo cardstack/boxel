@@ -1,3 +1,4 @@
+import BooleanField from 'https://cardstack.com/base/boolean';
 import {
   CardDef,
   Component,
@@ -5,7 +6,6 @@ import {
   contains,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
-import BooleanField from 'https://cardstack.com/base/boolean';
 
 export class Pet extends CardDef {
   static displayName = 'Pet';

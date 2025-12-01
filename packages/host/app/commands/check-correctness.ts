@@ -94,10 +94,8 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
   ): Promise<string[]> {
     let hasPendingRequest =
       this.commandService.hasPendingAiAssistantCardRequest(cardId, roomId);
-    let invalidationArrived = this.commandService.invalidationAfterCardPatchDidArrive(
-      cardId,
-      roomId,
-    );
+    let invalidationArrived =
+      this.commandService.invalidationAfterCardPatchDidArrive(cardId, roomId);
 
     if (hasPendingRequest && !invalidationArrived) {
       await this.waitForCardIndexing(cardId);
