@@ -2073,7 +2073,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       }
 
       .demo-display-large {
-        min-height: 400px;
+        min-height: 200px;
         width: 100%;
         display: flex;
         align-items: center;
@@ -2084,8 +2084,9 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         border-radius: 0;
       }
 
-      /* Make audio fields full-width */
+      /* Make audio fields full-width and taller */
       .demo-display-large.full-width-field {
+        min-height: 400px;
         align-items: stretch;
       }
 

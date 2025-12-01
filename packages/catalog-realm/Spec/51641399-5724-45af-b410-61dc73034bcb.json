@@ -22,7 +22,11 @@
           "playCount": null,
           "lastPlayed": null,
           "trimStart": null,
-          "trimEnd": null
+          "trimEnd": null,
+          "playbackRate": null,
+          "loopEnabled": null,
+          "loopStart": null,
+          "loopEnd": null
         }
       ],
       "title": "AudioField",

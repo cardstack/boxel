@@ -1,6 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
 import { Button } from '@cardstack/boxel-ui/components';
 import { WaveformVisualizer } from './waveform-visualizer';
 import PlayIcon from '@cardstack/boxel-icons/play';
@@ -60,7 +59,7 @@ export class TrimEditor extends GlimmerComponent<TrimEditorSignature> {
       <WaveformVisualizer
         @bars={{@player.displayWaveform}}
         @currentProgress={{@player.progressPercentage}}
-        @onBarClick={{fn (mut @player.currentTime) 0}}
+        @onBarClick={{@player.seekToPosition}}
         @variant='trim'
         @trimStart={{@player.trimStart}}
         @trimEnd={{@player.trimEnd}}
