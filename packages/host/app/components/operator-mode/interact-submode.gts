@@ -247,7 +247,7 @@ export default class InteractSubmode extends Component {
   };
 
   private editCard = (stackIndex: number, card: CardDef): void => {
-    this.operatorModeStateService.editCardInStack(stackIndex, card);
+    this.operatorModeStateService.editCardOnStack(stackIndex, card);
   };
 
   private saveCard = (id: string): void => {

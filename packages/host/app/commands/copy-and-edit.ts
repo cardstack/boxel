@@ -1,8 +1,6 @@
 import { service } from '@ember/service';
 
-import {
-  isCardInstance,
-} from '@cardstack/runtime-common';
+import { isCardInstance } from '@cardstack/runtime-common';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -105,7 +103,6 @@ export default class CopyAndEditCommand extends HostBaseCommand<
             stackIndex,
             'edit',
           );
-          this.operatorModeStateService.editCardInStack(stackIndex, newCard);
         }
       }
     }

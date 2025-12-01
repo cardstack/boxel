@@ -416,7 +416,7 @@ export default class OperatorModeStateService extends Service {
     return item;
   }
 
-  editCardInStack(stackIndex: number, card: CardDef): void {
+  editCardOnStack(stackIndex: number, card: CardDef): void {
     let item = this.findCardInStack(card, stackIndex);
     this.replaceItemInStack(
       item,
