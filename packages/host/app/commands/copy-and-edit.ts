@@ -2,7 +2,6 @@ import { service } from '@ember/service';
 
 import {
   isCardInstance,
-  realmURL as realmURLSymbol,
 } from '@cardstack/runtime-common';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
