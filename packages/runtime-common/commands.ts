@@ -152,6 +152,14 @@ export function decodeCommandRequest(
   }
   if (commandRequest.arguments) {
     decodedCommandRequest.arguments = JSON.parse(commandRequest.arguments);
+    try {
+      let attributes = decodedCommandRequest.arguments?.attributes;
+      if (typeof attributes === 'string') {
+        decodedCommandRequest.arguments!.attributes = JSON.parse(attributes);
+      }
+    } catch {
+      // ignore malformed nested json; validation will report a clearer error later
+    }
   }
   return decodedCommandRequest;
 }

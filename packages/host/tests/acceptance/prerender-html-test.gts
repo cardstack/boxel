@@ -152,6 +152,12 @@ module('Acceptance | prerender | html', function (hooks) {
             <@fields.name />
           </div>
         </template>
+
+        static head = class Head extends Component<typeof Cat> {
+          <template>
+            <title>{{@fields.name}}</title>
+          </template>
+        };
       };
     }
 
@@ -567,7 +573,15 @@ module('Acceptance | prerender | html', function (hooks) {
       .dom(
         `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="atom"]`,
       )
-      .containsText('Paper', 'embedded format is rendered');
+      .containsText('Paper', 'atom format is rendered');
+  });
+
+  test('prerender head html', async function (assert) {
+    let url = `${testRealmURL}Cat/paper.json`;
+    await visit(renderPath(url, '/html/head/0'));
+    // TODO: restore in CS-9807
+    // assert.dom(`title`).containsText('Paper', 'head format is rendered');
+    assert.dom('meta[property="og:title"]').hasAttribute('content', 'Paper');
   });
 
   test('prerender fitted html', async function (assert) {

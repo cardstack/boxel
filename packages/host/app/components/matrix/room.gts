@@ -1237,7 +1237,10 @@ export default class Room extends Component<Signature> {
   @cached
   private get readyCommands() {
     let lastMessage = this.messages[this.messages.length - 1];
-    if (!lastMessage || !lastMessage.commands) return [];
+
+    if (!lastMessage || !lastMessage.commands) {
+      return [];
+    }
     return lastMessage.commands.filter(
       (command) =>
         (command.status === 'ready' || command.status === undefined) &&

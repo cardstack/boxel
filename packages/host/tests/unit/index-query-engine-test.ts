@@ -2404,6 +2404,7 @@ module('Unit | query', function (hooks) {
             '<div>Jimmy (CardDef fitted template)</div>',
         },
         atom_html: 'Jimmy',
+        head_html: '<title>Jimmy</title>',
         search_doc: { name: 'Jimmy' },
       },
       {
@@ -2539,6 +2540,27 @@ module('Unit | query', function (hooks) {
     assert.strictEqual(prerenderedCards[0].url, `${testRealmURL}donald.json`);
     assert.strictEqual(prerenderedCards[0].html, 'Donald'); // Atom template
     assert.deepEqual(prerenderedCards[0].usedRenderType, fancyPersonCard);
+
+    //  Requesting head template
+    ({ prerenderedCards, meta } = await indexQueryEngine.searchPrerendered(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: personCard,
+          eq: {
+            name: 'Jimmy',
+          },
+        },
+      },
+      {
+        htmlFormat: 'head',
+      },
+    ));
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.strictEqual(prerenderedCards[0].url, `${testRealmURL}jimmy.json`);
+    assert.strictEqual(prerenderedCards[0].html, '<title>Jimmy</title>'); // head template
+    assert.deepEqual(prerenderedCards[0].usedRenderType, personCard);
 
     // Define renderType argument
     ({ prerenderedCards, meta } = await indexQueryEngine.searchPrerendered(

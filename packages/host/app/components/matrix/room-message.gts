@@ -205,6 +205,7 @@ export default class RoomMessage extends Component<Signature> {
         @retryAction={{@retryAction}}
         @waitAction={{if this.streamingTimeout this.waitLonger}}
         @isPending={{@isPending}}
+        @commands={{this.message.commands}}
         data-test-boxel-message-from={{this.message.author.name}}
         data-test-boxel-message-instance-id={{this.message.instanceId}}
         ...attributes

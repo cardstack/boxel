@@ -21,17 +21,17 @@ export default async function percySnapshot(
 
   // Using 1em lets us avoid needing to specify every size the application uses
   const fontPromises = weights.map((weight) =>
-    document.fonts.load(`${weight} 1em Poppins`, ''),
+    document.fonts.load(`${weight} 1em IBM Plex Sans`, ''),
   );
 
   await Promise.all(fontPromises);
   await document.fonts.ready;
 
   weights.forEach((weight) => {
-    const descriptor = `${weight} 1em Poppins`;
+    const descriptor = `${weight} 1em IBM Plex Sans`;
     if (!document.fonts.check(descriptor, '')) {
       throw new Error(
-        `Not ready: Poppins font could not be loaded (${descriptor})`,
+        `Not ready: IBM Plex Sans font could not be loaded (${descriptor})`,
       );
     }
   });

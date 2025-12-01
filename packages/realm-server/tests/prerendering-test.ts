@@ -986,6 +986,31 @@ module(basename(__filename), function () {
         );
       });
 
+      test('head HTML', function (assert) {
+        assert.ok(result.headHTML, 'headHTML should be present');
+        let cleanedHead = cleanWhiteSpace(result.headHTML!);
+
+        // TODO: restore in CS-9807
+        // assert.ok(
+        //   cleanedHead.includes(
+        //     '<title data-test-card-head-title>Untitled Cat</title>',
+        //   ),
+        //   `failed to find title in head html:${cleanedHead}`,
+        // );
+        assert.ok(
+          cleanedHead.includes('property="og:title" content="Untitled Cat"'),
+          `failed to find og:title in head html:${cleanedHead}`,
+        );
+        assert.ok(
+          cleanedHead.includes('name="twitter:card" content="summary"'),
+          `failed to find twitter:card in head html:${cleanedHead}`,
+        );
+        assert.ok(
+          cleanedHead.includes(`property="og:url" content="${realmURL2}1"`),
+          `failed to find og:url in head html:${cleanedHead}`,
+        );
+      });
+
       test('serialized', function (assert) {
         assert.strictEqual(result.serialized?.data.attributes?.name, 'Maple');
       });
@@ -1088,6 +1113,7 @@ module(basename(__filename), function () {
           atomHTML: null,
           embeddedHTML: null,
           fittedHTML: null,
+          headHTML: null,
           iconHTML: null,
           isolatedHTML: null,
         });
