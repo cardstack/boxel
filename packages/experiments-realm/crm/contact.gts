@@ -184,7 +184,7 @@ class EmbeddedTemplate extends Component<typeof Contact> {
         flex-wrap: wrap;
       }
       .links :deep(.pill) {
-        --boxel-social-link-pill-size: calc(var(--boxel-font-size-xxl) - 2px);
+        --boxel-social-link-pill-size: calc(var(--boxel-font-size-2xl) + 2px);
         width: var(--boxel-social-link-pill-size);
         height: var(--boxel-social-link-pill-size);
         --default-pill-border: 1px solid var(--boxel-300);
@@ -294,7 +294,7 @@ class FittedTemplate extends Component<typeof Contact> {
         flex-wrap: wrap;
       }
       .links :deep(.pill) {
-        --boxel-social-link-pill-size: calc(var(--boxel-font-size-xxl) - 2px);
+        --boxel-social-link-pill-size: calc(var(--boxel-font-size-2xl) + 2px);
         --default-pill-border: 1px solid var(--boxel-300);
         width: var(--boxel-social-link-pill-size);
         height: var(--boxel-social-link-pill-size);

@@ -99,7 +99,7 @@ export default class Login extends Component<Signature> {
         flex-direction: column;
       }
       .title {
-        font: 600 var(--boxel-font-med);
+        font: 600 var(--boxel-font-md);
         margin-bottom: var(--boxel-sp-sm);
         padding: 0;
       }

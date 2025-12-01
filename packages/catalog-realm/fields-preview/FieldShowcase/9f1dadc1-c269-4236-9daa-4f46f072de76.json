@@ -14,6 +14,9 @@
         "description": null,
         "thumbnailURL": null
       },
+      "playgroundDay": {
+        "value": 2
+      },
       "playgroundDate": "2025-11-20",
       "playgroundTime": {
         "value": "13:00"
@@ -30,6 +33,8 @@
       "playgroundMonth": {
         "value": 4
       },
+      "playgroundNumber": 20,
+      "playgroundRating": 4,
       "meetingTime24Hour": {
         "value": "14:30"
       },
@@ -37,10 +42,13 @@
         "year": null,
         "quarter": null
       },
-      "eventDateTimeShort": "2025-11-25T15:30:00.000Z",
-      "playgroundDatetime": "2025-11-22T05:19:00.000Z",
+      "eventDateTimeShort": null,
+      "playgroundDatetime": null,
       "playgroundDuration": {
+        "days": null,
         "hours": null,
+        "years": null,
+        "months": null,
         "minutes": null,
         "seconds": null
       },
@@ -48,7 +56,8 @@
         "day": null,
         "month": null
       },
-      "eventDateTimeCustom": "2025-12-01T18:00:00.000Z",
+      "playgroundQuantity": 100,
+      "eventDateTimeCustom": null,
       "playgroundDateRange": {
         "end": null,
         "start": null
@@ -65,22 +74,41 @@
           "value": null
         }
       },
-      "playgroundNumberStat": null,
+      "projectDurationFull": {
+        "days": 88,
+        "hours": 8,
+        "years": 2,
+        "months": 3,
+        "minutes": 30,
+        "seconds": 45
+      },
+      "taskDurationDayTime": {
+        "days": 5,
+        "hours": 3,
+        "years": null,
+        "months": null,
+        "minutes": 45,
+        "seconds": 30
+      },
+      "playgroundTimePeriod": {
+        "periodLabel": "2023-2024"
+      },
       "appointmentDateCustom": "2025-12-15",
-      "playgroundNumberBasic": null,
-      "playgroundNumberGauge": null,
-      "playgroundNumberScore": null,
       "appointmentDateCompact": "2025-11-28",
-      "playgroundNumberRating": null,
-      "playgroundNumberSlider": null,
       "playgroundPresentation": "standard",
       "playgroundRelativeTime": {
         "unit": null,
         "amount": null
       },
-      "playgroundNumberProgress": null,
-      "playgroundNumberQuantity": null,
-      "playgroundNumberPercentage": null,
+      "playgroundDatetimeStamp": "2025-11-28T16:44:00.000Z",
+      "contractDurationYearMonth": {
+        "days": null,
+        "hours": null,
+        "years": 3,
+        "months": 6,
+        "minutes": null,
+        "seconds": null
+      },
       "playgroundRecurringPattern": {
         "endDate": null,
         "pattern": null,
@@ -91,11 +119,7 @@
         "daysOfWeek": null,
         "monthOfYear": null,
         "occurrences": null
-      },
-      "playgroundNumberBadgeMetric": null,
-      "playgroundNumberBadgeCounter": null,
-      "playgroundNumberProgressCircle": null,
-      "playgroundNumberBadgeNotification": null
+      }
     },
     "relationships": {
       "cardInfo.theme": {

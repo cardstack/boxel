@@ -10,6 +10,7 @@ export type {
   SkillActions,
   StubActions,
   RegularActions,
+  ThemeActions,
 } from './helpers/listing-action-resolver';
 
 type ResourceState = Ready | Error;
