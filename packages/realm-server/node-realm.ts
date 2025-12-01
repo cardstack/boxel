@@ -277,10 +277,14 @@ export class NodeAdapter implements RealmAdapter {
       dmRooms = await fetchAllSessionRooms(dbAdapter, realmUrl);
     } catch (e) {
       realmEventsLog.error('Error getting account data', e);
+      return {}; // bail immediately on errors instead of retrying
+    }
+
+    if (Object.keys(dmRooms).length) {
       return dmRooms;
     }
 
-    if (Object.keys(dmRooms).length || attempts === 0) {
+    if (attempts === 0) {
       return dmRooms;
     }
 

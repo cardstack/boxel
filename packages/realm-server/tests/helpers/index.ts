@@ -836,11 +836,12 @@ export async function waitForRealmEvent(
       let matrixMessages = await getMessagesSince(since);
       let matchingEvent = findMatchingEvent(matrixMessages);
 
-      if (!matchingEvent && REALM_EVENT_TS_SKEW_BUFFER_MS > 0) {
-        let skewedMessages = await getMessagesSince(
-          Math.max(0, since - REALM_EVENT_TS_SKEW_BUFFER_MS),
-        );
-        matchingEvent = findMatchingEvent(skewedMessages);
+      if (!matchingEvent) {
+        let skewedSince = Math.max(0, since - REALM_EVENT_TS_SKEW_BUFFER_MS);
+        if (skewedSince !== since) {
+          let skewedMessages = await getMessagesSince(skewedSince);
+          matchingEvent = findMatchingEvent(skewedMessages);
+        }
       }
 
       if (matchingEvent) {
