@@ -16,7 +16,7 @@ interface AlbumCoverPlayerSignature {
 
 export class AlbumCoverPlayer extends GlimmerComponent<AlbumCoverPlayerSignature> {
   <template>
-    <div class='album-player'>
+    <div class='album-player' data-test-album-cover-player>
       <audio
         {{@player.setupAudio}}
         src={{@model.url}}

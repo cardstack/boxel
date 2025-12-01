@@ -15,7 +15,7 @@ interface WaveformPlayerSignature {
 
 export class WaveformPlayer extends GlimmerComponent<WaveformPlayerSignature> {
   <template>
-    <div class='waveform-player'>
+    <div class='waveform-player' data-test-waveform-player>
       <audio
         {{@player.setupAudio}}
         src={{@model.url}}

@@ -14,7 +14,7 @@ interface PlaylistRowSignature {
 
 export class PlaylistRow extends GlimmerComponent<PlaylistRowSignature> {
   <template>
-    <div class='playlist-row'>
+    <div class='playlist-row' data-test-playlist-row>
       <audio
         {{@player.setupAudio}}
         src={{@model.url}}

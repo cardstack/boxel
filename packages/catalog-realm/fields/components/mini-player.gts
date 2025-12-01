@@ -16,7 +16,7 @@ interface MiniPlayerSignature {
 
 export class MiniPlayer extends GlimmerComponent<MiniPlayerSignature> {
   <template>
-    <div class='mini-player'>
+    <div class='mini-player' data-test-mini-player>
       <audio
         {{@player.setupAudio}}
         src={{@model.url}}

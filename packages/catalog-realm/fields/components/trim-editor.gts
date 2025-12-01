@@ -17,7 +17,7 @@ interface TrimEditorSignature {
 
 export class TrimEditor extends GlimmerComponent<TrimEditorSignature> {
   <template>
-    <div class='trim-editor'>
+    <div class='trim-editor' data-test-trim-editor>
       <audio
         {{@player.setupAudio}}
         src={{@model.url}}

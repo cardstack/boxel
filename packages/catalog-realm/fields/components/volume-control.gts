@@ -17,7 +17,7 @@ interface VolumeControlSignature {
 
 export class VolumeControl extends GlimmerComponent<VolumeControlSignature> {
   <template>
-    <div class='volume-control'>
+    <div class='volume-control' data-test-volume-control>
       <IconButton
         @icon={{if (or @isMuted (eq @volume 0)) VolumeXIcon Volume2Icon}}
         @width='20px'

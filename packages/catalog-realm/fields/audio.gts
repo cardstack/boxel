@@ -57,9 +57,9 @@ class AudioFieldEdit extends Component<typeof AudioField> {
   }
 
   <template>
-    <div class='audio-edit'>
+    <div class='audio-edit' data-test-audio-edit>
       {{#if @model.url}}
-        <div class='uploaded-file'>
+        <div class='uploaded-file' data-test-audio-uploaded-file>
           <div class='file-icon'>
             <svg
               viewBox='0 0 24 24'
@@ -111,7 +111,7 @@ class AudioFieldEdit extends Component<typeof AudioField> {
           </FieldContainer>
         </div>
       {{else}}
-        <label class='upload-area'>
+        <label class='upload-area' data-test-audio-upload-area>
           <div class='upload-icon'>
             <UploadIcon width='48' height='48' />
           </div>
@@ -327,6 +327,7 @@ class AudioFieldFitted extends Component<typeof AudioField> {
     {{#if @model.url}}
       <div
         class='audio-card'
+        data-test-audio-fitted
         {{on 'mouseenter' this.handleMouseEnter}}
         {{on 'mouseleave' this.handleMouseLeave}}
         style={{htmlSafe 'width: 100%; height: 100%'}}
@@ -399,6 +400,7 @@ class AudioFieldFitted extends Component<typeof AudioField> {
     {{else}}
       <div
         class='audio-card-placeholder'
+        data-test-audio-fitted-placeholder
         style={{htmlSafe 'width: 100%; height: 100%'}}
       >
         <svg
@@ -607,7 +609,7 @@ export class AudioField extends FieldDef {
             <PlaylistRow @model={{@model}} @player={{player}} />
 
           {{else}}
-            <div class='audio-player'>
+            <div class='audio-player' data-test-audio-embedded>
               <audio
                 {{player.setupAudio}}
                 src={{@model.url}}
@@ -624,11 +626,17 @@ export class AudioField extends FieldDef {
                   <MusicIcon width='24' height='24' />
                 </div>
                 <div class='audio-info'>
-                  <div class='audio-title'>{{@model.displayTitle}}</div>
+                  <div
+                    class='audio-title'
+                    data-test-audio-title
+                  >{{@model.displayTitle}}</div>
                   {{#if @model.artist}}
-                    <div class='audio-artist'>{{@model.artist}}</div>
+                    <div
+                      class='audio-artist'
+                      data-test-audio-artist
+                    >{{@model.artist}}</div>
                   {{/if}}
-                  <div class='audio-metadata'>
+                  <div class='audio-metadata' data-test-audio-metadata>
                     {{#if @model.fileSize}}
                       <span>{{player.formatFileSize @model.fileSize}}</span>
                     {{/if}}
@@ -644,6 +652,7 @@ export class AudioField extends FieldDef {
                 <Button
                   @kind='primary'
                   class='play-button'
+                  data-test-audio-play-btn
                   {{on 'click' player.togglePlay}}
                 >
                   {{#if player.isPlaying}}
@@ -655,7 +664,7 @@ export class AudioField extends FieldDef {
               </div>
 
               {{#if player.audioDuration}}
-                <div class='player-controls'>
+                <div class='player-controls' data-test-audio-controls>
                   <input
                     type='range'
                     min='0'
@@ -663,6 +672,7 @@ export class AudioField extends FieldDef {
                     value={{player.currentTime}}
                     {{on 'input' player.handleSeek}}
                     class='seek-bar'
+                    data-test-audio-seek-bar
                     aria-label='Audio seek bar'
                   />
                   <div class='time-display'>
@@ -682,9 +692,12 @@ export class AudioField extends FieldDef {
               {{/if}}
 
               {{#if (or player.showSpeedControl player.showLoopControl)}}
-                <div class='advanced-controls'>
+                <div
+                  class='advanced-controls'
+                  data-test-audio-advanced-controls
+                >
                   {{#if player.showSpeedControl}}
-                    <label class='control-label'>
+                    <label class='control-label' data-test-audio-speed-control>
                       <span>Speed:</span>
                       <div class='speed-select'>
                         <BoxelSelect
@@ -712,12 +725,16 @@ export class AudioField extends FieldDef {
                   {{/if}}
 
                   {{#if player.showLoopControl}}
-                    <label class='control-label checkbox-label'>
+                    <label
+                      class='control-label checkbox-label'
+                      data-test-audio-loop-control
+                    >
                       <input
                         type='checkbox'
                         checked={{player.isLooping}}
                         {{on 'change' player.toggleLoop}}
                         class='loop-checkbox'
+                        data-test-audio-loop-checkbox
                       />
                       Loop
                     </label>
@@ -728,7 +745,7 @@ export class AudioField extends FieldDef {
           {{/if}}
         </BaseAudioPlayer>
       {{else}}
-        <div class='audio-placeholder'>
+        <div class='audio-placeholder' data-test-audio-placeholder>
           <svg
             viewBox='0 0 24 24'
             fill='none'
@@ -925,7 +942,7 @@ export class AudioField extends FieldDef {
   // ⁹ Atom format - minimal display
   static atom = class Atom extends Component<typeof this> {
     <template>
-      <span class='audio-atom'>
+      <span class='audio-atom' data-test-audio-atom>
         <svg
           viewBox='0 0 24 24'
           fill='none'
