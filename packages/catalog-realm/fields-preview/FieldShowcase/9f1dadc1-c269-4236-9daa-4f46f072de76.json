@@ -40,8 +40,8 @@
         "value": "09:15"
       },
       "playgroundImage": {
-        "uploadUrl": null,
-        "uploadedImageUrl": null
+        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764564584610",
+        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764564584610/public"
       },
       "playgroundMonth": {
         "value": 4
@@ -72,7 +72,7 @@
         "end": null,
         "start": null
       },
-      "playgroundFieldType": "multipleImage",
+      "playgroundFieldType": "image",
       "playgroundMonthYear": {
         "value": "2025-10"
       },
@@ -125,6 +125,10 @@
           {
             "uploadUrl": null,
             "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764089992240/public"
+          },
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764564664435/public"
           }
         ]
       },

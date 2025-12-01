@@ -2,6 +2,7 @@ import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
 import CameraIcon from '@cardstack/boxel-icons/camera';
 import { Button } from '@cardstack/boxel-ui/components';
+import ReadingProgress from './reading-progress';
 
 interface ImageAvatarPreviewArgs {
   Args: {
@@ -10,15 +11,28 @@ interface ImageAvatarPreviewArgs {
     onRemove: () => void;
     onFileSelect: (event: Event) => void;
     hasPendingUpload?: boolean;
+    isReading?: boolean;
+    readProgress?: number;
   };
 }
 
 export default class ImageAvatarPreview extends GlimmerComponent<ImageAvatarPreviewArgs> {
+  get readProgress(): number {
+    return this.args.readProgress ?? 0;
+  }
+
   <template>
     <div class='avatar-preview'>
       {{! Avatar container }}
       <label class='avatar-image-wrapper' for='avatar-file-input'>
-        <img src={{@imageData}} alt={{@fileName}} class='avatar-image' />
+        {{#if @isReading}}
+          {{! Progress indicator during file reading }}
+          <div class='avatar-reading-overlay'>
+            <ReadingProgress @readProgress={{this.readProgress}} />
+          </div>
+        {{else}}
+          <img src={{@imageData}} alt={{@fileName}} class='avatar-image' />
+        {{/if}}
         <div class='avatar-camera-icon'>
           <CameraIcon class='icon' />
         </div>
@@ -61,6 +75,16 @@ export default class ImageAvatarPreview extends GlimmerComponent<ImageAvatarPrev
         height: 8rem;
         cursor: pointer;
         display: block;
+      }
+
+      .avatar-reading-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 9999px;
+        overflow: hidden;
       }
 
       .avatar-image {

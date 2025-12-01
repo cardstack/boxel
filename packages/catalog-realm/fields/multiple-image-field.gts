@@ -117,7 +117,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
   }
 
   get autoUpload() {
-    return this.options.autoUpload === true;
+    return this.options.autoUpload !== false;
   }
 
   get allowReorder() {

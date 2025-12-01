@@ -40,17 +40,17 @@ export type ImageFieldConfiguration =
       variant: 'browse' | 'dropzone';
       presentation?: ImagePresentationType;
       options?: {
-        showImageModal?: boolean;
-        autoUpload?: boolean;
-        showProgress?: boolean; // Show progress during file reading
+        showImageModal?: boolean; // Show zoom/modal button on image preview (default: false)
+        autoUpload?: boolean; // Automatically upload image after file selection (default: true)
+        showProgress?: boolean; // Show progress indicator during file reading (default: false)
       };
     }
   | {
       variant: 'avatar';
       presentation?: ImagePresentationType;
       options?: {
-        autoUpload?: boolean;
-        showProgress?: boolean; // Show progress during file reading
+        autoUpload?: boolean; // Automatically upload image after file selection (default: true)
+        showProgress?: boolean; // Show progress indicator during file reading (default: false)
         // No showImageModal allowed here
       };
     };
@@ -73,7 +73,8 @@ class ImageFieldEdit extends Component<typeof ImageField> {
   }
 
   get hasImage() {
-    return this.preview || this.args.model?.uploadedImageUrl;
+    // Show preview components when reading (to display progress) or when image exists
+    return this.isReading || this.preview || this.args.model?.uploadedImageUrl;
   }
 
   get displayPreview() {
@@ -98,7 +99,7 @@ class ImageFieldEdit extends Component<typeof ImageField> {
   }
 
   get autoUpload() {
-    return this.options.autoUpload === true;
+    return this.options.autoUpload !== false;
   }
 
   get showImageModal() {
@@ -106,7 +107,7 @@ class ImageFieldEdit extends Component<typeof ImageField> {
       return false;
     }
     return (
-      (this.options as { showImageModal?: boolean }).showImageModal !== false
+      (this.options as { showImageModal?: boolean }).showImageModal === true
     );
   }
 
@@ -298,6 +299,8 @@ class ImageFieldEdit extends Component<typeof ImageField> {
             @onRemove={{this.removeImage}}
             @onFileSelect={{this.handleFileSelect}}
             @hasPendingUpload={{this.hasPendingUpload}}
+            @isReading={{this.isReading}}
+            @readProgress={{this.readProgress}}
           />
         {{else if (eq this.variant 'dropzone')}}
           <ImageDropzonePreview

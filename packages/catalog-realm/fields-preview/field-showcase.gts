@@ -2673,7 +2673,6 @@ export class FieldShowcase extends CardDef {
       variant: 'avatar',
       presentation: 'card',
       options: {
-        autoUpload: false,
         showProgress: true,
       },
     },
@@ -2685,7 +2684,6 @@ export class FieldShowcase extends CardDef {
       options: {
         showImageModal: true,
         showProgress: true,
-        autoUpload: false,
       },
     },
   });
@@ -2702,7 +2700,6 @@ export class FieldShowcase extends CardDef {
       variant: 'gallery',
       presentation: 'carousel',
       options: {
-        autoUpload: false,
         allowBatchSelect: true,
         allowReorder: true,
         maxFiles: 4,
@@ -2715,7 +2712,6 @@ export class FieldShowcase extends CardDef {
       variant: 'dropzone',
       presentation: 'carousel',
       options: {
-        autoUpload: false,
         allowBatchSelect: true,
         showProgress: true,
         maxFiles: 10,
