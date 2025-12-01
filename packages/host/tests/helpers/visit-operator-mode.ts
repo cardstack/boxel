@@ -1,5 +1,6 @@
 import { visit } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import stringify from 'safe-stable-stringify';
 
 import type { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
@@ -15,6 +16,11 @@ export default async function visitOperatorMode({
   workspaceChooserOpened,
   trail,
 }: Partial<SerializedState> & { selectAllCardsFilter?: boolean }) {
+  // In the host test, we can treat the visit operator mode as a full page refresh.
+  // So we reset the version to avoid conflicts.
+  let operatorModeStateService = getService('operator-mode-state-service');
+  operatorModeStateService.resetVersion();
+
   let operatorModeState = {
     stacks: stacks || [],
     submode: submode || 'interact',

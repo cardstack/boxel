@@ -114,8 +114,8 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
         -webkit-line-clamp: 2;
         overflow: hidden;
         margin-block: 0;
-        font-weight: var(--boxel-font-weight-semibold);
-        font-size: var(--boxel-font-size-sm);
+        font-weight: 500;
+        font-size: var(--boxel-body-font-size);
         letter-spacing: var(--boxel-lsp-sm);
         line-height: 1.25;
         text-overflow: ellipsis;
@@ -124,9 +124,9 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
         margin-top: var(--boxel-sp-4xs);
         margin-bottom: 0;
         color: var(--muted-foreground, var(--boxel-450));
-        font-weight: var(--boxel-font-weight-medium);
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-lineheight-xs);
+        font-weight: 500;
+        font-size: var(--boxel-caption-font-size);
+        line-height: var(--boxel-caption-line-height);
         letter-spacing: var(--boxel-lsp-xs);
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -137,9 +137,8 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
         -webkit-box-orient: vertical;
         overflow: hidden;
         margin-block: 0;
-        font-weight: var(--boxel-font-weight-medium);
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-lineheight-xs);
+        font-size: var(--boxel-caption-font-size);
+        line-height: var(--boxel-caption-line-height);
         letter-spacing: var(--boxel-lsp-xs);
         text-overflow: ellipsis;
       }
@@ -148,7 +147,7 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
       /* Common */
       @container fitted-card ((aspect-ratio <= 1) and (height < 180px)) {
         :global(.card-title) {
-          font-size: var(--boxel-font-size-xs);
+          font-size: var(--boxel-caption-font-size);
         }
       }
 
@@ -269,9 +268,9 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
       @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (height < 65px) {
         :global(.card-title) {
           -webkit-line-clamp: 1;
-          font-weight: var(--boxel-font-weight-semibold);
-          font-size: var(--boxel-font-size-xs);
-          line-height: var(--boxel-lineheight-xs);
+          font-weight: 500;
+          font-size: var(--boxel-caption-font-size);
+          line-height: var(--boxel-caption-line-height);
         }
         :global(.card-display-name) {
           margin-top: 0;

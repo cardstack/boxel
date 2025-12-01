@@ -7,13 +7,17 @@ import {
   type DBAdapter,
   MINIMUM_AI_CREDITS_TO_CONTINUE,
   logger,
-  retry,
+  delay,
 } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 
 const log = logger('ai-billing');
 
 const CREDITS_PER_USD = 1000;
+const MAX_FETCH_ATTEMPTS = 10;
+const MAX_FETCH_RUNTIME_MS = 10 * 60 * 1000; // 10 minutes
+const INITIAL_BACKOFF_MS = 1000;
+const MAX_BACKOFF_DELAY_MS = 60 * 1000; // 60 seconds
 
 export interface AICreditValidationResult {
   hasEnoughCredits: boolean;
@@ -68,15 +72,17 @@ export async function saveUsageCost(
 ) {
   try {
     // Generation data is sometimes not immediately available, so we retry a couple of times until we are able to get the cost
-    let costInUsd = await retry(
-      () => fetchGenerationCost(generationId, openRouterApiKey),
-      {
-        retries: 10,
-        delayMs: 500,
-      },
+    let costInUsd = await fetchGenerationCostWithBackoff(
+      generationId,
+      openRouterApiKey,
     );
 
     if (costInUsd === null) {
+      Sentry.captureException(
+        new Error(
+          `Failed to fetch generation cost after retries (generationId: ${generationId})`,
+        ),
+      );
       return;
     }
 
@@ -91,8 +97,6 @@ export async function saveUsageCost(
     }
 
     await spendCredits(dbAdapter, user.id, creditsConsumed);
-
-    // TODO: send a signal to the host app to update credits balance displayed in the UI
   } catch (err) {
     log.error(
       `Failed to track AI usage (matrixUserId: ${matrixUserId}, generationId: ${generationId}):`,
@@ -101,6 +105,43 @@ export async function saveUsageCost(
     Sentry.captureException(err);
     // Don't throw, because we don't want to crash the application over this
   }
+}
+
+async function fetchGenerationCostWithBackoff(
+  generationId: string,
+  openRouterApiKey: string,
+): Promise<number | null> {
+  let startedAt = Date.now();
+  let delayMs = INITIAL_BACKOFF_MS;
+
+  for (let attempt = 1; attempt <= MAX_FETCH_ATTEMPTS; attempt++) {
+    try {
+      let cost = await fetchGenerationCost(generationId, openRouterApiKey);
+      if (cost !== null) {
+        return cost;
+      }
+    } catch (error) {
+      log.warn(
+        `Attempt ${attempt} to fetch generation cost failed (generationId: ${generationId})`,
+        error,
+      );
+    }
+
+    let elapsed = Date.now() - startedAt;
+    if (attempt === MAX_FETCH_ATTEMPTS || elapsed >= MAX_FETCH_RUNTIME_MS) {
+      break;
+    }
+
+    let remainingTime = MAX_FETCH_RUNTIME_MS - elapsed;
+    let sleepMs = Math.min(delayMs, remainingTime);
+    await delay(sleepMs);
+    delayMs = Math.min(delayMs * 2, MAX_BACKOFF_DELAY_MS);
+  }
+
+  log.error(
+    `Failed to fetch generation cost within ${MAX_FETCH_ATTEMPTS} attempts or ${Math.round(MAX_FETCH_RUNTIME_MS / 60000)} minutes (generationId: ${generationId})`,
+  );
+  return null;
 }
 
 async function fetchGenerationCost(
@@ -116,10 +157,24 @@ async function fetchGenerationCost(
     },
   );
 
+  // 404 means generation data probably isn't available yet - return null to trigger retry
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      `OpenRouter API returned ${response.status}: ${response.statusText}`,
+    );
+  }
+
   const data = await response.json();
 
-  if (data.error && data.error.message.includes('not found')) {
-    return null;
+  if (data.error) {
+    if (data.error.message?.includes('not found')) {
+      return null;
+    }
+    throw new Error(`OpenRouter API error: ${data.error.message}`);
   }
 
   return data.data.total_cost;

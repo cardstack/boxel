@@ -53,6 +53,7 @@ const emptyListingId = `${mockCatalogURL}Listing/empty`;
 const pirateSkillListingId = `${mockCatalogURL}SkillListing/pirate-skill`;
 const incompleteSkillListingId = `${mockCatalogURL}Listing/incomplete-skill`;
 const apiDocumentationStubListingId = `${mockCatalogURL}Listing/api-documentation-stub`;
+const themeListingId = `${mockCatalogURL}ThemeListing/cardstack-theme`;
 //license
 const mitLicenseId = `${mockCatalogURL}License/mit`;
 //category
@@ -192,6 +193,81 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         'app-card.gts': appCardSource,
         'blog-app/blog-app.gts': blogAppCardSource,
         'card-with-unrecognised-imports.gts': cardWithUnrecognisedImports,
+        'theme/theme-example.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              cssVariables:
+                ':root { --background: #ffffff; } .dark { --background: #000000; }',
+              cssImports: [],
+              cardInfo: {
+                title: 'Sample Theme',
+                description: 'A sample theme for testing remix.',
+                thumbnailURL: null,
+                notes: null,
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'Theme',
+              },
+            },
+          },
+        },
+        'ThemeListing/cardstack-theme.json': {
+          data: {
+            meta: {
+              adoptsFrom: {
+                name: 'ThemeListing',
+                module: `${catalogRealmURL}catalog-app/listing/listing`,
+              },
+            },
+            type: 'card',
+            attributes: {
+              name: 'Cardstack Theme',
+              images: [],
+              summary: 'Cardstack base theme listing.',
+            },
+            relationships: {
+              specs: {
+                links: {
+                  self: null,
+                },
+              },
+              skills: {
+                links: {
+                  self: null,
+                },
+              },
+              tags: {
+                links: {
+                  self: null,
+                },
+              },
+              license: {
+                links: {
+                  self: null,
+                },
+              },
+              publisher: {
+                links: {
+                  self: null,
+                },
+              },
+              'examples.0': {
+                links: {
+                  self: '../theme/theme-example',
+                },
+              },
+              categories: {
+                links: {
+                  self: null,
+                },
+              },
+            },
+          },
+        },
         'author/Author/example.json': {
           data: {
             type: 'card',
@@ -1681,7 +1757,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                 let content: string | undefined;
                 if (
                   systemLower.includes(
-                    'respond only with one token: card, app, or skill',
+                    'respond only with one token: card, app, skill, or theme',
                   )
                 ) {
                   // Heuristic moved from production code into test mock:
@@ -1695,6 +1771,12 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                     )
                   ) {
                     content = 'app';
+                  } else if (
+                    /(cssvariables|css imports|theme card|themecreator|theme listing)/.test(
+                      userLower,
+                    )
+                  ) {
+                    content = 'theme';
                   } else if (/skill/.test(userLower)) {
                     content = 'skill';
                   } else {
@@ -2270,6 +2352,30 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           listingName,
         );
         let instancePath = `${outerFolder}Skill/pirate-speak.json`;
+        await openDir(assert, instancePath);
+        await verifyFileInFileTree(assert, instancePath);
+        let cardId =
+          testDestinationRealmURL + instancePath.replace('.json', '');
+        await waitFor('[data-test-card-resource-loaded]');
+        assert
+          .dom(`[data-test-code-mode-card-renderer-header="${cardId}"]`)
+          .exists();
+      });
+      test('theme listing: installs the theme example and redirects to code mode successfully', async function (assert) {
+        const listingName = 'cardstack-theme';
+        await executeCommand(
+          ListingRemixCommand,
+          themeListingId,
+          testDestinationRealmURL,
+        );
+        await settled();
+        await verifySubmode(assert, 'code');
+        await toggleFileTree();
+        let outerFolder = await verifyFolderWithUUIDInFileTree(
+          assert,
+          listingName,
+        );
+        let instancePath = `${outerFolder}theme/theme-example.json`;
         await openDir(assert, instancePath);
         await verifyFileInFileTree(assert, instancePath);
         let cardId =

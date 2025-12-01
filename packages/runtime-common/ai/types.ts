@@ -1,4 +1,5 @@
 import type {
+  BoxelContext,
   MatrixEvent as DiscreteMatrixEvent,
   Tool,
 } from 'https://cardstack.com/base/matrix-event';
@@ -24,6 +25,7 @@ export interface PromptParts {
   reasoningEffort?: ReasoningEffort;
   shouldRespond: boolean;
   history: DiscreteMatrixEvent[];
+  pendingCodePatchCorrectnessChecks?: PendingCodePatchCorrectnessCheck;
 }
 
 export interface OpenAIPromptMessage {
@@ -37,6 +39,23 @@ export interface OpenAIPromptMessage {
 export interface RelevantCards {
   mostRecentlyAttachedCard: LooseCardResource | undefined;
   attachedCards: LooseCardResource[];
+}
+
+export interface CodePatchCorrectnessFile {
+  sourceUrl: string;
+  displayName: string;
+}
+
+export interface CodePatchCorrectnessCard {
+  cardId: string;
+}
+
+export interface PendingCodePatchCorrectnessCheck {
+  targetEventId: string;
+  roomId: string;
+  context?: BoxelContext;
+  files: CodePatchCorrectnessFile[];
+  cards: CodePatchCorrectnessCard[];
 }
 
 export class HistoryConstructionError extends Error {

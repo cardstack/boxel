@@ -105,7 +105,7 @@ class TypographyEmbedded extends Component<typeof TypographyField> {
         break;
       case '400':
       case 'normal':
-        fontWeight = 'normal';
+        fontWeight = 'regular';
         break;
       case '500':
       case 'medium':
@@ -127,10 +127,11 @@ class TypographyEmbedded extends Component<typeof TypographyField> {
         fontWeight;
     }
 
-    fontFamily = fontFamily?.split(',')?.[0]?.replace(/'/g, '') ?? 'Poppins';
+    fontFamily =
+      fontFamily?.split(',')?.[0]?.replace(/'/g, '') ?? 'IBM Plex Sans';
 
     return sanitizeHtmlSafe(
-      `${fontFamily} ${fontWeight ?? 'normal'}, ${fontSize ?? '16px'}`,
+      `${fontFamily} ${fontWeight ?? 'regular'}, ${fontSize ?? '14px'}`,
     );
   }
 }
