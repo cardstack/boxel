@@ -254,12 +254,26 @@ export function getFieldDescription(
   } else {
     klass = card;
   }
-  let descriptionsMap = fieldDescriptions.get(klass);
-  if (!descriptionsMap) {
-    descriptionsMap = new Map();
-    fieldDescriptions.set(klass, descriptionsMap);
+  return lookupFieldDescription(klass, fieldName);
+}
+
+function lookupFieldDescription(
+  klass: typeof BaseDef,
+  fieldName: string,
+): string | undefined {
+  let proto: object | null = klass.prototype;
+  while (proto && proto.constructor && proto.constructor !== Object) {
+    let currentClass = proto.constructor as typeof BaseDef;
+    let descriptionsMap = fieldDescriptions.get(currentClass);
+    if (descriptionsMap) {
+      let description = descriptionsMap.get(fieldName);
+      if (description !== undefined) {
+        return description;
+      }
+    }
+    proto = Object.getPrototypeOf(proto);
   }
-  return descriptionsMap.get(fieldName);
+  return undefined;
 }
 
 export function getFieldOverrides<T extends BaseDef>(
