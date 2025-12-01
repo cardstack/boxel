@@ -247,8 +247,16 @@ export default class CopyAndEditCommand extends HostBaseCommand<
             relationshipContext: item.relationshipContext,
           };
         }
-      } catch {
-        // not in this stack, continue
+      } catch (err) {
+        if (
+          err instanceof Error &&
+          (err.message.includes('Could not find card') ||
+            (err.message.includes('Stack') &&
+              err.message.includes('does not exist')))
+        ) {
+          continue;
+        }
+        throw err;
       }
     }
     return undefined;
