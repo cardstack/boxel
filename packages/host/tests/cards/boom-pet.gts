@@ -15,9 +15,11 @@ export class Pet extends CardDef {
   @field boom = contains(StringField, {
     computeVia: function (this: Pet) {
       if (this.hasError) {
-        throw new Error('hasError was set to true');
+        throw new Error(
+          'hasError was set to true because we deliberately want to get this card to a broken state',
+        );
       }
-      return 'ok';
+      return 'hasError is false which means this card is not broken';
     },
   });
 
@@ -25,14 +27,8 @@ export class Pet extends CardDef {
     <template>
       <div class='pet-card'>
         <h2>{{@model.name}}</h2>
-        <p>Boom: <@fields.boom /></p>
+        <p><@fields.boom /></p>
       </div>
-      <style scoped>
-        .pet-card {
-          display: grid;
-          gap: 0.25rem;
-        }
-      </style>
     </template>
   };
 }
