@@ -11,13 +11,14 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import HostBaseCommand from '../lib/host-base-command';
 
 import { waitForRealmState } from './utils';
+import ENV from '@cardstack/host/config/environment';
 
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
-const CARD_INDEX_TIMEOUT_MS = 15_000;
+const cardIndexingTimeout = ENV.cardRenderTimeout;
 
 export default class CheckCorrectnessCommand extends HostBaseCommand<
   typeof BaseCommandModule.CheckCorrectnessInput,
@@ -177,7 +178,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
             this.matchesInvalidation(cardURL!.href, invalidation),
           );
         },
-        { timeoutMs: CARD_INDEX_TIMEOUT_MS },
+        { timeoutMs: cardIndexingTimeout },
       );
     } catch (error) {
       console.warn(
