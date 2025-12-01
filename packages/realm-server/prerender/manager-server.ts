@@ -20,11 +20,16 @@ let { port } = yargs(process.argv.slice(2))
   .parseSync();
 
 let webServerInstance: Server | undefined;
-let { app } = buildPrerenderManagerApp();
+let draining = false;
+let { app } = buildPrerenderManagerApp({
+  isDraining: () => draining,
+});
 webServerInstance = createServer(app.callback()).listen(port);
 log.info(`prerender manager HTTP listening on port ${port}`);
 
 function shutdown() {
+  if (draining) return;
+  draining = true;
   log.info(`Shutting down prerender manager...`);
   (webServerInstance as any)?.closeAllConnections?.();
   webServerInstance?.close((err?: Error) => {

@@ -4,15 +4,40 @@ import {
   type ModuleRenderResponse,
   logger,
 } from '@cardstack/runtime-common';
+import {
+  PRERENDER_SERVER_DRAINING_STATUS_CODE,
+  PRERENDER_SERVER_STATUS_DRAINING,
+  PRERENDER_SERVER_STATUS_HEADER,
+} from './prerender-constants';
 
 const log = logger('remote-prerenderer');
+
+class RetryablePrerenderError extends Error {
+  status?: number;
+  constructor(message: string, status?: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export function createRemotePrerenderer(
   prerenderServerURL: string,
 ): Prerenderer {
   let prerenderURL = new URL(prerenderServerURL);
+  const maxAttempts = Math.max(
+    1,
+    Number(process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS ?? 5),
+  );
+  const baseDelayMs = Math.max(
+    50,
+    Number(process.env.PRERENDER_MANAGER_RETRY_DELAY_MS ?? 200),
+  );
 
-  async function request<T>(
+  async function requestWithRetry<T>(
     path: string,
     type: string,
     attributes: Record<string, unknown>,
@@ -25,43 +50,70 @@ export function createRemotePrerenderer(
       },
     };
 
-    let response = await fetch(endpoint, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      let message = `Prerender request to ${endpoint.href} failed with status ${response.status}`;
-      let text: string | undefined;
+    let attempts = 0;
+    let lastError: Error | undefined;
+    while (attempts < maxAttempts) {
+      attempts++;
       try {
-        text = await response.text();
-      } catch (err) {
-        log.error('Error reading prerender response body:', err);
+        let response = await fetch(endpoint, {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+
+        let draining =
+          response.status === PRERENDER_SERVER_DRAINING_STATUS_CODE ||
+          response.headers.get(PRERENDER_SERVER_STATUS_HEADER) ===
+            PRERENDER_SERVER_STATUS_DRAINING;
+
+        if (!response.ok || draining) {
+          let message = `Prerender request to ${endpoint.href} failed with status ${response.status}`;
+          let text: string | undefined;
+          try {
+            text = await response.text();
+          } catch (err) {
+            log.error('Error reading prerender response body:', err);
+          }
+          if (text) {
+            message += `: ${text}`;
+          }
+          if (response.status === 503 || draining || response.status === 504) {
+            throw new RetryablePrerenderError(message, response.status);
+          }
+          throw new Error(message);
+        }
+
+        let json: any;
+        try {
+          json = await response.json();
+        } catch (e) {
+          throw new Error('Failed to parse prerender response as JSON');
+        }
+
+        let attributesPayload: T | undefined = json?.data?.attributes;
+        if (!attributesPayload) {
+          throw new Error('Prerender response did not contain data.attributes');
+        }
+
+        return attributesPayload;
+      } catch (e: any) {
+        lastError = e;
+        let retryable =
+          e instanceof RetryablePrerenderError ||
+          e?.code === 'ECONNREFUSED' ||
+          e?.code === 'ETIMEDOUT';
+        if (!retryable || attempts >= maxAttempts) {
+          throw e;
+        }
+        let delayMs = baseDelayMs * Math.pow(2, attempts - 1);
+        await delay(delayMs);
       }
-      if (text) {
-        message += `: ${text}`;
-      }
-      throw new Error(message);
     }
-
-    let json: any;
-    try {
-      json = await response.json();
-    } catch (e) {
-      throw new Error('Failed to parse prerender response as JSON');
-    }
-
-    let attributesPayload: T | undefined = json?.data?.attributes;
-    if (!attributesPayload) {
-      throw new Error('Prerender response did not contain data.attributes');
-    }
-
-    return attributesPayload;
+    throw lastError ?? new Error('Prerender request failed');
   }
 
   return {
     async prerenderCard({ realm, url, userId, permissions, renderOptions }) {
-      return await request<RenderResponse>(
+      return await requestWithRetry<RenderResponse>(
         'prerender-card',
         'prerender-request',
         {
@@ -74,7 +126,7 @@ export function createRemotePrerenderer(
       );
     },
     async prerenderModule({ realm, url, userId, permissions, renderOptions }) {
-      return await request<ModuleRenderResponse>(
+      return await requestWithRetry<ModuleRenderResponse>(
         'prerender-module',
         'prerender-module-request',
         {

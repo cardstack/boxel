@@ -950,6 +950,27 @@ module(basename(__filename), function () {
       );
     });
 
+    test('returns 503 immediately when manager is draining', async function (assert) {
+      let draining = true;
+      let { app } = buildPrerenderManagerApp({ isDraining: () => draining });
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      let res = await request
+        .post('/prerender-card')
+        .send(
+          makeBody(
+            'https://realm.example/drain-manager',
+            'https://realm.example/drain-manager/1',
+          ),
+        );
+      assert.strictEqual(res.status, 503, '503 when manager draining');
+      assert.strictEqual(
+        res.body?.errors?.[0]?.message,
+        'Prerender manager draining',
+        'draining message returned',
+      );
+    });
+
     test('returns 503 when no prerender servers are registered', async function (assert) {
       let { app } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());

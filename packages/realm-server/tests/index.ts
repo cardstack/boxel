@@ -59,3 +59,4 @@ import './claim-boxel-domain-test';
 import './delete-boxel-claimed-domain-test';
 import './realm-auth-test';
 import './queries-test';
+import './remote-prerenderer-test';

@@ -59,7 +59,9 @@ function formatTimestampWithTimezone(timestamp: number): string {
   return `${formattedDate} (${timezone})`;
 }
 
-export function buildPrerenderManagerApp(): {
+export function buildPrerenderManagerApp(options?: {
+  isDraining?: () => boolean;
+}): {
   app: Koa<Koa.DefaultState, Koa.Context>;
   registry: Registry;
   sweepServers: () => Promise<void>;
@@ -220,9 +222,16 @@ export function buildPrerenderManagerApp(): {
 
   // health
   router.head('/', async (ctxt) => {
+    if (options?.isDraining?.()) {
+      ctxt.status = 503;
+      return;
+    }
     ctxt.status = 200;
   });
   router.get('/', async (ctxt) => {
+    if (options?.isDraining?.()) {
+      ctxt.status = 503;
+    }
     ctxt.set('Content-Type', 'application/vnd.api+json');
 
     // Build the list of active servers with their realms
@@ -561,6 +570,13 @@ export function buildPrerenderManagerApp(): {
     label: string,
   ) {
     try {
+      if (options?.isDraining?.()) {
+        ctxt.status = 503;
+        ctxt.body = {
+          errors: [{ status: 503, message: 'Prerender manager draining' }],
+        };
+        return;
+      }
       // read body once
       const req = await fetchRequestFromContext(ctxt);
       const raw = await req.text().catch(() => '');
