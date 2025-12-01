@@ -71,7 +71,7 @@ module(basename(__filename), function () {
         'response type',
       );
       assert.strictEqual(getResponse.body.data.id, 'health', 'response id');
-      assert.true(getResponse.body.data.attributes.ready, 'ready attribute');
+      assert.false(getResponse.body.data.attributes.ready, 'ready attribute');
       assert.ok(Array.isArray(getResponse.body.included), 'included is array');
       assert.strictEqual(
         getResponse.body.included.length,

@@ -97,6 +97,18 @@ export function buildPrerenderManagerApp(): {
         5000,
     ),
   );
+  const discoveryWaitMs = Math.max(
+    0,
+    Number(process.env.PRERENDER_SERVER_DISCOVERY_WAIT_MS ?? 3000),
+  );
+  const discoveryPollMs = Math.max(
+    50,
+    Number(process.env.PRERENDER_SERVER_DISCOVERY_POLL_MS ?? 100),
+  );
+
+  function delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
 
   function urlFromQuery(ctxt: Koa.Context): string | undefined {
     let raw = (ctxt.query as Record<string, unknown>)?.['url'];
@@ -236,7 +248,7 @@ export function buildPrerenderManagerApp(): {
         type: 'prerender-manager-health',
         id: 'health',
         attributes: {
-          ready: true,
+          ready: registry.servers.size > 0,
         },
       },
       included: servers,
@@ -559,6 +571,12 @@ export function buildPrerenderManagerApp(): {
           ],
         };
         return;
+      }
+      if (registry.servers.size === 0 && discoveryWaitMs > 0) {
+        let start = now();
+        while (registry.servers.size === 0 && now() - start < discoveryWaitMs) {
+          await delay(discoveryPollMs);
+        }
       }
       if (registry.servers.size === 0) {
         ctxt.status = 503;
