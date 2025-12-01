@@ -40,10 +40,6 @@ export default class CopyAndEditCommand extends HostBaseCommand<
     return this.#cardAPI;
   }
 
-  private async getResultType() {
-    return undefined;
-  }
-
   private async getInputTypeClass() {
     if (!this.#CopyAndEditInput) {
       let commandModule = await this.loadCommandModule();
