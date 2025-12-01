@@ -10,9 +10,9 @@
     "attributes": {
       "ref": {
         "name": "default",
-        "module": "../fields/number/percentage"
+        "module": "../fields/slider"
       },
-      "title": "Percentage Field",
+      "title": "Slider Field",
       "readMe": null,
       "cardInfo": {
         "notes": null,
