@@ -47,7 +47,6 @@ export class FilterRefersToNonexistentTypeError extends Error {
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
-
 export function isFilterRefersToNonexistentTypeError(
   error: unknown,
 ): error is FilterRefersToNonexistentTypeError {
@@ -284,12 +283,9 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         coerceTypes: modulesTableCoerceTypes,
       },
     )) as {
-      definitions:
-        | Record<string, ModuleDefinitionResult | ErrorEntry>
-        | string
-        | null;
-      deps: string[] | string | null;
-      error_doc: ErrorEntry | string | null;
+      definitions: Record<string, ModuleDefinitionResult | ErrorEntry> | null;
+      deps: string[] | null;
+      error_doc: ErrorEntry | null;
       cache_scope: CacheScope;
       auth_user_id: string | null;
       resolved_realm_url: string | null;
@@ -301,11 +297,9 @@ export class CachingDefinitionLookup implements DefinitionLookup {
 
     let row = rows[0];
     return {
-      definitions: parseJSON<
-        Record<string, ModuleDefinitionResult | ErrorEntry>
-      >(row.definitions, {}),
-      deps: parseJSON<string[]>(row.deps, []),
-      error: parseJSON<ErrorEntry | undefined>(row.error_doc, undefined),
+      definitions: row.definitions ?? {},
+      deps: row.deps ?? [],
+      error: row.error_doc ?? undefined,
       cacheScope: row.cache_scope,
       authUserId: row.auth_user_id || undefined,
       resolvedRealmURL: row.resolved_realm_url || '',
@@ -374,12 +368,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cacheScope,
       cacheScope === 'public' ? '' : userId,
     );
-    return {
-      ...cacheEntry,
-      cacheScope,
-      authUserId: cacheScope === 'public' ? undefined : userId,
-      resolvedRealmURL,
-    };
+    return cacheEntry;
   }
 }
 
@@ -413,19 +402,4 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
   forRealm(realm: LocalRealm): DefinitionLookup {
     return this.#inner.forRealm(realm);
   }
-}
-
-function parseJSON<T>(value: unknown, fallback: T): T {
-  if (value == null) {
-    return fallback;
-  }
-  if (typeof value === 'string') {
-    try {
-      return JSON.parse(value) as T;
-    } catch (err) {
-      console.warn('Failed to parse cached JSON value', err);
-      return fallback;
-    }
-  }
-  return value as T;
 }

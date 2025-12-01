@@ -530,7 +530,7 @@ module(basename(__filename), function () {
       },
     });
 
-    test.only('module prerender surfaces auth error without timing out', async function (assert) {
+    test('module prerender surfaces auth error without timing out', async function (assert) {
       const moduleURL = `${consumerRealmURL}website.gts`;
 
       let result = await prerenderer.prerenderModule({

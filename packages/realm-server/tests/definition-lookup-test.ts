@@ -34,8 +34,10 @@ module(basename(__filename), function () {
         async prerenderCard() {
           throw new Error('Not implemented in mock');
         },
-        async prerenderModule(_args: ModulePrerenderArgs) {
+        async prerenderModule(args: ModulePrerenderArgs) {
           prerenderModuleCalls++;
+          let moduleURL = new URL(args.url);
+          let modulePathWithoutExtension = moduleURL.href.replace(/\.gts$/, '');
           return Promise.resolve({
             id: 'example-id',
             status: 'ready',
@@ -45,13 +47,13 @@ module(basename(__filename), function () {
             createdAt: +new Date(),
             deps: ['dep/a', 'dep/b'],
             definitions: {
-              [`${realmURL}person/Person`]: {
+              [`${modulePathWithoutExtension}/Person`]: {
                 type: 'definition',
-                moduleURL: './person.gts',
+                moduleURL: moduleURL.href,
                 definition: {
                   type: 'card-def',
                   codeRef: {
-                    module: './person.gts',
+                    module: moduleURL.href,
                     name: 'Person',
                   },
                   displayName: 'Person',
@@ -88,14 +90,6 @@ module(basename(__filename), function () {
           return 'private';
         },
       });
-    });
-
-    hooks.after(async () => {
-      // await prerenderer.stop();
-    });
-
-    hooks.afterEach(async () => {
-      // await prerenderer.disposeRealm(realmURL);
     });
 
     setupBaseRealmServer(hooks, matrixURL);
@@ -253,6 +247,118 @@ module(basename(__filename), function () {
 
       assert.strictEqual(rows[0]?.cache_scope, 'public');
       assert.strictEqual(rows[0]?.auth_user_id, '');
+    });
+
+    test('uses realm-auth cache scope when realm is private on the same server', async function (assert) {
+      await dbAdapter.execute('DELETE FROM modules');
+
+      await definitionLookup.lookupDefinition({
+        module: `${realmURL}person.gts`,
+        name: 'Person',
+      });
+
+      let rows = (await dbAdapter.execute(
+        `SELECT cache_scope, auth_user_id FROM modules WHERE url = $1`,
+        { bind: [`${realmURL}person.gts`] },
+      )) as { cache_scope: string; auth_user_id: string }[];
+
+      assert.strictEqual(rows[0]?.cache_scope, 'realm-auth');
+      assert.strictEqual(rows[0]?.auth_user_id, testUserId);
+    });
+
+    test('uses public cache scope when requesting a public realm on another server', async function (assert) {
+      await dbAdapter.execute('DELETE FROM modules');
+      let remoteRealmURL = 'http://remote-realm/';
+      let remoteModuleURL = `${remoteRealmURL}person.gts`;
+
+      let handler = async (request: Request) => {
+        if (request.method === 'HEAD' && request.url === remoteModuleURL) {
+          return new Response(null, {
+            status: 200,
+            headers: {
+              'x-boxel-realm-public-readable': 'true',
+              'x-boxel-realm-url': remoteRealmURL,
+            },
+          });
+        }
+        return null;
+      };
+      virtualNetwork.mount(handler);
+
+      try {
+        let scopedLookup = definitionLookup.forRealm({
+          url: realmURL,
+          async getRealmOwnerUserId() {
+            return testUserId;
+          },
+          async visibility() {
+            return 'private';
+          },
+        });
+
+        await scopedLookup.lookupDefinition({
+          module: remoteModuleURL,
+          name: 'Person',
+        });
+
+        let rows = (await dbAdapter.execute(
+          `SELECT cache_scope, auth_user_id FROM modules WHERE url = $1`,
+          { bind: [remoteModuleURL] },
+        )) as { cache_scope: string; auth_user_id: string }[];
+
+        assert.strictEqual(rows[0]?.cache_scope, 'public');
+        assert.strictEqual(rows[0]?.auth_user_id, '');
+      } finally {
+        virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('uses realm-auth cache scope when requesting a private realm on another server', async function (assert) {
+      await dbAdapter.execute('DELETE FROM modules');
+      let remoteRealmURL = 'http://private-remote-realm/';
+      let remoteModuleURL = `${remoteRealmURL}person.gts`;
+      let requestingUserId = '@other-user:localhost';
+
+      let handler = async (request: Request) => {
+        if (request.method === 'HEAD' && request.url === remoteModuleURL) {
+          return new Response(null, {
+            status: 200,
+            headers: {
+              'x-boxel-realm-public-readable': 'false',
+              'x-boxel-realm-url': remoteRealmURL,
+            },
+          });
+        }
+        return null;
+      };
+      virtualNetwork.mount(handler);
+
+      try {
+        let scopedLookup = definitionLookup.forRealm({
+          url: realmURL,
+          async getRealmOwnerUserId() {
+            return requestingUserId;
+          },
+          async visibility() {
+            return 'private';
+          },
+        });
+
+        await scopedLookup.lookupDefinition({
+          module: remoteModuleURL,
+          name: 'Person',
+        });
+
+        let rows = (await dbAdapter.execute(
+          `SELECT cache_scope, auth_user_id FROM modules WHERE url = $1`,
+          { bind: [remoteModuleURL] },
+        )) as { cache_scope: string; auth_user_id: string }[];
+
+        assert.strictEqual(rows[0]?.cache_scope, 'realm-auth');
+        assert.strictEqual(rows[0]?.auth_user_id, requestingUserId);
+      } finally {
+        virtualNetwork.unmount(handler);
+      }
     });
   });
 });

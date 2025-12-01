@@ -658,8 +658,8 @@ export class Realm {
     let performIndex = async () => {
       await this.#realmIndexUpdater.update(urls, {
         clientRequestId,
-        onInvalidation: (invalidatedURLs: URL[]) => {
-          this.handleExecutableInvalidations(invalidatedURLs);
+        onInvalidation: async (invalidatedURLs: URL[]) => {
+          await this.handleExecutableInvalidations(invalidatedURLs);
           invalidations = new Set([
             ...invalidations,
             ...invalidatedURLs.map((u) => u.href),
@@ -1082,8 +1082,8 @@ export class Realm {
     await this.removeFileMeta([path]);
     await this.#realmIndexUpdater.update([url], {
       delete: true,
-      onInvalidation: (invalidatedURLs: URL[]) => {
-        this.handleExecutableInvalidations(invalidatedURLs);
+      onInvalidation: async (invalidatedURLs: URL[]) => {
+        await this.handleExecutableInvalidations(invalidatedURLs);
         this.broadcastRealmEvent({
           eventName: 'index',
           indexType: 'incremental',
@@ -1116,8 +1116,8 @@ export class Realm {
     await this.removeFileMeta(paths);
     await this.#realmIndexUpdater.update(urls, {
       delete: true,
-      onInvalidation: (invalidatedURLs: URL[]) => {
-        this.handleExecutableInvalidations(invalidatedURLs);
+      onInvalidation: async (invalidatedURLs: URL[]) => {
+        await this.handleExecutableInvalidations(invalidatedURLs);
         this.broadcastRealmEvent({
           eventName: 'index',
           indexType: 'incremental',
@@ -1137,7 +1137,7 @@ export class Realm {
 
   async reindex() {
     await this.#realmIndexUpdater.fullIndex();
-    this.#definitionLookup.invalidate(this.url);
+    await this.#definitionLookup.invalidate(this.url);
     this.#moduleCache.clear();
     this.broadcastRealmEvent({
       eventName: 'index',
@@ -1999,7 +1999,9 @@ export class Realm {
     return this.cloneFileRefWithContent(ref, text);
   }
 
-  private handleExecutableInvalidations(invalidatedURLs: URL[]): void {
+  private async handleExecutableInvalidations(
+    invalidatedURLs: URL[],
+  ): Promise<void> {
     let definitionsInvalidated = false;
     for (const invalidatedURL of invalidatedURLs) {
       if (hasExecutableExtension(invalidatedURL.href)) {
@@ -2008,7 +2010,7 @@ export class Realm {
       }
     }
     if (definitionsInvalidated) {
-      this.#definitionLookup.invalidate(this.url);
+      await this.#definitionLookup.invalidate(this.url);
     }
   }
 
@@ -3285,7 +3287,7 @@ export class Realm {
   }
 
   private async startFileWatcher() {
-    await this.#adapter.subscribe((data) => {
+    await this.#adapter.subscribe(async (data) => {
       let tracked = this.getTrackedWrite(data);
       if (!tracked || tracked.isTracked) {
         return;
@@ -3296,7 +3298,7 @@ export class Realm {
 
       if (hasExecutableExtension(localPath)) {
         this.#moduleCache.invalidate(localPath);
-        this.#definitionLookup.invalidate(this.url);
+        await this.#definitionLookup.invalidate(this.url);
       }
 
       this.broadcastRealmEvent(data);
@@ -3325,8 +3327,8 @@ export class Realm {
     for (let { operation, url } of items) {
       this.sendIndexInitiationEvent(url.href);
       await this.#realmIndexUpdater.update([url], {
-        onInvalidation: (invalidatedURLs: URL[]) => {
-          this.handleExecutableInvalidations(invalidatedURLs);
+        onInvalidation: async (invalidatedURLs: URL[]) => {
+          await this.handleExecutableInvalidations(invalidatedURLs);
           this.broadcastRealmEvent({
             eventName: 'index',
             indexType: 'incremental',
