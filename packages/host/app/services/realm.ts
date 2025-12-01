@@ -284,9 +284,8 @@ class RealmResource {
   ): Promise<void> {
     await this.loginTask.perform();
     let headers: Record<string, string> = {
-      Accept: SupportedMimeType.RealmInfo,
+      Accept: SupportedMimeType.JSON,
       Authorization: `Bearer ${this.token}`,
-      'Content-Type': SupportedMimeType.JSONAPI,
     };
     let response = await this.network.authedFetch(`${this.realmURL}_config`, {
       method: 'PATCH',
@@ -295,7 +294,7 @@ class RealmResource {
         data: {
           type: 'realm-config',
           id: this.url,
-          attributes: { property, value },
+          attributes: { [property]: value },
         },
       }),
     });
