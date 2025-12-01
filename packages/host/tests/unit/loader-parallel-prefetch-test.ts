@@ -218,8 +218,9 @@ module('Unit | loader prefetch', function (hooks) {
         'broken',
         'broken dependency recorded',
       );
-      assert.ok(
-        (depModule as any)?.exception.id === trimmedDepURL,
+      assert.strictEqual(
+        (depModule as any)?.exception.id,
+        trimmedDepURL,
         'broken dependency error corresponds to dependency URL',
       );
 
