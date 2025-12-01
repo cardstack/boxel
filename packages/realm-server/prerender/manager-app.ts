@@ -197,10 +197,46 @@ export function buildPrerenderManagerApp(options?: {
     );
     let existing = registry.servers.get(url);
     if (existing) {
+      let warmSet = new Set(warmedRealms ?? []);
       existing.lastSeenAt = now();
       existing.capacity = capacity || existing.capacity;
       existing.status = status ?? 'active';
-      existing.warmedRealms = new Set(warmedRealms ?? []);
+      existing.warmedRealms = warmSet;
+      if (warmSet.size === 0) {
+        // server restarted; clear tracked active realms and mappings
+        for (let realm of [...existing.activeRealms]) {
+          existing.activeRealms.delete(realm);
+          let arr = registry.realms.get(realm) || [];
+          let idx;
+          while ((idx = arr.indexOf(url)) !== -1) {
+            arr.splice(idx, 1);
+          }
+          if (arr.length === 0) {
+            registry.realms.delete(realm);
+            registry.lastAccessByRealm.delete(realm);
+          } else {
+            registry.realms.set(realm, arr);
+          }
+        }
+      } else {
+        // drop active realms that are not warmed to free capacity
+        for (let realm of [...existing.activeRealms]) {
+          if (!warmSet.has(realm)) {
+            existing.activeRealms.delete(realm);
+            let arr = registry.realms.get(realm) || [];
+            let idx;
+            while ((idx = arr.indexOf(url)) !== -1) {
+              arr.splice(idx, 1);
+            }
+            if (arr.length === 0) {
+              registry.realms.delete(realm);
+              registry.lastAccessByRealm.delete(realm);
+            } else {
+              registry.realms.set(realm, arr);
+            }
+          }
+        }
+      }
       log.debug(
         'Registry after heartbeat: %s',
         JSON.stringify(Array.from(registry.servers.keys())),
@@ -333,6 +369,17 @@ export function buildPrerenderManagerApp(options?: {
       ctxt.status = 500;
       ctxt.body = { errors: [{ status: 500, message: 'Heartbeat error' }] };
     }
+  });
+
+  // maintenance: clear realm assignments and capacity tracking
+  router.post('/prerender-maintenance/reset', async (ctxt) => {
+    for (let [, info] of registry.servers) {
+      info.activeRealms.clear();
+    }
+    registry.realms.clear();
+    registry.lastAccessByRealm.clear();
+    log.warn('Maintenance reset: cleared realm assignments and activeRealms');
+    ctxt.status = 204;
   });
 
   // unregister server
@@ -501,7 +548,7 @@ export function buildPrerenderManagerApp(options?: {
       }
       return candidate;
     }
-    // pressure mode: pick server owning globally LRU realm
+    // pressure mode: pick server owning globally LRU realm (may evict to free capacity)
     let lruRealm: string | undefined;
     let lruTime = Infinity;
     for (let [r, t] of registry.lastAccessByRealm) {
@@ -515,15 +562,31 @@ export function buildPrerenderManagerApp(options?: {
       while (arr.length > 0) {
         let url = arr.shift()!;
         let info = registry.servers.get(url);
-        if (info && isServerUsable(info) && hasCapacity(info)) {
-          arr.push(url);
-          registry.realms.set(lruRealm, arr);
+        if (info && isServerUsable(info)) {
+          // evict lruRealm from this server to free capacity
+          info.activeRealms.delete(lruRealm);
+          let existing = registry.realms.get(lruRealm) || [];
+          let idx = existing.indexOf(url);
+          if (idx > -1) existing.splice(idx, 1);
+          if (existing.length === 0) {
+            registry.realms.delete(lruRealm);
+          } else {
+            registry.realms.set(lruRealm, existing);
+          }
+          registry.lastAccessByRealm.delete(lruRealm);
+
           let list = registry.realms.get(realm) || [];
           if (!list.includes(url)) list.push(url);
           if (list.length > multiplex) list = list.slice(-multiplex);
           registry.realms.set(realm, list);
           info.activeRealms.add(realm);
           info.lastAssignedAt = now();
+          log.warn(
+            'Pressure-mode: evicted realm %s from %s to assign %s',
+            lruRealm,
+            url,
+            realm,
+          );
           return url;
         }
         registry.servers.get(url)?.activeRealms.delete(lruRealm);
@@ -532,19 +595,46 @@ export function buildPrerenderManagerApp(options?: {
         registry.realms.delete(lruRealm);
       }
     }
-    // fallback: any usable server
-    let anyCandidate = leastRecentlyUsedServerWithCapacity(realm, { exclude });
-    if (anyCandidate) {
+    // fallback: any usable server (evict if needed)
+    for (let [url, info] of registry.servers) {
+      if (!isServerUsable(info)) continue;
+      if (!hasCapacity(info) && info.activeRealms.size > 0) {
+        let evictRealm: string | undefined;
+        let oldest = Infinity;
+        for (let r of info.activeRealms) {
+          let t = registry.lastAccessByRealm.get(r) ?? 0;
+          if (t < oldest) {
+            oldest = t;
+            evictRealm = r;
+          }
+        }
+        if (!evictRealm) evictRealm = [...info.activeRealms][0];
+        if (evictRealm) {
+          info.activeRealms.delete(evictRealm);
+          let existing = registry.realms.get(evictRealm) || [];
+          let idx = existing.indexOf(url);
+          if (idx > -1) existing.splice(idx, 1);
+          if (existing.length === 0) {
+            registry.realms.delete(evictRealm);
+          } else {
+            registry.realms.set(evictRealm, existing);
+          }
+          registry.lastAccessByRealm.delete(evictRealm);
+          log.warn(
+            'Fallback eviction: evicted realm %s from %s to assign %s',
+            evictRealm,
+            url,
+            realm,
+          );
+        }
+      }
       let list = registry.realms.get(realm) || [];
-      if (!list.includes(anyCandidate)) list.push(anyCandidate);
+      if (!list.includes(url)) list.push(url);
       if (list.length > multiplex) list = list.slice(-multiplex);
       registry.realms.set(realm, list);
-      let info = registry.servers.get(anyCandidate);
-      if (info) {
-        info.activeRealms.add(realm);
-        info.lastAssignedAt = now();
-      }
-      return anyCandidate;
+      info.activeRealms.add(realm);
+      info.lastAssignedAt = now();
+      return url;
     }
     return null;
   }

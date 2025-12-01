@@ -971,6 +971,110 @@ module(basename(__filename), function () {
       );
     });
 
+    test('maintenance reset clears realm assignments', async function (assert) {
+      let { app, registry } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlA },
+        },
+      });
+      let realm = 'https://realm.example/reset';
+      await request.post('/prerender-card').send(makeBody(realm, `${realm}/1`));
+      assert.true(
+        registry.servers.get(serverUrlA!)?.activeRealms.has(realm) as boolean,
+        'realm assigned before reset',
+      );
+
+      let resetRes = await request.post('/prerender-maintenance/reset');
+      assert.strictEqual(resetRes.status, 204, 'reset endpoint 204');
+
+      assert.false(
+        registry.servers.get(serverUrlA!)?.activeRealms.has(realm) as boolean,
+        'activeRealms cleared after reset',
+      );
+      assert.false(registry.realms.has(realm), 'realm mapping cleared');
+    });
+
+    test('pressure mode evicts LRU realm when all servers at capacity', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '1';
+      let { app, registry } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlA },
+        },
+      });
+
+      let realm1 = 'https://realm.example/experiments/';
+      let realm2 = 'https://realm.example/new';
+
+      let res1 = await request
+        .post('/prerender-card')
+        .send(makeBody(realm1, `${realm1}1`));
+      assert.strictEqual(res1.status, 201, 'first realm assigned');
+
+      let res2 = await request
+        .post('/prerender-card')
+        .send(makeBody(realm2, `${realm2}/1`));
+      assert.strictEqual(
+        res2.status,
+        201,
+        'second realm succeeds via eviction',
+      );
+
+      assert.false(
+        registry.realms.has(realm1),
+        'evicted realm mapping removed after steal',
+      );
+      assert.true(
+        registry.servers.get(serverUrlA!)?.activeRealms.has(realm2) as boolean,
+        'new realm assigned to server after eviction',
+      );
+    });
+
+    test('heartbeat clears stale active realms when warmedRealms are empty', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '1';
+      let { app, registry, chooseServerForRealm } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlA },
+        },
+      });
+
+      let staleRealm = 'https://realm.example/stale';
+      registry.servers.get(serverUrlA!)?.activeRealms.add(staleRealm);
+      registry.realms.set(staleRealm, [serverUrlA as string]);
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 1,
+            url: serverUrlA,
+            warmedRealms: [],
+          },
+        },
+      });
+
+      assert.strictEqual(
+        registry.servers.get(serverUrlA!)?.activeRealms.size,
+        0,
+        'activeRealms cleared on heartbeat',
+      );
+      assert.false(registry.realms.has(staleRealm), 'realm mapping removed');
+
+      let newRealm = 'https://realm.example/newafterclear';
+      let target = chooseServerForRealm(newRealm);
+      assert.strictEqual(target, serverUrlA, 'server reused after clear');
+    });
+
     test('returns 503 when no prerender servers are registered', async function (assert) {
       let { app } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());
