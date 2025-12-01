@@ -10,10 +10,10 @@
     "attributes": {
       "ref": {
         "name": "default",
-        "module": "../fields/number/badge-notification"
+        "module": "../fields/quantity"
       },
-      "title": "Badge Notification Field",
-      "readMe": "",
+      "title": "Quantity Field",
+      "readMe": null,
       "cardInfo": {
         "notes": null,
         "title": null,

@@ -10,9 +10,9 @@
     "attributes": {
       "ref": {
         "name": "default",
-        "module": "../fields/number/progress-bar"
+        "module": "../fields/rating"
       },
-      "title": "Progress Bar Field",
+      "title": "Rating Field",
       "readMe": null,
       "cardInfo": {
         "notes": null,
