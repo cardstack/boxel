@@ -304,6 +304,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   CopyCardToStackCommandModule.default,
   CopySourceCommandModule.default,
   CreateAIAssistantRoomCommandModule.default,
+  CopyAndEditCommandModule.default,
   CreateSpecCommandModule.default,
   GenerateExampleCardsCommandModule.default,
   GenerateReadmeSpecCommandModule.default,
