@@ -6,7 +6,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { eq, gt } from '@cardstack/boxel-ui/helpers';
+import { eq, gt, and, not } from '@cardstack/boxel-ui/helpers';
 
 import StringField from 'https://cardstack.com/base/string';
 import DateField from '../fields/date';
@@ -31,6 +31,9 @@ import RatingField from '../fields/rating';
 import QuantityField from '../fields/quantity';
 import ImageField from '../fields/image-field';
 import MultipleImageField from '../fields/multiple-image-field';
+import { AudioField } from '../fields/audio';
+import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
+import CubeIcon from '@cardstack/boxel-icons/cube';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
 import ChevronRightIcon from '@cardstack/boxel-icons/chevron-right';
 import ChevronLeftIcon from '@cardstack/boxel-icons/chevron-left';
@@ -141,6 +144,16 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
   }
 
   compatibilityMap: Record<string, string[]> = {
+    audio: [
+      'inline-player',
+      'waveform-player',
+      'playlist-row',
+      'mini-player',
+      'album-cover',
+      'volume-control',
+      'trim-editor',
+      'advanced-controls',
+    ],
     date: ['standard', 'countdown', 'timeline', 'age'],
     time: ['standard', 'timeSlots'],
     datetime: [
@@ -286,11 +299,23 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
           fieldName: 'playgroundMultipleImage',
         },
       ],
+      groupName: 'Media Fields',
+      options: [
+        { value: 'audio', label: 'AudioField', fieldName: 'playgroundAudio' },
+      ],
     },
   ];
 
   allPresentationOptions = [
     { value: 'standard', label: 'Standard' },
+    { value: 'inline-player', label: 'Inline Player' },
+    { value: 'waveform-player', label: 'Waveform (SoundCloud)' },
+    { value: 'playlist-row', label: 'Playlist Row (Spotify)' },
+    { value: 'mini-player', label: 'Mini Player (Podcast)' },
+    { value: 'album-cover', label: 'Album Cover' },
+    { value: 'volume-control', label: 'With Volume' },
+    { value: 'trim-editor', label: 'Trim Editor' },
+    { value: 'advanced-controls', label: 'Advanced Controls' },
     { value: 'countdown', label: 'Countdown Timer' },
     { value: 'timeAgo', label: 'Time Ago' },
     { value: 'age', label: 'Age Calculator' },
@@ -356,6 +381,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         fieldName: string;
       }>
     > = {
+      audio: [],
       date: [
         {
           name: 'Compact Date',
@@ -1332,10 +1358,33 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       if (presentation === 'standard') {
         return `@field myField = contains(NumberField);`;
       }
+    }
 
-      return `@field myField = contains(NumberField, {
+    if (fieldType === 'audio') {
+      if (presentation === 'inline-player') {
+        return `@field myAudio = contains(AudioField);`;
+      }
+      if (presentation === 'volume-control') {
+        return `@field myAudio = contains(AudioField, {
   configuration: {
-    presentation: '${presentation}'
+    presentation: { showVolume: true }
+  }
+});`;
+      }
+      if (presentation === 'advanced-controls') {
+        return `@field myAudio = contains(AudioField, {
+  configuration: {
+    presentation: {
+      showVolume: true,
+      showSpeedControl: true,
+      showLoopControl: true
+    }
+  }
+});`;
+      }
+      return `@field myAudio = contains(AudioField, {
+  configuration: {
+    presentation: { style: '${presentation}' }
   }
 });`;
     }
@@ -1488,7 +1537,10 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
               <h1>{{this.selectedFieldTypeLabel}}</h1>
             </div>
             <p class='hero-description'>
-              {{#if (eq this.currentPlaygroundField 'playgroundDate')}}
+              {{#if (eq this.currentPlaygroundField 'playgroundAudio')}}
+                Audio playback with 8 presentation styles: waveform
+                visualization, podcast player, album covers, and more
+              {{else if (eq this.currentPlaygroundField 'playgroundDate')}}
                 Single date selection for appointments, deadlines, and events
               {{else if (eq this.currentPlaygroundField 'playgroundTime')}}
                 Time input for meetings, reminders, and schedules
@@ -1541,8 +1593,19 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
                   Atom Format
                 {{/if}}
               </div>
-              <div class='demo-display-large'>
-                {{#if (eq this.currentPlaygroundField 'playgroundDate')}}
+              <div
+                class='demo-display-large
+                  {{if
+                    (and
+                      (eq this.currentPlaygroundField "playgroundAudio")
+                      (not (eq @model.playgroundPresentation "album-cover"))
+                    )
+                    "full-width-field"
+                  }}'
+              >
+                {{#if (eq this.currentPlaygroundField 'playgroundAudio')}}
+                  <@fields.playgroundAudio @format={{this.selectedFormat}} />
+                {{else if (eq this.currentPlaygroundField 'playgroundDate')}}
                   <@fields.playgroundDate @format={{this.selectedFormat}} />
                 {{else if (eq this.currentPlaygroundField 'playgroundTime')}}
                   <@fields.playgroundTime @format={{this.selectedFormat}} />
@@ -2010,7 +2073,8 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       }
 
       .demo-display-large {
-        min-height: 200px;
+        min-height: 400px;
+        width: 100%;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -2018,6 +2082,11 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         background: #ffffff;
         border: 1px solid var(--border, #e2e8f0);
         border-radius: 0;
+      }
+
+      /* Make audio fields full-width */
+      .demo-display-large.full-width-field {
+        align-items: stretch;
       }
 
       .demo-display-large > :first-child {
@@ -3178,6 +3247,42 @@ export class FieldShowcase extends CardDef {
   @field playgroundPresentation = contains(StringField);
 
   // ¹⁷ Playground fields - one for each field type
+  @field playgroundAudio = contains(AudioField, {
+    configuration: function (this: FieldShowcase) {
+      const presentation = this.playgroundPresentation || 'inline-player';
+
+      if (presentation === 'waveform-player') {
+        return { presentation: { style: 'waveform-player' } };
+      }
+      if (presentation === 'playlist-row') {
+        return { presentation: { style: 'playlist-row' } };
+      }
+      if (presentation === 'mini-player') {
+        return { presentation: { style: 'mini-player' } };
+      }
+      if (presentation === 'album-cover') {
+        return { presentation: { style: 'album-cover' } };
+      }
+      if (presentation === 'volume-control') {
+        return { presentation: { showVolume: true } };
+      }
+      if (presentation === 'trim-editor') {
+        return { presentation: { style: 'trim-editor' } };
+      }
+      if (presentation === 'advanced-controls') {
+        return {
+          presentation: {
+            showVolume: true,
+            showSpeedControl: true,
+            showLoopControl: true,
+          },
+        };
+      }
+
+      return { presentation: { style: 'inline-player' } };
+    },
+  });
+
   @field playgroundDate = contains(DateField, {
     configuration: function (this: FieldShowcase) {
       return {
