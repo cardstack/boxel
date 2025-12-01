@@ -467,7 +467,6 @@ export default class MatrixService extends Service {
       // when user logs out we transition them back to an empty stack with the
       // workspace chooser open. this way we don't inadvertently leak private
       // card id's in the URL
-      console.log('Transition to in matrix service, logging out');
       this.router.transitionTo('index-root', {
         queryParams: {
           operatorModeState: stringify({
@@ -669,7 +668,6 @@ export default class MatrixService extends Service {
         let systemCardAccountData = (await this.client.getAccountDataFromServer(
           APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
         )) as { id?: string } | null;
-        // SHould be
         await this.setSystemCard(systemCardAccountData?.id);
         if (noRealmsLoggedIn) {
           // In this case we want to authenticate to all accessible realms in a single request,
