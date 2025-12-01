@@ -33,6 +33,7 @@ import CardPresentation from './image/components/card-presentation';
 type ImageInputVariant = 'browse' | 'dropzone' | 'avatar';
 type ImagePresentationType = 'standard' | 'image' | 'inline' | 'card';
 type UploadStatus = 'idle' | 'pending' | 'success' | 'error';
+type PreviewImageFit = 'contain' | 'cover';
 
 // TypeScript configuration interface
 export type ImageFieldConfiguration =
@@ -43,6 +44,7 @@ export type ImageFieldConfiguration =
         showImageModal?: boolean; // Show zoom/modal button on image preview (default: false)
         autoUpload?: boolean; // Automatically upload image after file selection (default: true)
         showProgress?: boolean; // Show progress indicator during file reading (default: false)
+        previewImageFit?: PreviewImageFit; // How the preview image fits in container: 'contain' (show full image) or 'cover' (fill container, may crop) (default: 'contain')
       };
     }
   | {
@@ -51,7 +53,7 @@ export type ImageFieldConfiguration =
       options?: {
         autoUpload?: boolean; // Automatically upload image after file selection (default: true)
         showProgress?: boolean; // Show progress indicator during file reading (default: false)
-        // No showImageModal allowed here
+        // No showImageModal or previewImageFit allowed here (avatar always uses 'cover')
       };
     };
 
@@ -113,6 +115,14 @@ class ImageFieldEdit extends Component<typeof ImageField> {
 
   get showProgress() {
     return this.options.showProgress === true;
+  }
+
+  get previewImageFit(): PreviewImageFit {
+    // Default to 'contain' (avatar doesn't use this, it always uses 'cover')
+    return (
+      (this.options as { previewImageFit?: PreviewImageFit }).previewImageFit ||
+      'contain'
+    );
   }
 
   get hasPendingUpload() {
@@ -311,6 +321,7 @@ class ImageFieldEdit extends Component<typeof ImageField> {
             @showZoomButton={{this.showImageModal}}
             @isReading={{this.isReading}}
             @readProgress={{this.readProgress}}
+            @previewImageFit={{this.previewImageFit}}
           />
         {{else}}
           <ImageBrowsePreview
@@ -321,6 +332,7 @@ class ImageFieldEdit extends Component<typeof ImageField> {
             @showZoomButton={{this.showImageModal}}
             @isReading={{this.isReading}}
             @readProgress={{this.readProgress}}
+            @previewImageFit={{this.previewImageFit}}
           />
         {{/if}}
 

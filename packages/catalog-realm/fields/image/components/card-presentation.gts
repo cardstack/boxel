@@ -45,8 +45,7 @@ export default class CardPresentation extends GlimmerComponent<CardPresentationS
 
       .card-image-wrapper {
         width: 100%;
-        height: var(--image-card-height, 200px);
-        aspect-ratio: var(--image-card-aspect-ratio, 1 / 1);
+        height: var(--image-card-height, auto);
         background: var(--muted, #f1f5f9);
         flex-shrink: 0;
       }
@@ -54,7 +53,7 @@ export default class CardPresentation extends GlimmerComponent<CardPresentationS
       .card-image {
         width: 100%;
         height: 100%;
-        object-fit: cover;
+        object-fit: var(--image-card-object-fit, cover);
       }
 
       .card-content {

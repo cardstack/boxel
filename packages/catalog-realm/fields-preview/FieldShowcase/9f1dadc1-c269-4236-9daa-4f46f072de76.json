@@ -15,12 +15,12 @@
         "thumbnailURL": null
       },
       "imageAvatar": {
-        "uploadUrl": null,
-        "uploadedImageUrl": null
+        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764570318102",
+        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764570318102/public"
       },
       "imageBrowse": {
-        "uploadUrl": null,
-        "uploadedImageUrl": null
+        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764570261129",
+        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764570261129/public"
       },
       "imageDropzone": {
         "uploadUrl": null,
@@ -40,8 +40,8 @@
         "value": "09:15"
       },
       "playgroundImage": {
-        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764564584610",
-        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764564584610/public"
+        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764570251469",
+        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764570251469/public"
       },
       "playgroundMonth": {
         "value": 4
@@ -111,7 +111,7 @@
       "appointmentDateCompact": "2025-11-28",
       "playgroundNumberRating": null,
       "playgroundNumberSlider": null,
-      "playgroundPresentation": "standard",
+      "playgroundPresentation": "card",
       "playgroundRelativeTime": {
         "unit": null,
         "amount": null

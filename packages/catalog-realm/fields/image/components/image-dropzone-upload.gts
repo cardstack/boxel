@@ -49,7 +49,11 @@ export default class ImageDropzoneUpload extends GlimmerComponent<ImageDropzoneU
 
       .dropzone-upload:hover {
         border-color: var(--accent, #60a5fa);
-        background: color-mix(in srgb, var(--primary, #3b82f6) 10%, transparent);
+        background: color-mix(
+          in srgb,
+          var(--primary, #3b82f6) 10%,
+          transparent
+        );
       }
 
       .dropzone-content {

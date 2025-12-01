@@ -1,5 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
+import { htmlSafe } from '@ember/template';
 import CameraIcon from '@cardstack/boxel-icons/camera';
 import { Button } from '@cardstack/boxel-ui/components';
 import ReadingProgress from './reading-progress';
@@ -21,6 +22,10 @@ export default class ImageAvatarPreview extends GlimmerComponent<ImageAvatarPrev
     return this.args.readProgress ?? 0;
   }
 
+  get imageStyle() {
+    return htmlSafe('object-fit: cover;');
+  }
+
   <template>
     <div class='avatar-preview'>
       {{! Avatar container }}
@@ -31,7 +36,12 @@ export default class ImageAvatarPreview extends GlimmerComponent<ImageAvatarPrev
             <ReadingProgress @readProgress={{this.readProgress}} />
           </div>
         {{else}}
-          <img src={{@imageData}} alt={{@fileName}} class='avatar-image' />
+          <img
+            src={{@imageData}}
+            alt={{@fileName}}
+            class='avatar-image'
+            style={{this.imageStyle}}
+          />
         {{/if}}
         <div class='avatar-camera-icon'>
           <CameraIcon class='icon' />

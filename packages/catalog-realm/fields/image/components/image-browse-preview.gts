@@ -1,6 +1,7 @@
 import { not, eq } from '@cardstack/boxel-ui/helpers';
 import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
+import { htmlSafe } from '@ember/template';
 import XIcon from '@cardstack/boxel-icons/x';
 import ZoomInIcon from '@cardstack/boxel-icons/zoom-in';
 import ImageIcon from '@cardstack/boxel-icons/image';
@@ -16,12 +17,21 @@ interface ImageBrowsePreviewArgs {
     showZoomButton?: boolean;
     isReading?: boolean;
     readProgress?: number;
+    previewImageFit?: 'contain' | 'cover';
   };
 }
 
 export default class ImageBrowsePreview extends GlimmerComponent<ImageBrowsePreviewArgs> {
   get readProgress(): number {
     return this.args.readProgress ?? 0;
+  }
+
+  get objectFit(): 'contain' | 'cover' {
+    return this.args.previewImageFit ?? 'contain';
+  }
+
+  get imageStyle() {
+    return htmlSafe(`object-fit: ${this.objectFit};`);
   }
 
   <template>
@@ -32,7 +42,12 @@ export default class ImageBrowsePreview extends GlimmerComponent<ImageBrowsePrev
           {{! Progress indicator during file reading }}
           <ReadingProgress @readProgress={{this.readProgress}} />
         {{else}}
-          <img src={{@imageData}} alt={{@fileName}} class='preview-image' />
+          <img
+            src={{@imageData}}
+            alt={{@fileName}}
+            class='preview-image'
+            style={{this.imageStyle}}
+          />
 
           {{! Top-left: Zoom button }}
           {{#if (not (eq @showZoomButton false))}}
@@ -73,16 +88,17 @@ export default class ImageBrowsePreview extends GlimmerComponent<ImageBrowsePrev
 
       .image-wrapper {
         position: relative;
-        height: 12rem;
+        width: 100%;
+        aspect-ratio: 16 / 9;
         border: 2px solid var(--border, #e0e0e0);
         border-radius: var(--radius, 0.5rem);
         overflow: hidden;
+        background: var(--muted, #f1f5f9);
       }
 
       .preview-image {
         width: 100%;
         height: 100%;
-        object-fit: cover;
         display: block;
       }
 
