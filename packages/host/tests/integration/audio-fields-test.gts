@@ -73,14 +73,9 @@ module('Integration | audio fields', function (hooks) {
   async function renderConfiguredField(
     FieldClass: any,
     value: unknown,
-    presentation: any,
-    extraConfig: Record<any, unknown> = {},
+    configuration: Record<string, unknown> = {},
   ) {
     const fieldType = FieldClass;
-    const configuration = { presentation, ...extraConfig } as Record<
-      any,
-      unknown
-    >;
 
     class TestCard extends CardDef {
       @field sample = contains(fieldType, { configuration });
@@ -274,7 +269,7 @@ module('Integration | audio fields', function (hooks) {
     await renderConfiguredField(
       AudioFieldClass,
       buildField(AudioFieldClass, sampleAudioData),
-      { style: 'waveform-player' },
+      { presentation: 'waveform-player' },
     );
 
     assert
@@ -286,7 +281,7 @@ module('Integration | audio fields', function (hooks) {
     await renderConfiguredField(
       AudioFieldClass,
       buildField(AudioFieldClass, sampleAudioData),
-      { style: 'mini-player' },
+      { presentation: 'mini-player' },
     );
 
     assert.dom('[data-test-mini-player]').exists('mini player is rendered');
@@ -296,7 +291,7 @@ module('Integration | audio fields', function (hooks) {
     await renderConfiguredField(
       AudioFieldClass,
       buildField(AudioFieldClass, sampleAudioData),
-      { style: 'album-cover' },
+      { presentation: 'album-cover' },
     );
 
     assert
@@ -308,7 +303,7 @@ module('Integration | audio fields', function (hooks) {
     await renderConfiguredField(
       AudioFieldClass,
       buildField(AudioFieldClass, sampleAudioData),
-      { style: 'trim-editor' },
+      { presentation: 'trim-editor' },
     );
 
     assert.dom('[data-test-trim-editor]').exists('trim editor is rendered');
@@ -318,7 +313,7 @@ module('Integration | audio fields', function (hooks) {
     await renderConfiguredField(
       AudioFieldClass,
       buildField(AudioFieldClass, sampleAudioData),
-      { style: 'playlist-row' },
+      { presentation: 'playlist-row' },
     );
 
     assert.dom('[data-test-playlist-row]').exists('playlist row is rendered');
@@ -328,7 +323,7 @@ module('Integration | audio fields', function (hooks) {
     await renderConfiguredField(
       AudioFieldClass,
       buildField(AudioFieldClass, sampleAudioData),
-      { style: 'inline-player' },
+      {}, // Default presentation
     );
 
     assert
@@ -344,7 +339,7 @@ module('Integration | audio fields', function (hooks) {
     await renderConfiguredField(
       AudioFieldClass,
       buildField(AudioFieldClass, sampleAudioData),
-      { style: 'inline-player', showVolume: true },
+      { options: { showVolume: true } },
     );
 
     assert
@@ -356,7 +351,7 @@ module('Integration | audio fields', function (hooks) {
     await renderConfiguredField(
       AudioFieldClass,
       buildField(AudioFieldClass, sampleAudioData),
-      { style: 'inline-player', showSpeedControl: true },
+      { options: { showSpeedControl: true } },
     );
 
     assert
@@ -371,7 +366,7 @@ module('Integration | audio fields', function (hooks) {
     await renderConfiguredField(
       AudioFieldClass,
       buildField(AudioFieldClass, sampleAudioData),
-      { style: 'inline-player', showLoopControl: true },
+      { options: { showLoopControl: true } },
     );
 
     assert

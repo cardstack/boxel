@@ -3,12 +3,12 @@ import { on } from '@ember/modifier';
 import { IconButton } from '@cardstack/boxel-ui/components';
 import PlayIcon from '@cardstack/boxel-icons/play';
 import PauseIcon from '@cardstack/boxel-icons/pause';
-import type { BaseAudioPlayer } from './base-audio-player';
+import type { BaseAudioPlayer, AudioFieldModel } from './base-audio-player';
 
 interface PlaylistRowSignature {
   Args: {
-    model: any;
-    player: BaseAudioPlayer<any>;
+    model: AudioFieldModel;
+    player: BaseAudioPlayer;
   };
 }
 
@@ -20,7 +20,7 @@ export class PlaylistRow extends GlimmerComponent<PlaylistRowSignature> {
         src={{@model.url}}
         {{on 'play' @player.handlePlay}}
         {{on 'pause' @player.handlePause}}
-        {{on 'timeupdate' @player.handleTimeUpdate}}
+        {{on 'timeupdate' @player.handleTimeUpdateWithTrim}}
         {{on 'loadedmetadata' @player.handleLoadedMetadata}}
       >
         <track kind='captions' />
@@ -58,7 +58,7 @@ export class PlaylistRow extends GlimmerComponent<PlaylistRowSignature> {
       </div>
 
       <div class='playlist-duration'>
-        {{@player.formatTime @player.audioDuration}}
+        {{@player.formatTime @player.displayDuration}}
       </div>
     </div>
 

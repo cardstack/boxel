@@ -5,12 +5,12 @@ import { htmlSafe } from '@ember/template';
 import { Button } from '@cardstack/boxel-ui/components';
 import PlayIcon from '@cardstack/boxel-icons/play';
 import PauseIcon from '@cardstack/boxel-icons/pause';
-import type { BaseAudioPlayer } from './base-audio-player';
+import type { BaseAudioPlayer, AudioFieldModel } from './base-audio-player';
 
 interface AlbumCoverPlayerSignature {
   Args: {
-    model: any;
-    player: BaseAudioPlayer<any>;
+    model: AudioFieldModel;
+    player: BaseAudioPlayer;
   };
 }
 
@@ -22,7 +22,7 @@ export class AlbumCoverPlayer extends GlimmerComponent<AlbumCoverPlayerSignature
         src={{@model.url}}
         {{on 'play' @player.handlePlay}}
         {{on 'pause' @player.handlePause}}
-        {{on 'timeupdate' @player.handleTimeUpdate}}
+        {{on 'timeupdate' @player.handleTimeUpdateWithTrim}}
         {{on 'loadedmetadata' @player.handleLoadedMetadata}}
       >
         <track kind='captions' />
@@ -62,9 +62,9 @@ export class AlbumCoverPlayer extends GlimmerComponent<AlbumCoverPlayerSignature
               ></div>
             </div>
             <div class='album-time'>
-              {{@player.formatTime @player.currentTime}}
+              {{@player.formatTime @player.displayCurrentTime}}
               <span>/</span>
-              {{@player.formatTime @player.audioDuration}}
+              {{@player.formatTime @player.displayDuration}}
             </div>
           </div>
         {{/if}}

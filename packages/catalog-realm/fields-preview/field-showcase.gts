@@ -31,9 +31,7 @@ import RatingField from '../fields/rating';
 import QuantityField from '../fields/quantity';
 import ImageField from '../fields/image-field';
 import MultipleImageField from '../fields/multiple-image-field';
-import { AudioField } from '../fields/audio';
-import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
-import CubeIcon from '@cardstack/boxel-icons/cube';
+import AudioField from '../fields/audio';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
 import ChevronRightIcon from '@cardstack/boxel-icons/chevron-right';
 import ChevronLeftIcon from '@cardstack/boxel-icons/chevron-left';
@@ -299,6 +297,8 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
           fieldName: 'playgroundMultipleImage',
         },
       ],
+    },
+    {
       groupName: 'Media Fields',
       options: [
         { value: 'audio', label: 'AudioField', fieldName: 'playgroundAudio' },
@@ -3253,26 +3253,26 @@ export class FieldShowcase extends CardDef {
       const presentation = this.playgroundPresentation || 'inline-player';
 
       if (presentation === 'waveform-player') {
-        return { presentation: { style: 'waveform-player' } };
+        return { presentation: 'waveform-player' };
       }
       if (presentation === 'playlist-row') {
-        return { presentation: { style: 'playlist-row' } };
+        return { presentation: 'playlist-row' };
       }
       if (presentation === 'mini-player') {
-        return { presentation: { style: 'mini-player' } };
+        return { presentation: 'mini-player' };
       }
       if (presentation === 'album-cover') {
-        return { presentation: { style: 'album-cover' } };
+        return { presentation: 'album-cover' };
       }
       if (presentation === 'volume-control') {
-        return { presentation: { showVolume: true } };
+        return { options: { showVolume: true } };
       }
       if (presentation === 'trim-editor') {
-        return { presentation: { style: 'trim-editor' } };
+        return { presentation: 'trim-editor' };
       }
       if (presentation === 'advanced-controls') {
         return {
-          presentation: {
+          options: {
             showVolume: true,
             showSpeedControl: true,
             showLoopControl: true,
@@ -3280,7 +3280,7 @@ export class FieldShowcase extends CardDef {
         };
       }
 
-      return { presentation: { style: 'inline-player' } };
+      return {}; // Default presentation
     },
   });
 

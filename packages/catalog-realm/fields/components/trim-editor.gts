@@ -5,12 +5,12 @@ import { WaveformVisualizer } from './waveform-visualizer';
 import PlayIcon from '@cardstack/boxel-icons/play';
 import PauseIcon from '@cardstack/boxel-icons/pause';
 import CheckIcon from '@cardstack/boxel-icons/check';
-import type { BaseAudioPlayer } from './base-audio-player';
+import type { BaseAudioPlayer, AudioFieldModel } from './base-audio-player';
 
 interface TrimEditorSignature {
   Args: {
-    model: any;
-    player: BaseAudioPlayer<any>;
+    model: AudioFieldModel;
+    player: BaseAudioPlayer;
   };
 }
 
@@ -69,7 +69,7 @@ export class TrimEditor extends GlimmerComponent<TrimEditorSignature> {
         <div class='slider-group'>
           <label class='slider-label'>
             <span>Trim Start</span>
-            <span class='slider-value'>{{@player.trimStart}}%</span>
+            <span class='slider-value'>{{@player.trimStartFormatted}}%</span>
           </label>
           <input
             type='range'
@@ -86,7 +86,7 @@ export class TrimEditor extends GlimmerComponent<TrimEditorSignature> {
         <div class='slider-group'>
           <label class='slider-label'>
             <span>Trim End</span>
-            <span class='slider-value'>{{@player.trimEnd}}%</span>
+            <span class='slider-value'>{{@player.trimEndFormatted}}%</span>
           </label>
           <input
             type='range'
@@ -116,9 +116,9 @@ export class TrimEditor extends GlimmerComponent<TrimEditorSignature> {
           </Button>
 
           <span class='time-display-inline'>
-            {{@player.formatTime @player.currentTime}}
+            {{@player.formatTime @player.displayCurrentTime}}
             /
-            {{@player.formatTime @player.audioDuration}}
+            {{@player.formatTime @player.displayDuration}}
           </span>
 
           <label class='loop-toggle'>

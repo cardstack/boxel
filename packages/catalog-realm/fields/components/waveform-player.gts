@@ -4,12 +4,12 @@ import { IconButton } from '@cardstack/boxel-ui/components';
 import { WaveformVisualizer } from './waveform-visualizer';
 import PlayIcon from '@cardstack/boxel-icons/play';
 import PauseIcon from '@cardstack/boxel-icons/pause';
-import type { BaseAudioPlayer } from './base-audio-player';
+import type { BaseAudioPlayer, AudioFieldModel } from './base-audio-player';
 
 interface WaveformPlayerSignature {
   Args: {
-    model: any;
-    player: BaseAudioPlayer<any>;
+    model: AudioFieldModel;
+    player: BaseAudioPlayer;
   };
 }
 
@@ -21,7 +21,7 @@ export class WaveformPlayer extends GlimmerComponent<WaveformPlayerSignature> {
         src={{@model.url}}
         {{on 'play' @player.handlePlay}}
         {{on 'pause' @player.handlePause}}
-        {{on 'timeupdate' @player.handleTimeUpdate}}
+        {{on 'timeupdate' @player.handleTimeUpdateWithTrim}}
         {{on 'loadedmetadata' @player.handleLoadedMetadata}}
       >
         <track kind='captions' />
@@ -55,9 +55,9 @@ export class WaveformPlayer extends GlimmerComponent<WaveformPlayerSignature> {
           aria-label={{if @player.isPlaying 'Pause' 'Play'}}
         />
         <div class='waveform-time'>
-          {{@player.formatTime @player.currentTime}}
+          {{@player.formatTime @player.displayCurrentTime}}
           /
-          {{@player.formatTime @player.audioDuration}}
+          {{@player.formatTime @player.displayDuration}}
         </div>
       </div>
     </div>

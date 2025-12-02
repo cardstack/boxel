@@ -14,7 +14,12 @@ import { on } from '@ember/modifier';
 import { fn, array, hash, concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
-import { BaseAudioPlayer } from './components/base-audio-player';
+import {
+  BaseAudioPlayer,
+  type AudioFieldConfiguration,
+  type AudioFieldOptions,
+  type AudioPresentationStyle,
+} from './components/base-audio-player';
 import { WaveformPlayer } from './components/waveform-player';
 import { MiniPlayer } from './components/mini-player';
 import { AlbumCoverPlayer } from './components/album-cover-player';
@@ -32,6 +37,12 @@ import MusicIcon from '@cardstack/boxel-icons/music';
 import UploadIcon from '@cardstack/boxel-icons/upload';
 import PlayIcon from '@cardstack/boxel-icons/play';
 import PauseIcon from '@cardstack/boxel-icons/pause';
+
+export type {
+  AudioFieldConfiguration,
+  AudioFieldOptions,
+  AudioPresentationStyle,
+};
 
 class AudioFieldEdit extends Component<typeof AudioField> {
   @action
@@ -56,6 +67,13 @@ class AudioFieldEdit extends Component<typeof AudioField> {
     });
   }
 
+  formatDuration(seconds: number): string {
+    if (!seconds || isNaN(seconds)) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
   <template>
     <div class='audio-edit' data-test-audio-edit>
       {{#if @model.url}}
@@ -77,8 +95,7 @@ class AudioFieldEdit extends Component<typeof AudioField> {
             {{#if @model.duration}}
               <div class='file-meta'>
                 Duration:
-                {{@model.duration}}
-                seconds
+                {{this.formatDuration @model.duration}}
               </div>
             {{/if}}
           </div>
@@ -586,26 +603,38 @@ export class AudioField extends FieldDef {
   });
 
   static embedded = class Embedded extends Component<typeof this> {
+    get configuration(): AudioFieldConfiguration {
+      return (this.args.configuration as AudioFieldConfiguration) || {};
+    }
+
+    get presentation(): AudioPresentationStyle {
+      return this.configuration.presentation || 'default';
+    }
+
+    get options(): AudioFieldOptions {
+      return this.configuration.options || {};
+    }
+
     <template>
       {{#if @model.url}}
         <BaseAudioPlayer
           @model={{@model}}
-          @configuration={{@configuration}}
+          @options={{this.options}}
           as |player|
         >
-          {{#if (eq player.presentationStyle 'waveform-player')}}
+          {{#if (eq this.presentation 'waveform-player')}}
             <WaveformPlayer @model={{@model}} @player={{player}} />
 
-          {{else if (eq player.presentationStyle 'mini-player')}}
+          {{else if (eq this.presentation 'mini-player')}}
             <MiniPlayer @model={{@model}} @player={{player}} />
 
-          {{else if (eq player.presentationStyle 'album-cover')}}
+          {{else if (eq this.presentation 'album-cover')}}
             <AlbumCoverPlayer @model={{@model}} @player={{player}} />
 
-          {{else if (eq player.presentationStyle 'trim-editor')}}
+          {{else if (eq this.presentation 'trim-editor')}}
             <TrimEditor @model={{@model}} @player={{player}} />
 
-          {{else if (eq player.presentationStyle 'playlist-row')}}
+          {{else if (eq this.presentation 'playlist-row')}}
             <PlaylistRow @model={{@model}} @player={{player}} />
 
           {{else}}
@@ -615,7 +644,7 @@ export class AudioField extends FieldDef {
                 src={{@model.url}}
                 {{on 'play' player.handlePlay}}
                 {{on 'pause' player.handlePause}}
-                {{on 'timeupdate' player.handleTimeUpdate}}
+                {{on 'timeupdate' player.handleTimeUpdateWithTrim}}
                 {{on 'loadedmetadata' player.handleLoadedMetadata}}
               >
                 <track kind='captions' />
@@ -643,8 +672,8 @@ export class AudioField extends FieldDef {
                     {{#if (and @model.fileSize player.audioDuration)}}
                       <span> • </span>
                     {{/if}}
-                    {{#if player.audioDuration}}
-                      <span>{{player.formatTime player.audioDuration}}</span>
+                    {{#if player.displayDuration}}
+                      <span>{{player.formatTime player.displayDuration}}</span>
                     {{/if}}
                   </div>
                 </div>
@@ -668,21 +697,21 @@ export class AudioField extends FieldDef {
                   <input
                     type='range'
                     min='0'
-                    max={{player.audioDuration}}
-                    value={{player.currentTime}}
+                    max={{player.displayDuration}}
+                    value={{player.displayCurrentTime}}
                     {{on 'input' player.handleSeek}}
                     class='seek-bar'
                     data-test-audio-seek-bar
                     aria-label='Audio seek bar'
                   />
                   <div class='time-display'>
-                    <span>{{player.formatTime player.currentTime}}</span>
-                    <span>{{player.formatTime player.audioDuration}}</span>
+                    <span>{{player.formatTime player.displayCurrentTime}}</span>
+                    <span>{{player.formatTime player.displayDuration}}</span>
                   </div>
                 </div>
               {{/if}}
 
-              {{#if player.showVolume}}
+              {{#if this.options.showVolume}}
                 <VolumeControl
                   @volume={{player.volume}}
                   @isMuted={{player.isMuted}}
@@ -691,12 +720,14 @@ export class AudioField extends FieldDef {
                 />
               {{/if}}
 
-              {{#if (or player.showSpeedControl player.showLoopControl)}}
+              {{#if
+                (or this.options.showSpeedControl this.options.showLoopControl)
+              }}
                 <div
                   class='advanced-controls'
                   data-test-audio-advanced-controls
                 >
-                  {{#if player.showSpeedControl}}
+                  {{#if this.options.showSpeedControl}}
                     <label class='control-label' data-test-audio-speed-control>
                       <span>Speed:</span>
                       <div class='speed-select'>
@@ -724,7 +755,7 @@ export class AudioField extends FieldDef {
                     </label>
                   {{/if}}
 
-                  {{#if player.showLoopControl}}
+                  {{#if this.options.showLoopControl}}
                     <label
                       class='control-label checkbox-label'
                       data-test-audio-loop-control
@@ -978,3 +1009,5 @@ export class AudioField extends FieldDef {
 
   static edit = AudioFieldEdit;
 }
+
+export default AudioField;

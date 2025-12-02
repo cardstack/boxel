@@ -5,12 +5,12 @@ import { htmlSafe } from '@ember/template';
 import { Button, IconButton } from '@cardstack/boxel-ui/components';
 import PlayIcon from '@cardstack/boxel-icons/play';
 import PauseIcon from '@cardstack/boxel-icons/pause';
-import type { BaseAudioPlayer } from './base-audio-player';
+import type { BaseAudioPlayer, AudioFieldModel } from './base-audio-player';
 
 interface MiniPlayerSignature {
   Args: {
-    model: any;
-    player: BaseAudioPlayer<any>;
+    model: AudioFieldModel;
+    player: BaseAudioPlayer;
   };
 }
 
@@ -22,7 +22,7 @@ export class MiniPlayer extends GlimmerComponent<MiniPlayerSignature> {
         src={{@model.url}}
         {{on 'play' @player.handlePlay}}
         {{on 'pause' @player.handlePause}}
-        {{on 'timeupdate' @player.handleTimeUpdate}}
+        {{on 'timeupdate' @player.handleTimeUpdateWithTrim}}
         {{on 'loadedmetadata' @player.handleLoadedMetadata}}
       >
         <track kind='captions' />
@@ -78,9 +78,9 @@ export class MiniPlayer extends GlimmerComponent<MiniPlayerSignature> {
       </div>
 
       <div class='mini-time'>
-        {{@player.formatTime @player.currentTime}}
+        {{@player.formatTime @player.displayCurrentTime}}
         <span class='time-separator'>/</span>
-        {{@player.formatTime @player.audioDuration}}
+        {{@player.formatTime @player.displayDuration}}
       </div>
 
       {{#if @player.audioDuration}}

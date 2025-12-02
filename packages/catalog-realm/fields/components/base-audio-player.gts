@@ -3,22 +3,62 @@ import { action } from '@ember/object';
 import { modifier } from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
 
-// ² Component signature for proper typing
-interface BaseAudioPlayerSignature<T> {
+// Type definitions for AudioField model
+export interface AudioFieldModel {
+  url?: string;
+  filename?: string;
+  mimeType?: string;
+  duration?: number;
+  fileSize?: number;
+  title?: string;
+  artist?: string;
+  waveformData?: string;
+  trimStart?: number;
+  trimEnd?: number;
+  playbackRate?: number;
+  loopEnabled?: boolean;
+  loopStart?: number;
+  loopEnd?: number;
+  displayTitle?: string;
+}
+
+export type AudioPresentationStyle =
+  | 'default'
+  | 'inline-player'
+  | 'waveform-player'
+  | 'mini-player'
+  | 'album-cover'
+  | 'trim-editor'
+  | 'playlist-row';
+
+export interface AudioFieldOptions {
+  showVolume?: boolean;
+  showWaveform?: boolean;
+  showSpeedControl?: boolean;
+  showLoopControl?: boolean;
+  showPlayCount?: boolean;
+  showLikeButton?: boolean;
+  enableTrimming?: boolean;
+  compactMode?: boolean;
+}
+
+export interface AudioFieldConfiguration {
+  presentation?: AudioPresentationStyle;
+  options?: AudioFieldOptions;
+}
+
+interface BaseAudioPlayerSignature {
   Args: {
-    model: any;
-    configuration?: any;
+    model: AudioFieldModel;
+    options?: AudioFieldOptions;
+    configuration?: AudioFieldConfiguration;
   };
   Blocks: {
-    default: [BaseAudioPlayer<T>];
+    default: [BaseAudioPlayer];
   };
 }
 
-// ² Base audio player class with shared state and logic
-export class BaseAudioPlayer<T> extends GlimmerComponent<
-  BaseAudioPlayerSignature<T>
-> {
-  // ³ Shared reactive state
+export class BaseAudioPlayer extends GlimmerComponent<BaseAudioPlayerSignature> {
   @tracked isPlaying = false;
   @tracked currentTime = 0;
   @tracked audioDuration = 0;
@@ -29,23 +69,29 @@ export class BaseAudioPlayer<T> extends GlimmerComponent<
   @tracked trimStart = 0;
   @tracked trimEnd = 100; // Percentage
 
-  // ⁴ Real waveform data
   @tracked waveformBars: number[] = [];
 
-  // ⁵ Audio element reference
   audioElement: HTMLAudioElement | null = null;
 
-  // ⁶ Internal flag to prevent concurrent waveform generation
   private _isGeneratingWaveform = false;
 
-  // ⁷ Waveform display logic
-  get displayWaveform() {
+  // Type-safe model accessor
+  get model(): AudioFieldModel {
+    return this.args.model;
+  }
+
+  // Type-safe options accessor
+  get options(): AudioFieldOptions {
+    return this.args.options ?? {};
+  }
+
+  get displayWaveform(): number[] {
     if (this.waveformBars.length > 0) {
       return this.waveformBars;
     }
-    if ((this.args as any).model?.waveformData) {
+    if (this.model.waveformData) {
       try {
-        return JSON.parse((this.args as any).model.waveformData);
+        return JSON.parse(this.model.waveformData);
       } catch {
         return this.generateFallbackWaveform();
       }
@@ -53,39 +99,41 @@ export class BaseAudioPlayer<T> extends GlimmerComponent<
     return this.generateFallbackWaveform();
   }
 
-  // ⁸ Fallback waveform generator
-  generateFallbackWaveform() {
+  generateFallbackWaveform(): number[] {
     return Array.from({ length: 80 }, () => 20 + Math.random() * 80);
   }
 
-  // ⁹ Audio element setup modifier
   setupAudio = modifier((element: HTMLAudioElement) => {
     this.audioElement = element;
 
-    // Generate real waveform when audio is loaded
-    if ((this.args as any).model?.url && this.waveformBars.length === 0) {
+    if (this.model.url && this.waveformBars.length === 0) {
       setTimeout(() => {
-        this.generateRealWaveform((this.args as any).model.url);
+        this.generateRealWaveform(this.model.url!);
       }, 0);
     }
 
     return () => {
-      this.audioElement = null;
+      if (this.audioElement) {
+        // Pause the audio
+        this.audioElement.pause();
+        // Reset playback position
+        this.audioElement.currentTime = 0;
+      }
+
+      // Reset all playback state
+      this.isPlaying = false;
+      this.currentTime = 0;
     };
   });
 
-  // ¹⁰ Real waveform generation using Web Audio API
   async generateRealWaveform(url: string) {
-    // Prevent multiple simultaneous generations
     if (this._isGeneratingWaveform) return;
     this._isGeneratingWaveform = true;
 
     try {
-      // Create audio context
       const audioContext = new (window.AudioContext ||
         (window as any).webkitAudioContext)();
 
-      // Fetch audio file
       const response = await fetch(url, { mode: 'cors' });
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -94,9 +142,8 @@ export class BaseAudioPlayer<T> extends GlimmerComponent<
       const arrayBuffer = await response.arrayBuffer();
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
-      // Get the first channel data
       const rawData = audioBuffer.getChannelData(0);
-      const samples = 80; // Number of bars
+      const samples = 80;
       const blockSize = Math.floor(rawData.length / samples);
       const filteredData: number[] = [];
 
@@ -117,11 +164,11 @@ export class BaseAudioPlayer<T> extends GlimmerComponent<
       this.waveformBars = filteredData;
 
       // Save to model for persistence
-      if ((this.args as any).model) {
-        (this.args as any).model.waveformData = JSON.stringify(filteredData);
+      if (this.model) {
+        (this.model as AudioFieldModel).waveformData =
+          JSON.stringify(filteredData);
       }
 
-      // Close audio context to free resources
       await audioContext.close();
     } catch (error) {
       console.warn('Failed to generate waveform, using fallback:', error);
@@ -131,50 +178,69 @@ export class BaseAudioPlayer<T> extends GlimmerComponent<
     }
   }
 
-  // ¹¹ Playback control actions
   @action
-  togglePlay() {
+  togglePlay(): void {
     if (!this.audioElement) return;
 
     if (this.isPlaying) {
       this.audioElement.pause();
     } else {
+      if (
+        this.model.trimStart != null &&
+        this.audioElement.currentTime < this.model.trimStart
+      ) {
+        this.audioElement.currentTime = this.model.trimStart;
+      }
       this.audioElement.play();
     }
   }
 
   @action
-  handlePlay() {
+  handlePlay(): void {
     this.isPlaying = true;
   }
 
   @action
-  handlePause() {
+  handlePause(): void {
     this.isPlaying = false;
   }
 
   @action
-  handleTimeUpdate(event: Event) {
+  handleTimeUpdate(event: Event): void {
     const audio = event.target as HTMLAudioElement;
     this.currentTime = audio.currentTime;
   }
 
   @action
-  handleLoadedMetadata(event: Event) {
+  handleLoadedMetadata(event: Event): void {
     const audio = event.target as HTMLAudioElement;
     this.audioDuration = audio.duration;
+
+    if (this.model.trimStart != null && this.model.trimEnd != null) {
+      this.trimStart = (this.model.trimStart / audio.duration) * 100;
+      this.trimEnd = (this.model.trimEnd / audio.duration) * 100;
+      // Set audio position to trim start
+      audio.currentTime = this.model.trimStart;
+      this.currentTime = this.model.trimStart;
+    }
   }
 
   @action
-  handleSeek(event: Event) {
+  handleSeek(event: Event): void {
     if (!this.audioElement) return;
     const input = event.target as HTMLInputElement;
-    this.audioElement.currentTime = parseFloat(input.value);
+    const seekValue = parseFloat(input.value);
+
+    // If trimmed, the seek value is relative to the trim start
+    if (this.model.trimStart != null && this.model.trimEnd != null) {
+      this.audioElement.currentTime = this.model.trimStart + seekValue;
+    } else {
+      this.audioElement.currentTime = seekValue;
+    }
   }
 
-  // ¹² Volume control actions
   @action
-  handleVolumeChange(event: Event) {
+  handleVolumeChange(event: Event): void {
     if (!this.audioElement) return;
     const input = event.target as HTMLInputElement;
     this.volume = parseFloat(input.value);
@@ -187,83 +253,120 @@ export class BaseAudioPlayer<T> extends GlimmerComponent<
   }
 
   @action
-  toggleMute() {
+  toggleMute(): void {
     if (!this.audioElement) return;
     this.isMuted = !this.isMuted;
     this.audioElement.muted = this.isMuted;
   }
 
-  // ¹³ Advanced playback actions
   @action
-  skipTime(seconds: number) {
+  skipTime(seconds: number): void {
     if (!this.audioElement) return;
-    this.audioElement.currentTime = Math.max(
-      0,
-      Math.min(this.audioElement.currentTime + seconds, this.audioDuration),
+
+    // Determine boundaries (either trim bounds or full audio bounds)
+    const minTime = this.model.trimStart ?? 0;
+    const maxTime = this.model.trimEnd ?? this.audioDuration;
+
+    const newTime = Math.max(
+      minTime,
+      Math.min(this.audioElement.currentTime + seconds, maxTime),
     );
+    this.audioElement.currentTime = newTime;
   }
 
   @action
-  seekToPosition(index: number) {
+  seekToPosition(index: number): void {
     if (!this.audioElement || !this.audioDuration) return;
-    const position = (index / this.displayWaveform.length) * this.audioDuration;
-    this.audioElement.currentTime = position;
+
+    // Check if we have valid trim values (both must be set and trimEnd > trimStart)
+    const hasTrim =
+      this.model.trimStart != null &&
+      this.model.trimEnd != null &&
+      this.model.trimEnd > this.model.trimStart;
+
+    if (hasTrim) {
+      // If trimmed, seek within the trimmed range
+      const trimDuration = this.model.trimEnd! - this.model.trimStart!;
+      const relativePosition =
+        (index / this.displayWaveform.length) * trimDuration;
+      this.audioElement.currentTime = this.model.trimStart! + relativePosition;
+    } else {
+      // No trim - seek within full audio duration
+      const position =
+        (index / this.displayWaveform.length) * this.audioDuration;
+      this.audioElement.currentTime = position;
+    }
   }
 
   @action
-  handleSpeedChange(selected: any) {
+  handleSpeedChange(selected: { value: number }): void {
     if (!this.audioElement) return;
     this.playbackRate = selected.value;
     this.audioElement.playbackRate = this.playbackRate;
   }
 
   @action
-  toggleLoop() {
+  toggleLoop(): void {
     this.isLooping = !this.isLooping;
     if (this.audioElement) {
       this.audioElement.loop = this.isLooping;
     }
   }
 
-  // ¹⁴ Trim control actions
   @action
-  handleTrimStartChange(event: Event) {
+  handleTrimStartChange(event: Event): void {
     const input = event.target as HTMLInputElement;
-    this.trimStart = parseFloat(input.value);
+    const newValue = parseFloat(input.value);
+    // Ensure start doesn't exceed end
+    this.trimStart = Math.min(newValue, this.trimEnd - 0.1);
   }
 
   @action
-  handleTrimEndChange(event: Event) {
+  handleTrimEndChange(event: Event): void {
     const input = event.target as HTMLInputElement;
-    this.trimEnd = parseFloat(input.value);
+    const newValue = parseFloat(input.value);
+    // Ensure end doesn't go below start
+    this.trimEnd = Math.max(newValue, this.trimStart + 0.1);
   }
 
   @action
-  applyTrim() {
+  applyTrim(): void {
     if (!this.audioElement || !this.audioDuration) return;
 
-    // Save trim values to model
-    (this.args as any).model.trimStart =
-      (this.trimStart / 100) * this.audioDuration;
-    (this.args as any).model.trimEnd =
-      (this.trimEnd / 100) * this.audioDuration;
+    // If sliders are at 0% and 100% (or very close), clear the trim values
+    const isFullRange = this.trimStart <= 0.1 && this.trimEnd >= 99.9;
 
-    // Seek to trim start
-    this.audioElement.currentTime = (this.args as any).model.trimStart;
+    if (isFullRange) {
+      // Clear trim values to indicate no trimming
+      this.args.model.trimStart = undefined;
+      this.args.model.trimEnd = undefined;
+      // Restore original duration
+      this.args.model.duration = this.audioDuration;
+    } else {
+      // Calculate trim values in seconds from the current slider positions
+      const trimStartSeconds = (this.trimStart / 100) * this.audioDuration;
+      const trimEndSeconds = (this.trimEnd / 100) * this.audioDuration;
+
+      // Save trim values as seconds (the model stores seconds, not percentages)
+      this.args.model.trimStart = trimStartSeconds;
+      this.args.model.trimEnd = trimEndSeconds;
+
+      // Update duration to reflect the trimmed length
+      this.args.model.duration = trimEndSeconds - trimStartSeconds;
+    }
+
+    // Keep sliders at their current positions (don't reset)
   }
 
   @action
-  handleTimeUpdateWithTrim(event: Event) {
+  handleTimeUpdateWithTrim(event: Event): void {
     const audio = event.target as HTMLAudioElement;
     this.currentTime = audio.currentTime;
 
     // Handle trimmed playback
-    if (
-      (this.args as any).model?.trimEnd &&
-      audio.currentTime >= (this.args as any).model.trimEnd
-    ) {
-      if (this.isLooping && (this.args as any).model.trimStart) {
-        audio.currentTime = (this.args as any).model.trimStart;
+    if (this.model.trimEnd != null && audio.currentTime >= this.model.trimEnd) {
+      if (this.isLooping && this.model.trimStart != null) {
+        audio.currentTime = this.model.trimStart;
       } else {
         audio.pause();
       }
@@ -272,8 +375,56 @@ export class BaseAudioPlayer<T> extends GlimmerComponent<
 
   // ¹⁵ Computed properties and helpers
   get progressPercentage(): number {
+    // If trimmed, calculate progress relative to the trimmed range
+    if (this.model.trimStart != null && this.model.trimEnd != null) {
+      const trimDuration = this.model.trimEnd - this.model.trimStart;
+      if (trimDuration <= 0) return 0;
+      const relativeTime = Math.max(0, this.currentTime - this.model.trimStart);
+      return Math.min(100, (relativeTime / trimDuration) * 100);
+    }
+    // Otherwise use full duration
     if (!this.audioDuration || this.audioDuration === 0) return 0;
     return (this.currentTime / this.audioDuration) * 100;
+  }
+
+  get hasTrim(): boolean {
+    // Check if we have active trim (either from sliders or saved model)
+    const hasSliderTrim = this.trimStart > 0.1 || this.trimEnd < 99.9;
+    const hasModelTrim =
+      this.model.trimStart != null &&
+      this.model.trimEnd != null &&
+      this.model.trimEnd > this.model.trimStart;
+    return hasSliderTrim || hasModelTrim;
+  }
+
+  get effectiveTrimStart(): number {
+    // Use slider-based value (in seconds) - this reflects current UI state
+    return this.trimStartSeconds;
+  }
+
+  get effectiveTrimEnd(): number {
+    // Use slider-based value (in seconds) - this reflects current UI state
+    return this.trimEndSeconds;
+  }
+
+  get displayDuration(): number {
+    // Show duration based on current trim sliders
+    if (this.hasTrim) {
+      return this.trimDurationSeconds;
+    }
+    return this.audioDuration;
+  }
+
+  get displayCurrentTime(): number {
+    // Show time relative to current trim start
+    if (this.hasTrim) {
+      const relativeTime = Math.max(
+        0,
+        this.currentTime - this.effectiveTrimStart,
+      );
+      return Math.min(relativeTime, this.trimDurationSeconds);
+    }
+    return this.currentTime;
   }
 
   get trimStartSeconds(): number {
@@ -290,14 +441,20 @@ export class BaseAudioPlayer<T> extends GlimmerComponent<
     return this.trimEndSeconds - this.trimStartSeconds;
   }
 
-  // ¹⁶ Helper to check if waveform bar is played
+  get trimStartFormatted(): string {
+    return this.trimStart.toFixed(2);
+  }
+
+  get trimEndFormatted(): string {
+    return this.trimEnd.toFixed(2);
+  }
+
   isBarPlayed = (index: number): boolean => {
     if (!this.audioDuration || !this.displayWaveform.length) return false;
     const barProgress = (index / this.displayWaveform.length) * 100;
     return barProgress <= this.progressPercentage;
   };
 
-  // ¹⁷ Utility formatters
   formatTime(seconds: number): string {
     if (!seconds || isNaN(seconds)) return '0:00';
     const mins = Math.floor(seconds / 60);
@@ -311,36 +468,26 @@ export class BaseAudioPlayer<T> extends GlimmerComponent<
     return `${mb} MB`;
   }
 
-  // ¹⁸ Configuration getters
-  get presentationStyle() {
-    return (
-      (this.args as any).configuration?.presentation?.style ?? 'inline-player'
-    );
+  get presentationStyle(): AudioPresentationStyle {
+    return this.args.configuration?.presentation ?? 'inline-player';
   }
 
-  get showVolume() {
-    return (this.args as any).configuration?.presentation?.showVolume ?? false;
+  get showVolume(): boolean {
+    return this.options.showVolume ?? false;
   }
 
-  get showWaveform() {
-    return (
-      (this.args as any).configuration?.presentation?.showWaveform ?? false
-    );
+  get showWaveform(): boolean {
+    return this.options.showWaveform ?? false;
   }
 
-  get showSpeedControl() {
-    return (
-      (this.args as any).configuration?.presentation?.showSpeedControl ?? false
-    );
+  get showSpeedControl(): boolean {
+    return this.options.showSpeedControl ?? false;
   }
 
-  get showLoopControl() {
-    return (
-      (this.args as any).configuration?.presentation?.showLoopControl ?? false
-    );
+  get showLoopControl(): boolean {
+    return this.options.showLoopControl ?? false;
   }
 
-  // ¹⁹ Template that yields player context
   <template>
     {{yield this}}
   </template>
