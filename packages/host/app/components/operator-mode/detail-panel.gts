@@ -40,6 +40,7 @@ import { type Ready } from '@cardstack/host/resources/file';
 import {
   type ModuleDeclaration,
   isCardOrFieldDeclaration,
+  isCommandDeclaration,
   isReexportCardOrField,
 } from '@cardstack/host/resources/module-contents';
 
@@ -143,6 +144,14 @@ export default class DetailPanel extends Component<Signature> {
     return (
       this.args.cardError ||
       (!this.isModule && !isCardDocumentString(this.args.readyFile.content))
+    );
+  }
+
+  private get showCommandPanel() {
+    return (
+      this.isModule &&
+      this.args.selectedDeclaration &&
+      isCommandDeclaration(this.args.selectedDeclaration)
     );
   }
 
@@ -267,7 +276,7 @@ export default class DetailPanel extends Component<Signature> {
     ) {
       throw new Error(`bug: the selected declaration is not a card definition`);
     }
-    let ref = this.getSelectedDeclarationAsCodeRef();
+    let ref = this.getSelectedDeclarationAsCodeRef;
     let displayName = this.args.selectedDeclaration.cardOrField.displayName;
     let id: NewFileType = 'card-instance';
     this.args.createFile(
@@ -299,7 +308,7 @@ export default class DetailPanel extends Component<Signature> {
     if (!id) {
       throw new Error(`Can only call inherit() on card def or field def`);
     }
-    let ref = this.getSelectedDeclarationAsCodeRef();
+    let ref = this.getSelectedDeclarationAsCodeRef;
     let displayName = this.args.selectedDeclaration.cardOrField.displayName;
     this.args.createFile(
       { id, displayName: capitalize(startCase(id)) },
@@ -321,7 +330,7 @@ export default class DetailPanel extends Component<Signature> {
     ) {
       throw new Error(`bug: the selected declaration is not a card definition`);
     }
-    let ref = this.getSelectedDeclarationAsCodeRef();
+    let ref = this.getSelectedDeclarationAsCodeRef;
     let refURL = internalKeyFor(
       ref,
       this.operatorModeStateService.state.codePath!,
@@ -329,7 +338,7 @@ export default class DetailPanel extends Component<Signature> {
     this.args.openSearch(`carddef:${refURL}`);
   }
 
-  private getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
+  private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
     if (!this.args.selectedDeclaration?.exportName) {
       throw new Error(`bug: only exported cards/fields can be inherited`);
     }
@@ -364,6 +373,14 @@ export default class DetailPanel extends Component<Signature> {
     } else {
       return '';
     }
+  }
+
+  private get selectedDeclarationName() {
+    let declaration = this.args.selectedDeclaration;
+    if (!declaration) {
+      return '';
+    }
+    return declaration.exportName ?? declaration.localName ?? '[No Name Found]';
   }
 
   private get buildSelectorItems(): SelectorItem[] {
@@ -540,6 +557,24 @@ export default class DetailPanel extends Component<Signature> {
               {{/if}}
             {{/let}}
           {{/if}}
+        </PanelSection>
+      {{else if this.showCommandPanel}}
+        <PanelSection as |PanelHeader|>
+          <PanelHeader
+            aria-label='Command Panel Header'
+            data-test-command-panel-header
+          >
+            Command
+          </PanelHeader>
+          <ModuleDefinitionContainer
+            @title='Command'
+            @fileURL={{@readyFile.url}}
+            @name={{this.selectedDeclarationName}}
+            @fileExtension={{this.fileExtension}}
+            @isActive={{true}}
+            @actions={{this.definitionActions}}
+            @infoText={{this.lastModified.value}}
+          />
         </PanelSection>
       {{else if this.showDetailsPanel}}
         <PanelSection as |PanelHeader|>
