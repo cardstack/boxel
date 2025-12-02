@@ -77,6 +77,7 @@ export function buildPrerenderManagerApp(options?: {
     realms: new Map(),
     lastAccessByRealm: new Map(),
   };
+  let lastRegistrySnapshot: string | undefined;
 
   const multiplex = Math.max(1, Number(process.env.PRERENDER_MULTIPLEX ?? 1));
   const proxyTimeoutMs = Math.max(
@@ -145,6 +146,23 @@ export function buildPrerenderManagerApp(options?: {
     );
   }
 
+  function logRegistryIfChanged(reason: string) {
+    let snapshot = JSON.stringify({
+      servers: [...registry.servers.values()].map((s) => ({
+        url: s.url,
+        status: s.status,
+        capacity: s.capacity,
+        activeRealms: Array.from(s.activeRealms),
+        warmedRealms: Array.from(s.warmedRealms),
+      })),
+      realms: [...registry.realms.entries()],
+    });
+    if (snapshot !== lastRegistrySnapshot) {
+      lastRegistrySnapshot = snapshot;
+      log.debug('Registry changed (%s): %s', reason, snapshot);
+    }
+  }
+
   function cleanupAssignments(): void {
     for (let [realm, list] of registry.realms) {
       let filtered: string[] = [];
@@ -158,20 +176,19 @@ export function buildPrerenderManagerApp(options?: {
       }
       if (filtered.length === 0) {
         registry.realms.delete(realm);
+        logRegistryIfChanged('cleanup removed realm');
         continue;
       }
       if (filtered.length !== list.length) {
         registry.realms.set(realm, filtered);
+        logRegistryIfChanged('cleanup pruned assignments');
       }
     }
   }
 
   function pruneServer(url: string) {
     registry.servers.delete(url);
-    log.debug(
-      'Registry after prune: %s',
-      JSON.stringify(Array.from(registry.servers.keys())),
-    );
+    logRegistryIfChanged('prune server');
     for (let [realm, list] of registry.realms) {
       let idx;
       while ((idx = list.indexOf(url)) !== -1) {
@@ -196,12 +213,26 @@ export function buildPrerenderManagerApp(options?: {
       `received heartbeat from ${url} status=${status} capacity=${capacity} warmedRealms=${warmedRealms ? warmedRealms.join() : 'none'}`,
     );
     let existing = registry.servers.get(url);
+    let changed = false;
     if (existing) {
       let warmSet = new Set(warmedRealms ?? []);
       existing.lastSeenAt = now();
-      existing.capacity = capacity || existing.capacity;
-      existing.status = status ?? 'active';
-      existing.warmedRealms = warmSet;
+      if (capacity && capacity !== existing.capacity) {
+        existing.capacity = capacity;
+        changed = true;
+      }
+      if (status && status !== existing.status) {
+        existing.status = status;
+        changed = true;
+      }
+      if (
+        warmedRealms &&
+        (warmedRealms.some((r) => !existing.warmedRealms.has(r)) ||
+          existing.warmedRealms.size !== warmSet.size)
+      ) {
+        existing.warmedRealms = warmSet;
+        changed = true;
+      }
       if (warmSet.size === 0) {
         // server restarted; clear tracked active realms and mappings
         for (let realm of [...existing.activeRealms]) {
@@ -237,10 +268,9 @@ export function buildPrerenderManagerApp(options?: {
           }
         }
       }
-      log.debug(
-        'Registry after heartbeat: %s',
-        JSON.stringify(Array.from(registry.servers.keys())),
-      );
+      if (changed) {
+        logRegistryIfChanged('heartbeat update');
+      }
       return existing;
     }
 
@@ -255,10 +285,7 @@ export function buildPrerenderManagerApp(options?: {
       lastAssignedAt: 0,
     };
     registry.servers.set(url, info);
-    log.debug(
-      'Registry after heartbeat: %s',
-      JSON.stringify(Array.from(registry.servers.keys())),
-    );
+    logRegistryIfChanged('heartbeat add');
     return info;
   }
 
