@@ -74,5 +74,5 @@ function shutdown(signal: NodeJS.Signals) {
   // process manager to terminate after grace period.
 }
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
