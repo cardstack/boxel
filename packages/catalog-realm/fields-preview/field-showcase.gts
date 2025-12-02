@@ -2021,10 +2021,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       }
 
       .demo-display-large > :first-child {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        flex: 1;
+        width: 100%;
       }
 
       /* Collapsible Section Styles */
@@ -2291,10 +2288,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       }
 
       .example-demo > :first-child {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        flex: 1;
+        width: 100%;
       }
 
       /* Responsive adjustments for hero */
