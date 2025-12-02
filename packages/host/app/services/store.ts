@@ -587,6 +587,16 @@ export default class StoreService extends Service implements StoreInterface {
     this.liveQueryRegistry.add(liveQuery);
     if (options.seedRealmHref) {
       this.registerLiveQueryRealm(liveQuery, options.seedRealmHref);
+    } else if (options.seedSearchURL) {
+      try {
+        let { realm } = this.parseSearchURL(options.seedSearchURL);
+        this.registerLiveQueryRealm(liveQuery, realm.href);
+      } catch (e) {
+        storeLogger.warn(
+          `unable to register live query realm from seedSearchURL ${options.seedSearchURL}`,
+          e,
+        );
+      }
     }
     return liveQuery;
   }
@@ -627,12 +637,38 @@ export default class StoreService extends Service implements StoreInterface {
   markLiveQueriesStaleForRealm(realmHref: string): void {
     let normalized = this.normalizeRealmHref(realmHref);
     let tracked = this.liveQueryRealmMap.get(normalized);
-    if (!tracked || tracked.size === 0) {
-      return;
+    let candidates: Set<LiveQuery> | undefined = tracked;
+    // Fallback: if we don't have any registered queries for this realm (e.g.
+    // seed data without an explicit realm assignment), fall back to scanning
+    // the entire registry and matching based on searchURL.
+    if (!candidates || candidates.size === 0) {
+      candidates = new Set(
+        [...this.liveQueryRegistry].filter((liveQuery) => {
+          if (liveQuery.isDestroyed) {
+            return false;
+          }
+          let realmForQuery = this.liveQueryRealmAssignments.get(liveQuery);
+          if (!realmForQuery && liveQuery.searchURL) {
+            try {
+              let { realm } = this.parseSearchURL(liveQuery.searchURL);
+              realmForQuery = this.normalizeRealmHref(realm.href);
+            } catch {
+              realmForQuery = undefined;
+            }
+          }
+          return realmForQuery === normalized;
+        }),
+      );
+      if (candidates.size === 0) {
+        return;
+      }
     }
-    for (let liveQuery of Array.from(tracked)) {
+    storeLogger.debug(
+      `marking live queries stale for ${normalized}; candidates=${candidates.size}`,
+    );
+    for (let liveQuery of Array.from(candidates)) {
       if (liveQuery.isDestroyed) {
-        tracked.delete(liveQuery);
+        candidates.delete(liveQuery);
         continue;
       }
       let marked = liveQuery.markStale();
@@ -643,8 +679,29 @@ export default class StoreService extends Service implements StoreInterface {
         storeLogger.warn('live query refresh failed', error);
       });
     }
-    if (tracked.size === 0) {
+    if (tracked && tracked.size === 0) {
       this.liveQueryRealmMap.delete(normalized);
+    }
+  }
+
+  private markAllLiveQueriesStale(): void {
+    if (this.liveQueryRegistry.size === 0) {
+      return;
+    }
+    storeLogger.debug(
+      `marking all live queries stale (count=${this.liveQueryRegistry.size})`,
+    );
+    for (let liveQuery of Array.from(this.liveQueryRegistry)) {
+      if (liveQuery.isDestroyed) {
+        continue;
+      }
+      let marked = liveQuery.markStale();
+      if (!marked) {
+        continue;
+      }
+      void liveQuery.refresh({ force: true }).catch((error) => {
+        storeLogger.warn('live query refresh failed', error);
+      });
     }
   }
 
@@ -830,7 +887,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   private handleInvalidations = (
     event: RealmEventContent,
-    realmHref?: string,
+    realmHref: string,
   ) => {
     if (event.eventName !== 'index') {
       return;
@@ -840,6 +897,7 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
     let invalidations = event.invalidations as string[];
+    let resolvedRealmHref = realmHref;
 
     if (invalidations.find((i) => hasExecutableExtension(i))) {
       // the invalidation included code changes too. in this case we
@@ -913,10 +971,22 @@ export default class StoreService extends Service implements StoreInterface {
           `ignoring invalidation ${invalidation} because we did not previously try to load it`,
         );
       }
+      if (!resolvedRealmHref) {
+        try {
+          let maybeRealm = this.realm.realmOfURL(new URL(invalidation));
+          resolvedRealmHref = maybeRealm?.href ?? resolvedRealmHref;
+        } catch {
+          // ignore invalid URL
+        }
+      }
     }
-    if (realmHref) {
-      this.markLiveQueriesStaleForRealm(realmHref);
+    if (resolvedRealmHref) {
+      this.markLiveQueriesStaleForRealm(resolvedRealmHref);
     }
+    // Always fall back to marking all live queries stale to ensure query-backed
+    // fields refresh even when we cannot resolve the realm or when tracking
+    // was not established.
+    this.markAllLiveQueriesStale();
   };
 
   private loadInstanceTask = task(
