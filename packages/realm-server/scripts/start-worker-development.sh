@@ -4,7 +4,7 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS_DIR/wait-for-prerender.sh"
 
 wait_for_postgres
-PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
+PRERENDER_URL="${PRERENDER_URL:-http://localhost:4222}"
 wait_for_prerender "$PRERENDER_URL"
 
 DEFAULT_CATALOG_REALM_URL='http://localhost:4201/catalog/'
