@@ -45,6 +45,7 @@
   --boxel-line-height-md: calc(28 / 20); /* 1.4 */
   --boxel-line-height: calc(22 / 16); /* 1.375 */
   --boxel-line-height-sm: calc(18 / 13); /* 1.3846 (body) */
+  --boxel-line-height-xs: calc(15 / 11); /* 1.3636 */
 
   /* letter-spacing */
   /* Note: the px conversion is using default font_size = 16px (1rem) */
@@ -250,9 +251,14 @@
   /* font-family */
   --boxel-body-font-family: var(--boxel-font-family);
   --boxel-heading-font-family: var(--boxel-font-family);
+  --boxel-section-heading-font-family: var(--boxel-font-family);
+  --boxel-subheading-font-family: var(--boxel-font-family);
+  --boxel-caption-font-family: var(--boxel-font-family);
 
   /* font-size */
   --boxel-heading-font-size: var(--boxel-font-size-lg); /* 22px */
+  --boxel-section-heading-font-size: var(--boxel-font-size-md); /* 18px */
+  --boxel-subheading-font-size: var(--boxel-font-size); /* 16px */
   --boxel-body-font-size: var(--boxel-font-size-sm); /* 14px */
   --boxel-caption-font-size: var(--boxel-font-size-xs); /* 12px */
 
@@ -260,8 +266,13 @@
   --boxel-body-line-height: var(--boxel-line-height-sm);
   --boxel-heading-line-height: var(--boxel-line-height-lg);
   --boxel-caption-line-height: var(--boxel-line-height-xs);
+  --boxel-section-heading-line-height: var(--boxel-line-height-md);
+  --boxel-subheading-line-height: var(--boxel-line-height);
 
   /* font-weight */
   --boxel-heading-font-weight: 700;
+  --boxel-section-heading-font-weight: 500;
+  --boxel-subheading-font-weight: 500;
   --boxel-body-font-weight: 400;
+  --boxel-caption-font-weight: 500;
 }

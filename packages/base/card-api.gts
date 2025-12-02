@@ -2342,7 +2342,10 @@ export class CardInfoField extends FieldDef {
   @field title = contains(StringField);
   @field description = contains(StringField);
   @field thumbnailURL = contains(MaybeBase64Field);
-  @field theme = linksTo(() => Theme);
+  @field theme = linksTo(() => Theme, {
+    description:
+      "Reference to the Theme card (by non-Theme cards) whose CSS variables style this card's preview.",
+  });
   @field notes = contains(MarkdownField);
 }
 
@@ -2367,7 +2370,10 @@ export class CardDef extends BaseDef {
     notifyCardTracking(this);
   }
   @field id = contains(ReadOnlyField);
-  @field cardInfo = contains(CardInfoField);
+  @field cardInfo = contains(CardInfoField, {
+    description:
+      'Persistent metadata (title, description, thumbnailURL) used for rendering cards in listings and previews.',
+  });
   @field title = contains(StringField, {
     computeVia: function (this: CardDef) {
       return this.cardInfo.title?.trim()?.length
@@ -2463,8 +2469,14 @@ export class CssImportField extends StringField {
 export class Theme extends CardDef {
   static displayName = 'Theme';
   static icon = ThemeIcon;
-  @field cssVariables = contains(CSSField);
-  @field cssImports = containsMany(CssImportField);
+  @field cssVariables = contains(CSSField, {
+    description:
+      'CSS variable definitions that build on shadcn variables (typically for :root and .dark selectors) injected into the CardContainer.',
+  });
+  @field cssImports = containsMany(CssImportField, {
+    description:
+      'CSS links (e.g. Google Fonts) imported via the CardContainer.',
+  });
 
   [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
     let menuItems = super[getCardMenuItems](params);
