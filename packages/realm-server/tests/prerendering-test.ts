@@ -635,14 +635,15 @@ module(basename(__filename), function () {
       ]);
     };
 
-    hooks.before(async () => {
+    hooks.before(async function () {
       prerenderer = new Prerenderer({
         secretSeed: realmSecretSeed,
         maxPages: 2,
         serverURL: prerenderServerURL,
       });
     });
-    hooks.after(async () => {
+
+    hooks.after(async function () {
       await prerenderer.stop();
     });
 

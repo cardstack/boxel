@@ -4,7 +4,7 @@ import type { VisitCardsInput } from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import ReadTextFileCommand from './read-text-file';
+import ReadSourceCommand from './read-source';
 import { SearchCardsByQueryCommand } from './search-cards';
 import WriteTextFileCommand from './write-text-file';
 
@@ -35,8 +35,8 @@ export default class TransformCardsCommand extends HostBaseCommand<
       this.loaderService.loader,
     );
     let visitPromises = cardIds.map(async (cardId: string) => {
-      let readTextFileCommand = new ReadTextFileCommand(this.commandContext);
-      let { content } = await readTextFileCommand.execute({
+      let readSourceCommand = new ReadSourceCommand(this.commandContext);
+      let { content } = await readSourceCommand.execute({
         path: cardId + '.json',
       });
 

@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const DEFAULT_CARD_RENDER_TIMEOUT_MS = 30_000;
 
 let sqlSchema = fs.readFileSync(getLatestSchemaFile(), 'utf8');
 
@@ -37,7 +38,9 @@ module.exports = function (environment) {
     serverEchoDebounceMs: 5000,
     loginMessageTimeoutMs: 1000,
     minSaveTaskDurationMs: 1000,
-    renderTimeoutMs: 30_000,
+    cardRenderTimeout: Number(
+      process.env.RENDER_TIMEOUT_MS ?? DEFAULT_CARD_RENDER_TIMEOUT_MS,
+    ),
     iconsURL: process.env.ICONS_URL || 'https://boxel-icons.boxel.ai',
     publishedRealmBoxelSpaceDomain:
       process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost:4201',
