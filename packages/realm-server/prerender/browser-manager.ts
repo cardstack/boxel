@@ -54,8 +54,8 @@ export class BrowserManager {
   }
 
   async cleanupUserDataDirs(): Promise<void> {
-    let activeDir = this.#browser ? this.#browserUserDataDir : undefined;
-    if (this.#browser && !activeDir) {
+    let activeDir = this.#browserUserDataDir;
+    if (!activeDir && this.#browser) {
       // If Puppeteer is running but we cannot locate its profile, avoid deleting.
       return;
     }
