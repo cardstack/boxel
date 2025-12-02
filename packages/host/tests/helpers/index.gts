@@ -714,16 +714,11 @@ export async function setupIntegrationTestRealm({
   mockMatrixUtils: MockUtils;
   usePrerenderer?: boolean;
 }) {
-<<<<<<< HEAD
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
   setupAuthEndpoints({
     [resolvedRealmURL]: deriveTestUserPermissions(permissions),
   });
-  return await setupTestRealm({
-=======
-  setupAuthEndpoints();
   let result = await setupTestRealm({
->>>>>>> 0c37fdd78 (Let query fields update reactively)
     contents,
     realmURL: resolvedRealmURL,
     isAcceptanceTest: false,
