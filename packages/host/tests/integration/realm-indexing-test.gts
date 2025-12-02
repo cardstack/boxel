@@ -4117,6 +4117,9 @@ module(`Integration | realm indexing`, function (hooks) {
         'posts/ignore-me-2.json': {
           data: { meta: { adoptsFrom: baseCardRef } },
         },
+        '.git/should-not-index.json': {
+          data: { meta: { adoptsFrom: baseCardRef } },
+        },
         'post.json': { data: { meta: { adoptsFrom: baseCardRef } } },
         'dir/card.json': { data: { meta: { adoptsFrom: baseCardRef } } },
         '.gitignore': `
@@ -4165,6 +4168,16 @@ posts/please-ignore-me.json
         card,
         undefined,
         'instance does not exist because file is ignored',
+      );
+    }
+    {
+      let card = await indexer.cardDocument(
+        new URL(`${testRealmURL}.git/should-not-index`),
+      );
+      assert.strictEqual(
+        card,
+        undefined,
+        '.git directory entries are ignored',
       );
     }
     {
