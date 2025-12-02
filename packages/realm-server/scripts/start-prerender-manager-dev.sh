@@ -8,4 +8,5 @@ NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   ts-node \
   --transpileOnly prerender/manager-server \
-  --port=${PRERENDER_MANAGER_PORT:-4222}
+  --port=${PRERENDER_MANAGER_PORT:-4222} \
+  --exit-on-signal
