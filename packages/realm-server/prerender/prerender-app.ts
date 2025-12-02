@@ -4,6 +4,7 @@ import type { Server } from 'http';
 import { createServer } from 'http';
 import * as Sentry from '@sentry/node';
 import {
+  Deferred,
   logger,
   type RealmPermissions,
   type RenderRouteOptions,
@@ -18,13 +19,24 @@ import {
 } from '../middleware';
 import { Prerenderer } from './index';
 import { resolvePrerenderManagerURL } from './config';
+import {
+  PRERENDER_SERVER_DRAINING_STATUS_CODE,
+  PRERENDER_SERVER_STATUS_DRAINING,
+  PRERENDER_SERVER_STATUS_HEADER,
+} from './prerender-constants';
 
 let log = logger('prerender-server');
 const defaultPrerenderServerPort = 4221;
 
 export function buildPrerenderApp(
   secretSeed: string,
-  options: { serverURL: string; maxPages?: number; silent?: boolean },
+  options: {
+    serverURL: string;
+    maxPages?: number;
+    silent?: boolean;
+    isDraining?: () => boolean;
+    drainingPromise?: Promise<void>;
+  },
 ): {
   app: Koa<Koa.DefaultState, Koa.Context>;
   prerenderer: Prerenderer;
@@ -41,8 +53,28 @@ export function buildPrerenderApp(
     serverURL: options.serverURL,
   });
 
-  router.head('/', livenessCheck);
+  router.head('/', (ctxt: Koa.Context) => {
+    if (options.isDraining?.()) {
+      ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+      ctxt.set(
+        PRERENDER_SERVER_STATUS_HEADER,
+        PRERENDER_SERVER_STATUS_DRAINING,
+      );
+      return;
+    }
+    return livenessCheck(ctxt, async () => undefined);
+  });
   router.get('/', async (ctxt: Koa.Context) => {
+    if (options.isDraining?.()) {
+      ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+      ctxt.set(
+        PRERENDER_SERVER_STATUS_HEADER,
+        PRERENDER_SERVER_STATUS_DRAINING,
+      );
+      ctxt.set('Content-Type', 'application/json');
+      ctxt.body = JSON.stringify({ ready: false, draining: true });
+      return;
+    }
     ctxt.set('Content-Type', 'application/json');
     ctxt.body = JSON.stringify({ ready: true });
     ctxt.status = 200;
@@ -78,6 +110,7 @@ export function buildPrerenderApp(
       errorContext: string;
       execute: (args: PrerenderArgs) => Promise<PrerenderExecResult<R>>;
       afterResponse?: (url: string, response: R) => void;
+      drainingPromise?: Promise<void>;
     },
   ) {
     router.post(path, async (ctxt: Koa.Context) => {
@@ -136,13 +169,42 @@ export function buildPrerenderApp(
         }
 
         let start = Date.now();
-        let { response, timings, pool } = await options.execute({
-          realm,
-          url,
-          userId,
-          permissions,
-          renderOptions,
-        });
+        let execPromise = options
+          .execute({
+            realm,
+            url,
+            userId,
+            permissions,
+            renderOptions,
+          })
+          .then((result) => ({ result }));
+        let drainPromise = options.drainingPromise
+          ? options.drainingPromise.then(() => ({ draining: true as const }))
+          : null;
+        let raceResult = drainPromise
+          ? await Promise.race([execPromise, drainPromise])
+          : await execPromise;
+        if ('draining' in raceResult) {
+          // Ensure execute completion does not raise unhandled rejections after we respond.
+          execPromise.catch((e) =>
+            log.debug('prerender execute settled after drain (ignored):', e),
+          );
+          ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+          ctxt.set(
+            PRERENDER_SERVER_STATUS_HEADER,
+            PRERENDER_SERVER_STATUS_DRAINING,
+          );
+          ctxt.body = {
+            errors: [
+              {
+                status: PRERENDER_SERVER_DRAINING_STATUS_CODE,
+                message: 'Prerender server draining',
+              },
+            ],
+          };
+          return;
+        }
+        let { response, timings, pool } = raceResult.result;
         let totalMs = Date.now() - start;
         let poolFlags = Object.entries({
           reused: pool.reused,
@@ -209,6 +271,7 @@ export function buildPrerenderApp(
     warnTimeoutMessage: (url) => `render of ${url} timed out`,
     errorContext: '/prerender-card',
     execute: (args) => prerenderer.prerenderCard(args),
+    drainingPromise: options.drainingPromise,
     afterResponse: (url, response) => {
       const cardResponse = response as RenderResponse;
       if (cardResponse.error) {
@@ -230,6 +293,7 @@ export function buildPrerenderApp(
     warnTimeoutMessage: (url) => `module render of ${url} timed out`,
     errorContext: '/prerender-module',
     execute: (args) => prerenderer.prerenderModule(args),
+    drainingPromise: options.drainingPromise,
     afterResponse: (url, response) => {
       const moduleResponse = response as ModuleRenderResponse;
       if (moduleResponse.status === 'error' && moduleResponse.error) {
@@ -241,6 +305,29 @@ export function buildPrerenderApp(
   });
 
   app
+    .use((ctxt: Koa.Context, next: Koa.Next) => {
+      if (
+        options.isDraining?.() &&
+        ctxt.method === 'POST' &&
+        ctxt.path.startsWith('/prerender-')
+      ) {
+        ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+        ctxt.set(
+          PRERENDER_SERVER_STATUS_HEADER,
+          PRERENDER_SERVER_STATUS_DRAINING,
+        );
+        ctxt.body = {
+          errors: [
+            {
+              status: PRERENDER_SERVER_DRAINING_STATUS_CODE,
+              message: 'Prerender server draining',
+            },
+          ],
+        };
+        return;
+      }
+      return next();
+    })
     .use((ctxt: Koa.Context, next: Koa.Next) => {
       log.info(
         `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}`,
@@ -269,35 +356,6 @@ function resolvePrerenderServerURL(port?: number): string {
   return `http://${hostname}:${resolvedPort}`.replace(/\/$/, '');
 }
 
-async function registerWithManager(serverURL: string) {
-  try {
-    const managerURL = resolvePrerenderManagerURL();
-    const capacity = Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 4);
-    let body = {
-      data: {
-        type: 'prerender-server',
-        attributes: {
-          capacity,
-          url: serverURL,
-        },
-      },
-    };
-    await fetch(`${managerURL}/prerender-servers`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/vnd.api+json',
-        Accept: 'application/vnd.api+json',
-      },
-      body: JSON.stringify(body),
-    }).catch((e) => {
-      log.debug('Prerender manager registration request failed:', e);
-    });
-  } catch (e) {
-    // best-effort, but log for visibility
-    log.debug('Error while attempting to register with prerender manager:', e);
-  }
-}
-
 async function unregisterWithManager(serverURL: string) {
   try {
     const managerURL = resolvePrerenderManagerURL();
@@ -320,6 +378,11 @@ export function createPrerenderHttpServer(options?: {
   silent?: boolean;
   port?: number;
 }): Server {
+  let draining = false;
+  let drainingResolved = false;
+  let drainingDeferred = new Deferred<void>();
+  let heartbeatTimer: NodeJS.Timeout | undefined;
+  let isClosing = false;
   let secretSeed = options?.secretSeed ?? process.env.REALM_SECRET_SEED ?? '';
   let silent = options?.silent || process.env.PRERENDER_SILENT === 'true';
   let serverURL = resolvePrerenderServerURL(options?.port);
@@ -327,9 +390,71 @@ export function createPrerenderHttpServer(options?: {
     maxPages: options?.maxPages,
     silent,
     serverURL,
+    isDraining: () => draining,
+    drainingPromise: drainingDeferred.promise,
   });
+  const heartbeatIntervalMs = Math.max(
+    1000,
+    Number(process.env.PRERENDER_HEARTBEAT_INTERVAL_MS ?? 5000),
+  );
+  const shutdownGraceMs = Math.max(
+    0,
+    Number(process.env.PRERENDER_SHUTDOWN_GRACE_MS ?? 10000),
+  );
+
+  async function sendHeartbeat(status?: 'active' | 'draining') {
+    try {
+      const managerURL = resolvePrerenderManagerURL();
+      const capacity = Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 4);
+      let body = {
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity,
+            url: serverURL,
+            status: status ?? (draining ? 'draining' : 'active'),
+            warmedRealms: prerenderer.getWarmRealms(),
+          },
+        },
+      };
+      log.debug(
+        `POST heartbeat to ${managerURL}/prerender-servers with body:\n${JSON.stringify(body, null, 2)}`,
+      );
+      await fetch(`${managerURL}/prerender-servers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/vnd.api+json',
+          Accept: 'application/vnd.api+json',
+        },
+        body: JSON.stringify(body),
+      }).catch((e) => {
+        log.debug('Prerender manager heartbeat request failed:', e);
+      });
+    } catch (e) {
+      // best-effort, but log for visibility
+      log.debug('Error while attempting heartbeat with prerender manager:', e);
+    }
+  }
+
+  function startHeartbeatLoop() {
+    if (heartbeatTimer) return;
+    void sendHeartbeat();
+    heartbeatTimer = setInterval(() => {
+      void sendHeartbeat();
+    }, heartbeatIntervalMs);
+    (heartbeatTimer as any).unref?.();
+  }
+
+  function stopHeartbeatLoop() {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = undefined;
+    }
+  }
+
   let server = createServer(app.callback());
   server.on('close', async () => {
+    stopHeartbeatLoop();
     try {
       await prerenderer.stop();
     } catch (e: any) {
@@ -348,10 +473,38 @@ export function createPrerenderHttpServer(options?: {
   // best-effort registration (async, non-blocking)
   server.on('listening', () => {
     try {
-      void registerWithManager(serverURL);
+      startHeartbeatLoop();
     } catch (e) {
       log.debug('Error scheduling registration with prerender manager:', e);
     }
+  });
+  let shutdownHandler = (signal: NodeJS.Signals) => {
+    if (draining) return;
+    log.info(`Received ${signal}; marking prerender server as draining`);
+    draining = true;
+    if (!drainingResolved) {
+      drainingResolved = true;
+      drainingDeferred.fulfill();
+    }
+    stopHeartbeatLoop();
+    void sendHeartbeat('draining');
+    const shutdownTimer = setTimeout(() => {
+      if (isClosing) return;
+      isClosing = true;
+      clearTimeout(shutdownTimer);
+      server.close(() => {
+        log.info(
+          `prerender server HTTP on port ${options?.port ?? defaultPrerenderServerPort} has stopped.`,
+        );
+      });
+    }, shutdownGraceMs);
+    shutdownTimer.unref();
+  };
+  process.on('SIGTERM', shutdownHandler);
+  process.on('SIGINT', shutdownHandler);
+  server.on('close', () => {
+    process.off('SIGTERM', shutdownHandler);
+    process.off('SIGINT', shutdownHandler);
   });
   return server;
 }
