@@ -9,7 +9,9 @@
     "type": "card",
     "attributes": {
       "name": "Table App",
-      "images": [],
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/table-listing/screenshot_01.png"
+      ],
       "summary": "A configurable data table application for displaying and managing card collections in a structured tabular format",
       "cardInfo": {
         "notes": "Features: Configurable field display, computed field support, primitive field filtering, direct card creation, query-based data loading",
