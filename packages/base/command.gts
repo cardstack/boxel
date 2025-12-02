@@ -213,6 +213,7 @@ export class CheckCorrectnessInput extends CardDef {
   @field targetRef = contains(StringField);
   @field fileUrl = contains(StringField);
   @field cardId = contains(StringField);
+  @field roomId = contains(StringField);
 }
 
 export class CorrectnessResultCard extends CardDef {
