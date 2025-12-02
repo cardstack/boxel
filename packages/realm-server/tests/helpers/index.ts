@@ -15,6 +15,7 @@ import type {
   Subscription,
   Plan,
   RealmAdapter,
+  DefinitionLookup,
 } from '@cardstack/runtime-common';
 import {
   Realm,
@@ -40,6 +41,7 @@ import {
   type IndexRunner,
   type Definition,
   type Prerenderer,
+  CachingDefinitionLookup,
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
@@ -209,20 +211,7 @@ async function stopTestPrerenderServer() {
   prerenderServerStart = undefined;
 }
 
-async function getTestPrerenderer(
-  usePrerenderer?: boolean,
-): Promise<Prerenderer> {
-  if (!usePrerenderer) {
-    return {
-      async prerenderCard() {
-        throw new Error(`prerenderer not enabled`);
-      },
-      async prerenderModule() {
-        throw new Error(`prerenderer not enabled`);
-      },
-    };
-  }
-  (globalThis as any).__useHeadlessChromePrerender = true;
+export async function getTestPrerenderer(): Promise<Prerenderer> {
   let url = await startTestPrerenderServer();
   return createRemotePrerenderer(url);
 }
@@ -315,6 +304,7 @@ export async function getFastbootState() {
 
 export async function createRealm({
   dir,
+  definitionLookup,
   fileSystem = {},
   realmURL = testRealm,
   permissions = { '*': ['read'] },
@@ -328,6 +318,7 @@ export async function createRealm({
   disablePrerenderer = false,
 }: {
   dir: string;
+  definitionLookup: DefinitionLookup;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
   realmURL?: string;
   permissions?: RealmPermissions;
@@ -355,12 +346,15 @@ export async function createRealm({
 
   let adapter = new NodeAdapter(dir, enableFileWatcher);
   let worker: Worker | undefined;
+  if (!disablePrerenderer) {
+    (globalThis as any).__useHeadlessChromePrerender = true;
+  }
+  let prerenderer = await getTestPrerenderer();
   if (withWorker) {
     if (!runner) {
       throw new Error(`must provider a QueueRunner when using withWorker`);
     }
     let indexRunner = (await getFastbootState()).getRunner;
-    let prerenderer = await getTestPrerenderer(!disablePrerenderer);
     worker = new Worker({
       indexWriter: new IndexWriter(dbAdapter),
       queue: runner,
@@ -390,6 +384,7 @@ export async function createRealm({
     dbAdapter,
     queue: publisher,
     realmServerMatrixClient,
+    definitionLookup,
   });
   if (worker) {
     virtualNetwork.mount(realm.handle);
@@ -442,7 +437,16 @@ export async function runBaseRealmServer(
   virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 
   let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
-  let prerenderer = await getTestPrerenderer(!disablePrerenderer);
+  if (!disablePrerenderer) {
+    (globalThis as any).__useHeadlessChromePrerender = true;
+  }
+
+  let prerenderer = await getTestPrerenderer();
+  let definitionLookup = new CachingDefinitionLookup(
+    dbAdapter,
+    prerenderer,
+    virtualNetwork,
+  );
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue: runner,
@@ -464,6 +468,7 @@ export async function runBaseRealmServer(
     publisher,
     dbAdapter,
     permissions,
+    definitionLookup,
   });
   // the base realm is public readable so it doesn't need a private network
   virtualNetwork.mount(testBaseRealm.handle);
@@ -474,8 +479,9 @@ export async function runBaseRealmServer(
     username: realmServerTestMatrix.username,
     seed: realmSecretSeed,
   });
+  let realms = [testBaseRealm];
   let testBaseRealmServer = new RealmServer({
-    realms: [testBaseRealm],
+    realms,
     virtualNetwork,
     matrixClient,
     realmServerSecretSeed,
@@ -488,6 +494,7 @@ export async function runBaseRealmServer(
     grafanaSecret,
     serverURL: new URL(localBaseRealmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
+    definitionLookup,
   });
   return testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
 }
@@ -530,7 +537,15 @@ export async function runTestRealmServer({
   disablePrerenderer?: boolean;
 }) {
   let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
-  let prerenderer = await getTestPrerenderer(!disablePrerenderer);
+  if (!disablePrerenderer) {
+    (globalThis as any).__useHeadlessChromePrerender = true;
+  }
+  let prerenderer = await getTestPrerenderer();
+  let definitionLookup = new CachingDefinitionLookup(
+    dbAdapter,
+    prerenderer,
+    virtualNetwork,
+  );
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue: runner,
@@ -556,6 +571,7 @@ export async function runTestRealmServer({
     publisher,
     dbAdapter,
     enableFileWatcher,
+    definitionLookup,
   });
 
   await testRealm.logInToMatrix();
@@ -583,6 +599,7 @@ export async function runTestRealmServer({
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
     domainsForPublishedRealms,
+    definitionLookup,
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   await testRealmServer.start();

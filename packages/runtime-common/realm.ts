@@ -48,7 +48,6 @@ import {
   type LintArgs,
   type LintResult,
   codeRefWithAbsoluteURL,
-  isResolvedCodeRef,
   userInitiatedPriority,
   systemInitiatedPriority,
   userIdFromUsername,
@@ -78,7 +77,6 @@ import {
 } from './router';
 import { InvalidQueryError, assertQuery, parseQuery } from './query';
 import type { Readable } from 'stream';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
 import { getCardDirectoryName } from './helpers/card-directory-name';
@@ -113,9 +111,9 @@ import type {
 } from './atomic-document';
 import { filterAtomicOperations } from './atomic-document';
 import {
-  DefinitionsCache,
   isFilterRefersToNonexistentTypeError,
-} from './definitions-cache';
+  type DefinitionLookup,
+} from './definition-lookup';
 import {
   fetchSessionRoom,
   upsertSessionRoom,
@@ -326,7 +324,7 @@ export class Realm {
   #fullIndexOnStartup = false;
   #fromScratchIndexPriority = systemInitiatedPriority;
   #realmServerMatrixUserId: string;
-  #definitionsCache: DefinitionsCache;
+  #definitionLookup: DefinitionLookup;
   #copiedFromRealm: URL | undefined;
   #sourceCache = new AliasCache<SourceCacheEntry>();
   #moduleCache = new AliasCache<ModuleCacheEntry>();
@@ -365,6 +363,7 @@ export class Realm {
       queue,
       virtualNetwork,
       realmServerMatrixClient,
+      definitionLookup,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -374,6 +373,7 @@ export class Realm {
       queue: QueuePublisher;
       virtualNetwork: VirtualNetwork;
       realmServerMatrixClient: MatrixClient;
+      definitionLookup: DefinitionLookup;
     },
     opts?: Options,
   ) {
@@ -428,7 +428,9 @@ export class Realm {
         new RealmAuthDataSource(this.#realmServerMatrixClient, () => _fetch),
       ),
     ]);
-    this.#definitionsCache = new DefinitionsCache(_fetch);
+
+    // Wrap to retain realm context for definition lookups
+    this.#definitionLookup = definitionLookup.forRealm(this);
 
     this.__fetchForTesting = _fetch;
 
@@ -441,7 +443,7 @@ export class Realm {
       realm: this,
       dbAdapter,
       fetch: _fetch,
-      definitionsCache: this.#definitionsCache,
+      definitionLookup: this.#definitionLookup,
     });
 
     this.#router = new Router(new URL(url))
@@ -489,11 +491,6 @@ export class Realm {
         '/_permissions',
         SupportedMimeType.Permissions,
         this.patchRealmPermissions.bind(this),
-      )
-      .get(
-        '/_definition',
-        SupportedMimeType.JSONAPI,
-        this.getDefinition.bind(this),
       )
       .get(
         '/_readiness-check',
@@ -661,8 +658,8 @@ export class Realm {
     let performIndex = async () => {
       await this.#realmIndexUpdater.update(urls, {
         clientRequestId,
-        onInvalidation: (invalidatedURLs: URL[]) => {
-          this.handleExecutableInvalidations(invalidatedURLs);
+        onInvalidation: async (invalidatedURLs: URL[]) => {
+          await this.handleExecutableInvalidations(invalidatedURLs);
           invalidations = new Set([
             ...invalidations,
             ...invalidatedURLs.map((u) => u.href),
@@ -1085,8 +1082,8 @@ export class Realm {
     await this.removeFileMeta([path]);
     await this.#realmIndexUpdater.update([url], {
       delete: true,
-      onInvalidation: (invalidatedURLs: URL[]) => {
-        this.handleExecutableInvalidations(invalidatedURLs);
+      onInvalidation: async (invalidatedURLs: URL[]) => {
+        await this.handleExecutableInvalidations(invalidatedURLs);
         this.broadcastRealmEvent({
           eventName: 'index',
           indexType: 'incremental',
@@ -1119,8 +1116,8 @@ export class Realm {
     await this.removeFileMeta(paths);
     await this.#realmIndexUpdater.update(urls, {
       delete: true,
-      onInvalidation: (invalidatedURLs: URL[]) => {
-        this.handleExecutableInvalidations(invalidatedURLs);
+      onInvalidation: async (invalidatedURLs: URL[]) => {
+        await this.handleExecutableInvalidations(invalidatedURLs);
         this.broadcastRealmEvent({
           eventName: 'index',
           indexType: 'incremental',
@@ -1140,7 +1137,7 @@ export class Realm {
 
   async reindex() {
     await this.#realmIndexUpdater.fullIndex();
-    this.#definitionsCache.invalidate();
+    await this.#definitionLookup.invalidate(this.url);
     this.#moduleCache.clear();
     this.broadcastRealmEvent({
       eventName: 'index',
@@ -2002,16 +1999,18 @@ export class Realm {
     return this.cloneFileRefWithContent(ref, text);
   }
 
-  private handleExecutableInvalidations(invalidatedURLs: URL[]): void {
+  private async handleExecutableInvalidations(
+    invalidatedURLs: URL[],
+  ): Promise<void> {
     let definitionsInvalidated = false;
-    for (let invalidatedURL of invalidatedURLs) {
+    for (const invalidatedURL of invalidatedURLs) {
       if (hasExecutableExtension(invalidatedURL.href)) {
         definitionsInvalidated = true;
         this.#moduleCache.invalidate(this.paths.local(invalidatedURL));
       }
     }
     if (definitionsInvalidated) {
-      this.#definitionsCache.invalidate();
+      await this.#definitionLookup.invalidate(this.url);
     }
   }
 
@@ -2785,71 +2784,6 @@ export class Realm {
     });
   }
 
-  private async getDefinition(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
-    let href = new URL(request.url).search.slice(1);
-    let payload = parseQuery(href);
-    if (!payload.codeRef) {
-      return badRequest({
-        message: `The request body is missing the codeRef parameter`,
-        requestContext,
-      });
-    }
-    if (!isResolvedCodeRef(payload.codeRef)) {
-      return badRequest({
-        message: `The coderef parameter is not a valid code ref`,
-        requestContext,
-      });
-    }
-    let { codeRef } = payload;
-    let maybeError =
-      await this.#realmIndexQueryEngine.getOwnDefinition(codeRef);
-    if (!maybeError) {
-      return notFound(request, requestContext);
-    }
-    let id = internalKeyFor(codeRef, undefined);
-    if (maybeError.type === 'error') {
-      return systemError({
-        requestContext,
-        message: `cannot get definition, ${request.url}, from index: ${maybeError.error.message}`,
-        id,
-        additionalError: CardError.fromSerializableError(maybeError.error),
-        // This is based on https://jsonapi.org/format/#errors
-        body: {
-          id,
-          status: maybeError.error.status,
-          title: maybeError.error.title,
-          message: maybeError.error.message,
-          // note that this is actually available as part of the response
-          // header too--it's just easier for clients when it is here
-          realm: this.url,
-          meta: {
-            stack: maybeError.error.stack,
-          },
-        },
-      });
-    }
-    let { definition } = maybeError;
-    let doc: CardAPI.JSONAPISingleResourceDocument = {
-      data: {
-        id,
-        type: 'definition',
-        attributes: {
-          ...definition,
-        },
-      },
-    };
-    return createResponse({
-      body: JSON.stringify(doc, null, 2),
-      init: {
-        headers: { 'content-type': SupportedMimeType.JSONAPI },
-      },
-      requestContext,
-    });
-  }
-
   private async getCardDependencies(
     request: Request,
     requestContext: RequestContext,
@@ -3254,7 +3188,7 @@ export class Realm {
       relativeTo,
     ) as ResolvedCodeRef;
     let definition =
-      await this.#definitionsCache.getDefinition(absoluteCodeRef);
+      await this.#definitionLookup.lookupDefinition(absoluteCodeRef);
     if (!definition) {
       throw new Error(
         `Could not find card definition for: ${JSON.stringify(absoluteCodeRef)}`,
@@ -3306,7 +3240,7 @@ export class Realm {
               relativeTo,
             ) as ResolvedCodeRef;
             let fieldDefinition =
-              await this.#definitionsCache.getDefinition(absoluteCodeRef);
+              await this.#definitionLookup.lookupDefinition(absoluteCodeRef);
             if (fieldDefinition) {
               for (const [subFieldName, subFieldDefinition] of Object.entries(
                 fieldDefinition.fields,
@@ -3331,7 +3265,7 @@ export class Realm {
           relativeTo,
         ) as ResolvedCodeRef;
         let fieldDefinition =
-          await this.#definitionsCache.getDefinition(absoluteCodeRef);
+          await this.#definitionLookup.lookupDefinition(absoluteCodeRef);
         if (fieldDefinition) {
           for (const [subFieldName, subFieldDefinition] of Object.entries(
             fieldDefinition.fields,
@@ -3353,7 +3287,7 @@ export class Realm {
   }
 
   private async startFileWatcher() {
-    await this.#adapter.subscribe((data) => {
+    await this.#adapter.subscribe(async (data) => {
       let tracked = this.getTrackedWrite(data);
       if (!tracked || tracked.isTracked) {
         return;
@@ -3364,7 +3298,7 @@ export class Realm {
 
       if (hasExecutableExtension(localPath)) {
         this.#moduleCache.invalidate(localPath);
-        this.#definitionsCache.invalidate();
+        await this.#definitionLookup.invalidate(this.url);
       }
 
       this.broadcastRealmEvent(data);
@@ -3393,8 +3327,8 @@ export class Realm {
     for (let { operation, url } of items) {
       this.sendIndexInitiationEvent(url.href);
       await this.#realmIndexUpdater.update([url], {
-        onInvalidation: (invalidatedURLs: URL[]) => {
-          this.handleExecutableInvalidations(invalidatedURLs);
+        onInvalidation: async (invalidatedURLs: URL[]) => {
+          await this.handleExecutableInvalidations(invalidatedURLs);
           this.broadcastRealmEvent({
             eventName: 'index',
             indexType: 'incremental',
@@ -3435,7 +3369,7 @@ export class Realm {
     };
   }
 
-  private async visibility(): Promise<RealmVisibility> {
+  public async visibility(): Promise<RealmVisibility> {
     if (this.visibilityPromise) {
       return this.visibilityPromise;
     }

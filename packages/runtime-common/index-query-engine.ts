@@ -56,8 +56,10 @@ import {
   type Definition,
   type FieldDefinition,
 } from './index-structure';
-import type { DefinitionsCache } from './definitions-cache';
-import { isFilterRefersToNonexistentTypeError } from './definitions-cache';
+import {
+  isFilterRefersToNonexistentTypeError,
+  type DefinitionLookup,
+} from './definition-lookup';
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
 interface IndexedModule {
@@ -172,11 +174,11 @@ export function isValidPrerenderedHtmlFormat(
 
 export class IndexQueryEngine {
   #dbAdapter: DBAdapter;
-  #definitionsCache: DefinitionsCache;
+  #definitionLookup: DefinitionLookup;
 
-  constructor(dbAdapter: DBAdapter, definitionsCache: DefinitionsCache) {
+  constructor(dbAdapter: DBAdapter, definitionLookup: DefinitionLookup) {
     this.#dbAdapter = dbAdapter;
-    this.#definitionsCache = definitionsCache;
+    this.#definitionLookup = definitionLookup;
   }
 
   async #query(expression: Expression) {
@@ -373,7 +375,7 @@ export class IndexQueryEngine {
         `Your filter refers to a nonexistent type: ${stringify(codeRef)}`,
       );
     }
-    return await this.#definitionsCache.getDefinition(codeRef);
+    return await this.#definitionLookup.lookupDefinition(codeRef);
   }
 
   // we pass the loader in so there is no ambiguity which loader to use as this

@@ -16,6 +16,7 @@ import {
 import type { Realm } from '@cardstack/runtime-common';
 import {
   baseRealm,
+  CachingDefinitionLookup,
   SupportedMimeType,
   type LooseSingleCardDocument,
   type QueuePublisher,
@@ -43,6 +44,7 @@ import {
   testRealmURL,
   createJWT,
   cardInfo,
+  getTestPrerenderer,
 } from './helpers';
 import { expectIncrementalIndexEvent } from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -1522,9 +1524,16 @@ module(basename(__filename), function () {
     setupDB(hooks, {
       beforeEach: async (dbAdapter, publisher, runner) => {
         let localBaseRealmURL = new URL('http://127.0.0.1:4446/base/');
+        let prerenderer = await getTestPrerenderer();
+        let definitionLookup = new CachingDefinitionLookup(
+          dbAdapter,
+          prerenderer,
+          virtualNetwork,
+        );
         virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 
         ({ realm: base } = await createRealm({
+          definitionLookup,
           withWorker: true,
           dir: basePath,
           realmURL: baseRealm.url,
@@ -1537,6 +1546,7 @@ module(basename(__filename), function () {
         virtualNetwork.mount(base.handle);
 
         ({ realm: testRealm } = await createRealm({
+          definitionLookup,
           withWorker: true,
           dir: join(dir.name, 'demo'),
           virtualNetwork,
@@ -1568,6 +1578,7 @@ module(basename(__filename), function () {
           getIndexHTML,
           serverURL: new URL('http://127.0.0.1:4446'),
           assetsURL: new URL(`http://example.com/notional-assets-host/`),
+          definitionLookup,
         }).listen(parseInt(localBaseRealmURL.port));
         await base.start();
         await testRealm.start();

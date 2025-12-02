@@ -926,6 +926,8 @@ module('Acceptance | operator mode tests', function (hooks) {
     let refreshInSec = 2;
 
     hooks.beforeEach(async function () {
+      delete (globalThis as any).__boxelRenderContext;
+      delete (globalThis as any).__renderInstance;
       setExpiresInSec(tokenRefreshPeriodSec + refreshInSec);
     });
 

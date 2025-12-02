@@ -410,6 +410,12 @@ module(basename(__filename), function () {
       await prerenderer.stop();
     });
 
+    hooks.beforeEach(function () {
+      permissions = {
+        [consumerRealmURL]: ['read', 'write', 'realm-owner'],
+      };
+    });
+
     hooks.afterEach(async () => {
       await Promise.all([
         prerenderer.disposeRealm(providerRealmURL),
