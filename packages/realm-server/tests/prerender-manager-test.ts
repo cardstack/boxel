@@ -1030,6 +1030,41 @@ module(basename(__filename), function () {
       assert.ok(hits >= 0, 'request handled');
     });
 
+    test('recovers when a prerender server disappears without draining', async function (assert) {
+      let { app, registry } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlA },
+        },
+      });
+
+      // stop the server before proxying so fetch will fail
+      await mockPrerenderA?.stop();
+
+      let res = await request
+        .post('/prerender-card')
+        .send(
+          makeBody(
+            'https://realm.example/lost-server',
+            'https://realm.example/lost-server/1',
+          ),
+        );
+
+      assert.strictEqual(res.status, 503, 'returns 503 on upstream failure');
+      assert.strictEqual(
+        res.body?.errors?.[0]?.message,
+        'No servers',
+        'reports no servers',
+      );
+      assert.strictEqual(
+        registry.servers.size,
+        0,
+        'failed server pruned from registry',
+      );
+    });
+
     test('maintenance reset clears realm assignments', async function (assert) {
       let { app, registry } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());
