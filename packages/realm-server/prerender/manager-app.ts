@@ -822,12 +822,16 @@ export function buildPrerenderManagerApp(options?: {
           res?.headers.get(PRERENDER_SERVER_STATUS_HEADER) ===
             PRERENDER_SERVER_STATUS_DRAINING;
         let upstreamFailure = !res && !draining;
-        if (!res || draining) {
-          if (upstreamFailure) {
+        let serverError =
+          res && res.status >= 500 && res.status < 600 && !draining;
+        if (!res || draining || serverError) {
+          if (upstreamFailure || serverError) {
             pruneServer(target);
+            attempts.delete(target);
             log.warn(
-              'Pruned prerender server %s due to upstream failure; registry now has %d servers',
+              'Pruned prerender server %s due to %s; registry now has %d servers',
               target,
+              upstreamFailure ? 'upstream failure' : `status ${res?.status}`,
               registry.servers.size,
             );
           }
@@ -852,7 +856,7 @@ export function buildPrerenderManagerApp(options?: {
                 },
               ],
             };
-          } else if (upstreamFailure) {
+          } else if (upstreamFailure || serverError) {
             ctxt.status = 503;
             ctxt.body = { errors: [{ status: 503, message: 'No servers' }] };
           } else {

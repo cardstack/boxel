@@ -1065,6 +1065,55 @@ module(basename(__filename), function () {
       );
     });
 
+    test('retries another server when the first returns 500', async function (assert) {
+      let { app, registry } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlA },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlB },
+        },
+      });
+
+      mockPrerenderA?.setResponder((ctxt) => {
+        ctxt.status = 500;
+        ctxt.body = JSON.stringify({
+          errors: [{ status: 500, message: 'Protocol error (Target closed)' }],
+        });
+      });
+      mockPrerenderB?.setResponder((ctxt) => {
+        ctxt.status = 201;
+        ctxt.set('Content-Type', 'application/vnd.api+json');
+        ctxt.body = JSON.stringify({ data: { attributes: { ok: true } } });
+      });
+
+      let res = await request
+        .post('/prerender-card')
+        .send(
+          makeBody(
+            'https://realm.example/server-error',
+            'https://realm.example/server-error/1',
+          ),
+        );
+
+      assert.strictEqual(res.status, 201, 'falls back to second server');
+      assert.strictEqual(
+        res.headers['x-boxel-prerender-target'],
+        serverUrlB,
+        'routed to healthy server',
+      );
+      assert.false(
+        registry.servers.has(serverUrlA!),
+        'unhealthy server pruned from registry',
+      );
+    });
+
     test('maintenance reset clears realm assignments', async function (assert) {
       let { app, registry } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());

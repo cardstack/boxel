@@ -75,6 +75,51 @@ module(basename(__filename), function () {
         delete process.env.PRERENDER_MANAGER_RETRY_MAX_ELAPSED_MS;
       }
     });
+
+    test('retries on manager 500 and succeeds', async function (assert) {
+      process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS = '3';
+      process.env.PRERENDER_MANAGER_RETRY_DELAY_MS = '1';
+      let attempts = 0;
+      let server = createServer((_req, res) => {
+        attempts++;
+        if (attempts === 1) {
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(
+            JSON.stringify({
+              errors: [{ status: 500, message: 'Protocol error' }],
+            }),
+          );
+          return;
+        }
+        res.statusCode = 201;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(
+          JSON.stringify({
+            data: { attributes: { ok: true } },
+          }),
+        );
+      }).listen(0);
+
+      try {
+        let url = `http://127.0.0.1:${(server.address() as any).port}`;
+        let prerenderer = createRemotePrerenderer(url);
+
+        let result = await prerenderer.prerenderCard({
+          realm: 'realm',
+          url: 'https://example.com/card',
+          userId: '@user:localhost',
+          permissions: {},
+        });
+
+        assert.true((result as any).ok, 'eventually succeeds after 500');
+        assert.ok(attempts >= 2, 'retried after 500');
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+        delete process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS;
+        delete process.env.PRERENDER_MANAGER_RETRY_DELAY_MS;
+      }
+    });
   });
 });
 

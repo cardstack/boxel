@@ -73,6 +73,8 @@ export function createRemotePrerenderer(
           response.headers.get(PRERENDER_SERVER_STATUS_HEADER) ===
             PRERENDER_SERVER_STATUS_DRAINING;
 
+        let serverError =
+          response.status >= 500 && response.status < 600 && !draining;
         if (!response.ok || draining) {
           let message = `Prerender request to ${endpoint.href} failed with status ${response.status}`;
           let text: string | undefined;
@@ -84,7 +86,12 @@ export function createRemotePrerenderer(
           if (text) {
             message += `: ${text}`;
           }
-          if (response.status === 503 || draining || response.status === 504) {
+          if (
+            response.status === 503 ||
+            draining ||
+            response.status === 504 ||
+            serverError
+          ) {
             throw new RetryablePrerenderError(message, response.status);
           }
           throw new Error(message);
