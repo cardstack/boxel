@@ -27,6 +27,7 @@ export default class NotificationBubble extends GlimmerComponent<NotificationBub
         transition:
           background 0.2s,
           color 0.2s;
+        word-break: break-word;
       }
       .notification-bubble.idle {
         background: #f5f7fa;

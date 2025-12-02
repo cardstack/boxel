@@ -9,8 +9,11 @@ import {
 import type { Page } from 'puppeteer';
 
 const log = logger('prerenderer');
+const DEFAULT_CARD_RENDER_TIMEOUT_MS = 30_000;
 
-export const renderTimeoutMs = Number(process.env.RENDER_TIMEOUT_MS ?? 30_000);
+export const cardRenderTimeout = Number(
+  process.env.RENDER_TIMEOUT_MS ?? DEFAULT_CARD_RENDER_TIMEOUT_MS,
+);
 
 export type RenderStatus = 'ready' | 'error' | 'unusable';
 
@@ -248,7 +251,7 @@ export async function captureModule(
         let value = pre?.textContent ?? '';
         return value.trim().length > 0;
       },
-      { timeout: renderTimeoutMs },
+      { timeout: cardRenderTimeout },
       opts?.expectedId ?? null,
       opts?.expectedNonce ?? null,
     );
@@ -422,7 +425,7 @@ export async function captureResult(
       }
       return false;
     },
-    { timeout: renderTimeoutMs },
+    { timeout: cardRenderTimeout },
     statuses,
     opts?.expectedId ?? null,
     opts?.expectedNonce ?? null,
@@ -607,7 +610,7 @@ export async function captureResult(
 export async function withTimeout<T>(
   page: Page,
   fn: () => Promise<T>,
-  timeoutMs = renderTimeoutMs,
+  timeoutMs = cardRenderTimeout,
 ): Promise<T | RenderError> {
   let result = await Promise.race([
     fn(),
