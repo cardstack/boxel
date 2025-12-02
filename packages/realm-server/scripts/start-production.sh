@@ -19,6 +19,7 @@ NODE_NO_WARNINGS=1 \
   --matrixURL='https://matrix.boxel.ai' \
   --realmsRootPath='/persistent/realms' \
   --serverURL='https://app.boxel.ai' \
+  --prerendererUrl='http://boxel-prerender-manager.boxel-production-internal:4222' \
   \
   --path='/persistent/base' \
   --username='base_realm' \
