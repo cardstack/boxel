@@ -15,16 +15,16 @@
         "notes": "Features: Configurable field display, computed field support, primitive field filtering, direct card creation, query-based data loading",
         "title": "Table App",
         "description": "Table App provides a powerful and flexible way to display card collections in a structured table format. It allows users to configure display options, show computed fields, filter data, and create new cards directly from the table interface. Perfect for data management, inventory tracking, and organized content display.",
-        "thumbnailURL": null
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/table-listing/thumbnail.png"
       }
     },
     "relationships": {
-      "skills": {
+      "tags": {
         "links": {
           "self": null
         }
       },
-      "tags": {
+      "skills": {
         "links": {
           "self": null
         }
