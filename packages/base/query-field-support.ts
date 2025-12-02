@@ -19,7 +19,10 @@ import {
   realmURL as realmURLSymbol,
   localId as localIdSymbol,
 } from '@cardstack/runtime-common';
-import { buildQuerySearchURL, normalizeQueryDefinition } from '@cardstack/runtime-common';
+import {
+  buildQuerySearchURL,
+  normalizeQueryDefinition,
+} from '@cardstack/runtime-common';
 import type { FieldDefinition } from '@cardstack/runtime-common/index-structure';
 import type { StoreLiveQuery, StoreLiveQueryOptions } from './card-api';
 import { serializeCard } from './card-serialization';
@@ -65,7 +68,7 @@ export function setQueryFieldState(
   }
 }
 
-export function getQueryFieldState(
+function getQueryFieldState(
   instance: BaseDef,
   fieldName: string,
 ): QueryFieldState | undefined {
@@ -297,7 +300,6 @@ export function seedQueryFieldState(
       continue;
     }
 
-
     let relationshipClone = cloneRelationship(relationship);
     let realmFromSearch = realmHrefFromSearchURL(searchURL);
     let normalizedQuery: Query | undefined;
@@ -377,10 +379,10 @@ function resolveSearchURL(
     let realmURL = instance[realmURLSymbol]
       ? new URL(instance[realmURLSymbol].href)
       : resource.meta?.realmURL
-      ? new URL(resource.meta.realmURL)
-      : instance.id
-      ? new URL(instance.id)
-      : undefined;
+        ? new URL(resource.meta.realmURL)
+        : instance.id
+          ? new URL(instance.id)
+          : undefined;
     if (!realmURL) {
       return undefined;
     }
@@ -455,7 +457,7 @@ function buildRelationshipFromRecords(
   if (field.fieldType === 'linksTo') {
     let first = records[0];
     links.self = first?.id ?? null;
-    let data = first ? recordToResource(first) ?? null : null;
+    let data = first ? (recordToResource(first) ?? null) : null;
     return {
       links,
       data,

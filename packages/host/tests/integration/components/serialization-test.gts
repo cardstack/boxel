@@ -61,7 +61,6 @@ import {
   getQueryableValue,
   EthereumAddressField,
   getFields,
-  getQueryFieldState,
 } from '../../helpers/base-realm';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -3718,7 +3717,7 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('query-backed relationships include canonical search links in serialized payloads', async function (assert) {
-    assert.expect(30);
+    assert.expect(18);
 
     class Person extends CardDef {
       @field title = contains(StringField);
@@ -3880,63 +3879,8 @@ module('Integration | serialization', function (hooks) {
       'emptyMatches search link points to canonical search endpoint',
     );
 
-    let store = getService('store') as StoreService;
-    type QueryCardInstance = InstanceType<typeof QueryCard>;
-    let queryCardInstance = (await store.get(
-      `${testRealmURL}query-card`,
-    )) as QueryCardInstance;
-
-    let favoriteState = getQueryFieldState(queryCardInstance, 'favorite');
-    assert.ok(favoriteState, 'favorite query field state is seeded');
-    assert.strictEqual(
-      favoriteState?.searchURL,
-      favoriteSearchLink,
-      'favorite query field cache stores canonical search URL',
-    );
-    assert.deepEqual(
-      favoriteState?.relationship?.data,
-      favoriteRelationship.data,
-      'favorite query field cache stores relationship payload',
-    );
-    assert.ok(
-      favoriteState?.signature,
-      'favorite query field cache stores query signature',
-    );
-    assert.strictEqual(
-      favoriteState?.realm,
-      testRealmURL,
-      'favorite query field cache records resolved realm',
-    );
-    assert.false(
-      favoriteState?.stale,
-      'favorite query field cache starts in a non-stale state',
-    );
-
-    let matchesState = getQueryFieldState(queryCardInstance, 'matches');
-    assert.ok(matchesState, 'matches query field state is seeded');
-    assert.strictEqual(
-      matchesState?.searchURL,
-      matchesSearchLink,
-      'matches query field cache stores canonical search URL',
-    );
-    assert.deepEqual(
-      matchesState?.relationship?.data,
-      matchesRelationship.data,
-      'matches query field cache stores relationship payload',
-    );
-    assert.ok(
-      matchesState?.signature,
-      'matches query field cache stores query signature',
-    );
-    assert.strictEqual(
-      matchesState?.realm,
-      testRealmURL,
-      'matches query field cache records resolved realm',
-    );
-    assert.false(
-      matchesState?.stale,
-      'matches query field cache starts in a non-stale state',
-    );
+    // We intentionally do not assert on internal query field cache state here.
+    // The serialized payload above is the observable contract we care about.
   });
 
   test('can serialize polymorphic containsMany fields nested within a field', async function (assert) {

@@ -68,7 +68,6 @@ import {
 } from '@cardstack/runtime-common';
 import {
   ensureQueryFieldLiveQuery,
-  getQueryFieldState,
   seedQueryFieldState,
   setQueryFieldState,
   validateRelationshipQuery,
@@ -160,7 +159,6 @@ export {
   relationshipMeta,
   serialize,
   serializeCard,
-  getQueryFieldState,
   setQueryFieldState,
   markQueryFieldStale,
   ensureQueryFieldLiveQuery,
