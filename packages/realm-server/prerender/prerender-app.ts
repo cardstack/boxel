@@ -491,14 +491,14 @@ export function createPrerenderHttpServer(options?: {
     const shutdownTimer = setTimeout(() => {
       if (isClosing) return;
       isClosing = true;
+      clearTimeout(shutdownTimer);
       server.close(() => {
         log.info(
           `prerender server HTTP on port ${options?.port ?? defaultPrerenderServerPort} has stopped.`,
         );
-        clearTimeout(shutdownTimer);
       });
     }, shutdownGraceMs);
-    shutdownTimer.unref?.();
+    shutdownTimer.unref();
   };
   process.on('SIGTERM', shutdownHandler);
   process.on('SIGINT', shutdownHandler);

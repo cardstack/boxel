@@ -8,7 +8,14 @@ import {
   PRERENDER_SERVER_STATUS_HEADER,
 } from '../prerender/prerender-constants';
 
-module(basename(__filename), function () {
+module(basename(__filename), function (hooks) {
+  hooks.afterEach(function () {
+    delete process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS;
+    delete process.env.PRERENDER_MANAGER_RETRY_DELAY_MS;
+    delete process.env.PRERENDER_MANAGER_REQUEST_TIMEOUT_MS;
+    delete process.env.PRERENDER_MANAGER_MAX_DELAY_MS;
+  });
+
   module('remote prerenderer retries', function () {
     test('retries draining responses and succeeds', async function (assert) {
       let attempts = 0;
@@ -43,8 +50,6 @@ module(basename(__filename), function () {
 
       assert.true((result as any).ok, 'eventually succeeds after retries');
       await new Promise<void>((resolve) => server.close(() => resolve()));
-      delete process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS;
-      delete process.env.PRERENDER_MANAGER_RETRY_MAX_ELAPSED_MS;
     });
 
     test('fails after exhausting retries on 503', async function (assert) {
@@ -116,8 +121,6 @@ module(basename(__filename), function () {
         assert.ok(attempts >= 2, 'retried after 500');
       } finally {
         await new Promise<void>((resolve) => server.close(() => resolve()));
-        delete process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS;
-        delete process.env.PRERENDER_MANAGER_RETRY_DELAY_MS;
       }
     });
   });
@@ -170,9 +173,6 @@ module(basename(__filename), function () {
         assert.ok(attempts >= 2, 'retried after timeout');
       } finally {
         await new Promise<void>((resolve) => server.close(() => resolve()));
-        delete process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS;
-        delete process.env.PRERENDER_MANAGER_RETRY_DELAY_MS;
-        delete process.env.PRERENDER_MANAGER_REQUEST_TIMEOUT_MS;
       }
     });
   });

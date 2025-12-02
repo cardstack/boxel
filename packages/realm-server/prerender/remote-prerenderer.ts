@@ -37,6 +37,10 @@ export function createRemotePrerenderer(
     50,
     Number(process.env.PRERENDER_MANAGER_RETRY_DELAY_MS ?? 200),
   );
+  const maxDelayMs = Math.max(
+    1000,
+    Number(process.env.PRERENDER_MANAGER_MAX_DELAY_MS ?? 180_000),
+  );
   const requestTimeoutMs = Math.max(
     1000,
     Number(process.env.PRERENDER_MANAGER_REQUEST_TIMEOUT_MS ?? renderTimeoutMs),
@@ -120,7 +124,10 @@ export function createRemotePrerenderer(
         if (!retryable || attempts >= maxAttempts) {
           throw e;
         }
-        let delayMs = baseDelayMs * Math.pow(2, attempts - 1);
+        let delayMs = Math.min(
+          baseDelayMs * Math.pow(2, attempts - 1),
+          maxDelayMs,
+        );
         await delay(delayMs);
       }
     }
