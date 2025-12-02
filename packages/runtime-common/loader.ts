@@ -619,6 +619,7 @@ export class Loader {
 
     this.setModule(moduleIdentifier, registeredModule);
     module.deferred.fulfill();
+    this.prefetchDependencies(registeredModule.dependencyList);
   }
 
   private evaluate<T>(moduleIdentifier: string, module: EvaluatableModule): T {
@@ -724,6 +725,30 @@ export class Loader {
     let source = await response.text();
     response.cacheResponse?.(source);
     return { type: 'source', source, url: canonicalURL };
+  }
+
+  private prefetchDependencies(dependencyList: UnregisteredDep[]) {
+    for (let entry of dependencyList) {
+      if (entry.type !== 'dep') {
+        continue;
+      }
+      this.prefetchModule(entry.moduleURL);
+    }
+  }
+
+  private prefetchModule(moduleURL: URL) {
+    let module = this.getModule(moduleURL.href);
+    if (module) {
+      return;
+    }
+
+    let maybeFetch = this.fetchModule(moduleURL);
+    maybeFetch.catch((error) => {
+      this.log.debug(
+        `prefetch failed for ${moduleURL.href} (will surface on demand)`,
+        error,
+      );
+    });
   }
 }
 
