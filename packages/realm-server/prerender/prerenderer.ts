@@ -21,6 +21,7 @@ export class Prerenderer {
   #browserManager: BrowserManager;
   #pagePool: PagePool;
   #renderRunner: RenderRunner;
+  #cleanupInterval: NodeJS.Timeout | undefined;
 
   constructor(options: {
     secretSeed: string;
@@ -42,6 +43,7 @@ export class Prerenderer {
       pagePool: this.#pagePool,
       boxelHostURL,
     });
+    this.#startCleanupLoop();
   }
 
   getWarmRealms(): string[] {
@@ -49,6 +51,10 @@ export class Prerenderer {
   }
 
   async stop(): Promise<void> {
+    if (this.#cleanupInterval) {
+      clearInterval(this.#cleanupInterval);
+      this.#cleanupInterval = undefined;
+    }
     await this.#pagePool.closeAll();
     await this.#browserManager.stop();
     this.#stopped = true;
@@ -312,5 +318,18 @@ export class Prerenderer {
     log.warn('Restarting prerender browser');
     await this.#pagePool.closeAll();
     await this.#browserManager.restartBrowser();
+  }
+
+  #startCleanupLoop(): void {
+    let intervalMs = Math.max(
+      5 * 60 * 1000,
+      Number(
+        process.env.PRERENDER_USERDATA_CLEAN_INTERVAL_MS ?? 30 * 60 * 1000,
+      ),
+    );
+    this.#cleanupInterval = setInterval(() => {
+      void this.#browserManager.cleanupUserDataDirs();
+    }, intervalMs);
+    (this.#cleanupInterval as any).unref?.();
   }
 }
