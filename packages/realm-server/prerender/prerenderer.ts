@@ -323,9 +323,7 @@ export class Prerenderer {
   #startCleanupLoop(): void {
     let envInterval = process.env.PRERENDER_USERDATA_CLEAN_INTERVAL_MS;
     let intervalMs =
-      envInterval !== undefined
-        ? Number(envInterval)
-        : 30 * 60 * 1000;
+      envInterval !== undefined ? Number(envInterval) : 30 * 60 * 1000;
     if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
       log.warn(
         'PRERENDER_USERDATA_CLEAN_INTERVAL_MS is invalid; defaulting to 30 minutes',
