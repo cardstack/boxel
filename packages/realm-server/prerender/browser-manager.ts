@@ -57,6 +57,9 @@ export class BrowserManager {
     let activeDir = this.#browserUserDataDir;
     if (!activeDir && this.#browser) {
       // If Puppeteer is running but we cannot locate its profile, avoid deleting.
+      log.warn(
+        'Cannot locate active browser user data directory; skipping cleanup to avoid deleting active profile',
+      );
       return;
     }
 

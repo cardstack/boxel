@@ -321,15 +321,26 @@ export class Prerenderer {
   }
 
   #startCleanupLoop(): void {
-    let intervalMs = Math.max(
-      5 * 60 * 1000,
-      Number(
-        process.env.PRERENDER_USERDATA_CLEAN_INTERVAL_MS ?? 30 * 60 * 1000,
-      ),
-    );
+    let envInterval = process.env.PRERENDER_USERDATA_CLEAN_INTERVAL_MS;
+    let intervalMs =
+      envInterval !== undefined
+        ? Number(envInterval)
+        : 30 * 60 * 1000;
+    if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
+      log.warn(
+        'PRERENDER_USERDATA_CLEAN_INTERVAL_MS is invalid; defaulting to 30 minutes',
+      );
+      intervalMs = 30 * 60 * 1000;
+    }
+    if (intervalMs < 5 * 60 * 1000) {
+      log.warn(
+        'PRERENDER_USERDATA_CLEAN_INTERVAL_MS is less than 5 minutes; using 5 minutes for safety',
+      );
+      intervalMs = 5 * 60 * 1000;
+    }
     this.#cleanupInterval = setInterval(() => {
       void this.#browserManager.cleanupUserDataDirs();
     }, intervalMs);
-    (this.#cleanupInterval as any).unref?.();
+    this.#cleanupInterval.unref?.();
   }
 }
