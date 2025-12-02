@@ -75,7 +75,7 @@ import type NetworkService from '../services/network';
 
 const log = logger('current-run');
 const perfLog = logger('index-perf');
-const { renderTimeoutMs } = ENV;
+const { cardRenderTimeout } = ENV;
 
 function canonicalURL(url: string, relativeTo?: string): string {
   try {
@@ -951,7 +951,7 @@ export class CurrentRun {
       new Promise<{ timeout: true }>((r) =>
         setTimeout(() => {
           r({ timeout: true });
-        }, renderTimeoutMs),
+        }, cardRenderTimeout),
       ),
     ]);
     if (typeof maybeHtml === 'string') {
@@ -959,7 +959,7 @@ export class CurrentRun {
     }
 
     throw new Error(
-      `timed out after ${renderTimeoutMs} ms waiting for ${args.card.id} with format "${args.format}" to render`,
+      `timed out after ${cardRenderTimeout} ms waiting for ${args.card.id} with format "${args.format}" to render`,
     );
   }
 

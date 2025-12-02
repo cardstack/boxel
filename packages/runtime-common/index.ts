@@ -148,6 +148,7 @@ import type { CardTypeFilter, Query, EveryFilter } from './query';
 import { Loader } from './loader';
 export * from './paths';
 export * from './cached-fetch';
+export * from './definition-lookup';
 export * from './definitions';
 export * from './catalog';
 export * from './commands';

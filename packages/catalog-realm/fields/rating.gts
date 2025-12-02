@@ -208,6 +208,7 @@ export default class RatingField extends NumberField {
           display: flex;
           align-items: center;
           justify-content: space-between;
+          gap: calc(var(--spacing, 0.25rem) * 3);
         }
         .rating-title {
           font-size: 0.75rem;
