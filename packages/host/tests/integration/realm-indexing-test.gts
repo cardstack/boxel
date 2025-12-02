@@ -4174,11 +4174,7 @@ posts/please-ignore-me.json
       let card = await indexer.cardDocument(
         new URL(`${testRealmURL}.git/should-not-index`),
       );
-      assert.strictEqual(
-        card,
-        undefined,
-        '.git directory entries are ignored',
-      );
+      assert.strictEqual(card, undefined, '.git directory entries are ignored');
     }
     {
       let card = await indexer.cardDocument(new URL(`${testRealmURL}post`));
