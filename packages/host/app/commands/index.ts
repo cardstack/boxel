@@ -5,6 +5,7 @@ import * as UseAiAssistantCommandModule from './ai-assistant';
 import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-block';
 import * as AskAiCommandModule from './ask-ai';
 import * as CheckCorrectnessCommandModule from './check-correctness';
+import * as CopyAndEditCommandModule from './copy-and-edit';
 import * as CopyCardToRealmModule from './copy-card';
 import * as CopyCardToStackCommandModule from './copy-card-to-stack';
 import * as CopySourceCommandModule from './copy-source';
@@ -83,6 +84,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/copy-source',
     CopySourceCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/copy-and-edit',
+    CopyAndEditCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/create-ai-assistant-room',
@@ -299,6 +304,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   CopyCardToStackCommandModule.default,
   CopySourceCommandModule.default,
   CreateAIAssistantRoomCommandModule.default,
+  CopyAndEditCommandModule.default,
   CreateSpecCommandModule.default,
   GenerateExampleCardsCommandModule.default,
   GenerateReadmeSpecCommandModule.default,
