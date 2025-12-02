@@ -12,6 +12,10 @@ import {
   Deferred,
 } from '@cardstack/runtime-common';
 
+export type SQLiteSnapshot = {
+  tables: Record<string, Record<string, PgPrimitive>[]>;
+};
+
 export default class SQLiteAdapter implements DBAdapter {
   readonly kind = 'sqlite';
   private _sqlite: typeof SQLiteWorker | undefined;
@@ -116,6 +120,39 @@ export default class SQLiteAdapter implements DBAdapter {
     await this.started;
     for (let table of this.tables) {
       await this.execute(`DELETE FROM ${table};`);
+    }
+  }
+
+  async exportSnapshot(): Promise<SQLiteSnapshot> {
+    await this.started;
+    let snapshot: SQLiteSnapshot = { tables: {} };
+    for (let table of this.tables) {
+      snapshot.tables[table] = await this.execute(`SELECT * FROM ${table};`);
+    }
+    return snapshot;
+  }
+
+  async importSnapshot(snapshot: SQLiteSnapshot): Promise<void> {
+    await this.started;
+    await this.reset();
+    for (let [table, rows] of Object.entries(snapshot.tables)) {
+      if (rows.length === 0) {
+        continue;
+      }
+      let columns = Object.keys(rows[0]);
+      if (columns.length === 0) {
+        continue;
+      }
+      let placeholders = columns
+        .map((_, index) => `$${index + 1}`)
+        .join(', ');
+      for (let row of rows) {
+        let values = columns.map((column) => row[column] ?? null);
+        await this.execute(
+          `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders});`,
+          { bind: values },
+        );
+      }
     }
   }
 

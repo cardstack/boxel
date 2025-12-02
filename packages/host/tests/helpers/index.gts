@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import Service from '@ember/service';
 import {
@@ -11,6 +12,7 @@ import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { getService } from '@universal-ember/test-support';
+import stringify from 'safe-stable-stringify';
 
 import ms from 'ms';
 
@@ -54,7 +56,9 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
 import { render as renderIntoElement } from '@cardstack/host/lib/isolated-render';
-import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
+import SQLiteAdapter, {
+  type SQLiteSnapshot,
+} from '@cardstack/host/lib/sqlite-adapter';
 import type NetworkService from '@cardstack/host/services/network';
 import { RealmServerTokenClaims } from '@cardstack/host/services/realm-server';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
@@ -101,6 +105,8 @@ const baseTestMatrix = {
   username: 'test_realm',
   password: 'password',
 };
+
+const testRealmSnapshots = new Map<string, SQLiteSnapshot>();
 
 export { provide as provideConsumeContext } from 'ember-provide-consume-context/test-support';
 
@@ -666,6 +672,12 @@ export async function setupAcceptanceTestRealm({
   setupAuthEndpoints({
     [resolvedRealmURL]: deriveTestUserPermissions(permissions),
   });
+  let snapshotName = computeSnapshotName({
+    contents,
+    permissions,
+    realmURL: resolvedRealmURL,
+    usePrerenderer,
+  });
   return await setupTestRealm({
     contents,
     realmURL: resolvedRealmURL,
@@ -693,6 +705,12 @@ export async function setupIntegrationTestRealm({
   setupAuthEndpoints({
     [resolvedRealmURL]: deriveTestUserPermissions(permissions),
   });
+  let snapshotName = computeSnapshotName({
+    contents,
+    permissions,
+    realmURL: resolvedRealmURL,
+    usePrerenderer,
+  });
   return await setupTestRealm({
     contents,
     realmURL: resolvedRealmURL,
@@ -700,6 +718,7 @@ export async function setupIntegrationTestRealm({
     permissions: permissions as RealmPermissions,
     mockMatrixUtils,
     usePrerenderer,
+    snapshotName,
   });
 }
 
@@ -720,6 +739,7 @@ async function setupTestRealm({
   permissions = { '*': ['read', 'write'] },
   mockMatrixUtils,
   usePrerenderer,
+  snapshotName,
 }: {
   contents: RealmContents;
   realmURL?: string;
@@ -727,6 +747,7 @@ async function setupTestRealm({
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
   usePrerenderer: boolean;
+  snapshotName: string;
 }) {
   let hadHeadlessFlag = Object.prototype.hasOwnProperty.call(
     globalThis,
@@ -743,6 +764,9 @@ async function setupTestRealm({
     let owner = (getContext() as TestContext).owner;
     let { virtualNetwork } = getService('network');
     let { queue } = getService('queue');
+    let snapshot = snapshotName
+      ? testRealmSnapshots.get(snapshotName)
+      : undefined;
 
     realmURL = realmURL ?? testRealmURL;
 
@@ -828,16 +852,30 @@ async function setupTestRealm({
     });
 
     // we use this to run cards that were added to the test filesystem
-    adapter.setLoader(
-      new Loader(realm.__fetchForTesting, virtualNetwork.resolveImport),
+    let loader = new Loader(
+      realm.__fetchForTesting,
+      virtualNetwork.resolveImport,
     );
+    adapter.setLoader(loader);
+    //registerDestructor(owner, () => loader.reset());
 
     // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
     virtualNetwork.mount(realm.maybeHandle);
+    //registerDestructor(owner, () => {
+    //  virtualNetwork.unmount(realm.maybeHandle);
+    //});
     await mockMatrixUtils.start();
     await adapter.ready;
-    await worker.run();
+    if (snapshot) {
+      await restoreRealmSnapshot(dbAdapter, snapshot);
+    } else {
+      await worker.run();
+    }
     await realm.start();
+    if (snapshotName) {
+      let dbSnapshot = await createRealmSnapshot(dbAdapter);
+      testRealmSnapshots.set(snapshotName, dbSnapshot);
+    }
 
     let realmServer = getService('realm-server');
     if (!realmServer.availableRealmURLs.includes(realmURL)) {
@@ -965,6 +1003,44 @@ function deriveTestUserPermissions(
 
 function ensureTrailingSlash(url: string): string {
   return url.endsWith('/') ? url : `${url}/`;
+}
+
+function computeSnapshotName(args: {
+  contents: RealmContents;
+  permissions?: RealmPermissions;
+  realmURL: string;
+  usePrerenderer: boolean;
+}): string {
+  let str = stringify(args);
+  let len = str.length;
+  let h = 5381;
+
+  for (let i = 0; i < len; i++) {
+    h = (h * 33) ^ str.charCodeAt(i);
+  }
+  return (h >>> 0).toString(16);
+}
+
+function getSQLiteAdapterInstance(adapter: DBAdapter): SQLiteAdapter {
+  if (adapter instanceof SQLiteAdapter) {
+    return adapter;
+  }
+  throw new Error('Realm snapshots require a SQLiteAdapter');
+}
+
+async function createRealmSnapshot(
+  adapter: DBAdapter,
+): Promise<SQLiteSnapshot> {
+  let sqlite = getSQLiteAdapterInstance(adapter);
+  return await sqlite.exportSnapshot();
+}
+
+async function restoreRealmSnapshot(
+  adapter: DBAdapter,
+  snapshot: SQLiteSnapshot,
+): Promise<void> {
+  let sqlite = getSQLiteAdapterInstance(adapter);
+  await sqlite.importSnapshot(snapshot);
 }
 
 export function setupUserSubscription() {
