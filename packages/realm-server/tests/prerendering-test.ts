@@ -410,6 +410,12 @@ module(basename(__filename), function () {
       await prerenderer.stop();
     });
 
+    hooks.beforeEach(function () {
+      permissions = {
+        [consumerRealmURL]: ['read', 'write', 'realm-owner'],
+      };
+    });
+
     hooks.afterEach(async () => {
       await Promise.all([
         prerenderer.disposeRealm(providerRealmURL),
@@ -629,14 +635,15 @@ module(basename(__filename), function () {
       ]);
     };
 
-    hooks.before(async () => {
+    hooks.before(async function () {
       prerenderer = new Prerenderer({
         secretSeed: realmSecretSeed,
         maxPages: 2,
         serverURL: prerenderServerURL,
       });
     });
-    hooks.after(async () => {
+
+    hooks.after(async function () {
       await prerenderer.stop();
     });
 

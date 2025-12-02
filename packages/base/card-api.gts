@@ -83,9 +83,11 @@ import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 import ImportIcon from '@cardstack/boxel-icons/import';
+import FilePencilIcon from '@cardstack/boxel-icons/file-pencil';
 import WandIcon from '@cardstack/boxel-icons/wand';
 // normalizeEnumOptions used by enum moved to packages/base/enum.gts
 import PatchThemeCommand from '@cardstack/boxel-host/commands/patch-theme';
+import CopyAndEditCommand from '@cardstack/boxel-host/commands/copy-and-edit';
 
 import {
   callSerializeHook,
@@ -2481,6 +2483,20 @@ export class Theme extends CardDef {
     if (params.menuContext === 'interact' && params.commandContext && this.id) {
       menuItems = [
         ...menuItems,
+        {
+          label: 'Copy and Edit',
+          action: async () => {
+            if (!params.commandContext || !this.id) {
+              return;
+            }
+            let cmd = new CopyAndEditCommand(params.commandContext);
+            await cmd.execute({
+              card: this,
+            });
+          },
+          icon: FilePencilIcon,
+          disabled: !this.id,
+        },
         {
           label: 'Modify theme via AI',
           action: async () => {

@@ -87,8 +87,8 @@ let {
       type: 'number',
     },
     prerendererUrl: {
-      // TODO make this required when feature flag is removed
       description: 'URL of the prerender server to invoke',
+      demandOption: true,
       type: 'string',
     },
   })

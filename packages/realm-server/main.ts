@@ -6,6 +6,7 @@ import {
   logger,
   RunnerOptionsManager,
   Deferred,
+  CachingDefinitionLookup,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -17,6 +18,7 @@ import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 import 'decorator-transforms/globals';
+import { createRemotePrerenderer } from './prerender/remote-prerenderer';
 
 let log = logger('main');
 if (process.env.NODE_ENV === 'test') {
@@ -91,6 +93,7 @@ let {
   useRegistrationSecretFunction,
   migrateDB,
   workerManagerPort,
+  prerendererUrl,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -153,6 +156,11 @@ let {
         'The port the worker manager is running on. used to wait for the workers to be ready',
       type: 'number',
     },
+    prerendererUrl: {
+      demandOption: true,
+      description: 'URL of the prerender server to invoke',
+      type: 'string',
+    },
   })
   .parseSync();
 
@@ -214,6 +222,13 @@ let autoMigrate = migrateDB || undefined;
     username: REALM_SERVER_MATRIX_USERNAME,
     seed: REALM_SECRET_SEED,
   });
+  let prerenderer = createRemotePrerenderer(prerendererUrl);
+
+  let definitionLookup = new CachingDefinitionLookup(
+    dbAdapter,
+    prerenderer,
+    virtualNetwork,
+  );
 
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
@@ -239,6 +254,7 @@ let autoMigrate = migrateDB || undefined;
         dbAdapter,
         queue,
         realmServerMatrixClient,
+        definitionLookup,
       },
       {
         fullIndexOnStartup: true,
@@ -282,6 +298,7 @@ let autoMigrate = migrateDB || undefined;
     grafanaSecret: GRAFANA_SECRET,
     dbAdapter,
     queue,
+    definitionLookup,
     assetsURL: process.env.ASSETS_URL_OVERRIDE
       ? new URL(process.env.ASSETS_URL_OVERRIDE)
       : dist,

@@ -12,6 +12,7 @@ import {
   type IndexedDefinitionOrError,
   type InstanceOrError,
   type ResolvedCodeRef,
+  type DefinitionLookup,
 } from '.';
 import type { Realm } from './realm';
 import { RealmPaths } from './paths';
@@ -23,7 +24,6 @@ import {
   type CardCollectionDocument,
 } from './document-types';
 import type { CardResource, Saved } from './resource-types';
-import type { DefinitionsCache } from './definitions-cache';
 
 type Options = {
   loadLinks?: true;
@@ -53,19 +53,19 @@ export class RealmIndexQueryEngine {
     realm,
     dbAdapter,
     fetch,
-    definitionsCache,
+    definitionLookup,
   }: {
     realm: Realm;
     dbAdapter: DBAdapter;
     fetch: typeof globalThis.fetch;
-    definitionsCache: DefinitionsCache;
+    definitionLookup: DefinitionLookup;
   }) {
     if (!dbAdapter) {
       throw new Error(
         `DB Adapter was not provided to SearchIndex constructor--this is required when using a db based index`,
       );
     }
-    this.#indexQueryEngine = new IndexQueryEngine(dbAdapter, definitionsCache);
+    this.#indexQueryEngine = new IndexQueryEngine(dbAdapter, definitionLookup);
     this.#realm = realm;
     this.#fetch = fetch;
   }

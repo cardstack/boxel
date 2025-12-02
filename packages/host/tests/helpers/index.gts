@@ -37,6 +37,8 @@ import {
   unixTime,
   RealmAction,
   type RenderError,
+  type DefinitionLookup,
+  CachingDefinitionLookup,
 } from '@cardstack/runtime-common';
 import { getCreatedTime } from '@cardstack/runtime-common/file-meta';
 import {
@@ -379,7 +381,7 @@ type RenderingContextWithPrerender = TestContext & {
   __cardPrerenderElement?: HTMLElement;
 };
 
-async function makeRenderer() {
+export async function makeRenderer() {
   let context = getContext() as RenderingContextWithPrerender;
   let owner = context.owner;
   if (!owner) {
@@ -770,6 +772,26 @@ async function setupTestRealm({
     };
 
     let dbAdapter = await getDbAdapter();
+    let definitionLookup = owner.lookup('definition-lookup:main') as
+      | DefinitionLookup
+      | undefined;
+    if (!definitionLookup) {
+      owner.register(
+        'definition-lookup:main',
+        new CachingDefinitionLookup(
+          dbAdapter,
+          localIndexer.prerenderer,
+          virtualNetwork,
+        ),
+        {
+          instantiate: false,
+        },
+      );
+      definitionLookup = owner.lookup(
+        'definition-lookup:main',
+      ) as DefinitionLookup;
+    }
+
     await insertPermissions(dbAdapter, new URL(realmURL), permissions);
     let worker = new Worker({
       indexWriter: new IndexWriter(dbAdapter),
@@ -802,6 +824,7 @@ async function setupTestRealm({
         username: testRealmServerMatrixUsername,
         seed: testRealmSecretSeed,
       }),
+      definitionLookup,
     });
 
     // we use this to run cards that were added to the test filesystem
