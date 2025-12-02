@@ -87,6 +87,26 @@ module('Integration | commands | copy-and-edit', function (hooks) {
             },
           },
         },
+        'simple-card.gts': `
+          import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class SimpleCard extends CardDef {
+            static displayName = 'SimpleCard';
+          }
+        `,
+        'simple-card-instance.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: './simple-card',
+                name: 'SimpleCard',
+              },
+            },
+          },
+        },
       },
     });
 
@@ -203,6 +223,40 @@ module('Integration | commands | copy-and-edit', function (hooks) {
     });
 
     assert.ok(true, 'command completes without throwing when no parent linked');
+  });
+
+  test('copies card in single stack and replaces current item', async function (assert) {
+    let commandService = getService('command-service');
+    let store = getService('store');
+    let operatorModeStateService = getService('operator-mode-state-service');
+
+    let simpleCard = (await store.get(
+      `${testRealmURL}simple-card-instance`,
+    )) as CardDef;
+
+    operatorModeStateService.addItemToStack(
+      new StackItem({
+        id: simpleCard.id as string,
+        format: 'isolated',
+        stackIndex: 0,
+      }),
+    );
+
+    let command = new CopyAndEditCommand(commandService.commandContext);
+    await command.execute({
+      card: simpleCard,
+    });
+
+    await settled();
+
+    let stacks = operatorModeStateService.state?.stacks ?? [];
+    let topItemId = stacks[0]?.[stacks[0].length - 1]?.id;
+    assert.ok(topItemId, 'stack has a top item after copy');
+    assert.notEqual(
+      topItemId,
+      simpleCard.id,
+      'stack item replaced with copied card',
+    );
   });
 
   test('copies card and relinks linksToMany parent (same realm)', async function (assert) {

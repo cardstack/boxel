@@ -47,9 +47,9 @@ export default class CopyAndEditCommand extends HostBaseCommand<
       throw new Error('copy-and-edit requires a card with an id');
     }
 
-    let targetRealm = this.realm.url(input.card.id as string);
+    let targetRealm = this.operatorModeStateService.realmURL?.href;
     if (!targetRealm) {
-      throw new Error('Could not determine realm for card copy');
+      throw new Error('Could not determine interact realm for card copy');
     }
     if (!targetRealm.endsWith('/')) {
       targetRealm = `${targetRealm}/`;
@@ -66,6 +66,8 @@ export default class CopyAndEditCommand extends HostBaseCommand<
 
     await this.renameNewCard(newCardId);
 
+    let stackIndex = this.findStackIndexForCard(input.card.id as string);
+
     let linkedParent = this.deriveLinkedParent(input.card.id as string);
     if (linkedParent) {
       await this.linkToParentCard(
@@ -75,26 +77,21 @@ export default class CopyAndEditCommand extends HostBaseCommand<
         linkedParent.relationshipContext,
       );
 
-      let newCard = await this.store.get(newCardId);
-      if (isCardInstance(newCard)) {
-        let stackIndex = this.findStackIndexForCard(input.card.id as string);
-
-        // Prefer replacing the original card in-place; fall back to the parent's stack
-        if (stackIndex === undefined) {
-          stackIndex = this.findStackIndexForCard(linkedParent.parentId);
-        }
-
-        if (stackIndex !== undefined) {
-          this.operatorModeStateService.replaceCardOnStack(
-            input.card.id as string,
-            newCardId,
-            stackIndex,
-            'edit',
-          );
-        }
+      // Prefer replacing the original card in-place; fall back to the parent's stack
+      if (stackIndex === undefined) {
+        stackIndex = this.findStackIndexForCard(linkedParent.parentId);
       }
     }
-    return;
+
+    if (stackIndex !== undefined) {
+      this.operatorModeStateService.replaceCardOnStack(
+        input.card.id as string,
+        newCardId,
+        stackIndex,
+        'edit',
+      );
+    }
+    return undefined;
   }
 
   private async renameNewCard(newCardId: string) {
