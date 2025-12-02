@@ -12,6 +12,7 @@ import {
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
 } from '../prerender/prerender-constants';
+import { Deferred } from '@cardstack/runtime-common';
 
 module(basename(__filename), function () {
   module('Prerender manager', function (hooks) {
@@ -950,7 +951,7 @@ module(basename(__filename), function () {
       );
     });
 
-    test('returns 503 immediately when manager is draining', async function (assert) {
+    test('returns draining immediately when manager is draining (no proxy)', async function (assert) {
       let draining = true;
       let { app } = buildPrerenderManagerApp({ isDraining: () => draining });
       let request: SuperTest<Test> = supertest(app.callback());
@@ -963,12 +964,70 @@ module(basename(__filename), function () {
             'https://realm.example/drain-manager/1',
           ),
         );
-      assert.strictEqual(res.status, 503, '503 when manager draining');
+      assert.strictEqual(
+        res.status,
+        PRERENDER_SERVER_DRAINING_STATUS_CODE,
+        '410 when manager draining',
+      );
+      assert.strictEqual(
+        res.headers[PRERENDER_SERVER_STATUS_HEADER.toLowerCase()],
+        PRERENDER_SERVER_STATUS_DRAINING,
+        'draining header set',
+      );
       assert.strictEqual(
         res.body?.errors?.[0]?.message,
         'Prerender manager draining',
         'draining message returned',
       );
+    });
+
+    test('returns draining when manager starts draining during an in-flight proxy', async function (assert) {
+      let draining = false;
+      let { app } = buildPrerenderManagerApp({ isDraining: () => draining });
+      let request: SuperTest<Test> = supertest(app.callback());
+      let blocker = new Deferred<void>();
+      let hits = 0;
+      mockPrerenderA?.setResponder(async (ctxt) => {
+        hits++;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        ctxt.status = 201;
+        ctxt.set('Content-Type', 'application/vnd.api+json');
+        ctxt.body = JSON.stringify({ data: { attributes: { ok: true } } });
+        blocker.fulfill();
+      });
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 1, url: serverUrlA },
+        },
+      });
+
+      let resPromise = request
+        .post('/prerender-card')
+        .send(
+          makeBody(
+            'https://realm.example/drain-midflight',
+            'https://realm.example/drain-midflight/1',
+          ),
+        );
+
+      // start draining shortly after proxying begins
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      draining = true;
+
+      let res = await resPromise;
+      assert.strictEqual(
+        res.status,
+        PRERENDER_SERVER_DRAINING_STATUS_CODE,
+        'returns draining status when shutdown begins mid-flight',
+      );
+      assert.strictEqual(
+        res.headers[PRERENDER_SERVER_STATUS_HEADER.toLowerCase()],
+        PRERENDER_SERVER_STATUS_DRAINING,
+        'sets draining header',
+      );
+      assert.ok(hits >= 0, 'request handled');
     });
 
     test('maintenance reset clears realm assignments', async function (assert) {
@@ -1136,6 +1195,50 @@ module(basename(__filename), function () {
         serverUrlA,
         'request routed to newly registered server',
       );
+    });
+
+    test('returns draining immediately when manager is draining', async function (assert) {
+      let draining = true;
+      let { app } = buildPrerenderManagerApp({
+        isDraining: () => draining,
+      });
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      let hits = 0;
+      mockPrerenderA?.setResponder((ctxt) => {
+        hits++;
+        ctxt.status = 201;
+        ctxt.set('Content-Type', 'application/vnd.api+json');
+        ctxt.body = JSON.stringify({ data: { attributes: { ok: true } } });
+      });
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlA },
+        },
+      });
+
+      let res = await request
+        .post('/prerender-card')
+        .send(
+          makeBody(
+            'https://realm.example/draining',
+            'https://realm.example/draining/1',
+          ),
+        );
+
+      assert.strictEqual(
+        res.status,
+        PRERENDER_SERVER_DRAINING_STATUS_CODE,
+        'returns draining status',
+      );
+      assert.strictEqual(
+        res.headers[PRERENDER_SERVER_STATUS_HEADER.toLowerCase()],
+        PRERENDER_SERVER_STATUS_DRAINING,
+        'sets draining header',
+      );
+      assert.strictEqual(hits, 0, 'does not proxy to prerender server');
     });
   });
 });

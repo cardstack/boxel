@@ -9,6 +9,7 @@ import {
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
 } from './prerender-constants';
+import { renderTimeoutMs } from './utils';
 
 const log = logger('remote-prerenderer');
 
@@ -36,6 +37,10 @@ export function createRemotePrerenderer(
     50,
     Number(process.env.PRERENDER_MANAGER_RETRY_DELAY_MS ?? 200),
   );
+  const requestTimeoutMs = Math.max(
+    1000,
+    Number(process.env.PRERENDER_MANAGER_REQUEST_TIMEOUT_MS ?? renderTimeoutMs),
+  );
 
   async function requestWithRetry<T>(
     path: string,
@@ -55,10 +60,13 @@ export function createRemotePrerenderer(
     while (attempts < maxAttempts) {
       attempts++;
       try {
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), requestTimeoutMs);
         let response = await fetch(endpoint, {
           method: 'POST',
           body: JSON.stringify(body),
-        });
+          signal: ac.signal,
+        }).finally(() => clearTimeout(timer));
 
         let draining =
           response.status === PRERENDER_SERVER_DRAINING_STATUS_CODE ||
@@ -100,7 +108,8 @@ export function createRemotePrerenderer(
         let retryable =
           e instanceof RetryablePrerenderError ||
           e?.code === 'ECONNREFUSED' ||
-          e?.code === 'ETIMEDOUT';
+          e?.code === 'ETIMEDOUT' ||
+          e?.name === 'AbortError';
         if (!retryable || attempts >= maxAttempts) {
           throw e;
         }

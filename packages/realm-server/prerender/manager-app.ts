@@ -272,14 +272,22 @@ export function buildPrerenderManagerApp(options?: {
   // health
   router.head('/', async (ctxt) => {
     if (options?.isDraining?.()) {
-      ctxt.status = 503;
+      ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+      ctxt.set(
+        PRERENDER_SERVER_STATUS_HEADER,
+        PRERENDER_SERVER_STATUS_DRAINING,
+      );
       return;
     }
     ctxt.status = 200;
   });
   router.get('/', async (ctxt) => {
     if (options?.isDraining?.()) {
-      ctxt.status = 503;
+      ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+      ctxt.set(
+        PRERENDER_SERVER_STATUS_HEADER,
+        PRERENDER_SERVER_STATUS_DRAINING,
+      );
     }
     ctxt.set('Content-Type', 'application/vnd.api+json');
 
@@ -674,9 +682,18 @@ export function buildPrerenderManagerApp(options?: {
   ) {
     try {
       if (options?.isDraining?.()) {
-        ctxt.status = 503;
+        ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+        ctxt.set(
+          PRERENDER_SERVER_STATUS_HEADER,
+          PRERENDER_SERVER_STATUS_DRAINING,
+        );
         ctxt.body = {
-          errors: [{ status: 503, message: 'Prerender manager draining' }],
+          errors: [
+            {
+              status: PRERENDER_SERVER_DRAINING_STATUS_CODE,
+              message: 'Prerender manager draining',
+            },
+          ],
         };
         return;
       }
@@ -738,8 +755,21 @@ export function buildPrerenderManagerApp(options?: {
         log.info(
           `proxying ${label} prerender request for ${attrs.url} to ${targetURL}`,
         );
+        let abortedDueToDrain = false;
         const ac = new AbortController();
         const timer = setTimeout(() => ac.abort(), proxyTimeoutMs).unref?.();
+        const drainPoll =
+          options?.isDraining && proxyTimeoutMs > 50
+            ? setInterval(
+                () => {
+                  if (options.isDraining!()) {
+                    ac.abort();
+                  }
+                },
+                Math.min(100, proxyTimeoutMs / 2),
+              )
+            : null;
+        (drainPoll as any)?.unref?.();
         const res = await fetch(targetURL, {
           method: 'POST',
           headers: {
@@ -749,12 +779,18 @@ export function buildPrerenderManagerApp(options?: {
           body: raw,
           signal: ac.signal,
         }).catch((e) => {
-          log.warn('Upstream error:', e);
+          if (e?.name === 'AbortError' && options?.isDraining?.()) {
+            abortedDueToDrain = true;
+          } else {
+            log.warn('Upstream error:', e);
+          }
           return null as any;
         });
         clearTimeout(timer as any);
+        if (drainPoll) clearInterval(drainPoll as any);
 
         let draining =
+          abortedDueToDrain ||
           res?.status === PRERENDER_SERVER_DRAINING_STATUS_CODE ||
           res?.headers.get(PRERENDER_SERVER_STATUS_HEADER) ===
             PRERENDER_SERVER_STATUS_DRAINING;

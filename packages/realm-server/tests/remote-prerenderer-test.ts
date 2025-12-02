@@ -77,3 +77,58 @@ module(basename(__filename), function () {
     });
   });
 });
+
+module(basename(__filename), function () {
+  module('remote prerenderer timeouts', function () {
+    test('retries when a request times out', async function (assert) {
+      process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS = '3';
+      process.env.PRERENDER_MANAGER_RETRY_DELAY_MS = '1';
+      process.env.PRERENDER_MANAGER_REQUEST_TIMEOUT_MS = '20';
+      let attempts = 0;
+
+      let server = createServer((_req, res) => {
+        attempts++;
+        if (attempts === 1) {
+          res.on('error', () => {});
+          setTimeout(() => {
+            if (!res.writableEnded && !res.destroyed) {
+              res.statusCode = 504;
+              res.end('delayed');
+            }
+          }, 100);
+          return;
+        }
+        res.statusCode = 201;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(
+          JSON.stringify({
+            data: { attributes: { ok: true } },
+          }),
+        );
+      }).listen(0);
+
+      try {
+        let url = `http://127.0.0.1:${(server.address() as any).port}`;
+        let prerenderer = createRemotePrerenderer(url);
+
+        let result = await prerenderer.prerenderCard({
+          realm: 'realm',
+          url: 'https://example.com/card',
+          userId: '@user:localhost',
+          permissions: {},
+        });
+
+        assert.true(
+          (result as any).ok,
+          'eventually succeeds after timing out and retrying',
+        );
+        assert.ok(attempts >= 2, 'retried after timeout');
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+        delete process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS;
+        delete process.env.PRERENDER_MANAGER_RETRY_DELAY_MS;
+        delete process.env.PRERENDER_MANAGER_REQUEST_TIMEOUT_MS;
+      }
+    });
+  });
+});
