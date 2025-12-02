@@ -15,16 +15,19 @@
         "thumbnailURL": null
       },
       "imageAvatar": {
-        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764570318102",
-        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764570318102/public"
+        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642749200",
+        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642749200/public"
       },
       "imageBrowse": {
-        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764570261129",
-        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764570261129/public"
+        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642741446",
+        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642741446/public"
       },
       "imageDropzone": {
-        "uploadUrl": null,
-        "uploadedImageUrl": null
+        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642756898",
+        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642756898/public"
+      },
+      "playgroundDay": {
+        "value": 2
       },
       "playgroundDate": "2025-11-20",
       "playgroundTime": {
@@ -40,8 +43,8 @@
         "value": "09:15"
       },
       "playgroundImage": {
-        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764583465205",
-        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764583465205/public"
+        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642806276",
+        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642806276/public"
       },
       "playgroundMonth": {
         "value": 4
@@ -55,11 +58,11 @@
         "images": [
           {
             "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764577101407/public"
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764582386156/public"
           },
           {
             "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764582386156/public"
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764577101407/public"
           }
         ]
       },
@@ -67,10 +70,13 @@
         "year": null,
         "quarter": null
       },
-      "eventDateTimeShort": "2025-11-25T15:30:00.000Z",
-      "playgroundDatetime": "2025-11-22T05:19:00.000Z",
+      "eventDateTimeShort": null,
+      "playgroundDatetime": null,
       "playgroundDuration": {
+        "days": null,
         "hours": null,
+        "years": null,
+        "months": null,
         "minutes": null,
         "seconds": null
       },
@@ -79,7 +85,7 @@
         "month": null
       },
       "playgroundQuantity": 100,
-      "eventDateTimeCustom": "2025-12-01T18:00:00.000Z",
+      "eventDateTimeCustom": null,
       "playgroundDateRange": {
         "end": null,
         "start": null
@@ -96,17 +102,36 @@
           "value": null
         }
       },
+      "projectDurationFull": {
+        "days": 88,
+        "hours": 8,
+        "years": 2,
+        "months": 3,
+        "minutes": 30,
+        "seconds": 45
+      },
+      "taskDurationDayTime": {
+        "days": 5,
+        "hours": 3,
+        "years": null,
+        "months": null,
+        "minutes": 45,
+        "seconds": 30
+      },
       "multipleImageGallery": {
         "images": [
           {
             "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764577044538/public"
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642638586/public"
           },
           {
             "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764577042128/public"
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642635903/public"
           }
         ]
+      },
+      "playgroundTimePeriod": {
+        "periodLabel": "2023-2024"
       },
       "appointmentDateCustom": "2025-12-15",
       "multipleImageDropzone": {
@@ -127,21 +152,22 @@
         "unit": null,
         "amount": null
       },
+      "playgroundDatetimeStamp": "2025-11-28T16:44:00.000Z",
       "playgroundMultipleImage": {
         "images": [
           {
             "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764577114030/public"
-          },
-          {
-            "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764577115667/public"
-          },
-          {
-            "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764582842082/public"
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642655034/public"
           }
         ]
+      },
+      "contractDurationYearMonth": {
+        "days": null,
+        "hours": null,
+        "years": 3,
+        "months": 6,
+        "minutes": null,
+        "seconds": null
       },
       "playgroundRecurringPattern": {
         "endDate": null,
