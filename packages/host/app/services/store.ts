@@ -706,7 +706,7 @@ export default class StoreService extends Service implements StoreInterface {
         continue;
       }
       let clientRequestId = event.clientRequestId ?? undefined;
-      this.commandService.markAiAssistantClientRequestReceivedInvalidation(
+      this.commandService.markInvalidationAfterAIAssistantRequest(
         clientRequestId,
       );
 

@@ -91,6 +91,7 @@ let {
   useRegistrationSecretFunction,
   migrateDB,
   workerManagerPort,
+  prerendererUrl = process.env.PRERENDER_URL,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -152,6 +153,11 @@ let {
       description:
         'The port the worker manager is running on. used to wait for the workers to be ready',
       type: 'number',
+    },
+    prerendererUrl: {
+      description:
+        'URL of the prerender server or manager to proxy prerender requests to',
+      type: 'string',
     },
   })
   .parseSync();
@@ -293,6 +299,7 @@ let autoMigrate = migrateDB || undefined;
     getRegistrationSecret: useRegistrationSecretFunction
       ? getRegistrationSecret
       : undefined,
+    prerendererUrl: prerendererUrl ? new URL(prerendererUrl) : undefined,
   });
 
   let httpServer = server.listen(port);

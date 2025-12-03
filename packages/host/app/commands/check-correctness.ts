@@ -17,6 +17,7 @@ import { waitForRealmState } from './utils';
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type RealmService from '../services/realm';
+import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 
 const cardIndexingTimeout = ENV.cardRenderTimeout;
@@ -29,6 +30,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
   @service declare private realm: RealmService;
   @service declare private commandService: CommandService;
   @service declare private cardService: CardService;
+  @service declare private realmServer: RealmServerService;
 
   description =
     'Run post-change correctness checks for a specific file or card instance.';
@@ -76,7 +78,10 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     const { CorrectnessResultCard } = commandModule;
     let errors: string[] = [];
 
-    if (targetType === 'card') {
+    let gtsFileUrl = input.fileUrl ?? input.targetRef;
+    if (gtsFileUrl && gtsFileUrl.endsWith('.gts')) {
+      errors = await this.collectModuleErrors(gtsFileUrl, roomId);
+    } else if (targetType === 'card') {
       if (!cardId) {
         throw new Error('Card correctness checks require a cardId.');
       }
@@ -196,6 +201,108 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     let normalizedTarget = cardHref.replace(/\.json$/, '');
     let normalizedInvalidation = invalidation.replace(/\.json$/, '');
     return normalizedTarget === normalizedInvalidation;
+  }
+
+  private async collectModuleErrors(
+    fileUrl: string,
+    roomId: string,
+  ): Promise<string[]> {
+    let moduleInfo = this.moduleInfoFromFile(fileUrl);
+    if (!moduleInfo) {
+      return [
+        `${fileUrl}: Unable to determine module URL or realm for correctness check`,
+      ];
+    }
+
+    let { moduleURL, realmURL } = moduleInfo;
+
+    debugger;
+    await this.commandService.waitForInvalidationAfterAIAssistantRequest(
+      moduleURL.href,
+      roomId,
+      cardIndexingTimeout,
+    );
+
+    let errorMessage = await this.prerenderModule(moduleURL, realmURL);
+
+    if (!errorMessage) {
+      return [];
+    }
+
+    return [errorMessage];
+  }
+
+  private moduleInfoFromFile(
+    fileUrl: string,
+  ): { moduleURL: URL; realmURL: URL } | undefined {
+    try {
+      let fileURL = new URL(fileUrl);
+      let realmURL = this.realm.realmOfURL(fileURL);
+      if (!realmURL) {
+        return undefined;
+      }
+
+      let moduleHref = fileURL.href.replace(/\.gts$/, '');
+      let moduleURL = new URL(moduleHref);
+      return { moduleURL, realmURL };
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async prerenderModule(
+    moduleURL: URL,
+    realmURL: URL,
+  ): Promise<string | undefined> {
+    try {
+      let prerenderURL = new URL('/_prerender-module', this.realmServer.url);
+
+      let response = await this.realmServer.authedFetch(prerenderURL.href, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.api+json',
+          'Content-Type': 'application/vnd.api+json',
+        },
+        body: JSON.stringify({
+          data: {
+            type: 'prerender-module-request',
+            attributes: {
+              realm: realmURL.href,
+              url: moduleURL.href,
+            },
+          },
+        }),
+      });
+
+      let body: any;
+      try {
+        body = await response.json();
+      } catch (error) {
+        let text = await response.text().catch(() => '');
+        return `${moduleURL.href}: Unable to parse prerender response (${response.status}) ${text}`;
+      }
+
+      if (!response.ok) {
+        return `${moduleURL.href}: prerender request failed (${response.status}) ${JSON.stringify(body)}`;
+      }
+
+      let prerenderError = body?.data?.attributes?.error?.error;
+      if (prerenderError) {
+        let messageParts = [
+          prerenderError.message,
+          prerenderError.stack,
+        ].filter((part) => typeof part === 'string' && part.length > 0);
+        let summary =
+          messageParts.length > 0
+            ? messageParts.join('\n')
+            : 'Unknown prerender error';
+        return `${moduleURL.href}: ${summary}`;
+      }
+
+      return undefined;
+    } catch (error: any) {
+      return `${moduleURL.href}: prerender request threw ${error?.message ?? error}`;
+    }
   }
 
   private describeCardError(cardId: string, error: CardErrorJSONAPI): string {

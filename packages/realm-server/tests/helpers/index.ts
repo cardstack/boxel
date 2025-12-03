@@ -508,6 +508,7 @@ export async function runTestRealmServer({
     boxelSite: 'localhost',
   },
   disablePrerenderer = false,
+  prerendererUrl,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -526,6 +527,7 @@ export async function runTestRealmServer({
     boxelSite?: string;
   };
   disablePrerenderer?: boolean;
+  prerendererUrl?: string;
 }) {
   let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
   let prerenderer = await getTestPrerenderer(!disablePrerenderer);
@@ -581,6 +583,7 @@ export async function runTestRealmServer({
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
     domainsForPublishedRealms,
+    prerendererUrl: prerendererUrl ? new URL(prerendererUrl) : undefined,
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   await testRealmServer.start();

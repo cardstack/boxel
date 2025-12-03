@@ -13,6 +13,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import type { Command, CommandContext } from '@cardstack/runtime-common';
 import {
+  Deferred,
   CommandContextStamp,
   delay,
   getClass,
@@ -72,7 +73,6 @@ export default class CommandService extends Service {
       roomId?: string;
     }
   >();
-
   private commandProcessingEventQueue: string[] = [];
   private codePatchProcessingEventQueue: string[] = [];
   private flushCommandProcessingQueue: Promise<void> | undefined;
@@ -115,7 +115,16 @@ export default class CommandService extends Service {
     );
   }
 
-  markAiAssistantClientRequestReceivedInvalidation(clientRequestId?: string) {
+  private aiAssistantRequestInvalidations = new Map<
+    string,
+    {
+      clientRequestId: string;
+      invalidationReceived: boolean;
+      deferred?: Deferred<void>;
+    }
+  >();
+
+  markInvalidationAfterAIAssistantRequest(clientRequestId?: string) {
     if (!clientRequestId) {
       return;
     }
@@ -125,6 +134,16 @@ export default class CommandService extends Service {
           ...data,
           invalidationReceived: true,
         });
+      }
+    }
+
+    for (let [key, data] of this.aiAssistantRequestInvalidations) {
+      if (data.clientRequestId === clientRequestId) {
+        this.aiAssistantRequestInvalidations.set(key, {
+          ...data,
+          invalidationReceived: true,
+        });
+        data.deferred?.fulfill();
       }
     }
   }
@@ -147,6 +166,51 @@ export default class CommandService extends Service {
     return this.aiAssistantCardRequests.has(
       this.aiAssistantCardRequestKey(cardId, roomId),
     );
+  }
+
+  trackInvalidationAfterAIAssistantRequest(
+    targetHref: string,
+    clientRequestId: string,
+    roomId: string,
+  ) {
+    let key = this.aiAssistantRequestKey(targetHref, roomId);
+    this.aiAssistantRequestInvalidations.set(key, {
+      clientRequestId,
+      invalidationReceived: false,
+    });
+  }
+
+  async waitForInvalidationAfterAIAssistantRequest(
+    targetHref: string,
+    roomId: string,
+    timeoutMs?: number,
+  ): Promise<void> {
+    let key = this.aiAssistantRequestKey(targetHref, roomId);
+    let existing = this.aiAssistantRequestInvalidations.get(key);
+    if (!existing) {
+      return;
+    }
+    if (existing.invalidationReceived) {
+      this.aiAssistantRequestInvalidations.delete(key);
+      return;
+    }
+    if (!existing.deferred) {
+      existing.deferred = new Deferred<void>();
+      this.aiAssistantRequestInvalidations.set(key, existing);
+    }
+    let waitPromise = existing.deferred.promise;
+    if (timeoutMs) {
+      waitPromise = Promise.race([
+        waitPromise,
+        delay(timeoutMs).then(() => {}),
+      ]);
+    }
+    await waitPromise;
+    this.aiAssistantRequestInvalidations.delete(key);
+  }
+
+  private aiAssistantRequestKey(targetHref: string, roomId: string) {
+    return `${roomId}::${targetHref}`;
   }
 
   public queueEventForCommandProcessing(event: Partial<IEvent>) {

@@ -434,6 +434,7 @@ jobs:
             "prerendering-test.ts",
             "prerender-server-test.ts",
             "prerender-manager-test.ts",
+            "prerender-proxy-test.ts",
             "queue-test.ts",
             "realm-endpoints/directory-test.ts",
             "realm-endpoints/info-test.ts",

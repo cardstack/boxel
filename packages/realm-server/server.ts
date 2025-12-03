@@ -78,6 +78,7 @@ export class RealmServer {
         boxelSite?: string;
       }
     | undefined;
+  private prerendererUrl: URL | undefined;
 
   constructor({
     serverURL,
@@ -96,6 +97,7 @@ export class RealmServer {
     getRegistrationSecret,
     enableFileWatcher,
     domainsForPublishedRealms,
+    prerendererUrl,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -116,6 +118,7 @@ export class RealmServer {
       boxelSpace?: string;
       boxelSite?: string;
     };
+    prerendererUrl?: URL;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -142,6 +145,7 @@ export class RealmServer {
     this.enableFileWatcher = enableFileWatcher ?? false;
     this.domainsForPublishedRealms = domainsForPublishedRealms;
     this.realms = [...realms];
+    this.prerendererUrl = prerendererUrl;
   }
 
   @Memoize()
@@ -198,6 +202,7 @@ export class RealmServer {
           getMatrixRegistrationSecret: this.getMatrixRegistrationSecret,
           createAndMountRealm: this.createAndMountRealm,
           domainsForPublishedRealms: this.domainsForPublishedRealms,
+          prerendererUrl: this.prerendererUrl?.href,
         }),
       )
       .use(this.serveIndex)
