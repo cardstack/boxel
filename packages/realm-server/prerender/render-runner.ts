@@ -578,6 +578,11 @@ export class RenderRunner {
   }
 
   #evictionReason(renderError: RenderError): 'timeout' | 'unusable' | null {
+    let status = Number(renderError.error?.status);
+    if (status === 401 || status === 403) {
+      // Auth failures are not signs of a bad page; do not evict on auth errors.
+      return null;
+    }
     if (renderError.error.title === 'Render timeout') {
       return 'timeout';
     }

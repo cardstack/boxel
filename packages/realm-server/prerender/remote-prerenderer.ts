@@ -70,13 +70,9 @@ export function createRemotePrerenderer(
           method: 'POST',
           body: JSON.stringify(body),
           signal: ac.signal,
-        })
-          .finally(() => {
-            clearTimeout(timer);
-          })
-          .catch((err) => {
-            throw err;
-          });
+        }).finally(() => {
+          clearTimeout(timer);
+        });
 
         let draining =
           response.status === PRERENDER_SERVER_DRAINING_STATUS_CODE ||
