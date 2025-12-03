@@ -7,7 +7,7 @@ import {
 
 const COMMENT_PATTERN = /\/\*[\s\S]*?\*\//g;
 const BLOCK_PATTERN = /(.*?)\{([\s\S]*?)\}/g;
-const PROPERTY_PATTERN = /^[a-z-]+$/i;
+const PROPERTY_PATTERN = /^[a-z\d-]+$/i;
 
 // Turns a CSS declaration block into a property-value map.
 const parseCssDeclarations = (rules?: string): CssRuleMap | undefined => {
@@ -16,10 +16,14 @@ const parseCssDeclarations = (rules?: string): CssRuleMap | undefined => {
   }
 
   const cssMap: CssRuleMap = new Map();
-  for (const declaration of rules.split(';')) {
-    if (!declaration.trim()) {
-      continue;
-    }
+  let normalizedRules = rules
+    .split(';')
+    .map((rule) => rule.replace(/[\r\n]+/g, ' ').trim())
+    .map((rule) => rule.replace(/\s{2,}/g, ' '))
+    .filter(Boolean);
+
+  const entries: Array<[string, string]> = [];
+  for (const declaration of normalizedRules) {
     const colonIndex = declaration.indexOf(':');
     if (colonIndex <= 0) {
       continue;
@@ -36,6 +40,11 @@ const parseCssDeclarations = (rules?: string): CssRuleMap | undefined => {
     if (!normalizedValue) {
       continue;
     }
+    entries.push([property, normalizedValue]);
+  }
+
+  entries.sort(([a], [b]) => a.localeCompare(b));
+  for (const [property, normalizedValue] of entries) {
     cssMap.set(property, normalizedValue);
   }
 

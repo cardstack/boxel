@@ -34,7 +34,7 @@ import menuItem, {
 import optional from './helpers/optional.ts';
 import pick from './helpers/pick.ts';
 import { sanitizeHtml, sanitizeHtmlSafe } from './helpers/sanitize-html.ts';
-import { substring } from './helpers/string.ts';
+import { substring, dasherize } from './helpers/string.ts';
 import {
   type CssGroupInput,
   type CssGroups,
@@ -68,6 +68,7 @@ export {
   copyCardURLToClipboard,
   cssVar,
   currencyFormat,
+  dasherize,
   dayjsFormat,
   divide,
   element,

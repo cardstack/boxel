@@ -137,4 +137,18 @@ module('Unit | extract-css-variables', function () {
     let result = extractCssVariables(cssString);
     assert.strictEqual(result, `--primary: lightpink; --secondary: purple`);
   });
+
+  test('keeps properties containing numbers', function (assert) {
+    let cssString = `
+      :root {
+        --shadow-2xl: 0 1px 4px rgba(0 0 0 / 0.3);
+        --shadow-4xl: 0 2px 8px rgba(0 0 0 / 0.4);
+      }
+    `;
+    let result = extractCssVariables(cssString);
+    assert.strictEqual(
+      result,
+      `--shadow-2xl: 0 1px 4px rgba(0 0 0 / 0.3); --shadow-4xl: 0 2px 8px rgba(0 0 0 / 0.4)`,
+    );
+  });
 });
