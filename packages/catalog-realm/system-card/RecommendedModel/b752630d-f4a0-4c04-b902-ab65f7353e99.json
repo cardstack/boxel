@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "RecommendedModel",
+        "module": "../recommended-model"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "purpose": "design",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "thinkingEffort": "low"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "modelConfiguration": {
+        "links": {
+          "self": "../OpenRouterModel/google-gemini-3-pro-preview"
+        }
+      }
+    }
+  }
+}

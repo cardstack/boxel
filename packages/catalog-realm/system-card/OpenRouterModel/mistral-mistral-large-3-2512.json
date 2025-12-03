@@ -1,0 +1,79 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "OpenRouterModel",
+        "module": "../openrouter-model"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Mistral: Mistral Large 3 2512",
+      "created": 1764624472,
+      "modelId": "mistralai/mistral-large-2512",
+      "pricing": {
+        "image": "0",
+        "prompt": "0.0000005",
+        "request": "0",
+        "completion": "0.0000015"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "description": "Mistral Large 3 2512 is Mistral’s most capable model to date, featuring a sparse mixture-of-experts architecture with 41B active parameters (675B total), and released under the Apache 2.0 license.",
+      "topProvider": {
+        "isModerated": false,
+        "contextLength": 262144,
+        "maxCompletionTokens": null
+      },
+      "architecture": {
+        "modality": "text+image->text",
+        "tokenizer": "Mistral",
+        "instructType": "",
+        "inputModalities": [
+          "text",
+          "image"
+        ],
+        "outputModalities": [
+          "text"
+        ]
+      },
+      "canonicalSlug": "mistralai/mistral-large-2512",
+      "contextLength": 262144,
+      "perRequestLimits": {
+        "promptTokens": null,
+        "completionTokens": null
+      },
+      "defaultParameters": {
+        "top_p": null,
+        "max_tokens": null,
+        "temperature": 0.0645,
+        "presence_penalty": null,
+        "frequency_penalty": null
+      },
+      "supportedParameters": [
+        "frequency_penalty",
+        "max_tokens",
+        "presence_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_p"
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
