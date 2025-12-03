@@ -1851,37 +1851,11 @@ export default class MatrixService extends Service {
     this.localPersistenceService.setCurrentRoomId(undefined);
   }
 
-  async activateCodingSkill() {
-    if (!this.currentRoomId) {
-      return;
-    }
+  async activateCodingSkill() {}
 
-    let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(
-      this.commandService.commandContext,
-    );
-    let defaultSkills = await this.loadDefaultSkills('code');
-    await updateRoomSkillsCommand.execute({
-      roomId: this.currentRoomId,
-      skillCardIdsToActivate: defaultSkills.map((s) => s.id),
-    });
-  }
+  async setLLMForCodeMode() {}
 
-  async setLLMForCodeMode() {
-    let preferredModel =
-      this.systemCard?.defaultModelConfiguration?.modelId ??
-      this.systemCard?.modelConfigurations?.[0]?.modelId ??
-      DEFAULT_CODING_LLM;
-    return this.setLLMModel(preferredModel);
-  }
-
-  async setLLMForInteractMode() {
-    let preferredModel =
-      this.systemCard?.defaultModelConfiguration?.modelId ??
-      this.systemCard?.modelConfigurations?.[0]?.modelId ??
-      DEFAULT_LLM;
-
-    return this.setLLMModel(preferredModel);
-  }
+  async setLLMForInteractMode() {}
 
   private async setLLMModel(model: string) {
     if (!this.currentRoomId) {
