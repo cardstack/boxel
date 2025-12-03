@@ -830,13 +830,8 @@ module('Acceptance | Spec preview', function (hooks) {
       codePath: `${testRealmURL}pet.gts`,
     });
     await click('[data-test-module-inspector-view="spec"]');
-
     await click('[data-test-spec-selector] > div');
-    assert
-      .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
-      .hasText('pet-entry-2');
-    await click('[data-option-index="0"]');
-
+    await click(`[data-test-option-id="${testRealmURL}pet-entry-2"]`);
     assert
       .dom(
         `[data-test-card="${testRealmURL}pet-entry-2"][data-test-card-format="isolated"]`,
@@ -854,10 +849,7 @@ module('Acceptance | Spec preview', function (hooks) {
     await click('[data-test-module-inspector-view="spec"]');
 
     await click('[data-test-spec-selector] > div');
-    assert
-      .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
-      .hasText('pet-entry-2');
-    await click('[data-option-index="0"]');
+    await click(`[data-test-option-id="${testRealmURL}pet-entry-2"]`);
     await click('[data-test-view-spec-instance]');
 
     assert
@@ -1009,11 +1001,7 @@ module('Acceptance | Spec preview', function (hooks) {
     await click('[data-test-module-inspector-view="spec"]');
 
     await click('[data-test-spec-selector] > div');
-    assert
-      .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
-      .hasText('pet-entry-2');
-
-    await click('[data-option-index="0"]');
+    await click(`[data-test-option-id="${testRealmURL}pet-entry-2"]`);
     assert.dom(`[data-test-links-to-many="linkedExamples"]`).exists();
     assert.dom(`[data-test-card="${testRealmURL}Pet/mango"]`).exists();
 
@@ -1097,12 +1085,9 @@ module('Acceptance | Spec preview', function (hooks) {
       codePath: `${testRealmURL}pet.gts`,
     });
     await click('[data-test-module-inspector-view="spec"]');
-    // Select the pet-entry-2 spec which has linked examples
     await click('[data-test-spec-selector] > div');
-    assert
-      .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
-      .hasText('pet-entry-2');
-    await click('[data-option-index="0"]');
+    // Select the pet-entry-2 spec which has linked examples
+    await click(`[data-test-option-id="${testRealmURL}pet-entry-2"]`);
 
     // Wait for linked examples to appear
     const petId = `${testRealmURL}Pet/mango`;
@@ -1141,13 +1126,9 @@ module('Acceptance | Spec preview', function (hooks) {
       codePath: `${testRealmURL}pet.gts`,
     });
     await click('[data-test-module-inspector-view="spec"]');
-    // Select the pet-entry-2 spec which has linked examples
     await click('[data-test-spec-selector] > div');
-    assert
-      .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
-      .hasText('pet-entry-2');
-
-    await click('[data-option-index="0"]');
+    // Select the pet-entry-2 spec which has linked examples
+    await click(`[data-test-option-id="${testRealmURL}pet-entry-2"]`);
     assert.dom(`[data-test-card="${petId}"]`).exists();
     // Click on the first linked example
     await triggerEvent(`[data-test-card="${petId}"]`, 'mouseenter');
@@ -1179,10 +1160,7 @@ module('Acceptance | Spec preview', function (hooks) {
     });
     await click('[data-test-module-inspector-view="spec"]');
     await click('[data-test-spec-selector] > div');
-    assert
-      .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
-      .hasText('pet-entry-2');
-    await click('[data-option-index="0"]');
+    await click(`[data-test-option-id="${testRealmURL}pet-entry-2"]`);
     assert.dom(`[data-test-card="${firstPetId}"]`).exists();
     assert.dom(`[data-test-card="${secondPetId}"]`).exists();
 
@@ -1266,7 +1244,7 @@ module('Acceptance | Spec preview', function (hooks) {
       .dom('[data-test-spec-selector] [data-test-spec-selector-item-path]')
       .containsText('pet-entry');
     await click('[data-test-spec-selector] > div');
-    await click('[data-option-index="1"]');
+    await click(`[data-test-option-id="${testRealmURL}pet-entry"]`);
 
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Pet');
     assert.dom('[data-test-exported-type]').hasText('card');

@@ -723,6 +723,7 @@ export class BoxelSelectOptions extends PowerSelectOptions {
           id='{{@select.uniqueId}}-{{@groupIndex}}{{index}}'
           data-option-index='{{@groupIndex}}{{index}}'
           data-test-option={{index}}
+          data-test-option-id={{option.id}}
           role='option'
           aria-selected={{eq option @select.selected}}
           aria-disabled={{if (get option 'disabled') 'true'}}
