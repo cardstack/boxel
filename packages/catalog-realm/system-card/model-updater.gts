@@ -1,5 +1,4 @@
-import { multiply, divide, and, not } from '@cardstack/boxel-ui/helpers'; // ²⁶ Added gt helper
-import { concat } from '@ember/helper';
+import { and, not } from '@cardstack/boxel-ui/helpers'; // ²⁶ Added gt helper
 import {
   CardDef,
   Component,
