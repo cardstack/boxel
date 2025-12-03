@@ -1081,31 +1081,22 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
           seedRecords?.length ?? 0
         }`,
       );
-      let liveQuery = ensureQueryFieldLiveQuery(
+      let searchResource = ensureQueryFieldLiveQuery(
         getStore(instance),
         instance,
         this,
         seedRecords,
       );
-      if (liveQuery) {
-        let records =
-          (liveQuery as any).records ??
-          (liveQuery as any).instances ??
-          ([] as any[]);
-        if ((!records || records.length === 0) && seedRecords?.length) {
-          records = seedRecords;
-        }
-        let next = (records as any[])[0] as BaseInstanceType<CardT> | undefined;
-        deserialized.set(this.name, next ?? null);
-        return next;
+      let records =
+        (searchResource as any)?.instances ??
+        (searchResource as any)?.records ??
+        ([] as any[]);
+      if ((!records || records.length === 0) && seedRecords?.length) {
+        records = seedRecords;
       }
-      if (seedRecords) {
-        let next = seedRecords[0] as BaseInstanceType<CardT> | undefined;
-        deserialized.set(this.name, next ?? null);
-        return next;
-      }
-      deserialized.set(this.name, null);
-      return undefined;
+      let next = (records as any[])[0] as BaseInstanceType<CardT> | undefined;
+      deserialized.set(this.name, next ?? null);
+      return next;
     }
 
     // fallback to legacy behavior
@@ -1539,29 +1530,21 @@ class LinksToMany<FieldT extends CardDefConstructor>
           seedRecords?.length ?? 0
         }`,
       );
-      let liveQuery = ensureQueryFieldLiveQuery(
+      let searchResource = ensureQueryFieldLiveQuery(
         getStore(instance),
         instance,
         this,
         seedRecords,
       );
-      if (liveQuery) {
-        let records =
-          (liveQuery as any).records ??
-          (liveQuery as any).instances ??
-          ([] as any[]);
-        if ((!records || records.length === 0) && seedRecords?.length) {
-          records = seedRecords;
-        }
-        deserialized.set(this.name, records);
-        return records as BaseInstanceType<FieldT>;
+      let records =
+        (searchResource as any)?.instances ??
+        (searchResource as any)?.records ??
+        ([] as any[]);
+      if ((!records || records.length === 0) && seedRecords?.length) {
+        records = seedRecords;
       }
-      if (Array.isArray(storedValue)) {
-        return storedValue as BaseInstanceType<FieldT>;
-      }
-      let fallback = this.emptyValue(instance);
-      deserialized.set(this.name, fallback);
-      return fallback as BaseInstanceType<FieldT>;
+      deserialized.set(this.name, records);
+      return records as BaseInstanceType<FieldT>;
     }
 
     // Non-query fields
