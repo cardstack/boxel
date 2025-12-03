@@ -330,7 +330,7 @@ module('Acceptance | theme-card-test', function (hooks) {
       );
       assert.ok(
         styleAttr.includes('--shadow-2xl: 0 6px 12px rgba(255, 215, 0, 0.5)'),
-        'inline style includes root shadow-2x variable',
+        'inline style includes root shadow-2xl variable',
       );
       assert.false(
         styleAttr.includes('--background: #050813'),
