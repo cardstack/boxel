@@ -105,7 +105,6 @@ export function ensureQueryFieldSearchResource(
   if (seedRecords === undefined && cachedState?.records) {
     seedRecords = cachedState.records;
   }
-  registerSeedRecords(store, seedRecords);
   let args = () =>
     resolveQueryAndRealm(instance, field, fieldDefinition) ??
     deriveArgsFromCachedState(cachedState);
@@ -169,23 +168,6 @@ export function ensureQueryFieldSearchResource(
 
 function getQueryFieldStateKeys(instance: BaseDef): string[] {
   return Array.from(queryFieldStates.get(instance)?.keys() ?? []);
-}
-
-export function markQueryFieldStaleInternal(
-  instance: BaseDef,
-  fieldName: string,
-  notifyCardTracking: (instance: BaseDef) => void,
-): boolean {
-  let state = getQueryFieldState(instance, fieldName);
-  if (!state || state.stale) {
-    return false;
-  }
-  setQueryFieldState(instance, fieldName, {
-    ...state,
-    stale: true,
-  });
-  notifyCardTracking(instance);
-  return true;
 }
 
 export function validateRelationshipQuery(
@@ -383,7 +365,6 @@ export function seedQueryFieldState(
     }
 
     let seedRecords = extractSeedRecords(instance, field);
-    registerSeedRecords(store, seedRecords);
 
     setQueryFieldState(instance, fieldName, {
       query: normalizedQuery,
@@ -593,22 +574,4 @@ function extractSeedRecords(
     }
   }
   return undefined;
-}
-
-function registerSeedRecords(
-  store: CardStore | undefined,
-  records?: CardDef[],
-): void {
-  if (!store || !records || records.length === 0) {
-    return;
-  }
-  for (let record of records) {
-    if (!record) {
-      continue;
-    }
-    let identifier = record.id ?? record[localIdSymbol];
-    if (identifier) {
-      store.set(identifier, record);
-    }
-  }
 }

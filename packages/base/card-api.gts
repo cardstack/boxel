@@ -129,7 +129,6 @@ import {
   notifyCardTracking,
   peekAtField,
   relationshipMeta,
-  markQueryFieldStale,
   setFieldDescription,
   type NotLoadedValue,
 } from './field-support';
@@ -163,7 +162,6 @@ export {
   serialize,
   serializeCard,
   setQueryFieldState,
-  markQueryFieldStale,
   ensureQueryFieldSearchResource,
   getStore,
   type BoxComponent,

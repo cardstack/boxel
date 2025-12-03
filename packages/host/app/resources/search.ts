@@ -2,8 +2,7 @@ import { registerDestructor } from '@ember/destroyable';
 import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import { tracked, cached } from '@glimmer/tracking';
-import { restartableTask } from 'ember-concurrency';
-import { next, scheduleOnce } from '@ember/runloop';
+import { restartableTask, task } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
 import difference from 'lodash/difference';
@@ -17,6 +16,8 @@ import {
   isCardCollectionDocument,
   isCardInstance,
   logger as runtimeLogger,
+  normalizeQueryForSignature,
+  buildQueryString,
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -58,11 +59,10 @@ export class SearchResource extends Resource<Args> {
   private _instances = new TrackedArray<CardDef>();
   @tracked private _meta: QueryResultsMeta = { page: { total: 0 } };
   @tracked private _errors: ErrorEntry[] | undefined;
-  @tracked private refreshQueued = false;
   #isLive = false;
   #seedApplied = false;
   #doWhileRefreshing: (() => void) | undefined;
-  #previousQuery: Query | undefined;
+  #previousQueryString: string | undefined;
   #previousRealms: string[] | undefined;
   #hasRegisteredDestructor = false;
   #log = runtimeLogger('search-resource');
@@ -71,6 +71,7 @@ export class SearchResource extends Resource<Args> {
     if (query === undefined) {
       return;
     }
+
     this.#log.info(
       `modify: query present; isLive=${isLive}; realms=${realms?.join(',') ?? '(default)'}`,
     );
@@ -83,34 +84,31 @@ export class SearchResource extends Resource<Args> {
     this.#log.info(
       `modify: prepared realms for subscription=${this.realmsToSearch.join(',')}`,
     );
+    if (seed && !this.#seedApplied) {
+      this.loaded = this.applySeed.perform(seed);
+      this.#seedApplied = true;
+      let normalizedQuery = normalizeQueryForSignature(query);
+      this.#previousQueryString = buildQueryString(normalizedQuery);
+      this.#log.info(
+        `apply seed for search resource (one-time); count=${seed.cards.length}; searchURL=${seed.searchURL}`,
+      );
+    }
+
+    let queryString = buildQueryString(normalizeQueryForSignature(query));
     if (
-      isEqual(query, this.#previousQuery) &&
+      isEqual(queryString, this.#previousQueryString) &&
       isEqual(realms, this.#previousRealms)
     ) {
       // we want to only run the search when there is a deep equality
       // difference, not a strict equality difference
       return;
     }
-    this.#previousQuery = query;
+
     this.#previousRealms = realms;
-    if (seed && !this.#seedApplied) {
-      this.applySeed(seed);
-      this.#seedApplied = true;
-      this.loaded = Promise.resolve();
-      this.#log.info(
-        `apply seed for search resource (one-time); count=${seed.cards.length}; searchURL=${seed.searchURL}`,
-      );
-    }
-    // Only kick off a fetch if we didn't just seed; seeding is the initial state.
-    // Defer to afterRender to avoid mutating tracked state during render.
-    if (!seed || this.#seedApplied) {
-      scheduleOnce('afterRender', this, () => {
-        next(this, () => {
-          this.loaded = this.search.perform(query);
-        });
-      });
-    }
-    if (isLive) {
+    this.#previousQueryString = queryString;
+    this.loaded = this.search.perform(query);
+
+    if (isLive && !isEqual(realms, this.#previousRealms)) {
       this.#log.info(
         `subscribing to realms for search resource; realms=${this.realmsToSearch.join(',')}`,
       );
@@ -139,17 +137,7 @@ export class SearchResource extends Resource<Args> {
             ) {
               return;
             }
-            if (this.refreshQueued) {
-              this.#log.info(
-                `search-resource: refresh already queued for ${realm}; skipping requeue`,
-              );
-              return;
-            }
-            this.refreshQueued = true;
-            next(this, () => {
-              this.refreshQueued = false;
-              this.search.perform(query);
-            });
+            this.search.perform(query);
           }),
         };
       });
@@ -172,7 +160,6 @@ export class SearchResource extends Resource<Args> {
   get isLive() {
     return this.#isLive;
   }
-  @cached
   get instances() {
     return this._instances;
   }
@@ -193,18 +180,30 @@ export class SearchResource extends Resource<Args> {
   get errors() {
     return this._errors;
   }
-  private applySeed(seed: NonNullable<Args['named']['seed']>) {
+
+  private async updateInstances(newInstances: CardDef[]) {
     let oldReferences = this._instances.map((i) => i.id);
-    this._meta = seed.meta ?? { page: { total: seed.cards.length } };
-    this._errors = seed.errors;
-    this._instances.splice(0, this._instances.length, ...seed.cards);
-    for (let card of seed.cards) {
-      if (card?.id) {
-        this.store.set(card.id, card);
-        this.store.addReference(card.id);
-      }
+    // Please note 3 things there:
+    // 1. we are mutating this._instances, not replacing it
+    // 2. the items in this array come from an identity map, so we are never
+    //    recreating an instance that already exists.
+    // 3. The ordering of the results is important, we need to retain that.
+    //
+    //  As such, removing all the items in-place in our tracked
+    //  this._instances array, and then re-adding the new results back into
+    //  the array in the correct order synchronously is a stable operation.
+    //  glimmer understands the delta and will only rerender the components
+    //  tied to the instances that are added (or removed) from the array
+    this._instances.splice(0, this._instances.length, ...newInstances);
+    if (this.#doWhileRefreshing) {
+      this.#doWhileRefreshing();
     }
     let newReferences = this._instances.map((i) => i.id);
+    for (let card of this._instances) {
+      if (card?.id) {
+        this.store.set(card.id, card);
+      }
+    }
     let referencesToDrop = difference(oldReferences, newReferences);
     for (let id of referencesToDrop) {
       this.store.dropReference(id);
@@ -213,12 +212,20 @@ export class SearchResource extends Resource<Args> {
     for (let id of referencesToAdd) {
       this.store.addReference(id);
     }
+    return this.store.flush();
   }
+
+  private applySeed = task(async (seed: NonNullable<Args['named']['seed']>) => {
+    await Promise.resolve();
+    this._meta = seed.meta ?? { page: { total: seed.cards.length } };
+    this._errors = seed.errors;
+    await this.updateInstances(seed.cards);
+  });
+
   private search = restartableTask(async (query: Query) => {
     this.#log.info(
       `search task start; realms=${this.realmsToSearch.join(',')}; query=${JSON.stringify(query)}`,
     );
-    let oldReferences = this._instances.map((i) => i.id);
     // we cannot use the `waitForPromise` test waiter helper as that will cast
     // the Task instance to a promise which makes it uncancellable. When this is
     // uncancellable it results in a flaky test.
@@ -276,36 +283,7 @@ export class SearchResource extends Resource<Args> {
         { page: { total: 0 } } as QueryResultsMeta,
       );
       this._errors = undefined;
-      // Please note 3 things there:
-      // 1. we are mutating this._instances, not replacing it
-      // 2. the items in this array come from an identity map, so we are never
-      //    recreating an instance that already exists.
-      // 3. The ordering of the results is important, we need to retain that.
-      //
-      //  As such, removing all the items in-place in our tracked
-      //  this._instances array, and then re-adding the new results back into
-      //  the array in the correct order synchronously is a stable operation.
-      //  glimmer understands the delta and will only rerender the components
-      //  tied to the instances that are added (or removed) from the array
-      this._instances.splice(0, this._instances.length, ...results);
-      if (this.#doWhileRefreshing) {
-        this.#doWhileRefreshing();
-      }
-      let newReferences = this._instances.map((i) => i.id);
-      for (let card of this._instances) {
-        if (card?.id) {
-          this.store.set(card.id, card);
-        }
-      }
-      let referencesToDrop = difference(oldReferences, newReferences);
-      for (let id of referencesToDrop) {
-        this.store.dropReference(id);
-      }
-      let referencesToAdd = difference(newReferences, oldReferences);
-      for (let id of referencesToAdd) {
-        this.store.addReference(id);
-      }
-      await this.store.flush();
+      await this.updateInstances(results);
     } finally {
       waiter.endAsync(token);
     }
