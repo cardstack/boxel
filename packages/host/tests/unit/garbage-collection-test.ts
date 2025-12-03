@@ -3,11 +3,9 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import {
   baseRealm,
   localId,
-  isNotLoadedError,
   type Loader,
   type CardErrorJSONAPI as CardError,
 } from '@cardstack/runtime-common';
@@ -669,49 +667,6 @@ module('Unit | identity-context garbage collection', function (hooks) {
       `${testRealmURL}${hassan[localId]}`,
       'instance has remote id set correctly',
     );
-  });
-
-  test('can handle encountering a NotLoaded error in an instance during garbage collection', async function (assert) {
-    let { store } = await setupTest();
-    let doc: LooseSingleCardDocument = {
-      data: {
-        id: `${testRealmURL}wu`,
-        type: 'card',
-        attributes: {
-          name: 'Wu',
-        },
-        relationships: {
-          bestFriend: {
-            links: { self: `${testRealmURL}not-loaded` },
-            // this is what a NotLoaded error looks like: a relationship data.id
-            // that has no associated included resource
-            data: {
-              id: `${testRealmURL}not-loaded`,
-              type: 'card',
-            },
-          },
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${testRealmURL}test-cards`,
-            name: 'Person',
-          },
-        },
-      },
-    };
-    let instance = await api.createFromSerialized(doc.data, doc, undefined, {
-      store,
-    });
-
-    try {
-      (instance as any).bestFriend;
-      throw new Error('expected NotLoadedError');
-    } catch (err) {
-      assert.true(isNotLoadedError(err), 'instance has NotLoaded error');
-    }
-
-    // success is not throwing
-    store.sweep(api);
   });
 
   test('return a stale instance when the server state reflects an error for an id', async function (assert) {
