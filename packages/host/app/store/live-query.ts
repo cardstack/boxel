@@ -83,6 +83,10 @@ export default class LiveQuery<T extends CardDef = CardDef> {
     return this.#options.owner;
   }
 
+  get isStale(): boolean {
+    return this.stale;
+  }
+
   get isDestroyed(): boolean {
     return this.#isDestroyed;
   }

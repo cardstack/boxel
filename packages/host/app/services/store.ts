@@ -36,6 +36,7 @@ import {
   type AddOptions,
   type CreateOptions,
   type Query,
+  type QueryResultsMeta,
   type PatchData,
   type Relationship,
   type AutoSaveState,
@@ -46,6 +47,7 @@ import {
   type LooseCardResource,
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
+  type ErrorEntry,
 } from '@cardstack/runtime-common';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
@@ -54,6 +56,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
+import { getSearch } from '../resources/search';
 import LiveQuery, {
   type LiveQueryCreationOptions,
   type LiveQuerySearchArgs,
@@ -77,6 +80,7 @@ import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
+import { getOwner, setOwner } from '@ember/owner';
 
 export { CardErrorJSONAPI, CardSaveSubscriber };
 
@@ -128,6 +132,9 @@ export default class StoreService extends Service implements StoreInterface {
   constructor(owner: Owner) {
     super(owner);
     this.store = this.createCardStore();
+    // ensure global realm subscription hook is registered so search resources
+    // using subscribeToRealm receive events
+    this.messageService.register();
     this.reset.register(this);
     this.ready = this.setup();
     registerDestructor(this, () => {
@@ -601,6 +608,29 @@ export default class StoreService extends Service implements StoreInterface {
     return liveQuery;
   }
 
+  getSearchResource<T extends CardDef = CardDef>(
+    parent: CardDef,
+    getQuery: () => Query | undefined,
+    getRealms?: () => string[] | undefined,
+    opts?: {
+      isLive?: boolean;
+      doWhileRefreshing?: (() => void) | undefined;
+      seed?: {
+        cards: T[];
+        searchURL?: string;
+        meta?: QueryResultsMeta;
+        errors?: ErrorEntry[];
+      };
+    },
+  ) {
+    // ensure parent has an owner so the resource can resolve injected services
+    let owner = getOwner(this);
+    if (owner && !getOwner(parent)) {
+      setOwner(parent, owner);
+    }
+    return getSearch(parent, getQuery, getRealms, opts);
+  }
+
   ensureFieldLiveQuery<T extends CardDef = CardDef>(
     instance: CardDef,
     fieldName: string,
@@ -632,77 +662,6 @@ export default class StoreService extends Service implements StoreInterface {
       this.teardownLiveQuery(liveQuery);
     }
     this.fieldLiveQueries.delete(instance);
-  }
-
-  markLiveQueriesStaleForRealm(realmHref: string): void {
-    let normalized = this.normalizeRealmHref(realmHref);
-    let tracked = this.liveQueryRealmMap.get(normalized);
-    let candidates: Set<LiveQuery> | undefined = tracked;
-    // Fallback: if we don't have any registered queries for this realm (e.g.
-    // seed data without an explicit realm assignment), fall back to scanning
-    // the entire registry and matching based on searchURL.
-    if (!candidates || candidates.size === 0) {
-      candidates = new Set(
-        [...this.liveQueryRegistry].filter((liveQuery) => {
-          if (liveQuery.isDestroyed) {
-            return false;
-          }
-          let realmForQuery = this.liveQueryRealmAssignments.get(liveQuery);
-          if (!realmForQuery && liveQuery.searchURL) {
-            try {
-              let { realm } = this.parseSearchURL(liveQuery.searchURL);
-              realmForQuery = this.normalizeRealmHref(realm.href);
-            } catch {
-              realmForQuery = undefined;
-            }
-          }
-          return realmForQuery === normalized;
-        }),
-      );
-      if (candidates.size === 0) {
-        return;
-      }
-    }
-    storeLogger.debug(
-      `marking live queries stale for ${normalized}; candidates=${candidates.size}`,
-    );
-    for (let liveQuery of Array.from(candidates)) {
-      if (liveQuery.isDestroyed) {
-        candidates.delete(liveQuery);
-        continue;
-      }
-      let marked = liveQuery.markStale();
-      if (!marked) {
-        continue;
-      }
-      void liveQuery.refresh({ force: true }).catch((error) => {
-        storeLogger.warn('live query refresh failed', error);
-      });
-    }
-    if (tracked && tracked.size === 0) {
-      this.liveQueryRealmMap.delete(normalized);
-    }
-  }
-
-  private markAllLiveQueriesStale(): void {
-    if (this.liveQueryRegistry.size === 0) {
-      return;
-    }
-    storeLogger.debug(
-      `marking all live queries stale (count=${this.liveQueryRegistry.size})`,
-    );
-    for (let liveQuery of Array.from(this.liveQueryRegistry)) {
-      if (liveQuery.isDestroyed) {
-        continue;
-      }
-      let marked = liveQuery.markStale();
-      if (!marked) {
-        continue;
-      }
-      void liveQuery.refresh({ force: true }).catch((error) => {
-        storeLogger.warn('live query refresh failed', error);
-      });
-    }
   }
 
   getSaveState(id: string): AutoSaveState | undefined {
@@ -880,8 +839,8 @@ export default class StoreService extends Service implements StoreInterface {
       ensureFieldLiveQuery: (instance, fieldName, options) =>
         this.ensureFieldLiveQuery(instance, fieldName, options),
       destroyLiveQueries: (instance) => this.destroyLiveQueries(instance),
-      markLiveQueriesStaleForRealm: (realmHref) =>
-        this.markLiveQueriesStaleForRealm(realmHref),
+      getSearchResource: (parent, getQuery, getRealms, opts) =>
+        this.getSearchResource(parent, getQuery, getRealms, opts),
     });
   }
 
@@ -980,13 +939,6 @@ export default class StoreService extends Service implements StoreInterface {
         }
       }
     }
-    if (resolvedRealmHref) {
-      this.markLiveQueriesStaleForRealm(resolvedRealmHref);
-    }
-    // Always fall back to marking all live queries stale to ensure query-backed
-    // fields refresh even when we cannot resolve the realm or when tracking
-    // was not established.
-    this.markAllLiveQueriesStale();
   };
 
   private loadInstanceTask = task(

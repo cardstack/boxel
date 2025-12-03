@@ -90,10 +90,6 @@ class DeferredLinkStore implements CardStore {
     /* no-op */
   }
 
-  markLiveQueriesStaleForRealm(_realmHref: string): void {
-    /* no-op */
-  }
-
   async loadDocument(url: string) {
     let normalized = this.normalize(url);
     let ready = this.readyDocs.get(normalized);

@@ -36,7 +36,23 @@ type LiveQueryHooks = {
     options: StoreLiveQueryOptions<T>,
   ): StoreLiveQuery<T>;
   destroyLiveQueries(instance: CardDef): void;
-  markLiveQueriesStaleForRealm(realmHref: string): void;
+  getSearchResource<T extends CardDef = CardDef>(
+    parent: CardDef,
+    getQuery: () => Query | undefined,
+    getRealms?: () => string[] | undefined,
+    opts?: {
+      isLive?: boolean;
+      doWhileRefreshing?: (() => void) | undefined;
+      seed?:
+        | {
+            cards: CardDef[];
+            searchURL?: string;
+            meta?: QueryResultsMeta;
+            errors?: ErrorEntry[];
+          }
+        | undefined;
+    },
+  ): StoreSearchResource<T>;
 };
 
 // we use this 2 way mapping between local ID and remote ID because if we end up
@@ -583,8 +599,38 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.#liveQueryHooks?.destroyLiveQueries(instance);
   }
 
-  markLiveQueriesStaleForRealm(realmHref: string): void {
-    this.#liveQueryHooks?.markLiveQueriesStaleForRealm(realmHref);
+  getSearchResource<T extends CardDef = CardDef>(
+    parent: CardDef,
+    getQuery: () => Query | undefined,
+    getRealms?: () => string[] | undefined,
+    opts?: {
+      isLive?: boolean;
+      doWhileRefreshing?: (() => void) | undefined;
+      seed?:
+        | {
+            cards: CardDef[];
+            searchURL?: string;
+            meta?: QueryResultsMeta;
+            errors?: ErrorEntry[];
+          }
+        | undefined;
+    },
+  ) {
+    if (!this.#liveQueryHooks?.getSearchResource) {
+      return {
+        instances: [],
+        instancesByRealm: [],
+        isLoading: false,
+        meta: { page: { total: 0 } },
+        errors: undefined,
+      } as StoreSearchResource<T>;
+    }
+    return this.#liveQueryHooks.getSearchResource(
+      parent,
+      getQuery,
+      getRealms,
+      opts,
+    );
   }
 }
 

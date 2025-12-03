@@ -110,7 +110,20 @@ export class CardStoreWithErrors implements CardStore {
     return this.#liveQuery as StoreLiveQuery<T>;
   }
   destroyLiveQueries(): void {}
-  markLiveQueriesStaleForRealm(): void {}
+  getSearchResource<T extends CardDef = CardDef>(
+    _parent: CardDef,
+    _getQuery: () => any,
+    _getRealms?: () => string[] | undefined,
+    _opts?: any,
+  ) {
+    return {
+      instances: [],
+      instancesByRealm: [],
+      isLoading: false,
+      meta: { page: { total: 0 } },
+      errors: undefined,
+    } as any;
+  }
 }
 
 export interface RenderCardParams {

@@ -456,14 +456,26 @@ export function subscribeToRealm(
 ): () => void {
   let here = globalThis as any;
   if (!here._CARDSTACK_REALM_SUBSCRIBE) {
+    console.warn(
+      `subscribeToRealm: no subscription handler registered for ${realmURL}; callbacks will never fire`,
+    );
     // eventually we'll support subscribing to a realm in node since this will
     // be how realms will coordinate with one another, but for now do nothing
     return () => {
       /* do nothing */
     };
   } else {
+    let cbId = Math.random().toString(36).slice(2, 8);
+    console.info(
+      `subscribeToRealm: registering listener ${cbId} for ${realmURL}`,
+    );
     let realmSubscribe: RealmSubscribe = here._CARDSTACK_REALM_SUBSCRIBE;
-    return realmSubscribe.subscribe(realmURL, cb);
+    return realmSubscribe.subscribe(realmURL, (ev) => {
+      console.info(
+        `subscribeToRealm: invoking listener ${cbId} for ${realmURL} with event ${JSON.stringify(ev)}`,
+      );
+      cb(ev);
+    });
   }
 }
 

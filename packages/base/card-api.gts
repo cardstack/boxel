@@ -65,6 +65,8 @@ import {
   LocalPath,
   getCardMenuItems,
   type QueryWithInterpolations,
+  type QueryResultsMeta,
+  type ErrorEntry,
 } from '@cardstack/runtime-common';
 import {
   ensureQueryFieldLiveQuery,
@@ -72,6 +74,7 @@ import {
   setQueryFieldState,
   validateRelationshipQuery,
 } from './query-field-support';
+import { logger as runtimeLogger } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
 import DefaultFittedTemplate from './default-templates/fitted';
@@ -355,6 +358,8 @@ export async function flushLogs() {
   await logger.flush();
 }
 
+const queryFieldLogger = runtimeLogger('query-field-getter');
+
 export type StoreLiveQueryStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 export interface StoreLiveQuery<T extends CardDef = CardDef> {
@@ -378,6 +383,14 @@ export interface StoreLiveQueryOptions<T extends CardDef = CardDef> {
   onRefreshEnd?: (result: { error?: unknown }) => void;
 }
 
+export interface StoreSearchResource<T extends CardDef = CardDef> {
+  readonly instances: T[];
+  readonly instancesByRealm: { realm: string; cards: T[] }[];
+  readonly isLoading: boolean;
+  readonly meta: QueryResultsMeta;
+  readonly errors?: ErrorEntry[];
+}
+
 export interface CardStore {
   get(url: string): CardDef | undefined;
   set(url: string, instance: CardDef): void;
@@ -395,7 +408,21 @@ export interface CardStore {
     options: StoreLiveQueryOptions<T>,
   ): StoreLiveQuery<T>;
   destroyLiveQueries(instance: CardDef): void;
-  markLiveQueriesStaleForRealm(realmHref: string): void;
+  getSearchResource<T extends CardDef = CardDef>(
+    parent: CardDef,
+    getQuery: () => Query | undefined,
+    getRealms?: () => string[] | undefined,
+    opts?: {
+      isLive?: boolean;
+      doWhileRefreshing?: (() => void) | undefined;
+      seed?: {
+        cards: T[];
+        searchURL?: string;
+        meta?: QueryResultsMeta;
+        errors?: ErrorEntry[];
+      };
+    },
+  ): StoreSearchResource<T>;
 }
 
 export interface Field<
@@ -1034,6 +1061,9 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         typeof (deserialized as Map<string, unknown>).has === 'function'
           ? (deserialized as Map<string, unknown>).has(this.name)
           : deserialized.get(this.name) !== undefined;
+      queryFieldLogger.info(
+        `linksTo getter for ${this.name} hasStoredValue=${hasStoredValue}`,
+      );
       let storedValue = hasStoredValue
         ? deserialized.get(this.name)
         : undefined;
@@ -1044,6 +1074,13 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       if (hasStoredValue && storedValue !== undefined) {
         seedRecords = storedValue == null ? [] : [storedValue as CardDef];
       }
+      queryFieldLogger.info(
+        `linksTo getter for ${
+          this.name
+        } invoking ensureQueryFieldLiveQuery with seeds=${
+          seedRecords?.length ?? 0
+        }`,
+      );
       let liveQuery = ensureQueryFieldLiveQuery(
         getStore(instance),
         instance,
@@ -1051,7 +1088,14 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         seedRecords,
       );
       if (liveQuery) {
-        let next = liveQuery.records[0] as BaseInstanceType<CardT> | undefined;
+        let records =
+          (liveQuery as any).records ??
+          (liveQuery as any).instances ??
+          ([] as any[]);
+        if ((!records || records.length === 0) && seedRecords?.length) {
+          records = seedRecords;
+        }
+        let next = (records as any[])[0] as BaseInstanceType<CardT> | undefined;
         deserialized.set(this.name, next ?? null);
         return next;
       }
@@ -1476,6 +1520,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
         typeof (deserialized as Map<string, unknown>).has === 'function'
           ? (deserialized as Map<string, unknown>).has(this.name)
           : deserialized.get(this.name) !== undefined;
+      queryFieldLogger.info(
+        `linksToMany getter for ${this.name} hasStoredValue=${hasStoredValue}`,
+      );
       let storedValue = hasStoredValue
         ? deserialized.get(this.name)
         : undefined;
@@ -1485,6 +1532,13 @@ class LinksToMany<FieldT extends CardDefConstructor>
           (entry) => !isNotLoadedValue(entry),
         ) as CardDef[];
       }
+      queryFieldLogger.info(
+        `linksToMany getter for ${
+          this.name
+        } invoking ensureQueryFieldLiveQuery with seeds=${
+          seedRecords?.length ?? 0
+        }`,
+      );
       let liveQuery = ensureQueryFieldLiveQuery(
         getStore(instance),
         instance,
@@ -1492,8 +1546,15 @@ class LinksToMany<FieldT extends CardDefConstructor>
         seedRecords,
       );
       if (liveQuery) {
-        deserialized.set(this.name, liveQuery.records);
-        return liveQuery.records as BaseInstanceType<FieldT>;
+        let records =
+          (liveQuery as any).records ??
+          (liveQuery as any).instances ??
+          ([] as any[]);
+        if ((!records || records.length === 0) && seedRecords?.length) {
+          records = seedRecords;
+        }
+        deserialized.set(this.name, records);
+        return records as BaseInstanceType<FieldT>;
       }
       if (Array.isArray(storedValue)) {
         return storedValue as BaseInstanceType<FieldT>;
@@ -3899,7 +3960,6 @@ class FallbackCardStore implements CardStore {
     return this.#liveQuery as StoreLiveQuery<T>;
   }
   destroyLiveQueries(): void {}
-  markLiveQueriesStaleForRealm(): void {}
 }
 
 class NullLiveQuery implements StoreLiveQuery<CardDef> {

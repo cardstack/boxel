@@ -24,7 +24,7 @@ import {
   normalizeQueryDefinition,
 } from '@cardstack/runtime-common';
 import type { FieldDefinition } from '@cardstack/runtime-common/index-structure';
-import type { StoreLiveQuery, StoreLiveQueryOptions } from './card-api';
+import { logger as runtimeLogger } from '@cardstack/runtime-common';
 import { serializeCard } from './card-serialization';
 import { initSharedState } from './shared-state';
 import { getFields, getDataBucket } from './field-support';
@@ -43,6 +43,17 @@ const queryFieldStates = initSharedState(
   'queryFieldStates',
   () => new WeakMap<BaseDef, Map<string, QueryFieldState>>(),
 );
+
+const queryFieldResources = initSharedState(
+  'queryFieldResources',
+  () =>
+    new WeakMap<
+      BaseDef,
+      Map<string, ReturnType<CardStore['getSearchResource']>>
+    >(),
+);
+
+const log = runtimeLogger('query-field-support');
 
 export function setQueryFieldState(
   instance: BaseDef,
@@ -80,37 +91,80 @@ export function ensureQueryFieldLiveQuery(
   instance: CardDef,
   field: Field,
   seedRecords?: CardDef[],
-): StoreLiveQuery<CardDef> | undefined {
+): ReturnType<CardStore['getSearchResource']> | undefined {
   if (!field.queryDefinition) {
+    log.info(`field ${field.name} is not a query field, skipping`);
     return undefined;
   }
   let fieldDefinition = buildFieldDefinition(field);
   if (!fieldDefinition) {
+    log.warn(`field ${field.name} missing fieldDefinition, skipping`);
     return undefined;
   }
   let cachedState = getQueryFieldState(instance, field.name);
   if (seedRecords === undefined && cachedState?.records) {
     seedRecords = cachedState.records;
   }
-  let liveQuery: StoreLiveQuery<CardDef>;
-  let options: StoreLiveQueryOptions<CardDef> = {
-    getSearchURL: () => resolveSearchURL(instance, field, fieldDefinition),
-    seedRecords,
-    seedRealmHref: cachedState?.realm ?? undefined,
-    seedSearchURL: cachedState?.searchURL ?? undefined,
-    onRefreshEnd: () => {
-      if (liveQuery) {
-        syncQueryFieldState(instance, field, liveQuery);
-      }
-    },
-  };
-  liveQuery = store.ensureFieldLiveQuery<CardDef>(
-    instance,
-    field.name,
-    options,
-  );
-  syncQueryFieldState(instance, field, liveQuery);
-  return liveQuery;
+  registerSeedRecords(store, seedRecords);
+  let args = () =>
+    resolveQueryAndRealm(instance, field, fieldDefinition) ??
+    deriveArgsFromCachedState(cachedState);
+
+  if (!args()) {
+    log.warn(
+      `resolveQueryAndRealm failed and no cached args for ${field.name}; cannot create search resource`,
+    );
+    setQueryFieldState(instance, field.name, undefined);
+    return undefined;
+  }
+
+  let resources = queryFieldResources.get(instance);
+  if (!resources) {
+    resources = new Map();
+    queryFieldResources.set(instance, resources);
+  }
+
+  let resource = resources.get(field.name);
+  if (!resource) {
+    log.info(
+      `ensureQueryFieldLiveQuery: creating resource; field=${field.name}; isLive=${true}; realms derivation starting`,
+    );
+    let resourceRef: ReturnType<CardStore['getSearchResource']> | undefined;
+    let sync = () =>
+      syncQueryFieldStateFromResource(instance, field, resourceRef, args);
+    log.info(
+      `creating search resource for query field ${field.name}; realm=${args()?.realmHref}; searchURL=${args()?.searchURL}; seeds=${seedRecords?.length ?? 0}`,
+    );
+    resourceRef = store.getSearchResource(
+      instance,
+      () => args()?.query,
+      () => {
+        let realm = args()?.realmHref;
+        return realm ? [realm] : undefined;
+      },
+      {
+        isLive: true,
+        seed:
+          seedRecords !== undefined || cachedState?.searchURL !== undefined
+            ? {
+                cards: seedRecords ?? cachedState?.records ?? [],
+                searchURL: cachedState?.searchURL ?? undefined,
+              }
+            : undefined,
+        doWhileRefreshing: sync,
+      },
+    );
+    resource = resourceRef;
+    resources.set(field.name, resourceRef);
+    sync();
+  } else {
+    log.info(
+      `ensureQueryFieldLiveQuery: reusing existing resource for field=${field.name}`,
+    );
+    syncQueryFieldStateFromResource(instance, field, resource, args);
+  }
+
+  return resource;
 }
 
 function getQueryFieldStateKeys(instance: BaseDef): string[] {
@@ -364,11 +418,11 @@ function realmHrefFromSearchURL(searchURL?: string | null): string | undefined {
   return undefined;
 }
 
-function resolveSearchURL(
+function resolveQueryAndRealm(
   instance: CardDef,
   field: Field,
   fieldDefinition: FieldDefinition,
-): { realmHref: string; searchURL: string } | undefined {
+): { realmHref: string; searchURL: string; query: Query } | undefined {
   try {
     let serialized = serializeCard(instance, {
       includeComputeds: true,
@@ -399,6 +453,27 @@ function resolveSearchURL(
     return {
       realmHref: normalized.realm,
       searchURL: buildQuerySearchURL(normalized.realm, normalized.query),
+      query: normalized.query,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function deriveArgsFromCachedState(
+  cachedState: QueryFieldState | undefined,
+): { realmHref: string; searchURL: string; query: Query } | undefined {
+  if (!cachedState?.searchURL || !cachedState?.query) {
+    return undefined;
+  }
+  try {
+    return {
+      realmHref:
+        cachedState.realm ??
+        realmHrefFromSearchURL(cachedState.searchURL) ??
+        '',
+      searchURL: cachedState.searchURL,
+      query: cachedState.query,
     };
   } catch {
     return undefined;
@@ -418,30 +493,35 @@ function buildFieldDefinition(field: Field): FieldDefinition | undefined {
   };
 }
 
-function syncQueryFieldState(
+function syncQueryFieldStateFromResource(
   instance: CardDef,
   field: Field,
-  liveQuery: StoreLiveQuery<CardDef>,
+  resource: ReturnType<CardStore['getSearchResource']> | undefined,
+  getArgs: () =>
+    | { realmHref: string; searchURL: string; query: Query }
+    | undefined,
 ): void {
-  if (!liveQuery) {
+  if (!resource) {
+    setQueryFieldState(instance, field.name, undefined);
     return;
   }
-  if (!liveQuery.searchURL && liveQuery.records.length === 0) {
+  let args = getArgs();
+  if (!args) {
     setQueryFieldState(instance, field.name, undefined);
     return;
   }
   let relationship = buildRelationshipFromRecords(
     field,
-    liveQuery.records,
-    liveQuery.searchURL ?? undefined,
+    resource.instances,
+    args.searchURL,
   );
   setQueryFieldState(instance, field.name, {
-    searchURL: liveQuery.searchURL ?? null,
-    signature: liveQuery.searchURL ?? undefined,
+    searchURL: args.searchURL ?? null,
+    signature: args.searchURL ?? undefined,
     relationship,
-    realm: liveQuery.realmHref ?? null,
+    realm: args.realmHref ?? null,
     stale: false,
-    records: [...liveQuery.records],
+    records: [...resource.instances],
   });
 }
 
