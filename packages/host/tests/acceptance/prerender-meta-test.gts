@@ -238,7 +238,6 @@ module('Acceptance | prerender | meta', function (hooks) {
   });
 
   hooks.afterEach(function () {
-    delete (globalThis as any).__lazilyLoadLinks;
     delete (globalThis as any).__boxelRenderContext;
   });
 

@@ -634,10 +634,6 @@ export default class StoreService extends Service implements StoreInterface {
     let card = shouldStubTimers
       ? await withStubbedRenderTimers(performCreate)
       : await performCreate();
-    if (!(globalThis as any).__lazilyLoadLinks) {
-      // TODO we should be able to get rid of this when we decommission the old prerender
-      await api.ensureLinksLoaded(card);
-    }
     return card;
   }
 
