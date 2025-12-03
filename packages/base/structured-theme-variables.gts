@@ -15,7 +15,7 @@ import {
 } from './card-api';
 import ColorField from './color';
 import CSSValueField from './css-value';
-import { dasherize, type CssRuleMap } from '@cardstack/boxel-ui/helpers';
+import { buildCssVariableName, type CssRuleMap } from '@cardstack/boxel-ui/helpers';
 
 export interface CssVariableFieldEntry extends CssVariableEntry {
   fieldName: string;
@@ -199,7 +199,7 @@ export default class ThemeVarField extends FieldDef {
     }
     let cssVariableFields: CssVariableFieldEntry[] = [];
     for (let fieldName of fieldNames) {
-      let cssVariableName = `--${dasherize(fieldName)}`;
+      let cssVariableName = buildCssVariableName(fieldName);
       let value = (this as CssVariableField)?.[fieldName];
       cssVariableFields.push({
         fieldName,

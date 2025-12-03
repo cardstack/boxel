@@ -4,12 +4,12 @@ import {
   sanitizeHtmlSafe,
   type CssVariableEntry,
   type CssRuleMap,
+  buildCssVariableName,
 } from '@cardstack/boxel-ui/helpers';
 
 import { field, contains, getFields, Component, FieldDef } from './card-api';
 import CSSValueField from './css-value';
 import {
-  dasherize,
   type CssVariableField,
   type CssVariableFieldEntry,
 } from './structured-theme-variables';
@@ -187,7 +187,7 @@ export default class BrandTypography extends FieldDef {
     if (headingFields) {
       for (let { name, value } of headingFields) {
         if (name && value) {
-          let cssVariableName = `--brand-heading-${dasherize(name)}`;
+          let cssVariableName = buildCssVariableName(name, 'brand-heading');
           cssVariableFields.push({
             fieldName: name,
             cssVariableName,
@@ -202,7 +202,7 @@ export default class BrandTypography extends FieldDef {
     if (bodyFields) {
       for (let { name, value } of bodyFields) {
         if (name && value) {
-          let cssVariableName = `--brand-body-${dasherize(name)}`;
+          let cssVariableName = buildCssVariableName(name, 'brand-body');
           cssVariableFields.push({
             fieldName: name,
             cssVariableName,

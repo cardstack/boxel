@@ -1,11 +1,10 @@
 import { GridContainer, Swatch } from '@cardstack/boxel-ui/components';
-import { entriesToCssRuleMap } from '@cardstack/boxel-ui/helpers';
+import { buildCssVariableName, entriesToCssRuleMap } from '@cardstack/boxel-ui/helpers';
 
 import { field, contains, Component, getFields, FieldDef } from './card-api';
 import ColorField from './color';
 import type { CssRuleMap } from '@cardstack/boxel-ui/helpers';
 import {
-  dasherize,
   type CssVariableField,
   type CssVariableFieldEntry,
 } from './structured-theme-variables';
@@ -55,7 +54,7 @@ export default class BrandFunctionalPalette extends FieldDef {
     }
     let cssVariableFields: CssVariableFieldEntry[] = [];
     for (let fieldName of fieldNames) {
-      let cssVariableName = `--brand-${dasherize(fieldName)}`;
+      let cssVariableName = buildCssVariableName(fieldName, 'brand');
       let value = (this as CssVariableField)?.[fieldName];
       cssVariableFields.push({
         fieldName,
