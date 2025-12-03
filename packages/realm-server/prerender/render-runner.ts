@@ -609,6 +609,10 @@ export class RenderRunner {
     if (!err) {
       return false;
     }
+    let status = Number(err.error?.status);
+    if (status === 401 || status === 403) {
+      return false;
+    }
     let reason = this.#evictionReason(err);
     if (!reason) {
       return false;
