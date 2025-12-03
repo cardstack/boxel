@@ -211,9 +211,8 @@ module('Unit | extract-css-variables', function () {
     `;
 
     let groups = parseCssGroups(cssString);
-    assert.ok(groups, 'groups were returned');
     if (!groups) {
-      return;
+      throw new Error('no groups were returned');
     }
 
     assert.deepEqual(

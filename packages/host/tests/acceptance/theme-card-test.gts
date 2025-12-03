@@ -3,9 +3,9 @@ import { click, fillIn } from '@ember/test-helpers';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
-import { Deferred } from '@cardstack/runtime-common';
-
 import { dasherize } from '@cardstack/boxel-ui/helpers';
+
+import { Deferred } from '@cardstack/runtime-common';
 
 import {
   percySnapshot,
