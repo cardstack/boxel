@@ -69,7 +69,7 @@ import {
   type ErrorEntry,
 } from '@cardstack/runtime-common';
 import {
-  ensureQueryFieldLiveQuery,
+  ensureQueryFieldSearchResource,
   seedQueryFieldState,
   setQueryFieldState,
   validateRelationshipQuery,
@@ -164,7 +164,7 @@ export {
   serializeCard,
   setQueryFieldState,
   markQueryFieldStale,
-  ensureQueryFieldLiveQuery,
+  ensureQueryFieldSearchResource,
   getStore,
   type BoxComponent,
   type DeserializeOpts,
@@ -1077,11 +1077,11 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       queryFieldLogger.info(
         `linksTo getter for ${
           this.name
-        } invoking ensureQueryFieldLiveQuery with seeds=${
+        } invoking ensureQueryFieldSearchResource with seeds=${
           seedRecords?.length ?? 0
         }`,
       );
-      let searchResource = ensureQueryFieldLiveQuery(
+      let searchResource = ensureQueryFieldSearchResource(
         getStore(instance),
         instance,
         this,
@@ -1526,11 +1526,11 @@ class LinksToMany<FieldT extends CardDefConstructor>
       queryFieldLogger.info(
         `linksToMany getter for ${
           this.name
-        } invoking ensureQueryFieldLiveQuery with seeds=${
+        } invoking ensureQueryFieldSearchResource with seeds=${
           seedRecords?.length ?? 0
         }`,
       );
-      let searchResource = ensureQueryFieldLiveQuery(
+      let searchResource = ensureQueryFieldSearchResource(
         getStore(instance),
         instance,
         this,

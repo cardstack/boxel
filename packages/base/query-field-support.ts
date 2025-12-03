@@ -86,7 +86,7 @@ function getQueryFieldState(
   return queryFieldStates.get(instance)?.get(fieldName);
 }
 
-export function ensureQueryFieldLiveQuery(
+export function ensureQueryFieldSearchResource(
   store: CardStore,
   instance: CardDef,
   field: Field,
@@ -127,7 +127,7 @@ export function ensureQueryFieldLiveQuery(
   let resource = resources.get(field.name);
   if (!resource) {
     log.info(
-      `ensureQueryFieldLiveQuery: creating resource; field=${field.name}; isLive=${true}; realms derivation starting`,
+      `ensureQueryFieldSearchResource: creating resource; field=${field.name}; isLive=${true}; realms derivation starting`,
     );
     let resourceRef: ReturnType<CardStore['getSearchResource']> | undefined;
     let sync = () =>
@@ -159,7 +159,7 @@ export function ensureQueryFieldLiveQuery(
     sync();
   } else {
     log.info(
-      `ensureQueryFieldLiveQuery: reusing existing resource for field=${field.name}`,
+      `ensureQueryFieldSearchResource: reusing existing resource for field=${field.name}`,
     );
     syncQueryFieldStateFromResource(instance, field, resource, args);
   }
