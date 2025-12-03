@@ -119,6 +119,49 @@ module(basename(__filename), function () {
                 },
               },
             },
+            'rejects.gts': `
+              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              export class Rejects extends CardDef {
+                static isolated = class extends Component<typeof this> {
+                  constructor(...args) {
+                    super(...args);
+                    Promise.reject(new Error('reject boom'));
+                  }
+                  <template>oops</template>
+                }
+              }
+            `,
+            'rejects.json': {
+              data: {
+                meta: {
+                  adoptsFrom: {
+                    module: './rejects',
+                    name: 'Rejects',
+                  },
+                },
+              },
+            },
+            'throws.gts': `
+              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              export class Throws extends CardDef {
+                static isolated = class extends Component<typeof this> {
+                  get explode() {
+                    throw new Error('boom');
+                  }
+                  <template>{{this.explode}}</template>
+                }
+              }
+            `,
+            'throws.json': {
+              data: {
+                meta: {
+                  adoptsFrom: {
+                    module: './throws',
+                    name: 'Throws',
+                  },
+                },
+              },
+            },
           },
         },
       ],
@@ -372,6 +415,66 @@ module(basename(__filename), function () {
           '[data-prerender] has no child element to capture',
         ),
         `error message mentions empty prerender container, got: ${result.response.error?.error.message}`,
+      );
+    });
+
+    test('card prerender surfaces runtime render errors without timing out', async function (assert) {
+      let cardURL = `${realmURL}throws.json`;
+
+      let result = await prerenderer.prerenderCard({
+        realm: realmURL,
+        url: cardURL,
+        userId: testUserId,
+        permissions,
+      });
+
+      assert.ok(result.response.error, 'prerender reports error');
+      assert.strictEqual(
+        result.response.error?.error.status,
+        500,
+        'runtime error surfaces as 500',
+      );
+      assert.ok(
+        result.response.error?.error.message?.includes('boom'),
+        `runtime error message includes thrown message, got: ${result.response.error?.error.message}`,
+      );
+      assert.false(
+        result.pool.timedOut,
+        'runtime error should not be mistaken for timeout',
+      );
+      assert.true(
+        result.pool.evicted,
+        'runtime error evicts prerender page to recover clean state',
+      );
+    });
+
+    test('card prerender surfaces unhandled promise rejection without timing out', async function (assert) {
+      let cardURL = `${realmURL}rejects.json`;
+
+      let result = await prerenderer.prerenderCard({
+        realm: realmURL,
+        url: cardURL,
+        userId: testUserId,
+        permissions,
+      });
+
+      assert.ok(result.response.error, 'prerender reports error');
+      assert.strictEqual(
+        result.response.error?.error.status,
+        500,
+        'unhandled rejection surfaces as 500',
+      );
+      assert.ok(
+        result.response.error?.error.message?.includes('reject boom'),
+        `unhandled rejection message includes thrown message, got: ${result.response.error?.error.message}`,
+      );
+      assert.false(
+        result.pool.timedOut,
+        'unhandled rejection should not be mistaken for timeout',
+      );
+      assert.true(
+        result.pool.evicted,
+        'unhandled rejection evicts prerender page to recover clean state',
       );
     });
 
