@@ -1577,7 +1577,7 @@ export class Realm {
     let source = await fileContentToText(fileWithContent);
     let transpiled: string;
     try {
-      transpiled = transpileJS(source, fileWithContent.path);
+      transpiled = await transpileJS(source, fileWithContent.path);
     } catch (err: any) {
       let cardError =
         err instanceof CardError

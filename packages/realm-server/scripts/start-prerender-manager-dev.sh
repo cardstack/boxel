@@ -6,6 +6,8 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
+  PRERENDER_MANAGER_VERBOSE_LOGS=false \
   ts-node \
   --transpileOnly prerender/manager-server \
-  --port=${PRERENDER_MANAGER_PORT:-4222}
+  --port=${PRERENDER_MANAGER_PORT:-4222} \
+  --exit-on-signal

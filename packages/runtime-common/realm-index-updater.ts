@@ -223,7 +223,8 @@ export function isIgnored(
     [
       `${realmURL.href}.realm.json`,
       `${realmURL.href}.template-lintrc.js`,
-    ].includes(url.href)
+    ].includes(url.href) ||
+    url.href.startsWith(`${realmURL.href}.git/`)
   ) {
     return true;
   }

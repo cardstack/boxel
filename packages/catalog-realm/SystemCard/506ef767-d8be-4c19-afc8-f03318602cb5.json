@@ -1,0 +1,46 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SystemCard",
+        "module": "https://cardstack.com/base/system-card"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Pinecliiff System",
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "modelConfigurations.0": {
+        "links": {
+          "self": "../RecommendedModel/37533a45-5b7a-4cfd-a169-a46976e155be"
+        }
+      },
+      "modelConfigurations.1": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/catalog/ModelConfiguration/anthropic-claude-haiku-45"
+        }
+      },
+      "modelConfigurations.2": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/ctse/personal/ModelConfiguration/08dfc745-4e5c-4be7-b1ba-a7ba56ebd4e3"
+        }
+      },
+      "defaultModelConfiguration": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -19,6 +19,7 @@ NODE_NO_WARNINGS=1 \
   --matrixURL='https://matrix-staging.stack.cards' \
   --realmsRootPath='/persistent/realms' \
   --serverURL='https://realms-staging.stack.cards' \
+  --prerendererUrl='http://boxel-prerender-manager.boxel-staging-internal:4222' \
   \
   --path='/persistent/base' \
   --username='base_realm' \
