@@ -82,6 +82,32 @@ module(basename(__filename), function () {
                 },
               },
             },
+            'no-icon.gts': `
+              import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+              export class NoIcon extends CardDef {
+                static displayName = "No Icon";
+                static icon = class extends Component<typeof this> {
+                  <template></template>
+                }
+                @field name = contains(StringField);
+                static isolated = class extends Component<typeof this> {
+                  <template>{{@model.name}}</template>
+                }
+              }
+            `,
+            'no-icon.json': {
+              data: {
+                attributes: {
+                  name: 'Missing Icon',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './no-icon',
+                    name: 'NoIcon',
+                  },
+                },
+              },
+            },
             'broken.gts': 'export const Broken = ;',
             'broken.json': {
               data: {
@@ -325,6 +351,30 @@ module(basename(__filename), function () {
       );
     });
 
+    test('card prerender surfaces empty render container', async function (assert) {
+      let cardURL = `${realmURL}no-icon.json`;
+
+      let result = await prerenderer.prerenderCard({
+        realm: realmURL,
+        url: cardURL,
+        userId: testUserId,
+        permissions,
+      });
+
+      assert.ok(result.response.error, 'prerender reports error');
+      assert.strictEqual(
+        result.response.error?.error.title,
+        'Invalid render response',
+        'error title indicates invalid render payload',
+      );
+      assert.ok(
+        result.response.error?.error.message?.includes(
+          '[data-prerender] has no child element to capture',
+        ),
+        `error message mentions empty prerender container, got: ${result.response.error?.error.message}`,
+      );
+    });
+
     test('module prerender evicts pooled page on timeout', async function (assert) {
       const moduleURL = `${realmURL}person.gts`;
 
@@ -408,6 +458,12 @@ module(basename(__filename), function () {
 
     hooks.after(async () => {
       await prerenderer.stop();
+    });
+
+    hooks.beforeEach(function () {
+      permissions = {
+        [consumerRealmURL]: ['read', 'write', 'realm-owner'],
+      };
     });
 
     hooks.afterEach(async () => {
@@ -629,14 +685,15 @@ module(basename(__filename), function () {
       ]);
     };
 
-    hooks.before(async () => {
+    hooks.before(async function () {
       prerenderer = new Prerenderer({
         secretSeed: realmSecretSeed,
         maxPages: 2,
         serverURL: prerenderServerURL,
       });
     });
-    hooks.after(async () => {
+
+    hooks.after(async function () {
       await prerenderer.stop();
     });
 

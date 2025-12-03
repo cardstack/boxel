@@ -14,6 +14,7 @@ const DEFAULT_CARD_RENDER_TIMEOUT_MS = 30_000;
 export const cardRenderTimeout = Number(
   process.env.RENDER_TIMEOUT_MS ?? DEFAULT_CARD_RENDER_TIMEOUT_MS,
 );
+export const renderTimeoutMs = cardRenderTimeout;
 
 export type RenderStatus = 'ready' | 'error' | 'unusable';
 
@@ -582,11 +583,32 @@ export async function captureResult(
             undefined,
         } as RenderCapture;
       } else {
-        const firstChild = resolvedElement.children[0] as HTMLElement & {
-          textContent: string;
-          innerHTML: string;
-          outerHTML: string;
-        };
+        const firstChild = resolvedElement.children[0] as
+          | (HTMLElement & {
+              textContent: string;
+              innerHTML: string;
+              outerHTML: string;
+            })
+          | undefined;
+        if (!firstChild) {
+          return {
+            status: 'error',
+            value: JSON.stringify({
+              type: 'error',
+              error: {
+                id: resolvedElement.dataset.prerenderId ?? null,
+                status: 500,
+                title: 'Invalid render response',
+                message:
+                  '[data-prerender] has no child element to capture (render produced no root element)',
+                additionalErrors: null,
+              },
+            }),
+            alive,
+            id: resolvedElement.dataset.prerenderId ?? undefined,
+            nonce: resolvedElement.dataset.prerenderNonce ?? undefined,
+          } as RenderCapture;
+        }
         return {
           status: finalStatus,
           value: (firstChild as any)[capture]!,
