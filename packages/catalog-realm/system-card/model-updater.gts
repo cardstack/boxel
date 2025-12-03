@@ -502,17 +502,11 @@ class Isolated extends Component<typeof ModelUpdater> {
           <div class='progress-text'>{{this.statusMessage}}</div>
           {{#if this.totalCount}}
             <div class='progress-bar'>
-              <div
-                class='progress-fill'
-                style='width: {{if
-                  this.totalCount
-                  (concat
-                    (multiply (divide this.processedCount this.totalCount) 100)
-                    "%"
-                  )
-                  "0%"
-                }}'
-              ></div>
+              <progress
+                class='progress-meter'
+                value={{this.processedCount}}
+                max={{this.totalCount}}
+              ></progress>
             </div>
             <div class='progress-count'>{{this.processedCount}}
               /
@@ -752,17 +746,32 @@ class Isolated extends Component<typeof ModelUpdater> {
 
       .progress-bar {
         width: 100%;
-        height: 8px;
-        background: var(--border);
-        border-radius: 4px;
-        overflow: hidden;
         margin-bottom: 0.5rem;
       }
 
-      .progress-fill {
-        height: 100%;
+      .progress-meter {
+        width: 100%;
+        height: 8px;
+        appearance: none;
+        border: none;
+        background: var(--border);
+        border-radius: 4px;
+        overflow: hidden;
+      }
+
+      .progress-meter::-webkit-progress-bar {
+        background: var(--border);
+        border-radius: 4px;
+      }
+
+      .progress-meter::-webkit-progress-value {
         background: var(--primary);
-        transition: width 0.3s ease;
+        border-radius: 4px;
+      }
+
+      .progress-meter::-moz-progress-bar {
+        background: var(--primary);
+        border-radius: 4px;
       }
 
       .progress-count {

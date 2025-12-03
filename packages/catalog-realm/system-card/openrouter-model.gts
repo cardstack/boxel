@@ -247,9 +247,9 @@ class Isolated extends Component<typeof OpenRouterModel> {
         {{/if}}
 
         <nav class='tab-nav'>
-          <a class='tab-link active'>Overview</a>
-          <a class='tab-link'>Performance</a>
-          <a class='tab-link'>Parameters</a>
+          <button class='tab-link active' type='button'>Overview</button>
+          <button class='tab-link' type='button'>Performance</button>
+          <button class='tab-link' type='button'>Parameters</button>
         </nav>
       </header>
 
