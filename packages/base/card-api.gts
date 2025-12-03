@@ -360,29 +360,6 @@ export async function flushLogs() {
 
 const queryFieldLogger = runtimeLogger('query-field-getter');
 
-export type StoreLiveQueryStatus = 'idle' | 'loading' | 'ready' | 'error';
-
-export interface StoreLiveQuery<T extends CardDef = CardDef> {
-  readonly records: T[];
-  readonly record: T | null;
-  readonly status: StoreLiveQueryStatus;
-  readonly error?: unknown;
-  readonly searchURL?: string;
-  readonly realmHref?: string;
-  refresh(opts?: { force?: boolean }): Promise<void>;
-  destroy(): void;
-}
-
-export interface StoreLiveQueryOptions<T extends CardDef = CardDef> {
-  getSearchURL: () => { realmHref: string; searchURL: string } | undefined;
-  seedRecords?: T[];
-  seedRealmHref?: string;
-  seedSearchURL?: string;
-  autoRefresh?: boolean;
-  onRefreshStart?: () => void;
-  onRefreshEnd?: (result: { error?: unknown }) => void;
-}
-
 export interface StoreSearchResource<T extends CardDef = CardDef> {
   readonly instances: T[];
   readonly instancesByRealm: { realm: string; cards: T[] }[];
@@ -399,15 +376,6 @@ export interface CardStore {
   loadDocument(url: string): Promise<SingleCardDocument | CardError>;
   trackLoad(load: Promise<unknown>): void;
   loaded(): Promise<void>;
-  createLiveQuery<T extends CardDef = CardDef>(
-    options: StoreLiveQueryOptions<T>,
-  ): StoreLiveQuery<T>;
-  ensureFieldLiveQuery<T extends CardDef = CardDef>(
-    instance: CardDef,
-    fieldName: string,
-    options: StoreLiveQueryOptions<T>,
-  ): StoreLiveQuery<T>;
-  destroyLiveQueries(instance: CardDef): void;
   getSearchResource<T extends CardDef = CardDef>(
     parent: CardDef,
     getQuery: () => Query | undefined,
@@ -3882,7 +3850,6 @@ class FallbackCardStore implements CardStore {
   #instances: Map<string, CardDef> = new Map();
   #inFlight: Set<Promise<unknown>> = new Set();
   #loadGeneration = 0; // mirrors host store tracking to detect new loads
-  #liveQuery = new NullLiveQuery();
 
   get(id: string) {
     id = id.replace(/\.json$/, '');
@@ -3929,33 +3896,5 @@ class FallbackCardStore implements CardStore {
     let promise = loadDocument(fetch, url);
     this.trackLoad(promise);
     return await promise;
-  }
-  createLiveQuery<T extends CardDef = CardDef>(
-    _options?: StoreLiveQueryOptions<T>,
-  ): StoreLiveQuery<T> {
-    return this.#liveQuery as StoreLiveQuery<T>;
-  }
-  ensureFieldLiveQuery<T extends CardDef = CardDef>(
-    _instance: CardDef,
-    _fieldName: string,
-    _options?: StoreLiveQueryOptions<T>,
-  ): StoreLiveQuery<T> {
-    return this.#liveQuery as StoreLiveQuery<T>;
-  }
-  destroyLiveQueries(): void {}
-}
-
-class NullLiveQuery implements StoreLiveQuery<CardDef> {
-  readonly records: CardDef[] = [];
-  readonly status: StoreLiveQueryStatus = 'idle';
-  readonly record: CardDef | null = null;
-  readonly error: unknown = undefined;
-  readonly searchURL: string | undefined = undefined;
-  readonly realmHref: string | undefined = undefined;
-  async refresh(): Promise<void> {
-    /* no-op */
-  }
-  destroy(): void {
-    /* no-op */
   }
 }
