@@ -8,7 +8,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import { restartableTask, timeout } from 'ember-concurrency';
+import { restartableTask } from 'ember-concurrency';
 import { Button } from '@cardstack/boxel-ui/components';
 import { on } from '@ember/modifier';
 import SendRequestViaProxyCommand from '@cardstack/boxel-host/commands/send-request-via-proxy';
@@ -240,16 +240,25 @@ class Isolated extends Component<typeof ModelUpdater> {
       this.totalCount = models.length;
 
       this.statusMessage = `Found ${models.length} models. Processing...`;
+      const errors: string[] = [];
 
       for (let i = 0; i < models.length; i++) {
         const apiModel = models[i];
         this.statusMessage = `Processing model ${i + 1}/${models.length}: ${
           apiModel.name || apiModel.id
         }`;
+        console.debug(
+          '[DEBUG] Beginning processing for model',
+          apiModel.id || apiModel.name,
+          `(${i + 1}/${models.length})`,
+        );
+
+        let cardPath: string | undefined;
+        let finalSlug: string | undefined;
 
         try {
           // Create new card instance - will overwrite if exists
-          const modelCard = new OpenRouterModel(this);
+          const modelCard = new OpenRouterModel();
 
           const candidateSlugs = this.getCandidateSlugs(apiModel);
           if (!candidateSlugs.length && apiModel?.id) {
@@ -325,9 +334,9 @@ class Isolated extends Component<typeof ModelUpdater> {
             ? targetRealm
             : `${targetRealm}/`;
 
-          const finalSlug = slugToUse;
+          finalSlug = slugToUse;
 
-          const cardPath = `OpenRouterModel/${finalSlug}.json`;
+          cardPath = `OpenRouterModel/${finalSlug}.json`;
 
           // Build JSON structure
           const cardJson = {
@@ -423,25 +432,37 @@ class Isolated extends Component<typeof ModelUpdater> {
           console.log('[DEBUG] Card saved successfully to:', cardPath);
 
           this.processedCount++;
-
-          await timeout(100);
-
-          // Update UI immediately
-          this.args.model.modelsProcessed = this.processedCount;
-          this.args.model.lastUpdateStatus = `Processed ${this.processedCount} of ${this.totalCount} models`;
         } catch (error: any) {
-          const errorDetails = `Error processing model ${apiModel.id}: ${
-            error.message
-          }\nStack: ${error.stack || 'No stack trace'}`;
-          console.error(errorDetails);
-          this.errorMessage = errorDetails;
+          const isFileExists =
+            typeof error?.message === 'string' &&
+            error.message.toLowerCase().includes('file already exists');
+
+          const errorDetails = isFileExists
+            ? `File already exists for ${finalSlug ?? apiModel.id}`
+            : `Error processing model ${apiModel.id} ${
+                cardPath ? `(${cardPath}) ` : ''
+              }: ${error.message}\nStack: ${error.stack || 'No stack trace'}`;
+
+          if (isFileExists) {
+            console.error(errorDetails);
+          } else {
+            console.error(errorDetails);
+          }
+
+          errors.push(errorDetails);
           // Continue processing other models
         }
       }
 
       this.args.model.modelsProcessed = this.processedCount;
-      this.args.model.lastUpdateStatus = `Successfully processed ${this.processedCount} of ${this.totalCount} models`;
-      this.statusMessage = `✓ Complete! Processed ${this.processedCount} of ${this.totalCount} models`;
+      if (errors.length) {
+        this.errorMessage = errors.join('\n\n');
+        this.args.model.lastUpdateStatus = `Processed ${this.processedCount} of ${this.totalCount} models with ${errors.length} errors`;
+        this.statusMessage = `⚠️ Completed with errors. Processed ${this.processedCount} of ${this.totalCount} models`;
+      } else {
+        this.args.model.lastUpdateStatus = `Successfully processed ${this.processedCount} of ${this.totalCount} models`;
+        this.statusMessage = `✓ Complete! Processed ${this.processedCount} of ${this.totalCount} models`;
+      }
     } catch (error: any) {
       const errorDetails = `Error updating models: ${error.message}\nStack: ${
         error.stack || 'No stack trace'
