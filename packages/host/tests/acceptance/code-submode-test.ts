@@ -1448,9 +1448,9 @@ module('Acceptance | code submode tests', function (_hooks) {
     });
 
     test('clicking a linksTo field in card renderer panel opens the linked card JSON', async function (assert) {
-      let operatorModeStateService = getService<OperatorModeStateService>(
+      let operatorModeStateService = getService(
         'operator-mode-state-service',
-      );
+      ) as OperatorModeStateService;
 
       await visitOperatorMode({
         stacks: [
@@ -1498,9 +1498,9 @@ module('Acceptance | code submode tests', function (_hooks) {
     });
 
     test('clicking a linksToMany field in card renderer panel opens the linked card JSON', async function (assert) {
-      let operatorModeStateService = getService<OperatorModeStateService>(
+      let operatorModeStateService = getService(
         'operator-mode-state-service',
-      );
+      ) as OperatorModeStateService;
 
       await visitOperatorMode({
         stacks: [
@@ -1550,9 +1550,9 @@ module('Acceptance | code submode tests', function (_hooks) {
     });
 
     test('clicking a linksTo field in playground panel opens the linked card JSON', async function (assert) {
-      let operatorModeStateService = getService<OperatorModeStateService>(
+      let operatorModeStateService = getService(
         'operator-mode-state-service',
-      );
+      ) as OperatorModeStateService;
 
       await visitOperatorMode({
         stacks: [
@@ -1597,9 +1597,9 @@ module('Acceptance | code submode tests', function (_hooks) {
     });
 
     test('clicking a linksToMany field in playground panel opens the linked card JSON', async function (assert) {
-      let operatorModeStateService = getService<OperatorModeStateService>(
+      let operatorModeStateService = getService(
         'operator-mode-state-service',
-      );
+      ) as OperatorModeStateService;
 
       setPlaygroundSelections({
         [`${testRealmURL}person/Person`]: {
