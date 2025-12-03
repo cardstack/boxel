@@ -182,7 +182,7 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
 }
 
 const formatCssVarName = (name?: string) =>
-  buildCssVariableName(name, 'brand-color');
+  buildCssVariableName(name, { prefix: 'brand-color' });
 
 export class CompoundColorField extends FieldDef {
   static displayName = 'Color';

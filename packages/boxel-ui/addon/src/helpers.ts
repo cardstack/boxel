@@ -34,13 +34,15 @@ import menuItem, {
 import optional from './helpers/optional.ts';
 import pick from './helpers/pick.ts';
 import { sanitizeHtml, sanitizeHtmlSafe } from './helpers/sanitize-html.ts';
-import { substring, dasherize, buildCssVariableName } from './helpers/string.ts';
+import { dasherize, substring } from './helpers/string.ts';
 import {
+  type BuildCssVariableNameOptions,
   type CssGroupInput,
   type CssGroups,
   type CssRuleMap,
   type CssVariableEntry,
   buildCssGroups,
+  buildCssVariableName,
   entriesToCssRuleMap,
   normalizeCssRuleMap,
 } from './helpers/theme-css.ts';
@@ -63,12 +65,12 @@ export {
   and,
   bool,
   buildCssGroups,
+  buildCssVariableName,
   cn,
   compact,
   copyCardURLToClipboard,
   cssVar,
   currencyFormat,
-  buildCssVariableName,
   dasherize,
   dayjsFormat,
   divide,
@@ -114,6 +116,7 @@ export {
 };
 
 export type {
+  BuildCssVariableNameOptions,
   CssGroupInput,
   CssGroups,
   CssRuleMap,

@@ -1,3 +1,5 @@
+import { dasherize } from './string.ts';
+
 export type CssRuleMap = Map<string, string>; // css property(css variable name)-value map
 export type CssGroups = Map<string, CssRuleMap>; // string is css selector (block name)
 
@@ -12,16 +14,45 @@ export interface CssGroupInput {
   selector?: string | null;
 }
 
+export interface BuildCssVariableNameOptions {
+  prefix?: string;
+}
+
 // Ensures every custom property name is trimmed and prefixed with `--`.
-export const normalizeCssVariableName = (
-  name?: string | null,
-): string | undefined => {
+const normalizeCssVariableName = (name?: string | null): string | undefined => {
   const trimmed = name?.trim();
   if (!trimmed) {
     return;
   }
   return trimmed.startsWith('--') ? trimmed : `--${trimmed}`;
 };
+
+// Normalizes any loose identifier (including leading `--`) into a dasherized segment.
+const normalizeCssVariableSegment = (segment?: string | null) => {
+  const trimmed = segment?.toString()?.trim();
+  if (!trimmed) {
+    return;
+  }
+  const withoutPrefix = trimmed.startsWith('--') ? trimmed.slice(2) : trimmed;
+  const normalized = dasherize(withoutPrefix);
+  return normalized || undefined;
+};
+
+// Produces a dasherized CSS variable name (prefixed with `--`) from a string input and optional string prefix.
+export function buildCssVariableName(
+  name?: string | null,
+  options?: BuildCssVariableNameOptions,
+): string {
+  const normalizedName = normalizeCssVariableSegment(name);
+  if (!normalizedName) {
+    return '';
+  }
+
+  const normalizedPrefix = normalizeCssVariableSegment(options?.prefix);
+  return normalizedPrefix
+    ? `--${normalizedPrefix}-${normalizedName}`
+    : `--${normalizedName}`;
+}
 
 // Standardizes rule values by trimming and removing trailing semicolons.
 export const normalizeCssValue = (
@@ -65,6 +96,7 @@ const addNormalizedRule = (
   map.set(normalizedName, normalizedValue);
 };
 
+// Builds a rule map from arbitrary entries, discarding anything that fails normalization.
 export function entriesToCssRuleMap(
   entries?: CssVariableEntry[] | null,
 ): CssRuleMap {
@@ -78,6 +110,7 @@ export function entriesToCssRuleMap(
   return map;
 }
 
+// Normalizes an existing rule map by revalidating every name/value pair.
 export function normalizeCssRuleMap(rules?: CssRuleMap | null): CssRuleMap {
   if (!rules?.size) {
     return new Map();
@@ -98,6 +131,10 @@ export function buildCssGroups(inputs?: CssGroupInput[] | null): CssGroups {
   for (let input of inputs) {
     const selector = normalizeSelector(input?.selector);
     if (!selector) {
+      console.warn(
+        'buildCssGroups: skipping group because selector "%s" is invalid',
+        input?.selector,
+      );
       continue;
     }
     const initialRules = input.rules?.size

@@ -54,7 +54,7 @@ export default class BrandFunctionalPalette extends FieldDef {
     }
     let cssVariableFields: CssVariableFieldEntry[] = [];
     for (let fieldName of fieldNames) {
-      let cssVariableName = buildCssVariableName(fieldName, 'brand');
+      let cssVariableName = buildCssVariableName(fieldName, { prefix: 'brand' });
       let value = (this as CssVariableField)?.[fieldName];
       cssVariableFields.push({
         fieldName,

@@ -187,7 +187,9 @@ export default class BrandTypography extends FieldDef {
     if (headingFields) {
       for (let { name, value } of headingFields) {
         if (name && value) {
-          let cssVariableName = buildCssVariableName(name, 'brand-heading');
+          let cssVariableName = buildCssVariableName(name, {
+            prefix: 'brand-heading',
+          });
           cssVariableFields.push({
             fieldName: name,
             cssVariableName,
@@ -202,7 +204,9 @@ export default class BrandTypography extends FieldDef {
     if (bodyFields) {
       for (let { name, value } of bodyFields) {
         if (name && value) {
-          let cssVariableName = buildCssVariableName(name, 'brand-body');
+          let cssVariableName = buildCssVariableName(name, {
+            prefix: 'brand-body',
+          });
           cssVariableFields.push({
             fieldName: name,
             cssVariableName,

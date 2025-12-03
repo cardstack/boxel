@@ -26,6 +26,10 @@ const parseCssDeclarations = (rules?: string): CssRuleMap | undefined => {
   for (const declaration of normalizedRules) {
     const colonIndex = declaration.indexOf(':');
     if (colonIndex <= 0) {
+      console.warn(
+        'parseCssDeclarations: skipping declaration without colon ("%s")',
+        declaration,
+      );
       continue;
     }
     const property = declaration.slice(0, colonIndex).trim();
@@ -34,6 +38,10 @@ const parseCssDeclarations = (rules?: string): CssRuleMap | undefined => {
       !property ||
       (!property.startsWith('--') && !PROPERTY_PATTERN.test(property))
     ) {
+      console.warn(
+        'parseCssDeclarations: skipping invalid property "%s"',
+        property,
+      );
       continue;
     }
     const normalizedValue = normalizeCssValue(value);
