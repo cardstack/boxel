@@ -70,7 +70,9 @@ export function createRemotePrerenderer(
           method: 'POST',
           body: JSON.stringify(body),
           signal: ac.signal,
-        }).finally(() => clearTimeout(timer));
+        }).finally(() => {
+          clearTimeout(timer);
+        });
 
         let draining =
           response.status === PRERENDER_SERVER_DRAINING_STATUS_CODE ||
@@ -90,12 +92,7 @@ export function createRemotePrerenderer(
           if (text) {
             message += `: ${text}`;
           }
-          if (
-            response.status === 503 ||
-            draining ||
-            response.status === 504 ||
-            serverError
-          ) {
+          if (response.status === 503 || draining || serverError) {
             throw new RetryablePrerenderError(message, response.status);
           }
           throw new Error(message);
@@ -116,6 +113,12 @@ export function createRemotePrerenderer(
         return attributesPayload;
       } catch (e: any) {
         lastError = e;
+        if (e?.name === 'AbortError') {
+          // AbortError from request timeout—consider this a hard timeout, not a retryable deployment blip.
+          throw new Error(
+            `Prerender request to ${endpoint.href} aborted after ${requestTimeoutMs}ms`,
+          );
+        }
         let retryable =
           e instanceof RetryablePrerenderError ||
           e?.code === 'ECONNREFUSED' ||

@@ -908,16 +908,22 @@ export function buildPrerenderManagerApp(options?: {
     proxyPrerenderRequest(ctxt, 'prerender-module', 'module'),
   );
 
+  let verboseManagerLogs =
+    process.env.PRERENDER_MANAGER_VERBOSE_LOGS === 'true';
   app
     .use((ctxt: Koa.Context, next: Koa.Next) => {
-      log.info(
-        `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}`,
-      );
-      ctxt.res.on('finish', () => {
+      if (verboseManagerLogs) {
         log.info(
-          `--> ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}: ${ctxt.status}`,
+          `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}`,
         );
-        log.debug(JSON.stringify(ctxt.req.headers));
+      }
+      ctxt.res.on('finish', () => {
+        if (verboseManagerLogs) {
+          log.info(
+            `--> ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}: ${ctxt.status}`,
+          );
+          log.debug(JSON.stringify(ctxt.req.headers));
+        }
       });
       return next();
     })

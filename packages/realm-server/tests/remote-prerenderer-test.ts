@@ -128,7 +128,7 @@ module(basename(__filename), function (hooks) {
 
 module(basename(__filename), function () {
   module('remote prerenderer timeouts', function () {
-    test('retries when a request times out', async function (assert) {
+    test('does not retry when the client aborts from request timeout', async function (assert) {
       process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS = '3';
       process.env.PRERENDER_MANAGER_RETRY_DELAY_MS = '1';
       process.env.PRERENDER_MANAGER_REQUEST_TIMEOUT_MS = '20';
@@ -136,41 +136,25 @@ module(basename(__filename), function () {
 
       let server = createServer((_req, res) => {
         attempts++;
-        if (attempts === 1) {
-          res.on('error', () => {});
-          setTimeout(() => {
-            if (!res.writableEnded && !res.destroyed) {
-              res.statusCode = 504;
-              res.end('delayed');
-            }
-          }, 100);
-          return;
-        }
-        res.statusCode = 201;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(
-          JSON.stringify({
-            data: { attributes: { ok: true } },
-          }),
-        );
+        // Never respond; let client-side timeout abort the request.
+        res.on('error', () => {});
       }).listen(0);
 
       try {
         let url = `http://127.0.0.1:${(server.address() as any).port}`;
         let prerenderer = createRemotePrerenderer(url);
 
-        let result = await prerenderer.prerenderCard({
-          realm: 'realm',
-          url: 'https://example.com/card',
-          userId: '@user:localhost',
-          permissions: {},
-        });
-
-        assert.true(
-          (result as any).ok,
-          'eventually succeeds after timing out and retrying',
+        await assert.rejects(
+          prerenderer.prerenderCard({
+            realm: 'realm',
+            url: 'https://example.com/card',
+            userId: '@user:localhost',
+            permissions: {},
+          }),
+          /aborted/,
+          'throws after client-side abort',
         );
-        assert.ok(attempts >= 2, 'retried after timeout');
+        assert.strictEqual(attempts, 1, 'does not retry after timeout abort');
       } finally {
         await new Promise<void>((resolve) => server.close(() => resolve()));
       }
