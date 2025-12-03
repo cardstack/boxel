@@ -1,10 +1,13 @@
 import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+
 import { service } from '@ember/service';
+
 import Component from '@glimmer/component';
 
 import Modifier from 'ember-modifier';
+import { consume, provide } from 'ember-provide-consume-context';
 
 import {
   CardHeader,
@@ -22,16 +25,27 @@ import {
   isResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
+import { CardContextName } from '@cardstack/runtime-common';
+
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import Overlays from '@cardstack/host/components/operator-mode/overlays';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
+import ElementTracker, {
+  type RenderedCardForOverlayActions,
+} from '@cardstack/host/resources/element-tracker';
 import type CommandService from '@cardstack/host/services/command-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type RealmService from '@cardstack/host/services/realm';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import type {
+  CardContext,
+  CardDef,
+  Format,
+  ViewCardFn,
+} from 'https://cardstack.com/base/card-api';
 
 import FormatChooser from '../code-submode/format-chooser';
 
@@ -43,15 +57,18 @@ interface Signature {
     card: CardDef;
     format?: Format; // defaults to 'isolated'
     setFormat: (format: Format) => void;
+    viewCard?: ViewCardFn;
   };
 }
 
 export default class CardRendererPanel extends Component<Signature> {
+  @consume(CardContextName) private declare cardContext: CardContext;
   @service private declare commandService: CommandService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
 
   private scrollPositions = new Map<string, number>();
+  private cardTracker = new ElementTracker();
 
   private onScroll = (event: Event) => {
     let scrollPosition = (event.target as HTMLElement).scrollTop;
@@ -110,6 +127,28 @@ export default class CardRendererPanel extends Component<Signature> {
     );
   }
 
+  @provide(CardContextName)
+  // @ts-ignore context is used via provider
+  private get context(): CardContext {
+    return {
+      ...this.cardContext,
+      cardComponentModifier: this.cardTracker.trackElement,
+    };
+  }
+
+  private get renderedCardsForOverlayActions():
+    | RenderedCardForOverlayActions[]
+    | undefined {
+    if (!this.args.viewCard) {
+      return undefined;
+    }
+    let entries = this.cardTracker.filter(
+      [{ fieldType: 'linksTo' }, { fieldType: 'linksToMany' }],
+      'or',
+    );
+    return entries.length ? entries : undefined;
+  }
+
   <template>
     <div class='preview-buttons'>
       <BoxelButton
@@ -164,6 +203,12 @@ export default class CardRendererPanel extends Component<Signature> {
           {{#if (eq this.format 'fitted')}}
             <FittedFormatGallery @card={{@card}} />
           {{else}}
+            {{#if this.renderedCardsForOverlayActions}}
+              <Overlays
+                @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
+                @viewCard={{@viewCard}}
+              />
+            {{/if}}
             <CardRenderer
               class='preview'
               @card={{@card}}
