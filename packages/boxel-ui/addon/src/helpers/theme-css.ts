@@ -61,8 +61,8 @@ export const normalizeCssValue = (
   if (value == null) {
     return;
   }
-  const trimmed = `${value}`.trim().replace(/;+$/, '');
-  return trimmed ? trimmed : undefined;
+  const normalized = `${value}`.trim().replace(/[;\s]+$/, '');
+  return normalized ? normalized : undefined;
 };
 
 // Collapses selector aliases (like `root`) into their canonical form.
