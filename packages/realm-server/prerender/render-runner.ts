@@ -583,7 +583,7 @@ export class RenderRunner {
       // Auth failures are not signs of a bad page; do not evict on auth errors.
       return null;
     }
-    if (renderError.error.title === 'Render timeout') {
+    if (renderError.error?.title === 'Render timeout') {
       return 'timeout';
     }
     if ((renderError as any).evict) {
