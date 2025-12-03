@@ -66,6 +66,7 @@ type ModelState = {
   state: TrackedMap<string, unknown>;
   readyDeferred: Deferred<void>;
   isReady: boolean;
+  readyWatchdogStarted?: boolean;
 };
 
 export default class RenderRoute extends Route<Model> {
@@ -358,6 +359,7 @@ export default class RenderRoute extends Route<Model> {
     }
     this.#pendingReadyModels.add(model);
     scheduleOnce('afterRender', this, this.#processPendingReadyModels);
+    this.#startReadyWatchdog(model);
   }
 
   #processPendingReadyModels() {
@@ -372,6 +374,40 @@ export default class RenderRoute extends Route<Model> {
       });
     }
     this.#pendingReadyModels.clear();
+  }
+
+  // In rare cases the afterRender queue does not fire, leaving prerender
+  // status stuck at "loading" forever. This watchdog forces the ready path
+  // after a few animation frames so we can unblock prerenders.
+  #startReadyWatchdog(model: Model) {
+    let modelState = this.#modelStates.get(model);
+    if (
+      !modelState ||
+      modelState.isReady ||
+      modelState.readyWatchdogStarted ||
+      typeof requestAnimationFrame !== 'function'
+    ) {
+      return;
+    }
+    modelState.readyWatchdogStarted = true;
+    let attempts = 0;
+    let tick = () => {
+      let current = this.#modelStates.get(model);
+      if (
+        !current ||
+        current.isReady ||
+        this.isDestroying ||
+        this.isDestroyed
+      ) {
+        return;
+      }
+      if (attempts++ >= 2) {
+        void this.#settleModelAfterRender(model);
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
   }
 
   async #settleModelAfterRender(model: Model): Promise<void> {
