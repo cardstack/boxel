@@ -380,10 +380,7 @@ module('Acceptance | site config home page', function (hooks) {
               ? file.content
               : JSON.stringify(file.content);
           realmDoc = JSON.parse(content);
-          return (
-            realmDoc.hostHome === `${testRealmURL}SiteConfig/custom` &&
-            realmDoc.hostHome !== null
-          );
+          return realmDoc.hostHome === `${testRealmURL}SiteConfig/custom`;
         });
 
         assert.strictEqual(

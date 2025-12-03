@@ -115,15 +115,7 @@ export default class HomePageResolverService extends Service {
       return undefined;
     }
 
-    let siteConfig =
-      (await this.tryLoadSiteConfig(resolvedSiteConfigId)) ??
-      (await this.tryLoadSiteConfig(
-        resolvedSiteConfigId.endsWith('.json')
-          ? resolvedSiteConfigId
-          : `${resolvedSiteConfigId}.json`,
-      ));
-
-    return siteConfig ?? undefined;
+    return await this.tryLoadSiteConfig(resolvedSiteConfigId);
   }
 
   private async tryLoadSiteConfig(
