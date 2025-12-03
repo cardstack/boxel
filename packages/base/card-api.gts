@@ -69,9 +69,8 @@ import {
   type ErrorEntry,
 } from '@cardstack/runtime-common';
 import {
+  captureQueryFieldSeedData,
   ensureQueryFieldSearchResource,
-  seedQueryFieldState,
-  setQueryFieldState,
   validateRelationshipQuery,
 } from './query-field-support';
 import { logger as runtimeLogger } from '@cardstack/runtime-common';
@@ -161,7 +160,6 @@ export {
   relationshipMeta,
   serialize,
   serializeCard,
-  setQueryFieldState,
   ensureQueryFieldSearchResource,
   getStore,
   type BoxComponent,
@@ -375,7 +373,7 @@ export interface CardStore {
   trackLoad(load: Promise<unknown>): void;
   loaded(): Promise<void>;
   getSearchResource<T extends CardDef = CardDef>(
-    parent: CardDef,
+    parent: BaseDef,
     getQuery: () => Query | undefined,
     getRealms?: () => string[] | undefined,
     opts?: {
@@ -403,6 +401,11 @@ export interface Field<
   configuration?: ConfigurationInput<any>;
   // Declarative relationship query definition, if provided
   queryDefinition?: QueryWithInterpolations;
+  captureQueryFieldSeedData?(
+    instance: BaseDef,
+    value: any,
+    resource: LooseCardResource,
+  ): void;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
   // use the rendering mechanism to tell if a card is used or not,
@@ -1022,47 +1025,14 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     let deserialized = getDataBucket(instance);
     entangleWithCardTracking(instance);
 
-    if (this.queryDefinition && !this.computeVia) {
-      let hasStoredValue =
-        typeof (deserialized as Map<string, unknown>).has === 'function'
-          ? (deserialized as Map<string, unknown>).has(this.name)
-          : deserialized.get(this.name) !== undefined;
-      queryFieldLogger.info(
-        `linksTo getter for ${this.name} hasStoredValue=${hasStoredValue}`,
-      );
-      let storedValue = hasStoredValue
-        ? deserialized.get(this.name)
-        : undefined;
-      if (isNotLoadedValue(storedValue)) {
-        storedValue = undefined;
-      }
-      let seedRecords: CardDef[] | undefined;
-      if (hasStoredValue && storedValue !== undefined) {
-        seedRecords = storedValue == null ? [] : [storedValue as CardDef];
-      }
-      queryFieldLogger.info(
-        `linksTo getter for ${
-          this.name
-        } invoking ensureQueryFieldSearchResource with seeds=${
-          seedRecords?.length ?? 0
-        }`,
-      );
+    if (this.queryDefinition) {
       let searchResource = ensureQueryFieldSearchResource(
         getStore(instance),
         instance,
         this,
-        seedRecords,
       );
-      let records =
-        (searchResource as any)?.instances ??
-        (searchResource as any)?.records ??
-        ([] as any[]);
-      if ((!records || records.length === 0) && seedRecords?.length) {
-        records = seedRecords;
-      }
-      let next = (records as any[])[0] as BaseInstanceType<CardT> | undefined;
-      deserialized.set(this.name, next ?? null);
-      return next;
+      let records = (searchResource as any)?.instances ?? ([] as any[]);
+      return (records as any[])[0] as BaseInstanceType<CardT> | undefined;
     }
 
     // fallback to legacy behavior
@@ -1344,6 +1314,22 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     return fieldInstance;
   }
 
+  captureQueryFieldSeedData(
+    instance: BaseDef,
+    value: CardDef,
+    resource: LooseCardResource,
+  ) {
+    console.trace(
+      'calling LinksTo#captureQueryFieldSeedData',
+      instance,
+      this.name,
+      value,
+      resource,
+    );
+
+    captureQueryFieldSeedData(instance, this.name, [value], resource);
+  }
+
   component(model: Box<CardDef>): BoxComponent {
     let isComputed = !!this.computeVia || !!this.queryDefinition;
     let fieldName = this.name as keyof CardDef;
@@ -1473,43 +1459,12 @@ class LinksToMany<FieldT extends CardDefConstructor>
     let deserialized = getDataBucket(instance);
 
     if (this.queryDefinition) {
-      let hasStoredValue =
-        typeof (deserialized as Map<string, unknown>).has === 'function'
-          ? (deserialized as Map<string, unknown>).has(this.name)
-          : deserialized.get(this.name) !== undefined;
-      queryFieldLogger.info(
-        `linksToMany getter for ${this.name} hasStoredValue=${hasStoredValue}`,
-      );
-      let storedValue = hasStoredValue
-        ? deserialized.get(this.name)
-        : undefined;
-      let seedRecords: CardDef[] | undefined;
-      if (hasStoredValue && Array.isArray(storedValue)) {
-        seedRecords = storedValue.filter(
-          (entry) => !isNotLoadedValue(entry),
-        ) as CardDef[];
-      }
-      queryFieldLogger.info(
-        `linksToMany getter for ${
-          this.name
-        } invoking ensureQueryFieldSearchResource with seeds=${
-          seedRecords?.length ?? 0
-        }`,
-      );
       let searchResource = ensureQueryFieldSearchResource(
         getStore(instance),
         instance,
         this,
-        seedRecords,
-      );
-      let records =
-        (searchResource as any)?.instances ??
-        (searchResource as any)?.records ??
-        ([] as any[]);
-      if ((!records || records.length === 0) && seedRecords?.length) {
-        records = seedRecords;
-      }
-      deserialized.set(this.name, records);
+      )!;
+      let records = searchResource.instances ?? ([] as any[]);
       return records as BaseInstanceType<FieldT>;
     }
 
@@ -1974,6 +1929,22 @@ class LinksToMany<FieldT extends CardDefConstructor>
       throw errors;
     }
     return fieldInstances;
+  }
+
+  captureQueryFieldSeedData(
+    instance: BaseDef,
+    value: CardDef[],
+    resource: LooseCardResource,
+  ) {
+    console.trace(
+      'calling LinksToMany#captureQueryFieldSeedData',
+      instance,
+      this.name,
+      value,
+      resource,
+    );
+
+    captureQueryFieldSeedData(instance, this.name, value, resource);
   }
 
   component(model: Box<CardDef>): BoxComponent {
@@ -3207,6 +3178,10 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   store: CardStore;
   opts?: DeserializeOpts;
 }): Promise<BaseInstanceType<T>> {
+  console.log(
+    `Deserializing instance of ${instance.constructor.name} from resource`,
+    resource,
+  );
   // because our store uses a tracked map for its identity map all the assembly
   // work that we are doing to deserialize the instance below is "live". so we
   // add the actual instance silently in a non-tracked way and only track it at
@@ -3473,14 +3448,12 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         applySubscribersToInstanceValue(instance, field, existingValue, value);
       }
       deserialized.set(field.name as string, value);
+      field.captureQueryFieldSeedData?.(instance, value, resource);
     }
 
     // assign the realm meta before we compute as computeds may be relying on this
     if (isCardInstance(instance) && resource.id != null) {
       (instance as any)[meta] = resource.meta;
-    }
-    if (isCardInstance(instance)) {
-      seedQueryFieldState(instance as CardDef, resource);
     }
     notifyCardTracking(instance);
     if (isCardInstance(instance) && resource.id != null) {

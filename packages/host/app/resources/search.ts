@@ -64,8 +64,20 @@ export class SearchResource extends Resource<Args> {
   #doWhileRefreshing: (() => void) | undefined;
   #previousQueryString: string | undefined;
   #previousRealms: string[] | undefined;
-  #hasRegisteredDestructor = false;
   #log = runtimeLogger('search-resource');
+
+  constructor(owner: object) {
+    super(owner);
+    registerDestructor(this, () => {
+      for (let instance of this._instances) {
+        this.store.dropReference(instance.id);
+      }
+      for (let subscription of this.subscriptions) {
+        subscription.unsubscribe();
+      }
+    });
+  }
+
   modify(_positional: never[], named: Args['named']) {
     let { query, realms, isLive, doWhileRefreshing, seed } = named;
     if (query === undefined) {
@@ -87,26 +99,11 @@ export class SearchResource extends Resource<Args> {
     if (seed && !this.#seedApplied) {
       this.loaded = this.applySeed.perform(seed);
       this.#seedApplied = true;
-      let normalizedQuery = normalizeQueryForSignature(query);
-      this.#previousQueryString = buildQueryString(normalizedQuery);
+      this.#previousQueryString = seed.searchURL;
       this.#log.info(
         `apply seed for search resource (one-time); count=${seed.cards.length}; searchURL=${seed.searchURL}`,
       );
     }
-
-    let queryString = buildQueryString(normalizeQueryForSignature(query));
-    if (
-      isEqual(queryString, this.#previousQueryString) &&
-      isEqual(realms, this.#previousRealms)
-    ) {
-      // we want to only run the search when there is a deep equality
-      // difference, not a strict equality difference
-      return;
-    }
-
-    this.#previousRealms = realms;
-    this.#previousQueryString = queryString;
-    this.loaded = this.search.perform(query);
 
     if (isLive && !isEqual(realms, this.#previousRealms)) {
       this.#log.info(
@@ -142,17 +139,20 @@ export class SearchResource extends Resource<Args> {
         };
       });
     }
-    if (!this.#hasRegisteredDestructor) {
-      this.#hasRegisteredDestructor = true;
-      registerDestructor(this, () => {
-        for (let instance of this._instances) {
-          this.store.dropReference(instance.id);
-        }
-        for (let subscription of this.subscriptions) {
-          subscription.unsubscribe();
-        }
-      });
+
+    let queryString = buildQueryString(normalizeQueryForSignature(query));
+    if (
+      isEqual(queryString, this.#previousQueryString) &&
+      isEqual(realms, this.#previousRealms)
+    ) {
+      // we want to only run the search when there is a deep equality
+      // difference, not a strict equality difference
+      return;
     }
+
+    this.#previousRealms = realms;
+    this.#previousQueryString = queryString;
+    this.loaded = this.search.perform(query);
   }
   get isLoading() {
     return this.search.isRunning;

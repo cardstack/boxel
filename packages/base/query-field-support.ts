@@ -1,23 +1,21 @@
-import type { BaseDef, CardDef, CardStore, Field } from './card-api';
-import { getStore } from './card-api';
+import type {
+  BaseDef,
+  CardDef,
+  CardStore,
+  Field,
+  StoreSearchResource,
+} from './card-api';
 import type {
   LooseCardResource,
   Query,
   QueryWithInterpolations,
-  Relationship,
-  ResourceID,
 } from '@cardstack/runtime-common';
 import {
-  assertQuery,
-  cloneRelationship,
   getField,
   identifyCard,
-  normalizeQueryForSignature,
-  parseQuery,
   THIS_INTERPOLATION_PREFIX,
   THIS_REALM_TOKEN,
   realmURL as realmURLSymbol,
-  localId as localIdSymbol,
 } from '@cardstack/runtime-common';
 import {
   buildQuerySearchURL,
@@ -27,16 +25,11 @@ import type { FieldDefinition } from '@cardstack/runtime-common/index-structure'
 import { logger as runtimeLogger } from '@cardstack/runtime-common';
 import { serializeCard } from './card-serialization';
 import { initSharedState } from './shared-state';
-import { getFields, getDataBucket } from './field-support';
 
 interface QueryFieldState {
-  signature?: string;
-  query?: Query;
-  searchURL?: string | null;
-  relationship?: Relationship;
-  realm?: string | null;
-  stale?: boolean;
-  records?: CardDef[];
+  seedSearchURL?: string | null;
+  seedRecords?: CardDef[];
+  searchResource?: StoreSearchResource;
 }
 
 const queryFieldStates = initSharedState(
@@ -44,53 +37,12 @@ const queryFieldStates = initSharedState(
   () => new WeakMap<BaseDef, Map<string, QueryFieldState>>(),
 );
 
-const queryFieldResources = initSharedState(
-  'queryFieldResources',
-  () =>
-    new WeakMap<
-      BaseDef,
-      Map<string, ReturnType<CardStore['getSearchResource']>>
-    >(),
-);
-
 const log = runtimeLogger('query-field-support');
-
-export function setQueryFieldState(
-  instance: BaseDef,
-  fieldName: string,
-  state: QueryFieldState | undefined,
-) {
-  let cache = queryFieldStates.get(instance);
-  if (!cache) {
-    if (!state) {
-      return;
-    }
-    cache = new Map();
-    queryFieldStates.set(instance, cache);
-  }
-
-  if (state) {
-    cache.set(fieldName, state);
-  } else {
-    cache.delete(fieldName);
-    if (cache.size === 0) {
-      queryFieldStates.delete(instance);
-    }
-  }
-}
-
-function getQueryFieldState(
-  instance: BaseDef,
-  fieldName: string,
-): QueryFieldState | undefined {
-  return queryFieldStates.get(instance)?.get(fieldName);
-}
 
 export function ensureQueryFieldSearchResource(
   store: CardStore,
-  instance: CardDef,
+  instance: BaseDef,
   field: Field,
-  seedRecords?: CardDef[],
 ): ReturnType<CardStore['getSearchResource']> | undefined {
   if (!field.queryDefinition) {
     log.info(`field ${field.name} is not a query field, skipping`);
@@ -101,73 +53,45 @@ export function ensureQueryFieldSearchResource(
     log.warn(`field ${field.name} missing fieldDefinition, skipping`);
     return undefined;
   }
-  let cachedState = getQueryFieldState(instance, field.name);
-  if (seedRecords === undefined && cachedState?.records) {
-    seedRecords = cachedState.records;
-  }
-  let args = () =>
-    resolveQueryAndRealm(instance, field, fieldDefinition) ??
-    deriveArgsFromCachedState(cachedState);
-
-  if (!args()) {
-    log.warn(
-      `resolveQueryAndRealm failed and no cached args for ${field.name}; cannot create search resource`,
-    );
-    setQueryFieldState(instance, field.name, undefined);
-    return undefined;
-  }
-
-  let resources = queryFieldResources.get(instance);
-  if (!resources) {
-    resources = new Map();
-    queryFieldResources.set(instance, resources);
-  }
-
-  let resource = resources.get(field.name);
-  if (!resource) {
+  let queryFieldState = queryFieldStates.get(instance);
+  let fieldState = queryFieldState?.get(field.name);
+  let searchResource = fieldState?.searchResource;
+  if (searchResource) {
     log.info(
-      `ensureQueryFieldSearchResource: creating resource; field=${field.name}; isLive=${true}; realms derivation starting`,
+      `ensureQueryFieldSearchResource: reusing existing resource from fieldState for field=${field.name}`,
     );
-    let resourceRef: ReturnType<CardStore['getSearchResource']> | undefined;
-    let sync = () =>
-      syncQueryFieldStateFromResource(instance, field, resourceRef, args);
-    log.info(
-      `creating search resource for query field ${field.name}; realm=${args()?.realmHref}; searchURL=${args()?.searchURL}; seeds=${seedRecords?.length ?? 0}`,
-    );
-    resourceRef = store.getSearchResource(
-      instance,
-      () => args()?.query,
-      () => {
-        let realm = args()?.realmHref;
-        return realm ? [realm] : undefined;
-      },
-      {
-        isLive: true,
-        seed:
-          seedRecords !== undefined || cachedState?.searchURL !== undefined
-            ? {
-                cards: seedRecords ?? cachedState?.records ?? [],
-                searchURL: cachedState?.searchURL ?? undefined,
-              }
-            : undefined,
-        doWhileRefreshing: sync,
-      },
-    );
-    resource = resourceRef;
-    resources.set(field.name, resourceRef);
-    sync();
-  } else {
-    log.info(
-      `ensureQueryFieldSearchResource: reusing existing resource for field=${field.name}`,
-    );
-    syncQueryFieldStateFromResource(instance, field, resource, args);
+    return searchResource;
   }
 
-  return resource;
-}
+  let seedRecords = fieldState?.seedRecords;
+  let seedSearchURL = fieldState?.seedSearchURL;
 
-function getQueryFieldStateKeys(instance: BaseDef): string[] {
-  return Array.from(queryFieldStates.get(instance)?.keys() ?? []);
+  let args = () => resolveQueryAndRealm(instance, field, fieldDefinition);
+
+  log.info(
+    `ensureQueryFieldSearchResource: creating resource; field=${field.name}; isLive=${true}; realms derivation starting`,
+  );
+  searchResource = store.getSearchResource(
+    instance,
+    () => args()?.query,
+    () => {
+      let realm = args()?.realmHref;
+      return realm ? [realm] : undefined;
+    },
+    {
+      isLive: true,
+      seed: seedRecords
+        ? {
+            cards: seedRecords ?? undefined,
+            searchURL: seedSearchURL ?? undefined,
+          }
+        : undefined,
+    },
+  );
+  fieldState = fieldState || {};
+  fieldState.searchResource = searchResource;
+
+  return searchResource;
 }
 
 export function validateRelationshipQuery(
@@ -305,118 +229,46 @@ export function collectInterpolationTokens(
     }
   }
 }
-
-export function seedQueryFieldState(
-  instance: CardDef,
+export function captureQueryFieldSeedData(
+  instance: BaseDef,
+  fieldName: string,
+  value: CardDef[],
   resource: LooseCardResource,
-): void {
-  let store = getStore(instance);
-  let queryFieldEntries = Object.entries(
-    getFields(instance, { includeComputeds: true }),
-  ).filter(([, field]) => 'queryDefinition' in field && field.queryDefinition);
-  let queryFieldNameSet = new Set(
-    queryFieldEntries.map(([fieldName]) => fieldName),
-  );
-
-  for (let existingField of getQueryFieldStateKeys(instance)) {
-    if (!queryFieldNameSet.has(existingField)) {
-      setQueryFieldState(instance, existingField, undefined);
-    }
+) {
+  let queryFieldState = queryFieldStates.get(instance);
+  if (!queryFieldState) {
+    queryFieldState = new Map();
+    queryFieldStates.set(instance, queryFieldState);
   }
-
-  for (let [fieldName, field] of queryFieldEntries) {
-    let relationship = resource.relationships?.[fieldName];
-    if (!relationship) {
-      setQueryFieldState(instance, fieldName, undefined);
-      continue;
-    }
-    let searchURL = relationship.links?.search ?? null;
-    if (!searchURL || typeof searchURL !== 'string') {
-      setQueryFieldState(instance, fieldName, undefined);
-      continue;
-    }
-
-    let relationshipClone = cloneRelationship(relationship);
-    let realmFromSearch = realmHrefFromSearchURL(searchURL);
-    let normalizedQuery: Query | undefined;
-    let signature: string | undefined = searchURL;
-
-    let queryString: string | undefined;
-    try {
-      let url = new URL(searchURL);
-      queryString =
-        url.search && url.search.startsWith('?')
-          ? url.search.slice(1)
-          : url.search;
-    } catch {
-      if (searchURL.startsWith('?')) {
-        queryString = searchURL.slice(1);
-      }
-    }
-    if (queryString) {
-      try {
-        let parsed = parseQuery(queryString);
-        assertQuery(parsed);
-        normalizedQuery = normalizeQueryForSignature(parsed as Query);
-      } catch {
-        normalizedQuery = undefined;
-        signature = undefined;
-      }
-    }
-
-    let seedRecords = extractSeedRecords(instance, field);
-
-    setQueryFieldState(instance, fieldName, {
-      query: normalizedQuery,
-      signature,
-      searchURL,
-      relationship: relationshipClone,
-      realm: realmFromSearch ?? null,
-      stale: false,
-      records: seedRecords ? [...seedRecords] : undefined,
-    });
+  let fieldState = queryFieldState.get(fieldName);
+  if (!fieldState) {
+    fieldState = {};
+    queryFieldState.set(fieldName, fieldState);
   }
-}
-
-function realmHrefFromSearchURL(searchURL?: string | null): string | undefined {
-  if (!searchURL) {
-    return undefined;
-  }
-  try {
-    let parsed = new URL(searchURL);
-    if (parsed.pathname.endsWith('/_search')) {
-      parsed.pathname = parsed.pathname.replace(/\/_search$/, '/');
-      parsed.search = '';
-      parsed.hash = '';
-      if (!parsed.pathname.endsWith('/')) {
-        parsed.pathname = `${parsed.pathname}/`;
-      }
-      return parsed.href;
-    }
-  } catch {
-    return undefined;
-  }
-  return undefined;
+  fieldState.seedRecords = value;
+  fieldState.seedSearchURL =
+    resource.relationships?.[fieldName]?.links?.search ?? null;
 }
 
 function resolveQueryAndRealm(
-  instance: CardDef,
+  instance: BaseDef,
   field: Field,
   fieldDefinition: FieldDefinition,
 ): { realmHref: string; searchURL: string; query: Query } | undefined {
   try {
-    let serialized = serializeCard(instance, {
+    // TODO: needs to work with FieldDef instance too
+    let serialized = serializeCard(instance as CardDef, {
       includeComputeds: true,
       includeUnrenderedFields: true,
       useAbsoluteURL: true,
     });
     let resource = serialized.data as LooseCardResource;
-    let realmURL = instance[realmURLSymbol]
-      ? new URL(instance[realmURLSymbol].href)
+    let realmURL = (instance as CardDef)[realmURLSymbol]
+      ? new URL((instance as CardDef)[realmURLSymbol].href)
       : resource.meta?.realmURL
         ? new URL(resource.meta.realmURL)
-        : instance.id
-          ? new URL(instance.id)
+        : (instance as CardDef).id
+          ? new URL((instance as CardDef).id)
           : undefined;
     if (!realmURL) {
       return undefined;
@@ -441,26 +293,6 @@ function resolveQueryAndRealm(
   }
 }
 
-function deriveArgsFromCachedState(
-  cachedState: QueryFieldState | undefined,
-): { realmHref: string; searchURL: string; query: Query } | undefined {
-  if (!cachedState?.searchURL || !cachedState?.query) {
-    return undefined;
-  }
-  try {
-    return {
-      realmHref:
-        cachedState.realm ??
-        realmHrefFromSearchURL(cachedState.searchURL) ??
-        '',
-      searchURL: cachedState.searchURL,
-      query: cachedState.query,
-    };
-  } catch {
-    return undefined;
-  }
-}
-
 function buildFieldDefinition(field: Field): FieldDefinition | undefined {
   let ref = identifyCard(field.card);
   if (!ref) {
@@ -472,106 +304,4 @@ function buildFieldDefinition(field: Field): FieldDefinition | undefined {
     isComputed: !!field.computeVia,
     fieldOrCard: ref,
   };
-}
-
-function syncQueryFieldStateFromResource(
-  instance: CardDef,
-  field: Field,
-  resource: ReturnType<CardStore['getSearchResource']> | undefined,
-  getArgs: () =>
-    | { realmHref: string; searchURL: string; query: Query }
-    | undefined,
-): void {
-  if (!resource) {
-    setQueryFieldState(instance, field.name, undefined);
-    return;
-  }
-  let args = getArgs();
-  if (!args) {
-    setQueryFieldState(instance, field.name, undefined);
-    return;
-  }
-  let relationship = buildRelationshipFromRecords(
-    field,
-    resource.instances,
-    args.searchURL,
-  );
-  setQueryFieldState(instance, field.name, {
-    searchURL: args.searchURL ?? null,
-    signature: args.searchURL ?? undefined,
-    relationship,
-    realm: args.realmHref ?? null,
-    stale: false,
-    records: [...resource.instances],
-  });
-}
-
-function buildRelationshipFromRecords(
-  field: Field,
-  records: CardDef[],
-  searchURL?: string,
-): Relationship {
-  let links: Record<string, string | null> = {};
-  if (searchURL) {
-    links.search = searchURL;
-  }
-  if (field.fieldType === 'linksTo') {
-    let first = records[0];
-    links.self = first?.id ?? null;
-    let data = first ? (recordToResource(first) ?? null) : null;
-    return {
-      links,
-      data,
-    };
-  }
-  if (!('self' in links)) {
-    links.self = null;
-  }
-  let data = records
-    .map((record) => recordToResource(record))
-    .filter((entry): entry is ResourceID => !!entry);
-  return {
-    links,
-    data,
-  };
-}
-
-function recordToResource(card: CardDef): ResourceID | undefined {
-  if (card.id) {
-    return { type: 'card', id: card.id };
-  }
-  let lid = card[localIdSymbol];
-  if (lid) {
-    return { type: 'card', lid };
-  }
-  return undefined;
-}
-
-function extractSeedRecords(
-  instance: CardDef,
-  field: Field,
-): CardDef[] | undefined {
-  let deserialized = getDataBucket(instance);
-  if (!deserialized.has(field.name)) {
-    return undefined;
-  }
-  let value = deserialized.get(field.name);
-  if (value === undefined) {
-    return undefined;
-  }
-  if (field.fieldType === 'linksTo') {
-    if (value == null) {
-      return [];
-    }
-    return [value as CardDef];
-  }
-  if (field.fieldType === 'linksToMany') {
-    if (value == null) {
-      return [];
-    }
-    if (Array.isArray(value)) {
-      return (value as CardDef[]).slice();
-    }
-  }
-  return undefined;
 }

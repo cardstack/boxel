@@ -28,7 +28,6 @@ import {
   type CardCollectionDocument,
 } from './document-types';
 import type { CardResource, Saved } from './resource-types';
-import type { DefinitionsCache } from './definitions-cache';
 import type { FieldDefinition } from './index-structure';
 import {
   normalizeQueryDefinition,

@@ -369,10 +369,18 @@ export default class CardPrerender extends Component {
         delete initialRenderOptions.clearCache;
       }
 
-      let routeInfo = await this.router.recognizeAndLoad(
-        this.#moduleBasePath(url, initialRenderOptions),
-      );
-      return routeInfo.attributes as ModuleRenderResponse;
+      // TODO: extract beforeModel/model hook contents from the route
+      let moduleRoute = getOwner(this)!.lookup('route:module') as any;
+      let result = await moduleRoute!.model({
+        id: url,
+        nonce: String(this.#nonce),
+        renderOptions: initialRenderOptions,
+      });
+      return result as ModuleRenderResponse;
+      // let routeInfo = await this.router.recognizeAndLoad(
+      //   this.#moduleBasePath(url, initialRenderOptions),
+      // );
+      // return routeInfo.attributes as ModuleRenderResponse;
     },
   );
 
