@@ -33,6 +33,7 @@ import {
   type FileResource,
 } from '@cardstack/host/resources/file';
 import { maybe } from '@cardstack/host/resources/maybe';
+import type HomePageResolverService from '@cardstack/host/services/home-page-resolver';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
@@ -138,6 +139,7 @@ export default class OperatorModeStateService extends Service {
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
   private cardTitles = new TrackedMap<string, string>();
+  private interactHomeByRealm = new TrackedMap<string, string>();
 
   private moduleInspectorHistory: Record<string, ModuleInspectorView>;
 
@@ -149,6 +151,7 @@ export default class OperatorModeStateService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private monacoService: MonacoService;
+  @service declare private homePageResolver: HomePageResolverService;
   @service declare private realm: Realm;
   @service declare private realmServer: RealmServer;
   @service declare private recentCardsService: RecentCardsService;
@@ -329,14 +332,15 @@ export default class OperatorModeStateService extends Service {
     if (this._state.stacks.length === 0) {
       const realmURL = this.getRealmURLFromItemId(item.id);
       const isIndexCard = this.isIndexCard(realmURL, item);
+      let defaultCardId =
+        this.interactHomeForRealm(realmURL) ?? `${realmURL}index`;
       if (isIndexCard) {
         // Only open workspace chooser if the trimmed item was an index card
         this._state.workspaceChooserOpened = true;
       } else {
         // If the trimmed item was not an index card, add an index card to the stack
-        const indexCardId = `${realmURL}index`;
-        const indexCardItem = this.createStackItem(indexCardId, 0);
-        this.addItemToStack(indexCardItem);
+        const fallbackCardItem = this.createStackItem(defaultCardId, 0);
+        this.addItemToStack(fallbackCardItem);
       }
     }
 
@@ -443,7 +447,8 @@ export default class OperatorModeStateService extends Service {
   private getRealmURLFromItemId(itemId: string): string {
     try {
       const url = new URL(itemId);
-      return this.realm.realmOfURL(url)?.href ?? this.realmURL.href;
+      let realmURL = this.realm.realmOfURL(url)?.href ?? this.realmURL.href;
+      return this.ensureTrailingSlash(realmURL);
     } catch (error) {
       return this.realmURL.href;
     }
@@ -451,7 +456,62 @@ export default class OperatorModeStateService extends Service {
 
   private isIndexCard(realmURL: string, item: StackItem): boolean {
     const itemUrl = item.id;
-    return itemUrl === `${realmURL}index`;
+    let interactHomeId = this.interactHomeForRealm(realmURL);
+    return (
+      itemUrl === `${realmURL}index` ||
+      (!!interactHomeId && itemUrl === interactHomeId)
+    );
+  }
+
+  private interactHomeForRealm(realmURL: string): string | undefined {
+    let normalizedRealm = this.ensureTrailingSlash(realmURL);
+    return (
+      this.realm.info(normalizedRealm).interactHome ??
+      this.interactHomeByRealm.get(normalizedRealm)
+    );
+  }
+
+  async applyInteractHome(
+    realmURL: string,
+    opts?: { sourceCardId?: string },
+  ): Promise<void> {
+    let normalizedRealmUrl = this.ensureTrailingSlash(realmURL);
+    let resolution = await this.homePageResolver.resolve(
+      normalizedRealmUrl,
+      'interact',
+    );
+    let cardId = resolution?.cardId ?? `${normalizedRealmUrl}index`;
+    this.interactHomeByRealm.set(normalizedRealmUrl, cardId);
+
+    let targetStackIndex = 0;
+    if (opts?.sourceCardId) {
+      let foundIndex = this._state.stacks.findIndex((stack) =>
+        stack.some((item) => item.id === opts.sourceCardId),
+      );
+      if (foundIndex >= 0) {
+        targetStackIndex = foundIndex;
+      }
+    }
+
+    let stack = this._state.stacks[targetStackIndex];
+    if (!stack) {
+      return;
+    }
+
+    let item = this.createStackItem(cardId, targetStackIndex, 'isolated');
+    let indexCardPosition = stack.findIndex((stackItem) =>
+      this.isIndexCard(normalizedRealmUrl, stackItem),
+    );
+    if (indexCardPosition === -1) {
+      return;
+    }
+
+    stack[indexCardPosition] = item;
+    this.schedulePersist();
+  }
+
+  private ensureTrailingSlash(realmURL: string): string {
+    return realmURL.endsWith('/') ? realmURL : `${realmURL}/`;
   }
 
   get isViewingCardInCodeMode() {
@@ -1128,12 +1188,13 @@ export default class OperatorModeStateService extends Service {
 
   openWorkspace = async (realmUrl: string) => {
     // Ensure realmUrl has a trailing slash
-    if (!realmUrl.endsWith('/')) {
-      realmUrl = realmUrl + '/';
-    }
-    let id = `${realmUrl}index`;
+    let normalizedRealmUrl = this.ensureTrailingSlash(realmUrl);
+    let interactHome =
+      (await this.homePageResolver.resolve(normalizedRealmUrl, 'interact'))
+        ?.cardId ?? `${normalizedRealmUrl}index`;
+    this.interactHomeByRealm.set(normalizedRealmUrl, interactHome);
     let stackItem = new StackItem({
-      id,
+      id: interactHome,
       format: 'isolated',
       stackIndex: 0,
     });
@@ -1146,12 +1207,12 @@ export default class OperatorModeStateService extends Service {
     await this.updateCodePath(
       lastOpenedFile
         ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
-        : new URL(id),
+        : new URL(interactHome),
     );
     this.updateSubmode(Submodes.Interact);
 
     this._state.workspaceChooserOpened = false;
-    this.cachedRealmURL = new URL(realmUrl);
+    this.cachedRealmURL = new URL(normalizedRealmUrl);
   };
 
   get workspaceChooserOpened() {

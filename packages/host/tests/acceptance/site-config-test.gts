@@ -10,6 +10,7 @@ import {
   testRealmURL,
 } from '@cardstack/runtime-common/helpers/const';
 
+import type HomePageResolverService from '@cardstack/host/services/home-page-resolver';
 import HostModeService from '@cardstack/host/services/host-mode-service';
 
 import {
@@ -296,7 +297,14 @@ module('Acceptance | site config home page', function (hooks) {
 
     module('when site config file does not exist', function (hooks) {
       hooks.beforeEach(async function () {
-        let contents = { ...realmContents };
+        let contents = {
+          ...realmContents,
+          '.realm.json': {
+            ...(realmContents['.realm.json'] as any),
+            hostHome: null,
+            interactHome: null,
+          },
+        };
         delete contents['site.json'];
         contents['SiteConfig/custom.json'] = {
           data: {
@@ -304,6 +312,37 @@ module('Acceptance | site config home page', function (hooks) {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/site-config',
                 name: 'SiteConfig',
+              },
+            },
+            type: 'card',
+            attributes: {
+              cardInfo: {
+                notes: null,
+                title: null,
+                description: null,
+                thumbnailURL: null,
+              },
+            },
+            relationships: {
+              home: {
+                links: {
+                  self: '../Pet/peanut',
+                },
+              },
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
+            },
+          },
+        };
+        contents['IndexConfig/custom.json'] = {
+          data: {
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/index-config',
+                name: 'IndexConfig',
               },
             },
             type: 'card',
@@ -375,6 +414,282 @@ module('Acceptance | site config home page', function (hooks) {
           'site.json created with correct home',
         );
       });
+
+      test('user can set interact home via stack menu', async function (assert) {
+        await visitOperatorMode({
+          submode: 'interact',
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}IndexConfig/custom`,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+
+        await waitFor(
+          `[data-test-stack-card="${testRealmURL}IndexConfig/custom"]`,
+        );
+        await click('[data-test-more-options-button]');
+        await click('[data-test-boxel-menu-item-text="Set as interact home"]');
+
+        let realmDoc: any;
+        await waitUntil(async () => {
+          let file = await adapter.openFile('.realm.json');
+          if (!file) {
+            return false;
+          }
+          let content =
+            typeof file.content === 'string'
+              ? file.content
+              : JSON.stringify(file.content);
+          realmDoc = JSON.parse(content);
+          return realmDoc.interactHome === `${testRealmURL}IndexConfig/custom`;
+        });
+
+        assert.strictEqual(
+          realmDoc.interactHome,
+          `${testRealmURL}IndexConfig/custom`,
+          '.realm.json updated with selected interact home',
+        );
+
+        let homePageResolver = getService(
+          'home-page-resolver',
+        ) as HomePageResolverService;
+        let resolution = await homePageResolver.resolve(
+          testRealmURL,
+          'interact',
+        );
+        assert.strictEqual(
+          resolution?.cardId,
+          `${testRealmURL}Pet/peanut`,
+          'interact home resolves to index-config home card',
+        );
+
+        let operatorModeStateService = getService(
+          'operator-mode-state-service',
+        );
+        await operatorModeStateService.openWorkspace(testRealmURL);
+        await waitFor(`[data-test-stack-card="${testRealmURL}Pet/peanut"]`);
+        assert
+          .dom(`[data-test-stack-card="${testRealmURL}Pet/peanut"]`)
+          .exists('interact submode primary stack shows selected home card');
+        assert
+          .dom(`[data-test-stack-card="${testRealmURL}index"]`)
+          .doesNotExist('index card is replaced by interact home');
+      });
+
+      test('interact home updates the triggering stack', async function (assert) {
+        await visitOperatorMode({
+          submode: 'interact',
+          stacks: [
+            [
+              { id: `${testRealmURL}index`, format: 'isolated' },
+              { id: `${testRealmURL}IndexConfig/custom`, format: 'isolated' },
+            ],
+          ],
+        });
+
+        await waitFor(
+          `[data-test-stack-card="${testRealmURL}IndexConfig/custom"]`,
+        );
+        assert
+          .dom(
+            `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}index"]`,
+          )
+          .exists();
+        await click('[data-test-more-options-button]');
+        await click('[data-test-boxel-menu-item-text="Set as interact home"]');
+
+        assert
+          .dom(
+            `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}index"]`,
+          )
+          .doesNotExist();
+        assert
+          .dom(
+            `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Pet/peanut"]`,
+          )
+          .exists();
+      });
+
+      test('interact home updates index cards across stacks and realms', async function (assert) {
+        let otherRealmURL = 'http://second-realm/test/';
+        let otherRealmContents = {
+          ...realmContents,
+          '.realm.json': {
+            ...(realmContents['.realm.json'] as any),
+            hostHome: null,
+            interactHome: null,
+          },
+        };
+        delete otherRealmContents['site.json'];
+        otherRealmContents['SiteConfig/custom.json'] = {
+          data: {
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/site-config',
+                name: 'SiteConfig',
+              },
+            },
+            type: 'card',
+            attributes: {
+              cardInfo: {
+                notes: null,
+                title: null,
+                description: null,
+                thumbnailURL: null,
+              },
+            },
+            relationships: {
+              home: {
+                links: {
+                  self: '../Pet/peanut',
+                },
+              },
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
+            },
+          },
+        };
+        otherRealmContents['IndexConfig/custom.json'] = {
+          data: {
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/index-config',
+                name: 'IndexConfig',
+              },
+            },
+            type: 'card',
+            attributes: {
+              cardInfo: {
+                notes: null,
+                title: null,
+                description: null,
+                thumbnailURL: null,
+              },
+            },
+            relationships: {
+              home: {
+                links: {
+                  self: '../Pet/peanut',
+                },
+              },
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
+            },
+          },
+        };
+
+        let { setActiveRealms } = mockMatrixUtils;
+        await setupAcceptanceTestRealm({
+          contents: otherRealmContents,
+          realmURL: otherRealmURL,
+          mockMatrixUtils,
+        });
+        setActiveRealms([baseRealm.url, testRealmURL, otherRealmURL]);
+
+        await visitOperatorMode({
+          submode: 'interact',
+          stacks: [
+            [
+              { id: `${testRealmURL}index`, format: 'isolated' },
+              { id: `${testRealmURL}IndexConfig/custom`, format: 'isolated' },
+            ],
+            [
+              { id: `${otherRealmURL}index`, format: 'isolated' },
+              {
+                id: `${otherRealmURL}IndexConfig/custom`,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+
+        await waitFor(
+          `[data-test-stack-card="${testRealmURL}IndexConfig/custom"]`,
+        );
+        await waitFor(
+          `[data-test-stack-card="${otherRealmURL}IndexConfig/custom"]`,
+        );
+
+        await click(
+          '[data-test-operator-mode-stack="0"] [data-test-more-options-button]',
+        );
+        await click('[data-test-boxel-menu-item-text="Set as interact home"]');
+        await waitFor(
+          `[data-test-operator-mode-stack="0"] [data-test-stack-card="${testRealmURL}Pet/peanut"]`,
+        );
+
+        await click(
+          '[data-test-operator-mode-stack="1"] [data-test-more-options-button]',
+        );
+        await click('[data-test-boxel-menu-item-text="Set as interact home"]');
+        await waitFor(
+          `[data-test-operator-mode-stack="1"] [data-test-stack-card="${otherRealmURL}Pet/peanut"]`,
+        );
+
+        assert
+          .dom(
+            `[data-test-operator-mode-stack="0"] [data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Pet/peanut"]`,
+          )
+          .exists();
+        assert
+          .dom(
+            `[data-test-operator-mode-stack="0"] [data-test-stack-card="${testRealmURL}index"]`,
+          )
+          .doesNotExist();
+        assert
+          .dom(
+            `[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"][data-test-stack-card="${otherRealmURL}Pet/peanut"]`,
+          )
+          .exists();
+        assert
+          .dom(
+            `[data-test-operator-mode-stack="1"] [data-test-stack-card="${otherRealmURL}index"]`,
+          )
+          .doesNotExist();
+      });
+
+      test('interact home does not replace non-index cards at the top of the stack', async function (assert) {
+        await visitOperatorMode({
+          submode: 'interact',
+          stacks: [
+            [
+              { id: `${testRealmURL}Pet/mango`, format: 'isolated' },
+              { id: `${testRealmURL}index`, format: 'isolated' },
+              { id: `${testRealmURL}IndexConfig/custom`, format: 'isolated' },
+            ],
+          ],
+        });
+
+        await waitFor(
+          `[data-test-stack-card="${testRealmURL}IndexConfig/custom"]`,
+        );
+        await click('[data-test-more-options-button]');
+        await click('[data-test-boxel-menu-item-text="Set as interact home"]');
+
+        assert
+          .dom(
+            `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Pet/mango"]`,
+          )
+          .exists();
+        assert
+          .dom(
+            `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Pet/peanut"]`,
+          )
+          .exists();
+        assert
+          .dom(`[data-test-stack-card="${testRealmURL}index"]`)
+          .doesNotExist();
+      });
     });
 
     module('when site config file exists', function (hooks) {
@@ -386,6 +701,37 @@ module('Acceptance | site config home page', function (hooks) {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/site-config',
                 name: 'SiteConfig',
+              },
+            },
+            type: 'card',
+            attributes: {
+              cardInfo: {
+                notes: null,
+                title: null,
+                description: null,
+                thumbnailURL: null,
+              },
+            },
+            relationships: {
+              home: {
+                links: {
+                  self: '../Pet/peanut',
+                },
+              },
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
+            },
+          },
+        };
+        contents['IndexConfig/custom.json'] = {
+          data: {
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/index-config',
+                name: 'IndexConfig',
               },
             },
             type: 'card',
@@ -481,6 +827,9 @@ module('Acceptance | site config home page', function (hooks) {
       await click('[data-test-more-options-button]');
       assert
         .dom('[data-test-boxel-menu-item-text="Set as site home"]')
+        .doesNotExist();
+      assert
+        .dom('[data-test-boxel-menu-item-text="Set as interact home"]')
         .doesNotExist();
     });
   });

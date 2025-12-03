@@ -272,6 +272,56 @@ class RealmResource {
     }
   });
 
+<<<<<<< HEAD
+=======
+  async setRealmInfoProperty(
+    property: RealmInfoProperty,
+    value: string | null,
+  ): Promise<void> {
+    await this.loginTask.perform();
+    let headers: Record<string, string> = {
+      Accept: SupportedMimeType.JSON,
+      Authorization: `Bearer ${this.token}`,
+    };
+    let response = await this.network.authedFetch(`${this.realmURL}_config`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({
+        data: {
+          type: 'realm-config',
+          id: this.url,
+          attributes: { [property]: value },
+        },
+      }),
+    });
+
+    if (response.status !== 200) {
+      throw new Error(
+        `Failed to set realm config property '${property}' for realm ${this.url}: ${response.status}`,
+      );
+    }
+    let json = await waitForPromise(response.json());
+    let isPublic = Boolean(
+      response.headers.get('x-boxel-realm-public-readable'),
+    );
+    let updatedInfo = new TrackedObject({
+      url: json.data.id,
+      ...json.data.attributes,
+      isIndexing: this.info?.isIndexing ?? false,
+      isPublic,
+    }) as EnhancedRealmInfo;
+    this.info = updatedInfo;
+  }
+
+  async setHostHome(hostHome: string | null): Promise<void> {
+    return await this.setRealmInfoProperty('hostHome', hostHome);
+  }
+
+  async setInteractHome(interactHome: string | null): Promise<void> {
+    return await this.setRealmInfoProperty('interactHome', interactHome);
+  }
+
+>>>>>>> b0b076768 (Implement index config card)
   async fetchRealmPermissions() {
     return await this.fetchRealmPermissionsTask.perform();
   }
@@ -582,6 +632,20 @@ export default class RealmService extends Service {
     await this.knownRealm(url)?.setRealmPermission(userId, permissions);
   }
 
+<<<<<<< HEAD
+=======
+  async setHostHome(url: string, hostHome: string | null): Promise<void> {
+    await this.knownRealm(url)?.setHostHome(hostHome);
+  }
+
+  async setInteractHome(
+    url: string,
+    interactHome: string | null,
+  ): Promise<void> {
+    await this.knownRealm(url)?.setInteractHome(interactHome);
+  }
+
+>>>>>>> b0b076768 (Implement index config card)
   isPublic = (url: string): boolean => {
     return this.knownRealm(url)?.isPublic ?? false;
   };
