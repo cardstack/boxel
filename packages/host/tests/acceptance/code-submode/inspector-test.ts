@@ -1216,6 +1216,9 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert
       .dom('[data-test-card-module-definition]')
       .hasTextContaining('SampleCommand', 'shows command definition details');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText('SampleCommand command', 'selector shows command type');
   });
 
   test('can delete a misc file', async function (assert) {
