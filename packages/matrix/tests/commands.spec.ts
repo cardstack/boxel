@@ -293,6 +293,9 @@ test.describe('Commands', () => {
     // create a skill card
     await page.locator('[data-test-create-new-card-button]').click();
     await page
+      .locator('[data-test-card-catalog-modal] [data-test-search-field]')
+      .fill('skill');
+    await page
       .locator('[data-test-select="https://cardstack.com/base/cards/skill"]')
       .click();
     await page.locator('[data-test-card-catalog-go-button]').click();
