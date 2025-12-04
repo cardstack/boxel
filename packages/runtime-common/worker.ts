@@ -173,7 +173,6 @@ export class Worker {
     );
     _fetch = fetcher(this.#virtualNetwork.fetch, [
       async (req, next) => {
-        req.headers.set('X-Boxel-Building-Index', 'true');
         req.headers.set('X-Boxel-Assume-User', realmUserId);
         return next(req);
       },

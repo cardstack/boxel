@@ -2348,14 +2348,9 @@ export class Realm {
       localPath = 'index';
     }
 
-    let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Building-Index'),
-    );
-
     let url = this.paths.fileURL(localPath.replace(/\.json$/, ''));
     let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
       loadLinks: true,
-      useWorkInProgressIndex,
     });
     let start = Date.now();
     try {

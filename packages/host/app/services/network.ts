@@ -43,12 +43,6 @@ export default class NetworkService extends Service {
       return this.fetch; // "nativeFetch" already handles auth
     }
     return fetcher(this.fetch, [
-      async (req, next) => {
-        if (this.loaderService.isIndexing) {
-          req.headers.set('X-Boxel-Building-Index', 'true');
-        }
-        return next(req);
-      },
       authorizationMiddleware(this.realm),
       authErrorEventMiddleware(),
     ]);
