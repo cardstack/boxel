@@ -34,6 +34,11 @@
           "self": "../Statement/theming-system"
         }
       },
+      "statements.3": {
+        "links": {
+          "self": "../Statement/data-field-type-config"
+        }
+      },
       "cardInfo.theme": {
         "links": {
           "self": null
