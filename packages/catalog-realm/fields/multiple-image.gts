@@ -25,19 +25,19 @@ import { SortableGroupModifier } from '@cardstack/boxel-ui/modifiers';
 
 import { uuidv4 } from '@cardstack/runtime-common';
 
-import ImageField from './image-field';
+import ImageField from './image';
 
 import {
   requestCloudflareUploadUrl,
   uploadFileToCloudflare,
 } from './image/util/cloudflare-upload';
 
-import MultipleImageGalleryUpload from './multiple-image-field/components/multiple-image-gallery-upload';
-import MultipleImageDropzoneUpload from './multiple-image-field/components/multiple-image-dropzone-upload';
-import MultipleImageGalleryPreview from './multiple-image-field/components/multiple-image-gallery-preview';
-import MultipleImageDropzonePreview from './multiple-image-field/components/multiple-image-dropzone-preview';
-import GridPresentation from './multiple-image-field/components/grid-presentation';
-import CarouselPresentation from './multiple-image-field/components/carousel-presentation';
+import MultipleImageGalleryUpload from './multiple-image/components/multiple-image-gallery-upload';
+import MultipleImageDropzoneUpload from './multiple-image/components/multiple-image-dropzone-upload';
+import MultipleImageGalleryPreview from './multiple-image/components/multiple-image-gallery-preview';
+import MultipleImageDropzonePreview from './multiple-image/components/multiple-image-dropzone-preview';
+import GridPresentation from './multiple-image/components/grid-presentation';
+import CarouselPresentation from './multiple-image/components/carousel-presentation';
 
 // Type definitions
 type ImageInputVariant = 'list' | 'gallery' | 'dropzone';
@@ -1000,7 +1000,7 @@ class MultipleImageFieldEmbedded extends Component<typeof MultipleImageField> {
 }
 
 // Actual MultipleImageField class definition
-export class MultipleImageField extends FieldDef {
+export default class MultipleImageField extends FieldDef {
   static displayName = 'Multiple Images';
   static icon = Grid3x3Icon;
 
@@ -1010,5 +1010,3 @@ export class MultipleImageField extends FieldDef {
   static atom = MultipleImageFieldAtom;
   static edit = MultipleImageFieldEdit;
 }
-
-export default MultipleImageField;
