@@ -24,6 +24,7 @@ import {
 import type { Realm } from '@cardstack/runtime-common/realm';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
   ModuleInspectorSelections,
@@ -48,6 +49,7 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import {
   removePlaygroundSelections,
   removeSpecSelection,
+  setPlaygroundSelections,
 } from '../helpers/playground';
 import { setupApplicationTest } from '../helpers/setup';
 
@@ -349,16 +351,17 @@ const friendCardSource = `
     @field name = contains(StringField);
     @field friend = linksTo(() => Friend);
     @field title = contains(StringField, {
-      computeVia: function (this: Person) {
-        return name;
+      computeVia: function (this: Friend) {
+        return this.name;
       },
     });
     static isolated = class Isolated extends Component<typeof this> {
       <template>
-        <div data-test-person>
-          <p>First name: <@fields.firstName /></p>
-          <p>Last name: <@fields.lastName /></p>
-          <p>Title: <@fields.title /></p>
+        <div data-test-friend-card={{@model.name}}>
+          <p>Friend name: <@fields.name /></p>
+          <div data-test-friend-link>
+            <@fields.friend />
+          </div>
         </div>
         <style scoped>
           div {
@@ -728,6 +731,66 @@ module('Acceptance | code submode tests', function (_hooks) {
                 adoptsFrom: {
                   module: `${testRealmURL}pet`,
                   name: 'Pet',
+                },
+              },
+            },
+          },
+          'Friend/amy.json': {
+            data: {
+              attributes: {
+                name: 'Amy',
+              },
+              relationships: {
+                friend: {
+                  links: {
+                    self: `${testRealmURL}Friend/bob`,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}friend`,
+                  name: 'Friend',
+                },
+              },
+            },
+          },
+          'Friend/bob.json': {
+            data: {
+              attributes: {
+                name: 'Bob',
+              },
+              relationships: {},
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}friend`,
+                  name: 'Friend',
+                },
+              },
+            },
+          },
+          'Person/with-friends.json': {
+            data: {
+              attributes: {
+                firstName: 'With',
+                lastName: 'Friends',
+              },
+              relationships: {
+                'friends.0': {
+                  links: {
+                    self: `${testRealmURL}Friend/amy`,
+                  },
+                },
+                'friends.1': {
+                  links: {
+                    self: `${testRealmURL}Friend/bob`,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}person`,
+                  name: 'Person',
                 },
               },
             },
@@ -1378,6 +1441,219 @@ module('Acceptance | code submode tests', function (_hooks) {
             adoptsFrom: {
               module: `${testRealmURL}pet`,
               name: 'Pet',
+            },
+          },
+        },
+      });
+    });
+
+    test('clicking a linksTo field in card renderer panel opens the linked card JSON', async function (assert) {
+      let operatorModeStateService = getService(
+        'operator-mode-state-service',
+      ) as OperatorModeStateService;
+
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Friend/amy`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `${testRealmURL}Friend/amy.json`,
+      });
+      await waitFor('[data-test-code-mode-card-renderer-body]');
+      assert.dom(`[data-test-card="${testRealmURL}Friend/amy"]`).exists();
+
+      // Click the rendered linked friend card (linksTo field)
+      await waitFor(`[data-test-card="${testRealmURL}Friend/bob"]`);
+      await click(`[data-test-card="${testRealmURL}Friend/bob"]`);
+
+      await waitUntil(() =>
+        operatorModeStateService.state?.codePath?.href?.endsWith(
+          'Friend/bob.json',
+        ),
+      );
+
+      assert.strictEqual(
+        operatorModeStateService.state?.codePath?.href,
+        `${testRealmURL}Friend/bob.json`,
+      );
+      assert.deepEqual(JSON.parse(getMonacoContent()), {
+        data: {
+          attributes: {
+            name: 'Bob',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}friend`,
+              name: 'Friend',
+            },
+          },
+          relationships: {},
+        },
+      });
+    });
+
+    test('clicking a linksToMany field in card renderer panel opens the linked card JSON', async function (assert) {
+      let operatorModeStateService = getService(
+        'operator-mode-state-service',
+      ) as OperatorModeStateService;
+
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/with-friends`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `${testRealmURL}Person/with-friends.json`,
+      });
+      await waitFor('[data-test-code-mode-card-renderer-body]');
+      assert
+        .dom(`[data-test-card="${testRealmURL}Person/with-friends"]`)
+        .exists();
+
+      // Click one of the rendered linked friend cards (linksToMany field)
+      await waitFor(`[data-test-card="${testRealmURL}Friend/bob"]`);
+      await click(`[data-test-card="${testRealmURL}Friend/bob"]`);
+
+      await waitUntil(() =>
+        operatorModeStateService.state?.codePath?.href?.endsWith(
+          'Friend/bob.json',
+        ),
+      );
+
+      assert.strictEqual(
+        operatorModeStateService.state?.codePath?.href,
+        `${testRealmURL}Friend/bob.json`,
+      );
+      assert.deepEqual(JSON.parse(getMonacoContent()), {
+        data: {
+          attributes: {
+            name: 'Bob',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}friend`,
+              name: 'Friend',
+            },
+          },
+          relationships: {},
+        },
+      });
+    });
+
+    test('clicking a linksTo field in playground panel opens the linked card JSON', async function (assert) {
+      let operatorModeStateService = getService(
+        'operator-mode-state-service',
+      ) as OperatorModeStateService;
+
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Friend/amy`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `${testRealmURL}friend.gts`,
+      });
+      await click('[data-test-module-inspector-view="preview"]');
+      assert.dom(`[data-test-card="${testRealmURL}Friend/amy"]`).exists();
+      await click(`[data-test-card="${testRealmURL}Friend/bob"]`);
+
+      await waitUntil(() =>
+        operatorModeStateService.state?.codePath?.href?.endsWith(
+          'Friend/bob.json',
+        ),
+      );
+
+      assert.strictEqual(
+        operatorModeStateService.state?.codePath?.href,
+        `${testRealmURL}Friend/bob.json`,
+      );
+      assert.deepEqual(JSON.parse(getMonacoContent()), {
+        data: {
+          attributes: {
+            name: 'Bob',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}friend`,
+              name: 'Friend',
+            },
+          },
+          relationships: {},
+        },
+      });
+    });
+
+    test('clicking a linksToMany field in playground panel opens the linked card JSON', async function (assert) {
+      let operatorModeStateService = getService(
+        'operator-mode-state-service',
+      ) as OperatorModeStateService;
+
+      setPlaygroundSelections({
+        [`${testRealmURL}person/Person`]: {
+          cardId: `${testRealmURL}Person/with-friends`,
+          format: 'isolated',
+        },
+      });
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/with-friends`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `${testRealmURL}person.gts`,
+      });
+      await click('[data-test-module-inspector-view="preview"]');
+      assert
+        .dom(`[data-test-card="${testRealmURL}Person/with-friends"]`)
+        .exists();
+
+      // Click one of the rendered linked friend cards (linksToMany field)
+      await waitFor(`[data-test-card="${testRealmURL}Friend/amy"]`);
+      await click(`[data-test-card="${testRealmURL}Friend/amy"]`);
+
+      await waitUntil(() =>
+        operatorModeStateService.state?.codePath?.href?.endsWith(
+          'Friend/amy.json',
+        ),
+      );
+
+      assert.strictEqual(
+        operatorModeStateService.state?.codePath?.href,
+        `${testRealmURL}Friend/amy.json`,
+      );
+      assert.deepEqual(JSON.parse(getMonacoContent()), {
+        data: {
+          attributes: {
+            name: 'Amy',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}friend`,
+              name: 'Friend',
+            },
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: `${testRealmURL}Friend/bob`,
+              },
             },
           },
         },

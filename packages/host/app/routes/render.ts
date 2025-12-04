@@ -82,6 +82,7 @@ export default class RenderRoute extends Route<Model> {
   private lastStoreResetKey: string | undefined;
   private renderBaseParams: [string, string, string] | undefined;
   private lastRenderErrorSignature: string | undefined;
+  #windowListenersAttached = false;
   #cardTypeTracker = new RenderCardTypeTracker();
   #modelStates = new Map<Model, ModelState>();
   #pendingReadyModels = new Set<Model>();
@@ -91,45 +92,38 @@ export default class RenderRoute extends Route<Model> {
   #releaseTimerBlock: (() => void) | undefined;
 
   errorHandler = (event: Event) => {
+    if (this.isDestroying || this.isDestroyed) {
+      return;
+    }
+    let elements = this.#ensurePrerenderElements();
     windowErrorHandler({
       event,
-      setStatusToUnusable() {
-        let element: HTMLElement = document.querySelector('[data-prerender]')!;
-        element.dataset.prerenderStatus = 'unusable';
+      setStatusToUnusable: () => {
+        if (elements.container) {
+          elements.container.dataset.prerenderStatus = 'unusable';
+        }
       },
-      setError(error) {
-        let element: HTMLElement = document.querySelector('[data-prerender]')!;
-        element.innerHTML = error;
+      setError: (error) => {
+        if (elements.errorElement) {
+          elements.errorElement.textContent = error;
+        }
       },
       currentURL: this.router.currentURL,
     });
     this.#setAllModelStatuses('unusable');
-    // Only unset lazilyLoadLinks if we last set it
-    if ((globalThis as any).__lazilyLoadLinksOwner === 'render') {
-      (globalThis as any).__lazilyLoadLinks = undefined;
-      (globalThis as any).__lazilyLoadLinksOwner = undefined;
-    }
     (globalThis as any).__boxelRenderContext = undefined;
   };
 
   activate() {
-    window.addEventListener('error', this.errorHandler);
-    window.addEventListener('unhandledrejection', this.errorHandler);
     // this is for route errors, not window level error
     window.addEventListener('boxel-render-error', this.handleRenderError);
   }
 
   deactivate() {
-    // Only unset lazilyLoadLinks if we last set it
-    if ((globalThis as any).__lazilyLoadLinksOwner === 'render') {
-      (globalThis as any).__lazilyLoadLinks = undefined;
-      (globalThis as any).__lazilyLoadLinksOwner = undefined;
-    }
     (globalThis as any).__boxelRenderContext = undefined;
     (globalThis as any).__renderInstance = undefined;
-    window.removeEventListener('error', this.errorHandler);
-    window.removeEventListener('unhandledrejection', this.errorHandler);
     window.removeEventListener('boxel-render-error', this.handleRenderError);
+    this.#detachWindowErrorListeners();
     this.lastStoreResetKey = undefined;
     this.renderBaseParams = undefined;
     this.lastRenderErrorSignature = undefined;
@@ -147,10 +141,13 @@ export default class RenderRoute extends Route<Model> {
 
   async beforeModel(transition: Transition) {
     await super.beforeModel?.(transition);
+    if (!isTesting()) {
+      // tests have their own way of dealing with window level errors in card-prerender.gts
+      this.#attachWindowErrorListeners();
+    }
+
     // activate() doesn't run early enough for this to be set before the model()
     // hook is run
-    (globalThis as any).__lazilyLoadLinks = true;
-    (globalThis as any).__lazilyLoadLinksOwner = 'render';
     (globalThis as any).__boxelRenderContext = true;
     this.#authGuard.register();
     if (!isTesting()) {
@@ -514,6 +511,9 @@ export default class RenderRoute extends Route<Model> {
   }
 
   private handleRenderError = (errorOrEvent: any, transition?: Transition) => {
+    if (this.isDestroying || this.isDestroyed) {
+      return;
+    }
     let event =
       'reason' in errorOrEvent || 'detail' in errorOrEvent
         ? errorOrEvent
@@ -531,6 +531,9 @@ export default class RenderRoute extends Route<Model> {
   };
 
   #processRenderError(error: any, transition?: Transition) {
+    if (this.isDestroying || this.isDestroyed) {
+      return;
+    }
     this.currentTransition?.abort();
     this.#rejectAllModelStates('error');
     let context = this.#deriveErrorContext(transition);
@@ -730,6 +733,50 @@ export default class RenderRoute extends Route<Model> {
         errorElement.dataset.prerenderNonce = context.nonce;
       }
     }
+  }
+
+  #attachWindowErrorListeners() {
+    if (this.#windowListenersAttached || typeof window === 'undefined') {
+      return;
+    }
+    window.addEventListener('error', this.errorHandler);
+    window.addEventListener('unhandledrejection', this.errorHandler);
+    this.#windowListenersAttached = true;
+  }
+
+  #detachWindowErrorListeners() {
+    if (!this.#windowListenersAttached || typeof window === 'undefined') {
+      return;
+    }
+    window.removeEventListener('error', this.errorHandler);
+    window.removeEventListener('unhandledrejection', this.errorHandler);
+    this.#windowListenersAttached = false;
+  }
+
+  #ensurePrerenderElements(): {
+    container: HTMLElement | null;
+    errorElement: HTMLElement | null;
+  } {
+    if (typeof document === 'undefined') {
+      return { container: null, errorElement: null };
+    }
+    let container = document.querySelector(
+      '[data-prerender]',
+    ) as HTMLElement | null;
+    if (!container) {
+      container = document.createElement('div');
+      container.setAttribute('data-prerender', '');
+      document.body.appendChild(container);
+    }
+    let errorElement = document.querySelector(
+      '[data-prerender-error]',
+    ) as HTMLElement | null;
+    if (!errorElement) {
+      errorElement = document.createElement('pre');
+      errorElement.setAttribute('data-prerender-error', '');
+      container.appendChild(errorElement);
+    }
+    return { container, errorElement };
   }
 
   #transitionToErrorRoute(transition?: Transition) {

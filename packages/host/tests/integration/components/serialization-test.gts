@@ -75,9 +75,6 @@ module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
   hooks.beforeEach(async function () {
-    // Ensure consistent behavior by explicitly disabling lazy loading
-    (globalThis as any).__lazilyLoadLinks = false;
-
     let permissions: Permissions = {
       canWrite: true,
       canRead: true,
@@ -87,10 +84,6 @@ module('Integration | serialization', function (hooks) {
     loader = getService('loader-service').loader;
   });
 
-  hooks.afterEach(function () {
-    // Clean up the global flag
-    delete (globalThis as any).__lazilyLoadLinks;
-  });
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks);
