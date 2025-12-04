@@ -1,3 +1,4 @@
+import { destroy } from '@ember/destroyable';
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
@@ -340,6 +341,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
           console.log(
             `garbage collecting instance ${localId} (remote id: ${instance.id}) from store`,
           );
+          destroy(instance);
           // brand the instance to make it easier for debugging
           (instance as unknown as any)[
             Symbol.for('__instance_detached_from_store')

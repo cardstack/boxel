@@ -29,7 +29,6 @@ import {
   meta,
   logger,
   formattedError,
-  parseQuery,
   SupportedMimeType,
   RealmPaths,
   type Store as StoreInterface,
@@ -77,7 +76,7 @@ import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
-import { getOwner, setOwner } from '@ember/owner';
+import { getOwner } from '@ember/owner';
 
 export { CardErrorJSONAPI, CardSaveSubscriber };
 
@@ -563,12 +562,10 @@ export default class StoreService extends Service implements StoreInterface {
       };
     },
   ) {
-    // ensure parent has an owner so the resource can resolve injected services
-    let owner = getOwner(this);
-    if (owner && !getOwner(parent)) {
-      setOwner(parent, owner);
+    if (this.isRenderStore && opts) {
+      opts.isLive = false;
     }
-    return getSearch(parent, getQuery, getRealms, opts);
+    return getSearch(parent, getOwner(this)!, getQuery, getRealms, opts);
   }
 
   getSaveState(id: string): AutoSaveState | undefined {

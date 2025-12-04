@@ -28,9 +28,10 @@ import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
 
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
-import { getSearch } from '@cardstack/host/resources/search';
+import { service } from '@ember/service';
 
 import formatComponentName from '../helpers/format-component-name';
+import type StoreService from '../services/store';
 
 interface UsageComponent {
   title: string;
@@ -42,6 +43,7 @@ interface HostFreestyleSignature {
 }
 
 class HostFreestyleComponent extends Component<HostFreestyleSignature> {
+  @service private declare store: StoreService;
   formatComponentName = formatComponentName;
 
   @provide(GetCardContextName)
@@ -53,7 +55,7 @@ class HostFreestyleComponent extends Component<HostFreestyleSignature> {
   @provide(GetCardsContextName)
   // @ts-ignore "getCards" is declared but not used
   private get getCards() {
-    return getSearch;
+    return this.store.getSearchResource.bind(this.store);
   }
 
   @provide(GetCardCollectionContextName)

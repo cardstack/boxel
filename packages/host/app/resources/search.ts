@@ -26,6 +26,8 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 import type CardService from '../services/card-service';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
+import Owner from '@ember/owner';
+import { setOwner } from '@ember/owner';
 const waiter = buildWaiter('search-resource:search-waiter');
 export interface Args {
   named: {
@@ -44,6 +46,7 @@ export interface Args {
           errors?: ErrorEntry[];
         }
       | undefined;
+    owner: Owner;
   };
 }
 export class SearchResource extends Resource<Args> {
@@ -80,7 +83,10 @@ export class SearchResource extends Resource<Args> {
   }
 
   modify(_positional: never[], named: Args['named']) {
-    let { query, realms, isLive, doWhileRefreshing, seed } = named;
+    let { query, realms, isLive, doWhileRefreshing, seed, owner } = named;
+
+    setOwner(this, owner); // works around problem where lifetime parent is used as owner when they should be allowed to differ
+
     if (query === undefined) {
       return;
     }
@@ -316,6 +322,7 @@ export class SearchResource extends Resource<Args> {
 // let's talk.
 export function getSearch(
   parent: object,
+  owner: Owner,
   getQuery: () => Query | undefined,
   getRealms?: () => string[] | undefined,
   opts?: {
@@ -331,7 +338,7 @@ export function getSearch(
       | undefined;
   },
 ) {
-  return SearchResource.from(parent, () => ({
+  let resource = SearchResource.from(parent, () => ({
     named: {
       query: getQuery(),
       realms: getRealms ? getRealms() : undefined,
@@ -339,6 +346,8 @@ export function getSearch(
       // TODO refactor this out
       doWhileRefreshing: opts?.doWhileRefreshing,
       seed: opts?.seed,
+      owner,
     },
   }));
+  return resource;
 }

@@ -18,6 +18,7 @@ import {
   visitOperatorMode,
 } from '../helpers';
 import {
+  cardAPI,
   setupBaseRealm,
   CardDef,
   Component,
@@ -30,8 +31,10 @@ import {
 
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+import StoreService from '@cardstack/host/services/store';
 
 const QUERY_CARD_URL = `${testRealmURL}query-card`;
+const QUERY_CARD_2_URL = `${testRealmURL}query-card-2`;
 
 module(
   'Acceptance | Query Fields | host respects server-populated results',
@@ -99,6 +102,9 @@ module(
           'Person/not-target.json': new Person({ name: 'Not Target' }),
           'query-card.json': new QueryCard({
             title: 'Target',
+          }),
+          'query-card-2.json': new QueryCard({
+            title: 'Not Target',
           }),
         },
       });
@@ -180,6 +186,7 @@ module(
 
     test('linksToMany query fields append new matches after realm invalidations', async function (assert) {
       assert.expect(6);
+
       let network = getService('network') as NetworkService;
       let interceptedSearchRequests: string[] = [];
       let handler = async (request: Request) => {
@@ -245,6 +252,80 @@ module(
           interceptedSearchRequests[0].includes('_search'),
           'query refresh targets the realm search endpoint',
         );
+        assert.strictEqual(
+          findAll(`${cardSelector} [data-test-match]`).length,
+          2,
+          'linksToMany field shows the newly added match after refresh',
+        );
+      } finally {
+        network.virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('query fields do not respond to realm invalidations once garbage collected', async function (assert) {
+      assert.expect(3);
+
+      let network = getService('network') as NetworkService;
+      let interceptedSearchRequests: string[] = [];
+      let handler = async (request: Request) => {
+        let url = new URL(request.url);
+        if (url.pathname.endsWith('/_search')) {
+          interceptedSearchRequests.push(request.url);
+        }
+        return null;
+      };
+      network.virtualNetwork.mount(handler, { prepend: true });
+
+      try {
+        await visitOperatorMode({
+          stacks: [[{ id: QUERY_CARD_URL, format: 'isolated' }]],
+        });
+        await settled();
+
+        await visitOperatorMode({
+          stacks: [[{ id: QUERY_CARD_2_URL, format: 'isolated' }]],
+        });
+        await settled();
+
+        let store = getService('store') as StoreService;
+        (store as any).store.sweep(cardAPI);
+        (store as any).store.sweep(cardAPI);
+        await settled();
+
+        let realmMatrixUsername = testRealmURLToUsername(testRealmURL);
+        let realmRoomId = mockMatrixUtils.getRoomIdForRealmAndUser(
+          testRealmURL,
+          '@testuser:localhost',
+        );
+
+        await saveCard(
+          new PersonClass({ name: 'Not Target' }),
+          `${testRealmURL}Person/new-match`,
+          loader,
+        );
+        mockMatrixUtils.simulateRemoteMessage(
+          realmRoomId,
+          realmMatrixUsername,
+          {
+            eventName: 'index',
+            indexType: 'incremental',
+            invalidations: [`${testRealmURL}Person/new-match`],
+          },
+          { type: APP_BOXEL_REALM_EVENT_TYPE },
+        );
+        await settled();
+
+        console.log('interceptedSearchRequests:', interceptedSearchRequests);
+        assert.strictEqual(
+          interceptedSearchRequests.length,
+          2,
+          'realm invalidation triggers a refresh for each query-backed field',
+        );
+        assert.ok(
+          interceptedSearchRequests[0].includes('_search'),
+          'query refresh targets the realm search endpoint',
+        );
+        let cardSelector = `[data-test-stack-card="${QUERY_CARD_2_URL}"]`;
         assert.strictEqual(
           findAll(`${cardSelector} [data-test-match]`).length,
           2,
