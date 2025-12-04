@@ -18,7 +18,6 @@ import {
   type CodeRef,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
-import type { Deferred } from '@cardstack/runtime-common/deferred';
 
 import config from '@cardstack/host/config/environment';
 
@@ -104,13 +103,8 @@ export default class RenderService extends Service {
   @service('-document') document: SimpleDocument;
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
-  indexRunDeferred: Deferred<void> | undefined;
   renderError: Error | undefined;
   owner: Owner = getOwner(this)!;
-
-  renderCard = async (_params: RenderCardParams): Promise<string> => {
-    throw new Error('renderCard has been deprecated');
-  };
 
   async renderCardComponent(
     component: BoxComponent,

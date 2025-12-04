@@ -234,7 +234,6 @@ export async function startServer({
     'worker-manager',
     `--port=${workerManagerPort}`,
     `--matrixURL='${matrixURL}'`,
-    `--distURL="${process.env.HOST_URL ?? 'http://localhost:4200'}"`,
     `--prerendererUrl='${prerenderURL}'`,
     `--migrateDB`,
 

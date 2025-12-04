@@ -16,8 +16,6 @@ import {
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import { unwrap } from '@cardstack/host/lib/current-run';
-
 import { windowErrorHandler } from '@cardstack/host/lib/window-error-handler';
 
 import {
@@ -50,6 +48,16 @@ import { setupRenderingTest } from '../helpers/setup';
 let loader: Loader;
 let onError: (event: Event) => void;
 
+function unwrap(html: string): string {
+  return html
+    .trim()
+    .replace(/^<div ([^>]*>)/, '')
+    .trim()
+    .replace(/^<!---->/, '')
+    .replace(/<\/div>$/, '')
+    .trim();
+}
+
 function assertInnerHtmlMatches(
   assert: Assert,
   actual: string | null | undefined,
@@ -69,7 +77,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
-    (globalThis as any).__useHeadlessChromePrerender = true;
     onError = function (event: Event) {
       let localIndexer = getService('local-indexer');
       windowErrorHandler({
@@ -86,7 +93,6 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   hooks.afterEach(function (this: RenderingTestContext) {
-    delete (globalThis as any).__useHeadlessChromePrerender;
     window.removeEventListener('boxel-render-error', onError);
   });
 

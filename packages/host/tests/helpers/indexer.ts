@@ -35,7 +35,7 @@ const defaultIndexEntry = {
 
 let typesCache = new WeakMap<typeof CardDef, Promise<string[]>>();
 
-// this leverages the logic from current-run.ts to generate the types for a card
+// this leverages the logic from index-runner.ts to generate the types for a card
 // that are serialized in the same manner as they appear in the index
 export async function getTypes(instance: CardDef): Promise<string[]> {
   let loader = loaderFor(instance);
