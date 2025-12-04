@@ -22,13 +22,14 @@ import {
   entriesToCssRuleMap,
   generateCssVariables,
   getContrastColor,
+  buildCssVariableName,
 } from '@cardstack/boxel-ui/helpers';
 
 import BrandTypography from './brand-typography';
 import BrandFunctionalPalette from './brand-functional-palette';
 import BrandLogo from './brand-logo';
 import CSSValueField from './css-value';
-import ThemeVarField, { dasherize } from './structured-theme-variables';
+import ThemeVarField from './structured-theme-variables';
 
 const rootToBrandVariableMapping: Record<string, string> = {
   '--primary': '--brand-primary',
@@ -180,15 +181,8 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
   </template>
 }
 
-const formatCssVarName = (name?: string) => {
-  let varName = dasherize(name);
-  if (varName?.startsWith('--')) {
-    varName = varName.replace(/^--/, '--brand-color-');
-  } else {
-    varName = `--brand-color-${varName}`;
-  }
-  return varName;
-};
+const formatCssVarName = (name?: string) =>
+  buildCssVariableName(name, { prefix: 'brand-color' });
 
 export class CompoundColorField extends FieldDef {
   static displayName = 'Color';
