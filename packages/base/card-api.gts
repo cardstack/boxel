@@ -459,9 +459,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     // a not loaded error can blow up thru a computed containsMany field that consumes a link
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance as CardDef, this, maybeNotLoaded.reference);
-      if ((globalThis as any).__lazilyLoadLinks) {
-        return this.emptyValue(instance) as BaseInstanceType<FieldT>;
-      }
+      return this.emptyValue(instance) as BaseInstanceType<FieldT>;
     }
     return getter(instance, this);
   }
@@ -769,9 +767,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     // a not loaded error can blow up thru a computed contains field that consumes a link
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance as CardDef, this, maybeNotLoaded.reference);
-      if ((globalThis as any).__lazilyLoadLinks) {
-        return undefined;
-      }
+      return undefined;
     }
     return getter(instance, this);
   }
@@ -978,9 +974,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     let maybeNotLoaded = deserialized.get(this.name);
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance, this, maybeNotLoaded.reference);
-      if ((globalThis as any).__lazilyLoadLinks) {
-        return undefined;
-      }
+      return undefined;
     }
     return getter(instance, this);
   }
@@ -1375,9 +1369,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
     // Handle the case where the field was set to a single NotLoadedValue during deserialization
     if (isNotLoadedValue(value)) {
-      if (!(globalThis as any).__lazilyLoadLinks) {
-        throw new NotLoaded(instance, value.reference, field.name);
-      }
       // TODO figure out this test case...
       value = this.emptyValue(instance);
       deserialized.set(this.name, value);
@@ -1427,9 +1418,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
       //   `<LoadableCard @card={{card}}/>` instead of calling `getComponent`
       //   themselves.
 
-      if (!(globalThis as any).__lazilyLoadLinks) {
-        throw new NotLoaded(instance, notLoadedRefs, this.name);
-      }
       for (let entry of value) {
         if (isNotLoadedValue(entry) && !(entry as any).loading) {
           lazilyLoadLink(instance, this, entry.reference, { value });
@@ -2679,122 +2667,117 @@ function lazilyLoadLink(
   link: string,
   pluralArgs?: { value: any[] },
 ) {
-  if ((globalThis as any).__lazilyLoadLinks) {
-    let inflightLoads = inflightLinkLoads.get(instance);
-    if (!inflightLoads) {
-      inflightLoads = new Map();
-      inflightLinkLoads.set(instance, inflightLoads);
-    }
-    let reference = new URL(link, instance.id ?? instance[relativeTo]).href;
-    let key = `${field.name}/${reference}`;
-    let promise = inflightLoads.get(key);
-    let store = getStore(instance);
-    if (promise) {
-      store.trackLoad(promise);
-      return;
-    }
-    let deferred = new Deferred<void>();
-    inflightLoads.set(key, deferred.promise);
-    store.trackLoad(
-      // we wrap the promise with a catch that will prevent the rejections from bubbling up but
-      // not interfere with the original deferred. this prevents QUnit from being really noisy
-      // and reporting a "global error" even though that is a normal operating circumstance for
-      // the rendering when it encounters an error. the original deferred.promise still
-      // rejects as expected for anyone awaiting it, but it won't cause unnecessary noise in QUnit.
-      deferred.promise.then(
-        () => {},
-        () => {},
-      ),
-    );
-    (async () => {
-      try {
-        let doc = await store.loadDocument(reference);
-        if (isCardError(doc)) {
-          let cardError = doc;
-          cardError.deps = [
-            !reference.endsWith('.json') ? `${reference}.json` : reference,
-          ];
-          throw cardError;
-        }
-        let fieldValue = (await createFromSerialized(
-          doc.data,
-          doc,
-          new URL(doc.data.id!),
-          {
-            store,
-          },
-        )) as CardDef;
-        if (pluralArgs) {
-          let { value } = pluralArgs;
-          let indices: number[] = [];
-          for (let [index, item] of value.entries()) {
-            if (!isNotLoadedValue(item)) {
-              continue;
-            }
-            let notLoadedRef = new URL(
-              item.reference,
-              instance.id ?? instance[relativeTo],
-            ).href;
-            if (reference === notLoadedRef) {
-              indices.push(index);
-            }
-          }
-          for (let index of indices) {
-            value[index] = fieldValue;
-          }
-        } else {
-          (instance as any)[field.name] = fieldValue;
-        }
-      } catch (e) {
-        // we replace the node-loaded value with a null
-        // TODO in the future consider recording some link meta that this reference is actually missing
-        (instance as any)[field.name] = null;
-
-        let error = e as Error;
-        let isMissingFile =
-          typeof error?.message === 'string' &&
-          /not found/i.test(error.message);
-        let payloadError: {
-          title: string;
-          status: number;
-          message: string;
-          stack?: string;
-          deps?: string[];
-        } = {
-          title: isMissingFile
-            ? 'Link Not Found'
-            : error?.message ?? 'Card Error',
-          status: isMissingFile ? 404 : (error as any)?.status ?? 500,
-          message: isMissingFile
-            ? `missing file ${reference}.json`
-            : error?.message ?? String(e),
-          stack: error?.stack,
-        };
-        if (isCardError(error) && error.deps?.length) {
-          payloadError.deps = [...new Set(error.deps)];
-        }
-        let payload = JSON.stringify({
-          type: 'error',
-          error: payloadError,
-        });
-        // We use a custom event for render errors--otherwise QUnit will report a "global error"
-        // when we use a promise rejection to signal to the prerender that there was an error
-        // even though everything is working as designed. QUnit is very noisy about these errors...
-        const event = new CustomEvent('boxel-render-error', {
-          detail: { reason: payload },
-        });
-        globalThis.dispatchEvent(event);
-      } finally {
-        deferred.fulfill();
-        inflightLoads.delete(key);
-        if (inflightLoads.size === 0) {
-          inflightLinkLoads.delete(instance);
-        }
-      }
-    })();
-  } else {
-    throw new NotLoaded(instance, link, field.name);
+  let inflightLoads = inflightLinkLoads.get(instance);
+  if (!inflightLoads) {
+    inflightLoads = new Map();
+    inflightLinkLoads.set(instance, inflightLoads);
   }
+  let reference = new URL(link, instance.id ?? instance[relativeTo]).href;
+  let key = `${field.name}/${reference}`;
+  let promise = inflightLoads.get(key);
+  let store = getStore(instance);
+  if (promise) {
+    store.trackLoad(promise);
+    return;
+  }
+  let deferred = new Deferred<void>();
+  inflightLoads.set(key, deferred.promise);
+  store.trackLoad(
+    // we wrap the promise with a catch that will prevent the rejections from bubbling up but
+    // not interfere with the original deferred. this prevents QUnit from being really noisy
+    // and reporting a "global error" even though that is a normal operating circumstance for
+    // the rendering when it encounters an error. the original deferred.promise still
+    // rejects as expected for anyone awaiting it, but it won't cause unnecessary noise in QUnit.
+    deferred.promise.then(
+      () => {},
+      () => {},
+    ),
+  );
+  (async () => {
+    try {
+      let doc = await store.loadDocument(reference);
+      if (isCardError(doc)) {
+        let cardError = doc;
+        cardError.deps = [
+          !reference.endsWith('.json') ? `${reference}.json` : reference,
+        ];
+        throw cardError;
+      }
+      let fieldValue = (await createFromSerialized(
+        doc.data,
+        doc,
+        new URL(doc.data.id!),
+        {
+          store,
+        },
+      )) as CardDef;
+      if (pluralArgs) {
+        let { value } = pluralArgs;
+        let indices: number[] = [];
+        for (let [index, item] of value.entries()) {
+          if (!isNotLoadedValue(item)) {
+            continue;
+          }
+          let notLoadedRef = new URL(
+            item.reference,
+            instance.id ?? instance[relativeTo],
+          ).href;
+          if (reference === notLoadedRef) {
+            indices.push(index);
+          }
+        }
+        for (let index of indices) {
+          value[index] = fieldValue;
+        }
+      } else {
+        (instance as any)[field.name] = fieldValue;
+      }
+    } catch (e) {
+      // we replace the node-loaded value with a null
+      // TODO in the future consider recording some link meta that this reference is actually missing
+      (instance as any)[field.name] = null;
+
+      let error = e as Error;
+      let isMissingFile =
+        typeof error?.message === 'string' && /not found/i.test(error.message);
+      let payloadError: {
+        title: string;
+        status: number;
+        message: string;
+        stack?: string;
+        deps?: string[];
+      } = {
+        title: isMissingFile
+          ? 'Link Not Found'
+          : error?.message ?? 'Card Error',
+        status: isMissingFile ? 404 : (error as any)?.status ?? 500,
+        message: isMissingFile
+          ? `missing file ${reference}.json`
+          : error?.message ?? String(e),
+        stack: error?.stack,
+      };
+      if (isCardError(error) && error.deps?.length) {
+        payloadError.deps = [...new Set(error.deps)];
+      }
+      let payload = JSON.stringify({
+        type: 'error',
+        error: payloadError,
+      });
+      // We use a custom event for render errors--otherwise QUnit will report a "global error"
+      // when we use a promise rejection to signal to the prerender that there was an error
+      // even though everything is working as designed. QUnit is very noisy about these errors...
+      const event = new CustomEvent('boxel-render-error', {
+        detail: { reason: payload },
+      });
+      globalThis.dispatchEvent(event);
+    } finally {
+      deferred.fulfill();
+      inflightLoads.delete(key);
+      if (inflightLoads.size === 0) {
+        inflightLinkLoads.delete(instance);
+      }
+    }
+  })();
 }
 
 type Scalar =

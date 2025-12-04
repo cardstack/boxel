@@ -18,6 +18,8 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import { unwrap } from '@cardstack/host/lib/current-run';
 
+import { windowErrorHandler } from '@cardstack/host/lib/window-error-handler';
+
 import {
   testRealmURL,
   testRealmInfo,
@@ -27,8 +29,8 @@ import {
   setupIntegrationTestRealm,
   testModuleRealm,
   cardInfo,
+  getFileCreatedAt,
 } from '../helpers';
-import { getFileCreatedAt } from '../helpers';
 import {
   CardDef,
   Component,
@@ -46,6 +48,7 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 let loader: Loader;
+let onError: (event: Event) => void;
 
 function assertInnerHtmlMatches(
   assert: Assert,
@@ -66,9 +69,25 @@ module(`Integration | realm indexing`, function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
+    (globalThis as any).__useHeadlessChromePrerender = true;
+    onError = function (event: Event) {
+      let localIndexer = getService('local-indexer');
+      windowErrorHandler({
+        event,
+        setStatusToUnusable() {
+          localIndexer.prerenderStatus = 'unusable';
+        },
+        setError(error) {
+          localIndexer.renderError = error;
+        },
+      });
+    };
+    window.addEventListener('boxel-render-error', onError);
+  });
+
+  hooks.afterEach(function (this: RenderingTestContext) {
     delete (globalThis as any).__useHeadlessChromePrerender;
-    delete (globalThis as any).__lazilyLoadLinks;
-    delete (globalThis as any).__boxelRenderContext;
+    window.removeEventListener('boxel-render-error', onError);
   });
 
   setupLocalIndexing(hooks);
@@ -92,7 +111,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   test('full indexing discovers card instances', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'empty.json': {
@@ -107,7 +125,6 @@ module(`Integration | realm indexing`, function (hooks) {
         },
       },
     });
-    let createdAt = await getFileCreatedAt(realm, 'empty.json');
     let queryEngine = realm.realmIndexQueryEngine;
     let { data: cards } = await queryEngine.search({});
     assert.deepEqual(cards, [
@@ -128,12 +145,12 @@ module(`Integration | realm indexing`, function (hooks) {
             module: 'https://cardstack.com/base/card-api',
             name: 'CardDef',
           },
+          realmURL: 'http://test-realm/test/',
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}empty.json`,
           ),
-          resourceCreatedAt: createdAt!,
+          resourceCreatedAt: await getFileCreatedAt(realm, 'empty.json'),
           realmInfo: testRealmInfo,
-          realmURL: 'http://test-realm/test/',
         },
         links: {
           self: `${testRealmURL}empty`,
@@ -144,7 +161,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   test('full indexing skips over unchanged items in index', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'test1.json': {
@@ -252,7 +268,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   test('can recover from indexing a card with a broken link', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'Pet/mango.json': {
@@ -278,7 +293,6 @@ module(`Integration | realm indexing`, function (hooks) {
         },
       },
     });
-    let mangoCreatedAt = await getFileCreatedAt(realm, 'Pet/mango.json');
     let queryEngine = realm.realmIndexQueryEngine;
     {
       let mango = await queryEngine.cardDocument(
@@ -290,8 +304,8 @@ module(`Integration | realm indexing`, function (hooks) {
           `missing file ${testRealmURL}Person/owner.json`,
         );
         assert.deepEqual(mango.error.errorDetail.deps, [
-          'http://localhost:4202/test/pet',
           `${testRealmURL}Person/owner.json`,
+          'http://localhost:4202/test/pet',
         ]);
       } else {
         assert.ok(false, `expected search entry to be an error doc`);
@@ -348,7 +362,7 @@ module(`Integration | realm indexing`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Pet/mango.json`,
             ),
-            resourceCreatedAt: mangoCreatedAt!,
+            resourceCreatedAt: await getFileCreatedAt(realm, 'Pet/mango.json'),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
           },
@@ -364,7 +378,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   test('can query the "production" index while performing indexing operations', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'Pet/mango.json': {
@@ -495,7 +508,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   test('can index card with linkTo field', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'Person/owner.json': {
@@ -535,7 +547,6 @@ module(`Integration | realm indexing`, function (hooks) {
         },
       },
     });
-    let mangoCreatedAt = await getFileCreatedAt(realm, 'Pet/mango.json');
     let queryEngine = realm.realmIndexQueryEngine;
     let mango = await queryEngine.cardDocument(
       new URL(`${testRealmURL}Pet/mango`),
@@ -570,7 +581,7 @@ module(`Integration | realm indexing`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}Pet/mango.json`,
           ),
-          resourceCreatedAt: mangoCreatedAt!,
+          resourceCreatedAt: await getFileCreatedAt(realm, 'Pet/mango.json'),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
         },
@@ -585,7 +596,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   test('can index card with a relative linkTo field', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'Person/owner.json': {
@@ -625,7 +635,6 @@ module(`Integration | realm indexing`, function (hooks) {
         },
       },
     });
-    let mangoCreatedAt = await getFileCreatedAt(realm, 'Pet/mango.json');
     let indexer = realm.realmIndexQueryEngine;
     let mango = await indexer.cardDocument(new URL(`${testRealmURL}Pet/mango`));
     if (mango?.type === 'doc') {
@@ -658,7 +667,7 @@ module(`Integration | realm indexing`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}Pet/mango.json`,
           ),
-          resourceCreatedAt: mangoCreatedAt!,
+          resourceCreatedAt: await getFileCreatedAt(realm, 'Pet/mango.json'),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
         },
@@ -677,7 +686,6 @@ module(`Integration | realm indexing`, function (hooks) {
     }
 
     let { realm, adapter } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'person.gts': { Person },
@@ -702,7 +710,6 @@ module(`Integration | realm indexing`, function (hooks) {
         },
       },
     });
-    let personSpecCreatedAt = await getFileCreatedAt(realm, 'person-spec.json');
     let indexer = realm.realmIndexQueryEngine;
     let entry = await indexer.cardDocument(
       new URL(`${testRealmURL}person-spec`),
@@ -743,7 +750,7 @@ module(`Integration | realm indexing`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}person-spec.json`,
           ),
-          resourceCreatedAt: personSpecCreatedAt!,
+          resourceCreatedAt: await getFileCreatedAt(realm, 'person-spec.json'),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -780,7 +787,6 @@ module(`Integration | realm indexing`, function (hooks) {
     }
 
     let { realm, adapter } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'person.gts': { Person },
@@ -823,11 +829,6 @@ module(`Integration | realm indexing`, function (hooks) {
         },
       },
     });
-    let personSpecCreatedAt = await getFileCreatedAt(realm, 'person-spec.json');
-    let peopleSkillCreatedAt = await getFileCreatedAt(
-      realm,
-      'people-skill.json',
-    );
     let indexer = realm.realmIndexQueryEngine;
     let entry = await indexer.cardDocument(
       new URL(`${testRealmURL}person-spec`),
@@ -868,7 +869,7 @@ module(`Integration | realm indexing`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}person-spec.json`,
           ),
-          resourceCreatedAt: personSpecCreatedAt!,
+          resourceCreatedAt: await getFileCreatedAt(realm, 'person-spec.json'),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -930,7 +931,7 @@ module(`Integration | realm indexing`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}people-skill.json`,
           ),
-          resourceCreatedAt: peopleSkillCreatedAt!,
+          resourceCreatedAt: await getFileCreatedAt(realm, 'people-skill.json'),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -993,7 +994,6 @@ module(`Integration | realm indexing`, function (hooks) {
       }
 
       let { realm } = await setupIntegrationTestRealm({
-        usePrerenderer: false,
         mockMatrixUtils,
         contents: {
           'person.gts': { Person },
@@ -1144,7 +1144,6 @@ module(`Integration | realm indexing`, function (hooks) {
       };
     }
     let { realm } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'boom-person.gts': { BoomPerson },
@@ -1226,14 +1225,6 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   test('can recover from rendering a card that encounters a template error in its own custom component', async function (assert) {
-    class CustomBoom extends FieldDef {
-      @field firstName = contains(StringField);
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <h1><@fields.firstName /><Custom /></h1>
-        </template>
-      };
-    }
     class Custom extends GlimmerComponent {
       <template>
         {{this.boom}}
@@ -1241,6 +1232,14 @@ module(`Integration | realm indexing`, function (hooks) {
       get boom() {
         throw new Error('intentional error');
       }
+    }
+    class CustomBoom extends FieldDef {
+      @field firstName = contains(StringField);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <h1><@fields.firstName /><Custom /></h1>
+        </template>
+      };
     }
 
     class BoomPerson2 extends CardDef {
@@ -1273,7 +1272,6 @@ module(`Integration | realm indexing`, function (hooks) {
     }
 
     let { realm } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'boom-person2.gts': { BoomPerson2 },
@@ -1365,6 +1363,150 @@ module(`Integration | realm indexing`, function (hooks) {
     }
   });
 
+  test('can incrementally index a card', async function (assert) {
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h1><@fields.firstName /></h1>
+        </template>
+      };
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <div class='atom'>{{@model.firstName}}</div>
+        </template>
+      };
+    }
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'person.gts': { Person },
+        'vangogh.json': {
+          data: {
+            attributes: {
+              firstName: 'Van Gogh',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person',
+                name: 'Person',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    await realm.write(
+      'vangogh.json',
+      JSON.stringify({
+        data: {
+          id: `${testRealmURL}vangogh`,
+          attributes: {
+            firstName: 'Van Van',
+          },
+          meta: {
+            adoptsFrom: {
+              module: './person',
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+    let { instance } =
+      (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
+    assert.deepEqual(
+      instance,
+      {
+        id: `${testRealmURL}vangogh`,
+        type: 'card',
+        attributes: {
+          cardInfo: {
+            description: null,
+            notes: null,
+            thumbnailURL: null,
+            title: null,
+          },
+          description: null,
+          firstName: 'Van Van',
+          thumbnailURL: null,
+          title: 'Untitled Card',
+        },
+        relationships: {
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: './person',
+            name: 'Person',
+          },
+          lastModified: adapter.lastModifiedMap.get(
+            `${testRealmURL}vangogh.json`,
+          ),
+          resourceCreatedAt: await getFileCreatedAt(realm, 'vangogh.json'),
+          realmInfo: testRealmInfo,
+          realmURL: testRealmURL,
+        },
+      },
+      'serialized instance is correct',
+    );
+  });
+
+  test('can capture search doc when indexing a card', async function (assert) {
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h1><@fields.firstName /></h1>
+        </template>
+      };
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <div class='atom'>{{@model.firstName}}</div>
+        </template>
+      };
+    }
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'person.gts': { Person },
+        'vangogh.json': {
+          data: {
+            attributes: {
+              firstName: 'Van Gogh',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person',
+                name: 'Person',
+              },
+            },
+          },
+        },
+      },
+    });
+    let { searchDoc } =
+      (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
+    assert.deepEqual(
+      searchDoc,
+      {
+        _cardType: 'Person',
+        cardInfo: {
+          theme: null,
+        },
+        firstName: 'Van Gogh',
+        id: `${testRealmURL}vangogh`,
+        title: 'Untitled Card',
+      },
+      'search doc is correct',
+    );
+  });
+
   test('can capture atom html when indexing a card', async function (assert) {
     class Person extends CardDef {
       @field firstName = contains(StringField);
@@ -1380,7 +1522,6 @@ module(`Integration | realm indexing`, function (hooks) {
       };
     }
     let { realm } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'person.gts': { Person },
@@ -1425,7 +1566,6 @@ module(`Integration | realm indexing`, function (hooks) {
     }
 
     let { realm } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'person.gts': { Person },
@@ -1452,10 +1592,6 @@ module(`Integration | realm indexing`, function (hooks) {
       cleanWhiteSpace(stripScopedCSSAttributes(headHtml!)),
       cleanWhiteSpace(`<title>Van Gogh!</title>`),
       'head html is correct',
-    );
-    assert.false(
-      headHtml!.includes('id="ember'),
-      `head HTML does not include ember ID's`,
     );
   });
 
@@ -1486,7 +1622,6 @@ module(`Integration | realm indexing`, function (hooks) {
     }
 
     let { realm } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'person.gts': { Person },
@@ -1623,7 +1758,6 @@ module(`Integration | realm indexing`, function (hooks) {
     }
 
     let { realm } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'person.gts': { Person },
@@ -1758,7 +1892,6 @@ module(`Integration | realm indexing`, function (hooks) {
     }
 
     let { realm } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'person-card.gts': { Person },
@@ -1829,7 +1962,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   test('can index a card with a containsMany composite containing a linkTo field', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'Vendor/vendor1.json': {
@@ -1903,9 +2035,6 @@ module(`Integration | realm indexing`, function (hooks) {
       },
     });
     let indexer = realm.realmIndexQueryEngine;
-    let vendorCreatedAt = await getFileCreatedAt(realm, 'Vendor/vendor1.json');
-    let chain1CreatedAt = await getFileCreatedAt(realm, 'Chain/1.json');
-    let chain2CreatedAt = await getFileCreatedAt(realm, 'Chain/2.json');
     let vendor = await indexer.cardDocument(
       new URL(`${testRealmURL}Vendor/vendor1`),
       {
@@ -1970,7 +2099,10 @@ module(`Integration | realm indexing`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Vendor/vendor1.json`,
             ),
-            resourceCreatedAt: vendorCreatedAt!,
+            resourceCreatedAt: await getFileCreatedAt(
+              realm,
+              'Vendor/vendor1.json',
+            ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
           },
@@ -2001,7 +2133,7 @@ module(`Integration | realm indexing`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(
                 `${testRealmURL}Chain/1.json`,
               ),
-              resourceCreatedAt: chain1CreatedAt!,
+              resourceCreatedAt: await getFileCreatedAt(realm, 'Chain/1.json'),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
             },
@@ -2031,7 +2163,7 @@ module(`Integration | realm indexing`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(
                 `${testRealmURL}Chain/2.json`,
               ),
-              resourceCreatedAt: chain2CreatedAt!,
+              resourceCreatedAt: await getFileCreatedAt(realm, 'Chain/2.json'),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
             },
@@ -2048,7 +2180,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   test('can tolerate a card whose computed throws an exception', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'Boom/boom.json': {
@@ -2110,7 +2241,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   test(`search doc includes 'contains' and used 'linksTo' fields, including contained computed fields`, async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'Pet/mango.json': {
@@ -2172,7 +2302,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   test(`search doc includes unused 'linksTo' field if isUsed option is set to true`, async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'Publication/pacific.json': {
@@ -2265,13 +2394,41 @@ module(`Integration | realm indexing`, function (hooks) {
         title: 'Pacific Weekly',
         featuredPosts: [
           {
+            author: {
+              description: 'Person',
+              fullName: ' ',
+              title: ' ',
+            },
+            cardInfo: {
+              theme: null,
+            },
             id: `${testRealmURL}Post/1`,
+            publication: {
+              id: `${testRealmURL}Publication/pacific`,
+            },
+            title: '50 Ways to Leave Your Laptop',
+            views: 5,
           },
-          { id: `${testRealmURL}Post/2` },
+          {
+            author: {
+              description: 'Person',
+              fullName: ' ',
+              title: ' ',
+            },
+            cardInfo: {
+              theme: null,
+            },
+            id: `${testRealmURL}Post/2`,
+            publication: {
+              id: `${testRealmURL}Publication/pacific`,
+            },
+            title: '49 Shades of Mauve',
+            views: 24,
+          },
         ],
         cardInfo: { theme: null },
       },
-      `publication search doc includes featuredPosts relationship`,
+      `publication search doc includes featuredPosts relationship via isUsed=true`,
     );
   });
 
@@ -2318,7 +2475,6 @@ module(`Integration | realm indexing`, function (hooks) {
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     let { realm } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'booking.gts': { Booking },
@@ -2372,7 +2528,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   test('can index a card with linksToMany field', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'Pet/vanGogh.json': {
@@ -2420,12 +2575,6 @@ module(`Integration | realm indexing`, function (hooks) {
     });
 
     let indexer = realm.realmIndexQueryEngine;
-    let hassanCreatedAt = await getFileCreatedAt(
-      realm,
-      'PetPerson/hassan.json',
-    );
-    let mangoCreatedAt = await getFileCreatedAt(realm, 'Pet/mango.json');
-    let vanGoghCreatedAt = await getFileCreatedAt(realm, 'Pet/vanGogh.json');
     let hassan = await indexer.cardDocument(
       new URL(`${testRealmURL}PetPerson/hassan`),
       { loadLinks: true },
@@ -2467,7 +2616,10 @@ module(`Integration | realm indexing`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}PetPerson/hassan.json`,
           ),
-          resourceCreatedAt: hassanCreatedAt!,
+          resourceCreatedAt: await getFileCreatedAt(
+            realm,
+            'PetPerson/hassan.json',
+          ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
         },
@@ -2493,7 +2645,7 @@ module(`Integration | realm indexing`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Pet/mango.json`,
             ),
-            resourceCreatedAt: mangoCreatedAt!,
+            resourceCreatedAt: await getFileCreatedAt(realm, 'Pet/mango.json'),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
           },
@@ -2518,7 +2670,10 @@ module(`Integration | realm indexing`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Pet/vanGogh.json`,
             ),
-            resourceCreatedAt: vanGoghCreatedAt!,
+            resourceCreatedAt: await getFileCreatedAt(
+              realm,
+              'Pet/vanGogh.json',
+            ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
           },
@@ -2543,21 +2698,17 @@ module(`Integration | realm indexing`, function (hooks) {
         pets: [
           {
             id: `${testRealmURL}Pet/mango`,
-            description: null,
             firstName: 'Mango',
             owner: null,
             title: 'Mango',
-            thumbnailURL: null,
-            cardInfo: { theme: null, ...cardInfo },
+            cardInfo: { theme: null },
           },
           {
             id: `${testRealmURL}Pet/vanGogh`,
-            description: null,
             firstName: 'Van Gogh',
             owner: null,
             title: 'Van Gogh',
-            thumbnailURL: null,
-            cardInfo: { theme: null, ...cardInfo },
+            cardInfo: { theme: null },
           },
         ],
         friend: null,
@@ -2576,7 +2727,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   test('can index a card with empty linksToMany field value', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'PetPerson/burcu.json': {
@@ -2604,8 +2754,6 @@ module(`Integration | realm indexing`, function (hooks) {
       },
     );
 
-    let burcuCreatedAt = await getFileCreatedAt(realm, 'PetPerson/burcu.json');
-
     if (card?.type === 'doc') {
       assert.deepEqual(card.doc, {
         data: {
@@ -2632,7 +2780,10 @@ module(`Integration | realm indexing`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}PetPerson/burcu.json`,
             ),
-            resourceCreatedAt: burcuCreatedAt!,
+            resourceCreatedAt: await getFileCreatedAt(
+              realm,
+              'PetPerson/burcu.json',
+            ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
           },
@@ -2671,7 +2822,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   test('can index a card that contains a field with a linksToMany field', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'Pet/vanGogh.json': {
@@ -2724,7 +2874,6 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}pet-person-spec`),
       { loadLinks: true },
     );
-    let createdAt = await getFileCreatedAt(realm, 'pet-person-spec.json');
 
     if (spec?.type === 'doc') {
       assert.deepEqual(spec.doc.data, {
@@ -2762,7 +2911,10 @@ module(`Integration | realm indexing`, function (hooks) {
           ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
-          resourceCreatedAt: createdAt!,
+          resourceCreatedAt: await getFileCreatedAt(
+            realm,
+            'pet-person-spec.json',
+          ),
         },
       });
     } else {
@@ -2802,7 +2954,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   test('can index a card that has nested linksTo fields', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'Friend/hassan.json': {
@@ -2875,10 +3026,6 @@ module(`Integration | realm indexing`, function (hooks) {
       },
     });
     let indexer = realm.realmIndexQueryEngine;
-    let friendHassanCreatedAt = await getFileCreatedAt(
-      realm,
-      'Friend/hassan.json',
-    );
     let hassan = await indexer.cardDocument(
       new URL(`${testRealmURL}Friend/hassan`),
     );
@@ -2914,7 +3061,10 @@ module(`Integration | realm indexing`, function (hooks) {
           ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
-          resourceCreatedAt: friendHassanCreatedAt!,
+          resourceCreatedAt: await getFileCreatedAt(
+            realm,
+            'Friend/hassan.json',
+          ),
         },
       });
     } else {
@@ -2942,12 +3092,6 @@ module(`Integration | realm indexing`, function (hooks) {
           description: 'Dog friend',
           friend: {
             id: `${testRealmURL}Friend/vanGogh`,
-            firstName: 'Van Gogh',
-            title: 'Van Gogh',
-            friend: null,
-            description: 'Dog friend',
-            thumbnailURL: 'van-gogh.jpg',
-            cardInfo: { theme: null },
           },
           cardInfo: { theme: null },
         },
@@ -2963,7 +3107,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   test('can index a field with a cycle in the linksTo field', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'Friend/hassan.json': {
@@ -3019,8 +3162,6 @@ module(`Integration | realm indexing`, function (hooks) {
         loadLinks: true,
       },
     );
-    let hassanCreatedAt = await getFileCreatedAt(realm, 'Friend/hassan.json');
-    let mangoCreatedAt = await getFileCreatedAt(realm, 'Friend/mango.json');
     if (hassan?.type === 'doc') {
       assert.deepEqual(hassan.doc, {
         data: {
@@ -3056,7 +3197,10 @@ module(`Integration | realm indexing`, function (hooks) {
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
-            resourceCreatedAt: hassanCreatedAt!,
+            resourceCreatedAt: await getFileCreatedAt(
+              realm,
+              'Friend/hassan.json',
+            ),
           },
         },
         included: [
@@ -3093,7 +3237,10 @@ module(`Integration | realm indexing`, function (hooks) {
               ),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
-              resourceCreatedAt: mangoCreatedAt!,
+              resourceCreatedAt: await getFileCreatedAt(
+                realm,
+                'Friend/mango.json',
+              ),
             },
           },
         ],
@@ -3135,14 +3282,6 @@ module(`Integration | realm indexing`, function (hooks) {
       );
     }
 
-    let mangoHassanCreatedAt = await getFileCreatedAt(
-      realm,
-      'Friend/mango.json',
-    );
-    let hassanAgainCreatedAt = await getFileCreatedAt(
-      realm,
-      'Friend/hassan.json',
-    );
     let mango = await indexer.cardDocument(
       new URL(`${testRealmURL}Friend/mango`),
       {
@@ -3184,7 +3323,10 @@ module(`Integration | realm indexing`, function (hooks) {
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
-            resourceCreatedAt: mangoHassanCreatedAt!,
+            resourceCreatedAt: await getFileCreatedAt(
+              realm,
+              'Friend/mango.json',
+            ),
           },
         },
         included: [
@@ -3221,7 +3363,10 @@ module(`Integration | realm indexing`, function (hooks) {
               ),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
-              resourceCreatedAt: hassanAgainCreatedAt!,
+              resourceCreatedAt: await getFileCreatedAt(
+                realm,
+                'Friend/hassan.json',
+              ),
             },
           },
         ],
@@ -3266,7 +3411,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   test('can index a card that has a linksTo relationship to itself', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'Friend/hassan.json': {
@@ -3300,7 +3444,6 @@ module(`Integration | realm indexing`, function (hooks) {
         loadLinks: true,
       },
     );
-    let createdAt = await getFileCreatedAt(realm, 'Friend/hassan.json');
     if (hassan?.type === 'doc') {
       assert.deepEqual(hassan.doc, {
         data: {
@@ -3336,7 +3479,10 @@ module(`Integration | realm indexing`, function (hooks) {
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
-            resourceCreatedAt: createdAt!,
+            resourceCreatedAt: await getFileCreatedAt(
+              realm,
+              'Friend/hassan.json',
+            ),
           },
         },
       });
@@ -3380,7 +3526,6 @@ module(`Integration | realm indexing`, function (hooks) {
       name: 'Friends',
     };
     let { realm, adapter } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'Friends/vanGogh.json': {
@@ -3428,12 +3573,6 @@ module(`Integration | realm indexing`, function (hooks) {
     let hassan = await queryEngine.cardDocument(new URL(hassanID), {
       loadLinks: true,
     });
-    let hassanCreatedAt = await getFileCreatedAt(realm, 'Friends/hassan.json');
-    let mangoCreatedAt = await getFileCreatedAt(realm, 'Friends/mango.json');
-    let vanGoghCreatedAt = await getFileCreatedAt(
-      realm,
-      'Friends/vanGogh.json',
-    );
     if (hassan?.type === 'doc') {
       assert.deepEqual(
         hassan.doc.data,
@@ -3462,9 +3601,12 @@ module(`Integration | realm indexing`, function (hooks) {
           meta: {
             adoptsFrom: friendsRef,
             lastModified: adapter.lastModifiedMap.get(`${hassanID}.json`),
-            resourceCreatedAt: hassanCreatedAt!,
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
+            resourceCreatedAt: await getFileCreatedAt(
+              realm,
+              'Friends/hassan.json',
+            ),
           },
         },
         'hassan doc.data is correct',
@@ -3494,9 +3636,12 @@ module(`Integration | realm indexing`, function (hooks) {
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModifiedMap.get(`${mangoID}.json`),
-              resourceCreatedAt: mangoCreatedAt!,
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
+              resourceCreatedAt: await getFileCreatedAt(
+                realm,
+                'Friends/mango.json',
+              ),
             },
           },
           {
@@ -3520,9 +3665,12 @@ module(`Integration | realm indexing`, function (hooks) {
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModifiedMap.get(`${vanGoghID}.json`),
-              resourceCreatedAt: vanGoghCreatedAt!,
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
+              resourceCreatedAt: await getFileCreatedAt(
+                realm,
+                'Friends/vanGogh.json',
+              ),
             },
           },
         ],
@@ -3549,10 +3697,8 @@ module(`Integration | realm indexing`, function (hooks) {
               id: mangoID,
               firstName: 'Mango',
               title: 'Mango',
-              description: null,
-              thumbnailURL: null,
               friends: [{ id: hassanID }],
-              cardInfo: { theme: null, ...cardInfo },
+              cardInfo: { theme: null },
             },
             {
               id: vanGoghID,
@@ -3597,9 +3743,12 @@ module(`Integration | realm indexing`, function (hooks) {
           meta: {
             adoptsFrom: friendsRef,
             lastModified: adapter.lastModifiedMap.get(`${mangoID}.json`),
-            resourceCreatedAt: mangoCreatedAt!,
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
+            resourceCreatedAt: await getFileCreatedAt(
+              realm,
+              'Friends/mango.json',
+            ),
           },
         },
         'mango doc.data is correct',
@@ -3632,9 +3781,12 @@ module(`Integration | realm indexing`, function (hooks) {
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModifiedMap.get(`${hassanID}.json`),
-              resourceCreatedAt: hassanCreatedAt!,
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
+              resourceCreatedAt: await getFileCreatedAt(
+                realm,
+                'Friends/hassan.json',
+              ),
             },
           },
           {
@@ -3658,9 +3810,12 @@ module(`Integration | realm indexing`, function (hooks) {
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModifiedMap.get(`${vanGoghID}.json`),
-              resourceCreatedAt: vanGoghCreatedAt!,
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
+              resourceCreatedAt: await getFileCreatedAt(
+                realm,
+                'Friends/vanGogh.json',
+              ),
             },
           },
         ],
@@ -3739,9 +3894,12 @@ module(`Integration | realm indexing`, function (hooks) {
           meta: {
             adoptsFrom: friendsRef,
             lastModified: adapter.lastModifiedMap.get(`${vanGoghID}.json`),
-            resourceCreatedAt: vanGoghCreatedAt!,
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
+            resourceCreatedAt: await getFileCreatedAt(
+              realm,
+              'Friends/vanGogh.json',
+            ),
           },
         },
         'vanGogh doc.data is correct',
@@ -3774,9 +3932,12 @@ module(`Integration | realm indexing`, function (hooks) {
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModifiedMap.get(`${hassanID}.json`),
-              resourceCreatedAt: hassanCreatedAt!,
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
+              resourceCreatedAt: await getFileCreatedAt(
+                realm,
+                'Friends/hassan.json',
+              ),
             },
           },
           {
@@ -3800,9 +3961,12 @@ module(`Integration | realm indexing`, function (hooks) {
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModifiedMap.get(`${mangoID}.json`),
-              resourceCreatedAt: mangoCreatedAt!,
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
+              resourceCreatedAt: await getFileCreatedAt(
+                realm,
+                'Friends/mango.json',
+              ),
             },
           },
         ],
@@ -3829,21 +3993,23 @@ module(`Integration | realm indexing`, function (hooks) {
               id: hassanID,
               firstName: 'Hassan',
               title: 'Hassan',
-              description: null,
-              thumbnailURL: null,
               friends: [
                 {
-                  id: mangoID,
+                  cardInfo: {
+                    theme: null,
+                  },
                   firstName: 'Mango',
+                  friends: [
+                    {
+                      id: hassanID,
+                    },
+                  ],
+                  id: mangoID,
                   title: 'Mango',
-                  description: null,
-                  thumbnailURL: null,
-                  friends: [{ id: hassanID }],
-                  cardInfo: { theme: null, ...cardInfo },
                 },
                 { id: vanGoghID },
               ],
-              cardInfo: { theme: null, ...cardInfo },
+              cardInfo: { theme: null },
             },
           ],
           cardInfo: { theme: null },
@@ -3857,7 +4023,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   test("indexing identifies an instance's card references", async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'person-1.json': {
@@ -3965,7 +4130,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   test("indexing identifies an instance's polymorphic contained references", async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'spec-1.json': {
@@ -4102,7 +4266,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   test('search index does not contain entries that match patterns in ignore files', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'ignore-me-1.json': {
@@ -4117,6 +4280,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'posts/ignore-me-2.json': {
           data: { meta: { adoptsFrom: baseCardRef } },
         },
+        // we always ignore the contents of .git/
         '.git/should-not-index.json': {
           data: { meta: { adoptsFrom: baseCardRef } },
         },
@@ -4190,7 +4354,6 @@ posts/please-ignore-me.json
 
   test('search index ignores .realm.json file', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         '.realm.json': `{ name: 'Example Workspace' }`,
@@ -4213,7 +4376,6 @@ posts/please-ignore-me.json
 
   test("incremental indexing doesn't process ignored files", async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
-      usePrerenderer: false,
       mockMatrixUtils,
       contents: {
         'posts/ignore-me.json': {
