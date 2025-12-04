@@ -13,16 +13,12 @@ import { tokenize } from 'simple-html-tokenizer';
 
 import type { RealmPaths } from '@cardstack/runtime-common';
 import {
-  logger,
-  baseRealm,
   loadDocument,
+  type CardError,
   type CodeRef,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
 import type { Deferred } from '@cardstack/runtime-common/deferred';
-import { isCardError, CardError } from '@cardstack/runtime-common/error';
-import type { NotLoaded } from '@cardstack/runtime-common/not-loaded';
-import { isNotLoadedError } from '@cardstack/runtime-common/not-loaded';
 
 import config from '@cardstack/host/config/environment';
 
@@ -33,8 +29,6 @@ import type {
   BoxComponent,
 } from 'https://cardstack.com/base/card-api';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
 import { render } from '../lib/isolated-render';
 
 import type CardService from './card-service';
@@ -42,8 +36,6 @@ import type LoaderService from './loader-service';
 import type { ComponentLike } from '@glint/template';
 import type { SimpleDocument, SimpleElement } from '@simple-dom/interface';
 import type { Tokenizer } from '@simple-dom/parser';
-
-const log = logger('renderer');
 
 const ELEMENT_NODE_TYPE = 1;
 const { environment } = config;
@@ -107,10 +99,6 @@ export interface RenderCardParams {
 export type RenderCard = (params: RenderCardParams) => Promise<string>;
 export type Render = (component: ComponentLike) => string;
 
-// this means that we'll attempt up to 50 tries to load all the linked fields
-// consumed by a card. Any unloaded linked field in this card or an embedded
-// card exhausts a single attempt
-const maxRenderThreshold = 50;
 export default class RenderService extends Service {
   // @ts-expect-error the types for this invocation of @service() don't work
   @service('-document') document: SimpleDocument;
@@ -120,74 +108,8 @@ export default class RenderService extends Service {
   renderError: Error | undefined;
   owner: Owner = getOwner(this)!;
 
-  renderCard = async (params: RenderCardParams): Promise<string> => {
-    let {
-      card,
-      visit,
-      format = 'embedded',
-      store,
-      realmPath,
-      componentCodeRef,
-    } = params;
-    const cardApi = await this.loaderService.loader.import<typeof CardAPI>(
-      `${baseRealm.url}card-api`,
-    );
-    let component = cardApi.getComponent(card, undefined, {
-      componentCodeRef,
-    });
-
-    let element = getIsolatedRenderElement(this.document);
-    try {
-      let notLoaded: NotLoaded | undefined;
-      let tries = 0;
-      do {
-        notLoaded = undefined;
-        try {
-          log.debug(`rendering ${card.id} for indexing attempt #${tries}`);
-          render(component, element, this.owner, format);
-        } catch (err: any) {
-          notLoaded = err.additionalErrors?.find((e: any) =>
-            isNotLoadedError(e),
-          ) as NotLoaded | undefined;
-          if (isCardError(err) && notLoaded) {
-            let errorInstance = notLoaded?.instance;
-            if (!errorInstance) {
-              throw new Error(
-                `bug: could not determine NotLoaded card instance`,
-              );
-            }
-            let fieldName = notLoaded?.fieldName;
-            if (!fieldName) {
-              throw new Error(`bug: could not determine NotLoaded field`);
-            }
-            await this.resolveField({
-              card: errorInstance,
-              fieldName,
-              store,
-              visit,
-              realmPath,
-            });
-          } else {
-            throw err;
-          }
-        }
-      } while (notLoaded && tries++ <= maxRenderThreshold);
-
-      // This guards against bugs that may trigger render cycles
-      if (tries > maxRenderThreshold) {
-        let error = new CardError(
-          `detected a cycle trying to render card ${card.constructor.name} (id: ${card.id})`,
-        );
-        error.additionalErrors = [notLoaded!];
-        throw error;
-      }
-
-      let serializer = new Serializer(voidMap);
-      let html = serializer.serialize(element);
-      return parseCardHtml(html);
-    } finally {
-      clearIsolatedRenderElement(element);
-    }
+  renderCard = async (_params: RenderCardParams): Promise<string> => {
+    throw new Error('renderCard has been deprecated');
   };
 
   async renderCardComponent(
@@ -222,47 +144,6 @@ export default class RenderService extends Service {
       clearIsolatedRenderElement(element);
     }
   };
-
-  // TODO delete me
-  private async resolveField(
-    params: Omit<RenderCardParams, 'format'> & { fieldName: string },
-  ): Promise<void> {
-    let { card, visit, store, realmPath, fieldName } = params;
-    let api = await this.loaderService.loader.import<typeof CardAPI>(
-      `${baseRealm.url}card-api`,
-    );
-    try {
-      await api.getIfReady(card, fieldName as keyof CardDef);
-    } catch (error: any) {
-      let errors = Array.isArray(error) ? error : [error];
-      for (let err of errors) {
-        let notLoaded = err.additionalErrors?.find((e: any) =>
-          isNotLoadedError(e),
-        ) as NotLoaded | undefined;
-        if (isCardError(err) && err.status !== 500 && notLoaded) {
-          let links =
-            typeof notLoaded.reference === 'string'
-              ? [notLoaded.reference]
-              : notLoaded.reference;
-          for (let link of links) {
-            if (store.errors.has(link)) {
-              throw err; // the linked card was already found to be in an error state
-            }
-            let linkURL = new URL(`${link}.json`);
-            if (realmPath.inRealm(linkURL)) {
-              await visit(linkURL, store);
-            } else {
-              // in this case the instance we are linked to is a missing instance
-              // in an external realm.
-              throw err;
-            }
-          }
-        } else {
-          throw err;
-        }
-      }
-    }
-  }
 }
 
 export function parseCardHtml(
