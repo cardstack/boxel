@@ -1,5 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action, get } from '@ember/object';
 import StyleReference from './style-reference';
@@ -9,6 +10,8 @@ import MarkdownField from './markdown';
 
 import Moon from '@cardstack/boxel-icons/moon';
 import Sun from '@cardstack/boxel-icons/sun';
+import ChevronCompactRight from '@cardstack/boxel-icons/chevron-compact-right';
+import ChevronCompactLeft from '@cardstack/boxel-icons/chevron-compact-left';
 
 import { Button, CardContainer, Swatch } from '@cardstack/boxel-ui/components';
 import {
@@ -147,11 +150,29 @@ class NavBar extends GlimmerComponent<{
 }> {
   <template>
     <nav class='dsr-nav' ...attributes>
-      <div class='nav-grid'>
-        {{#each @sections as |section|}}
-          <a href='#{{section.id}}' class='nav-item'>{{section.navTitle}}</a>
-        {{/each}}
+      <button
+        type='button'
+        class='nav-scroll nav-scroll--left'
+        aria-label='Scroll navigation left'
+        {{on 'click' (fn this.scrollTo 'left')}}
+      >
+        <ChevronCompactLeft />
+      </button>
+      <div class='nav-container'>
+        <div class='nav-grid'>
+          {{#each @sections as |section|}}
+            <a href='#{{section.id}}' class='nav-item'>{{section.navTitle}}</a>
+          {{/each}}
+        </div>
       </div>
+      <button
+        type='button'
+        class='nav-scroll nav-scroll--right'
+        aria-label='Scroll navigation right'
+        {{on 'click' (fn this.scrollTo 'right')}}
+      >
+        <ChevronCompactRight />
+      </button>
     </nav>
     <style scoped>
       /* Navigation */
@@ -160,18 +181,22 @@ class NavBar extends GlimmerComponent<{
         top: 0;
         background: var(--dsr-background);
         border-bottom: 1px solid var(--dsr-border);
-        padding: calc(var(--dsr-spacing-unit) * 1.5)
-          calc(var(--dsr-spacing-unit) * 2);
         z-index: 10;
         backdrop-filter: blur(8px);
+        display: flex;
+        align-items: stretch;
+        padding-inline: var(--dsr-spacing-unit);
       }
 
       .nav-grid {
         display: flex;
-        gap: calc(var(--dsr-spacing-unit) * 1.5);
+        gap: calc(var(--dsr-spacing-unit) * 0.5);
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
+        flex: 1;
+        position: relative;
+        align-items: center;
       }
 
       .nav-grid::-webkit-scrollbar {
@@ -195,6 +220,74 @@ class NavBar extends GlimmerComponent<{
         background: color-mix(in srgb, var(--dsr-accent) 5%, transparent);
       }
 
+      .nav-scroll {
+        border: none;
+        background: none;
+        color: var(--dsr-secondary);
+        width: 2.25rem;
+        height: 5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition:
+          color 0.2s ease,
+          box-shadow 0.2s ease,
+          transform 0.2s ease;
+        opacity: 0.5;
+        padding: 0;
+      }
+
+      .nav-scroll:hover,
+      .nav-scroll:focus-visible {
+        color: var(--dsr-accent);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        outline: none;
+      }
+
+      .nav-scroll--left {
+        order: -1;
+      }
+
+      .nav-scroll--right {
+        order: 1;
+      }
+
+      .nav-container {
+        position: relative;
+        display: flex;
+        overflow: hidden;
+      }
+
+      .nav-container::before,
+      .nav-container::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 1rem;
+        pointer-events: none;
+        z-index: 1;
+      }
+
+      .nav-container::before {
+        left: 0;
+        background: linear-gradient(
+          to right,
+          var(--dsr-background),
+          transparent
+        );
+      }
+
+      .nav-container::after {
+        right: 0;
+        background: linear-gradient(
+          to left,
+          var(--dsr-background),
+          transparent
+        );
+      }
+
       @media (max-width: 768px) {
         .dsr-nav {
           padding: var(--dsr-spacing-unit);
@@ -203,9 +296,33 @@ class NavBar extends GlimmerComponent<{
         .nav-grid {
           gap: var(--dsr-spacing-unit);
         }
+
+        .nav-scroll {
+          display: none;
+        }
+
+        .nav-container::before,
+        .nav-container::after {
+          display: none;
+        }
       }
     </style>
   </template>
+  @action
+  private scrollTo(direction: 'left' | 'right', event: Event) {
+    event.preventDefault();
+    let navContainer = (event.currentTarget as HTMLElement)
+      ?.closest('.dsr-nav')
+      ?.querySelector('.nav-grid') as HTMLElement | null;
+    if (!navContainer) {
+      return;
+    }
+    let offset =
+      direction === 'left'
+        ? -navContainer.clientWidth * 0.8
+        : navContainer.clientWidth * 0.8;
+    navContainer.scrollBy({ left: offset, behavior: 'smooth' });
+  }
 }
 
 class ModeToggle extends GlimmerComponent<{
