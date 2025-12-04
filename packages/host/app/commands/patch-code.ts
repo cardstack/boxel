@@ -1,4 +1,3 @@
-/* eslint-disable import/order */
 import { inject as service } from '@ember/service';
 
 import {
@@ -6,13 +5,15 @@ import {
   isCardDocumentString,
 } from '@cardstack/runtime-common';
 
+import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+
 import HostBaseCommand from '../lib/host-base-command';
 import { parseSearchReplace } from '../lib/search-replace-block-parsing';
 import { isReady } from '../resources/file';
+
 import ApplySearchReplaceBlockCommand from './apply-search-replace-block';
 import LintAndFixCommand from './lint-and-fix';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type MonacoService from '../services/monaco-service';
