@@ -12,3 +12,7 @@ export const APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE =
   'app.boxel.realm-server-event';
 export const APP_BOXEL_REALMS_EVENT_TYPE = 'app.boxel.realms';
 export const APP_BOXEL_SYSTEM_CARD_EVENT_TYPE = 'app.boxel.system-card';
+export const APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE =
+  'app.boxel.codePatchCorrectness';
+export const APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE =
+  'app.boxel.codePatchCorrectnessAnnotation';

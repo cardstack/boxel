@@ -1,0 +1,60 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "perplexity/sonar-reasoning",
+      "canonicalSlug": "perplexity/sonar-reasoning",
+      "name": "Perplexity: Sonar Reasoning",
+      "created": 1738131107,
+      "description": "Sonar Reasoning is a reasoning model provided by Perplexity based on [DeepSeek R1](/deepseek/deepseek-r1).\n\nIt allows developers to utilize long chain of thought with built-in web search. Sonar Reasoning is uncensored and hosted in US datacenters. ",
+      "pricing": {
+        "prompt": "0.000001",
+        "completion": "0.000005",
+        "request": "0.005",
+        "image": "0"
+      },
+      "contextLength": 127000,
+      "architecture": {
+        "modality": "text->text",
+        "inputModalities": [
+          "text"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "Other",
+        "instructType": "deepseek-r1"
+      },
+      "topProvider": {
+        "isModerated": false,
+        "contextLength": 127000,
+        "maxCompletionTokens": null
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "max_tokens",
+        "presence_penalty",
+        "reasoning",
+        "temperature",
+        "top_k",
+        "top_p",
+        "web_search_options"
+      ],
+      "defaultParameters": {},
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

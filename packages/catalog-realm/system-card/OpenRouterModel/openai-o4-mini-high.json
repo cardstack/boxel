@@ -1,0 +1,61 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "openai/o4-mini-high",
+      "canonicalSlug": "openai/o4-mini-high-2025-04-16",
+      "name": "OpenAI: o4 Mini High",
+      "created": 1744824212,
+      "description": "OpenAI o4-mini-high is the same model as [o4-mini](/openai/o4-mini) with reasoning_effort set to high. \n\nOpenAI o4-mini is a compact reasoning model in the o-series, optimized for fast, cost-efficient performance while retaining strong multimodal and agentic capabilities. It supports tool use and demonstrates competitive reasoning and coding performance across benchmarks like AIME (99.5% with Python) and SWE-bench, outperforming its predecessor o3-mini and even approaching o3 in some domains.\n\nDespite its smaller size, o4-mini exhibits high accuracy in STEM tasks, visual problem solving (e.g., MathVista, MMMU), and code editing. It is especially well-suited for high-throughput scenarios where latency or cost is critical. Thanks to its efficient architecture and refined reinforcement learning training, o4-mini can chain tools, generate structured outputs, and solve multi-step tasks with minimal delay—often in under a minute.",
+      "pricing": {
+        "prompt": "0.0000011",
+        "completion": "0.0000044",
+        "request": "0",
+        "image": "0.0008415"
+      },
+      "contextLength": 200000,
+      "architecture": {
+        "modality": "text+image->text",
+        "inputModalities": [
+          "image",
+          "text",
+          "file"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "Other",
+        "instructType": ""
+      },
+      "topProvider": {
+        "isModerated": true,
+        "contextLength": 200000,
+        "maxCompletionTokens": 100000
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "include_reasoning",
+        "max_tokens",
+        "reasoning",
+        "response_format",
+        "seed",
+        "structured_outputs",
+        "tool_choice",
+        "tools"
+      ],
+      "defaultParameters": {},
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

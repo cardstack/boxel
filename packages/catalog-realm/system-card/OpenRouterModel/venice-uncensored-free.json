@@ -1,0 +1,60 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+      "canonicalSlug": "venice/uncensored",
+      "name": "Venice: Uncensored (free)",
+      "created": 1752094966,
+      "description": "Venice Uncensored Dolphin Mistral 24B Venice Edition is a fine-tuned variant of Mistral-Small-24B-Instruct-2501, developed by dphn.ai in collaboration with Venice.ai. This model is designed as an “uncensored” instruct-tuned LLM, preserving user control over alignment, system prompts, and behavior. Intended for advanced and unrestricted use cases, Venice Uncensored emphasizes steerability and transparent behavior, removing default safety and alignment layers typically found in mainstream assistant models.",
+      "pricing": {
+        "prompt": "0",
+        "completion": "0",
+        "request": "0",
+        "image": "0"
+      },
+      "contextLength": 32768,
+      "architecture": {
+        "modality": "text->text",
+        "inputModalities": [
+          "text"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "Other",
+        "instructType": ""
+      },
+      "topProvider": {
+        "isModerated": false,
+        "contextLength": 32768,
+        "maxCompletionTokens": null
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "frequency_penalty",
+        "max_tokens",
+        "presence_penalty",
+        "response_format",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "top_k",
+        "top_p"
+      ],
+      "defaultParameters": {},
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

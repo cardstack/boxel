@@ -60,6 +60,11 @@ export default class PatchCardInstanceCommand extends HostBaseCommand<
         'patch-instance',
         input.roomId,
       );
+    this.commandService.trackAiAssistantCardPatchRequest(
+      input.cardId,
+      clientRequestId,
+      input.roomId,
+    );
     await this.store.patch(
       input.cardId,
       {

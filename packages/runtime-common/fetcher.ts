@@ -15,7 +15,8 @@ export function fetcher(
         if (nextHandler) {
           response = await nextHandler(onwardReq, buildNext(rest));
         } else {
-          response = await fetchImplementation(onwardReq);
+          // clone so retries/redirects can reuse the original Request
+          response = await fetchImplementation(onwardReq.clone());
         }
         return await simulateNetworkBehaviors(onwardReq, response, instance);
       };

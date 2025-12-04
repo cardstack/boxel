@@ -1,0 +1,70 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "allenai/olmo-3-7b-instruct",
+      "canonicalSlug": "allenai/olmo-3-7b-instruct-20251121",
+      "name": "AllenAI: Olmo 3 7B Instruct",
+      "created": 1763758273,
+      "description": "Olmo 3 7B Instruct is a supervised instruction-fine-tuned variant of the Olmo 3 7B base model, optimized for instruction-following, question-answering, and natural conversational dialogue. By leveraging high-quality instruction data and an open training pipeline, it delivers strong performance across everyday NLP tasks while remaining accessible and easy to integrate. Developed by Ai2 under the Apache 2.0 license, the model offers a transparent, community-friendly option for instruction-driven applications.",
+      "pricing": {
+        "prompt": "0.0000001",
+        "completion": "0.0000002",
+        "request": "0",
+        "image": "0"
+      },
+      "contextLength": 65536,
+      "architecture": {
+        "modality": "text->text",
+        "inputModalities": [
+          "text"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "Other",
+        "instructType": ""
+      },
+      "topProvider": {
+        "isModerated": false,
+        "contextLength": 65536,
+        "maxCompletionTokens": 65536
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "frequency_penalty",
+        "logit_bias",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_p"
+      ],
+      "defaultParameters": {
+        "temperature": 0.6,
+        "top_p": 0.95,
+        "frequency_penalty": null
+      },
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "qwen/qwen3-vl-30b-a3b-instruct",
+      "canonicalSlug": "qwen/qwen3-vl-30b-a3b-instruct",
+      "name": "Qwen: Qwen3 VL 30B A3B Instruct",
+      "created": 1759794476,
+      "description": "Qwen3-VL-30B-A3B-Instruct is a multimodal model that unifies strong text generation with visual understanding for images and videos. Its Instruct variant optimizes instruction-following for general multimodal tasks. It excels in perception of real-world/synthetic categories, 2D/3D spatial grounding, and long-form visual comprehension, achieving competitive multimodal benchmark results. For agentic use, it handles multi-image multi-turn instructions, video timeline alignments, GUI automation, and visual coding from sketches to debugged UI. Text performance matches flagship Qwen3 models, suiting document AI, OCR, UI assistance, spatial tasks, and agent research.",
+      "pricing": {
+        "prompt": "0.00000015",
+        "completion": "0.0000006",
+        "request": "0",
+        "image": "0"
+      },
+      "contextLength": 262144,
+      "architecture": {
+        "modality": "text+image->text",
+        "inputModalities": [
+          "text",
+          "image"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "Qwen3",
+        "instructType": ""
+      },
+      "topProvider": {
+        "isModerated": false,
+        "contextLength": 262144,
+        "maxCompletionTokens": null
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "frequency_penalty",
+        "logit_bias",
+        "logprobs",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_logprobs",
+        "top_p"
+      ],
+      "defaultParameters": {
+        "temperature": 0.7,
+        "top_p": 0.8,
+        "frequency_penalty": null
+      },
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

@@ -55,6 +55,12 @@ export type EnhancedRealmInfo = RealmInfo & {
   isPublic: boolean;
 };
 
+type RealmInfoProperty =
+  | 'backgroundURL'
+  | 'iconURL'
+  | 'interactHome'
+  | 'hostHome';
+
 type AuthStatus =
   | { type: 'logged-in'; token: string; claims: JWTPayload }
   | { type: 'anonymous' };
@@ -271,6 +277,49 @@ class RealmResource {
       this.fetchingInfo = undefined;
     }
   });
+
+  async setRealmInfoProperty(
+    property: RealmInfoProperty,
+    value: string | null,
+  ): Promise<void> {
+    await this.loginTask.perform();
+    let headers: Record<string, string> = {
+      Accept: SupportedMimeType.JSON,
+      Authorization: `Bearer ${this.token}`,
+    };
+    let response = await this.network.authedFetch(`${this.realmURL}_config`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({
+        data: {
+          type: 'realm-config',
+          id: this.url,
+          attributes: { [property]: value },
+        },
+      }),
+    });
+
+    if (response.status !== 200) {
+      throw new Error(
+        `Failed to set realm config property '${property}' for realm ${this.url}: ${response.status}`,
+      );
+    }
+    let json = await waitForPromise(response.json());
+    let isPublic = Boolean(
+      response.headers.get('x-boxel-realm-public-readable'),
+    );
+    let updatedInfo = new TrackedObject({
+      url: json.data.id,
+      ...json.data.attributes,
+      isIndexing: this.info?.isIndexing ?? false,
+      isPublic,
+    }) as EnhancedRealmInfo;
+    this.info = updatedInfo;
+  }
+
+  async setHostHome(hostHome: string | null): Promise<void> {
+    return await this.setRealmInfoProperty('hostHome', hostHome);
+  }
 
   async fetchRealmPermissions() {
     return await this.fetchRealmPermissionsTask.perform();
@@ -541,6 +590,8 @@ export default class RealmService extends Service {
         isIndexing: false,
         isPublic: false,
         lastPublishedAt: null,
+        interactHome: null,
+        hostHome: null,
       };
     }
 
@@ -556,6 +607,8 @@ export default class RealmService extends Service {
         isIndexing: false,
         isPublic: false,
         lastPublishedAt: null,
+        interactHome: null,
+        hostHome: null,
       };
     } else {
       return resource.info;
@@ -576,6 +629,10 @@ export default class RealmService extends Service {
     permissions: ('read' | 'write')[],
   ) {
     await this.knownRealm(url)?.setRealmPermission(userId, permissions);
+  }
+
+  async setHostHome(url: string, hostHome: string | null): Promise<void> {
+    await this.knownRealm(url)?.setHostHome(hostHome);
   }
 
   isPublic = (url: string): boolean => {

@@ -1,3 +1,6 @@
+import { type TestContext, getContext } from '@ember/test-helpers';
+
+import { setupTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import {
@@ -12,11 +15,19 @@ import {
   type CardResource,
   type RealmInfo,
 } from '@cardstack/runtime-common';
-import { DefinitionsCache } from '@cardstack/runtime-common/definitions-cache';
+import { CachingDefinitionLookup } from '@cardstack/runtime-common/definition-lookup';
+import { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
 
 import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
+import type LocalIndexer from '@cardstack/host/services/local-indexer';
 
-import { getDbAdapter, testRealmURL, setupIndex } from '../helpers';
+import {
+  getDbAdapter,
+  testRealmURL,
+  setupIndex,
+  makeRenderer,
+} from '../helpers';
+
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 const testRealmURL2 = `http://test-realm/test2/`;
@@ -25,6 +36,8 @@ const testRealmInfo: RealmInfo = {
   backgroundURL: null,
   iconURL: null,
   showAsCatalog: null,
+  interactHome: null,
+  hostHome: null,
   visibility: 'public',
   publishable: null,
   lastPublishedAt: null,
@@ -34,6 +47,7 @@ module('Unit | index-writer', function (hooks) {
   let adapter: SQLiteAdapter;
   let indexWriter: IndexWriter;
   let indexQueryEngine: IndexQueryEngine;
+  setupTest(hooks);
 
   hooks.before(async function () {
     adapter = await getDbAdapter();
@@ -42,10 +56,28 @@ module('Unit | index-writer', function (hooks) {
   hooks.beforeEach(async function () {
     await adapter.reset();
     indexWriter = new IndexWriter(adapter);
-    indexQueryEngine = new IndexQueryEngine(
+    let owner = (getContext() as TestContext).owner;
+    await makeRenderer();
+    let localIndexer = owner.lookup('service:local-indexer') as LocalIndexer;
+    let virtualNetwork = new VirtualNetwork();
+
+    let definitionLookup = new CachingDefinitionLookup(
       adapter,
-      new DefinitionsCache(fetch),
+      localIndexer.prerenderer,
+      virtualNetwork,
     );
+
+    definitionLookup.registerRealm({
+      url: testRealmURL,
+      async getRealmOwnerUserId() {
+        return '@user1:localhost';
+      },
+      async visibility() {
+        return 'private';
+      },
+    });
+
+    indexQueryEngine = new IndexQueryEngine(adapter, definitionLookup);
   });
 
   test('can perform invalidations for a instance entry', async function (assert) {

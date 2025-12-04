@@ -1,0 +1,71 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "deepcogito/cogito-v2-preview-llama-70b",
+      "canonicalSlug": "deepcogito/cogito-v2-preview-llama-70b",
+      "name": "Deep Cogito: Cogito V2 Preview Llama 70B",
+      "created": 1756831784,
+      "description": "Cogito v2 70B is a dense hybrid reasoning model that combines direct answering capabilities with advanced self-reflection. Built with iterative policy improvement, it delivers strong performance across reasoning tasks while maintaining efficiency through shorter reasoning chains and improved intuition.",
+      "pricing": {
+        "prompt": "0.00000088",
+        "completion": "0.00000088",
+        "request": "0",
+        "image": "0"
+      },
+      "contextLength": 32768,
+      "architecture": {
+        "modality": "text->text",
+        "inputModalities": [
+          "text"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "Llama3",
+        "instructType": ""
+      },
+      "topProvider": {
+        "isModerated": false,
+        "contextLength": 32768,
+        "maxCompletionTokens": null
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "logit_bias",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "reasoning",
+        "repetition_penalty",
+        "response_format",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_p"
+      ],
+      "defaultParameters": {
+        "temperature": null,
+        "top_p": null,
+        "frequency_penalty": null
+      },
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

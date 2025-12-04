@@ -1,0 +1,65 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "qwen/qwen2.5-vl-72b-instruct",
+      "canonicalSlug": "qwen/qwen2.5-vl-72b-instruct",
+      "name": "Qwen: Qwen2.5 VL 72B Instruct",
+      "created": 1738410311,
+      "description": "Qwen2.5-VL is proficient in recognizing common objects such as flowers, birds, fish, and insects. It is also highly capable of analyzing texts, charts, icons, graphics, and layouts within images.",
+      "pricing": {
+        "prompt": "0.00000003",
+        "completion": "0.00000013",
+        "request": "0",
+        "image": "0"
+      },
+      "contextLength": 32768,
+      "architecture": {
+        "modality": "text+image->text",
+        "inputModalities": [
+          "text",
+          "image"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "Qwen",
+        "instructType": ""
+      },
+      "topProvider": {
+        "isModerated": false,
+        "contextLength": 32768,
+        "maxCompletionTokens": 32768
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "frequency_penalty",
+        "logit_bias",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "top_k",
+        "top_p"
+      ],
+      "defaultParameters": {},
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

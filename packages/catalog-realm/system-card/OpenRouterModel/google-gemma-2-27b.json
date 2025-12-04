@@ -1,0 +1,59 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "google/gemma-2-27b-it",
+      "canonicalSlug": "google/gemma-2-27b-it",
+      "name": "Google: Gemma 2 27B",
+      "created": 1720828800,
+      "description": "Gemma 2 27B by Google is an open model built from the same research and technology used to create the [Gemini models](/models?q=gemini).\n\nGemma models are well-suited for a variety of text generation tasks, including question answering, summarization, and reasoning.\n\nSee the [launch announcement](https://blog.google/technology/developers/google-gemma-2/) for more details. Usage of Gemma is subject to Google's [Gemma Terms of Use](https://ai.google.dev/gemma/terms).",
+      "pricing": {
+        "prompt": "0.00000065",
+        "completion": "0.00000065",
+        "request": "0",
+        "image": "0"
+      },
+      "contextLength": 8192,
+      "architecture": {
+        "modality": "text->text",
+        "inputModalities": [
+          "text"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "Gemini",
+        "instructType": "gemma"
+      },
+      "topProvider": {
+        "isModerated": false,
+        "contextLength": 8192,
+        "maxCompletionTokens": null
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "frequency_penalty",
+        "max_tokens",
+        "presence_penalty",
+        "response_format",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "top_p"
+      ],
+      "defaultParameters": {},
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

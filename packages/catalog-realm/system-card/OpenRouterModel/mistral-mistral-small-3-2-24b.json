@@ -1,0 +1,69 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "mistralai/mistral-small-3.2-24b-instruct",
+      "canonicalSlug": "mistralai/mistral-small-3.2-24b-instruct-2506",
+      "name": "Mistral: Mistral Small 3.2 24B",
+      "created": 1750443016,
+      "description": "Mistral-Small-3.2-24B-Instruct-2506 is an updated 24B parameter model from Mistral optimized for instruction following, repetition reduction, and improved function calling. Compared to the 3.1 release, version 3.2 significantly improves accuracy on WildBench and Arena Hard, reduces infinite generations, and delivers gains in tool use and structured output tasks.\n\nIt supports image and text inputs with structured outputs, function/tool calling, and strong performance across coding (HumanEval+, MBPP), STEM (MMLU, MATH, GPQA), and vision benchmarks (ChartQA, DocVQA).",
+      "pricing": {
+        "prompt": "0.00000006",
+        "completion": "0.00000018",
+        "request": "0",
+        "image": "0"
+      },
+      "contextLength": 131072,
+      "architecture": {
+        "modality": "text+image->text",
+        "inputModalities": [
+          "image",
+          "text"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "Mistral",
+        "instructType": ""
+      },
+      "topProvider": {
+        "isModerated": false,
+        "contextLength": 131072,
+        "maxCompletionTokens": 131072
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "frequency_penalty",
+        "logit_bias",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_p"
+      ],
+      "defaultParameters": {
+        "temperature": 0.3
+      },
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

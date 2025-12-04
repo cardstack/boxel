@@ -1,0 +1,77 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "OpenRouterModel",
+        "module": "../openrouter-model"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "TheDrummer: UnslopNemo 12B",
+      "created": 1731103448,
+      "modelId": "thedrummer/unslopnemo-12b",
+      "pricing": {
+        "image": "0",
+        "prompt": "0.0000004",
+        "request": "0",
+        "completion": "0.0000004"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": "",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "description": "UnslopNemo v4.1 is the latest addition from the creator of Rocinante, designed for adventure writing and role-play scenarios.",
+      "topProvider": {
+        "isModerated": false,
+        "contextLength": 32768,
+        "maxCompletionTokens": null
+      },
+      "architecture": {
+        "modality": "text->text",
+        "tokenizer": "Mistral",
+        "instructType": "mistral",
+        "inputModalities": [
+          "text"
+        ],
+        "outputModalities": [
+          "text"
+        ]
+      },
+      "canonicalSlug": "thedrummer/unslopnemo-12b",
+      "contextLength": 32768,
+      "perRequestLimits": {
+        "promptTokens": null,
+        "completionTokens": null
+      },
+      "defaultParameters": {
+        "top_p": null,
+        "max_tokens": null,
+        "temperature": null,
+        "presence_penalty": null,
+        "frequency_penalty": null
+      },
+      "supportedParameters": [
+        "frequency_penalty",
+        "max_tokens",
+        "presence_penalty",
+        "response_format",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_p"
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

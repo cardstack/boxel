@@ -1,0 +1,64 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "x-ai/grok-4",
+      "canonicalSlug": "x-ai/grok-4-07-09",
+      "name": "xAI: Grok 4",
+      "created": 1752087689,
+      "description": "Grok 4 is xAI's latest reasoning model with a 256k context window. It supports parallel tool calling, structured outputs, and both image and text inputs. Note that reasoning is not exposed, reasoning cannot be disabled, and the reasoning effort cannot be specified. Pricing increases once the total tokens in a given request is greater than 128k tokens. See more details on the [xAI docs](https://docs.x.ai/docs/models/grok-4-0709)",
+      "pricing": {
+        "prompt": "0.000003",
+        "completion": "0.000015",
+        "request": "0",
+        "image": "0"
+      },
+      "contextLength": 256000,
+      "architecture": {
+        "modality": "text+image->text",
+        "inputModalities": [
+          "image",
+          "text"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "Grok",
+        "instructType": ""
+      },
+      "topProvider": {
+        "isModerated": false,
+        "contextLength": 256000,
+        "maxCompletionTokens": null
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "include_reasoning",
+        "logprobs",
+        "max_tokens",
+        "reasoning",
+        "response_format",
+        "seed",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_logprobs",
+        "top_p"
+      ],
+      "defaultParameters": {},
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

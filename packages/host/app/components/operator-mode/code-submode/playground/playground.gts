@@ -5,7 +5,7 @@ import { not } from '@cardstack/boxel-ui/helpers';
 import { isFieldDef, isPrimitive } from '@cardstack/runtime-common';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef, ViewCardFn } from 'https://cardstack.com/base/card-api';
 
 import PlaygroundPanel from './playground-panel';
 
@@ -64,6 +64,7 @@ interface Signature {
     codeRef?: ResolvedCodeRef;
     isUpdating?: boolean;
     cardOrField?: typeof BaseDef;
+    viewCard?: ViewCardFn;
   };
   Element: HTMLElement;
 }
@@ -86,6 +87,7 @@ export default class Playground extends Component<Signature> {
         @codeRef={{this.playgroundPanelArgs.codeRef}}
         @isFieldDef={{this.playgroundPanelArgs.isFieldDef}}
         @isUpdating={{this.playgroundPanelArgs.isUpdating}}
+        @viewCard={{@viewCard}}
       />
     {{else}}
       <UnsupportedMessage @cardOrField={{@cardOrField}} @codeRef={{@codeRef}} />

@@ -366,6 +366,9 @@ Common issues are:
               'history:constructPromptParts',
               async () => getPromptParts(eventList, aiBotUserId, client),
             );
+            responder.responseState.setAllowedToolNames(
+              promptParts.tools?.map((tool) => tool.function.name),
+            );
             if (
               AI_PATCHING_CORRECTNESS_CHECKS_ENABLED &&
               promptParts.pendingCodePatchCorrectnessChecks

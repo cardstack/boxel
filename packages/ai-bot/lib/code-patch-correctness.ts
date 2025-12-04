@@ -61,6 +61,7 @@ export function buildCheckCorrectnessCommandRequests(
           targetType: 'file',
           targetRef: sourceRef,
           fileUrl: sourceRef,
+          roomId: summary.roomId,
         },
       },
     });
@@ -75,6 +76,7 @@ export function buildCheckCorrectnessCommandRequests(
           targetType: 'card',
           targetRef: card.cardId,
           cardId: card.cardId,
+          roomId: summary.roomId,
         },
       },
     });
