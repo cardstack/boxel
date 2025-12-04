@@ -4059,6 +4059,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/captions.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/code.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/eye.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/file-pencil.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/folder-pen.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/hash.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/import.js',
@@ -4094,6 +4095,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         'https://cardstack.com/base/string',
         'https://cardstack.com/base/text-input-validator',
         'https://cardstack.com/base/watched-array',
+        'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
         'https://packages/@cardstack/boxel-host/commands/copy-card',
         'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
         'https://packages/@cardstack/boxel-host/commands/generate-example-cards',
@@ -4182,6 +4184,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/captions.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/code.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/eye.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/file-pencil.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/folder-pen.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/git-branch.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/hash.js',
@@ -4226,6 +4229,7 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         'https://cardstack.com/base/string',
         'https://cardstack.com/base/text-input-validator',
         'https://cardstack.com/base/watched-array',
+        'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
         'https://packages/@cardstack/boxel-host/commands/copy-card',
         'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
         'https://packages/@cardstack/boxel-host/commands/generate-example-cards',
@@ -4280,6 +4284,10 @@ module(`Integration | realm indexing - using /render route`, function (hooks) {
         'posts/ignore-me-2.json': {
           data: { meta: { adoptsFrom: baseCardRef } },
         },
+        // we always ignore the contents of .git/
+        '.git/should-not-index.json': {
+          data: { meta: { adoptsFrom: baseCardRef } },
+        },
         'post.json': { data: { meta: { adoptsFrom: baseCardRef } } },
         'dir/card.json': { data: { meta: { adoptsFrom: baseCardRef } } },
         '.gitignore': `
@@ -4329,6 +4337,12 @@ posts/please-ignore-me.json
         undefined,
         'instance does not exist because file is ignored',
       );
+    }
+    {
+      let card = await indexer.cardDocument(
+        new URL(`${testRealmURL}.git/should-not-index`),
+      );
+      assert.strictEqual(card, undefined, '.git directory entries are ignored');
     }
     {
       let card = await indexer.cardDocument(new URL(`${testRealmURL}post`));

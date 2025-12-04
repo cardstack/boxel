@@ -55,6 +55,12 @@ export type EnhancedRealmInfo = RealmInfo & {
   isPublic: boolean;
 };
 
+type RealmInfoProperty =
+  | 'backgroundURL'
+  | 'iconURL'
+  | 'interactHome'
+  | 'hostHome';
+
 type AuthStatus =
   | { type: 'logged-in'; token: string; claims: JWTPayload }
   | { type: 'anonymous' };
@@ -272,8 +278,6 @@ class RealmResource {
     }
   });
 
-<<<<<<< HEAD
-=======
   async setRealmInfoProperty(
     property: RealmInfoProperty,
     value: string | null,
@@ -321,7 +325,6 @@ class RealmResource {
     return await this.setRealmInfoProperty('interactHome', interactHome);
   }
 
->>>>>>> b0b076768 (Implement index config card)
   async fetchRealmPermissions() {
     return await this.fetchRealmPermissionsTask.perform();
   }
@@ -632,8 +635,6 @@ export default class RealmService extends Service {
     await this.knownRealm(url)?.setRealmPermission(userId, permissions);
   }
 
-<<<<<<< HEAD
-=======
   async setHostHome(url: string, hostHome: string | null): Promise<void> {
     await this.knownRealm(url)?.setHostHome(hostHome);
   }
@@ -645,7 +646,6 @@ export default class RealmService extends Service {
     await this.knownRealm(url)?.setInteractHome(interactHome);
   }
 
->>>>>>> b0b076768 (Implement index config card)
   isPublic = (url: string): boolean => {
     return this.knownRealm(url)?.isPublic ?? false;
   };

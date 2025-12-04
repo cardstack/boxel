@@ -46,6 +46,11 @@
           "self": "../Spec/5403bdfb-a0f5-40b8-919a-129fd8807302"
         }
       },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/63fbcce0-08ff-4047-82bc-8199ff4cd586"
+        }
+      },
       "publisher": {
         "links": {
           "self": null
@@ -54,6 +59,11 @@
       "examples.0": {
         "links": {
           "self": "../tournament/Tournament/valorant-championship"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../video-game/VideoGame/valorant"
         }
       },
       "categories.0": {

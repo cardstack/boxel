@@ -1,5 +1,6 @@
 import { action } from '@ember/object';
 import { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -15,6 +16,8 @@ import AskAiTextBox from '@cardstack/host/components/ai-assistant/ask-ai-text-bo
 import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+
+const waiter = buildWaiter('operator-mode:ask-ai-container');
 
 interface Signature {
   Args: {};
@@ -35,40 +38,47 @@ export default class AskAiContainer extends Component<Signature> {
   }
 
   private sendMessageToNewRoom = restartableTask(async (name: string) => {
-    let { commandContext } = this.commandService;
+    let waiterToken = waiter.beginAsync();
+    try {
+      let { commandContext } = this.commandService;
 
-    let createRoomCommand = new CreateAiAssistantRoomCommand(commandContext);
-    let openRoomCommand = new OpenAiAssistantRoomCommand(commandContext);
-    let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(commandContext);
-    let sendMessageCommand = new SendAiAssistantMessageCommand(commandContext);
+      let createRoomCommand = new CreateAiAssistantRoomCommand(commandContext);
+      let openRoomCommand = new OpenAiAssistantRoomCommand(commandContext);
+      let updateRoomSkillsCommand = new UpdateRoomSkillsCommand(commandContext);
+      let sendMessageCommand = new SendAiAssistantMessageCommand(
+        commandContext,
+      );
 
-    let [{ roomId }, skills, openCards] = await Promise.all([
-      createRoomCommand.execute({ name }),
-      this.matrixService.loadDefaultSkills(
-        this.operatorModeStateService.state.submode,
-      ),
-      this.operatorModeStateService.getOpenCards.perform(),
-    ]);
+      let [{ roomId }, skills, openCards] = await Promise.all([
+        createRoomCommand.execute({ name }),
+        this.matrixService.loadDefaultSkills(
+          this.operatorModeStateService.state.submode,
+        ),
+        this.operatorModeStateService.getOpenCards.perform(),
+      ]);
 
-    await Promise.all([
-      updateRoomSkillsCommand.execute({
-        roomId,
-        skillCardIdsToActivate: skills.map((s) => s.id),
-      }),
-      sendMessageCommand.execute({
-        roomId,
-        prompt: this.aiPrompt,
-        attachedCards: openCards,
-        attachedFileURLs: this.operatorModeStateService.openFileURL
-          ? [this.operatorModeStateService.openFileURL]
-          : undefined,
-        openCardIds: openCards?.map((c) => c.id),
-        realmUrl: this.operatorModeStateService.realmURL.href,
-      }),
-    ]);
+      await Promise.all([
+        updateRoomSkillsCommand.execute({
+          roomId,
+          skillCardIdsToActivate: skills.map((s) => s.id),
+        }),
+        sendMessageCommand.execute({
+          roomId,
+          prompt: this.aiPrompt,
+          attachedCards: openCards,
+          attachedFileURLs: this.operatorModeStateService.openFileURL
+            ? [this.operatorModeStateService.openFileURL]
+            : undefined,
+          openCardIds: openCards?.map((c) => c.id),
+          realmUrl: this.operatorModeStateService.realmURL.href,
+        }),
+      ]);
 
-    await openRoomCommand.execute({ roomId });
-    this.aiPrompt = '';
+      await openRoomCommand.execute({ roomId });
+      this.aiPrompt = '';
+    } finally {
+      waiter.endAsync(waiterToken);
+    }
   });
 
   <template>

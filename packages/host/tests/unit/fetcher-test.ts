@@ -56,6 +56,36 @@ module('Unit | fetcher', function () {
     assert.true(response.redirected, 'labeled as redirected');
   });
 
+  test('can reuse a Request after a failed attempt', async function (assert) {
+    assert.expect(5);
+    let attempts = 0;
+    let fetch = fetcher(async function (input) {
+      attempts++;
+      let request = input as Request;
+      if (request.bodyUsed) {
+        throw new TypeError('Request already used');
+      }
+      await request.text(); // mark the body as read like a real fetch would
+      if (attempts === 1) {
+        throw new TypeError('network failed');
+      }
+      return new Response('OK', { status: 200 });
+    }, []);
+
+    let request = new Request('http://example.com/', {
+      method: 'POST',
+      body: 'hello',
+    });
+
+    await assert.rejects(fetch(request), /network failed/);
+    assert.false(request.bodyUsed, 'original request is still reusable');
+
+    let response = await fetch(request);
+    assert.strictEqual(attempts, 2, 'second attempt reached fetch impl');
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(await response.text(), 'OK');
+  });
+
   test('handler can call next more than once if needed', async function (assert) {
     assert.expect(2);
     let handler: FetcherMiddlewareHandler = async function (req, next) {

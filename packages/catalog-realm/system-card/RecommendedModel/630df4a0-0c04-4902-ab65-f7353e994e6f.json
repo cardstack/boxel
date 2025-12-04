@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "RecommendedModel",
+        "module": "../recommended-model"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "purpose": "",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "thinkingEffort": "minimal"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "modelConfiguration": {
+        "links": {
+          "self": "../OpenRouterModel/openai-gpt-5"
+        }
+      }
+    }
+  }
+}

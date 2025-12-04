@@ -17,6 +17,8 @@ export class MatrixClient {
   private password?: string;
   private seed?: string;
   private loggedInDeferred: Deferred<void> | undefined;
+  private lastTxnTimestamp = 0;
+  private txnSequence = 0;
 
   constructor({
     matrixURL,
@@ -255,7 +257,7 @@ export class MatrixClient {
     if (!this.access) {
       throw new Error(`Missing matrix access token`);
     }
-    let txnId = Date.now();
+    let txnId = this.nextTxnId();
 
     let response = await this.request(
       `_matrix/client/v3/rooms/${roomId}/send/${type}/${txnId}`,
@@ -338,6 +340,18 @@ export class MatrixClient {
       hash.update(this.password);
     }
     return uint8ArrayToHex(await hash.digest());
+  }
+
+  private nextTxnId() {
+    // Ensure unique txn ids even when multiple events are sent in the same millisecond
+    let now = Date.now();
+    if (now === this.lastTxnTimestamp) {
+      this.txnSequence++;
+    } else {
+      this.lastTxnTimestamp = now;
+      this.txnSequence = 0;
+    }
+    return `${now}-${this.txnSequence}`;
   }
 }
 

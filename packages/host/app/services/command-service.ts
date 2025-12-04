@@ -64,19 +64,21 @@ export default class CommandService extends Service {
     string,
     LimitedSet<string>
   >();
+  private aiAssistantCardRequests = new Map<
+    string,
+    {
+      clientRequestId: string;
+      invalidationReceived: boolean;
+      roomId?: string;
+    }
+  >();
 
   private commandProcessingEventQueue: string[] = [];
   private codePatchProcessingEventQueue: string[] = [];
   private flushCommandProcessingQueue: Promise<void> | undefined;
   private flushCodePatchProcessingQueue: Promise<void> | undefined;
 
-  registerAiAssistantClientRequestId(
-    action: string,
-    roomId?: string,
-  ): string | undefined {
-    if (!roomId) {
-      return `bot-patch:${action}:${uuidv4()}`;
-    }
+  registerAiAssistantClientRequestId(action: string, roomId: string): string {
     let encodedRoom = encodeURIComponent(roomId);
     let clientRequestId = `bot-patch:${encodedRoom}:${action}:${uuidv4()}`;
 
@@ -88,6 +90,63 @@ export default class CommandService extends Service {
     roomSet.add(clientRequestId);
 
     return clientRequestId;
+  }
+
+  private aiAssistantCardRequestKey(cardId: string, roomId: string) {
+    let normalizedCardId = cardId.replace(/\.json$/, '');
+    return `${roomId}::${normalizedCardId}`;
+  }
+
+  trackAiAssistantCardPatchRequest(
+    cardId: string,
+    clientRequestId: string,
+    roomId: string,
+  ) {
+    if (!cardId || !clientRequestId) {
+      return;
+    }
+    this.aiAssistantCardRequests.set(
+      this.aiAssistantCardRequestKey(cardId, roomId),
+      {
+        clientRequestId,
+        invalidationReceived: false,
+        roomId,
+      },
+    );
+  }
+
+  markAiAssistantClientRequestReceivedInvalidation(clientRequestId?: string) {
+    if (!clientRequestId) {
+      return;
+    }
+    for (let [cardId, data] of this.aiAssistantCardRequests) {
+      if (data.clientRequestId === clientRequestId) {
+        this.aiAssistantCardRequests.set(cardId, {
+          ...data,
+          invalidationReceived: true,
+        });
+      }
+    }
+  }
+
+  invalidationAfterCardPatchDidArrive(cardId: string, roomId: string): boolean {
+    return Boolean(
+      this.aiAssistantCardRequests.get(
+        this.aiAssistantCardRequestKey(cardId, roomId),
+      )?.invalidationReceived,
+    );
+  }
+
+  clearAiAssistantRequestForCard(cardId: string, roomId: string) {
+    this.aiAssistantCardRequests.delete(
+      this.aiAssistantCardRequestKey(cardId, roomId),
+    );
+  }
+
+  hasPendingAiAssistantCardRequest(cardId: string, roomId: string): boolean {
+    return this.aiAssistantCardRequests.has(
+      this.aiAssistantCardRequestKey(cardId, roomId),
+    );
   }
 
   public queueEventForCommandProcessing(event: Partial<IEvent>) {
@@ -395,12 +454,18 @@ export default class CommandService extends Service {
             "Patch command can't run because it doesn't have all the fields in arguments returned by open ai",
           );
         }
+        let cardId = payload.attributes.cardId;
         let clientRequestId = this.registerAiAssistantClientRequestId(
           'patch-instance',
           command.message.roomId,
         );
+        this.trackAiAssistantCardPatchRequest(
+          cardId,
+          clientRequestId,
+          command.message.roomId,
+        );
         await this.store.patch(
-          payload?.attributes?.cardId,
+          cardId,
           {
             attributes: payload?.attributes?.patch?.attributes,
             relationships: payload?.attributes?.patch?.relationships,

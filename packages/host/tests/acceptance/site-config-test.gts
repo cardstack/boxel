@@ -160,6 +160,7 @@ module('Acceptance | site config home page', function (hooks) {
       '.realm.json': {
         publishable: true,
         name: 'Site Config Workspace',
+        hostHome: `${testRealmURL}site`,
       },
     };
   });
@@ -176,11 +177,18 @@ module('Acceptance | site config home page', function (hooks) {
       setupUserSubscription();
       setupAuthEndpoints();
 
+      let contents = {
+        ...realmContents,
+        '.realm.json': {
+          ...(realmContents['.realm.json'] as any),
+          hostHome: `${testHostModeRealmURL}site`,
+        },
+      };
       setExpiresInSec(60 * 60);
       await setupAcceptanceTestRealm({
         realmURL: testHostModeRealmURL,
         mockMatrixUtils,
-        contents: realmContents,
+        contents,
         permissions: {
           '*': ['read'],
         },
@@ -394,9 +402,9 @@ module('Acceptance | site config home page', function (hooks) {
         await click('[data-test-more-options-button]');
         await click('[data-test-boxel-menu-item-text="Set as site home"]');
 
-        let siteDoc: any;
+        let realmDoc: any;
         await waitUntil(async () => {
-          let file = await adapter.openFile('site.json');
+          let file = await adapter.openFile('.realm.json');
           if (!file) {
             return false;
           }
@@ -404,15 +412,18 @@ module('Acceptance | site config home page', function (hooks) {
             typeof file.content === 'string'
               ? file.content
               : JSON.stringify(file.content);
-          siteDoc = JSON.parse(content);
-          return true;
+          realmDoc = JSON.parse(content);
+          return realmDoc.hostHome === `${testRealmURL}SiteConfig/custom`;
         });
 
         assert.strictEqual(
-          siteDoc.data.relationships.home.links.self,
-          './Pet/peanut',
-          'site.json created with correct home',
+          realmDoc.hostHome,
+          `${testRealmURL}SiteConfig/custom`,
+          '.realm.json updated with selected site config',
         );
+
+        let siteDoc = await adapter.openFile('site.json');
+        assert.strictEqual(siteDoc, undefined, 'site.json is not created');
       });
 
       test('user can set interact home via stack menu', async function (assert) {
@@ -694,7 +705,12 @@ module('Acceptance | site config home page', function (hooks) {
 
     module('when site config file exists', function (hooks) {
       hooks.beforeEach(async function () {
-        let contents = { ...realmContents };
+        let contents = {
+          ...realmContents,
+          '.realm.json': {
+            ...(realmContents['.realm.json'] as any),
+          },
+        };
         contents['SiteConfig/custom.json'] = {
           data: {
             meta: {
@@ -765,8 +781,8 @@ module('Acceptance | site config home page', function (hooks) {
       });
 
       test('user can update existing site config via stack menu', async function (assert) {
-        let initialDoc = await adapter.openFile('site.json');
-        assert.ok(initialDoc, 'site.json exists before update');
+        let initialDoc = await adapter.openFile('.realm.json');
+        assert.ok(initialDoc, '.realm.json exists before update');
 
         await visitOperatorMode({
           submode: 'interact',
@@ -786,9 +802,9 @@ module('Acceptance | site config home page', function (hooks) {
         await click('[data-test-more-options-button]');
         await click('[data-test-boxel-menu-item-text="Set as site home"]');
 
-        let siteDoc: any;
+        let realmDoc: any;
         await waitUntil(async () => {
-          let file = await adapter.openFile('site.json');
+          let file = await adapter.openFile('.realm.json');
           if (!file) {
             return false;
           }
@@ -796,15 +812,30 @@ module('Acceptance | site config home page', function (hooks) {
             typeof file.content === 'string'
               ? file.content
               : JSON.stringify(file.content);
-          siteDoc = JSON.parse(content);
-          return siteDoc.data.relationships.home.links.self === './Pet/peanut';
+          realmDoc = JSON.parse(content);
+          return realmDoc.hostHome === `${testRealmURL}SiteConfig/custom`;
         });
 
         assert.strictEqual(
-          siteDoc.data.relationships.home.links.self,
-          './Pet/peanut',
-          'existing site.json updated with new home',
+          realmDoc.hostHome,
+          `${testRealmURL}SiteConfig/custom`,
+          'realm config updated with new site home',
         );
+
+        let siteDoc = await adapter.openFile('site.json');
+        assert.ok(siteDoc, 'existing site.json remains available');
+        if (siteDoc) {
+          let content =
+            typeof siteDoc.content === 'string'
+              ? siteDoc.content
+              : JSON.stringify(siteDoc.content);
+          let parsedSiteDoc = JSON.parse(content);
+          assert.strictEqual(
+            parsedSiteDoc.data.relationships.home.links.self,
+            './Pet/mango',
+            'existing site.json content is unchanged',
+          );
+        }
       });
     });
   });
