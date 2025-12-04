@@ -113,6 +113,12 @@ export default class CommandService extends Service {
         roomId,
       },
     );
+
+    this.trackInvalidationAfterAIAssistantRequest(
+      cardId,
+      clientRequestId,
+      roomId,
+    );
   }
 
   private aiAssistantRequestInvalidations = new Map<

@@ -12,8 +12,6 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import { waitForRealmState } from './utils';
-
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type RealmService from '../services/realm';
@@ -99,26 +97,16 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     cardId: string,
     roomId: string,
   ): Promise<string[]> {
-    let hasPendingRequest =
-      this.commandService.hasPendingAiAssistantCardRequest(cardId, roomId);
-    let invalidationArrived =
-      this.commandService.invalidationAfterCardPatchDidArrive(cardId, roomId);
-
-    if (hasPendingRequest && !invalidationArrived) {
-      await this.waitForCardIndexing(cardId);
-    }
+    await this.commandService.waitForInvalidationAfterAIAssistantRequest(
+      cardId,
+      roomId,
+      cardIndexingTimeout,
+    );
 
     let error = await this.refreshCard(cardId);
 
     if (!error) {
       error = this.store.peekError(cardId);
-    }
-
-    if (
-      hasPendingRequest &&
-      this.commandService.invalidationAfterCardPatchDidArrive(cardId, roomId)
-    ) {
-      this.commandService.clearAiAssistantRequestForCard(cardId, roomId);
     }
 
     if (!error) {
@@ -147,62 +135,6 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     return undefined;
   }
 
-  private async waitForCardIndexing(cardId: string): Promise<void> {
-    let cardURL: URL | undefined;
-    try {
-      cardURL = new URL(cardId);
-    } catch (error) {
-      console.warn(
-        `CheckCorrectnessCommand: invalid card id ${cardId}, skipping index wait`,
-        error,
-      );
-      return;
-    }
-
-    let realmURL = this.realm.realmOfURL(cardURL);
-    if (!realmURL) {
-      console.warn(
-        `CheckCorrectnessCommand: unable to determine realm for ${cardId}`,
-      );
-      return;
-    }
-
-    try {
-      await waitForRealmState(
-        this.commandContext,
-        realmURL.href,
-        (event) => {
-          if (
-            !event ||
-            event.eventName !== 'index' ||
-            event.indexType !== 'incremental'
-          ) {
-            return false;
-          }
-
-          return event.invalidations?.some((invalidation) =>
-            this.matchesInvalidation(cardURL!.href, invalidation),
-          );
-        },
-        { timeoutMs: cardIndexingTimeout },
-      );
-    } catch (error) {
-      console.warn(
-        `CheckCorrectnessCommand: timed out waiting for indexing of ${cardId}`,
-        error,
-      );
-    }
-  }
-
-  private matchesInvalidation(cardHref: string, invalidation: string): boolean {
-    if (invalidation === cardHref) {
-      return true;
-    }
-    let normalizedTarget = cardHref.replace(/\.json$/, '');
-    let normalizedInvalidation = invalidation.replace(/\.json$/, '');
-    return normalizedTarget === normalizedInvalidation;
-  }
-
   private async collectModuleErrors(
     fileUrl: string,
     roomId: string,
@@ -216,7 +148,6 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
 
     let { moduleURL, realmURL } = moduleInfo;
 
-    debugger;
     await this.commandService.waitForInvalidationAfterAIAssistantRequest(
       moduleURL.href,
       roomId,
