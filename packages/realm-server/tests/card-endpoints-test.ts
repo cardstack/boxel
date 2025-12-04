@@ -174,7 +174,7 @@ module(basename(__filename), function () {
             },
           });
         });
-        test.only('query-backed relationships resolve via search at read time', async function (assert) {
+        test('query-backed relationships resolve via search at read time', async function (assert) {
           let { testRealm: realm, request } = getRealmSetup();
 
           let writes = new Map<string, string>([
