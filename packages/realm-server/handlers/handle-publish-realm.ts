@@ -32,6 +32,19 @@ import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
 
 const log = logger('handle-publish');
 
+function rewriteHostHomeForPublishedRealm(
+  hostHome: string,
+  sourceRealmURL: string,
+  publishedRealmURL: string,
+): string | undefined {
+  if (typeof hostHome !== 'string') {
+    return undefined;
+  }
+  return hostHome.startsWith(sourceRealmURL)
+    ? `${publishedRealmURL}${hostHome.slice(sourceRealmURL.length)}`
+    : undefined;
+}
+
 export default function handlePublishRealm({
   dbAdapter,
   matrixClient,
@@ -251,6 +264,14 @@ export default function handlePublishRealm({
         join(publishedRealmPath, '.realm.json'),
       );
       newlyPublishedRealmConfig.publishable = false;
+      let rewrittenHostHome = rewriteHostHomeForPublishedRealm(
+        newlyPublishedRealmConfig.hostHome,
+        sourceRealmURL,
+        publishedRealmURL,
+      );
+      if (rewrittenHostHome) {
+        newlyPublishedRealmConfig.hostHome = rewrittenHostHome;
+      }
       writeJsonSync(
         join(publishedRealmPath, '.realm.json'),
         newlyPublishedRealmConfig,
