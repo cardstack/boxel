@@ -1,3 +1,4 @@
+import { service } from '@ember/service';
 import { click, waitUntil, render } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
@@ -21,10 +22,10 @@ import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { type RoomResource } from '@cardstack/host/resources/room';
 
+import type StoreService from '@cardstack/host/services/store';
+
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
-import { service } from '@ember/service';
-import type StoreService from '@cardstack/host/services/store';
 
 class GetCardsContextProvider extends GlimmerComponent<{
   Args: {};

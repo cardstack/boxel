@@ -30,7 +30,6 @@ import HostSubmode from '@cardstack/host/components/operator-mode/host-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
-import { getSearch } from '@cardstack/host/resources/search';
 
 import MessageService from '@cardstack/host/services/message-service';
 

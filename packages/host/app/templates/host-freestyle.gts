@@ -1,3 +1,4 @@
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { ComponentLike } from '@glint/template';
@@ -28,9 +29,9 @@ import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
 
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
-import { service } from '@ember/service';
 
 import formatComponentName from '../helpers/format-component-name';
+
 import type StoreService from '../services/store';
 
 interface UsageComponent {

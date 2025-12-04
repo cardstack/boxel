@@ -1108,7 +1108,7 @@ async function persistDocumentToTestRealm(
   await matching.realm.realmIndexUpdater.update(
     [matching.realm.paths.fileURL(localPath)],
     {
-      onInvalidation() {},
+      async onInvalidation() {},
     },
   );
 }

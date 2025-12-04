@@ -10,6 +10,8 @@ import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-con
 
 import type NetworkService from '@cardstack/host/services/network';
 
+import StoreService from '@cardstack/host/services/store';
+
 import {
   saveCard,
   setupAcceptanceTestRealm,
@@ -31,7 +33,6 @@ import {
 
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
-import StoreService from '@cardstack/host/services/store';
 
 const QUERY_CARD_URL = `${testRealmURL}query-card`;
 const QUERY_CARD_2_URL = `${testRealmURL}query-card-2`;

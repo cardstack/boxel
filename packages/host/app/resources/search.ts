@@ -1,7 +1,10 @@
 import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
+import { setOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import { tracked, cached } from '@glimmer/tracking';
+
 import { restartableTask, task } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
@@ -20,16 +23,17 @@ import {
   buildQueryString,
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
+
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import type CardService from '../services/card-service';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
-import Owner from '@ember/owner';
-import { setOwner } from '@ember/owner';
+
 const waiter = buildWaiter('search-resource:search-waiter');
-export interface Args {
+
+export interface Args<T extends CardDef = CardDef> {
   named: {
     query: Query | undefined;
     realms: string[] | undefined;
@@ -39,7 +43,7 @@ export interface Args {
     doWhileRefreshing?: (() => void) | undefined;
     seed?:
       | {
-          cards: CardDef[];
+          cards: T[];
           searchURL?: string;
           realms?: string[];
           meta?: QueryResultsMeta;
@@ -49,7 +53,9 @@ export interface Args {
     owner: Owner;
   };
 }
-export class SearchResource extends Resource<Args> {
+export class SearchResource<T extends CardDef = CardDef> extends Resource<
+  Args<T>
+> {
   @service declare private cardService: CardService;
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
@@ -60,7 +66,7 @@ export class SearchResource extends Resource<Args> {
   // @ts-ignore we use this.loaded for test instrumentation.
   private loaded: Promise<void> | undefined;
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
-  private _instances = new TrackedArray<CardDef>();
+  private _instances = new TrackedArray<T>();
   @tracked private _meta: QueryResultsMeta = { page: { total: 0 } };
   @tracked private _errors: ErrorEntry[] | undefined;
   #isLive = false;
@@ -83,7 +89,7 @@ export class SearchResource extends Resource<Args> {
     });
   }
 
-  modify(_positional: never[], named: Args['named']) {
+  modify(_positional: never[], named: Args<T>['named']) {
     let { query, realms, isLive, doWhileRefreshing, seed, owner } = named;
 
     setOwner(this, owner); // works around problem where lifetime parent is used as owner when they should be allowed to differ
@@ -205,7 +211,7 @@ export class SearchResource extends Resource<Args> {
     return this._errors;
   }
 
-  private async updateInstances(newInstances: CardDef[]) {
+  private async updateInstances(newInstances: T[]) {
     let oldReferences = this._instances.map((i) => i.id);
     // Please note 3 things there:
     // 1. we are mutating this._instances, not replacing it
@@ -239,12 +245,14 @@ export class SearchResource extends Resource<Args> {
     return this.store.flush();
   }
 
-  private applySeed = task(async (seed: NonNullable<Args['named']['seed']>) => {
-    await Promise.resolve();
-    this._meta = seed.meta ?? { page: { total: seed.cards.length } };
-    this._errors = seed.errors;
-    await this.updateInstances(seed.cards);
-  });
+  private applySeed = task(
+    async (seed: NonNullable<Args<T>['named']['seed']>) => {
+      await Promise.resolve();
+      this._meta = seed.meta ?? { page: { total: seed.cards.length } };
+      this._errors = seed.errors;
+      await this.updateInstances(seed.cards);
+    },
+  );
 
   private search = restartableTask(async (query: Query) => {
     this.#log.info(
@@ -282,7 +290,7 @@ export class SearchResource extends Resource<Args> {
           }
           let instances = collectionDoc.data
             .map((r) => this.store.peek(r.id!)) // all results will have id's
-            .filter((i) => isCardInstance(i)) as CardDef[];
+            .filter((i) => isCardInstance(i)) as T[];
           return {
             instances,
             meta: collectionDoc.meta,
@@ -323,7 +331,7 @@ export class SearchResource extends Resource<Args> {
 // ```
 // If you need to use `getSearch()`/`getCards()` in something that is not a Component, then
 // let's talk.
-export function getSearch(
+export function getSearch<T extends CardDef = CardDef>(
   parent: object,
   owner: Owner,
   getQuery: () => Query | undefined,
@@ -333,7 +341,7 @@ export function getSearch(
     doWhileRefreshing?: (() => void) | undefined;
     seed?:
       | {
-          cards: CardDef[];
+          cards: T[];
           searchURL?: string;
           meta?: QueryResultsMeta;
           errors?: ErrorEntry[];

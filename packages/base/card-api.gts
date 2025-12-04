@@ -362,6 +362,22 @@ export interface StoreSearchResource<T extends CardDef = CardDef> {
   readonly errors?: ErrorEntry[];
 }
 
+export type GetSearchResourceFuncOpts = {
+  isLive?: boolean;
+  doWhileRefreshing?: (() => void) | undefined;
+  seed?: {
+    cards: CardDef[];
+    searchURL?: string;
+    realms?: string[];
+  };
+};
+export type GetSearchResourceFunc<T extends CardDef = CardDef> = (
+  parent: object,
+  getQuery: () => Query | undefined,
+  getRealms?: () => string[] | undefined,
+  opts?: GetSearchResourceFuncOpts,
+) => StoreSearchResource<T>;
+
 export interface CardStore {
   get(url: string): CardDef | undefined;
   set(url: string, instance: CardDef): void;
@@ -370,22 +386,7 @@ export interface CardStore {
   loadDocument(url: string): Promise<SingleCardDocument | CardError>;
   trackLoad(load: Promise<unknown>): void;
   loaded(): Promise<void>;
-  getSearchResource<T extends CardDef = CardDef>(
-    parent: BaseDef,
-    getQuery: () => Query | undefined,
-    getRealms?: () => string[] | undefined,
-    opts?: {
-      isLive?: boolean;
-      doWhileRefreshing?: (() => void) | undefined;
-      seed?: {
-        cards: T[];
-        searchURL?: string;
-        realms?: string[];
-        meta?: QueryResultsMeta;
-        errors?: ErrorEntry[];
-      };
-    },
-  ): StoreSearchResource<T>;
+  getSearchResource: GetSearchResourceFunc;
 }
 
 export interface Field<
@@ -3849,5 +3850,14 @@ class FallbackCardStore implements CardStore {
     let promise = loadDocument(fetch, url);
     this.trackLoad(promise);
     return await promise;
+  }
+
+  getSearchResource<T extends CardDef = CardDef>(
+    _parent: object,
+    _getQuery: () => any,
+    _getRealms?: () => string[] | undefined,
+    _opts?: any,
+  ): StoreSearchResource<T> {
+    throw new Error('Method not implemented.');
   }
 }

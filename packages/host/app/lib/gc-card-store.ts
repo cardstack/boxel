@@ -1,4 +1,5 @@
 import { destroy } from '@ember/destroyable';
+
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
@@ -19,6 +20,7 @@ import {
 import type {
   CardDef,
   CardStore,
+  GetSearchResourceFuncOpts,
   StoreSearchResource,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -30,7 +32,7 @@ type InstanceGraph = Map<LocalId, Set<LocalId>>;
 
 type StoreHooks = {
   getSearchResource<T extends CardDef = CardDef>(
-    parent: CardDef,
+    parent: object,
     getQuery: () => Query | undefined,
     getRealms?: () => string[] | undefined,
     opts?: {
@@ -38,8 +40,9 @@ type StoreHooks = {
       doWhileRefreshing?: (() => void) | undefined;
       seed?:
         | {
-            cards: CardDef[];
+            cards: T[];
             searchURL?: string;
+            realms?: string[];
             meta?: QueryResultsMeta;
             errors?: ErrorEntry[];
           }
@@ -568,21 +571,10 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   getSearchResource<T extends CardDef = CardDef>(
-    parent: CardDef,
+    parent: object,
     getQuery: () => Query | undefined,
     getRealms?: () => string[] | undefined,
-    opts?: {
-      isLive?: boolean;
-      doWhileRefreshing?: (() => void) | undefined;
-      seed?:
-        | {
-            cards: CardDef[];
-            searchURL?: string;
-            meta?: QueryResultsMeta;
-            errors?: ErrorEntry[];
-          }
-        | undefined;
-    },
+    opts?: GetSearchResourceFuncOpts,
   ) {
     if (!this.#storeHooks?.getSearchResource) {
       return {

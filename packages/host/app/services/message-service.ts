@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
@@ -11,8 +12,8 @@ export default class MessageService extends Service {
     new Map();
   @service declare private network: NetworkService;
 
-  constructor() {
-    super(...arguments);
+  constructor(owner: Owner) {
+    super(owner);
     this.register();
     console.info('message-service: registered global realm subscription hook');
   }

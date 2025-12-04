@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import { settled, type RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
@@ -28,7 +29,6 @@ import {
   setupBaseRealm,
 } from '../helpers/base-realm';
 import { setupRenderingTest } from '../helpers/setup';
-import { registerDestructor } from '@ember/destroyable';
 
 let loader: Loader;
 

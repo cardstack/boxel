@@ -91,15 +91,6 @@ export default class CardPrerender extends Component {
     }/${optionsSegment}`;
   }
 
-  #moduleBasePath(url: string, renderOptions?: RenderRouteOptions) {
-    let optionsSegment = encodeURIComponent(
-      serializeRenderRouteOptions(renderOptions ?? {}),
-    );
-    return `/module/${encodeURIComponent(url)}/${
-      this.#nonce
-    }/${optionsSegment}`;
-  }
-
   constructor(owner: Owner, args: {}) {
     super(owner, args);
     this.#prerendererDelegate = {

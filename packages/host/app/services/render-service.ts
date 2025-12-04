@@ -95,13 +95,13 @@ export class CardStoreWithErrors implements CardStore {
     await Promise.allSettled(this.#inFlight);
   }
   getSearchResource<T extends CardDef = CardDef>(
-    _parent: CardDef,
+    _parent: object,
     _getQuery: () => any,
     _getRealms?: () => string[] | undefined,
     _opts?: any,
   ) {
     return {
-      instances: [],
+      instances: [] as T[],
       instancesByRealm: [],
       isLoading: false,
       meta: { page: { total: 0 } },

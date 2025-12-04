@@ -1,5 +1,6 @@
 import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
+import { getOwner } from '@ember/owner';
 import Service, { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 
@@ -56,6 +57,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
+
 import { getSearch } from '../resources/search';
 
 import {
@@ -76,7 +78,7 @@ import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
-import { getOwner } from '@ember/owner';
+import type { SearchResource } from '../resources/search';
 
 export { CardErrorJSONAPI, CardSaveSubscriber };
 
@@ -548,7 +550,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   getSearchResource<T extends CardDef = CardDef>(
-    parent: CardDef,
+    parent: object,
     getQuery: () => Query | undefined,
     getRealms?: () => string[] | undefined,
     opts?: {
@@ -561,11 +563,17 @@ export default class StoreService extends Service implements StoreInterface {
         errors?: ErrorEntry[];
       };
     },
-  ) {
+  ): SearchResource<T> {
     if (this.isRenderStore && opts) {
       opts.isLive = false;
     }
-    return getSearch(parent, getOwner(this)!, getQuery, getRealms, opts);
+    return getSearch<T>(
+      parent,
+      getOwner(this)!,
+      getQuery,
+      getRealms,
+      opts,
+    ) as unknown as SearchResource<T>;
   }
 
   getSaveState(id: string): AutoSaveState | undefined {
