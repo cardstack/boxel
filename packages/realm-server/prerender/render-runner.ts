@@ -162,6 +162,9 @@ export class RenderRunner {
         poolInfo.evicted = true;
         shortCircuit = true;
       }
+      if (this.#isAuthError(error)) {
+        shortCircuit = true;
+      }
     } else {
       let capture = result as RenderCapture;
       if (capture.status === 'ready') {
@@ -175,6 +178,9 @@ export class RenderRunner {
         let evicted = await this.#maybeEvict(realm, 'isolated render', capErr);
         if (evicted) {
           poolInfo.evicted = true;
+          shortCircuit = true;
+        }
+        if (this.#isAuthError(error)) {
           shortCircuit = true;
         }
       }
@@ -234,6 +240,9 @@ export class RenderRunner {
       }
       error = error ?? (metaMaybeError as RenderError);
       markTimeout(error);
+      if (this.#isAuthError(error)) {
+        shortCircuit = true;
+      }
       meta = {
         serialized: null,
         searchDoc: null,
@@ -321,6 +330,10 @@ export class RenderRunner {
           markTimeout(res.error);
           if (res.evicted) {
             poolInfo.evicted = true;
+            shortCircuit = true;
+            break;
+          }
+          if (this.#isAuthError(error)) {
             shortCircuit = true;
             break;
           }
@@ -534,6 +547,11 @@ export class RenderRunner {
       }
     }
     return undefined;
+  }
+
+  #isAuthError(err?: RenderError): boolean {
+    let status = Number(err?.error?.status);
+    return status === 401 || status === 403;
   }
 
   async #step<T>(
