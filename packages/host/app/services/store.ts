@@ -48,6 +48,7 @@ import {
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
   type ErrorEntry,
+  parseSearchURL,
 } from '@cardstack/runtime-common';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
@@ -493,7 +494,7 @@ export default class StoreService extends Service implements StoreInterface {
       typeof queryOrSearchURL === 'string' ||
       queryOrSearchURL instanceof URL
     ) {
-      let { query, realm } = this.parseSearchURL(queryOrSearchURL);
+      let { query, realm } = parseSearchURL(queryOrSearchURL);
       return this._search(query, realm);
     }
 
@@ -504,24 +505,6 @@ export default class StoreService extends Service implements StoreInterface {
         realms.map((realmURL) => this._search(query, new URL(realmURL))),
       ),
     );
-  }
-
-  private parseSearchURL(searchURL: string | URL): {
-    query: Query;
-    realm: URL;
-  } {
-    let url = new URL(searchURL);
-    let query = parseQuery(url.search.slice(1));
-
-    // strip the trailing "_search" path segment to recover the realm URL
-    if (url.pathname.endsWith('_search')) {
-      url.pathname = url.pathname.replace(/_search$/, '');
-    } else if (url.pathname.endsWith('_search/')) {
-      url.pathname = url.pathname.replace(/_search\/$/, '/');
-    }
-    url.search = '';
-
-    return { query, realm: url };
   }
 
   private async _search(query: Query, realmURL: URL): Promise<CardDef[]> {

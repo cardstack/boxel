@@ -39,6 +39,7 @@ export interface Args {
       | {
           cards: CardDef[];
           searchURL?: string;
+          realms?: string[];
           meta?: QueryResultsMeta;
           errors?: ErrorEntry[];
         }
@@ -99,13 +100,22 @@ export class SearchResource extends Resource<Args> {
     if (seed && !this.#seedApplied) {
       this.loaded = this.applySeed.perform(seed);
       this.#seedApplied = true;
-      this.#previousQueryString = seed.searchURL;
+      if (seed.searchURL) {
+        this.#previousQueryString = new URL(seed.searchURL).search;
+      }
+      if (seed.realms) {
+        this.#previousRealms = seed.realms;
+      }
       this.#log.info(
         `apply seed for search resource (one-time); count=${seed.cards.length}; searchURL=${seed.searchURL}`,
       );
     }
 
-    if (isLive && !isEqual(realms, this.#previousRealms)) {
+    if (
+      isLive &&
+      (this.subscriptions.length === 0 ||
+        !isEqual(realms, this.#previousRealms))
+    ) {
       this.#log.info(
         `subscribing to realms for search resource; realms=${this.realmsToSearch.join(',')}`,
       );
@@ -147,6 +157,11 @@ export class SearchResource extends Resource<Args> {
     ) {
       // we want to only run the search when there is a deep equality
       // difference, not a strict equality difference
+      this.#log.info(
+        `skip search perform as query and realms have not changed; query=${queryString}; realms=${this.realmsToSearch.join(
+          ',',
+        )}`,
+      );
       return;
     }
 

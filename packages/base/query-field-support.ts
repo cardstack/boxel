@@ -16,6 +16,7 @@ import {
   THIS_INTERPOLATION_PREFIX,
   THIS_REALM_TOKEN,
   realmURL as realmURLSymbol,
+  parseSearchURL,
 } from '@cardstack/runtime-common';
 import {
   buildQuerySearchURL,
@@ -29,6 +30,7 @@ import { initSharedState } from './shared-state';
 interface QueryFieldState {
   seedSearchURL?: string | null;
   seedRecords?: CardDef[];
+  seedRealms?: string[];
   searchResource?: StoreSearchResource;
 }
 
@@ -84,6 +86,7 @@ export function ensureQueryFieldSearchResource(
         ? {
             cards: seedRecords ?? undefined,
             searchURL: seedSearchURL ?? undefined,
+            realms: fieldState?.seedRealms,
           }
         : undefined,
     },
@@ -248,6 +251,9 @@ export function captureQueryFieldSeedData(
   fieldState.seedRecords = value;
   fieldState.seedSearchURL =
     resource.relationships?.[fieldName]?.links?.search ?? null;
+  fieldState.seedRealms = fieldState.seedSearchURL
+    ? [parseSearchURL(new URL(fieldState.seedSearchURL)).realm.href]
+    : [];
 }
 
 function resolveQueryAndRealm(
@@ -263,8 +269,9 @@ function resolveQueryAndRealm(
       useAbsoluteURL: true,
     });
     let resource = serialized.data as LooseCardResource;
-    let realmURL = (instance as CardDef)[realmURLSymbol]
-      ? new URL((instance as CardDef)[realmURLSymbol].href)
+    let realmURL: URL | undefined = (instance as CardDef)[realmURLSymbol];
+    realmURL = realmURL
+      ? realmURL
       : resource.meta?.realmURL
         ? new URL(resource.meta.realmURL)
         : (instance as CardDef).id

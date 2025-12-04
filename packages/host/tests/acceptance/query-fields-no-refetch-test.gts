@@ -235,6 +235,7 @@ module(
         );
         await settled();
 
+        console.log('interceptedSearchRequests:', interceptedSearchRequests);
         assert.strictEqual(
           interceptedSearchRequests.length,
           2,

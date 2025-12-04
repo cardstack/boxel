@@ -43,6 +43,12 @@ import {
   getAncestor,
   relativeTo,
   assertIsSerializerName,
+  getSerializer,
+  isCardError,
+  SingleCardDocument,
+  loadDocument,
+  LocalPath,
+  getCardMenuItems,
   type Format,
   type Meta,
   type CardFields,
@@ -58,22 +64,16 @@ import {
   type getCardCollection,
   type Store,
   type PrerenderedCardComponentSignature,
-  getSerializer,
-  isCardError,
-  SingleCardDocument,
-  loadDocument,
-  LocalPath,
-  getCardMenuItems,
+  type ErrorEntry,
+  type Query,
   type QueryWithInterpolations,
   type QueryResultsMeta,
-  type ErrorEntry,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
   ensureQueryFieldSearchResource,
   validateRelationshipQuery,
 } from './query-field-support';
-import { logger as runtimeLogger } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
 import DefaultFittedTemplate from './default-templates/fitted';
@@ -354,8 +354,6 @@ export async function flushLogs() {
   await logger.flush();
 }
 
-const queryFieldLogger = runtimeLogger('query-field-getter');
-
 export interface StoreSearchResource<T extends CardDef = CardDef> {
   readonly instances: T[];
   readonly instancesByRealm: { realm: string; cards: T[] }[];
@@ -382,6 +380,7 @@ export interface CardStore {
       seed?: {
         cards: T[];
         searchURL?: string;
+        realms?: string[];
         meta?: QueryResultsMeta;
         errors?: ErrorEntry[];
       };

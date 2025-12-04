@@ -549,3 +549,21 @@ export function sortKeysDeep<T>(value: T): T {
   }
   return value;
 }
+
+export function parseSearchURL(searchURL: string | URL): {
+  query: Query;
+  realm: URL;
+} {
+  let url = new URL(searchURL);
+  let query = parseQuery(url.search.slice(1));
+
+  // strip the trailing "_search" path segment to recover the realm URL
+  if (url.pathname.endsWith('_search')) {
+    url.pathname = url.pathname.replace(/_search$/, '');
+  } else if (url.pathname.endsWith('_search/')) {
+    url.pathname = url.pathname.replace(/_search\/$/, '/');
+  }
+  url.search = '';
+
+  return { query, realm: url };
+}
