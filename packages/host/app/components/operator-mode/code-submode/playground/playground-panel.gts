@@ -22,6 +22,7 @@ import { eq, MenuItem, toMenuItems } from '@cardstack/boxel-ui/helpers';
 import { Folder, IconPlusThin } from '@cardstack/boxel-ui/icons';
 
 import {
+  CardContextName,
   cardTypeDisplayName,
   getCardMenuItems,
   type Permissions,
@@ -46,9 +47,13 @@ import {
   type PrerenderedCardLike,
 } from '@cardstack/runtime-common';
 
+import Overlays from '@cardstack/host/components/operator-mode/overlays';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
+import ElementTracker, {
+  type RenderedCardForOverlayActions,
+} from '@cardstack/host/resources/element-tracker';
 
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type CommandService from '@cardstack/host/services/command-service';
@@ -64,9 +69,11 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 import type StoreService from '@cardstack/host/services/store';
 
 import type {
+  CardContext,
   CardDef,
   FieldDef,
   Format,
+  ViewCardFn,
 } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { Spec } from 'https://cardstack.com/base/spec';
@@ -97,12 +104,14 @@ interface Signature {
     codeRef: ResolvedCodeRef;
     isFieldDef?: boolean;
     isUpdating?: boolean;
+    viewCard?: ViewCardFn;
   };
   Element: HTMLElement;
 }
 
 export default class PlaygroundPanel extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
+  @consume(CardContextName) private declare cardContext: CardContext;
   @service private declare aiAssistantPanelService: AiAssistantPanelService;
   @service private declare commandService: CommandService;
   @service private declare loaderService: LoaderService;
@@ -199,6 +208,30 @@ export default class PlaygroundPanel extends Component<Signature> {
       );
     }
     return menuItems;
+  }
+
+  private cardTracker = new ElementTracker();
+
+  @provide(CardContextName)
+  // @ts-ignore context is used via provider
+  private get context(): CardContext {
+    return {
+      ...this.cardContext,
+      cardComponentModifier: this.cardTracker.trackElement,
+    };
+  }
+
+  private get renderedCardsForOverlayActions():
+    | RenderedCardForOverlayActions[]
+    | undefined {
+    if (!this.args.viewCard) {
+      return undefined;
+    }
+    let entries = this.cardTracker.filter(
+      [{ fieldType: 'linksTo' }, { fieldType: 'linksToMany' }],
+      'or',
+    );
+    return entries.length ? entries : undefined;
   }
 
   @action private setFormat(format: Format) {
@@ -867,6 +900,12 @@ export default class PlaygroundPanel extends Component<Signature> {
                   class='preview-area'
                   data-test-field-preview-card={{@isFieldDef}}
                 >
+                  {{#if this.renderedCardsForOverlayActions}}
+                    <Overlays
+                      @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
+                      @viewCard={{@viewCard}}
+                    />
+                  {{/if}}
                   <PlaygroundPreview
                     @card={{card}}
                     @format={{this.format}}
