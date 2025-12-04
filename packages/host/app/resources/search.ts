@@ -66,6 +66,7 @@ export class SearchResource extends Resource<Args> {
   #isLive = false;
   #seedApplied = false;
   #doWhileRefreshing: (() => void) | undefined;
+  #previousQuery: Query | undefined;
   #previousQueryString: string | undefined;
   #previousRealms: string[] | undefined;
   #log = runtimeLogger('search-resource');
@@ -109,6 +110,7 @@ export class SearchResource extends Resource<Args> {
       if (seed.searchURL) {
         this.#previousQueryString = new URL(seed.searchURL).search;
       }
+      this.#previousQuery = query;
       if (seed.realms) {
         this.#previousRealms = seed.realms;
       }
@@ -140,7 +142,7 @@ export class SearchResource extends Resource<Args> {
             this.#log.info(
               `received realm event for ${realm}: ${event.eventName} / ${'indexType' in event ? event.indexType : 'n/a'}`,
             );
-            if (query === undefined) {
+            if (this.#previousQuery === undefined) {
               return;
             }
             // we are only interested in incremental index events
@@ -150,7 +152,7 @@ export class SearchResource extends Resource<Args> {
             ) {
               return;
             }
-            this.search.perform(query);
+            this.search.perform(this.#previousQuery);
           }),
         };
       });
@@ -172,6 +174,7 @@ export class SearchResource extends Resource<Args> {
     }
 
     this.#previousRealms = realms;
+    this.#previousQuery = query;
     this.#previousQueryString = queryString;
     this.loaded = this.search.perform(query);
   }

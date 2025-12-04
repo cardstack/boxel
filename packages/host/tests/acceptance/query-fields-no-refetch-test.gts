@@ -1,4 +1,4 @@
-import { click, findAll, settled, waitFor } from '@ember/test-helpers';
+import { click, fillIn, findAll, settled, waitFor } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -334,6 +334,32 @@ module(
       } finally {
         network.virtualNetwork.unmount(handler);
       }
+    });
+
+    test('interpolated value in query fields triggers search refresh', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: QUERY_CARD_URL, format: 'isolated' }]],
+      });
+      let cardSelector = `[data-test-stack-card="${QUERY_CARD_URL}"]`;
+      await waitFor(`${cardSelector} [data-test-matches]`);
+      // assert on initial matches
+      let matchElements = findAll(`${cardSelector} [data-test-match]`);
+      assert.deepEqual(
+        matchElements.map((el) => el.textContent?.trim()),
+        ['Target'],
+        'linksToMany query field was hydrated with initial value',
+      );
+      let titleElement = `${cardSelector} [data-test-inline-title] input`;
+      await waitFor(titleElement);
+      await fillIn(titleElement, 'Not Target');
+
+      //assert on new matches
+      matchElements = findAll(`${cardSelector} [data-test-match]`);
+      assert.deepEqual(
+        matchElements.map((el) => el.textContent?.trim()),
+        ['Not Target'],
+        'linksToMany query field was updated after changing the interpolated value',
+      );
     });
   },
 );
