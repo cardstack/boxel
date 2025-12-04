@@ -465,15 +465,8 @@ export function subscribeToRealm(
       /* do nothing */
     };
   } else {
-    let cbId = Math.random().toString(36).slice(2, 8);
-    console.info(
-      `subscribeToRealm: registering listener ${cbId} for ${realmURL}`,
-    );
     let realmSubscribe: RealmSubscribe = here._CARDSTACK_REALM_SUBSCRIBE;
     return realmSubscribe.subscribe(realmURL, (ev) => {
-      console.info(
-        `subscribeToRealm: invoking listener ${cbId} for ${realmURL} with event ${JSON.stringify(ev)}`,
-      );
       cb(ev);
     });
   }

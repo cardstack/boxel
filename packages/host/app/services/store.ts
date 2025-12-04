@@ -123,9 +123,6 @@ export default class StoreService extends Service implements StoreInterface {
   constructor(owner: Owner) {
     super(owner);
     this.store = this.createCardStore();
-    // ensure global realm subscription hook is registered so search resources
-    // using subscribeToRealm receive events
-    this.messageService.register();
     this.reset.register(this);
     this.ready = this.setup();
     registerDestructor(this, () => {
@@ -485,21 +482,7 @@ export default class StoreService extends Service implements StoreInterface {
     return persistedResult as T | CardErrorJSONAPI;
   }
 
-  async search(query: Query, realmURL?: URL): Promise<CardDef[]>;
-  async search(searchURL: string | URL): Promise<CardDef[]>;
-  async search(
-    queryOrSearchURL: Query | string | URL,
-    realmURL?: URL,
-  ): Promise<CardDef[]> {
-    if (
-      typeof queryOrSearchURL === 'string' ||
-      queryOrSearchURL instanceof URL
-    ) {
-      let { query, realm } = parseSearchURL(queryOrSearchURL);
-      return this._search(query, realm);
-    }
-
-    let query = queryOrSearchURL;
+  async search(query: Query, realmURL?: URL): Promise<CardDef[]> {
     let realms = realmURL ? [realmURL] : this.realmServer.availableRealmURLs;
     return flatMap(
       await Promise.all(
@@ -820,14 +803,6 @@ export default class StoreService extends Service implements StoreInterface {
         realmEventsLogger.debug(
           `ignoring invalidation ${invalidation} because we did not previously try to load it`,
         );
-      }
-      if (!resolvedRealmHref) {
-        try {
-          let maybeRealm = this.realm.realmOfURL(new URL(invalidation));
-          resolvedRealmHref = maybeRealm?.href ?? resolvedRealmHref;
-        } catch {
-          // ignore invalid URL
-        }
       }
     }
   };

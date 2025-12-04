@@ -1031,7 +1031,6 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       return (records as any[])[0] as BaseInstanceType<CardT> | undefined;
     }
 
-    // fallback to legacy behavior
     let maybeNotLoaded = deserialized.get(this.name);
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance, this, maybeNotLoaded.reference);
@@ -1169,23 +1168,10 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       );
     }
     let reference = value.links?.self;
-    if (reference === null || reference === '') {
+    if (reference == null || reference === '') {
       return null;
     }
-    if (reference === undefined) {
-      if (value.data && 'id' in value.data && value.data.id) {
-        reference = value.data.id;
-      } else {
-        return null;
-      }
-    }
-    let resolvedReference: string;
-    try {
-      resolvedReference = new URL(reference, relativeTo).href;
-    } catch {
-      resolvedReference = reference;
-    }
-    let cachedInstance = store.get(resolvedReference);
+    let cachedInstance = store.get(new URL(reference, relativeTo).href);
     if (cachedInstance) {
       cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
@@ -1205,7 +1191,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       }
       return {
         type: 'not-loaded',
-        reference: resolvedReference,
+        reference,
       };
     }
 
@@ -1313,14 +1299,6 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     value: CardDef,
     resource: LooseCardResource,
   ) {
-    console.trace(
-      'calling LinksTo#captureQueryFieldSeedData',
-      instance,
-      this.name,
-      value,
-      resource,
-    );
-
     captureQueryFieldSeedData(instance, this.name, [value], resource);
   }
 
@@ -1492,6 +1470,31 @@ class LinksToMany<FieldT extends CardDefConstructor>
       }
     }
     if (notLoadedRefs.length > 0) {
+      // Important: we intentionally leave the NotLoadedValue sentinels inside the
+      // WatchedArray so the lazy loader can swap them out in place once the linked
+      // cards finish loading. Because the array identity never changes, Glimmer’s
+      // tracking sees the mutation and re-renders when lazilyLoadLink replaces each
+      // sentinel with a CardDef instance. Callers should treat these entries as
+      // placeholders (e.g. check for constructor.getComponent) rather than assuming
+      // every element is immediately renderable. Ideally the .value refactor can
+      // iron out this kink.
+      // TODO
+      // Codex has offered a couple interim solutions to ease the burden on card
+      // authors around this:
+      // We can wrap the guard in a reusable helper/component so card authors don’t
+      // have to think about the sentinel:
+      //
+      // - Helper – export something like `has-card-component` (just checks
+      //   `value?.constructor?.getComponent`) from card-api. Then in templates
+      //   they write: `{{#if (has-card-component card)}}…{{/if}}` or
+      //   `{{#each (filter-loadable cards) as |c|}}`.
+      //
+      // - Component – provide a `LoadableCard` component that takes a card instance
+      //   and renders the correct `CardContainer` only when the component is ready;
+      //   otherwise it renders nothing or a skeleton. Card authors use
+      //   `<LoadableCard @card={{card}}/>` instead of calling `getComponent`
+      //   themselves.
+
       for (let entry of value) {
         if (isNotLoadedValue(entry) && !(entry as any).loading) {
           lazilyLoadLink(instance, this, entry.reference, { value });
@@ -1679,23 +1682,11 @@ class LinksToMany<FieldT extends CardDefConstructor>
           );
         }
         let reference = value.links?.self;
-        if (reference === null || reference === '') {
+        if (reference == null) {
           return null;
         }
-        if (reference === undefined) {
-          if (value.data && 'id' in value.data && value.data.id) {
-            reference = value.data.id;
-          } else {
-            return null;
-          }
-        }
-        let resolvedReference: string;
-        try {
-          resolvedReference = new URL(reference, relativeTo).href;
-        } catch {
-          resolvedReference = reference;
-        }
-        let cachedInstance = store.get(resolvedReference);
+        let cachedInstance = store.get(new URL(reference, relativeTo).href);
+
         if (cachedInstance) {
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
@@ -1719,7 +1710,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
         if (!resource) {
           return {
             type: 'not-loaded',
-            reference: resolvedReference,
+            reference,
           };
         }
         let clazz = await cardClassFromResource(
@@ -1924,14 +1915,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
     value: CardDef[],
     resource: LooseCardResource,
   ) {
-    console.trace(
-      'calling LinksToMany#captureQueryFieldSeedData',
-      instance,
-      this.name,
-      value,
-      resource,
-    );
-
     captureQueryFieldSeedData(instance, this.name, value, resource);
   }
 
@@ -3161,10 +3144,6 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   store: CardStore;
   opts?: DeserializeOpts;
 }): Promise<BaseInstanceType<T>> {
-  console.log(
-    `Deserializing instance of ${instance.constructor.name} from resource`,
-    resource,
-  );
   // because our store uses a tracked map for its identity map all the assembly
   // work that we are doing to deserialize the instance below is "live". so we
   // add the actual instance silently in a non-tracked way and only track it at
