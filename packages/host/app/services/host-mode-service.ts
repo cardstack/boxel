@@ -24,8 +24,6 @@ export default class HostModeService extends Service {
       this.isRealmServerDomain === false &&
       this.originIsNotMatrixTests
     );
-
-    return false;
   }
 
   get isRealmServerDomain() {
