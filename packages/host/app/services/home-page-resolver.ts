@@ -147,60 +147,14 @@ export default class HomePageResolverService extends Service {
     siteConfigId: string,
     realmURL: string,
   ): Promise<SiteConfig | undefined> {
-    let resolvedSiteConfigId = this.resolveCardURL(siteConfigId, realmURL);
-    if (!resolvedSiteConfigId) {
-      return undefined;
-    }
-
-    let siteConfig =
-      (await this.tryLoadSiteConfig(resolvedSiteConfigId)) ??
-      (await this.tryLoadSiteConfig(
-        resolvedSiteConfigId.endsWith('.json')
-          ? resolvedSiteConfigId
-          : `${resolvedSiteConfigId}.json`,
-      ));
-
-    return siteConfig ?? undefined;
-  }
-
-  private async tryLoadSiteConfig(
-    siteConfigURL: string,
-  ): Promise<SiteConfig | undefined> {
-    try {
-      return (await this.store.get(siteConfigURL)) as SiteConfig | undefined;
-    } catch (_error) {
-      return undefined;
-    }
+    return this.loadConfig<SiteConfig>(siteConfigId, realmURL);
   }
 
   private async loadIndexConfig(
     indexConfigId: string,
     realmURL: string,
   ): Promise<IndexConfig | undefined> {
-    let resolvedIndexConfigId = this.resolveCardURL(indexConfigId, realmURL);
-    if (!resolvedIndexConfigId) {
-      return undefined;
-    }
-
-    let indexConfig =
-      (await this.tryLoadIndexConfig(resolvedIndexConfigId)) ??
-      (await this.tryLoadIndexConfig(
-        resolvedIndexConfigId.endsWith('.json')
-          ? resolvedIndexConfigId
-          : `${resolvedIndexConfigId}.json`,
-      ));
-
-    return indexConfig ?? undefined;
-  }
-
-  private async tryLoadIndexConfig(
-    indexConfigURL: string,
-  ): Promise<IndexConfig | undefined> {
-    try {
-      return (await this.store.get(indexConfigURL)) as IndexConfig | undefined;
-    } catch (_error) {
-      return undefined;
-    }
+    return this.loadConfig<IndexConfig>(indexConfigId, realmURL);
   }
 
   private resolveCardURL(cardId: string, realmURL: string): string | undefined {
@@ -213,6 +167,18 @@ export default class HomePageResolverService extends Service {
         return undefined;
       }
     }
+  }
+
+  private async loadConfig<T>(
+    configId: string,
+    realmURL: string,
+  ): Promise<T | undefined> {
+    let resolvedConfigId = this.resolveCardURL(configId, realmURL);
+    if (!resolvedConfigId) {
+      return undefined;
+    }
+
+    return (await this.store.get(configId)) as T | undefined;
   }
 
   private async identifyRealmURL(url: URL): Promise<string | undefined> {
