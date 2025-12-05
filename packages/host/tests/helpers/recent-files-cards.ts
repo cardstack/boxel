@@ -48,12 +48,14 @@ export function getRecentFiles(): RecentFiles | null {
 }
 
 export function setRecentFiles(files: RecentFiles) {
+  // ensure deterministic ordering when explicit timestamps are not provided
+  let baseTimestamp = Date.now() + files.length;
   let recentFiles = files.map(
-    ([realmURL, filePath, cursorPosition, timestamp]) => [
+    ([realmURL, filePath, cursorPosition, timestamp], index) => [
       realmURL,
       filePath,
       cursorPosition ?? null,
-      timestamp ?? Date.now(),
+      timestamp ?? baseTimestamp - index,
     ],
   );
   window.localStorage.setItem(RecentFiles, JSON.stringify(recentFiles));
