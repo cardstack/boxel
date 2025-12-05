@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "@cardstack/boxel-icons": "workspace:*",
-    "@ember/string": "^3.1.1",
+    "@ember/string": "catalog:",
     "@ember/test-waiters": "catalog:",
     "@embroider/addon-shim": "^1.8.9",
     "@floating-ui/dom": "catalog:",

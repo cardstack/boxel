@@ -1,5 +1,8 @@
 import { GridContainer, Swatch } from '@cardstack/boxel-ui/components';
-import { buildCssVariableName, entriesToCssRuleMap } from '@cardstack/boxel-ui/helpers';
+import {
+  buildCssVariableName,
+  entriesToCssRuleMap,
+} from '@cardstack/boxel-ui/helpers';
 
 import { field, contains, Component, getFields, FieldDef } from './card-api';
 import ColorField from './color';
@@ -13,18 +16,16 @@ export default class BrandFunctionalPalette extends FieldDef {
   static displayName = 'Functional Palette';
   @field primary = contains(ColorField);
   @field secondary = contains(ColorField);
-  @field neutral = contains(ColorField);
-  @field border = contains(ColorField);
   @field accent = contains(ColorField);
-  @field dark = contains(ColorField);
   @field light = contains(ColorField);
+  @field dark = contains(ColorField);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <GridContainer class='functional-palette'>
         {{#each @model.cssVariableFields as |color|}}
           {{#if color.value}}
-            <Swatch @label={{color.name}} @color={{color.value}} />
+            <Swatch @label='Brand {{color.fieldName}}' @color={{color.value}} />
           {{/if}}
         {{/each}}
       </GridContainer>
@@ -54,7 +55,9 @@ export default class BrandFunctionalPalette extends FieldDef {
     }
     let cssVariableFields: CssVariableFieldEntry[] = [];
     for (let fieldName of fieldNames) {
-      let cssVariableName = buildCssVariableName(fieldName, { prefix: 'brand' });
+      let cssVariableName = buildCssVariableName(fieldName, {
+        prefix: 'brand',
+      });
       let value = (this as CssVariableField)?.[fieldName];
       cssVariableFields.push({
         fieldName,

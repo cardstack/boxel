@@ -2564,8 +2564,14 @@ export class CssImportField extends StringField {
 export class Theme extends CardDef {
   static displayName = 'Theme';
   static icon = ThemeIcon;
-  @field cssVariables = contains(CSSField);
-  @field cssImports = containsMany(CssImportField);
+  @field cssVariables = contains(CSSField, {
+    description:
+      'CSS variable definitions that build on shadcn variables (typically for :root and .dark selectors) injected into the CardContainer.',
+  });
+  @field cssImports = containsMany(CssImportField, {
+    description:
+      'CSS links (e.g. Google Fonts) imported via the CardContainer.',
+  });
 
   [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
     let menuItems = super[getCardMenuItems](params);
