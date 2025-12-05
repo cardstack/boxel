@@ -52,8 +52,8 @@ export default class SetInteractHomeCommand extends HostBaseCommand<
       throw new Error(`Do not have write permissions to ${realmHref}`);
     }
 
-    let siteConfigInstance = await this.store.get(cardId);
-    if (!siteConfigInstance || !isCardInstance(siteConfigInstance)) {
+    let indexConfigInstance = await this.store.get(cardId);
+    if (!indexConfigInstance || !isCardInstance(indexConfigInstance)) {
       throw new Error(`Could not load site config card: ${cardId}`);
     }
 
