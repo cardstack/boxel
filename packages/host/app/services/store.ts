@@ -1189,6 +1189,7 @@ export default class StoreService extends Service implements StoreInterface {
       'meta' in error &&
       typeof error.meta === 'object' &&
       'responseHeaders' in error.meta &&
+      error.meta.responseHeaders &&
       typeof error.meta.responseHeaders === 'object'
     ) {
       let wafRule = Object.entries(error.meta.responseHeaders).find(
