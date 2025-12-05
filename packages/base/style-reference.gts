@@ -53,16 +53,10 @@ class Isolated extends Component<typeof StyleReference> {
 
     <style scoped>
       h1 {
-        margin-top: 0;
         margin-bottom: var(--boxel-sp-lg);
-        font-size: var(--boxel-heading-font-size);
-        font-weight: 600;
       }
       h2 {
-        margin-top: 0;
         margin-bottom: var(--boxel-sp);
-        font-size: var(--boxel-font-size-md);
-        font-weight: 500;
       }
       ul {
         list-style: none;
