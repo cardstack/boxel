@@ -28,10 +28,6 @@ import {
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
-import {
-  extractCssVariables,
-  sanitizeHtmlSafe,
-} from '@cardstack/boxel-ui/helpers';
 import Modifier from 'ember-modifier';
 import { isEqual, flatMap } from 'lodash';
 import { initSharedState } from './shared-state';
@@ -39,7 +35,6 @@ import { and, cn, eq, not } from '@cardstack/boxel-ui/helpers';
 import { consume, provide } from 'ember-provide-consume-context';
 import Component from '@glimmer/component';
 import { concat } from '@ember/helper';
-import { htmlSafe } from '@ember/template';
 import { resolveFieldConfiguration } from './field-support';
 
 export interface BoxComponentSignature {
@@ -235,20 +230,14 @@ export function getBoxComponent(
   }
 
   function getThemeStyles(cardDef?: CardDef) {
-    if (!extractCssVariables) {
-      return htmlSafe('');
-    }
     let css = isThemeCard(cardDef)
       ? cardDef.cssVariables
       : cardDef?.cardInfo?.theme?.cssVariables;
-    return sanitizeHtmlSafe(extractCssVariables(css));
+    return css;
   }
 
-  function hasTheme(cardDef?: CardDef) {
-    if (isThemeCard(cardDef)) {
-      return Boolean(cardDef?.cssVariables?.trim());
-    }
-    return cardDef?.cardInfo?.theme != null;
+  function canToggleMode(cardDef?: CardDef, format?: Format) {
+    return isThemeCard(cardDef) && format === 'isolated';
   }
 
   function getCssImports(card?: CardDef) {
@@ -310,8 +299,12 @@ export function getBoxComponent(
                       >
                         <CardContainer
                           @displayBoundaries={{displayContainer}}
-                          @isThemed={{hasTheme card}}
                           @cssImports={{getCssImports card}}
+                          @canToggleMode={{canToggleMode
+                            card
+                            effectiveFormats.cardDef
+                          }}
+                          @themeVariables={{getThemeStyles card}}
                           class={{cn
                             'field-component-card'
                             (concat effectiveFormats.cardDef '-format')
@@ -323,7 +316,6 @@ export function getBoxComponent(
                             fieldType=field.fieldType
                             fieldName=field.name
                           }}
-                          style={{getThemeStyles card}}
                           data-test-card={{card.id}}
                           data-test-card-format={{effectiveFormats.cardDef}}
                           data-test-field-component-card

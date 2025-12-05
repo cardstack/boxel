@@ -1,24 +1,18 @@
 import GlimmerComponent from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action, get } from '@ember/object';
 import StyleReference from './style-reference';
+import { ThemeHeader } from './structured-theme';
 import { ThemeTypographyField } from './structured-theme-variables';
 import { contains, field, Component } from './card-api';
 import MarkdownField from './markdown';
 
-import Moon from '@cardstack/boxel-icons/moon';
-import Sun from '@cardstack/boxel-icons/sun';
 import ChevronCompactRight from '@cardstack/boxel-icons/chevron-compact-right';
 import ChevronCompactLeft from '@cardstack/boxel-icons/chevron-compact-left';
 
 import { Button, CardContainer, Swatch } from '@cardstack/boxel-ui/components';
-import {
-  eq,
-  extractCssVariables,
-  sanitizeHtmlSafe,
-} from '@cardstack/boxel-ui/helpers';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 class NavSection extends GlimmerComponent<{
   Args: {
@@ -325,52 +319,6 @@ class NavBar extends GlimmerComponent<{
   }
 }
 
-class ModeToggle extends GlimmerComponent<{
-  Args: {
-    toggleDarkMode: () => void;
-    isDarkMode: boolean;
-  };
-  Element: HTMLButtonElement;
-}> {
-  <template>
-    <button class='theme-toggle' {{on 'click' @toggleDarkMode}} ...attributes>
-      {{#if @isDarkMode}}
-        <Sun class='toggle-icon' role='presentation' />
-        Light Mode
-      {{else}}
-        <Moon class='toggle-icon' role='presentation' />
-        Dark Mode
-      {{/if}}
-    </button>
-    <style scoped>
-      .theme-toggle {
-        display: flex;
-        align-items: center;
-        gap: calc(var(--dsr-spacing-unit) * 0.5);
-        padding: calc(var(--dsr-spacing-unit) * 0.5)
-          calc(var(--dsr-spacing-unit) * 1);
-        background: var(--dsr-accent);
-        color: white;
-        border: none;
-        border-radius: calc(var(--dsr-radius) * 0.5);
-        font-size: 0.875rem;
-        font-weight: 600;
-        cursor: pointer;
-      }
-
-      .theme-toggle:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-      }
-
-      .toggle-icon {
-        width: 1rem;
-        height: 1rem;
-      }
-    </style>
-  </template>
-}
-
 class ThemeDashboard extends GlimmerComponent<{
   Args: {
     description?: string;
@@ -382,16 +330,7 @@ class ThemeDashboard extends GlimmerComponent<{
 }> {
   <template>
     <article id='top' class='detailed-style-reference' ...attributes>
-      <header class='dsr-header'>
-        <div class='header-meta'>
-          <span class='meta-label'>Style Guide</span>
-          <span class='meta-version'>Version 1.0</span>
-        </div>
-        <h1 class='style-title'>{{@title}}</h1>
-        {{#if @description}}
-          <p class='style-tagline'>{{@description}}</p>
-        {{/if}}
-      </header>
+      <ThemeHeader @title={{@title}} @description={{@description}} />
 
       {{#if @sections.length}}
         <NavBar @sections={{@sections}} />
@@ -440,42 +379,6 @@ class ThemeDashboard extends GlimmerComponent<{
         overflow-y: auto;
       }
 
-      /* Header */
-      .dsr-header {
-        border-bottom: 1px solid var(--dsr-border);
-        padding: calc(var(--dsr-spacing-unit) * 3)
-          calc(var(--dsr-spacing-unit) * 2);
-        background: var(--dsr-surface);
-      }
-
-      .header-meta {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: calc(var(--dsr-spacing-unit) * 1.5);
-        font-size: var(--boxel-caption-font-size);
-        text-transform: uppercase;
-        letter-spacing: 0.1em;
-        font-weight: 600;
-        color: var(--dsr-secondary);
-      }
-
-      .style-title {
-        font-size: clamp(2rem, 5vw, 3.5rem);
-        font-weight: 700;
-        line-height: 1.1;
-        margin: 0 0 calc(var(--dsr-spacing-unit) * 0.75) 0;
-        letter-spacing: -0.02em;
-      }
-
-      .style-tagline {
-        font-size: 1.125rem;
-        color: var(--dsr-secondary);
-        margin: 0;
-        max-width: 48rem;
-        line-height: 1.5;
-      }
-
       /* Content */
       .dsr-content {
         max-width: 56rem;
@@ -492,13 +395,11 @@ class ThemeDashboard extends GlimmerComponent<{
         padding: calc(var(--dsr-spacing-unit) * 2);
         background: var(--dsr-surface);
       }
-
       .footer-content {
         max-width: 56rem;
         margin: 0 auto;
         text-align: center;
       }
-
       .footer-text {
         font-size: 0.875rem;
         color: var(--dsr-secondary);
@@ -509,21 +410,8 @@ class ThemeDashboard extends GlimmerComponent<{
 
       /* Responsive */
       @media (max-width: 768px) {
-        .dsr-header {
-          padding: calc(var(--dsr-spacing-unit) * 2) var(--dsr-spacing-unit);
-        }
-
-        .style-title {
-          font-size: clamp(1.75rem, 8vw, 2.5rem);
-        }
-
         .dsr-content {
           padding: calc(var(--dsr-spacing-unit) * 2) var(--dsr-spacing-unit);
-        }
-
-        .theme-toggle {
-          width: 100%;
-          justify-content: center;
         }
       }
     </style>
@@ -531,52 +419,43 @@ class ThemeDashboard extends GlimmerComponent<{
 }
 
 class Isolated extends Component<typeof DetailedStyleReference> {
-  @tracked private isDarkMode = false;
-
-  private toggleDarkMode = () => {
-    this.isDarkMode = !this.isDarkMode;
-  };
-
   private get colorSystem() {
-    let vars = this.isDarkMode
-      ? this.args.model?.darkModeVariables
-      : this.args.model?.rootVariables;
     return [
       {
         name: 'Background',
-        value: vars?.background,
+        value: 'var(--background)',
       },
       {
         name: 'Foreground',
-        value: vars?.foreground,
+        value: 'var(--foreground)',
       },
       {
         name: 'Primary',
-        value: vars?.primary,
+        value: 'var(--primary)',
       },
       {
         name: 'Secondary',
-        value: vars?.secondary,
+        value: 'var(--secondary)',
       },
       {
         name: 'Accent',
-        value: vars?.accent,
+        value: 'var(--accent)',
       },
       {
         name: 'Muted',
-        value: vars?.muted,
+        value: 'var(--muted)',
       },
     ];
   }
 
   private get chartColors() {
-    let vars = this.isDarkMode
-      ? this.args.model?.darkModeVariables
-      : this.args.model?.rootVariables;
-    if (!vars) {
-      return [];
-    }
-    return [vars.chart1, vars.chart2, vars.chart3, vars.chart4, vars.chart5];
+    return [
+      'var(--chart-1)',
+      'var(--chart-2)',
+      'var(--chart-3)',
+      'var(--chart-4)',
+      'var(--chart-5)',
+    ];
   }
 
   private sections = [
@@ -686,15 +565,8 @@ class Isolated extends Component<typeof DetailedStyleReference> {
     );
   }
 
-  private get themeStyles() {
-    let css = this.args.model?.cssVariables;
-    let selector = this.isDarkMode ? '.dark' : ':root';
-    return sanitizeHtmlSafe(extractCssVariables(css, selector));
-  }
-
   <template>
     <ThemeDashboard
-      style={{this.themeStyles}}
       @title={{@model.title}}
       @description={{@model.description}}
       @sections={{this.sectionsWithContent}}
@@ -703,10 +575,6 @@ class Isolated extends Component<typeof DetailedStyleReference> {
       <section class='dsr-section theme-visualizer-section'>
         <div class='section-header'>
           <h2 class='section-title'>Theme Visualizer</h2>
-          <ModeToggle
-            @toggleDarkMode={{this.toggleDarkMode}}
-            @isDarkMode={{this.isDarkMode}}
-          />
         </div>
 
         <div class='theme-preview'>
@@ -1192,11 +1060,6 @@ class Isolated extends Component<typeof DetailedStyleReference> {
         .theme-visualizer-section .section-header {
           flex-direction: column;
           align-items: stretch;
-        }
-
-        .theme-toggle {
-          width: 100%;
-          justify-content: center;
         }
 
         .color-grid {

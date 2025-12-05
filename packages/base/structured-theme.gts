@@ -5,7 +5,6 @@ import { action } from '@ember/object';
 
 import {
   BoxelButton,
-  BoxelContainer,
   GridContainer,
   BoxelInput,
   CopyButton,
@@ -37,6 +36,76 @@ interface SectionToggleSignature {
     onToggle: (event: Event) => void;
   };
   Element: HTMLButtonElement;
+}
+
+export class ThemeHeader extends GlimmerComponent<{
+  Args: {
+    title?: string;
+    version?: string;
+    description?: string;
+    toggleMode?: () => void;
+    isDarkMode?: boolean;
+  };
+  Element: HTMLElement;
+}> {
+  <template>
+    <header class='theme-header' ...attributes>
+      <div class='header-meta'>
+        <span class='meta-label'>Style Guide</span>
+        <span class='meta-version'>Version {{if @version @version '1.0'}}</span>
+      </div>
+      <h1 class='style-title'>{{@title}}</h1>
+      {{#if @description}}
+        <p class='style-tagline'>{{@description}}</p>
+      {{/if}}
+    </header>
+    <style scoped>
+      @layer baseComponent {
+        .theme-header {
+          border-bottom: 1px solid var(--border);
+          padding: calc(var(--boxel-sp) * 3) calc(var(--boxel-sp) * 2);
+          background: var(--card);
+          color: var(--card-foreground);
+        }
+        .header-meta {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: calc(var(--boxel-sp) * 1.5);
+          font-size: var(--boxel-caption-font-size);
+          text-transform: uppercase;
+          letter-spacing: var(--boxel-lsp-xxl);
+          font-weight: 600;
+          color: var(--muted-foreground);
+        }
+        .style-title {
+          font-size: clamp(2rem, 5vw, 3.5rem);
+          font-weight: 700;
+          line-height: 1.1;
+          margin-bottom: calc(var(--boxel-sp) * 0.75);
+          letter-spacing: -0.02em;
+        }
+        .style-tagline {
+          font-size: var(--boxel-font-size);
+          color: var(--muted-foreground);
+          max-width: 48rem;
+          line-height: 1.5;
+        }
+        .theme-mode-toggle {
+          margin-top: calc(var(--boxel-sp) * 1.5);
+        }
+
+        @media (max-width: 768px) {
+          .theme-header {
+            padding: calc(var(--boxel-sp) * 2) var(--boxel-sp);
+          }
+          .style-title {
+            font-size: clamp(1.75rem, 8vw, 2.5rem);
+          }
+        }
+      }
+    </style>
+  </template>
 }
 
 class SectionToggleButton extends GlimmerComponent<SectionToggleSignature> {
@@ -181,13 +250,10 @@ class Isolated extends Component<typeof StructuredTheme> {
 
   <template>
     <GridContainer @tag='article' class='structured-theme-card'>
-      <BoxelContainer @tag='header' @display='flex' class='theme-header'>
-        <h1><@fields.title /></h1>
-        <p class='theme-description'>
-          <@fields.description />
-        </p>
-      </BoxelContainer>
-
+      <ThemeHeader
+        @title={{@model.title}}
+        @description={{@model.description}}
+      />
       <GridContainer @tag='section' class='content-section'>
         <GridContainer @tag='header' class='section-header'>
           <h2>Insert CSS Variables</h2>
@@ -307,22 +373,6 @@ class Isolated extends Component<typeof StructuredTheme> {
         gap: 0;
         container-name: structured-theme-card;
         container-type: inline-size;
-      }
-
-      .theme-header {
-        min-height: 20vh;
-        flex-direction: column;
-        flex-wrap: nowrap;
-        justify-content: center;
-        padding: var(--boxel-sp-xxl);
-        gap: var(--boxel-sp-xs);
-        text-align: center;
-        background-color: var(--card);
-        color: var(--card-foreground);
-      }
-
-      .theme-description {
-        color: var(--muted-foreground);
       }
 
       .content-section {
