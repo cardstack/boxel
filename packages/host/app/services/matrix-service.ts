@@ -365,8 +365,11 @@ export default class MatrixService extends Service {
               await this.realmServer.setAvailableRealmURLs(
                 e.event.content.realms,
               );
-              await this.loginToRealms();
-              await this.loadMoreAuthRooms(e.event.content.realms);
+              // Only do this after we've completed our overall login
+              if (this.postLoginCompleted) {
+                await this.loginToRealms();
+                await this.loadMoreAuthRooms(e.event.content.realms);
+              }
               break;
             case APP_BOXEL_SYSTEM_CARD_EVENT_TYPE:
               await this.setSystemCard(e.event.content.id);
@@ -656,14 +659,6 @@ export default class MatrixService extends Service {
           ([_url, realmResource]) => !realmResource.isLoggedIn,
         );
 
-        if (noRealmsLoggedIn) {
-          // In this case we want to authenticate to all accessible realms in a single request,
-          // for performance reasons (otherwise we would make 2 auth requests for
-          // each realm, which could be a lot of requests).
-
-          await this.realmServer.authenticateToAllAccessibleRealms();
-        }
-
         await Promise.all([
           this.realmServer.fetchCatalogRealms(),
           this.realmServer.setAvailableRealmURLs(
@@ -671,14 +666,19 @@ export default class MatrixService extends Service {
           ),
         ]);
 
+        await this.initSlidingSync(accountDataContent);
+        await this.client.startClient({ slidingSync: this.slidingSync });
         let systemCardAccountData = (await this.client.getAccountDataFromServer(
           APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
         )) as { id?: string } | null;
-
         await this.setSystemCard(systemCardAccountData?.id);
+        if (noRealmsLoggedIn) {
+          // In this case we want to authenticate to all accessible realms in a single request,
+          // for performance reasons (otherwise we would make 2 auth requests for
+          // each realm, which could be a lot of requests).
 
-        await this.initSlidingSync(accountDataContent);
-        await this.client.startClient({ slidingSync: this.slidingSync });
+          await this.realmServer.authenticateToAllAccessibleRealms();
+        }
 
         this.postLoginCompleted = true;
       } catch (e) {
