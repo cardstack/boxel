@@ -4,7 +4,6 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-
 import DropTargetModifier from 'ember-draggable-modifiers/modifiers/drop-target';
 import SortableItemModifier from 'ember-draggable-modifiers/modifiers/sortable-item';
 import {
