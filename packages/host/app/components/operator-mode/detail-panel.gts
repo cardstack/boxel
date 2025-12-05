@@ -276,7 +276,7 @@ export default class DetailPanel extends Component<Signature> {
     ) {
       throw new Error(`bug: the selected declaration is not a card definition`);
     }
-    let ref = this.getSelectedDeclarationAsCodeRef;
+    let ref = this.selectedDeclarationAsCodeRef;
     let displayName = this.args.selectedDeclaration.cardOrField.displayName;
     let id: NewFileType = 'card-instance';
     this.args.createFile(
@@ -308,7 +308,7 @@ export default class DetailPanel extends Component<Signature> {
     if (!id) {
       throw new Error(`Can only call inherit() on card def or field def`);
     }
-    let ref = this.getSelectedDeclarationAsCodeRef;
+    let ref = this.selectedDeclarationAsCodeRef;
     let displayName = this.args.selectedDeclaration.cardOrField.displayName;
     this.args.createFile(
       { id, displayName: capitalize(startCase(id)) },
@@ -330,7 +330,7 @@ export default class DetailPanel extends Component<Signature> {
     ) {
       throw new Error(`bug: the selected declaration is not a card definition`);
     }
-    let ref = this.getSelectedDeclarationAsCodeRef;
+    let ref = this.selectedDeclarationAsCodeRef;
     let refURL = internalKeyFor(
       ref,
       this.operatorModeStateService.state.codePath!,
@@ -338,7 +338,7 @@ export default class DetailPanel extends Component<Signature> {
     this.args.openSearch(`carddef:${refURL}`);
   }
 
-  private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
+  private get selectedDeclarationAsCodeRef(): ResolvedCodeRef {
     if (!this.args.selectedDeclaration?.exportName) {
       throw new Error(`bug: only exported cards/fields can be inherited`);
     }
