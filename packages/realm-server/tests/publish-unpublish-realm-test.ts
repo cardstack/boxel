@@ -8,6 +8,7 @@ import {
   copySync,
   pathExistsSync,
   readJsonSync,
+  writeJsonSync,
 } from 'fs-extra';
 import { basename, join } from 'path';
 import type { Server } from 'http';
@@ -326,6 +327,68 @@ module(basename(__filename), function () {
           publishedLastPublishedAt,
           response.body.data.attributes.lastPublishedAt,
           'published realm lastPublishedAt matches publish response timestamp',
+        );
+      });
+
+      test('publishing rewrites hostHome URLs that point to the source realm', async function (assert) {
+        let sourceRealmURL = new URL(sourceRealmUrlString);
+        let sourceRealmPath = join(
+          dir.name,
+          'realm_server_3',
+          ...sourceRealmURL.pathname.split('/').filter(Boolean),
+        );
+        let sourceRealmConfigPath = join(sourceRealmPath, '.realm.json');
+        let sourceRealmConfig = pathExistsSync(sourceRealmConfigPath)
+          ? readJsonSync(sourceRealmConfigPath)
+          : {};
+        let hostHomePath = 'SiteConfig/custom-home';
+        let sourceHostHome = `${sourceRealmUrlString}${hostHomePath}`;
+
+        writeJsonSync(sourceRealmConfigPath, {
+          ...sourceRealmConfig,
+          publishable: true,
+          hostHome: sourceHostHome,
+        });
+
+        let response = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              sourceRealmURL: sourceRealmUrlString,
+              publishedRealmURL: 'http://testuser.localhost/test-realm/',
+            }),
+          );
+
+        assert.strictEqual(response.status, 201, 'HTTP 201 status');
+
+        let publishedRealmId = response.body.data.id;
+        let publishedRealmPath = join(
+          dir.name,
+          'realm_server_3',
+          '_published',
+          publishedRealmId,
+        );
+        let publishedRealmConfig = readJsonSync(
+          join(publishedRealmPath, '.realm.json'),
+        );
+
+        assert.strictEqual(
+          publishedRealmConfig.hostHome,
+          `${response.body.data.attributes.publishedRealmURL}${hostHomePath}`,
+          'hostHome points at published realm',
+        );
+        assert.notOk(
+          publishedRealmConfig.publishable,
+          'published realm config should have publishable: false',
         );
       });
 
