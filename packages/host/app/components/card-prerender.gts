@@ -91,15 +91,6 @@ export default class CardPrerender extends Component {
     }/${optionsSegment}`;
   }
 
-  #moduleBasePath(url: string, renderOptions?: RenderRouteOptions) {
-    let optionsSegment = encodeURIComponent(
-      serializeRenderRouteOptions(renderOptions ?? {}),
-    );
-    return `/module/${encodeURIComponent(url)}/${
-      this.#nonce
-    }/${optionsSegment}`;
-  }
-
   constructor(owner: Owner, args: {}) {
     super(owner, args);
     this.#prerendererDelegate = {
@@ -369,10 +360,18 @@ export default class CardPrerender extends Component {
         delete initialRenderOptions.clearCache;
       }
 
-      let routeInfo = await this.router.recognizeAndLoad(
-        this.#moduleBasePath(url, initialRenderOptions),
-      );
-      return routeInfo.attributes as ModuleRenderResponse;
+      // TODO: extract beforeModel/model hook contents from the route
+      let moduleRoute = getOwner(this)!.lookup('route:module') as any;
+      let result = await moduleRoute!.model({
+        id: url,
+        nonce: String(this.#nonce),
+        renderOptions: initialRenderOptions,
+      });
+      return result as ModuleRenderResponse;
+      // let routeInfo = await this.router.recognizeAndLoad(
+      //   this.#moduleBasePath(url, initialRenderOptions),
+      // );
+      // return routeInfo.attributes as ModuleRenderResponse;
     },
   );
 

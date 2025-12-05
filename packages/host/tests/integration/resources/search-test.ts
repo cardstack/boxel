@@ -317,6 +317,7 @@ module(`Integration | search resource`, function (hooks) {
         isLive: false,
         isAutoSaved: false,
         storeService,
+        owner: this.owner,
       },
     }));
     await search.loaded;
@@ -343,6 +344,7 @@ module(`Integration | search resource`, function (hooks) {
         isLive: true,
         isAutoSaved: false,
         storeService,
+        owner: this.owner,
       },
     }));
     await search.loaded;
@@ -400,6 +402,7 @@ module(`Integration | search resource`, function (hooks) {
         isLive: true,
         isAutoSaved: false,
         storeService,
+        owner: this.owner,
       },
     }));
     await search.loaded;
@@ -468,6 +471,7 @@ module(`Integration | search resource`, function (hooks) {
         isLive: false,
         isAutoSaved: false,
         storeService,
+        owner: this.owner,
       },
     }));
 
@@ -491,6 +495,7 @@ module(`Integration | search resource`, function (hooks) {
         isLive: false,
         isAutoSaved: false,
         storeService,
+        owner: this.owner,
       },
     }));
 
@@ -514,6 +519,7 @@ module(`Integration | search resource`, function (hooks) {
         isLive: false,
         isAutoSaved: false,
         storeService,
+        owner: this.owner,
       },
     }));
 

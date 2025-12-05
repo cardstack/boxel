@@ -1,16 +1,10 @@
-import type { CardResource, Meta } from './resource-types';
+import type { CardResource, LooseCardResource, Meta } from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './index-structure';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import type { ErrorEntry } from './index-writer';
-
-// a card resource but with optional "id" and "type" props
-export type LooseCardResource = Omit<CardResource, 'id' | 'type'> & {
-  type?: 'card';
-  id?: string;
-};
 
 export interface LooseSingleCardDocument {
   data: LooseCardResource;
@@ -175,6 +169,7 @@ export * from './utils';
 export * from './authorization-middleware';
 export * from './resource-types';
 export * from './query';
+export * from './query-field-utils';
 export * from './formats';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
@@ -461,6 +456,9 @@ export function subscribeToRealm(
 ): () => void {
   let here = globalThis as any;
   if (!here._CARDSTACK_REALM_SUBSCRIBE) {
+    console.warn(
+      `subscribeToRealm: no subscription handler registered for ${realmURL}; callbacks will never fire`,
+    );
     // eventually we'll support subscribing to a realm in node since this will
     // be how realms will coordinate with one another, but for now do nothing
     return () => {
@@ -468,7 +466,9 @@ export function subscribeToRealm(
     };
   } else {
     let realmSubscribe: RealmSubscribe = here._CARDSTACK_REALM_SUBSCRIBE;
-    return realmSubscribe.subscribe(realmURL, cb);
+    return realmSubscribe.subscribe(realmURL, (ev) => {
+      cb(ev);
+    });
   }
 }
 

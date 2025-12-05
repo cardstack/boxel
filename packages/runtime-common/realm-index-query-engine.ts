@@ -5,6 +5,8 @@ import {
   maxLinkDepth,
   maybeURL,
   IndexQueryEngine,
+  codeRefWithAbsoluteURL,
+  logger,
   type LooseCardResource,
   type DBAdapter,
   type QueryOptions,
@@ -16,14 +18,21 @@ import {
 } from '.';
 import type { Realm } from './realm';
 import { RealmPaths } from './paths';
-import type { Query } from './query';
+import { buildQueryString, type Query } from './query';
 import { CardError, type SerializedError } from './error';
+import { isResolvedCodeRef } from './code-ref';
 import {
+  isCardCollectionDocument,
   isSingleCardDocument,
   type SingleCardDocument,
   type CardCollectionDocument,
 } from './document-types';
 import type { CardResource, Saved } from './resource-types';
+import type { FieldDefinition } from './index-structure';
+import {
+  normalizeQueryDefinition,
+  buildQuerySearchURL,
+} from './query-field-utils';
 
 type Options = {
   loadLinks?: true;
@@ -44,10 +53,20 @@ export interface SearchResultError {
   };
 }
 
+type QueryFieldErrorType = 'authorization' | 'network' | 'unknown';
+
+type QueryFieldErrorDetail = {
+  realm: string;
+  type: QueryFieldErrorType;
+  message: string;
+  status?: number;
+};
+
 export class RealmIndexQueryEngine {
   #realm: Realm;
   #fetch: typeof globalThis.fetch;
   #indexQueryEngine: IndexQueryEngine;
+  #log = logger('realm:index-query-engine');
 
   constructor({
     realm,
@@ -209,6 +228,311 @@ export class RealmIndexQueryEngine {
     return await this.#indexQueryEngine.getInstance(url, opts);
   }
 
+  private async populateQueryFields(
+    resource: LooseCardResource,
+    realmURL: URL,
+    opts?: Options,
+  ): Promise<void> {
+    if (!resource.meta?.adoptsFrom) {
+      return;
+    }
+
+    let relativeTo = resource.id ? new URL(resource.id) : realmURL;
+    let codeRef = codeRefWithAbsoluteURL(resource.meta.adoptsFrom, relativeTo);
+    if (!isResolvedCodeRef(codeRef)) {
+      return;
+    }
+    let definitionEntry = await this.#indexQueryEngine.getOwnDefinition(
+      codeRef,
+      opts,
+    );
+    if (!definitionEntry || definitionEntry.type !== 'definition') {
+      return;
+    }
+
+    let definition = definitionEntry.definition;
+    for (let [fieldName, fieldDefinition] of Object.entries(
+      definition.fields,
+    )) {
+      let queryDefinition = this.getQueryDefinition(fieldDefinition);
+
+      if (
+        fieldName.includes('.') ||
+        (fieldDefinition.type !== 'linksTo' &&
+          fieldDefinition.type !== 'linksToMany') ||
+        !queryDefinition
+      ) {
+        continue;
+      }
+
+      let { results, errors, searchURL } = await this.executeQueryForField({
+        fieldDefinition,
+        fieldName,
+        queryDefinition,
+        resource,
+        realmURL,
+        opts,
+      });
+      this.applyQueryResults({
+        fieldDefinition,
+        fieldName,
+        resource,
+        results,
+        errors,
+        searchURL,
+      });
+    }
+  }
+
+  private async executeQueryForField({
+    fieldDefinition,
+    fieldName,
+    queryDefinition,
+    resource,
+    realmURL,
+    opts,
+  }: {
+    fieldDefinition: FieldDefinition;
+    fieldName: string;
+    queryDefinition: Query;
+    resource: LooseCardResource;
+    realmURL: URL;
+    opts?: Options;
+  }): Promise<{
+    results: CardResource<Saved>[];
+    errors: QueryFieldErrorDetail[];
+    searchURL: string;
+  }> {
+    let normalized = normalizeQueryDefinition({
+      fieldDefinition,
+      queryDefinition,
+      resource,
+      realmURL,
+      fieldName,
+    });
+    if (!normalized) {
+      return { results: [], errors: [], searchURL: '' };
+    }
+
+    let { query, realm } = normalized;
+    let searchURL = buildQuerySearchURL(realm, query);
+    let aggregated: CardResource<Saved>[] = [];
+    let seen = new Set<string>();
+    let errors: QueryFieldErrorDetail[] = [];
+
+    let realmResults: CardResource<Saved>[] = [];
+    if (realm === this.realmURL.href) {
+      try {
+        let collection = await this.#indexQueryEngine.search(
+          this.realmURL,
+          query,
+          opts,
+        );
+        realmResults = Array.isArray(collection.cards) ? collection.cards : [];
+      } catch (err: unknown) {
+        let message =
+          err instanceof Error ? err.message : String(err ?? 'unknown error');
+        errors.push({
+          realm,
+          type: 'unknown',
+          message,
+        });
+        this.#log.debug(
+          `query field "${fieldName}" on ${resource.id ?? '(unsaved card)'} failed to execute local search: ${message}`,
+        );
+      }
+    } else {
+      let remoteResult = await this.fetchRemoteQueryResults(realm, query);
+      if (remoteResult.error) {
+        errors.push(remoteResult.error);
+        this.#log.debug(
+          `query field "${fieldName}" on ${resource.id ?? '(unsaved card)'} failed querying realm ${realm}: ${remoteResult.error.message}`,
+        );
+      }
+      realmResults = remoteResult.cards;
+    }
+
+    for (let card of realmResults) {
+      if (!card?.id || seen.has(card.id)) {
+        continue;
+      }
+      seen.add(card.id);
+      aggregated.push(card);
+    }
+
+    if (
+      aggregated.length === 0 &&
+      errors.length > 0 &&
+      errors.every((error) => error.type === 'authorization')
+    ) {
+      this.#log.warn(
+        `query field "${fieldName}" on ${resource.id ?? '(unsaved card)'} returned no results because the realm query was unauthorized`,
+      );
+    }
+
+    return { results: aggregated, errors, searchURL };
+  }
+
+  private getQueryDefinition(
+    fieldDefinition: FieldDefinition,
+  ): Query | undefined {
+    if (fieldDefinition.query && typeof fieldDefinition.query === 'object') {
+      return fieldDefinition.query as Query;
+    }
+    return undefined;
+  }
+
+  private applyQueryResults({
+    fieldDefinition,
+    fieldName,
+    resource,
+    results,
+    errors,
+    searchURL,
+  }: {
+    fieldDefinition: FieldDefinition;
+    fieldName: string;
+    resource: LooseCardResource;
+    results: CardResource<Saved>[];
+    errors: QueryFieldErrorDetail[];
+    searchURL: string;
+  }): void {
+    resource.relationships = resource.relationships ?? {};
+    for (let key of Object.keys(resource.relationships)) {
+      if (key === fieldName || key.startsWith(`${fieldName}.`)) {
+        delete resource.relationships[key];
+      }
+    }
+
+    let errorMeta =
+      errors.length > 0
+        ? {
+            errors: errors.map((error) => ({
+              realm: error.realm,
+              type: error.type,
+              message: error.message,
+              ...(error.status != null ? { status: error.status } : {}),
+            })),
+          }
+        : undefined;
+
+    if (fieldDefinition.type === 'linksTo') {
+      let first = results[0];
+      let relationshipLinks: Record<string, string | null> = {
+        ...(searchURL ? { search: searchURL } : {}),
+      };
+      let relationship: {
+        links: Record<string, string | null>;
+        data?: { type: string; id: string } | null;
+        meta?: typeof errorMeta;
+      } = {
+        links: relationshipLinks,
+        ...(errorMeta ? { meta: errorMeta } : {}),
+      };
+      if (first && first.id) {
+        relationship.links.self = first.id;
+        if (searchURL) {
+          relationship.data = { type: 'card', id: first.id };
+        }
+      } else {
+        relationship.links.self = null;
+        if (searchURL) {
+          relationship.data = null;
+        }
+      }
+      resource.relationships[fieldName] = relationship;
+      return;
+    }
+
+    let baseRelationshipLinks: Record<string, string | null> = {
+      ...(searchURL ? { search: searchURL } : {}),
+    };
+    if (!('self' in baseRelationshipLinks)) {
+      baseRelationshipLinks.self = null;
+    }
+
+    let relationshipData =
+      searchURL !== ''
+        ? results
+            .filter(
+              (card): card is CardResource<Saved> & { id: string } =>
+                typeof card.id === 'string',
+            )
+            .map((card) => ({ type: 'card', id: card.id }))
+        : undefined;
+
+    resource.relationships[fieldName] = {
+      links: baseRelationshipLinks,
+      ...(relationshipData !== undefined ? { data: relationshipData } : {}),
+      ...(errorMeta ? { meta: errorMeta } : {}),
+    };
+
+    results.forEach((card, index) => {
+      if (!card.id) {
+        return;
+      }
+      resource.relationships![`${fieldName}.${index}`] = {
+        links: { self: card.id },
+        data: { type: 'card', id: card.id },
+      };
+    });
+  }
+
+  private async fetchRemoteQueryResults(
+    realmHref: string,
+    query: Query,
+  ): Promise<{ cards: CardResource<Saved>[]; error?: QueryFieldErrorDetail }> {
+    try {
+      let baseHref = realmHref.endsWith('/') ? realmHref : `${realmHref}/`;
+      let searchURL = new URL('./_search', baseHref);
+      searchURL.search = buildQueryString(query);
+      let response = await this.#fetch(searchURL.href, {
+        headers: { Accept: SupportedMimeType.CardJson },
+      });
+      if (!response.ok) {
+        let type: QueryFieldErrorType =
+          response.status === 401 || response.status === 403
+            ? 'authorization'
+            : 'network';
+        let statusMessage = `${response.status}${
+          response.statusText ? ` ${response.statusText}` : ''
+        }`;
+        return {
+          cards: [],
+          error: {
+            realm: realmHref,
+            type,
+            status: response.status,
+            message: `HTTP ${statusMessage}`,
+          },
+        };
+      }
+      let json = await response.json();
+      if (!isCardCollectionDocument(json)) {
+        return {
+          cards: [],
+          error: {
+            realm: realmHref,
+            type: 'unknown',
+            message: 'remote realm returned unexpected payload',
+          },
+        };
+      }
+      return { cards: json.data };
+    } catch (err: unknown) {
+      let message =
+        err instanceof Error ? err.message : String(err ?? 'unknown error');
+      return {
+        cards: [],
+        error: {
+          realm: realmHref,
+          type: 'network',
+          message,
+        },
+      };
+    }
+  }
+
   // TODO The caller should provide a list of fields to be included via JSONAPI
   // request. currently we just use the maxLinkDepth to control how deep to load
   // links
@@ -237,91 +561,102 @@ export class RealmIndexQueryEngine {
       visited.push(resource.id);
     }
     let realmPath = new RealmPaths(realmURL);
-    for (let [fieldName, relationship] of Object.entries(
-      resource.relationships ?? {},
-    )) {
-      if (!relationship.links?.self) {
-        continue;
-      }
-      let linkURL = new URL(
-        relationship.links.self,
-        resource.id ? new URL(resource.id) : realmURL,
-      );
-      let linkResource: CardResource<Saved> | undefined;
-      if (realmPath.inRealm(linkURL)) {
-        let maybeResult = await this.#indexQueryEngine.getInstance(
-          linkURL,
-          opts,
+    let processedRelationships = new Set<string>();
+    let processRelationships = async () => {
+      for (let [fieldName, relationship] of Object.entries(
+        resource.relationships ?? {},
+      )) {
+        if (processedRelationships.has(fieldName)) {
+          continue;
+        }
+        if (!relationship.links?.self) {
+          continue;
+        }
+        processedRelationships.add(fieldName);
+        let linkURL = new URL(
+          relationship.links.self,
+          resource.id ? new URL(resource.id) : realmURL,
         );
-        linkResource =
-          maybeResult?.type === 'instance' ? maybeResult.instance : undefined;
-      } else {
-        let response = await this.#fetch(linkURL, {
-          headers: { Accept: SupportedMimeType.CardJson },
-        });
-        if (!response.ok) {
-          let cardError = await CardError.fromFetchResponse(
-            linkURL.href,
-            response,
+        let linkResource: CardResource<Saved> | undefined;
+        if (realmPath.inRealm(linkURL)) {
+          let maybeResult = await this.#indexQueryEngine.getInstance(
+            linkURL,
+            opts,
           );
-          throw cardError;
+          linkResource =
+            maybeResult?.type === 'instance' ? maybeResult.instance : undefined;
+        } else {
+          let response = await this.#fetch(linkURL, {
+            headers: { Accept: SupportedMimeType.CardJson },
+          });
+          if (!response.ok) {
+            let cardError = await CardError.fromFetchResponse(
+              linkURL.href,
+              response,
+            );
+            throw cardError;
+          }
+          let json = await response.json();
+          if (!isSingleCardDocument(json)) {
+            throw new Error(
+              `instance ${
+                linkURL.href
+              } is not a card document. it is: ${JSON.stringify(json, null, 2)}`,
+            );
+          }
+          linkResource = { ...json.data, ...{ links: { self: json.data.id } } };
         }
-        let json = await response.json();
-        if (!isSingleCardDocument(json)) {
-          throw new Error(
-            `instance ${
-              linkURL.href
-            } is not a card document. it is: ${JSON.stringify(json, null, 2)}`,
-          );
-        }
-        linkResource = { ...json.data, ...{ links: { self: json.data.id } } };
-      }
-      let foundLinks = false;
-      // TODO stop using maxLinkDepth. we should save the JSON-API doc in the
-      // index based on keeping track of the rendered fields and invalidate the
-      // index as consumed cards change
-      if (linkResource && stack.length <= maxLinkDepth) {
-        for (let includedResource of await this.loadLinks(
-          {
-            realmURL,
-            resource: linkResource,
-            omit,
-            included: [...included, linkResource],
-            visited,
-            stack: [...(resource.id != null ? [resource.id] : []), ...stack],
-          },
-          opts,
-        )) {
-          foundLinks = true;
-          if (
-            includedResource.id &&
-            !omit.includes(includedResource.id) &&
-            !included.find((r) => r.id === includedResource.id)
-          ) {
-            included.push({
-              ...includedResource,
-              ...{ links: { self: includedResource.id } },
-            });
+        let foundLinks = false;
+        // TODO stop using maxLinkDepth. we should save the JSON-API doc in the
+        // index based on keeping track of the rendered fields and invalidate the
+        // index as consumed cards change
+        if (linkResource && stack.length <= maxLinkDepth) {
+          for (let includedResource of await this.loadLinks(
+            {
+              realmURL,
+              resource: linkResource,
+              omit,
+              included: [...included, linkResource],
+              visited,
+              stack: [...(resource.id != null ? [resource.id] : []), ...stack],
+            },
+            opts,
+          )) {
+            foundLinks = true;
+            if (
+              includedResource.id &&
+              !omit.includes(includedResource.id) &&
+              !included.find((r) => r.id === includedResource.id)
+            ) {
+              included.push({
+                ...includedResource,
+                ...{ links: { self: includedResource.id } },
+              });
+            }
           }
         }
+        let relationshipId = maybeURL(relationship.links.self, resource.id);
+        if (!relationshipId) {
+          throw new Error(
+            `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`,
+          );
+        }
+        if (
+          foundLinks ||
+          omit.includes(relationshipId.href) ||
+          included.find((i) => i.id === relationshipId!.href)
+        ) {
+          resource.relationships![fieldName].data = {
+            type: 'card',
+            id: relationshipId.href,
+          };
+        }
       }
-      let relationshipId = maybeURL(relationship.links.self, resource.id);
-      if (!relationshipId) {
-        throw new Error(
-          `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`,
-        );
-      }
-      if (
-        foundLinks ||
-        omit.includes(relationshipId.href) ||
-        (relationshipId && included.find((i) => i.id === relationshipId!.href))
-      ) {
-        resource.relationships![fieldName].data = {
-          type: 'card',
-          id: relationshipId.href,
-        };
-      }
-    }
+    };
+
+    await processRelationships();
+    await this.populateQueryFields(resource, realmURL, opts);
+    await processRelationships();
     return included;
   }
 }

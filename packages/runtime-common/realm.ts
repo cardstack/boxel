@@ -2615,8 +2615,13 @@ export class Realm {
       throw e;
     }
 
+    let useWorkInProgressIndex = Boolean(
+      request.headers.get('X-Boxel-Building-Index'),
+    );
+
     let doc = await this.#realmIndexQueryEngine.search(cardsQuery, {
       loadLinks: true,
+      useWorkInProgressIndex,
     });
     return createResponse({
       body: JSON.stringify(doc, null, 2),

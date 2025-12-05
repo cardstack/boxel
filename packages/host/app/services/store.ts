@@ -1,5 +1,6 @@
 import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
+import { getOwner } from '@ember/owner';
 import Service, { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 
@@ -23,17 +24,19 @@ import {
   Deferred,
   delay,
   mergeRelationships,
+  isLocalId,
   realmURL as realmURLSymbol,
   localId as localIdSymbol,
   meta,
   logger,
   formattedError,
+  SupportedMimeType,
   RealmPaths,
-  isLocalId,
   type Store as StoreInterface,
   type AddOptions,
   type CreateOptions,
   type Query,
+  type QueryResultsMeta,
   type PatchData,
   type Relationship,
   type AutoSaveState,
@@ -44,7 +47,8 @@ import {
   type LooseCardResource,
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
-  SupportedMimeType,
+  type ErrorEntry,
+  parseSearchURL,
 } from '@cardstack/runtime-common';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
@@ -53,6 +57,8 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
+
+import { getSearch } from '../resources/search';
 
 import {
   enableRenderTimerStub,
@@ -72,6 +78,7 @@ import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
+import type { SearchResource } from '../resources/search';
 
 export { CardErrorJSONAPI, CardSaveSubscriber };
 
@@ -115,7 +122,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   constructor(owner: Owner) {
     super(owner);
-    this.store = new CardStore(this.referenceCount, this.network.authedFetch);
+    this.store = this.createCardStore();
     this.reset.register(this);
     this.ready = this.setup();
     registerDestructor(this, () => {
@@ -153,7 +160,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightCardLoads = new Map();
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
-    this.store = new CardStore(this.referenceCount, this.network.authedFetch);
+    this.store = this.createCardStore();
     this.ready = this.setup();
   }
 
@@ -173,7 +180,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightCardLoads = new Map();
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
-    this.store = new CardStore(this.referenceCount, this.network.authedFetch);
+    this.store = this.createCardStore();
   }
 
   dropReference(id: string | undefined) {
@@ -525,6 +532,33 @@ export default class StoreService extends Service implements StoreInterface {
     ).filter(Boolean) as CardDef[];
   }
 
+  getSearchResource<T extends CardDef = CardDef>(
+    parent: object,
+    getQuery: () => Query | undefined,
+    getRealms?: () => string[] | undefined,
+    opts?: {
+      isLive?: boolean;
+      doWhileRefreshing?: (() => void) | undefined;
+      seed?: {
+        cards: T[];
+        searchURL?: string;
+        meta?: QueryResultsMeta;
+        errors?: ErrorEntry[];
+      };
+    },
+  ): SearchResource<T> {
+    if (this.isRenderStore && opts) {
+      opts.isLive = false;
+    }
+    return getSearch<T>(
+      parent,
+      getOwner(this)!,
+      getQuery,
+      getRealms,
+      opts,
+    ) as unknown as SearchResource<T>;
+  }
+
   getSaveState(id: string): AutoSaveState | undefined {
     return this.autoSaveStates.get(id);
   }
@@ -677,7 +711,17 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
-  private handleInvalidations = (event: RealmEventContent) => {
+  private createCardStore(): CardStore {
+    return new CardStore(this.referenceCount, this.network.authedFetch, {
+      getSearchResource: (parent, getQuery, getRealms, opts) =>
+        this.getSearchResource(parent, getQuery, getRealms, opts),
+    });
+  }
+
+  private handleInvalidations = (
+    event: RealmEventContent,
+    realmHref: string,
+  ) => {
     if (event.eventName !== 'index') {
       return;
     }
@@ -686,6 +730,7 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
     let invalidations = event.invalidations as string[];
+    let resolvedRealmHref = realmHref;
 
     if (invalidations.find((i) => hasExecutableExtension(i))) {
       // the invalidation included code changes too. in this case we
@@ -707,53 +752,57 @@ export default class StoreService extends Service implements StoreInterface {
       );
 
       let instance = this.peekLive(invalidation);
-      if (instance && isCardInstance(instance)) {
-        // Do not reload if the event is a result of an instance-editing request that we made. Otherwise we risk
-        // overwriting the inputs with past values. This can happen if the user makes edits in the time between
-        // the auto save request and the arrival realm event.
+      if (instance) {
+        if (isCardInstance(instance)) {
+          // Do not reload if the event is a result of an instance-editing request that we made. Otherwise we risk
+          // overwriting the inputs with past values. This can happen if the user makes edits in the time between
+          // the auto save request and the arrival realm event.
+          let reloadFile = false;
 
-        let reloadFile = false;
-
-        if (!clientRequestId) {
-          reloadFile = true;
-          realmEventsLogger.debug(
-            `reloading file resource ${invalidation} because event has no clientRequestId`,
-          );
-        } else if (this.cardService.clientRequestIds.has(clientRequestId)) {
-          if (
-            clientRequestId.startsWith('instance:') ||
-            clientRequestId.startsWith('editor-with-instance')
-          ) {
+          if (!clientRequestId) {
+            reloadFile = true;
             realmEventsLogger.debug(
-              `ignoring invalidation for card ${invalidation} because request id ${clientRequestId} is ours and an instance type`,
+              `reloading file resource ${invalidation} because event has no clientRequestId`,
             );
+          } else if (this.cardService.clientRequestIds.has(clientRequestId)) {
+            if (
+              clientRequestId.startsWith('instance:') ||
+              clientRequestId.startsWith('editor-with-instance')
+            ) {
+              realmEventsLogger.debug(
+                `ignoring invalidation for card ${invalidation} because request id ${clientRequestId} is ours and an instance type`,
+              );
+            } else {
+              reloadFile = true;
+              realmEventsLogger.debug(
+                `reloading file resource ${invalidation} because request id ${clientRequestId} is not instance type`,
+              );
+            }
           } else {
             reloadFile = true;
             realmEventsLogger.debug(
-              `reloading file resource ${invalidation} because request id ${clientRequestId} is not instance type`,
+              `reloading file resource ${invalidation} because request id ${clientRequestId} is not contained within known clientRequestIds`,
+              Array.from(this.cardService.clientRequestIds.values()),
+            );
+          }
+
+          if (reloadFile) {
+            this.reloadTask.perform(instance);
+          } else {
+            realmEventsLogger.debug(
+              `ignoring invalidation ${invalidation} for request id ${clientRequestId}`,
             );
           }
         } else {
-          reloadFile = true;
           realmEventsLogger.debug(
-            `reloading file resource ${invalidation} because request id ${clientRequestId} is not contained within known clientRequestIds`,
-            Array.from(this.cardService.clientRequestIds.values()),
+            `reloading file resource ${invalidation} because it is in an error state`,
           );
-        }
-
-        if (reloadFile) {
-          this.reloadTask.perform(instance);
-        } else {
-          realmEventsLogger.debug(
-            `ignoring invalidation ${invalidation} for request id ${clientRequestId}`,
-          );
+          this.loadInstanceTask.perform(invalidation);
         }
       } else {
-        // load the card using just the ID because we don't have a running card on hand
         realmEventsLogger.debug(
-          `reloading file resource ${invalidation} because it is not found in the identity context`,
+          `ignoring invalidation ${invalidation} because we did not previously try to load it`,
         );
-        this.loadInstanceTask.perform(invalidation);
       }
     }
   };
@@ -1354,9 +1403,8 @@ export default class StoreService extends Service implements StoreInterface {
     let subscription = this.subscriptions.get(realm);
     if (!subscription) {
       this.subscriptions.set(realm, {
-        unsubscribe: this.messageService.subscribe(
-          realm,
-          this.handleInvalidations,
+        unsubscribe: this.messageService.subscribe(realm, (event) =>
+          this.handleInvalidations(event, realm),
         ),
       });
     }

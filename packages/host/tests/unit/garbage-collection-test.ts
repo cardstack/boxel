@@ -1,4 +1,5 @@
-import type { RenderingTestContext } from '@ember/test-helpers';
+import { registerDestructor } from '@ember/destroyable';
+import { settled, type RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -232,6 +233,25 @@ module('Unit | identity-context garbage collection', function (hooks) {
       store.get(boris.id),
       undefined,
       'store does not contain "boris"',
+    );
+  });
+
+  test('instances removed by GC have destructors run', async function (assert) {
+    let {
+      store,
+      instances: { boris },
+    } = await setupTest(saveAll);
+
+    registerDestructor(boris, () => {
+      assert.step('boris destructor called');
+    });
+    store.sweep(api);
+    store.sweep(api);
+    await settled();
+
+    assert.verifySteps(
+      ['boris destructor called'],
+      'destructor was called exactly once',
     );
   });
 
