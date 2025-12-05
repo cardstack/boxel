@@ -1,6 +1,6 @@
 # Indexing with the headless prerenderer
 
-Cards are indexed by rendering them and deriving search documents from the rendered output. Today all indexing goes through the headless prerenderer, which runs a pool of Chromium pages (via Puppeteer) and renders card routes in the built host app. The legacy FastBoot-based path has been removed.
+Cards are indexed by rendering them and deriving search documents from the rendered output. Indexing goes through the headless prerenderer, which runs a pool of Chromium pages (via Puppeteer) and renders card routes in the built host app.
 
 ## Components involved
 - `Worker` (`packages/runtime-common/worker.ts`): pulls indexing jobs from the queue and registers the indexing tasks.

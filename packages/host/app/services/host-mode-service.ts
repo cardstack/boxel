@@ -12,21 +12,18 @@ interface PublishedRealmMetadata {
 }
 
 export default class HostModeService extends Service {
-  @service declare fastboot: { isFastBoot: boolean };
   @service declare operatorModeStateService: OperatorModeStateService;
 
   get isActive() {
-    if (!this.fastboot.isFastBoot) {
-      if (this.simulatingHostMode) {
-        return true;
-      }
-
-      return (
-        !config.hostsOwnAssets &&
-        this.isRealmServerDomain === false &&
-        this.originIsNotMatrixTests
-      );
+    if (this.simulatingHostMode) {
+      return true;
     }
+
+    return (
+      !config.hostsOwnAssets &&
+      this.isRealmServerDomain === false &&
+      this.originIsNotMatrixTests
+    );
 
     return false;
   }

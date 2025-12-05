@@ -50,9 +50,7 @@ import type NetworkService from '../services/network';
 import type RenderService from '../services/render-service';
 import type RenderStoreService from '../services/render-store';
 
-// This component is used in a node/Fastboot context to perform
-// server-side rendering for indexing as well as by the TestRealm
-// to perform rendering for indexing in Ember test contexts.
+// This component is used to perform rendering for indexing in Ember test contexts
 export default class CardPrerender extends Component {
   @service('render-store') private declare store: RenderStoreService;
   @service private declare network: NetworkService;

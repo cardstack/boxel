@@ -1,15 +1,10 @@
 import Route from '@ember/routing/route';
-import { service } from '@ember/service';
 
 import ENV from '@cardstack/host/config/environment';
 
-interface Model {
-  isFastBoot: boolean;
-}
+interface Model {}
 
 export default class Application extends Route<Model> {
-  @service declare fastboot: { isFastBoot: boolean };
-
   async beforeModel(transition: any): Promise<void> {
     // Override the matrix URL for testing
     if (ENV.environment === 'test' || ENV.environment === 'development') {
@@ -23,8 +18,8 @@ export default class Application extends Route<Model> {
     }
   }
 
+  // TODO is this necessary?
   async model(): Promise<Model> {
-    let { isFastBoot } = this.fastboot;
-    return { isFastBoot };
+    return {};
   }
 }
