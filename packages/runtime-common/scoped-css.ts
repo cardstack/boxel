@@ -3,8 +3,8 @@ import jsEscapeString from 'js-string-escape';
 
 export async function maybeHandleScopedCSSRequest(req: Request) {
   if (isScopedCSSRequest(req.url)) {
-    // isFastBoot doesn’t work here because this runs outside FastBoot but inside Node
     if (typeof (globalThis as any).document == 'undefined') {
+      // when run inside Node
       return Promise.resolve(new Response('', { status: 200 }));
     } else {
       let decodedCSS = decodeScopedCSSRequest(req.url).css;

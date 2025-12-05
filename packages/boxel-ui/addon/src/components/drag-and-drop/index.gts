@@ -2,13 +2,17 @@ import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { fn, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import DropTargetModifier from 'ember-draggable-modifiers/modifiers/drop-target';
+import SortableItemModifier from 'ember-draggable-modifiers/modifiers/sortable-item';
+import {
+  insertAfter,
+  insertBefore,
+  removeItem,
+} from 'ember-draggable-modifiers/utils/array';
 
 import { and, eq } from '../../helpers/truth-helpers.ts';
-
-const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
 export type DndItem = Record<string, any>;
 
@@ -48,55 +52,7 @@ export interface DndKanbanBoardSignature<DndColumn> {
 export default class DndKanbanBoard extends Component<
   DndKanbanBoardSignature<DndColumn>
 > {
-  @tracked areModifiersLoaded = false;
-  @tracked DndDraggableItemModifier: any = null;
-  @tracked DndDropTargetModifier: any = null;
-  @tracked DndSortableItemModifier: any = null;
-  @tracked insertAfter: any;
-  @tracked insertAt: any;
-  @tracked insertBefore: any;
-  @tracked removeItem: any;
   @tracked draggedCard: DndItem | null = null;
-
-  constructor(owner: Owner, args: DndKanbanBoardArgs<DndColumn>) {
-    super(owner, args);
-
-    if (!isFastBoot) {
-      this.loadModifiers();
-    }
-  }
-
-  // Have to use dynamic imports because the modifiers are not compatible in FastBoot
-  // .ie a static import will break the indexing build
-  // See: https://github.com/alvarocastro/ember-draggable-modifiers/issues/1 and https://github.com/cardstack/boxel/pull/1683#discussion_r1803979937
-  async loadModifiers() {
-    // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
-    const DndDraggableItemModifier = await import(
-      'ember-draggable-modifiers/modifiers/draggable-item'
-    );
-
-    // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
-    const DndDropTargetModifier = await import(
-      'ember-draggable-modifiers/modifiers/drop-target'
-    );
-
-    // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
-    const DndSortableItemModifier = await import(
-      'ember-draggable-modifiers/modifiers/sortable-item'
-    );
-    // @ts-expect-error Dynamic imports are only supported when the '--module' flag is set to 'es2020', 'es2022', 'esnext', 'commonjs', 'amd', 'system', 'umd', 'node16', or 'nodenext'
-    const arrayUtils = await import('ember-draggable-modifiers/utils/array');
-
-    this.DndDraggableItemModifier = DndDraggableItemModifier.default;
-    this.DndDropTargetModifier = DndDropTargetModifier.default;
-    this.DndSortableItemModifier = DndSortableItemModifier.default;
-    this.insertAfter = arrayUtils.insertAfter;
-    this.insertAt = arrayUtils.insertAt;
-    this.insertBefore = arrayUtils.insertBefore;
-    this.removeItem = arrayUtils.removeItem;
-
-    this.areModifiersLoaded = true;
-  }
 
   @action moveCard({
     source: {
@@ -107,20 +63,17 @@ export default class DndKanbanBoard extends Component<
       edge,
     },
   }: any) {
-    draggedItemParent.cards = this.removeItem(
-      draggedItemParent.cards,
-      draggedItem,
-    );
+    draggedItemParent.cards = removeItem(draggedItemParent.cards, draggedItem);
 
     if (dropTarget !== undefined) {
       if (edge === 'top') {
-        dropTargetParent.cards = this.insertBefore(
+        dropTargetParent.cards = insertBefore(
           dropTargetParent.cards,
           dropTarget,
           draggedItem,
         );
       } else if (edge === 'bottom') {
-        dropTargetParent.cards = this.insertAfter(
+        dropTargetParent.cards = insertAfter(
           dropTargetParent.cards,
           dropTarget,
           draggedItem,
@@ -164,56 +117,54 @@ export default class DndKanbanBoard extends Component<
   }
 
   <template>
-    {{#if this.areModifiersLoaded}}
-      <div class='draggable-container' {{on 'dragend' this.onDragEnd}}>
-        {{#each @columns as |column|}}
-          <div
-            class='column'
-            {{this.DndDropTargetModifier
-              group='cards'
-              data=(hash parent=column)
-              onDrop=this.moveCard
-            }}
-          >
-            {{#if (has-block 'header')}}
-              <div class='column-header'>
-                {{yield column to='header'}}
-              </div>
-            {{/if}}
-
-            <div class='column-drop-zone'>
-              {{#each column.cards as |card|}}
-                {{#if (this.displayCard card)}}
-                  <div
-                    class='draggable-card {{if @isLoading "is-loading"}}'
-                    {{this.DndSortableItemModifier
-                      group='cards'
-                      data=(hash item=card parent=column)
-                      onDrop=this.moveCard
-                      isOnTargetClass='is-on-target'
-                      onDragStart=(fn this.onDragStart card)
-                    }}
-                  >
-                    {{#if (and @isLoading (eq card this.draggedCard))}}
-                      <div class='overlay'></div>
-                      {{yield card column to='card'}}
-                      <LoadingIndicator
-                        width='18'
-                        height='18'
-                        @color='var(--boxel-light)'
-                        class='loader'
-                      />
-                    {{else}}
-                      {{yield card column to='card'}}
-                    {{/if}}
-                  </div>
-                {{/if}}
-              {{/each}}
+    <div class='draggable-container' {{on 'dragend' this.onDragEnd}}>
+      {{#each @columns as |column|}}
+        <div
+          class='column'
+          {{DropTargetModifier
+            group='cards'
+            data=(hash parent=column)
+            onDrop=this.moveCard
+          }}
+        >
+          {{#if (has-block 'header')}}
+            <div class='column-header'>
+              {{yield column to='header'}}
             </div>
+          {{/if}}
+
+          <div class='column-drop-zone'>
+            {{#each column.cards as |card|}}
+              {{#if (this.displayCard card)}}
+                <div
+                  class='draggable-card {{if @isLoading "is-loading"}}'
+                  {{SortableItemModifier
+                    group='cards'
+                    data=(hash item=card parent=column)
+                    onDrop=this.moveCard
+                    isOnTargetClass='is-on-target'
+                    onDragStart=(fn this.onDragStart card)
+                  }}
+                >
+                  {{#if (and @isLoading (eq card this.draggedCard))}}
+                    <div class='overlay'></div>
+                    {{yield card column to='card'}}
+                    <LoadingIndicator
+                      width='18'
+                      height='18'
+                      @color='var(--boxel-light)'
+                      class='loader'
+                    />
+                  {{else}}
+                    {{yield card column to='card'}}
+                  {{/if}}
+                </div>
+              {{/if}}
+            {{/each}}
           </div>
-        {{/each}}
-      </div>
-    {{/if}}
+        </div>
+      {{/each}}
+    </div>
 
     <style scoped>
       .draggable-container {

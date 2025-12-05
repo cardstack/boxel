@@ -53,7 +53,7 @@ jobs:
       # https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
       - name: Disable TCP/UDP network offloading
         run: sudo ethtool -K eth0 tx off rx off
-      - name: Start host to serve assets for fastboot
+      - name: Start host to serve assets for realm server
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
           run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &

@@ -697,7 +697,7 @@ async function setupTestRealm({
     await visit('/acceptance-test-setup');
   } else {
     // We use a rendered component to facilitate our indexing (this emulates
-    // the work that the Fastboot renderer is doing), which means that the
+    // the work that the prerenderer is doing), which means that the
     // `setupRenderingTest(hooks)` from ember-qunit must be used in your tests.
     await makeRenderer();
   }

@@ -18,7 +18,6 @@ import type RealmService from './realm';
 import type ResetService from './reset';
 
 export default class NetworkService extends Service {
-  @service declare fastboot: { isFastBoot: boolean };
   @service declare loaderService: LoaderService;
   @service declare realm: RealmService;
   @service declare reset: ResetService;
@@ -39,9 +38,6 @@ export default class NetworkService extends Service {
   }
 
   get authedFetch() {
-    if (this.fastboot.isFastBoot) {
-      return this.fetch; // "nativeFetch" already handles auth
-    }
     return fetcher(this.fetch, [
       authorizationMiddleware(this.realm),
       authErrorEventMiddleware(),
@@ -54,15 +50,10 @@ export default class NetworkService extends Service {
 
   private makeVirtualNetwork() {
     let virtualNetwork = new VirtualNetwork(globalThis.fetch);
-    if (!this.fastboot.isFastBoot) {
-      let resolvedBaseRealmURL = new URL(
-        withTrailingSlash(config.resolvedBaseRealmURL),
-      );
-      virtualNetwork.addURLMapping(
-        new URL(baseRealm.url),
-        resolvedBaseRealmURL,
-      );
-    }
+    let resolvedBaseRealmURL = new URL(
+      withTrailingSlash(config.resolvedBaseRealmURL),
+    );
+    virtualNetwork.addURLMapping(new URL(baseRealm.url), resolvedBaseRealmURL);
     shimExternals(virtualNetwork);
     virtualNetwork.addImportMap('@cardstack/boxel-icons/', (rest) => {
       return `${config.iconsURL}/@cardstack/boxel-icons/v1/icons/${rest}.js`;
