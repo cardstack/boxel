@@ -187,6 +187,7 @@ module(
         // Press the + button to create a new card instance
         await click('[data-test-boxel-filter-list-button="All Cards"]');
         await click('[data-test-create-new-card-button]');
+        await fillIn('[data-test-search-field]', 'Skill');
         // Select a card from catalog entries
         await click(
           `[data-test-select="https://cardstack.com/base/cards/skill"]`,
@@ -212,6 +213,7 @@ module(
         });
         await click('[data-test-boxel-filter-list-button="All Cards"]');
         await click('[data-test-create-new-card-button]');
+        await fillIn('[data-test-search-field]', 'Skill');
         await click(
           `[data-test-select="https://cardstack.com/base/cards/skill"]`,
         );
@@ -298,6 +300,7 @@ module(
         });
         await click('[data-test-boxel-filter-list-button="All Cards"]');
         await click('[data-test-create-new-card-button]');
+        await fillIn('[data-test-search-field]', 'Skill');
         await click(
           `[data-test-select="https://cardstack.com/base/cards/skill"]`,
         );

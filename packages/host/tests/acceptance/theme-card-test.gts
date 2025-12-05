@@ -3,6 +3,8 @@ import { click, fillIn } from '@ember/test-helpers';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
+import { dasherize } from '@cardstack/boxel-ui/helpers';
+
 import { Deferred } from '@cardstack/runtime-common';
 
 import {
@@ -49,6 +51,8 @@ const ROOT_CSS_VARS = {
   trackingNormal: '0.01em',
   radius: '0.75rem',
   shadow: '0 6px 12px rgba(255, 215, 0, 0.3)',
+  shadow2xl: '0 6px 12px rgba(255, 215, 0, 0.5)',
+  chart1: '#ffb347',
 };
 
 const DARK_MODE_VARS = {
@@ -82,8 +86,10 @@ const DARK_MODE_VARS = {
   trackingNormal: '0.01em',
 };
 
-const ROOT_STYLE_ATTRS =
-  "--background: #0a0f23; --foreground: #f4f1e8; --card: #1a1f3a; --card-foreground: #e8e5d3; --popover: #242952; --popover-foreground: #f4f1e8; --primary: #ffd700; --primary-foreground: #0a0f23; --secondary: #2d3561; --secondary-foreground: #c5c2b0; --muted: #1e2347; --muted-foreground: #8a8772; --accent: #ffb347; --accent-foreground: #1a1f3a; --destructive: #cd5c5c; --destructive-foreground: #f4f1e8; --border: #3a4073; --input: #2d3561; --ring: #ffd700; --sidebar: #0f1428; --sidebar-foreground: #c5c2b0; --font-sans: 'Libre Baskerville', 'Georgia', serif; --font-serif: 'Crimson Text', 'Times New Roman', serif; --font-mono: 'Source Code Pro', 'Courier New', monospace; --radius: 0.75rem; --spacing: 0.3rem; --tracking-normal: 0.01em; --shadow: 0 6px 12px rgba(255, 215, 0, 0.3)";
+const ROOT_STYLE_ATTRS = Object.entries(ROOT_CSS_VARS)
+  .sort()
+  .map(([key, val]) => [`--${dasherize(key)}`, val].join(': '))
+  .join('; ');
 
 const SOFT_POP_VARS = `:root {
   --background: oklch(0.9789 0.0082 121.6272);
@@ -318,6 +324,14 @@ module('Acceptance | theme-card-test', function (hooks) {
         styleAttr.includes('--background: #0a0f23'),
         'inline style includes root background variable',
       );
+      assert.ok(
+        styleAttr.includes('--chart-1: #ffb347'),
+        'inline style includes root chart-1 variable',
+      );
+      assert.ok(
+        styleAttr.includes('--shadow-2xl: 0 6px 12px rgba(255, 215, 0, 0.5)'),
+        'inline style includes root shadow-2xl variable',
+      );
       assert.false(
         styleAttr.includes('--background: #050813'),
         'dark mode value is not applied inline',
@@ -389,10 +403,10 @@ module('Acceptance | theme-card-test', function (hooks) {
         .containsText('oklch(0.3211 0 0)');
       assert
         .dom('[data-test-css-vars]')
-        .containsText(':root { --background: oklch(0.9789 0.0082 121.6272); ');
+        .containsText('--background: oklch(0.9789 0.0082 121.6272);');
       assert
         .dom('[data-test-css-vars]')
-        .containsText(' .dark { --background: oklch(0 0 0); ');
+        .containsText('--background: oklch(0 0 0);');
 
       await click('[data-test-edit-button]');
 

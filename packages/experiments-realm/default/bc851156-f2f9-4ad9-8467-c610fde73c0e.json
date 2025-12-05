@@ -17,6 +17,43 @@
       "cssImports": [
         "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Crimson+Text:wght@400;600&display=swap"
       ],
+      "typography": {
+        "body": {
+          "fontSize": null,
+          "fontFamily": null,
+          "fontWeight": null,
+          "lineHeight": null,
+          "sampleText": null
+        },
+        "caption": {
+          "fontSize": null,
+          "fontFamily": null,
+          "fontWeight": null,
+          "lineHeight": null,
+          "sampleText": null
+        },
+        "heading": {
+          "fontSize": "2.25rem",
+          "fontFamily": null,
+          "fontWeight": null,
+          "lineHeight": null,
+          "sampleText": null
+        },
+        "subheading": {
+          "fontSize": null,
+          "fontFamily": null,
+          "fontWeight": null,
+          "lineHeight": null,
+          "sampleText": null
+        },
+        "sectionHeading": {
+          "fontSize": null,
+          "fontFamily": null,
+          "fontWeight": null,
+          "lineHeight": null,
+          "sampleText": null
+        }
+      },
       "rootVariables": {
         "card": "#ffffff",
         "ring": "#0284c7",

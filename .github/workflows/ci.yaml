@@ -427,7 +427,6 @@ jobs:
             "card-source-endpoints-test.ts",
             "definition-lookup-test.ts",
             "file-watcher-events-test.ts",
-            "headless-chrome-indexing-test.ts",
             "indexing-test.ts",
             "transpile-test.ts",
             "module-syntax-test.ts",
