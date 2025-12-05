@@ -19,7 +19,7 @@ export default class SetInteractHomeCommand extends HostBaseCommand<
   @service declare private operatorModeStateService: OperatorModeStateService;
 
   static actionVerb = 'Set';
-  description = "Sets the current realm's interact home site config card";
+  description = "Sets the current realm's interact home index config card";
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
