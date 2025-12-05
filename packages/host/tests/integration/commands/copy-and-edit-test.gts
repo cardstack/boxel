@@ -108,7 +108,7 @@ module('Integration | commands | copy-and-edit', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: './simple-card',
                 name: 'Theme',
               },
             },
