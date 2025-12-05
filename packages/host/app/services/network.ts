@@ -19,6 +19,13 @@ import type RealmService from './realm';
 import type ResetService from './reset';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
+const cacheableExternalHosts = new Set(
+  (config.cacheableExternalHosts || []).map((host) => host.toLowerCase()),
+);
+const shouldLogCacheUsage = !!config.logCacheUsage;
+const hasPerformanceApi =
+  typeof performance !== 'undefined' &&
+  typeof performance.getEntriesByName === 'function';
 
 function getNativeFetch(): typeof fetch {
   if (isFastBoot) {
@@ -77,7 +84,9 @@ export default class NetworkService extends Service {
   }
 
   private makeVirtualNetwork() {
-    let virtualNetwork = new VirtualNetwork(getNativeFetch());
+    let virtualNetwork = new VirtualNetwork(
+      buildCacheAwareFetch(getNativeFetch()),
+    );
     if (!this.fastboot.isFastBoot) {
       let resolvedBaseRealmURL = new URL(
         withTrailingSlash(config.resolvedBaseRealmURL),
@@ -111,4 +120,89 @@ declare module '@ember/service' {
 
 function withTrailingSlash(url: string): string {
   return url.endsWith('/') ? url : `${url}/`;
+}
+
+function buildCacheAwareFetch(nativeFetch: typeof fetch): typeof fetch {
+  if (!cacheableExternalHosts.size) {
+    return nativeFetch;
+  }
+
+  return async (input: RequestInfo | URL, init?: RequestInit) => {
+    let request =
+      input instanceof Request ? input : new Request(input as RequestInfo, init);
+
+    let defaultBase =
+      typeof window !== 'undefined' && window.location?.href
+        ? window.location.href
+        : 'http://localhost';
+    let url = new URL(request.url, defaultBase);
+    let host = url.host.toLowerCase();
+
+    let isCacheable = host && cacheableExternalHosts.has(host);
+
+    if (host && !isCacheable) {
+      request = new Request(request, { cache: 'no-store' });
+    }
+
+    let response = await nativeFetch(request);
+
+    if (shouldLogCacheUsage) {
+      let timing = getLatestResourceTiming(url.href);
+      let cacheStatus = inferCacheStatus(timing);
+      let cacheHeader =
+        response.headers.get('x-cache') ||
+        response.headers.get('cf-cache-status') ||
+        'n/a';
+      let ageHeader = response.headers.get('age') || 'n/a';
+      console.info(
+        `[cache] ${isCacheable ? 'cacheable' : 'non-cacheable'} ${url.href} cache=${request.cache ?? 'default'} status=${response.status} x-cache=${cacheHeader} age=${ageHeader} cacheStatus=${cacheStatus} transferSize=${timing?.transferSize ?? 'n/a'} encodedBodySize=${timing?.encodedBodySize ?? 'n/a'} decodedBodySize=${timing?.decodedBodySize ?? 'n/a'}`,
+      );
+    }
+
+    return response;
+  };
+}
+
+function getLatestResourceTiming(
+  url: string,
+): PerformanceResourceTiming | null {
+  if (!hasPerformanceApi) {
+    return null;
+  }
+
+  let entries = performance.getEntriesByName(
+    url,
+  ) as PerformanceResourceTiming[];
+  if (!entries.length) {
+    return null;
+  }
+
+  let latest = entries[0];
+  for (let entry of entries) {
+    if (entry.responseEnd > latest.responseEnd) {
+      latest = entry;
+    }
+  }
+  return latest;
+}
+
+function inferCacheStatus(
+  timing: PerformanceResourceTiming | null,
+): 'cache' | 'partial-cache' | 'network' | 'unknown' {
+  if (!timing) {
+    return 'unknown';
+  }
+  // In Chrome, transferSize === 0 indicates a cache hit (memory or disk).
+  if (timing.transferSize === 0) {
+    return 'cache';
+  }
+  // Smaller transferSize than encodedBodySize typically means 304 or some cached reuse.
+  if (
+    timing.encodedBodySize &&
+    timing.transferSize > 0 &&
+    timing.transferSize < timing.encodedBodySize
+  ) {
+    return 'partial-cache';
+  }
+  return 'network';
 }

@@ -37,6 +37,11 @@ module.exports = function (environment) {
     monacoCursorDebounceMs: 200,
     serverEchoDebounceMs: 5000,
     loginMessageTimeoutMs: 1000,
+    cacheableExternalHosts: (process.env.CHROME_HTTP_CACHE_ALLOWLIST || '')
+      .split(',')
+      .map((host) => host.trim().toLowerCase())
+      .filter(Boolean),
+    logCacheUsage: process.env.CHROME_HTTP_CACHE_DEBUG === 'true',
     minSaveTaskDurationMs: 1000,
     cardRenderTimeout: Number(
       process.env.RENDER_TIMEOUT_MS ?? DEFAULT_CARD_RENDER_TIMEOUT_MS,
