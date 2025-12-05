@@ -42,6 +42,8 @@
       sans-serif
     );
     font-size: var(--boxel-body-font-size, 0.875rem);
+    letter-spacing: var(--boxel-lsp-xs, 0.01em);
+    line-height: var(--boxel-line-height-sm, calc(18 / 13));
     background-color: var(--boxel-light, #fff);
     overscroll-behavior: none;
   }

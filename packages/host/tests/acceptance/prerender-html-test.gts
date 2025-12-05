@@ -535,7 +535,6 @@ module('Acceptance | prerender | html', function (hooks) {
   });
 
   hooks.afterEach(function () {
-    delete (globalThis as any).__lazilyLoadLinks;
     delete (globalThis as any).__boxelRenderContext;
     delete (globalThis as any).__boxel_definitions_recursing_depth;
     delete (globalThis as any).__doNotSuppressRenderRouteError;
