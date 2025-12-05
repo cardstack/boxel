@@ -9,8 +9,6 @@ import { useTestWaiters } from '@cardstack/runtime-common';
 import * as TestWaiters from '@ember/test-waiters';
 
 QUnit.dump.maxDepth = 20;
-// Allow slower acceptance flows to finish before QUnit times out
-QUnit.config.testTimeout = 30000;
 
 useTestWaiters(TestWaiters);
 setApplication(Application.create(config.APP));
