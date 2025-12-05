@@ -130,7 +130,15 @@ export async function sendEventListAsDebugMessage(
       attachedFiles: [
         {
           sourceUrl: '',
-          url: client.mxcUrlToHttp(sharedFile.content_uri),
+          url: client.mxcUrlToHttp(
+            sharedFile.content_uri,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            true,
+          ),
           name: 'debug-event.json',
           contentType: 'text/plain',
         },
@@ -157,7 +165,15 @@ export async function sendPromptAsDebugMessage(
       attachedFiles: [
         {
           sourceUrl: '',
-          url: client.mxcUrlToHttp(sharedFile.content_uri),
+          url: client.mxcUrlToHttp(
+            sharedFile.content_uri,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            true,
+          ),
           name: 'debug-event.json',
           contentType: 'text/plain',
         },
