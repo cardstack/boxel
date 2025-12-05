@@ -91,14 +91,42 @@ module('Integration | commands | copy-and-edit', function (hooks) {
           import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
 
+          export class Theme extends CardDef {
+            static displayName = 'Theme';
+            @field name = contains(StringField);
+          }
+
           export class SimpleCard extends CardDef {
             static displayName = 'SimpleCard';
           }
         `,
+        'Theme/og.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Original Theme',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'Theme',
+              },
+            },
+          },
+        },
         'simple-card-instance.json': {
           data: {
             type: 'card',
             attributes: {},
+            relationships: {
+              // Establish nested relationship via dotted path
+              'cardInfo.theme': {
+                data: {
+                  type: 'card',
+                  id: './Theme/og',
+                },
+              },
+            },
             meta: {
               adoptsFrom: {
                 module: './simple-card',
@@ -198,6 +226,56 @@ module('Integration | commands | copy-and-edit', function (hooks) {
         'new child is in same realm as source',
       );
     }
+  });
+
+  test('copies card and relinks nested linksTo parent when only leaf field name is provided', async function (assert) {
+    let commandService = getService('command-service');
+    let store = getService('store');
+    let operatorModeStateService = getService('operator-mode-state-service');
+
+    let parentCard = (await store.get(
+      `${testRealmURL}simple-card-instance`,
+    )) as CardDef;
+    let originalTheme = (await store.get(`${testRealmURL}Theme/og`)) as CardDef;
+
+    operatorModeStateService.addItemToStack(
+      new StackItem({
+        id: parentCard.id as string,
+        format: 'isolated',
+        stackIndex: 0,
+      }),
+    );
+    operatorModeStateService.addItemToStack(
+      new StackItem({
+        id: originalTheme.id as string,
+        format: 'isolated',
+        stackIndex: 0,
+        relationshipContext: {
+          // overlay only knows about the leaf field name
+          fieldName: 'theme',
+          fieldType: 'linksTo',
+        },
+      }),
+    );
+
+    let command = new CopyAndEditCommand(commandService.commandContext);
+    await command.execute({
+      card: originalTheme,
+    });
+
+    await settled();
+
+    let updatedParent = (await store.get(parentCard.id as string)) as CardDef;
+    let linkedThemeId =
+      (updatedParent as any).cardInfo?.theme?.id ??
+      (updatedParent as any).cardInfo?.theme;
+
+    assert.ok(linkedThemeId, 'parent cardInfo.theme is set after copy');
+    assert.notEqual(
+      linkedThemeId,
+      originalTheme.id,
+      'cardInfo.theme points to copied theme',
+    );
   });
 
   test('copies card without linked parent (query-derived stack) and does not throw', async function (assert) {
