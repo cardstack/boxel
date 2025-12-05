@@ -54,7 +54,7 @@ export default class SetInteractHomeCommand extends HostBaseCommand<
 
     let indexConfigInstance = await this.store.get(cardId);
     if (!indexConfigInstance || !isCardInstance(indexConfigInstance)) {
-      throw new Error(`Could not load site config card: ${cardId}`);
+      throw new Error(`Could not load index config card: ${cardId}`);
     }
 
     let normalizedCardId = cardURL.href.replace(/\.json$/, '');
