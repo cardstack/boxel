@@ -7,7 +7,7 @@ import { eq, not } from '@cardstack/boxel-ui/helpers';
 import { Pill } from '@cardstack/boxel-ui/components';
 import ChevronLeftIcon from '@cardstack/boxel-icons/chevron-left';
 import ChevronRightIcon from '@cardstack/boxel-icons/chevron-right';
-import ImageField from '../../image-field';
+import ImageField from '../../image';
 
 interface CarouselPresentationSignature {
   Args: {
@@ -128,7 +128,8 @@ export default class CarouselPresentation extends GlimmerComponent<CarouselPrese
         position: relative;
         width: 100%;
         aspect-ratio: 1 / 1;
-        background: var(--muted, #f1f5f9);
+        background: var(--muted, var(--boxel-light));
+        border: 2px solid var(--border, #e5e7eb);
         border-radius: var(--radius, 0.5rem);
         overflow: hidden;
       }
@@ -195,12 +196,12 @@ export default class CarouselPresentation extends GlimmerComponent<CarouselPrese
         flex-shrink: 0;
         width: 4rem;
         height: 4rem;
-        border: 2px solid transparent;
+        border: 2px solid var(--border, #e5e7eb);
         border-radius: var(--radius, 0.375rem);
         overflow: hidden;
         cursor: pointer;
         transition: all 0.2s ease;
-        background: none;
+        background: var(--boxel-light);
         padding: 0;
       }
 

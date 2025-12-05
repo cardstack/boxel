@@ -5,7 +5,7 @@
         "containedExamples": [
           {
             "adoptsFrom": {
-              "module": "../fields/multiple-image-field",
+              "module": "../fields/multiple-image",
               "name": "MultipleImageField"
             }
           }
@@ -20,7 +20,7 @@
     "attributes": {
       "ref": {
         "name": "MultipleImageField",
-        "module": "../fields/multiple-image-field"
+        "module": "../fields/multiple-image"
       },
       "title": "MultipleImageField",
       "readMe": null,

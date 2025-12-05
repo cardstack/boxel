@@ -35,6 +35,7 @@ export class AlbumCoverPlayer extends GlimmerComponent<AlbumCoverPlayerSignature
             @kind='primary'
             class='album-play-btn'
             {{on 'click' @player.togglePlay}}
+            aria-label={{if @player.isPlaying 'Pause album' 'Play album'}}
           >
             {{#if @player.isPlaying}}
               <PauseIcon width='40' height='40' />

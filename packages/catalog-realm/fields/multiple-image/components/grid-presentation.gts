@@ -1,5 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
-import ImageField from '../../image-field';
+import ImageField from '../../image';
 
 interface GridPresentationSignature {
   Args: {
@@ -41,4 +41,3 @@ export default class GridPresentation extends GlimmerComponent<GridPresentationS
     </style>
   </template>
 }
-

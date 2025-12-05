@@ -29,8 +29,8 @@ import WeekField from '../fields/date/week';
 import NumberField from '../fields/number';
 import RatingField from '../fields/rating';
 import QuantityField from '../fields/quantity';
-import ImageField from '../fields/image-field';
-import MultipleImageField from '../fields/multiple-image-field';
+import ImageField from '../fields/image';
+import MultipleImageField from '../fields/multiple-image';
 import AudioField from '../fields/audio';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
 import ChevronRightIcon from '@cardstack/boxel-icons/chevron-right';
@@ -1367,14 +1367,14 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       if (presentation === 'volume-control') {
         return `@field myAudio = contains(AudioField, {
   configuration: {
-    presentation: { showVolume: true }
+    options: { showVolume: true }
   }
 });`;
       }
       if (presentation === 'advanced-controls') {
         return `@field myAudio = contains(AudioField, {
   configuration: {
-    presentation: {
+    options: {
       showVolume: true,
       showSpeedControl: true,
       showLoopControl: true
@@ -1384,7 +1384,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       }
       return `@field myAudio = contains(AudioField, {
   configuration: {
-    presentation: { style: '${presentation}' }
+    presentation: '${presentation}'
   }
 });`;
     }

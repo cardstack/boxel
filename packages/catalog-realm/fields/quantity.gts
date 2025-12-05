@@ -46,7 +46,7 @@ export default class QuantityField extends NumberField {
     }
 
     get maxValue() {
-      return this.options.max ?? 100;
+      return this.options.max ?? Infinity;
     }
 
     increment = () => {

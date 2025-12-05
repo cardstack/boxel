@@ -70,10 +70,7 @@ export class PlaylistRow extends GlimmerComponent<PlaylistRowSignature> {
         padding: 0.5rem;
         border-radius: var(--radius, 0.5rem);
         transition: background 0.2s;
-      }
-
-      .playlist-row:hover {
-        background: var(--muted, #f3f4f6);
+        background: var(--boxel-light, #ffffff);
       }
 
       .playlist-play-btn {
@@ -115,7 +112,9 @@ export class PlaylistRow extends GlimmerComponent<PlaylistRowSignature> {
         color: var(--foreground, #1f2937);
         overflow: hidden;
         text-overflow: ellipsis;
-        white-space: nowrap;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
       }
 
       .playlist-title.playing {

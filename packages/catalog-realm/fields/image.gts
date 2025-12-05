@@ -494,7 +494,7 @@ class ImageFieldAtom extends Component<typeof ImageField> {
   </template>
 }
 
-export class ImageField extends FieldDef {
+export default class ImageField extends FieldDef {
   static displayName = 'Image';
   static icon = CameraIcon;
 
@@ -506,5 +506,3 @@ export class ImageField extends FieldDef {
   static atom = ImageFieldAtom;
   static edit = ImageFieldEdit;
 }
-
-export default ImageField;
