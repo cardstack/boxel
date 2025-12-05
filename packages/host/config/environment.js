@@ -28,8 +28,7 @@ module.exports = function (environment) {
       enabled: false,
     },
     logLevels:
-      process.env.LOG_LEVELS ||
-      '*=info,current-run=error,matrix=info,realm:events=debug',
+      process.env.LOG_LEVELS || '*=info,matrix=info,realm:events=debug',
     matrixURL: process.env.MATRIX_URL || 'http://localhost:8008',
     matrixServerName: process.env.MATRIX_SERVER_NAME || 'localhost',
     autoSaveDelayMs: 500,
@@ -108,7 +107,7 @@ module.exports = function (environment) {
 
   if (environment === 'production') {
     // here you can enable a production-specific feature
-    ENV.logLevels = '*=warn,current-run=debug';
+    ENV.logLevels = '*=warn';
     ENV.defaultSystemCardId =
       process.env.DEFAULT_SYSTEM_CARD_ID ??
       'https://app.boxel.ai/catalog/SystemCard/default';

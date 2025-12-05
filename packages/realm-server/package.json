@@ -79,8 +79,8 @@
     "yargs": "catalog:"
   },
   "scripts": {
-    "test": "./scripts/remove-test-dbs.sh; USE_HEADLESS_CHROME_INDEXING=true PRERENDER_SILENT=true LOG_LEVELS=\"*=error,pg-adapter=warn,realm:requests=warn,current-run=error${LOG_LEVELS:+,}${LOG_LEVELS}\" NODE_NO_WARNINGS=1 PGPORT=5435 STRIPE_WEBHOOK_SECRET=stripe-webhook-secret STRIPE_API_KEY=stripe-api-key qunit --require ts-node/register/transpile-only tests/index.ts",
-    "test-module": "./scripts/remove-test-dbs.sh; USE_HEADLESS_CHROME_INDEXING=true PRERENDER_SILENT=true LOG_LEVELS=\"*=error,pg-adapter=warn,realm:requests=warn,current-run=error${LOG_LEVELS:+,}${LOG_LEVELS}\" NODE_NO_WARNINGS=1 PGPORT=5435 STRIPE_WEBHOOK_SECRET=stripe-webhook-secret STRIPE_API_KEY=stripe-api-key qunit --require ts-node/register/transpile-only --module ${TEST_MODULE} tests/index.ts",
+    "test": "./scripts/remove-test-dbs.sh; PRERENDER_SILENT=true LOG_LEVELS=\"*=error,pg-adapter=warn,realm:requests=warn${LOG_LEVELS:+,}${LOG_LEVELS}\" NODE_NO_WARNINGS=1 PGPORT=5435 STRIPE_WEBHOOK_SECRET=stripe-webhook-secret STRIPE_API_KEY=stripe-api-key qunit --require ts-node/register/transpile-only tests/index.ts",
+    "test-module": "./scripts/remove-test-dbs.sh; PRERENDER_SILENT=true LOG_LEVELS=\"*=error,pg-adapter=warn,realm:requests=warn${LOG_LEVELS:+,}${LOG_LEVELS}\" NODE_NO_WARNINGS=1 PGPORT=5435 STRIPE_WEBHOOK_SECRET=stripe-webhook-secret STRIPE_API_KEY=stripe-api-key qunit --require ts-node/register/transpile-only --module ${TEST_MODULE} tests/index.ts",
     "start:matrix": "cd ../matrix && pnpm assert-synapse-running",
     "start:smtp": "cd ../matrix && pnpm assert-smtp-running",
     "start:pg": "./scripts/start-pg.sh",

@@ -20,7 +20,6 @@ import {
   isRelationship,
   CardError,
   CardContextName,
-  NotLoaded,
   getField,
   isField,
   primitive,
@@ -111,7 +110,6 @@ import {
   getFieldDescription,
   getFieldOverrides,
   getFields,
-  getIfReady,
   getter,
   isArrayOfCardOrField,
   isCard,
@@ -141,7 +139,6 @@ export {
   getCardMeta,
   getFieldDescription,
   getFields,
-  getIfReady,
   isCard,
   isField,
   localId,
@@ -265,10 +262,7 @@ type CardChangeSubscriber = (
   fieldName: string,
   fieldValue: any,
 ) => void;
-const loadLinksPromises = initSharedState(
-  'loadLinksPromises',
-  () => new WeakMap<BaseDef, Promise<any>>(),
-);
+
 const stores = initSharedState(
   'stores',
   () => new WeakMap<BaseDef, CardStore>(),
@@ -388,12 +382,6 @@ export interface Field<
   component(model: Box<BaseDef>): BoxComponent;
   getter(instance: BaseDef): BaseInstanceType<CardT> | undefined;
   queryableValue(value: any, stack: BaseDef[]): SearchT;
-  handleNotLoadedError(
-    instance: BaseInstanceType<CardT>,
-    e: NotLoaded,
-  ): Promise<
-    BaseInstanceType<CardT> | BaseInstanceType<CardT>[] | undefined | void
-  >;
 }
 
 function cardTypeFor(
@@ -713,10 +701,6 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     }, values);
   }
 
-  async handleNotLoadedError<T extends BaseDef>(_instance: T, _e: NotLoaded) {
-    return undefined;
-  }
-
   component(model: Box<BaseDef>): BoxComponent {
     let fieldName = this.name as keyof BaseDef;
     let arrayField = model.field(
@@ -922,10 +906,6 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
       }
     }
     return value;
-  }
-
-  async handleNotLoadedError<T extends BaseDef>(_instance: T, _e: NotLoaded) {
-    return undefined;
   }
 
   component(model: Box<BaseDef>): BoxComponent {
@@ -1176,61 +1156,6 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       }
     }
     return value;
-  }
-
-  async handleNotLoadedError(
-    instance: BaseInstanceType<CardT>,
-    e: NotLoaded,
-  ): Promise<BaseInstanceType<CardT> | undefined> {
-    let deserialized = getDataBucket(instance as BaseDef);
-    let store = getStore(instance);
-    let fieldValue = store.get(e.reference as string);
-
-    if (fieldValue !== undefined) {
-      deserialized.set(this.name, fieldValue);
-      return fieldValue as BaseInstanceType<CardT>;
-    }
-
-    fieldValue = await this.loadMissingField(
-      instance,
-      e,
-      store,
-      instance[relativeTo],
-    );
-    deserialized.set(this.name, fieldValue);
-    return fieldValue as BaseInstanceType<CardT>;
-  }
-
-  // TODO we should be able to get rid of this when we decommission the old prerender
-  private async loadMissingField(
-    instance: CardDef,
-    notLoaded: NotLoadedValue | NotLoaded,
-    store: CardStore,
-    relativeTo: URL | undefined,
-  ): Promise<CardDef> {
-    let { reference: maybeRelativeReference } = notLoaded;
-    let reference = new URL(
-      maybeRelativeReference as string,
-      instance.id ?? relativeTo, // new instances may not yet have an ID, in that case fallback to the relativeTo
-    ).href;
-    let doc = await store.loadDocument(reference);
-    if (isCardError(doc)) {
-      let cardError = doc;
-      cardError.deps = [reference];
-      cardError.additionalErrors = [
-        new NotLoaded(instance, reference, this.name),
-      ];
-      throw cardError;
-    }
-    let fieldInstance = (await createFromSerialized(
-      doc.data,
-      doc,
-      new URL(doc.data.id!),
-      {
-        store,
-      },
-    )) as CardDef;
-    return fieldInstance;
   }
 
   component(model: Box<CardDef>): BoxComponent {
@@ -1721,116 +1646,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
       notifySubscribers(instance, this.name, value);
       notifyCardTracking(instance);
     }, values);
-  }
-
-  async handleNotLoadedError<T extends CardDef>(
-    instance: T,
-    e: NotLoaded,
-  ): Promise<T[] | undefined> {
-    let result: T[] | undefined;
-    let fieldValues: CardDef[] = [];
-    let store = getStore(instance);
-
-    let references = !Array.isArray(e.reference) ? [e.reference] : e.reference;
-    for (let ref of references) {
-      let value = store.get(ref);
-      if (value !== undefined) {
-        fieldValues.push(value);
-      }
-    }
-
-    fieldValues = await this.loadMissingFields(
-      instance,
-      e,
-      store,
-      instance[relativeTo],
-    );
-
-    if (fieldValues.length === references.length) {
-      let values: T[] = [];
-      let deserialized = getDataBucket(instance);
-
-      for (let field of deserialized.get(this.name)) {
-        if (isNotLoadedValue(field)) {
-          // replace the not-loaded values with the loaded cards
-          values.push(
-            fieldValues.find(
-              (v) =>
-                v.id === new URL(field.reference, instance[relativeTo]).href,
-            )! as T,
-          );
-        } else {
-          // keep existing loaded cards
-          values.push(field);
-        }
-      }
-
-      deserialized.set(this.name, values);
-      result = values as T[];
-    }
-
-    return result;
-  }
-
-  // TODO we should be able to get rid of this when we decommission the old prerender
-  private async loadMissingFields(
-    instance: CardDef,
-    notLoaded: NotLoaded,
-    store: CardStore,
-    relativeTo: URL | undefined,
-  ): Promise<CardDef[]> {
-    let refs = (
-      !Array.isArray(notLoaded.reference)
-        ? [notLoaded.reference]
-        : notLoaded.reference
-    ).map(
-      (ref) => new URL(ref, instance.id ?? relativeTo).href, // new instances may not yet have an ID, in that case fallback to the relativeTo
-    );
-    let errors = [];
-    let fieldInstances: CardDef[] = [];
-
-    const loadPromises = refs.map(async (reference) => {
-      try {
-        let doc = await store.loadDocument(reference);
-        if (isCardError(doc)) {
-          let cardError = doc;
-          cardError.deps = [reference];
-          cardError.additionalErrors = [
-            new NotLoaded(instance, reference, this.name),
-          ];
-          throw cardError;
-        }
-        let fieldInstance = (await createFromSerialized(
-          doc.data,
-          doc,
-          new URL(doc.data.id!),
-          {
-            store,
-          },
-        )) as CardDef;
-        return { ok: true, value: fieldInstance };
-      } catch (e) {
-        return { ok: false, error: e };
-      }
-    });
-
-    const results = await Promise.allSettled(loadPromises);
-    for (let result of results) {
-      if (result.status === 'fulfilled') {
-        const fetchResult = result.value;
-        if (fetchResult.ok && fetchResult.value) {
-          fieldInstances.push(fetchResult.value);
-        } else if (!fetchResult.ok) {
-          errors.push(fetchResult.error);
-        }
-      } else {
-        errors.push(result.reason);
-      }
-    }
-    if (errors.length) {
-      throw errors;
-    }
-    return fieldInstances;
   }
 
   component(model: Box<CardDef>): BoxComponent {
@@ -3472,63 +3287,6 @@ export function getComponent(
     opts,
   );
   return boxComponent;
-}
-
-// TODO we should be able to get rid of this when we decommission the old prerender
-export async function ensureLinksLoaded(card: BaseDef): Promise<void> {
-  // Note that after each async step we check to see if we are still the
-  // current promise, otherwise we bail
-  let done: () => void;
-  let loadLinksPromise = new Promise<void>((res) => (done = res));
-  loadLinksPromises.set(card, loadLinksPromise);
-
-  // wait a full micro task before we start - this is simple debounce
-  await Promise.resolve();
-  if (loadLinksPromises.get(card) !== loadLinksPromise) {
-    return;
-  }
-
-  async function _loadModel<T extends BaseDef>(
-    model: T,
-    stack: BaseDef[] = [],
-  ): Promise<void> {
-    let pendingFields = new Set<string>(
-      Object.keys(
-        getFields(model, {
-          includeComputeds: false, // Not necessary to execute computed to load linked fields
-          usedLinksToFieldsOnly: true,
-        }),
-      ),
-    );
-    do {
-      for (let fieldName of [...pendingFields]) {
-        let value = await getIfReady(model, fieldName as keyof T);
-        pendingFields.delete(fieldName);
-        if (loadLinksPromises.get(card) !== loadLinksPromise) {
-          return;
-        }
-        if (Array.isArray(value)) {
-          for (let item of value) {
-            if (item && isCardOrField(item) && !stack.includes(item)) {
-              await _loadModel(item, [item, ...stack]);
-            }
-          }
-        } else if (isCardOrField(value) && !stack.includes(value)) {
-          await _loadModel(value, [value, ...stack]);
-        }
-      }
-      // TODO should we have a timeout?
-    } while (pendingFields.size > 0);
-  }
-
-  await _loadModel(card);
-  if (loadLinksPromises.get(card) !== loadLinksPromise) {
-    return;
-  }
-
-  // notify glimmer to rerender this card
-  notifyCardTracking(card);
-  done!();
 }
 
 export class Box<T> {

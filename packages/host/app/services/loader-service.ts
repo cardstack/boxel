@@ -35,8 +35,6 @@ export default class LoaderService extends Service {
   @tracked public loader = this.makeInstance();
   private resetTime: number | undefined;
 
-  public isIndexing = false;
-
   constructor(owner: Owner) {
     super(owner);
     this.reset.register(this);
@@ -81,20 +79,8 @@ export default class LoaderService extends Service {
     }
   }
 
-  public setIsIndexing(value: boolean) {
-    this.isIndexing = value;
-  }
-
   private makeInstance() {
     let middlewareStack: FetcherMiddlewareHandler[] = [];
-    middlewareStack.push(async (req, next) => {
-      if (this.isIndexing) {
-        // externally hosted sites may object to our custom header--like
-        // esm.run. Their CORS rules reject this header.
-        req.headers.set('X-Boxel-Building-Index', 'true');
-      }
-      return next(req);
-    });
     middlewareStack.push(async (req, next) => {
       return (await maybeHandleScopedCSSRequest(req)) || next(req);
     });

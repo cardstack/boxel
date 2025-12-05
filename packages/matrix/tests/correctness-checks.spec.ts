@@ -362,7 +362,7 @@ ${brokenContent}
     expect(
       failingCardJson.data.attributes.errors.some((err: string) =>
         err.includes(
-          `${cardId}: Internal Server Error - Encountered error rendering HTML for card: hasError was set to true because we deliberately want to get this card to a broken state`,
+          `hasError was set to true because we deliberately want to get this card to a broken state`,
         ),
       ),
     ).toBe(true);
@@ -376,7 +376,7 @@ ${brokenContent}
         .locator(`[data-test-stack-card="${cardId}"] [data-test-error-message]`)
         .first(),
     ).toContainText(
-      'Encountered error rendering HTML for card: hasError was set to true because we deliberately want to get this card to a broken state',
+      'hasError was set to true because we deliberately want to get this card to a broken state',
     );
 
     // --- Revert the card using a search/replace code patch message and verify correctness is restored ---

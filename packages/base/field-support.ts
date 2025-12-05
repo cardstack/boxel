@@ -1,10 +1,4 @@
-import {
-  getField,
-  isBaseInstance,
-  isNotLoadedError,
-  NotLoaded,
-  primitive,
-} from '@cardstack/runtime-common';
+import { getField, isBaseInstance, primitive } from '@cardstack/runtime-common';
 import type {
   BaseDef,
   BaseDefConstructor,
@@ -60,19 +54,11 @@ export function getter<CardT extends BaseDefConstructor>(
   cardTracking.get(instance);
 
   if (field.computeVia) {
-    try {
-      let value = field.computeVia.bind(instance)();
-      if (value === undefined) {
-        value = field.emptyValue(instance);
-      }
-      return value as BaseInstanceType<CardT>;
-    } catch (e) {
-      if (isNotLoadedError(e)) {
-        // Re-throw NotLoaded errors with the computed field's name instead of the dependency field's name
-        throw new NotLoaded(instance, e.reference, field.name);
-      }
-      throw e;
+    let value = field.computeVia.bind(instance)();
+    if (value === undefined) {
+      value = field.emptyValue(instance);
     }
+    return value as BaseInstanceType<CardT>;
   } else {
     if (deserialized.has(field.name)) {
       return deserialized.get(field.name);
@@ -81,55 +67,6 @@ export function getter<CardT extends BaseDefConstructor>(
     deserialized.set(field.name, value);
     return value;
   }
-}
-
-export async function getIfReady<T extends BaseDef, K extends keyof T>(
-  instance: T,
-  fieldName: K,
-): Promise<T[K] | T[K][] | undefined> {
-  let result: T[K] | T[K][] | undefined;
-  let deserialized = getDataBucket(instance);
-  let field = getField(instance, fieldName as string, { untracked: true });
-  if (!field) {
-    throw new Error(
-      `the field '${fieldName as string} does not exist in card ${
-        instance.constructor.name
-      }'`,
-    );
-  }
-  if (field.computeVia) {
-    // Computed fields should never be passed to this function
-    return undefined;
-  }
-  try {
-    result = instance[fieldName];
-  } catch (e: any) {
-    if (isNotLoadedError(e)) {
-      let field: Field = getField(instance, fieldName as string)!;
-      let result: T[K] | T[K][] | undefined;
-      result = (await field.handleNotLoadedError(instance, e)) as
-        | T[K]
-        | T[K][]
-        | undefined;
-      if (result === undefined) {
-        // For linksToMany fields, preserve the existing array structure instead of
-        // overwriting with a single NotLoadedValue
-        if (field.fieldType === 'linksToMany') {
-          // The field should already have the correct array structure from deserialization
-          // Don't overwrite it with a single NotLoadedValue
-          return undefined;
-        }
-        deserialized.set(
-          fieldName as string,
-          { type: 'not-loaded', reference: e.reference } as NotLoadedValue,
-        );
-      }
-      return result;
-    } else {
-      throw e;
-    }
-  }
-  return result;
 }
 
 export function entangleWithCardTracking(instance: BaseDef) {
@@ -209,20 +146,12 @@ export function resolveFieldConfiguration(
     input: ConfigurationInput<T> | undefined,
   ): FieldConfiguration | undefined {
     if (!input) return undefined;
-    try {
-      if (typeof input === 'function') {
-        return (
-          input as (this: Readonly<T>) => FieldConfiguration | undefined
-        ).call(instance as unknown as T);
-      } else {
-        return input as FieldConfiguration;
-      }
-    } catch (e) {
-      if (isNotLoadedError(e)) {
-        // Treat as undefined for now; a future notifyCardTracking will invalidate cache
-        return undefined;
-      }
-      throw e;
+    if (typeof input === 'function') {
+      return (
+        input as (this: Readonly<T>) => FieldConfiguration | undefined
+      ).call(instance as unknown as T);
+    } else {
+      return input as FieldConfiguration;
     }
   }
 
@@ -403,32 +332,7 @@ export function peekAtField(instance: BaseDef, fieldName: string): any {
       `the card ${instance.constructor.name} does not have a field '${fieldName}'`,
     );
   }
-  try {
-    return getter(instance, field);
-  } catch (e) {
-    // we peek specifically so that we can see the raw values
-    // without worrying about encountering NotLoaded errors
-    if (isNotLoadedError(e)) {
-      // For linksToMany fields (both computed and non-computed), we want to return
-      // the actual array data (which may contain NotLoadedValue entries) rather than a single NotLoadedValue
-      if (field.fieldType === 'linksToMany') {
-        let deserialized = getDataBucket(instance);
-        let rawValue = deserialized.get(field.name);
-        if (rawValue) {
-          return rawValue;
-        }
-        // For computed linksToMany fields that can't be computed, return a special marker
-        // to indicate that the field should be skipped during serialization
-        if (field.computeVia) {
-          return { type: 'skip-serialization' };
-        }
-        // For non-computed fields, fall back to returning empty array for relationshipMeta to handle
-        return [];
-      }
-      return { type: 'not-loaded', reference: e.reference } as NotLoadedValue;
-    }
-    throw e;
-  }
+  return getter(instance, field);
 }
 
 type RelationshipMeta = NotLoadedRelationship | LoadedRelationship;
