@@ -365,8 +365,11 @@ export default class MatrixService extends Service {
               await this.realmServer.setAvailableRealmURLs(
                 e.event.content.realms,
               );
-              await this.loginToRealms();
-              await this.loadMoreAuthRooms(e.event.content.realms);
+              // Only do this after we've completed our overall login
+              if (this.postLoginCompleted) {
+                await this.loginToRealms();
+                await this.loadMoreAuthRooms(e.event.content.realms);
+              }
               break;
             case APP_BOXEL_SYSTEM_CARD_EVENT_TYPE:
               await this.setSystemCard(e.event.content.id);
