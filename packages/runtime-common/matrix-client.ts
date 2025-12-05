@@ -287,6 +287,66 @@ export class MatrixClient {
     return json.chunk;
   }
 
+  async getOpenIdToken(): Promise<
+    | {
+        access_token: string;
+        expires_in: number;
+        matrix_server_name: string;
+        token_type: string;
+      }
+    | undefined
+  > {
+    const url = `_matrix/client/v3/user/${encodeURIComponent(this.access!.userId)}/openid/request_token`;
+    // The body must be an empty JSON object, otherwise this request will fail
+    const response = await this.request(url, 'POST', { body: '{}' });
+    let json:
+      | {
+          access_token: string;
+          expires_in: number;
+          matrix_server_name: string;
+          token_type: string;
+        }
+      | undefined;
+    const text = await response.text();
+    try {
+      json = JSON.parse(text);
+    } catch (e) {
+      throw new Error(
+        `unable to parse response from ${url}, response was not JSON: ${text}`,
+      );
+    }
+    if (!json || !response.ok) {
+      return undefined;
+    } else {
+      return json;
+    }
+  }
+
+  async verifyOpenIdToken(openIdToken: string): Promise<string | undefined> {
+    const url = `_matrix/federation/v1/openid/userinfo?access_token=${encodeURIComponent(
+      openIdToken,
+    )}`;
+    const response = await this.request(url, 'GET', undefined, false);
+    let json:
+      | {
+          sub: string;
+        }
+      | undefined;
+    const text = await response.text();
+    try {
+      json = JSON.parse(text);
+    } catch (e) {
+      throw new Error(
+        `unable to parse response from ${url}, response was not JSON: ${text}`,
+      );
+    }
+    if (!json || !response.ok) {
+      return undefined;
+    } else {
+      return json.sub;
+    }
+  }
+
   async isTokenValid() {
     if (!this.access) {
       return false;

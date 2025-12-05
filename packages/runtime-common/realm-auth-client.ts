@@ -17,6 +17,12 @@ export interface RealmAuthMatrixClientInterface {
   hashMessageWithSecret(message: string): Promise<string>;
   getAccountDataFromServer(type: string): Promise<{ [k: string]: any } | null>;
   setAccountData(type: string, data: any): Promise<any>;
+  getOpenIdToken(): Promise<{
+    access_token: string;
+    expires_in: number;
+    matrix_server_name: string;
+    token_type: string;
+  }>;
 }
 
 interface Options {
@@ -123,38 +129,17 @@ export class RealmAuthClient {
     if (!userId) {
       throw new Error('userId is undefined');
     }
+    let openAccessToken = await this.matrixClient.getOpenIdToken();
     return this.withRetries(() =>
       this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
         method: 'POST',
         headers: {
           Accept: 'application/json',
         },
-        body: JSON.stringify({
-          user: userId,
-        }),
+        body: JSON.stringify(openAccessToken),
       }),
     );
   }
-
-  private async challengeRequest(
-    challenge: string,
-    challengeResponse?: string,
-  ) {
-    return this.withRetries(() =>
-      this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          user: this.matrixClient.getUserId(),
-          challenge,
-          ...(challengeResponse ? { challengeResponse } : {}),
-        }),
-      }),
-    );
-  }
-
   private async withRetries(
     fetchFn: () => ReturnType<typeof globalThis.fetch>,
   ) {
