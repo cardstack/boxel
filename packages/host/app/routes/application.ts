@@ -2,9 +2,7 @@ import Route from '@ember/routing/route';
 
 import ENV from '@cardstack/host/config/environment';
 
-interface Model {}
-
-export default class Application extends Route<Model> {
+export default class Application extends Route {
   async beforeModel(transition: any): Promise<void> {
     // Override the matrix URL for testing
     if (ENV.environment === 'test' || ENV.environment === 'development') {
@@ -16,10 +14,5 @@ export default class Application extends Route<Model> {
         );
       }
     }
-  }
-
-  // TODO is this necessary?
-  async model(): Promise<Model> {
-    return {};
   }
 }
