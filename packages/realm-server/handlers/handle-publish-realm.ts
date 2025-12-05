@@ -33,7 +33,7 @@ import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
 const log = logger('handle-publish');
 
 function rewriteHostHomeForPublishedRealm(
-  hostHome: string,
+  hostHome: string | undefined | null | unknown,
   sourceRealmURL: string,
   publishedRealmURL: string,
 ): string | undefined {
