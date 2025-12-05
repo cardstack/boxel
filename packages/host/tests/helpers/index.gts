@@ -6,6 +6,7 @@ import {
   visit,
   settled,
 } from '@ember/test-helpers';
+import { buildWaiter } from '@ember/test-waiters';
 import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -407,6 +408,9 @@ export async function makeRenderer() {
   );
 }
 
+const indexerWaiter = buildWaiter('local-indexer');
+const setupRealmWaiter = buildWaiter('setup-test-realm');
+
 class MockLocalIndexer extends Service {
   @tracked renderError: string | undefined;
   @tracked prerenderStatus: 'ready' | 'loading' | 'unusable' | undefined;
@@ -445,8 +449,8 @@ class MockLocalIndexer extends Service {
     this.#adapter = adapter;
     this.#indexWriter = indexWriter;
     await registerRunner(
-      this.#fromScratch.bind(this),
-      this.#incremental.bind(this),
+      this.wrapIndexRun(this.#fromScratch.bind(this)),
+      this.wrapIndexRun(this.#incremental.bind(this)),
     );
   }
   get adapter() {
@@ -472,6 +476,20 @@ class MockLocalIndexer extends Service {
   }
   setRenderError(error: string) {
     this.renderError = error;
+  }
+
+  private wrapIndexRun<Args, Result>(
+    fn: (args: Args) => Promise<Result>,
+  ): (args: Args) => Promise<Result> {
+    return async (args: Args) => {
+      let token = indexerWaiter.beginAsync();
+
+      try {
+        return await fn(args);
+      } finally {
+        indexerWaiter.endAsync(token);
+      }
+    };
   }
 }
 
@@ -733,6 +751,8 @@ async function setupTestRealm({
     '__useHeadlessChromePrerender',
   );
   let previousHeadlessFlag = (globalThis as any).__useHeadlessChromePrerender;
+  let setupRealmWaiterToken = setupRealmWaiter.beginAsync();
+
   // default to all tests using headless chrome
   if (usePrerenderer) {
     (globalThis as any).__useHeadlessChromePrerender = true;
@@ -846,6 +866,8 @@ async function setupTestRealm({
 
     return { realm, adapter };
   } finally {
+    setupRealmWaiter.endAsync(setupRealmWaiterToken);
+
     if (hadHeadlessFlag) {
       (globalThis as any).__useHeadlessChromePrerender = previousHeadlessFlag;
     } else {

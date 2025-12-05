@@ -1,10 +1,13 @@
 import Service, { service } from '@ember/service';
 
+import { buildWaiter } from '@ember/test-waiters';
 import { tracked } from '@glimmer/tracking';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import type NetworkService from './network';
+
+const realmEventWaiter = buildWaiter('realm-event-relay');
 
 export default class MessageService extends Service {
   @tracked listenerCallbacks: Map<string, ((ev: RealmEventContent) => void)[]> =
@@ -42,9 +45,16 @@ export default class MessageService extends Service {
   }
 
   relayRealmEvent(realmURL: string, event: RealmEventContent) {
-    this.listenerCallbacks.get(realmURL)?.forEach((cb) => {
-      cb(event);
-    });
+    let token: unknown | undefined;
+    token = realmEventWaiter.beginAsync();
+
+    try {
+      this.listenerCallbacks.get(realmURL)?.forEach((cb) => {
+        cb(event);
+      });
+    } finally {
+      realmEventWaiter.endAsync(token);
+    }
   }
 }
 
