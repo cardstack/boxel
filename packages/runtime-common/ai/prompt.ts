@@ -984,9 +984,9 @@ type FormattedCorrectnessSummary = {
   hasErrors: boolean;
 };
 
-const SEARCH_REPLACE_FIX_INSTRUCTION = `1. Propose fixes for the above errors by using a SEARCH/REPLACE block (DO NOT use the patchCardInstance tool function, because it will not work for broken cards).
+const SEARCH_REPLACE_FIX_INSTRUCTION = `1. Propose fixes for the above errors by using one or more SEARCH/REPLACE blocks (DO NOT use the patchCardInstance tool function, because it will not work for broken cards).
 2. You MUST re-fetch the files that have errors so that you can see their updated content before proposing fixes.
-3. Respond very briefly that there is an issue with the file (1 sentence max) that you will attempt to fix and do not mention SEARCH/REPLACE blocks in your prose.`;
+3. Respond very briefly that there is an issue with the file(s) (1 sentence max) that you will attempt to fix and do not mention SEARCH/REPLACE blocks in your prose.`;
 
 const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
   'Summarize the correctness results above in one short sentence confirming that the target is now fixed. Mention any warnings if they exist.';

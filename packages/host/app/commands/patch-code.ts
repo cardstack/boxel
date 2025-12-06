@@ -97,6 +97,14 @@ export default class PatchCodeCommand extends HostBaseCommand<
         clientRequestId,
         roomId,
       );
+      let normalizedTarget = finalFileUrl.endsWith('.json')
+        ? finalFileUrl.replace(/\.json$/, '')
+        : finalFileUrl;
+      this.commandService.trackInvalidationAfterAIAssistantRequest(
+        normalizedTarget,
+        clientRequestId,
+        roomId,
+      );
     }
 
     let commandModule = await this.loadCommandModule();
@@ -265,13 +273,13 @@ export default class PatchCodeCommand extends HostBaseCommand<
     content: string,
     clientRequestId: string,
     roomId: string,
-  ) {
+  ): string | undefined {
     if (!fileUrl.endsWith('.json')) {
-      return;
+      return undefined;
     }
 
     if (!isCardDocumentString(content)) {
-      return;
+      return undefined;
     }
 
     let normalizedCardId = fileUrl.replace(/\.json$/, '');
@@ -280,5 +288,6 @@ export default class PatchCodeCommand extends HostBaseCommand<
       clientRequestId,
       roomId,
     );
+    return normalizedCardId;
   }
 }

@@ -35,6 +35,7 @@ import handleRealmAuth from './handlers/handle-realm-auth';
 import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-claimed-domain';
 import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain';
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain';
+import handlePrerenderProxy from './handlers/handle-prerender-proxy';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -81,6 +82,7 @@ export type CreateRoutesArgs = {
     boxelSite?: string;
   };
   assetsURL: URL;
+  prerendererUrl?: string;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -116,6 +118,24 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_request-forward',
     jwtMiddleware(args.realmSecretSeed),
     handleRequestForward({
+      dbAdapter: args.dbAdapter,
+    }),
+  );
+  router.post(
+    '/_prerender-card',
+    jwtMiddleware(args.realmSecretSeed),
+    handlePrerenderProxy({
+      path: '/prerender-card',
+      prerendererUrl: args.prerendererUrl,
+      dbAdapter: args.dbAdapter,
+    }),
+  );
+  router.post(
+    '/_prerender-module',
+    jwtMiddleware(args.realmSecretSeed),
+    handlePrerenderProxy({
+      path: '/prerender-module',
+      prerendererUrl: args.prerendererUrl,
       dbAdapter: args.dbAdapter,
     }),
   );
