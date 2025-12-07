@@ -18,7 +18,6 @@ NODE_ENV=test \
   --transpileOnly worker-manager \
   --port=4211 \
   --matrixURL='http://localhost:8008' \
-  --distURL="${HOST_URL:-http://localhost:4200}" \
   --prerendererUrl="${PRERENDER_URL}" \
   \
   --fromUrl='http://localhost:4202/node-test/' \

@@ -1,7 +1,6 @@
 import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
-import type { RunnerOpts } from '@cardstack/runtime-common';
 import {
   VirtualNetwork,
   authorizationMiddleware,
@@ -17,23 +16,6 @@ import { authErrorEventMiddleware } from '../utils/auth-error-guard';
 import type LoaderService from './loader-service';
 import type RealmService from './realm';
 import type ResetService from './reset';
-
-const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
-
-function getNativeFetch(): typeof fetch {
-  if (isFastBoot) {
-    let optsId = (globalThis as any).runnerOptsId;
-    if (optsId == null) {
-      throw new Error(`Runner Options Identifier was not set`);
-    }
-    let getRunnerOpts = (globalThis as any).getRunnerOpts as (
-      optsId: number,
-    ) => RunnerOpts;
-    return getRunnerOpts(optsId)._fetch;
-  } else {
-    return fetch;
-  }
-}
 
 export default class NetworkService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
@@ -61,12 +43,6 @@ export default class NetworkService extends Service {
       return this.fetch; // "nativeFetch" already handles auth
     }
     return fetcher(this.fetch, [
-      async (req, next) => {
-        if (this.loaderService.isIndexing) {
-          req.headers.set('X-Boxel-Building-Index', 'true');
-        }
-        return next(req);
-      },
       authorizationMiddleware(this.realm),
       authErrorEventMiddleware(),
     ]);
@@ -77,7 +53,7 @@ export default class NetworkService extends Service {
   }
 
   private makeVirtualNetwork() {
-    let virtualNetwork = new VirtualNetwork(getNativeFetch());
+    let virtualNetwork = new VirtualNetwork(globalThis.fetch);
     if (!this.fastboot.isFastBoot) {
       let resolvedBaseRealmURL = new URL(
         withTrailingSlash(config.resolvedBaseRealmURL),

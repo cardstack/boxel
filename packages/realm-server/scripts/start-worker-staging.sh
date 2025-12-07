@@ -12,7 +12,6 @@ NODE_NO_WARNINGS=1 \
   --highPriorityCount="${WORKER_HIGH_PRIORITY_COUNT:-0}" \
   --prerendererUrl='http://boxel-prerender-manager.boxel-staging-internal:4222' \
   --matrixURL='https://matrix-staging.stack.cards' \
-  --distURL='https://boxel-host-staging.stack.cards' \
   \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='https://realms-staging.stack.cards/base/' \

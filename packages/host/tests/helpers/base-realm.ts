@@ -87,7 +87,6 @@ let isCard: (typeof CardAPIModule)['isCard'];
 let linksTo: (typeof CardAPIModule)['linksTo'];
 let linksToMany: (typeof CardAPIModule)['linksToMany'];
 let MaybeBase64Field: (typeof CardAPIModule)['MaybeBase64Field'];
-let ensureLinksLoaded: (typeof CardAPIModule)['ensureLinksLoaded'];
 let createFromSerialized: (typeof CardAPIModule)['createFromSerialized'];
 let updateFromSerialized: (typeof CardAPIModule)['updateFromSerialized'];
 let serializeCard: (typeof CardAPIModule)['serializeCard'];
@@ -203,7 +202,6 @@ async function initialize() {
     linksTo,
     linksToMany,
     getFields,
-    ensureLinksLoaded,
     createFromSerialized,
     updateFromSerialized,
     serializeCard,
@@ -263,7 +261,6 @@ export {
   isCard,
   linksTo,
   linksToMany,
-  ensureLinksLoaded,
   MaybeBase64Field,
   createFromSerialized,
   updateFromSerialized,

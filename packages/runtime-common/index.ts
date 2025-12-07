@@ -174,7 +174,6 @@ export * from './formats';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
 export { Loader };
-export { NotLoaded, isNotLoadedError } from './not-loaded';
 export {
   cardTypeDisplayName,
   cardTypeIcon,

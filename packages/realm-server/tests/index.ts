@@ -16,6 +16,9 @@
   }) as typeof setTimeout;
 }
 
+import * as ContentTagGlobal from 'content-tag';
+(globalThis as any).ContentTagGlobal = ContentTagGlobal;
+
 import QUnit from 'qunit';
 
 QUnit.config.testTimeout = 60000;

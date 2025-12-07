@@ -1313,30 +1313,6 @@ export class Realm {
 
     try {
       if (!isLocal) {
-        // Headless Chrome prerenders often run while the realm is still starting up, so they need to bypass
-        // the startup wait. We still enforce permissions below.
-        if (
-          !(globalThis as any).__useHeadlessChromePrerender &&
-          !request.headers.get('X-Boxel-Building-Index')
-        ) {
-          // for legacy indexer: local requests are allowed to query the realm as the index is being built up
-          let timeout = await Promise.race<void | Error>([
-            this.#startedUp.promise,
-            new Promise((resolve) =>
-              setTimeout(() => {
-                resolve(
-                  new Error(
-                    `Timeout waiting for realm ${this.url} to become ready`,
-                  ),
-                );
-              }, 60 * 1000).unref?.(),
-            ),
-          ]);
-          if (timeout) {
-            return new Response(timeout.message, { status: 500 });
-          }
-        }
-
         let requiredPermission: RealmAction;
         if (
           ['_permissions'].includes(localPath) ||
@@ -2372,14 +2348,9 @@ export class Realm {
       localPath = 'index';
     }
 
-    let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Building-Index'),
-    );
-
     let url = this.paths.fileURL(localPath.replace(/\.json$/, ''));
     let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
       loadLinks: true,
-      useWorkInProgressIndex,
     });
     let start = Date.now();
     try {

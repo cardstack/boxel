@@ -1175,7 +1175,7 @@ function getField(
     if (currentField(pathTraveled) === '_cardType') {
       // this is a little awkward--we have the need to treat '_cardType' as a
       // type of string field that we can query against from the index (e.g. the
-      // cards grid sorts by the card's display name). current-run is injecting
+      // cards grid sorts by the card's display name). index-runner is injecting
       // this into the searchDoc during index time.
       return {
         type: 'contains',

@@ -687,12 +687,24 @@ module(basename(__filename), function () {
           'Should return AI Gateway response',
         );
 
-        // Verify fetch was called correctly
-        assert.true(mockFetch.calledOnce, 'Fetch should be called once');
+        // Verify fetch was called correctly (at least once—there can be unrelated background fetches)
+        assert.true(mockFetch.callCount >= 1, 'Fetch should be called');
         const calls = mockFetch.getCalls();
 
-        // Check that the URL includes the API key as a parameter
-        const callHeaders = calls[0].args[1]?.headers as Record<string, string>;
+        // Find the Cloudflare call we care about
+        const cloudflareCall = calls.find((call) => {
+          const urlArg = call.args[0];
+          const url = typeof urlArg === 'string' ? urlArg : urlArg.toString();
+          return url.includes(
+            'gateway.ai.cloudflare.com/v1/4a94a1eb2d21bbbe160234438a49f687/boxel/',
+          );
+        });
+        assert.ok(cloudflareCall, 'Cloudflare request should be made');
+
+        const callHeaders = cloudflareCall!.args[1]?.headers as Record<
+          string,
+          string
+        >;
         assert.strictEqual(
           callHeaders['cf-aig-authorization'],
           'Bearer cloudflare-api-key',

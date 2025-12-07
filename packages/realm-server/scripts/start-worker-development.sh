@@ -24,7 +24,6 @@ NODE_ENV=development \
   --highPriorityCount="${WORKER_HIGH_PRIORITY_COUNT:-0}" \
   --port=4210 \
   --matrixURL='http://localhost:8008' \
-  --distURL="${HOST_URL:-http://localhost:4200}" \
   --prerendererUrl="${PRERENDER_URL}" \
   \
   --fromUrl='https://cardstack.com/base/' \
