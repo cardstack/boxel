@@ -231,7 +231,7 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
     let newReferences = this._instances.map((i) => i.id);
     for (let card of this._instances) {
       if (card?.id) {
-        this.store.set(card.id, card);
+        this.store.add(card);
       }
     }
     let referencesToDrop = difference(oldReferences, newReferences);
