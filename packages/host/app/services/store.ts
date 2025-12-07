@@ -48,7 +48,6 @@ import {
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
   type ErrorEntry,
-  parseSearchURL,
 } from '@cardstack/runtime-common';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
@@ -730,7 +729,6 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
     let invalidations = event.invalidations as string[];
-    let resolvedRealmHref = realmHref;
 
     if (invalidations.find((i) => hasExecutableExtension(i))) {
       // the invalidation included code changes too. in this case we
