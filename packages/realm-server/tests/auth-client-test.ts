@@ -9,8 +9,11 @@ import { VirtualNetwork } from '@cardstack/runtime-common';
 import jwt from 'jsonwebtoken';
 import { basename } from 'path';
 
-function createJWT(expiresIn: string | number) {
-  return jwt.sign({}, 'secret', { expiresIn });
+function createJWT(
+  expiresIn: string | number,
+  payload: Record<string, unknown> = {},
+) {
+  return jwt.sign(payload, 'secret', { expiresIn });
 }
 
 module(basename(__filename), function () {
@@ -43,6 +46,14 @@ module(basename(__filename), function () {
         async setAccountData() {
           return Promise.resolve();
         },
+        async getOpenIdToken() {
+          return {
+            access_token: 'matrix-openid-token',
+            expires_in: 3600,
+            matrix_server_name: 'synapse',
+            token_type: 'Bearer',
+          };
+        },
       } as RealmAuthMatrixClientInterface;
 
       let virtualNetwork = new VirtualNetwork();
@@ -55,25 +66,12 @@ module(basename(__filename), function () {
 
       // [] notation is a hack to make TS happy so we can set private properties with mocks
       client['initiateSessionRequest'] = async function (): Promise<Response> {
-        return {
-          status: 401,
-          json() {
-            return Promise.resolve({
-              room: 'room',
-              challenge: 'challenge',
-            });
-          },
-        } as Response;
-      };
-      client['challengeRequest'] = async function (): Promise<Response> {
-        return {
-          ok: true,
+        return new Response(null, {
+          status: 201,
           headers: {
-            get() {
-              return createJWT('1h');
-            },
+            Authorization: createJWT('1h', { sessionRoom: 'room' }),
           },
-        } as unknown as Response;
+        });
       };
     });
 
