@@ -96,14 +96,7 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 
 You can also use `start:development` if you want the functionality of `start:all`, but without running the test realms. `start:development` will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /experiments realm. In order to use `start:development` you must also make sure to run `start:worker-development` in order to start the workers (which are normally started in `start:all`.
 
-### Card Pre-rendering (Deprecated)
-
-In order to support server-side rendered cards, this project incorporates FastBoot. By default `pnpm start` in the `packages/host` workspace will serve server-side rendered cards. Specifically, the route `/render?url=card_url&format=isolated` will serve pre-rendered cards. There is additional build overhead required to serve pre-rendered cards. If you are not working on the `/render` route in the host, then you would likely benefit from disabling FastBoot when starting up the host server so that you can have faster rebuilds. To do so, you can start the host server using:
-`FASTBOOT_DISABLED=true pnpm start`.
-
-The realm server also uses FastBoot to pre-render card html. The realm server boots up the host app in a FastBoot container. The realm server will automatically look for the host app's `dist/` output to use when booting up the infrastructure for pre-rendering cards. Make sure to start to the host app first before starting the realm server so that the host app's `dist/` output will be generated. If you are making changes that effect the `/render` route in the host app, you'll want to restart the host app (or run `pnpm build`) in order for the realm server to pick up your changes.
-
-### Headless-Chrome Pre-rendering
+### Card Pre-rendering
 
 Boxel supports server-side rendering of cards via a lightweight prerender service and an optional manager that coordinates multiple services.
 

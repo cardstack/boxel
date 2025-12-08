@@ -26,7 +26,6 @@ import type ResetService from './reset';
 const log = logger('loader-service');
 
 export default class LoaderService extends Service {
-  @service declare private fastboot: { isFastBoot: boolean };
   @service declare private realmInfoService: RealmInfoService;
   @service declare private realm: RealmService;
   @service declare private network: NetworkService;
@@ -101,10 +100,8 @@ export default class LoaderService extends Service {
       return response;
     });
 
-    if (!this.fastboot.isFastBoot) {
-      middlewareStack.push(authorizationMiddleware(this.realm));
-      middlewareStack.push(authErrorEventMiddleware());
-    }
+    middlewareStack.push(authorizationMiddleware(this.realm));
+    middlewareStack.push(authErrorEventMiddleware());
     let fetch = fetcher(this.network.fetch, middlewareStack);
     let loader = new Loader(fetch, this.network.resolveImport);
     return loader;
