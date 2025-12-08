@@ -78,38 +78,62 @@ const fullReindex: Task<FullReindexArgs, void> = ({
       args.cooldownSeconds,
     );
 
-    let batches: RealmReindexTarget[][] = [];
-    for (let i = 0; i < realmsWithUsernames.length; i += batchSize) {
-      batches.push(realmsWithUsernames.slice(i, i + batchSize));
-    }
-
-    let totalBatches = batches.length;
-    for (let [index, batch] of batches.entries()) {
-      if (batch.length === 0) {
+    let enqueueFailures: { target: RealmReindexTarget; error: Error }[] = [];
+    for (let target of realmsWithUsernames) {
+      let { realmUrl, realmUsername } = target;
+      try {
+        await enqueueReindexRealmJob(
+          realmUrl,
+          realmUsername,
+          queuePublisher,
+          dbAdapter,
+          systemInitiatedPriority,
+        );
+      } catch (error: any) {
+        log.error(
+          `${jobIdentity(jobInfo)} failed to enqueue from-scratch job for ${realmUrl}`,
+          error,
+        );
+        enqueueFailures.push({
+          target,
+          error: error instanceof Error ? error : new Error(String(error)),
+        });
         continue;
       }
-      let timeout = fullReindexBatchTimeoutSeconds(
-        batch.length,
-        cooldownSeconds,
-      );
-      let concurrencySuffix = (index % concurrency) + 1;
-      await queuePublisher.publish<void>({
-        jobType: FULL_REINDEX_BATCH_JOB,
-        concurrencyGroup: `${FULL_REINDEX_BATCH_CONCURRENCY_GROUP}-${concurrencySuffix}`,
-        timeout,
-        priority: systemInitiatedPriority,
-        args: {
-          realms: batch,
-          cooldownSeconds,
-          batchNumber: index + 1,
-          totalBatches,
-        },
-      });
     }
 
-    log.info(
-      `${jobIdentity(jobInfo)} scheduled full reindex for ${realmsWithUsernames.length} realm(s) across ${totalBatches} batch(es) with batch size ${batchSize} and cooldown ${cooldownSeconds}s`,
-    );
+    // let batches: RealmReindexTarget[][] = [];
+    // for (let i = 0; i < realmsWithUsernames.length; i += batchSize) {
+    //   batches.push(realmsWithUsernames.slice(i, i + batchSize));
+    // }
+
+    // let totalBatches = batches.length;
+    // for (let [index, batch] of batches.entries()) {
+    //   if (batch.length === 0) {
+    //     continue;
+    //   }
+    //   let timeout = fullReindexBatchTimeoutSeconds(
+    //     batch.length,
+    //     cooldownSeconds,
+    //   );
+    //   let concurrencySuffix = (index % concurrency) + 1;
+    //   await queuePublisher.publish<void>({
+    //     jobType: FULL_REINDEX_BATCH_JOB,
+    //     concurrencyGroup: `${FULL_REINDEX_BATCH_CONCURRENCY_GROUP}-${concurrencySuffix}`,
+    //     timeout,
+    //     priority: systemInitiatedPriority,
+    //     args: {
+    //       realms: batch,
+    //       cooldownSeconds,
+    //       batchNumber: index + 1,
+    //       totalBatches,
+    //     },
+    //   });
+    // }
+
+    // log.info(
+    //   `${jobIdentity(jobInfo)} scheduled full reindex for ${realmsWithUsernames.length} realm(s) across ${totalBatches} batch(es) with batch size ${batchSize} and cooldown ${cooldownSeconds}s`,
+    // );
 
     reportStatus(jobInfo, 'finish');
   };
