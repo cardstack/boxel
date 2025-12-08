@@ -58,16 +58,20 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     let targetUrl = `${testRealm.url}dependencies-card.gts`;
     let response = await request
       .get(`/_dependencies?url=${encodeURIComponent(targetUrl)}`)
-      .set('Accept', SupportedMimeType.JSON);
+      .set('Accept', SupportedMimeType.JSONAPI);
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
-    assert.true(response.body.length > 0, 'returns at least one entry');
-
-    let entry = response.body[0];
-    assert.strictEqual(entry.canonicalUrl, targetUrl);
-    assert.strictEqual(entry.realmUrl, testRealm.url);
     assert.true(
-      entry.dependencies.includes('https://cardstack.com/base/string'),
+      Array.isArray(response.body.data) && response.body.data.length > 0,
+      'returns at least one entry',
+    );
+
+    let entry = response.body.data[0];
+    assert.strictEqual(entry.id, targetUrl);
+    assert.strictEqual(entry.attributes.canonicalUrl, targetUrl);
+    assert.strictEqual(entry.attributes.realmUrl, testRealm.url);
+    assert.true(
+      entry.attributes.dependencies.includes('https://cardstack.com/base/string'),
     );
   });
 
@@ -76,11 +80,11 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
       .get(
         `/_dependencies?url=${encodeURIComponent(`${testRealm.url}missing-resource.gts`)}`,
       )
-      .set('Accept', SupportedMimeType.JSON);
+      .set('Accept', SupportedMimeType.JSONAPI);
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
     assert.deepEqual(
-      response.body,
+      response.body.data,
       [],
       'missing resource returns an empty array',
     );
@@ -89,7 +93,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
   test('returns bad request when url parameter is missing', async function (assert) {
     let response = await request
       .get('/_dependencies')
-      .set('Accept', SupportedMimeType.JSON);
+      .set('Accept', SupportedMimeType.JSONAPI);
 
     assert.strictEqual(response.status, 400, 'HTTP 400 status');
 

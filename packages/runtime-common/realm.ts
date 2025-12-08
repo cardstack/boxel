@@ -481,7 +481,7 @@ export class Realm {
       )
       .get(
         '/_dependencies',
-        SupportedMimeType.JSON,
+        SupportedMimeType.JSONAPI,
         this.getDependencies.bind(this),
       )
       .get(
@@ -2838,10 +2838,22 @@ export class Realm {
       dependencies: parseDeps(row.deps),
     }));
 
+    let doc = {
+      data: entries.map((entry) => ({
+        type: 'dependencies',
+        id: entry.canonicalUrl,
+        attributes: {
+          canonicalUrl: entry.canonicalUrl,
+          realmUrl: entry.realmUrl,
+          dependencies: entry.dependencies,
+        },
+      })),
+    };
+
     return createResponse({
-      body: JSON.stringify(entries, null, 2),
+      body: JSON.stringify(doc, null, 2),
       init: {
-        headers: { 'content-type': SupportedMimeType.JSON },
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
       },
       requestContext,
     });
@@ -2964,7 +2976,7 @@ export class Realm {
       let response: Response;
       try {
         response = await this.__fetchForTesting(endpoint, {
-          headers: { Accept: SupportedMimeType.JSON },
+          headers: { Accept: SupportedMimeType.JSONAPI },
         });
       } catch (error: any) {
         this.#log.warn(
@@ -2981,11 +2993,37 @@ export class Realm {
           `Failed to fetch remote resource index for ${resourceUrl} (${response.status})`,
         );
       }
-      let payload = (await response.json()) as ResourceIndexEntry[];
-      let normalized = payload.map((entry) => ({
-        ...entry,
-        realmUrl: ensureTrailingSlash(entry.realmUrl),
-      }));
+      let payload = (await response.json()) as {
+        data?: Array<{
+          id?: string;
+          attributes?: {
+            canonicalUrl?: string;
+            realmUrl?: string;
+            dependencies?: unknown;
+          };
+        }>;
+      };
+      let normalized = (payload.data ?? [])
+        .map((resource) => {
+          let realmUrl = resource.attributes?.realmUrl;
+          let canonicalUrl = resource.attributes?.canonicalUrl ?? resource.id;
+          if (!realmUrl || !canonicalUrl) {
+            return undefined;
+          }
+
+          let dependencies = Array.isArray(resource.attributes?.dependencies)
+            ? resource.attributes.dependencies.filter(
+                (dep): dep is string => typeof dep === 'string',
+              )
+            : [];
+
+          return {
+            canonicalUrl,
+            realmUrl: ensureTrailingSlash(realmUrl),
+            dependencies,
+          };
+        })
+        .filter((entry): entry is ResourceIndexEntry => Boolean(entry));
       let remoteRealm = normalized[0]?.realmUrl;
       if (remoteRealm) {
         remoteRealmBaseCache.set(remoteRealm, base);
