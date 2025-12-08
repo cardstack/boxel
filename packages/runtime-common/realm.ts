@@ -3110,7 +3110,7 @@ export class Realm {
 
     let doc = {
       data: {
-        type: 'has-private-endpoints',
+        type: 'has-private-dependencies',
         id: sourceRealmURL,
         attributes: {
           publishable: result.publishable,
