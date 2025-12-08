@@ -3768,9 +3768,6 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
   if (!parsed) {
     return false;
   }
-  if (parsed.protocol === 'data:') {
-    return true;
-  }
   if (parsed.hostname === 'boxel-icons.boxel.ai') {
     return true;
   }
