@@ -167,25 +167,12 @@ export async function sendPromptAsDebugMessage(
 }
 
 function getErrorMessage(error: any): string {
-  // Try to unwrap OpenAI client errors before falling back to generic messaging
-  let openAIMessage =
-    (() => {
-      let raw = error?.error?.metadata?.raw;
-      if (typeof raw === 'string') {
-        try {
-          return JSON.parse(raw)?.error?.message;
-        } catch {
-          return undefined;
-        }
-      }
-      return undefined;
-    })() || error?.error?.message;
-
-  if (openAIMessage) {
-    return `OpenAI error: ${error?.name ?? 'APIError'} - ${openAIMessage}`;
+  let providerError = getProviderError(error);
+  if (providerError) {
+    return `${providerError.name} error: ${providerError.message}`;
   }
   if (error instanceof OpenAIError) {
-    return `OpenAI error: ${error.name} - ${error.message}`;
+    return `${error.name} - ${error.message}`;
   }
   if (typeof error === 'string') {
     return error;
@@ -194,6 +181,25 @@ function getErrorMessage(error: any): string {
     return error.message;
   }
   return 'Unknown error';
+}
+
+function getProviderError(
+  error: any,
+): { name: string; message: string } | null {
+  let metadata = error?.error?.metadata;
+  if (metadata) {
+    try {
+      let raw = JSON.parse(metadata.raw);
+      return {
+        name: metadata.provider_name,
+        message: raw.error.message,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
 }
 
 interface CacheEntry {
