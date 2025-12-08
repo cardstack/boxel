@@ -230,8 +230,12 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
     }
     let newReferences = this._instances.map((i) => i.id);
     for (let card of this._instances) {
-      if (card?.id) {
-        this.store.add(card);
+      let maybeInstance = card?.id ? this.store.peek(card.id) : undefined;
+      if (!maybeInstance && card.type !== 'not-loaded') {
+        await this.store.add(
+          card,
+          { doNotPersist: true }, // search results always have id's
+        );
       }
     }
     let referencesToDrop = difference(oldReferences, newReferences);

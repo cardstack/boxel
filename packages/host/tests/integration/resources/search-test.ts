@@ -29,6 +29,7 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 import type { CardDocFiles } from '../../helpers';
+import type CardService from '@cardstack/host/services/card-service';
 
 class StubRealmService extends RealmService {
   realmOfURL(_url: URL) {
@@ -323,6 +324,57 @@ module(`Integration | search resource`, function (hooks) {
     await search.loaded;
     assert.strictEqual(search.instances[0].id, `${testRealmURL}card-2`);
     assert.strictEqual(search.instances[0].constructor.name, 'Book');
+  });
+
+  test(`search is not re-run when query and realms are unchanged`, async function (assert) {
+    let cardService = getService<CardService>('card-service');
+    let fetchCalls = 0;
+    let originalFetchJSON = cardService.fetchJSON.bind(cardService);
+    cardService.fetchJSON = (async (...args) => {
+      fetchCalls++;
+      return await originalFetchJSON(...args);
+    }) as CardService['fetchJSON'];
+
+    try {
+      let query: Query = {
+        filter: {
+          on: {
+            module: `${testRealmURL}book`,
+            name: 'Book',
+          },
+          eq: {
+            'author.lastName': 'Jones',
+          },
+        },
+      };
+      let args = {
+        query,
+        realms: [testRealmURL],
+        isLive: false,
+        isAutoSaved: false,
+        storeService,
+        owner: this.owner,
+      } satisfies SearchResourceArgs['named'];
+
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: args,
+      }));
+
+      await search.loaded;
+      assert.strictEqual(fetchCalls, 1, 'initial search performed once');
+
+      // Re-run modify with the same args; this should short-circuit and avoid another fetch
+      search.modify([], args);
+      await settled();
+
+      assert.strictEqual(
+        fetchCalls,
+        1,
+        'search is not invoked again when query/realms are unchanged',
+      );
+    } finally {
+      cardService.fetchJSON = originalFetchJSON;
+    }
   });
 
   test(`can perform a live search for cards`, async function (assert) {

@@ -717,10 +717,7 @@ export default class StoreService extends Service implements StoreInterface {
     });
   }
 
-  private handleInvalidations = (
-    event: RealmEventContent,
-    realmHref: string,
-  ) => {
+  private handleInvalidations = (event: RealmEventContent) => {
     if (event.eventName !== 'index') {
       return;
     }
@@ -1402,7 +1399,7 @@ export default class StoreService extends Service implements StoreInterface {
     if (!subscription) {
       this.subscriptions.set(realm, {
         unsubscribe: this.messageService.subscribe(realm, (event) =>
-          this.handleInvalidations(event, realm),
+          this.handleInvalidations(event),
         ),
       });
     }

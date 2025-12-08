@@ -1,5 +1,6 @@
 import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
+import { getOwner } from '@ember/owner';
 import type {
   RouteInfo,
   RouteInfoWithAttributes,
@@ -12,7 +13,6 @@ import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
 import { didCancel, enqueueTask } from 'ember-concurrency';
-import { getOwner } from '@ember/owner';
 
 import {
   CardError,
