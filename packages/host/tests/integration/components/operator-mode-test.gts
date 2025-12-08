@@ -1986,7 +1986,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom(
         '[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]',
       )
-      .hasText('Publishing Packet - Untitled Publishing Packet');
+      .hasText('Publishing Packet - Untitled');
   });
 
   test(`can search by card title when opening card chooser from a field editor`, async function (assert) {
