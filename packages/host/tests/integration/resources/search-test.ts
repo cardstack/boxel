@@ -15,6 +15,7 @@ import {
 import type { Args as SearchResourceArgs } from '@cardstack/host/resources/search';
 import { SearchResource } from '@cardstack/host/resources/search';
 
+import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
@@ -29,7 +30,6 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 import type { CardDocFiles } from '../../helpers';
-import type CardService from '@cardstack/host/services/card-service';
 
 class StubRealmService extends RealmService {
   realmOfURL(_url: URL) {
@@ -327,7 +327,7 @@ module(`Integration | search resource`, function (hooks) {
   });
 
   test(`search is not re-run when query and realms are unchanged`, async function (assert) {
-    let cardService = getService<CardService>('card-service');
+    let cardService = getService('card-service') as CardService;
     let fetchCalls = 0;
     let originalFetchJSON = cardService.fetchJSON.bind(cardService);
     cardService.fetchJSON = (async (...args) => {

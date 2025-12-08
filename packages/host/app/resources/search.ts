@@ -231,7 +231,10 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
     let newReferences = this._instances.map((i) => i.id);
     for (let card of this._instances) {
       let maybeInstance = card?.id ? this.store.peek(card.id) : undefined;
-      if (!maybeInstance && card.type !== 'not-loaded') {
+      if (
+        !maybeInstance &&
+        (card as unknown as { type?: string })?.type !== 'not-loaded' // TODO: under what circumstances could this happen?
+      ) {
         await this.store.add(
           card,
           { doNotPersist: true }, // search results always have id's

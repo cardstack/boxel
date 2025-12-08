@@ -668,7 +668,8 @@ export class Realm {
     };
 
     for (let [path, content] of files) {
-      let currentWriteType = hasExecutableExtension(path)
+      let url = this.paths.fileURL(path);
+      let currentWriteType: 'module' | 'instance' | undefined = hasExecutableExtension(path)
         ? 'module'
         : path.endsWith('.json') && isCardDocumentString(content)
           ? 'instance'
@@ -707,7 +708,6 @@ export class Realm {
         await performIndex();
         urls = [];
       }
-      let url = this.paths.fileURL(path);
       this.sendIndexInitiationEvent(url.href);
       await this.trackOwnWrite(path);
       let { lastModified } = await this.#adapter.write(path, content);

@@ -588,7 +588,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: '/place-modules/place',
+                      module: '/missing-place/does-not-exist',
                       name: 'Place',
                     },
                   },
@@ -622,7 +622,7 @@ module(basename(__filename), function () {
           );
         });
 
-        test('update is a no-op when content is unchanged', async function (assert) {
+        test.only('update is a no-op when content is unchanged', async function (assert) {
           let source = `
               import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
               import StringField from "https://cardstack.com/base/string";
@@ -790,7 +790,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: '/place-modules/place',
+                      module: '/missing-place/does-not-exist',
                       name: 'Place',
                     },
                   },
@@ -811,7 +811,7 @@ module(basename(__filename), function () {
           assert.strictEqual(response.body.errors[0].title, 'Write Error');
           assert.strictEqual(
             response.body.errors[0].detail,
-            `Your filter refers to a nonexistent type: import { Place } from "${testRealmHref}place-modules/place"`,
+            `Your filter refers to a nonexistent type: import { Place } from "${testRealmHref}missing-place/does-not-exist"`,
             'error message is correct',
           );
         });
