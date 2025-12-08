@@ -1,71 +1,24 @@
 {
   "data": {
-    "type": "card",
-    "attributes": {
-      "gamerTag": "PhoenixRise_Maya",
-      "email": "maya.chen@gmail.com",
-      "bio": "RPG enthusiast and indie game curator. I love discovering hidden gems and supporting small developers. Currently obsessed with narrative-driven adventures and cozy simulation games.",
-      "joinDate": "2020-08-22",
-      "isOnline": false,
-      "profileImageUrl": "",
-      "location": "Vancouver, BC",
-      "preferredGenres": ["RPG", "Indie", "Simulation", "Adventure"],
-      "gamingGroups": [
-        "Indie Game Spotlight",
-        "RPG Storytellers",
-        "Cozy Gaming Society"
-      ],
-      "streamingPlatforms": ["Twitch"],
-      "contentCreatorStatus": false,
-      "streamSchedule": "",
-      "statistics": {
-        "totalGames": 203,
-        "totalHours": 1976,
-        "completionRate": 92,
-        "averageRating": 9.1,
-        "achievementsUnlocked": 2834,
-        "favoriteGenre": "RPG",
-        "currentStreak": 7
-      },
-      "cardInfo": {},
-      "description": null,
-      "thumbnailURL": null
-    },
     "meta": {
       "adoptsFrom": {
-        "module": "../gaming-hub",
-        "name": "GamingHub"
+        "name": "GamingHub",
+        "module": "../gaming-hub"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
       }
     },
     "relationships": {
-      "connectedPlatforms": {
+      "player": {
         "links": {
-          "self": null
-        }
-      },
-      "gameProgress.0": {
-        "links": {
-          "self": "../../player-progress/PlayerProgress/maya-hollow-knight"
-        }
-      },
-      "tournaments": {
-        "links": {
-          "self": null
-        }
-      },
-      "friends.0": {
-        "links": {
-          "self": "../../gaming-hub/GamingHub/alex-shadowblade"
-        }
-      },
-      "favoriteGames.0": {
-        "links": {
-          "self": "../../video-game/VideoGame/hollow-knight"
-        }
-      },
-      "wishlistGames.0": {
-        "links": {
-          "self": "../../video-game/VideoGame/cyberpunk-2077"
+          "self": "../../gaming-player/GamingPlayer/maya-phoenixrise"
         }
       },
       "cardInfo.theme": {
