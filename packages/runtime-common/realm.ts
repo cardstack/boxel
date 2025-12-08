@@ -2816,7 +2816,7 @@ export class Realm {
     let payload = parseQuery(href);
     if (!payload.url) {
       return badRequest({
-        message: `The request body is missing the url parameter`,
+        message: `The request is missing the url query parameter`,
         requestContext,
       });
     }

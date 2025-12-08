@@ -95,7 +95,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
 
     assert.strictEqual(
       response.body.errors?.[0]?.message,
-      'The request body is missing the url parameter',
+      'The request is missing the url query parameter',
     );
   });
 });
