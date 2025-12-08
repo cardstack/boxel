@@ -60,6 +60,7 @@ module(
       }
       PersonClass = Person;
       class QueryLinksField extends FieldDef {
+        @field title = contains(StringField);
         @field favorite = linksTo(() => Person, {
           query: {
             filter: {
@@ -118,14 +119,13 @@ module(
         };
       }
       class QueryCardNested extends CardDef {
-        @field title = contains(StringField);
         @field queries = contains(QueryLinksField);
         static isolated = class Isolated extends Component<
           typeof QueryCardNested
         > {
           <template>
             <div data-test-inline-title>
-              <@fields.title @format='edit' />
+              <@fields.queries.title @format='edit' />
             </div>
             <div data-test-favorite>
               {{#if @model.queries.favorite}}
@@ -154,7 +154,9 @@ module(
             title: 'Not Target',
           }),
           'query-card-nested.json': new QueryCardNested({
-            title: 'Target',
+            queries: new QueryLinksField({
+              title: 'Target',
+            }),
           }),
         },
       });

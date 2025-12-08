@@ -69,12 +69,12 @@ module('Unit | query field schema', function (hooks) {
     };
 
     class FavoriteField extends FieldDef {
+      @field size = contains(StringField);
       @field favorite = linksTo(Shirt, { query });
       @field shirts = linksToMany(Shirt, { query });
     }
 
     class Person extends CardDef {
-      @field size = contains(StringField);
       @field favoriteField = contains(FavoriteField);
     }
 
