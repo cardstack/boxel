@@ -56,6 +56,54 @@ module('Unit | query field schema', function (hooks) {
     );
   });
 
+  test('linksTo and linksToMany queries are preserved when defined inside FieldDefs', function (assert) {
+    class Shirt extends CardDef {
+      @field name = contains(StringField);
+    }
+
+    const query: Query = {
+      filter: {
+        eq: { size: '$this.size' },
+      },
+      realm: '$thisRealm',
+    };
+
+    class FavoriteField extends FieldDef {
+      @field favorite = linksTo(Shirt, { query });
+      @field shirts = linksToMany(Shirt, { query });
+    }
+
+    class Person extends CardDef {
+      @field size = contains(StringField);
+      @field favoriteField = contains(FavoriteField);
+    }
+
+    let fieldMeta = getField(FavoriteField, 'shirts') as {
+      queryDefinition?: Query;
+    };
+    let singleFieldMeta = getField(FavoriteField, 'favorite') as {
+      queryDefinition?: Query;
+    };
+
+    assert.ok(fieldMeta, 'field metadata is registered for nested shirts');
+    assert.deepEqual(
+      fieldMeta?.queryDefinition,
+      query,
+      'linksToMany query inside FieldDef stores the query definition',
+    );
+    assert.deepEqual(
+      singleFieldMeta?.queryDefinition,
+      query,
+      'linksTo query inside FieldDef stores the query definition',
+    );
+
+    // Ensure the containing card also validates with the nested query fields
+    assert.ok(
+      getField(Person, 'favoriteField'),
+      'containing card can be introspected',
+    );
+  });
+
   test('referencing a missing field in a query raises a descriptive error', function (assert) {
     class Shirt extends CardDef {}
 

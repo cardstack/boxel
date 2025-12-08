@@ -21,14 +21,15 @@ import {
 } from '../helpers';
 import {
   cardAPI,
-  setupBaseRealm,
   CardDef,
   Component,
-  StringField,
   contains,
   field,
+  FieldDef,
   linksTo,
   linksToMany,
+  setupBaseRealm,
+  StringField,
 } from '../helpers/base-realm';
 
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -36,6 +37,7 @@ import { setupApplicationTest } from '../helpers/setup';
 
 const QUERY_CARD_URL = `${testRealmURL}query-card`;
 const QUERY_CARD_2_URL = `${testRealmURL}query-card-2`;
+const QUERY_CARD_NESTED_URL = `${testRealmURL}query-card-nested`;
 
 module(
   'Acceptance | Query Fields | host respects server-populated results',
@@ -57,6 +59,26 @@ module(
         @field name = contains(StringField);
       }
       PersonClass = Person;
+      class QueryLinksField extends FieldDef {
+        @field favorite = linksTo(() => Person, {
+          query: {
+            filter: {
+              eq: { name: '$this.title' },
+            },
+          },
+        });
+        @field matches = linksToMany(() => Person, {
+          query: {
+            filter: {
+              eq: { name: '$this.title' },
+            },
+            page: {
+              size: 10,
+              number: 0,
+            },
+          },
+        });
+      }
       class QueryCard extends CardDef {
         @field title = contains(StringField);
         @field favorite = linksTo(() => Person, {
@@ -95,10 +117,34 @@ module(
           </template>
         };
       }
+      class QueryCardNested extends CardDef {
+        @field title = contains(StringField);
+        @field queries = contains(QueryLinksField);
+        static isolated = class Isolated extends Component<
+          typeof QueryCardNested
+        > {
+          <template>
+            <div data-test-inline-title>
+              <@fields.title @format='edit' />
+            </div>
+            <div data-test-favorite>
+              {{#if @model.queries.favorite}}
+                {{@model.queries.favorite.name}}
+              {{/if}}
+            </div>
+            <ul data-test-matches>
+              {{#each @model.queries.matches as |match|}}
+                <li data-test-match>{{match.name}}</li>
+              {{/each}}
+            </ul>
+          </template>
+        };
+      }
       await setupAcceptanceTestRealm({
         mockMatrixUtils,
         contents: {
           'query-card.gts': { Person, QueryCard },
+          'query-card-nested.gts': { Person, QueryCardNested, QueryLinksField },
           'Person/target.json': new Person({ name: 'Target' }),
           'Person/not-target.json': new Person({ name: 'Not Target' }),
           'query-card.json': new QueryCard({
@@ -106,6 +152,9 @@ module(
           }),
           'query-card-2.json': new QueryCard({
             title: 'Not Target',
+          }),
+          'query-card-nested.json': new QueryCardNested({
+            title: 'Target',
           }),
         },
       });
@@ -257,6 +306,49 @@ module(
           findAll(`${cardSelector} [data-test-match]`).length,
           2,
           'linksToMany field shows the newly added match after refresh',
+        );
+      } finally {
+        network.virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('query-backed relationships defined within FieldDef are hydrated without refetch', async function (assert) {
+      assert.expect(3);
+      let network = getService('network') as NetworkService;
+      let interceptedSearchRequests: string[] = [];
+      let handler = async (request: Request) => {
+        let url = new URL(request.url);
+        if (url.pathname.endsWith('/_search')) {
+          interceptedSearchRequests.push(request.url);
+        }
+        return null;
+      };
+
+      network.virtualNetwork.mount(handler, { prepend: true });
+      try {
+        await visitOperatorMode({
+          stacks: [[{ id: QUERY_CARD_NESTED_URL, format: 'isolated' }]],
+        });
+        let cardSelector = `[data-test-stack-card="${QUERY_CARD_NESTED_URL}"]`;
+        await waitFor(`${cardSelector} [data-test-matches]`);
+
+        assert.strictEqual(
+          interceptedSearchRequests.length,
+          0,
+          'no search requests triggered while hydrating nested query-backed relationships',
+        );
+        assert
+          .dom(`${cardSelector} [data-test-favorite]`)
+          .includesText(
+            'Target',
+            'nested linksTo query field hydrated from server response',
+          );
+        assert.deepEqual(
+          findAll(`${cardSelector} [data-test-match]`).map((el) =>
+            el.textContent?.trim(),
+          ),
+          ['Target'],
+          'nested linksToMany query field hydrated from server response',
         );
       } finally {
         network.virtualNetwork.unmount(handler);
