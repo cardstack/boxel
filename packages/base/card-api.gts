@@ -1224,7 +1224,9 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     value: CardDef,
     resource: LooseCardResource,
   ) {
-    captureQueryFieldSeedData(instance, this.name, [value], resource);
+    if (this.queryDefinition) {
+      captureQueryFieldSeedData(instance, this.name, [value], resource);
+    }
   }
 
   component(model: Box<CardDef>): BoxComponent {
@@ -1730,7 +1732,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
     value: CardDef[],
     resource: LooseCardResource,
   ) {
-    captureQueryFieldSeedData(instance, this.name, value, resource);
+    if (this.queryDefinition) {
+      captureQueryFieldSeedData(instance, this.name, value, resource);
+    }
   }
 
   component(model: Box<CardDef>): BoxComponent {

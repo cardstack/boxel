@@ -29,6 +29,7 @@ export interface NormalizeQueryDefinitionParams {
   resource: LooseCardResource;
   realmURL: URL;
   fieldName: string;
+  fieldPath?: string;
 }
 
 export interface NormalizedQueryDefinitionResult {
@@ -42,12 +43,33 @@ export function normalizeQueryDefinition({
   resource,
   realmURL,
   fieldName,
+  fieldPath,
 }: NormalizeQueryDefinitionParams): NormalizedQueryDefinitionResult | null {
   let workingQuery: QueryWithInterpolations = JSON.parse(
     JSON.stringify(queryDefinition),
   );
   let queryAny = workingQuery as Record<string, any>;
   let aborted = false;
+  let basePath =
+    fieldPath ??
+    (fieldName.includes('.')
+      ? fieldName.slice(0, fieldName.lastIndexOf('.'))
+      : '');
+  if (!basePath && resource.relationships) {
+    let matchingKey = Object.keys(resource.relationships).find((key) =>
+      key.endsWith(`.${fieldName}`),
+    );
+    if (matchingKey) {
+      basePath = matchingKey.slice(0, matchingKey.lastIndexOf('.'));
+    }
+  }
+
+  let resolveInterpolationPath = (path: string) => {
+    if (!basePath) {
+      return path;
+    }
+    return path.startsWith(`${basePath}.`) ? path : `${basePath}.${path}`;
+  };
 
   const markEmptyPredicate = (context?: string) => {
     if (context && EMPTY_PREDICATE_KEYS.has(context)) {
@@ -65,7 +87,9 @@ export function normalizeQueryDefinition({
         return realmURL.href;
       }
       if (node.startsWith(THIS_INTERPOLATION_PREFIX)) {
-        let path = node.slice(THIS_INTERPOLATION_PREFIX.length);
+        let path = resolveInterpolationPath(
+          node.slice(THIS_INTERPOLATION_PREFIX.length),
+        );
         let value = getValueForResourcePath(resource, path);
         if (value === undefined) {
           markEmptyPredicate(context);
@@ -178,7 +202,7 @@ export function normalizeQueryDefinition({
     if (value.startsWith(THIS_INTERPOLATION_PREFIX)) {
       let interpolated = getValueForResourcePath(
         resource,
-        value.slice(THIS_INTERPOLATION_PREFIX.length),
+        resolveInterpolationPath(value.slice(THIS_INTERPOLATION_PREFIX.length)),
       );
       if (typeof interpolated === 'string' && interpolated.length > 0) {
         return interpolated;
@@ -255,6 +279,17 @@ export function getValueForResourcePath(
     }
     if (typeof current === 'object' && segment in current) {
       current = (current as any)[segment];
+      continue;
+    }
+    if (
+      typeof current === 'object' &&
+      current !== null &&
+      'attributes' in current &&
+      typeof (current as any).attributes === 'object' &&
+      (current as any).attributes !== null &&
+      segment in (current as any).attributes
+    ) {
+      current = (current as any).attributes[segment];
       continue;
     }
     return undefined;
