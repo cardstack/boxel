@@ -52,8 +52,9 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
   let virtualNetwork: VirtualNetwork;
   let testRealm: Realm;
 
-  function onRealmSetup(args: { testRealm: Realm }) {
+  function onRealmSetup(args: { testRealm: Realm; request: SuperTest<Test> }) {
     testRealm = args.testRealm;
+    request = args.request;
   }
 
   setupBaseRealmServer(hooks, matrixURL);
@@ -92,7 +93,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
 
       testRealmServer = result.testRealmServer;
       testRealmHttpServer = result.testRealmHttpServer;
-      request = supertest(testRealmHttpServer);
+      // request = supertest(testRealmHttpServer);
     },
     afterEach: async () => {
       await closeServer(testRealmHttpServer);
@@ -150,7 +151,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
 
     test('reports publishable realm when there are no private dependencies', async function (assert) {
       let response = await request
-        .get(`${new URL(testRealm.url).pathname}_publishability`)
+        .get('/_publishability')
         .set('Accept', SupportedMimeType.JSONAPI)
         .set(
           'Authorization',
