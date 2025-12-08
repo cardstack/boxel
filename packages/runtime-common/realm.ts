@@ -482,7 +482,7 @@ export class Realm {
       .get(
         '/_dependencies',
         SupportedMimeType.JSON,
-        this.getResourceIndex.bind(this),
+        this.getDependencies.bind(this),
       )
       .get(
         '/_publishability',
@@ -2808,7 +2808,7 @@ export class Realm {
     }
   }
 
-  private async getResourceIndex(
+  private async getDependencies(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
