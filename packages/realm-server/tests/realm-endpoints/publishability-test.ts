@@ -16,7 +16,6 @@ import type {
 import {
   DEFAULT_PERMISSIONS,
   SupportedMimeType,
-  type Realm,
 } from '@cardstack/runtime-common';
 import {
   PgAdapter,
