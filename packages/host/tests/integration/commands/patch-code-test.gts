@@ -139,6 +139,44 @@ export class Task extends CardDef {
     assert.strictEqual(result.patchedContent, expectedResult);
   });
 
+  test('can create a new empty file when the search/replace block is empty', async function (assert) {
+    let commandService = getService('command-service');
+    let patchCodeCommand = new PatchCodeCommand(commandService.commandContext);
+    let emptyFileUrl = `${testRealmURL}new-empty-file.gts`;
+
+    adapter.lintStub = async (
+      request: Request,
+      _requestContext: any,
+    ): Promise<LintResult> => {
+      return { output: await request.text(), fixed: false, messages: [] };
+    };
+
+    let result = await patchCodeCommand.execute({
+      fileUrl: emptyFileUrl,
+      codeBlocks: [
+        `${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+${REPLACE_MARKER}`,
+      ],
+    });
+
+    assert.strictEqual(
+      result.patchedContent,
+      '',
+      'patched content is empty when no replacement is provided',
+    );
+    assert.strictEqual(
+      result.finalFileUrl,
+      emptyFileUrl,
+      'final file url matches the requested new file',
+    );
+    assert.strictEqual(
+      result.results[0].status,
+      'applied',
+      'empty block is treated as an applied patch',
+    );
+  });
+
   test('uses the open file resource when the target file is open', async function (assert) {
     assert.expect(7);
 
