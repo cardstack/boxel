@@ -14,7 +14,9 @@ import {
   fields,
   type LooseSingleCardDocument,
   type Permissions,
+  LooseCardResource,
 } from '@cardstack/runtime-common';
+import { realmURL } from '@cardstack/runtime-common/constants';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
@@ -136,6 +138,63 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
       'First Post created Apr 22, 2022 published Apr 27, 2022, 4:02 PM',
+    );
+  });
+
+  test('deserializing card JSON sets realm URL on contained FieldDef instances', async function (assert) {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+    }
+
+    class Post extends CardDef {
+      @field author = contains(Person);
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person, Post },
+      },
+    });
+
+    let cardJSON = {
+      data: {
+        id: `${testRealmURL}Post/1`,
+        type: 'card',
+        attributes: {
+          author: {
+            firstName: 'Mango',
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Post',
+          },
+          realmURL: testRealmURL,
+          fields: {
+            author: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'Person',
+              },
+              realmURL: testRealmURL,
+            },
+          },
+        },
+      } as LooseCardResource,
+    };
+
+    let instance = (await createFromSerialized(
+      cardJSON.data,
+      cardJSON,
+      new URL(cardJSON.data.id!),
+    )) as InstanceType<typeof Post>;
+
+    assert.strictEqual(
+      instance.author[realmURL]?.href,
+      testRealmURL,
+      'FieldDef instances nested inside card data keep track of their realm when metadata is available',
     );
   });
 

@@ -134,17 +134,17 @@ export function callSerializeHook(
 }
 
 export function getCardMeta<K extends keyof CardResourceMeta>(
-  card: CardDef,
+  card: BaseDef,
   metaKey: K,
 ): CardResourceMeta[K] | undefined {
   return card[meta]?.[metaKey] as CardResourceMeta[K] | undefined;
 }
 
 export function makeMetaForField(
-  meta: Partial<Meta> | undefined,
+  meta: Partial<CardResourceMeta> | undefined,
   fieldName: string,
   fallback: typeof BaseDef,
-): Meta {
+): CardResourceMeta {
   let adoptsFrom = meta?.adoptsFrom ?? identifyCard(fallback);
   if (!adoptsFrom) {
     throw new Error(`bug: cannot determine identity for field '${fieldName}'`);
@@ -155,6 +155,7 @@ export function makeMetaForField(
   return {
     adoptsFrom,
     ...(Object.keys(fields).length > 0 ? { fields } : {}),
+    ...(meta?.realmURL ? { realmURL: meta.realmURL } : {}),
   };
 }
 

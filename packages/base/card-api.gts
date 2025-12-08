@@ -1807,6 +1807,7 @@ export class BaseDef {
   // this is here because CardBase has no public instance methods, so without it
   // typescript considers everything a valid card.
   [isBaseInstance] = true;
+  [meta]: CardResourceMeta | undefined = undefined;
   // [relativeTo] actually becomes really important for Card/Field separation. FieldDefs
   // may contain interior fields that have relative links. FieldDef's though have no ID.
   // So we need a [relativeTo] property that derives from the root document ID in order to
@@ -1823,6 +1824,11 @@ export class BaseDef {
   }
   static getIconComponent(instance: BaseDef) {
     return instance.constructor.icon;
+  }
+
+  get [realmURL]() {
+    let realmURLString = getCardMeta(this, 'realmURL');
+    return realmURLString ? new URL(realmURLString) : undefined;
   }
 
   static [emptyValue]: object | string | number | null | boolean | undefined;
@@ -2164,7 +2170,6 @@ export class CardInfoField extends FieldDef {
 export class CardDef extends BaseDef {
   readonly [localId]: string = uuidv4();
   [isSavedInstance] = false;
-  [meta]: CardResourceMeta | undefined = undefined;
   get [fieldsUntracked](): Record<string, typeof BaseDef> | undefined {
     let overrides = getFieldOverrides(this);
     return overrides ? Object.fromEntries(getFieldOverrides(this)) : undefined;
@@ -2258,11 +2263,6 @@ export class CardDef extends BaseDef {
 
   get [realmInfo]() {
     return getCardMeta(this, 'realmInfo');
-  }
-
-  get [realmURL]() {
-    let realmURLString = getCardMeta(this, 'realmURL');
-    return realmURLString ? new URL(realmURLString) : undefined;
   }
 
   [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
@@ -3133,6 +3133,9 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     }
 
     // assign the realm meta before we compute as computeds may be relying on this
+    if (resource.meta && !isCardInstance(instance)) {
+      (instance as any)[meta] = resource.meta;
+    }
     if (isCardInstance(instance) && resource.id != null) {
       (instance as any)[meta] = resource.meta;
     }
