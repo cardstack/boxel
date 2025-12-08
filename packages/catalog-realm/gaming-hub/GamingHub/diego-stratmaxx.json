@@ -1,45 +1,30 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "GamingHub",
+        "module": "../gaming-hub"
+      }
+    },
     "type": "card",
     "attributes": {
-      "gamerTag": "StratMaxx_Diego",
-      "email": "diego.santos@gmail.com",
-      "bio": "Strategy game tactician and city builder architect. I love games that make me think 10 steps ahead. Currently building epic civilizations and managing complex economies.",
-      "joinDate": "2019-06-14",
-      "isOnline": true,
-      "profileImageUrl": "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&h=400&fit=crop&crop=face",
-      "location": "São Paulo, Brazil",
-      "preferredGenres": ["Strategy", "4X", "City Builder", "Management"],
-      "gamingGroups": [
-        "Strategy Masters BR",
-        "City Planners United",
-        "Empire Builders"
-      ],
-      "streamingPlatforms": ["YouTube Gaming", "Facebook Gaming"],
-      "contentCreatorStatus": false,
-      "streamSchedule": "",
-      "statistics": {
-        "totalGames": 78,
-        "totalHours": 2567,
-        "completionRate": 73,
-        "averageRating": 8.5,
-        "achievementsUnlocked": 1234,
-        "favoriteGenre": "Strategy",
-        "currentStreak": 5
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
       }
     },
     "relationships": {
-      "wishlistGames.0": {
-        "links": { "self": "../../video-game/VideoGame/valorant" }
+      "player": {
+        "links": {
+          "self": "../../gaming-player/GamingPlayer/diego-stratmaxx"
+        }
       },
-      "friends.0": {
-        "links": { "self": "../../gaming-hub/GamingHub/ravi-cosmicrift" }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../gaming-hub",
-        "name": "GamingHub"
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }
