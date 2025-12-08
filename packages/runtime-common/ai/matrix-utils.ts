@@ -167,11 +167,31 @@ export async function sendPromptAsDebugMessage(
 }
 
 function getErrorMessage(error: any): string {
+  // Try to unwrap OpenAI client errors before falling back to generic messaging
+  let openAIMessage =
+    (() => {
+      let raw = error?.error?.metadata?.raw;
+      if (typeof raw === 'string') {
+        try {
+          return JSON.parse(raw)?.error?.message;
+        } catch {
+          return undefined;
+        }
+      }
+      return undefined;
+    })() || error?.error?.message;
+
+  if (openAIMessage) {
+    return `OpenAI error: ${error?.name ?? 'APIError'} - ${openAIMessage}`;
+  }
   if (error instanceof OpenAIError) {
     return `OpenAI error: ${error.name} - ${error.message}`;
   }
   if (typeof error === 'string') {
     return error;
+  }
+  if (error?.message) {
+    return error.message;
   }
   return 'Unknown error';
 }
