@@ -831,9 +831,11 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
         delete serialized.meta.adoptsFrom;
       }
 
-      if (Object.keys(serialized.meta).length > 0) {
+      if (serialized.meta && Object.keys(serialized.meta).length > 0) {
         resource.meta = {
-          fields: { [this.name]: serialized.meta },
+          fields: {
+            [this.name]: serialized.meta,
+          },
         };
       }
       return resource;
@@ -3096,6 +3098,9 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     }),
   )) as [Field<T>, any][];
 
+  let realmURLString =
+    getCardMeta(instance as CardDef, 'realmURL') ?? resource.meta?.realmURL;
+
   // this block needs to be synchronous
   {
     let wasSaved = false;
@@ -3115,6 +3120,17 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         throw new Error(
           `cannot change the id for saved instance ${originalId}`,
         );
+      }
+      if (realmURLString) {
+        if (isCardOrField(value)) {
+          setRealmURLMeta(value, realmURLString);
+        } else if (isArrayOfCardOrField(value)) {
+          for (let v of value as any[]) {
+            if (isCardOrField(v)) {
+              setRealmURLMeta(v, realmURLString);
+            }
+          }
+        }
       }
       field.validate(instance, value);
 
@@ -3138,6 +3154,15 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     }
     if (isCardInstance(instance) && resource.id != null) {
       (instance as any)[meta] = resource.meta;
+      if (
+        realmURLString &&
+        !(instance as any)[meta]?.realmURL &&
+        (instance as any)[meta]
+      ) {
+        (instance as any)[meta]!.realmURL = realmURLString;
+      }
+    } else if (realmURLString && !(instance as any)[meta]) {
+      setRealmURLMeta(instance, realmURLString);
     }
     notifyCardTracking(instance);
     if (isCardInstance(instance) && resource.id != null) {
@@ -3431,6 +3456,19 @@ declare module 'ember-provide-consume-context/context-registry' {
 
 function getStore(instance: BaseDef): CardStore {
   return stores.get(instance as BaseDef) ?? new FallbackCardStore();
+}
+
+function setRealmURLMeta(instance: BaseDef, realmURLString: string) {
+  let existingMeta = (instance as any)[meta] as CardResourceMeta | undefined;
+  let adoptsFrom = existingMeta?.adoptsFrom ?? identifyCard(instance.constructor);
+  if (!adoptsFrom) {
+    return;
+  }
+  (instance as any)[meta] = {
+    ...existingMeta,
+    adoptsFrom,
+    realmURL: realmURLString,
+  };
 }
 
 function myLoader(): Loader {

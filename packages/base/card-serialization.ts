@@ -258,13 +258,13 @@ export function serializeCardResource(
     usedLinksToFieldsOnly: !opts?.includeUnrenderedFields,
   });
   let overrides = getFieldOverrides(model);
+  let realmURL = getCardMeta(model, 'realmURL');
   opts = { ...(opts ?? {}), overrides };
   let fieldResources = Object.entries(fields)
     .filter(([_fieldName, field]) =>
       opts?.omitFields ? !opts.omitFields.includes(field.card) : true,
     )
     .map(([fieldName]) => serializedGet(model, fieldName, doc, visited, opts));
-  let realmURL = getCardMeta(model, 'realmURL');
   return merge(
     {
       attributes: {},
