@@ -1189,10 +1189,15 @@ export default class StoreService extends Service implements StoreInterface {
       'meta' in error &&
       typeof error.meta === 'object' &&
       'responseHeaders' in error.meta &&
-      typeof error.meta.responseHeaders === 'object' &&
-      error.meta.responseHeaders['x-blocked-by-waf-rule']
+      error.meta.responseHeaders &&
+      typeof error.meta.responseHeaders === 'object'
     ) {
-      return 'Rejected by firewall';
+      let wafRule = Object.entries(error.meta.responseHeaders).find(
+        ([header]) => header.toLowerCase() === 'x-blocked-by-waf-rule',
+      )?.[1];
+      if (wafRule) {
+        return `Request blocked by Web Application Firewall. X-blocked-by-waf-rule response header specifies rule: ${wafRule}`;
+      }
     }
     if (error.message) {
       return error.message;

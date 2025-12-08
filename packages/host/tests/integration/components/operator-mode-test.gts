@@ -925,12 +925,15 @@ module('Integration | operator-mode', function (hooks) {
       () =>
         document
           .querySelector('[data-test-auto-save-indicator]')
-          ?.textContent?.trim() == 'Failed to save: Rejected by firewall',
+          ?.textContent?.trim() ==
+        'Failed to save: Request blocked by Web Application Firewall. X-blocked-by-waf-rule response header specifies rule: CrossSiteScripting_BODY',
       { timeoutMessage: 'Waiting for "Failed to save" to appear' },
     );
     assert
       .dom('[data-test-auto-save-indicator]')
-      .containsText('Failed to save: Rejected by firewall');
+      .containsText(
+        'Failed to save: Request blocked by Web Application Firewall. X-blocked-by-waf-rule response header specifies rule: CrossSiteScripting_BODY',
+      );
   });
 
   test('opens workspace chooser after closing the only remaining card on the stack', async function (assert) {
