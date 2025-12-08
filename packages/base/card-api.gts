@@ -753,7 +753,20 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
       lazilyLoadLink(instance as CardDef, this, maybeNotLoaded.reference);
       return undefined;
     }
-    return getter(instance, this);
+    let value = getter(instance, this);
+    let realmURLString = getCardMeta(instance as CardDef, 'realmURL');
+    if (realmURLString) {
+      if (isCardOrField(value)) {
+        setRealmURLMeta(value, realmURLString);
+      } else if (isArrayOfCardOrField(value)) {
+        for (let v of value as any[]) {
+          if (isCardOrField(v)) {
+            setRealmURLMeta(v, realmURLString);
+          }
+        }
+      }
+    }
+    return value;
   }
 
   queryableValue(instance: any, stack: BaseDef[]): any {
@@ -3236,6 +3249,18 @@ function makeDescriptor<
 }
 
 function setField(instance: BaseDef, field: Field, value: any) {
+  let realmURLString = getCardMeta(instance as CardDef, 'realmURL');
+  if (realmURLString) {
+    if (isCardOrField(value)) {
+      setRealmURLMeta(value, realmURLString);
+    } else if (isArrayOfCardOrField(value)) {
+      for (let v of value) {
+        if (isCardOrField(v)) {
+          setRealmURLMeta(v, realmURLString);
+        }
+      }
+    }
+  }
   // TODO: refactor validate to not have a return value and accomplish this normalization another way
   value = field.validate(instance, value);
   let deserialized = getDataBucket(instance);
@@ -3460,13 +3485,13 @@ function getStore(instance: BaseDef): CardStore {
 
 function setRealmURLMeta(instance: BaseDef, realmURLString: string) {
   let existingMeta = (instance as any)[meta] as CardResourceMeta | undefined;
-  let adoptsFrom = existingMeta?.adoptsFrom ?? identifyCard(instance.constructor);
-  if (!adoptsFrom) {
-    return;
-  }
   (instance as any)[meta] = {
     ...existingMeta,
-    adoptsFrom,
+    ...(existingMeta?.adoptsFrom
+      ? { adoptsFrom: existingMeta.adoptsFrom }
+      : identifyCard(instance.constructor)
+        ? { adoptsFrom: identifyCard(instance.constructor)! }
+        : {}),
     realmURL: realmURLString,
   };
 }

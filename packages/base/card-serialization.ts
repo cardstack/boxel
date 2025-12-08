@@ -1,7 +1,6 @@
 // --- Type Imports ---
 
 import type {
-  Meta,
   LooseCardResource,
   Loader,
   CardDocument,
