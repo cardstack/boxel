@@ -31,6 +31,8 @@ export const APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY =
 export const APP_BOXEL_CONTINUATION_OF_CONTENT_KEY =
   'app.boxel.continuation-of';
 export const APP_BOXEL_LLM_MODE = 'app.boxel.llm-mode';
+export const APP_BOXEL_INITIAL_PROMPT_EVENT_TYPE =
+  'app.boxel.initial-prompt';
 export type LLMMode = 'ask' | 'act';
 export const DEFAULT_LLM = 'anthropic/claude-sonnet-4.5';
 export const DEFAULT_CODING_LLM = 'anthropic/claude-sonnet-4.5';

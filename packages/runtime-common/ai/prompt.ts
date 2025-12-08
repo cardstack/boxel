@@ -41,6 +41,7 @@ import {
   APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_INITIAL_PROMPT_EVENT_TYPE,
   DEFAULT_LLM,
 } from '../matrix-constants';
 import { decodeCommandRequest } from '../commands';
@@ -89,11 +90,12 @@ export async function getPromptParts(
   let autoCorrectnessChecksEnabled =
     options?.autoCorrectnessChecksEnabled ??
     AI_PATCHING_CORRECTNESS_CHECKS_ENABLED;
+  let initialPrompt = getInitialPrompt(eventList);
   let history: DiscreteMatrixEvent[] = await constructHistory(
     eventList,
     client,
   );
-  let shouldRespond = getShouldRespond(history);
+  let shouldRespond = getShouldRespond(history, initialPrompt);
   let pendingCodePatchCorrectnessChecks =
     collectPendingCodePatchCorrectnessCheck(history, aiBotUserId);
   if (!shouldRespond) {
@@ -120,6 +122,7 @@ export async function getPromptParts(
     skills,
     disabledSkillIds,
     client,
+    initialPrompt,
     autoCorrectnessChecksEnabled,
   );
   let { model, toolsSupported, reasoningEffort } =
@@ -137,7 +140,13 @@ export async function getPromptParts(
   };
 }
 
-function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
+function getShouldRespond(
+  history: DiscreteMatrixEvent[],
+  initialPrompt?: string,
+): boolean {
+  if (!history.length && initialPrompt) {
+    return true;
+  }
   // If the aibot is awaiting command or code patch results, it should not respond yet.
   let lastEventExcludingResults = findLast(
     history,
@@ -297,6 +306,22 @@ function isTerminalCommandResultEventFor(
   }
   let status = event.content['m.relates_to']?.key;
   return status === 'applied' || status === 'failed' || status === 'invalid';
+}
+
+export function getInitialPrompt(
+  eventList: DiscreteMatrixEvent[],
+): string | undefined {
+  let initialPromptEvent = findLast(
+    eventList,
+    (event) => event.type === APP_BOXEL_INITIAL_PROMPT_EVENT_TYPE,
+  );
+  let prompt = (
+    initialPromptEvent as { content?: { prompt?: string } } | undefined
+  )?.content?.prompt;
+  if (typeof prompt === 'string' && prompt.trim().length > 0) {
+    return prompt;
+  }
+  return undefined;
 }
 
 async function getEnabledSkills(
@@ -1084,6 +1109,7 @@ export async function buildPromptForModel(
   skillCards: LooseCardResource[] = [],
   disabledSkillIds: string[] = [],
   client: MatrixClient,
+  initialPrompt?: string,
   autoCorrectnessChecksEnabled = AI_PATCHING_CORRECTNESS_CHECKS_ENABLED,
 ) {
   // Need to make sure the passed in username is a full id
@@ -1168,6 +1194,9 @@ export async function buildPromptForModel(
   if (autoCorrectnessChecksEnabled) {
     systemMessage +=
       'Never call the checkCorrectness tool on your own; correctness checks are handled automatically by the system.\n';
+  }
+  if (initialPrompt?.trim()) {
+    systemMessage += `The room creator supplied this initial request to set the purpose and starting point for the assistant in this room:\n${initialPrompt.trim()}\n`;
   }
   if (skillCards.length) {
     systemMessage += SKILL_INSTRUCTIONS_MESSAGE;

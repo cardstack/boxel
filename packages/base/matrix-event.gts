@@ -21,6 +21,7 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
+  APP_BOXEL_INITIAL_PROMPT_EVENT_TYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
@@ -273,6 +274,13 @@ export interface LLMModeEvent extends RoomStateEvent {
   };
 }
 
+export interface InitialPromptEvent extends RoomStateEvent {
+  type: typeof APP_BOXEL_INITIAL_PROMPT_EVENT_TYPE;
+  content: {
+    prompt: string;
+  };
+}
+
 export interface CommandResultEvent extends BaseMatrixEvent {
   type: typeof APP_BOXEL_COMMAND_RESULT_EVENT_TYPE;
   content: CommandResultWithOutputContent | CommandResultWithNoOutputContent;
@@ -446,6 +454,7 @@ export type MatrixEvent =
   | LeaveEvent
   | LLMModeEvent
   | MessageEvent
+  | InitialPromptEvent
   | RealmEvent
   | RealmServerEvent
   | RoomCreateEvent

@@ -227,6 +227,7 @@ export class CreateAIAssistantRoomInput extends CardDef {
   @field enabledSkills = linksToMany(Skill);
   @field disabledSkills = linksToMany(Skill);
   @field llmMode = contains(StringField); // 'gpt-4o' or 'gpt-4o-mini'
+  @field initialPrompt = contains(StringField); // optional initial prompt
 }
 
 export class CreateAIAssistantRoomResult extends CardDef {

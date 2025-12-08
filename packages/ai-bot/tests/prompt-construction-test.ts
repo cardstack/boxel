@@ -13,6 +13,7 @@ import {
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   DEFAULT_LLM,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_INITIAL_PROMPT_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type {
@@ -4340,6 +4341,38 @@ new
         ),
       ),
       'When enabled the legacy code patch result message should be omitted',
+    );
+  });
+
+  test('initial prompt state event appears inside prompt parts', async () => {
+    let eventList: DiscreteMatrixEvent[] = [
+      {
+        type: APP_BOXEL_INITIAL_PROMPT_EVENT_TYPE,
+        event_id: 'state1',
+        room_id: 'room1',
+        origin_server_ts: 1,
+        content: { prompt: 'hello from initial state' },
+        sender: '@creator:localhost',
+        state_key: '',
+        unsigned: {},
+      } as any,
+    ];
+
+    let promptParts = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.true(promptParts.shouldRespond, 'should respond to initial prompt');
+    assert.ok(promptParts.messages, 'messages should be present');
+    assert.strictEqual(promptParts.history.length, 0, 'history is empty');
+    assert.ok(
+      promptParts.messages?.some(
+        (m) =>
+          m.role === 'system' && m.content.includes('hello from initial state'),
+      ),
+      'initial prompt is included as the user message',
     );
   });
 });

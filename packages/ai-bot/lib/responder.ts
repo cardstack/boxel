@@ -6,8 +6,6 @@ import * as Sentry from '@sentry/node';
 import type { OpenAIError } from 'openai/error';
 import throttle from 'lodash/throttle';
 import type { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
-import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
-import type { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import type OpenAI from 'openai';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
@@ -66,11 +64,11 @@ export class Responder {
 
   needsMessageSend = false;
 
-  async ensureThinkingMessageSent() {
+  public async ensureThinkingMessageSent() {
     await this.matrixResponsePublisher.ensureThinkingMessageSent();
   }
 
-  sendMessageEventWithThrottling = () => {
+  private sendMessageEventWithThrottling = () => {
     if (this.needsMessageSend) {
       return; // already scheduled
     }
@@ -78,7 +76,7 @@ export class Responder {
     this.sendMessageEventWithThrottlingInternal();
   };
 
-  sendMessageEventWithThrottlingInternal: () => unknown = throttle(
+  private sendMessageEventWithThrottlingInternal: () => unknown = throttle(
     () => {
       this.needsMessageSend = false;
       this.sendMessageEvent();
@@ -86,7 +84,7 @@ export class Responder {
     Number(process.env.AI_BOT_STREAM_THROTTLE_MS ?? 250),
   );
 
-  sendMessageEvent = async () => {
+  private sendMessageEvent = async () => {
     // Only send if the delta is meaningful, unless we are finalizing.
     const minDelta = Number(process.env.AI_BOT_STREAM_MIN_DELTA ?? 0);
     const latestContentLen = (this.responseState.latestContent || '').length;
@@ -128,7 +126,7 @@ export class Responder {
     await messagePromise;
   };
 
-  async onChunk(
+  public async onChunk(
     chunk: OpenAI.Chat.Completions.ChatCompletionChunk,
     snapshot: ChatCompletionSnapshot,
   ) {
@@ -169,19 +167,7 @@ export class Responder {
     return await Promise.all(this.messagePromises);
   }
 
-  deserializeToolCall(
-    toolCall: ChatCompletionMessageFunctionToolCall,
-  ): FunctionToolCall {
-    let { id, function: f } = toolCall;
-    return {
-      type: 'function',
-      id,
-      name: f.name,
-      arguments: JSON.parse(f.arguments),
-    };
-  }
-
-  async onError(error: OpenAIError | string) {
+  public async onError(error: OpenAIError | string) {
     Sentry.captureException(error, {
       extra: {
         roomId: this.matrixResponsePublisher.roomId,
@@ -194,7 +180,7 @@ export class Responder {
     return await this.matrixResponsePublisher.sendError(error);
   }
 
-  async flush() {
+  public async flush() {
     if (this.needsMessageSend) {
       (
         this.sendMessageEventWithThrottlingInternal as unknown as {
@@ -213,7 +199,7 @@ export class Responder {
     }
   }
   isFinalized = false;
-  async finalize(opts?: { isCanceled?: boolean }) {
+  public async finalize(opts?: { isCanceled?: boolean }) {
     if (this.isFinalized) {
       return;
     }

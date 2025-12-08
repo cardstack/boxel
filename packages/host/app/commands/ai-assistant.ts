@@ -12,7 +12,6 @@ import HostBaseCommand from '../lib/host-base-command';
 import CreateAiAssistantRoomCommand from './create-ai-assistant-room';
 import OpenAiAssistantRoomCommand from './open-ai-assistant-room';
 
-import SendAiAssistantMessageCommand from './send-ai-assistant-message';
 import SetActiveLLMCommand from './set-active-llm';
 import UpdateRoomSkillsCommand from './update-room-skills';
 
@@ -65,25 +64,6 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
       setLLMModePromise,
     ]);
 
-    // Only send message if prompt is provided
-    if (input.prompt && input.prompt.trim() !== '') {
-      let sendMessageCommand = new SendAiAssistantMessageCommand(
-        this.commandContext,
-      );
-      let sendMessageResult = await sendMessageCommand.execute({
-        roomId,
-        prompt: input.prompt,
-        clientGeneratedId: input.clientGeneratedId,
-        attachedCards: [...(await attachedCardsPromise)],
-        attachedFileURLs: input.attachedFileURLs,
-        openCardIds: input.openCardIds,
-        realmUrl: this.operatorModeStateService.realmURL.href,
-        requireCommandCall: input.requireCommandCall,
-      });
-      return sendMessageResult;
-    }
-
-    // Return a result indicating no message was sent
     let commandModule = await this.loadCommandModule();
     const { SendAiAssistantMessageResult } = commandModule;
     return new SendAiAssistantMessageResult({ roomId });
@@ -109,6 +89,7 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
     );
     let createRoomResult = await createAIAssistantRoomCommand.execute({
       name: input.roomName,
+      initialPrompt: input.prompt,
     });
     return createRoomResult.roomId;
   }

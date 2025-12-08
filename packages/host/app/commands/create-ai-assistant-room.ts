@@ -5,17 +5,51 @@ import format from 'date-fns/format';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
+  APP_BOXEL_INITIAL_PROMPT_EVENT_TYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type {
+  FileDef,
+  SerializedFileDef,
+} from 'https://cardstack.com/base/file-api';
 
 import HostBaseCommand from '../lib/host-base-command';
 
 import type MatrixService from '../services/matrix-service';
+
+type InitialStateEvent =
+  | {
+      type: typeof APP_BOXEL_ACTIVE_LLM;
+      content: {
+        model: string;
+        toolsSupported?: boolean;
+        reasoningEffort?: string;
+      };
+    }
+  | {
+      type: typeof APP_BOXEL_LLM_MODE;
+      content: {
+        mode: string;
+      };
+    }
+  | {
+      type: typeof APP_BOXEL_ROOM_SKILLS_EVENT_TYPE;
+      content: {
+        enabledSkillCards: SerializedFileDef[];
+        disabledSkillCards: SerializedFileDef[];
+        commandDefinitions: SerializedFileDef[];
+      };
+    }
+  | {
+      type: typeof APP_BOXEL_INITIAL_PROMPT_EVENT_TYPE;
+      content: {
+        prompt: string;
+      };
+    };
 
 export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
   typeof BaseCommandModule.CreateAIAssistantRoomInput,
@@ -86,6 +120,47 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
     }
 
     // Run room creation and module loading in parallel
+    let initialState: InitialStateEvent[] = [
+      {
+        type: APP_BOXEL_ACTIVE_LLM,
+        content: {
+          ...this.getDefaultLLMDetails(),
+        },
+      },
+      {
+        type: APP_BOXEL_LLM_MODE,
+        content: {
+          mode: input.llmMode || 'ask',
+        },
+      },
+      {
+        type: APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+        content: {
+          enabledSkillCards:
+            enabledSkillFileDefs?.map((skillFileDef) =>
+              skillFileDef.serialize(),
+            ) ?? [],
+          disabledSkillCards:
+            disabledSkillFileDefs?.map((skillFileDef) =>
+              skillFileDef.serialize(),
+            ) ?? [],
+          commandDefinitions:
+            commandFileDefs?.map((commandFileDef) =>
+              commandFileDef.serialize(),
+            ) ?? [],
+        },
+      },
+    ];
+
+    if (input.initialPrompt?.trim()) {
+      initialState.push({
+        type: APP_BOXEL_INITIAL_PROMPT_EVENT_TYPE,
+        content: {
+          prompt: input.initialPrompt.trim(),
+        },
+      });
+    }
+
     const [roomResult, commandModule] = await Promise.all([
       await matrixService.createRoom({
         preset: matrixService.privateChatPreset,
@@ -103,37 +178,7 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
             [aiBotFullId]: matrixService.aiBotPowerLevel,
           },
         },
-        initial_state: [
-          {
-            type: APP_BOXEL_ACTIVE_LLM,
-            content: {
-              ...this.getDefaultLLMDetails(),
-            },
-          },
-          {
-            type: APP_BOXEL_LLM_MODE,
-            content: {
-              mode: input.llmMode || 'ask',
-            },
-          },
-          {
-            type: APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-            content: {
-              enabledSkillCards:
-                enabledSkillFileDefs?.map((skillFileDef) =>
-                  skillFileDef.serialize(),
-                ) ?? [],
-              disabledSkillCards:
-                disabledSkillFileDefs?.map((skillFileDef) =>
-                  skillFileDef.serialize(),
-                ) ?? [],
-              commandDefinitions:
-                commandFileDefs?.map((commandFileDef) =>
-                  commandFileDef.serialize(),
-                ) ?? [],
-            },
-          },
-        ],
+        initial_state: initialState,
       }),
       await this.loadCommandModule(),
     ]);
