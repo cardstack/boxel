@@ -879,10 +879,6 @@ function ensureAuthHandlerState(network: NetworkService): AuthHandlerState {
     let realmPermissions = new Map<string, RealmAction[]>();
     let handler = async (req: Request) => {
       if (req.url.includes('_realm-auth')) {
-        console.log(
-          '[mock realm auth] handling _realm-auth request for realms',
-          Array.from(state.realmPermissions.keys()),
-        );
         const authTokens: Record<string, string> = {};
         for (let [realmURL, permissions] of realmPermissions.entries()) {
           if (state.ensureSessionRoom) {
@@ -1175,7 +1171,6 @@ export function setupRealmServerEndpoints(
     {
       route: '_realm-auth',
       getResponse: async function (_req: Request) {
-        console.log('_realm-auth endpoint hit', req.url);
         return new Response(JSON.stringify({}), { status: 200 });
       },
     },
