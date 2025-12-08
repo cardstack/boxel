@@ -108,8 +108,8 @@ module('Integration | commands | copy-and-edit', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: './simple-card',
-                name: 'Theme',
+                module: 'https://cardstack.com/base/theme',
+                name: 'default',
               },
             },
           },
