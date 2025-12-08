@@ -22,39 +22,23 @@ export function getNumericValue(model: any): number {
  * This shared function handles prefix/suffix formatting consistently across all views
  *
  * @param model - The number model value (defaults to 0 if null/undefined)
- * @param config - Display configuration (decimals, prefix, suffix)
+ * @param options - Formatting options (decimals, prefix, suffix)
  * @returns Formatted display string with prefix/suffix applied
  *
  * @example
- * // With prefix
- * getFormattedDisplayValue(75, { prefix: '$', decimals: 2 })
- * // Returns: "$75.00"
- *
- * // With suffix
- * getFormattedDisplayValue(85, { suffix: '%', decimals: 0 })
- * // Returns: "85%"
- *
- * // With both prefix and suffix
- * getFormattedDisplayValue(42, { prefix: '$', suffix: ' USD', decimals: 2 })
- * // Returns: "$42.00 USD"
- *
- * // Null/undefined handling (defaults to 0)
- * getFormattedDisplayValue(null, { prefix: '$', decimals: 2 })
- * // Returns: "$0.00"
+ * getFormattedDisplayValue(75, { prefix: '$', decimals: 2 }) // "$75.00"
+ * getFormattedDisplayValue(85, { suffix: '%', decimals: 0 }) // "85%"
+ * getFormattedDisplayValue(42, { prefix: '$', suffix: ' USD', decimals: 2 }) // "$42.00 USD"
+ * getFormattedDisplayValue(null, { prefix: '$', decimals: 2 }) // "$0.00"
  */
 export function getFormattedDisplayValue(
   model: any,
-  config: NumberFormattingOptions | Record<string, any> = {},
+  options: NumberFormattingOptions = {},
 ): string {
-  // Safely extract formatting properties, with defaults
-  const decimals = config.decimals ?? 0;
-  const prefix = config.prefix ?? '';
-  const suffix = config.suffix ?? '';
-
-  // Always default to 0 for empty values
+  // Only use allowed keys from options
+  const { decimals = 0, prefix = '', suffix = '' } = options || {};
   const numericValue = getNumericValue(model);
   const formattedValue = numericValue.toFixed(decimals);
-
   return `${prefix}${formattedValue}${suffix}`;
 }
 
