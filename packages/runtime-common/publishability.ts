@@ -118,7 +118,6 @@ export async function analyzeRealmPublishability({
         if (visibility !== 'public') {
           chains.push([resourceUrl, dependency]);
         }
-        continue;
       }
     }
 
