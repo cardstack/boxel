@@ -20,11 +20,10 @@ import {
 } from '@cardstack/runtime-common';
 import {
   buildQuerySearchURL,
-  normalizeQueryDefinition,
+  codeRefWithAbsoluteURL,
 } from '@cardstack/runtime-common';
 import type { FieldDefinition } from '@cardstack/runtime-common/index-structure';
 import { logger as runtimeLogger } from '@cardstack/runtime-common';
-import { serializeCard } from './card-serialization';
 import { initSharedState } from './shared-state';
 
 interface QueryFieldState {
@@ -71,7 +70,7 @@ export function ensureQueryFieldSearchResource(
   let args = () => resolveQueryAndRealm(instance, field, fieldDefinition);
 
   log.info(
-    `ensureQueryFieldSearchResource: creating resource; field=${field.name}; isLive=${true}; realms derivation starting`,
+    `ensureQueryFieldSearchResource: creating resource; field=${field.name}; isLive=${true}; seedRecord=${seedRecords?.length ?? 0} realms derivation starting`,
   );
   searchResource = store.getSearchResource(
     instance,
@@ -268,43 +267,200 @@ function resolveQueryAndRealm(
   field: Field,
   fieldDefinition: FieldDefinition,
 ): { realmHref: string; searchURL: string; query: Query } | undefined {
-  try {
-    // TODO: needs to work with FieldDef instance too
-    let serialized = serializeCard(instance as CardDef, {
-      includeComputeds: true,
-      includeUnrenderedFields: true,
-      useAbsoluteURL: true,
-    });
-    let resource = serialized.data as LooseCardResource;
-    let realmURL: URL | undefined = (instance as CardDef)[realmURLSymbol];
-    realmURL = realmURL
-      ? realmURL
-      : resource.meta?.realmURL
-        ? new URL(resource.meta.realmURL)
-        : (instance as CardDef).id
-          ? new URL((instance as CardDef).id)
-          : undefined;
-    if (!realmURL) {
+  let realmURL: URL | undefined = (instance as any)[realmURLSymbol];
+
+  // Inline query normalization without serialize/normalizeQueryDefinition
+  let workingQuery: Query = JSON.parse(
+    JSON.stringify(field.queryDefinition ?? {}),
+  );
+  let queryAny = workingQuery as Record<string, any>;
+  let aborted = false;
+  let EMPTY_PREDICATE_KEYS = new Set([
+    'eq',
+    'contains',
+    'range',
+    'any',
+    'every',
+  ]);
+
+  const markEmptyPredicate = (context?: string) => {
+    if (context && EMPTY_PREDICATE_KEYS.has(context)) {
+      aborted = true;
+    }
+  };
+
+  const resolvePathValue = (path: string) => {
+    return instance[path];
+  };
+
+  const interpolateNode = (node: any, context?: string): any => {
+    if (aborted) {
       return undefined;
     }
-    let normalized = normalizeQueryDefinition({
-      fieldDefinition,
-      queryDefinition: field.queryDefinition!,
-      resource,
-      realmURL,
-      fieldName: field.name,
-    });
-    if (!normalized) {
-      return undefined;
+    if (typeof node === 'string') {
+      if (node === THIS_REALM_TOKEN) {
+        return realmURL!.href;
+      }
+      if (node.startsWith(THIS_INTERPOLATION_PREFIX)) {
+        let path = node.slice(THIS_INTERPOLATION_PREFIX.length);
+        let value = resolvePathValue(path);
+        if (value === undefined) {
+          markEmptyPredicate(context);
+          return undefined;
+        }
+        return value;
+      }
+      return node;
     }
-    return {
-      realmHref: normalized.realm,
-      searchURL: buildQuerySearchURL(normalized.realm, normalized.query),
-      query: normalized.query,
-    };
-  } catch {
+    if (Array.isArray(node)) {
+      let result: any[] = [];
+      for (let entry of node) {
+        let interpolated = interpolateNode(entry, context);
+        if (interpolated !== undefined) {
+          result.push(interpolated);
+        }
+      }
+      if (result.length === 0) {
+        markEmptyPredicate(context);
+        return undefined;
+      }
+      return result;
+    }
+    if (node && typeof node === 'object') {
+      let result: Record<string, any> = {};
+      for (let [key, value] of Object.entries(node)) {
+        let interpolated = interpolateNode(value, key);
+        if (interpolated !== undefined) {
+          result[key] = interpolated;
+        }
+      }
+      if (Object.keys(result).length === 0) {
+        markEmptyPredicate(context);
+        return undefined;
+      }
+      return result;
+    }
+    return node;
+  };
+
+  if (queryAny.filter) {
+    let interpolatedFilter = interpolateNode(queryAny.filter, 'filter');
+    if (interpolatedFilter === undefined) {
+      delete queryAny.filter;
+    } else {
+      queryAny.filter = interpolatedFilter;
+    }
+  }
+  if (queryAny.sort) {
+    let interpolatedSort = interpolateNode(queryAny.sort, 'sort');
+    if (interpolatedSort === undefined) {
+      delete queryAny.sort;
+    } else {
+      queryAny.sort = interpolatedSort;
+    }
+  }
+  if (queryAny.page) {
+    let interpolatedPage = interpolateNode(queryAny.page, 'page');
+    if (interpolatedPage === undefined) {
+      delete queryAny.page;
+    } else {
+      queryAny.page = interpolatedPage;
+    }
+  }
+  if (aborted) {
     return undefined;
   }
+
+  let specifiedRealm: any = queryAny.realm ?? THIS_REALM_TOKEN;
+  const resolveRealm = (value: any): string => {
+    if (value == null) {
+      return realmURL!.href;
+    }
+    if (Array.isArray(value)) {
+      if (value.length === 0) {
+        return realmURL!.href;
+      }
+      if (value.length > 1) {
+        throw new Error(
+          `query field "${field.name}" only supports a single realm but received multiple entries`,
+        );
+      }
+      return resolveRealm(value[0]);
+    }
+    if (typeof value !== 'string') {
+      throw new Error(
+        `query field "${field.name}" must resolve realm to a string`,
+      );
+    }
+    if (value.length === 0) {
+      throw new Error(
+        `query field "${field.name}" must resolve realm to a non-empty string`,
+      );
+    }
+    if (value === THIS_REALM_TOKEN) {
+      return realmURL!.href;
+    }
+    if (value.startsWith(THIS_INTERPOLATION_PREFIX)) {
+      let interpolated = resolvePathValue(
+        value.slice(THIS_INTERPOLATION_PREFIX.length),
+      );
+      if (typeof interpolated === 'string' && interpolated.length > 0) {
+        return interpolated;
+      }
+      throw new Error(
+        `query field "${field.name}" must resolve realm interpolation "${value}" to a non-empty string`,
+      );
+    }
+    return value;
+  };
+  let resolvedRealm = resolveRealm(specifiedRealm);
+  delete queryAny.realm;
+
+  // Apply defaults for target and paging (mirrors normalizeQueryDefinition)
+  let targetRef = codeRefWithAbsoluteURL(
+    fieldDefinition.fieldOrCard,
+    (instance as CardDef).id ? new URL((instance as CardDef).id) : realmURL,
+  );
+
+  let filter = queryAny.filter as Record<string, any> | undefined;
+  if (!filter || Object.keys(filter).length === 0) {
+    queryAny.filter = { type: targetRef };
+  } else if (!filter.on) {
+    filter.on = targetRef;
+  }
+
+  if (Array.isArray(queryAny.sort)) {
+    queryAny.sort = queryAny.sort.map((entry: any) => {
+      if (entry && typeof entry === 'object' && !('on' in entry)) {
+        return { ...entry, on: targetRef };
+      }
+      return entry;
+    });
+  }
+
+  if (fieldDefinition.type === 'linksTo') {
+    let page = queryAny.page ?? {};
+    page.size = 1;
+    page.number = 0;
+    queryAny.page = page;
+  } else if (queryAny.page) {
+    let page = queryAny.page;
+    if (page.size != null || page.number != null) {
+      page.number = page.number ?? 0;
+      queryAny.page = page;
+    } else {
+      delete queryAny.page;
+    }
+  }
+
+  // Final query object after interpolation
+  let normalizedQuery = queryAny as Query;
+
+  return {
+    realmHref: resolvedRealm,
+    searchURL: buildQuerySearchURL(resolvedRealm, normalizedQuery),
+    query: normalizedQuery,
+  };
 }
 
 function buildFieldDefinition(field: Field): FieldDefinition | undefined {

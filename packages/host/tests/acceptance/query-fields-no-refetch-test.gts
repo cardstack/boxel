@@ -328,6 +328,9 @@ module(
 
       network.virtualNetwork.mount(handler, { prepend: true });
       try {
+        console.log(
+          '************** *************** ************** **************',
+        );
         await visitOperatorMode({
           stacks: [[{ id: QUERY_CARD_NESTED_URL, format: 'isolated' }]],
         });
