@@ -16,6 +16,7 @@ import type {
 import {
   DEFAULT_PERMISSIONS,
   SupportedMimeType,
+  type Realm,
 } from '@cardstack/runtime-common';
 import {
   PgAdapter,
@@ -32,6 +33,7 @@ import {
   realmSecretSeed,
   runTestRealmServer,
   setupBaseRealmServer,
+  setupPermissionedRealm,
   setupDB,
 } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
@@ -49,6 +51,11 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
   let request: SuperTest<Test>;
   let tempDir: DirResult;
   let virtualNetwork: VirtualNetwork;
+  let testRealm: Realm;
+
+  function onRealmSetup(args: { testRealm: Realm }) {
+    testRealm = args.testRealm;
+  }
 
   setupBaseRealmServer(hooks, matrixURL);
 
@@ -96,32 +103,34 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     },
   });
 
-  test('reports publishable realm when there are no private dependencies', async function (assert) {
-    let { url, realm } = await createRealm({
-      name: 'Publishable Realm',
-      files: {
+  module('with a publishable realm', function (hooks) {
+    setupPermissionedRealm(hooks, {
+      permissions: {
+        [ownerUserId]: ['read', 'write', 'realm-owner'],
+      },
+      fileSystem: {
         'source-card.gts': `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
-          import CreateAiAssistantRoomCommand from "@cardstack/boxel-host/commands/create-ai-assistant-room";
+              import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+              import StringField from "https://cardstack.com/base/string";
+              import CreateAiAssistantRoomCommand from "@cardstack/boxel-host/commands/create-ai-assistant-room";
 
-          // Ensure data: dependencies are ignored
-          import "data:text/javascript,export%20default%200;";
+              // Ensure data: dependencies are ignored
+              import "data:text/javascript,export%20default%200;";
 
-          export class SourceCard extends CardDef {
-            @field label = contains(StringField);
+              export class SourceCard extends CardDef {
+                @field label = contains(StringField);
 
-            command = CreateAiAssistantRoomCommand;
+                command = CreateAiAssistantRoomCommand;
 
-            <template>
-              label: <span class='label'>{{@fields.label}}</span>
+                <template>
+                  label: <span class='label'>{{@fields.label}}</span>
 
-              <style scoped>
-                .label { font-weight: bold; }
-              </style>
-            </template>
-          }
-        `,
+                  <style scoped>
+                    .label { font-weight: bold; }
+                  </style>
+                </template>
+              }
+            `,
         'source-instance.json': {
           data: {
             type: 'card',
@@ -137,26 +146,29 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           },
         },
       },
+      onRealmSetup,
     });
 
-    let response = await request
-      .get(`${new URL(url).pathname}_publishability`)
-      .set('Accept', SupportedMimeType.JSONAPI)
-      .set(
-        'Authorization',
-        `Bearer ${createJWT(realm, ownerUserId, DEFAULT_PERMISSIONS)}`,
-      );
+    test('reports publishable realm when there are no private dependencies', async function (assert) {
+      let response = await request
+        .get(`${new URL(testRealm.url).pathname}_publishability`)
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, ownerUserId, DEFAULT_PERMISSIONS)}`,
+        );
 
-    assert.strictEqual(response.status, 200, 'HTTP 200 status');
-    assert.true(
-      response.body.data.attributes.publishable,
-      'Realm is publishable',
-    );
-    assert.deepEqual(
-      response.body.data.attributes.violations,
-      [],
-      'No violations reported',
-    );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.true(
+        response.body.data.attributes.publishable,
+        'Realm is publishable',
+      );
+      assert.deepEqual(
+        response.body.data.attributes.violations,
+        [],
+        'No violations reported',
+      );
+    });
   });
 
   test('lists direct dependencies on private realms', async function (assert) {
