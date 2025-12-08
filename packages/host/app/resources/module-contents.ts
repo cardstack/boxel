@@ -17,17 +17,21 @@ import {
   type ModuleDeclaration,
   type CardOrFieldDeclaration,
   type CardOrFieldReexport,
+  type CommandDeclaration,
   isCardOrFieldDeclaration,
+  isCommandDeclaration,
   isReexportCardOrField,
 } from '@cardstack/host/services/module-contents-service';
 import type NetworkService from '@cardstack/host/services/network';
 
 export {
   isCardOrFieldDeclaration,
+  isCommandDeclaration,
   isReexportCardOrField,
   type ModuleDeclaration,
   type CardOrFieldDeclaration,
   type CardOrFieldReexport,
+  type CommandDeclaration,
 };
 
 interface Args {

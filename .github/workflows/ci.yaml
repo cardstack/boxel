@@ -282,7 +282,7 @@ jobs:
       - name: Build boxel-motion
         run: pnpm build
         working-directory: packages/boxel-motion/addon
-      - name: Start host to serve assets for fastboot
+      - name: Start host to serve assets for realm server
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
           run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
@@ -392,13 +392,20 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          MATRIX_TEST_RESULT: ${{ needs.matrix-client-test.result }}
         run: |
+          state="success"
+          description=""
+          if [ "$MATRIX_TEST_RESULT" = "failure" ]; then
+            state="failure"
+            description="Matrix Playwright shard failures"
+          fi
           curl \
             -X POST \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/$REPOSITORY/statuses/$HEAD_SHA \
-            -d '{"context":"Matrix Playwright tests report","description":"","target_url":"'"$PLAYWRIGHT_REPORT_URL"'","state":"success"}'
+            -d '{"context":"Matrix Playwright tests report","description":"'"$description"'","target_url":"'"$PLAYWRIGHT_REPORT_URL"'","state":"'"$state"'"}'
 
   realm-server-test:
     name: Realm Server Tests
@@ -418,8 +425,8 @@ jobs:
             "card-dependencies-endpoint-test.ts",
             "card-endpoints-test.ts",
             "card-source-endpoints-test.ts",
+            "definition-lookup-test.ts",
             "file-watcher-events-test.ts",
-            "headless-chrome-indexing-test.ts",
             "indexing-test.ts",
             "transpile-test.ts",
             "module-syntax-test.ts",
@@ -427,6 +434,7 @@ jobs:
             "prerendering-test.ts",
             "prerender-server-test.ts",
             "prerender-manager-test.ts",
+            "remote-prerenderer-test.ts",
             "queue-test.ts",
             "realm-endpoints/directory-test.ts",
             "realm-endpoints/info-test.ts",
@@ -437,7 +445,6 @@ jobs:
             "realm-endpoints/resource-index-test.ts",
             "realm-endpoints/search-test.ts",
             "realm-endpoints/user-test.ts",
-            "realm-endpoints/definition-test.ts",
             "realm-endpoints-test.ts",
             "search-prerendered-test.ts",
             "types-endpoint-test.ts",
@@ -465,7 +472,7 @@ jobs:
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
-      - name: Start host to serve assets for fastboot
+      - name: Start host to serve assets for realm server
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
           run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &

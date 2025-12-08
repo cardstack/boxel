@@ -28,12 +28,13 @@ declare const config: {
   serverEchoDebounceMs: number;
   loginMessageTimeoutMs: number;
   minSaveTaskDurationMs: number;
-  renderTimeoutMs: number;
+  cardRenderTimeout: number;
   sqlSchema: string;
   assetsURL: string;
   stripePaymentLink: string;
   featureFlags?: {
     SHOW_ASK_AI?: boolean;
+    AI_PATCHING_CORRECTNESS_CHECKS?: boolean;
   };
   publishedRealmBoxelSpaceDomain: string;
   publishedRealmBoxelSiteDomain: string;

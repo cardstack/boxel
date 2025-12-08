@@ -85,7 +85,7 @@ export class RealmIndexUpdater {
   // TODO consider triggering realm events for invalidations now that we can
   // calculate fine grained invalidations for from-scratch indexing by passing
   // in an onInvalidation callback
-  async fullIndex() {
+  async fullIndex(priority = systemInitiatedPriority) {
     this.#indexingDeferred = new Deferred<void>();
     let startedAt = performance.now();
     try {
@@ -100,7 +100,7 @@ export class RealmIndexUpdater {
         jobType: `from-scratch-index`,
         concurrencyGroup: `indexing:${this.#realm.url}`,
         timeout: FROM_SCRATCH_JOB_TIMEOUT_SEC,
-        priority: systemInitiatedPriority,
+        priority,
         args,
       });
       let { ignoreData, stats } = await job.done;
@@ -128,7 +128,7 @@ export class RealmIndexUpdater {
     urls: URL[],
     opts?: {
       delete?: true;
-      onInvalidation?: (invalidatedURLs: URL[]) => void;
+      onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>;
       clientRequestId?: string | null;
     },
   ): Promise<void> {
@@ -153,7 +153,7 @@ export class RealmIndexUpdater {
       this.#stats = stats;
       this.#ignoreData = ignoreData;
       if (opts?.onInvalidation) {
-        opts.onInvalidation(
+        await opts.onInvalidation(
           invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
         );
       }
@@ -167,7 +167,7 @@ export class RealmIndexUpdater {
 
   async copy(
     sourceRealmURL: URL,
-    onInvalidation?: (invalidatedURLs: URL[]) => void,
+    onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>,
   ): Promise<void> {
     this.#indexingDeferred = new Deferred<void>();
     try {
@@ -185,7 +185,7 @@ export class RealmIndexUpdater {
       });
       let { invalidations } = await job.done;
       if (onInvalidation) {
-        onInvalidation(
+        await onInvalidation(
           invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
         );
       }
@@ -223,7 +223,8 @@ export function isIgnored(
     [
       `${realmURL.href}.realm.json`,
       `${realmURL.href}.template-lintrc.js`,
-    ].includes(url.href)
+    ].includes(url.href) ||
+    url.href.startsWith(`${realmURL.href}.git/`)
   ) {
     return true;
   }

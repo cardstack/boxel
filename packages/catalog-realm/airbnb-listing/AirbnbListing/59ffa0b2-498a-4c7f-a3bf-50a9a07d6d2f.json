@@ -1,0 +1,67 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AirbnbListing",
+        "module": "../airbnb-listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "beds": 4,
+      "host": "Sarah Martinez",
+      "guests": 6,
+      "photos": {
+        "images": [
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764831632778/public"
+          },
+          {
+            "uploadUrl": null,
+            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764833876706/public"
+          }
+        ]
+      },
+      "rating": 5,
+      "bedrooms": 3,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "location": "Malibu, California",
+      "amenities": [
+        "WiFi",
+        "Kitchen",
+        "Free parking",
+        "Pool",
+        "Hot tub",
+        "Beach access",
+        "Ocean view",
+        "Air conditioning",
+        "Heating",
+        "Washer",
+        "Dryer",
+        "TV",
+        "Coffee maker"
+      ],
+      "bathrooms": 2.5,
+      "superhost": "Yes",
+      "listedDate": "2025-12-01",
+      "description": "Wake up to stunning ocean views in this beautifully renovated beachfront villa. Features an open-concept living space, chef's kitchen, private pool, and direct beach access. Perfect for families or groups looking for a luxurious coastal retreat. The master suite offers panoramic ocean views and a private balcony. Located in prestigious Malibu with easy access to restaurants, shopping, and hiking trails.",
+      "reviewCount": 127,
+      "propertyName": "Cozy Beachfront Villa",
+      "propertyType": "Entire home",
+      "pricePerNight": 450
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

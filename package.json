@@ -38,7 +38,6 @@
     },
     "patchedDependencies": {
       "magic-string@0.25.9": "patches/magic-string@0.25.9.patch",
-      "fastboot@4.1.0": "patches/fastboot@4.1.0.patch",
       "style-loader@2.0.0": "patches/style-loader@2.0.0.patch",
       "ember-css-url@1.0.0": "patches/ember-css-url@1.0.0.patch",
       "ember-basic-dropdown@8.0.4": "patches/ember-basic-dropdown@8.0.4.patch",

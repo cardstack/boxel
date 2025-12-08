@@ -117,7 +117,15 @@ export class IndexRunner {
     this.#reportStatus = reportStatus;
     this.#prerenderer = prerenderer;
     this.#userId = userId;
-    this.#permissions = permissions;
+    this.#permissions = { ...permissions };
+    let ownerPermissions = new Set(
+      this.#permissions[this.#realmURL.href] ?? [],
+    );
+    // we assert that the userID provided is always the owner of the realm being
+    // indexed
+    ownerPermissions.add('read');
+    ownerPermissions.add('realm-owner');
+    this.#permissions[this.#realmURL.href] = [...ownerPermissions];
     this.#fetch = fetch;
   }
 
@@ -649,6 +657,7 @@ export class IndexRunner {
           deps,
           types,
           isolatedHTML,
+          headHTML,
           atomHTML,
           embeddedHTML,
           fittedHTML,
@@ -659,6 +668,7 @@ export class IndexRunner {
           resource: serialized!.data as CardResource,
           searchData: searchDoc!,
           isolatedHtml: isolatedHTML ?? undefined,
+          headHtml: headHTML ?? undefined,
           atomHtml: atomHTML ?? undefined,
           embeddedHtml: embeddedHTML ?? undefined,
           fittedHtml: fittedHTML ?? undefined,

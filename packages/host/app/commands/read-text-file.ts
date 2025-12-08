@@ -29,7 +29,9 @@ export default class ReadTextFileCommand extends HostBaseCommand<
     let url = input.realm
       ? new URL(input.path, input.realm)
       : new URL(input.path);
-    let response = await this.network.authedFetch(url);
+    let response = await this.network.authedFetch(url, {
+      headers: { Accept: 'text/plain' },
+    });
 
     let { FileContents } = await this.loadCommandModule();
     if (response.ok) {

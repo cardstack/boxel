@@ -52,7 +52,11 @@
     "lodash": "catalog:",
     "loglevel": "catalog:",
     "marked": "catalog:",
+    "matrix-js-sdk": "catalog:",
+    "openai": "catalog:",
     "pluralize": "catalog:",
+    "prettier": "catalog:",
+    "prettier-plugin-ember-template-tag": "catalog:",
     "qs": "catalog:",
     "qunit": "catalog:",
     "recast": "catalog:",
@@ -61,10 +65,7 @@
     "transform-modules-amd-plugin": "workspace:*",
     "typescript-memoize": "catalog:",
     "uuid": "catalog:",
-    "prettier": "catalog:",
-    "prettier-plugin-ember-template-tag": "catalog:",
-    "matrix-js-sdk": "catalog:",
-    "openai": "catalog:"
+    "zod": "^3.24.4"
   },
   "devDependencies": {
     "@babel/core": "catalog:",

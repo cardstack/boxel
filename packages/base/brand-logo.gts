@@ -13,8 +13,8 @@ import {
   StringField,
   getFieldDescription,
 } from './card-api';
+import { buildCssVariableName } from '@cardstack/boxel-ui/helpers';
 import {
-  dasherize,
   type CssVariableField,
   type CssVariableFieldEntry,
 } from './structured-theme-variables';
@@ -236,7 +236,7 @@ class Embedded extends Component<typeof BrandLogo> {
       }
       .annotation {
         color: var(--annotation-foreground);
-        font-weight: var(--boxel-font-weight-bold);
+        font-weight: 700;
         white-space: nowrap;
       }
       .height-annotation-border {
@@ -274,7 +274,7 @@ class Embedded extends Component<typeof BrandLogo> {
         overflow: hidden;
       }
       .media-handle {
-        font-weight: var(--boxel-font-weight-semibold);
+        font-weight: 600;
       }
     </style>
   </template>
@@ -357,7 +357,7 @@ export default class BrandLogo extends FieldDef {
 
     let cssVariableFields: CssVariableFieldEntry[] = [];
     for (let fieldName of fieldNames) {
-      let cssVariableName = `--brand-${dasherize(fieldName)}`;
+      let cssVariableName = buildCssVariableName(fieldName, { prefix: 'brand' });
       let value = (this as CssVariableField)?.[fieldName];
       cssVariableFields.push({
         fieldName,

@@ -2,6 +2,9 @@ import type { MatrixClient, MatrixEvent } from 'matrix-js-sdk';
 import type {
   ChatCompletionMessageToolCall,
   OpenAIPromptMessage,
+  PendingCodePatchCorrectnessCheck,
+  CodePatchCorrectnessCard,
+  CodePatchCorrectnessFile,
   PromptParts,
 } from './types';
 import { constructHistory } from './history';
@@ -13,6 +16,7 @@ import {
 import { isRecognisedDebugCommand } from './debug';
 import type {
   ActiveLLMEvent,
+  BoxelContext,
   CardMessageContent,
   CardMessageEvent,
   CodePatchResultEvent,
@@ -33,10 +37,14 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
+  APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   DEFAULT_LLM,
 } from '../matrix-constants';
+import { decodeCommandRequest } from '../commands';
+import type { CommandRequest } from '../commands';
 import type { ReasoningEffort } from 'openai/resources/shared';
 import type {
   CardResource,
@@ -50,6 +58,24 @@ import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants';
 import { humanReadable } from '../code-ref';
 import { SEARCH_MARKER, REPLACE_MARKER, SEPARATOR_MARKER } from '../constants';
 
+let aiPatchingCorrectnessFlag: string | boolean | undefined;
+if (typeof globalThis !== 'undefined') {
+  let maybeProcess = (globalThis as any).process;
+  if (maybeProcess?.env) {
+    aiPatchingCorrectnessFlag =
+      maybeProcess.env.ENABLE_AI_PATCHING_CORRECTNESS_CHECKS;
+  }
+  if (aiPatchingCorrectnessFlag === undefined) {
+    aiPatchingCorrectnessFlag = (globalThis as any)?.ENV
+      ?.ENABLE_AI_PATCHING_CORRECTNESS_CHECKS;
+  }
+}
+const AI_PATCHING_CORRECTNESS_CHECKS_ENABLED =
+  aiPatchingCorrectnessFlag === 'true' || aiPatchingCorrectnessFlag === true;
+
+const CARD_PATCH_COMMAND_NAMES = new Set(['patchCardInstance', 'patchFields']);
+const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
+
 function getLog() {
   return logger('ai-bot:prompt');
 }
@@ -58,12 +84,18 @@ export async function getPromptParts(
   eventList: DiscreteMatrixEvent[],
   aiBotUserId: string,
   client: MatrixClient,
+  options?: { autoCorrectnessChecksEnabled?: boolean },
 ): Promise<PromptParts> {
+  let autoCorrectnessChecksEnabled =
+    options?.autoCorrectnessChecksEnabled ??
+    AI_PATCHING_CORRECTNESS_CHECKS_ENABLED;
   let history: DiscreteMatrixEvent[] = await constructHistory(
     eventList,
     client,
   );
   let shouldRespond = getShouldRespond(history);
+  let pendingCodePatchCorrectnessChecks =
+    collectPendingCodePatchCorrectnessCheck(history, aiBotUserId);
   if (!shouldRespond) {
     return {
       shouldRespond: false,
@@ -74,6 +106,7 @@ export async function getPromptParts(
       toolChoice: undefined,
       toolsSupported: undefined,
       reasoningEffort: undefined,
+      pendingCodePatchCorrectnessChecks,
     };
   }
   let skills = await getEnabledSkills(eventList, client);
@@ -87,6 +120,7 @@ export async function getPromptParts(
     skills,
     disabledSkillIds,
     client,
+    autoCorrectnessChecksEnabled,
   );
   let { model, toolsSupported, reasoningEffort } =
     getActiveLLMDetails(eventList);
@@ -99,6 +133,7 @@ export async function getPromptParts(
     toolChoice: toolChoice,
     toolsSupported,
     reasoningEffort,
+    pendingCodePatchCorrectnessChecks,
   };
 }
 
@@ -155,7 +190,113 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
         );
       });
     });
-  return allCommandsHaveResults && allCodePatchesHaveResults;
+  if (!allCommandsHaveResults || !allCodePatchesHaveResults) {
+    return false;
+  }
+  if (!allCheckCorrectnessCommandsHaveResults(history)) {
+    return false;
+  }
+  return true;
+}
+
+function allCheckCorrectnessCommandsHaveResults(
+  history: DiscreteMatrixEvent[],
+): boolean {
+  let lastEventWithCheckCorrectnessRequests = findLast(history, (event) => {
+    return getCheckCorrectnessCommandRequests(event).length > 0;
+  });
+
+  if (!lastEventWithCheckCorrectnessRequests) {
+    return true;
+  }
+
+  let checkCommandRequests = getCheckCorrectnessCommandRequests(
+    lastEventWithCheckCorrectnessRequests,
+  );
+  if (checkCommandRequests.length === 0) {
+    return true;
+  }
+
+  let startIndex = history.indexOf(lastEventWithCheckCorrectnessRequests);
+  let subsequentEvents = history.slice(startIndex + 1);
+  return checkCommandRequests.every((request) => {
+    return subsequentEvents.some((event) =>
+      isTerminalCommandResultEventFor(event, request.id!),
+    );
+  });
+}
+
+function shouldPromptCheckCorrectnessSummary(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+) {
+  let lastEvent = history[history.length - 1];
+  if (!isCommandResultEvent(lastEvent)) {
+    return false;
+  }
+  if (!isCheckCorrectnessCommandResultEvent(lastEvent, history)) {
+    return false;
+  }
+  let lastNonResultIndex = findLastIndex(
+    history,
+    (event) => !isCommandOrCodePatchResult(event),
+  );
+  if (lastNonResultIndex === -1) {
+    return true;
+  }
+  let lastNonResultEvent = history[lastNonResultIndex];
+  return lastNonResultEvent.sender === aiBotUserId;
+}
+
+function getCheckCorrectnessCommandRequests(
+  event: DiscreteMatrixEvent,
+): CommandRequest[] {
+  if (!event || event.type !== 'm.room.message') {
+    return [];
+  }
+  let encodedRequests =
+    (event.content as CardMessageContent)[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? [];
+  if (!Array.isArray(encodedRequests)) {
+    return [];
+  }
+  let commandRequests: CommandRequest[] = [];
+  for (let encodedRequest of encodedRequests) {
+    let decoded = decodeCommandRequestSafe(
+      encodedRequest as Partial<EncodedCommandRequest>,
+    );
+    if (decoded?.id && decoded.name === CHECK_CORRECTNESS_COMMAND_NAME) {
+      commandRequests.push(decoded);
+    }
+  }
+  return commandRequests;
+}
+
+function decodeCommandRequestSafe(
+  request: Partial<EncodedCommandRequest>,
+): CommandRequest | undefined {
+  try {
+    let decoded = decodeCommandRequest(request);
+    if (decoded.id && decoded.name && decoded.arguments !== undefined) {
+      return decoded as CommandRequest;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isTerminalCommandResultEventFor(
+  event: DiscreteMatrixEvent,
+  commandRequestId: string,
+): boolean {
+  if (
+    event.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE ||
+    event.content.commandRequestId !== commandRequestId
+  ) {
+    return false;
+  }
+  let status = event.content['m.relates_to']?.key;
+  return status === 'applied' || status === 'failed' || status === 'invalid';
 }
 
 async function getEnabledSkills(
@@ -523,6 +664,11 @@ export async function getTools(
       }
     }
   }
+
+  // Correctness commands should only be emitted by helper flows, not
+  // directly via LLM tool calls.
+  toolMap.delete(CHECK_CORRECTNESS_COMMAND_NAME);
+
   return Array.from(toolMap.values()).sort((a, b) =>
     a.function.name.localeCompare(b.function.name),
   );
@@ -582,6 +728,27 @@ function getCommandResults(
   return commandResultEvents;
 }
 
+function isCheckCorrectnessCommandResultEvent(
+  commandResultEvent: CommandResultEvent,
+  history: DiscreteMatrixEvent[],
+) {
+  let sourceEventId = commandResultEvent.content['m.relates_to']?.event_id;
+  if (!sourceEventId) {
+    return false;
+  }
+  let sourceEvent = history.find((event) => event.event_id === sourceEventId);
+  if (!sourceEvent) {
+    return false;
+  }
+  let checkRequests = getCheckCorrectnessCommandRequests(sourceEvent);
+  if (checkRequests.length === 0) {
+    return false;
+  }
+  return checkRequests.some(
+    (request) => request.id === commandResultEvent.content.commandRequestId,
+  );
+}
+
 function getCodePatchResults(
   cardMessageEvent: CardMessageEvent,
   history: DiscreteMatrixEvent[],
@@ -620,12 +787,13 @@ async function toResultMessages(
   codePatchResults: CodePatchResultEvent[] = [],
   client: MatrixClient,
   history: DiscreteMatrixEvent[],
+  autoCorrectnessChecksEnabled: boolean,
 ): Promise<OpenAIPromptMessage[]> {
   const messageContent = event.content as CardMessageContent;
-  let commandResultMessages = await Promise.all(
+  let commandResultEntries = await Promise.all(
     (messageContent[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
       async (commandRequest: Partial<EncodedCommandRequest>) => {
-        let content = 'pending';
+        let decodedCommandRequest = decodeCommandRequestSafe(commandRequest);
         let commandResult = commandResults.find(
           (commandResult) =>
             (commandResult.content.msgtype ===
@@ -634,70 +802,279 @@ async function toResultMessages(
                 APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE) &&
             commandResult.content.commandRequestId === commandRequest.id,
         );
-        if (commandResult) {
-          let status = commandResult.content['m.relates_to']?.key;
-          if (
-            commandResult.content.msgtype ===
-              APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE &&
-            commandResult.content.data.card
-          ) {
-            let cardContent =
-              commandResult.content.data.card.content ??
-              commandResult.content.data.card.error;
-            content = `Tool call ${status == 'applied' ? 'executed' : status}, with result card: ${cardContent}.\n`;
-          } else {
-            content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
-          }
-          let attachments = await buildAttachmentsMessagePart(
-            client,
-            commandResult,
-            history,
-          );
-          content = [content, attachments].filter(Boolean).join('\n\n');
+        if (!commandResult) {
+          return undefined;
         }
-        return {
+        let content: string;
+        let followUpUserMessage: string | undefined;
+        let status = commandResult.content['m.relates_to']?.key;
+        let isCheckCorrectnessRequest =
+          decodedCommandRequest?.name === CHECK_CORRECTNESS_COMMAND_NAME;
+        if (isCheckCorrectnessRequest) {
+          let checkCorrectnessContent = buildCheckCorrectnessResultContent(
+            decodedCommandRequest,
+            commandResult,
+          );
+          content = checkCorrectnessContent.toolMessage;
+          followUpUserMessage = checkCorrectnessContent.followUpUserMessage;
+        } else if (
+          commandResult.content.msgtype ===
+            APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE &&
+          commandResult.content.data.card
+        ) {
+          let cardContent =
+            commandResult.content.data.card.content ??
+            commandResult.content.data.card.error;
+          content = `Tool call ${status == 'applied' ? 'executed' : status}, with result card: ${cardContent}.\n`;
+        } else {
+          content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
+        }
+        let attachments = await buildAttachmentsMessagePart(
+          client,
+          commandResult,
+          history,
+        );
+        content = [content, attachments].filter(Boolean).join('\n\n');
+        let toolMessage: OpenAIPromptMessage = {
           role: 'tool',
           tool_call_id: commandRequest.id,
           content,
-        } as OpenAIPromptMessage;
+        };
+        let followUpMessage = followUpUserMessage
+          ? ({
+              role: 'user',
+              content: followUpUserMessage,
+            } as OpenAIPromptMessage)
+          : undefined;
+        return { toolMessage, followUpMessage };
       },
     ),
   );
-  let codePatchBlocks = extractCodePatchBlocks(messageContent.body);
+  let toolMessages =
+    commandResultEntries
+      .map((entry) => entry?.toolMessage)
+      .filter((message): message is OpenAIPromptMessage => Boolean(message)) ??
+    [];
+  let followUpMessages =
+    commandResultEntries
+      .map((entry) => entry?.followUpMessage)
+      .filter((message): message is OpenAIPromptMessage => Boolean(message)) ??
+    [];
   let codePatchResultMessages: OpenAIPromptMessage[] = [];
-  if (codePatchBlocks.length) {
-    let codePatchResultsContent = (
-      await Promise.all(
-        codePatchBlocks.map(async (_codePatchBlock, codeBlockIndex) => {
-          let codePatchResultEvent = codePatchResults.find(
-            (codePatchResultEvent) =>
-              codePatchResultEvent.content.codeBlockIndex === codeBlockIndex,
-          );
-          let content = `(The user has not applied code patch ${codeBlockIndex + 1}/.)`;
-          if (codePatchResultEvent) {
-            let status = codePatchResultEvent.content['m.relates_to']?.key;
-            if (status === 'applied') {
-              content = `(The user has successfully applied code patch ${codeBlockIndex + 1}.)`;
-            } else if (status === 'failed') {
-              content = `(The user tried to apply code patch ${codeBlockIndex + 1} but there was an error: ${codePatchResultEvent.content.failureReason})`;
-            }
-            let attachments = await buildAttachmentsMessagePart(
-              client,
-              codePatchResultEvent,
-              history,
+  if (!autoCorrectnessChecksEnabled) {
+    let codePatchBlocks = extractCodePatchBlocks(messageContent.body || '');
+    if (codePatchBlocks.length) {
+      let codePatchResultsContent = (
+        await Promise.all(
+          codePatchBlocks.map(async (_codePatchBlock, codeBlockIndex) => {
+            let codePatchResultEvent = codePatchResults.find(
+              (codePatchResultEvent) =>
+                codePatchResultEvent.content.codeBlockIndex === codeBlockIndex,
             );
-            content = [content, attachments].filter(Boolean).join('\n\n');
-          }
-          return content;
-        }),
-      )
-    ).join('\n');
-    codePatchResultMessages.push({
-      role: 'user',
-      content: codePatchResultsContent,
-    });
+            let content = `(The user has not applied code patch ${codeBlockIndex + 1}.)`;
+            if (codePatchResultEvent) {
+              let status = codePatchResultEvent.content['m.relates_to']?.key;
+              if (status === 'applied') {
+                content = `(The user has successfully applied code patch ${codeBlockIndex + 1}.)`;
+              } else if (status === 'failed') {
+                content = `(The user tried to apply code patch ${codeBlockIndex + 1} but there was an error: ${codePatchResultEvent.content.failureReason})`;
+              }
+              let attachments = await buildAttachmentsMessagePart(
+                client,
+                codePatchResultEvent,
+                history,
+              );
+              content = [content, attachments].filter(Boolean).join('\n\n');
+            }
+            return content;
+          }),
+        )
+      ).join('\n');
+      codePatchResultMessages.push({
+        role: 'user',
+        content: codePatchResultsContent,
+      });
+    }
   }
-  return [...commandResultMessages, ...codePatchResultMessages];
+
+  return [...toolMessages, ...followUpMessages, ...codePatchResultMessages];
+}
+
+function buildCheckCorrectnessResultContent(
+  request?: CommandRequest,
+  commandResult?: CommandResultEvent,
+): CheckCorrectnessResultContent {
+  let targetDescription = describeCheckCorrectnessTarget(request);
+  if (!commandResult) {
+    return {
+      toolMessage: `Check correctness for ${targetDescription} is still pending.`,
+    };
+  }
+  let status = commandResult.content['m.relates_to']?.key ?? 'unknown';
+  let resultCard = extractCorrectnessResultCard(commandResult);
+  if (status === 'applied' && resultCard) {
+    return toCheckCorrectnessResultContent(
+      formatCorrectnessResultSummary(targetDescription, resultCard),
+    );
+  }
+  if (status === 'applied') {
+    return {
+      toolMessage: `Check correctness passed for ${targetDescription}.`,
+    };
+  }
+  let failureReason = commandResult.content.failureReason;
+  if (failureReason) {
+    return {
+      toolMessage: `Check correctness was marked as ${status} for ${targetDescription}: ${failureReason}`,
+    };
+  }
+  if (resultCard) {
+    return toCheckCorrectnessResultContent(
+      formatCorrectnessResultSummary(targetDescription, resultCard, status),
+    );
+  }
+  return {
+    toolMessage: `Check correctness was marked as ${status} for ${targetDescription}.`,
+  };
+}
+
+function describeCheckCorrectnessTarget(request?: CommandRequest) {
+  if (!request) {
+    return 'the requested target';
+  }
+  let args = (request.arguments as Record<string, any>) ?? {};
+  let attributes = (args.attributes as Record<string, any>) ?? {};
+  let targetType =
+    attributes.targetType ??
+    args.targetType ??
+    attributes.target_type ??
+    args.target_type;
+  let targetRef =
+    attributes.targetRef ??
+    args.targetRef ??
+    attributes.fileUrl ??
+    args.fileUrl ??
+    attributes.cardId ??
+    args.cardId;
+  if (targetType && targetRef) {
+    return `${targetType} "${targetRef}"`;
+  }
+  if (targetRef) {
+    return `"${targetRef}"`;
+  }
+  if (args.description) {
+    return args.description;
+  }
+  return 'the requested target';
+}
+
+type CorrectnessResultSummary = {
+  correct: boolean;
+  errors: string[];
+  warnings: string[];
+};
+
+type CheckCorrectnessResultContent = {
+  toolMessage: string;
+  followUpUserMessage?: string;
+};
+
+type FormattedCorrectnessSummary = {
+  summary: string;
+  hasErrors: boolean;
+};
+
+const SEARCH_REPLACE_FIX_INSTRUCTION = `1. Propose fixes for the above errors by using a SEARCH/REPLACE block (DO NOT use the patchCardInstance tool function, because it will not work for broken cards).
+2. You MUST re-fetch the files that have errors so that you can see their updated content before proposing fixes.
+3. Respond very briefly that there is an issue with the file (1 sentence max) that you will attempt to fix and do not mention SEARCH/REPLACE blocks in your prose.`;
+
+const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
+  'Summarize the correctness results above in one short sentence confirming that the target is now fixed. Mention any warnings if they exist.';
+
+function extractCorrectnessResultCard(
+  commandResult?: CommandResultEvent,
+): CorrectnessResultSummary | undefined {
+  if (
+    !commandResult ||
+    commandResult.content.msgtype !==
+      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+  ) {
+    return undefined;
+  }
+  let cardPayload = commandResult.content.data.card;
+  if (!cardPayload) {
+    return undefined;
+  }
+  let cardContent = cardPayload.content ?? cardPayload;
+  let parsed:
+    | {
+        data?: {
+          attributes?: {
+            correct?: boolean;
+            errors?: string[];
+            warnings?: string[];
+          };
+        };
+      }
+    | undefined;
+  try {
+    parsed =
+      typeof cardContent === 'string' ? JSON.parse(cardContent) : cardContent;
+  } catch (error) {
+    getLog().error('Unable to parse correctness result card', error);
+    return undefined;
+  }
+  let attributes = parsed?.data?.attributes ?? {};
+  return {
+    correct: Boolean(attributes.correct),
+    errors: Array.isArray(attributes.errors) ? attributes.errors : [],
+    warnings: Array.isArray(attributes.warnings) ? attributes.warnings : [],
+  };
+}
+
+function formatCorrectnessResultSummary(
+  targetDescription: string,
+  result: CorrectnessResultSummary,
+  status: string = 'applied',
+): FormattedCorrectnessSummary {
+  let sections: string[] = [];
+  sections.push(
+    result.correct && status === 'applied'
+      ? `Check correctness passed for ${targetDescription}.`
+      : `Check correctness was marked as ${status} for ${targetDescription}.`,
+  );
+  let errorLines = result.errors.filter(
+    (entry) => typeof entry === 'string' && entry.trim().length,
+  );
+  if (errorLines.length) {
+    sections.push(
+      `Errors:\n${errorLines.map((line) => `- ${line}`).join('\n')}`,
+    );
+  }
+  let warningLines = result.warnings.filter(
+    (entry) => typeof entry === 'string' && entry.trim().length,
+  );
+  if (warningLines.length) {
+    sections.push(
+      `Warnings:\n${warningLines.map((line) => `- ${line}`).join('\n')}`,
+    );
+  }
+  let summary = sections.join('\n\n');
+  return {
+    summary,
+    hasErrors: errorLines.length > 0,
+  };
+}
+
+function toCheckCorrectnessResultContent(
+  formattedSummary: FormattedCorrectnessSummary,
+): CheckCorrectnessResultContent {
+  return {
+    toolMessage: formattedSummary.summary,
+    followUpUserMessage: formattedSummary.hasErrors
+      ? SEARCH_REPLACE_FIX_INSTRUCTION
+      : CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION,
+  };
 }
 
 export async function buildPromptForModel(
@@ -707,6 +1084,7 @@ export async function buildPromptForModel(
   skillCards: LooseCardResource[] = [],
   disabledSkillIds: string[] = [],
   client: MatrixClient,
+  autoCorrectnessChecksEnabled = AI_PATCHING_CORRECTNESS_CHECKS_ENABLED,
 ) {
   // Need to make sure the passed in username is a full id
   if (
@@ -756,6 +1134,7 @@ export async function buildPromptForModel(
           codePatchResults,
           client,
           history,
+          autoCorrectnessChecksEnabled,
         )
       ).forEach((message) => historicalMessages.push(message));
     }
@@ -774,7 +1153,22 @@ export async function buildPromptForModel(
       }
     }
   }
+  if (
+    autoCorrectnessChecksEnabled &&
+    shouldPromptCheckCorrectnessSummary(history, aiBotUserId)
+  ) {
+    historicalMessages.push({
+      role: 'user',
+      content:
+        'The automated correctness checks have finished. Summarize their results for me based on the tool output above.',
+    });
+  }
   let systemMessage = `${SYSTEM_MESSAGE}\n`;
+
+  if (autoCorrectnessChecksEnabled) {
+    systemMessage +=
+      'Never call the checkCorrectness tool on your own; correctness checks are handled automatically by the system.\n';
+  }
   if (skillCards.length) {
     systemMessage += SKILL_INSTRUCTIONS_MESSAGE;
     systemMessage += skillCardsToMessage(skillCards);
@@ -818,6 +1212,331 @@ export async function buildPromptForModel(
   }
 
   return messages;
+}
+
+function collectPendingCodePatchCorrectnessCheck(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): PendingCodePatchCorrectnessCheck | undefined {
+  // If any bot message has unresolved code patches or card patch commands,
+  // defer correctness entirely until all are applied/failed.
+  if (hasUnresolvedCodePatches(history, aiBotUserId)) {
+    return undefined;
+  }
+
+  for (let index = history.length - 1; index >= 0; index--) {
+    let event = history[index];
+    if (
+      event.type !== 'm.room.message' ||
+      event.sender !== aiBotUserId ||
+      event.content.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
+    ) {
+      continue;
+    }
+
+    // Only consider messages that contain code patches or card patch commands.
+    let content = event.content as CardMessageContent;
+    let codePatchBlocks = extractCodePatchBlocks(content.body || '');
+    let commandRequests = (content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
+      (request) => decodeCommandRequest(request),
+    );
+    let relevantCommands = commandRequests.filter((request) =>
+      isCardPatchCommand(request.name),
+    );
+    let hasRelevantChanges =
+      codePatchBlocks.length > 0 || relevantCommands.length > 0;
+    if (!hasRelevantChanges) {
+      continue;
+    }
+
+    let codePatchResults = getCodePatchResults(
+      event as CardMessageEvent,
+      history,
+    );
+    let commandResults = getCommandResults(event as CardMessageEvent, history);
+
+    let appliedCodePatchResults = codePatchResults.filter(
+      (result) => result.content['m.relates_to']?.key === 'applied',
+    );
+    let allCodePatchesResolved =
+      codePatchBlocks.length === 0 ||
+      codePatchBlocks.every((_block, index) =>
+        appliedCodePatchResults.some(
+          (result) => result.content.codeBlockIndex === index,
+        ),
+      );
+    let allRelevantCommandsResolved =
+      relevantCommands.length === 0 ||
+      relevantCommands.every((request) =>
+        commandResults.some(
+          (result) => result.content.commandRequestId === request.id,
+        ),
+      );
+
+    // If the most recent message with patches/commands isn't resolved yet,
+    // don't walk back to earlier messages—wait for the current one to finish.
+    if (!allCodePatchesResolved || !allRelevantCommandsResolved) {
+      return undefined;
+    }
+
+    let correctnessCheck = buildCodePatchCorrectnessMessage(
+      event as CardMessageEvent,
+      history,
+    );
+    if (correctnessCheck) {
+      return correctnessCheck;
+    }
+  }
+  return undefined;
+}
+
+function hasUnresolvedCodePatches(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): boolean {
+  for (let event of history) {
+    if (
+      event.type !== 'm.room.message' ||
+      event.sender !== aiBotUserId ||
+      event.content.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
+    ) {
+      continue;
+    }
+    let content = event.content as CardMessageContent;
+    let codePatchBlocks = extractCodePatchBlocks(content.body || '');
+    let commandRequests = (content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
+      (request) => decodeCommandRequest(request),
+    );
+    let relevantCommands = commandRequests.filter((request) =>
+      isCardPatchCommand(request.name),
+    );
+    let hasRelevantChanges =
+      codePatchBlocks.length > 0 || relevantCommands.length > 0;
+    if (!hasRelevantChanges) {
+      continue;
+    }
+
+    let codePatchResults = getCodePatchResults(
+      event as CardMessageEvent,
+      history,
+    );
+    let commandResults = getCommandResults(event as CardMessageEvent, history);
+    let appliedCodePatchResults = codePatchResults.filter(
+      (result) => result.content['m.relates_to']?.key === 'applied',
+    );
+    let allCodePatchesResolved =
+      codePatchBlocks.length === 0 ||
+      codePatchBlocks.every((_block, index) =>
+        appliedCodePatchResults.some(
+          (result) => result.content.codeBlockIndex === index,
+        ),
+      );
+    let allRelevantCommandsResolved =
+      relevantCommands.length === 0 ||
+      relevantCommands.every((request) =>
+        commandResults.some(
+          (result) => result.content.commandRequestId === request.id,
+        ),
+      );
+
+    if (!allCodePatchesResolved || !allRelevantCommandsResolved) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function buildCodePatchCorrectnessMessage(
+  messageEvent: CardMessageEvent,
+  history: DiscreteMatrixEvent[],
+): PendingCodePatchCorrectnessCheck | undefined {
+  let content = messageEvent.content as CardMessageContent;
+  let codePatchBlocks = extractCodePatchBlocks(content.body || '');
+  let commandRequests = (content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
+    (request) => decodeCommandRequest(request),
+  );
+  let relevantCommands = commandRequests.filter((request) =>
+    isCardPatchCommand(request.name),
+  );
+
+  if (codePatchBlocks.length === 0 && relevantCommands.length === 0) {
+    return undefined;
+  }
+
+  if (
+    history.some((event) =>
+      isCodePatchCorrectnessEventForMessage(event, messageEvent.event_id!),
+    )
+  ) {
+    return undefined;
+  }
+
+  let codePatchResults = getCodePatchResults(messageEvent, history);
+  let commandResults = getCommandResults(messageEvent, history);
+
+  let appliedCodePatchResults = codePatchResults.filter(
+    (result) => result.content['m.relates_to']?.key === 'applied',
+  );
+  let allCodePatchesResolved =
+    codePatchBlocks.length === 0 ||
+    codePatchBlocks.every((_block, index) =>
+      appliedCodePatchResults.some(
+        (result) => result.content.codeBlockIndex === index,
+      ),
+    );
+  let allRelevantCommandsResolved =
+    relevantCommands.length === 0 ||
+    relevantCommands.every((request) =>
+      commandResults.some(
+        (result) => result.content.commandRequestId === request.id,
+      ),
+    );
+
+  if (!allCodePatchesResolved || !allRelevantCommandsResolved) {
+    return undefined;
+  }
+
+  let files = gatherPatchedFiles(codePatchResults);
+  let cards = gatherPatchedCards(relevantCommands, commandResults);
+
+  if (files.length === 0 && cards.length === 0) {
+    return undefined;
+  }
+
+  return {
+    targetEventId: messageEvent.event_id!,
+    roomId: messageEvent.room_id!,
+    context: content.data?.context as BoxelContext | undefined,
+    files,
+    cards,
+  };
+}
+
+function isCardPatchCommand(name?: string) {
+  if (!name) {
+    return false;
+  }
+  return CARD_PATCH_COMMAND_NAMES.has(name);
+}
+
+function gatherPatchedFiles(
+  codePatchResults: CodePatchResultEvent[],
+): CodePatchCorrectnessFile[] {
+  let seen = new Set<string>();
+  let files: CodePatchCorrectnessFile[] = [];
+  for (let result of codePatchResults) {
+    let status = result.content['m.relates_to']?.key;
+    if (status !== 'applied') {
+      continue;
+    }
+    let attachments = result.content.data?.attachedFiles ?? [];
+    if (attachments.length === 0) {
+      let fallback = result.content.data?.context?.codeMode?.currentFile;
+      if (fallback && !seen.has(fallback)) {
+        seen.add(fallback);
+        files.push({
+          sourceUrl: fallback,
+          displayName: formatFileDisplayName(fallback),
+        });
+      }
+      continue;
+    }
+    for (let file of attachments) {
+      let sourceUrl = file.sourceUrl ?? file.url ?? file.name ?? '';
+      let key = sourceUrl || file.name || `${result.event_id}-${file.name}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      let labelSource = sourceUrl || file.name || '';
+      files.push({
+        sourceUrl: sourceUrl || labelSource,
+        displayName: formatFileDisplayName(labelSource),
+      });
+    }
+  }
+  return files;
+}
+
+function gatherPatchedCards(
+  commandRequests: Partial<CommandRequest>[],
+  commandResults: CommandResultEvent[],
+): CodePatchCorrectnessCard[] {
+  let cards: CodePatchCorrectnessCard[] = [];
+  let seen = new Set<string>();
+  for (let request of commandRequests) {
+    let result = commandResults.find(
+      (commandResult) => commandResult.content.commandRequestId === request.id,
+    );
+    if (!result) {
+      continue;
+    }
+    if (result.content['m.relates_to']?.key !== 'applied') {
+      continue;
+    }
+    let cardId = extractCardIdFromCommandRequest(request);
+    if (!cardId || seen.has(cardId)) {
+      continue;
+    }
+    seen.add(cardId);
+    cards.push({ cardId });
+  }
+  return cards;
+}
+
+function extractCardIdFromCommandRequest(
+  request: Partial<CommandRequest>,
+): string | undefined {
+  let args = request.arguments as Record<string, any> | undefined;
+  if (!args) {
+    return undefined;
+  }
+  if (typeof args.cardId === 'string') {
+    return args.cardId;
+  }
+  if (typeof args.attributes?.cardId === 'string') {
+    return args.attributes.cardId;
+  }
+  if (typeof args.attributes?.patch?.cardId === 'string') {
+    return args.attributes.patch.cardId;
+  }
+  if (typeof args.attributes?.patch?.attributes?.cardId === 'string') {
+    return args.attributes.patch.attributes.cardId;
+  }
+  return undefined;
+}
+
+function isCodePatchCorrectnessEventForMessage(
+  event: DiscreteMatrixEvent,
+  targetEventId: string,
+) {
+  if (
+    event.type !== 'm.room.message' ||
+    event.content?.msgtype !== APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE
+  ) {
+    return false;
+  }
+  let relatesTo = event.content?.['m.relates_to'];
+  if (!relatesTo) {
+    return false;
+  }
+  return (
+    relatesTo.rel_type === APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE &&
+    relatesTo.event_id === targetEventId
+  );
+}
+
+function formatFileDisplayName(identifier?: string) {
+  if (!identifier) {
+    return 'Updated file';
+  }
+  try {
+    let url = new URL(identifier);
+    let pathname = url.pathname.replace(/^\/+/, '');
+    return pathname || identifier;
+  } catch {
+    return identifier;
+  }
 }
 
 export const buildAttachmentsMessagePart = async (

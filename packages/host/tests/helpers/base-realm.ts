@@ -86,7 +86,6 @@ let isCard: (typeof CardAPIModule)['isCard'];
 let linksTo: (typeof CardAPIModule)['linksTo'];
 let linksToMany: (typeof CardAPIModule)['linksToMany'];
 let MaybeBase64Field: (typeof CardAPIModule)['MaybeBase64Field'];
-let ensureLinksLoaded: (typeof CardAPIModule)['ensureLinksLoaded'];
 let createFromSerialized: (typeof CardAPIModule)['createFromSerialized'];
 let updateFromSerialized: (typeof CardAPIModule)['updateFromSerialized'];
 let serializeCard: (typeof CardAPIModule)['serializeCard'];
@@ -97,6 +96,7 @@ let subscribeToChanges: (typeof CardAPIModule)['subscribeToChanges'];
 let unsubscribeFromChanges: (typeof CardAPIModule)['unsubscribeFromChanges'];
 let flushLogs: (typeof CardAPIModule)['flushLogs'];
 let queryableValue: (typeof CardAPIModule)['queryableValue'];
+let getFields: (typeof CardAPIModule)['getFields'];
 let getFieldDescription: (typeof CardAPIModule)['getFieldDescription'];
 let ReadOnlyField: (typeof CardAPIModule)['ReadOnlyField'];
 let instanceOf: (typeof CardAPIModule)['instanceOf'];
@@ -200,7 +200,7 @@ async function initialize() {
     isCard,
     linksTo,
     linksToMany,
-    ensureLinksLoaded,
+    getFields,
     createFromSerialized,
     updateFromSerialized,
     serializeCard,
@@ -259,7 +259,6 @@ export {
   isCard,
   linksTo,
   linksToMany,
-  ensureLinksLoaded,
   MaybeBase64Field,
   createFromSerialized,
   updateFromSerialized,
@@ -271,6 +270,7 @@ export {
   unsubscribeFromChanges,
   flushLogs,
   queryableValue,
+  getFields,
   getFieldDescription,
   ReadOnlyField,
   Skill,

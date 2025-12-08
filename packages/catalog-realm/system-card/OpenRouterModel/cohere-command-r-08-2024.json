@@ -1,0 +1,79 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "OpenRouterModel",
+        "module": "../openrouter-model"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Cohere: Command R+ (08-2024)",
+      "created": 1724976000,
+      "modelId": "cohere/command-r-plus-08-2024",
+      "pricing": {
+        "image": "0",
+        "prompt": "0.0000025",
+        "request": "0",
+        "completion": "0.00001"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "description": "command-r-plus-08-2024 is an update of the [Command R+](/models/cohere/command-r-plus) with roughly 50% higher throughput and 25% lower latencies as compared to the previous Command R+ version, while keeping the hardware footprint the same.\n\nRead the launch post [here](https://docs.cohere.com/changelog/command-gets-refreshed).\n\nUse of this model is subject to Cohere's [Usage Policy](https://docs.cohere.com/docs/usage-policy) and [SaaS Agreement](https://cohere.com/saas-agreement).",
+      "topProvider": {
+        "isModerated": true,
+        "contextLength": 128000,
+        "maxCompletionTokens": 4000
+      },
+      "architecture": {
+        "modality": "text->text",
+        "tokenizer": "Cohere",
+        "instructType": "",
+        "inputModalities": [
+          "text"
+        ],
+        "outputModalities": [
+          "text"
+        ]
+      },
+      "canonicalSlug": "cohere/command-r-plus-08-2024",
+      "contextLength": 128000,
+      "perRequestLimits": {
+        "promptTokens": null,
+        "completionTokens": null
+      },
+      "defaultParameters": {
+        "top_p": null,
+        "max_tokens": null,
+        "temperature": null,
+        "presence_penalty": null,
+        "frequency_penalty": null
+      },
+      "supportedParameters": [
+        "frequency_penalty",
+        "max_tokens",
+        "presence_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_p"
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -100,8 +100,7 @@ module.exports = function (defaults) {
               stream: require.resolve('stream-browserify'),
             },
             alias: {
-              // Exclude the rust-crypto module from the bundle
-              // because it wont work in fastboot and we don't use it
+              // Exclude the rust-crypto module from the bundle because we don't use it
               'matrix-js-sdk$': 'matrix-js-sdk/src/browser-index.ts',
               './rust-crypto/index.ts': false,
             },

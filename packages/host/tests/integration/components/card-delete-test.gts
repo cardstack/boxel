@@ -14,7 +14,6 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
-  percySnapshot,
   testRealmURL,
   testModuleRealm,
   setupCardLogs,
@@ -40,7 +39,7 @@ module('Integration | card-delete', function (hooks) {
   let adapter: TestRealmAdapter;
   let noop = () => {};
   async function loadCard(url: string): Promise<CardDef> {
-    let { createFromSerialized, ensureLinksLoaded } = cardApi;
+    let { createFromSerialized } = cardApi;
     let result = await realm.realmIndexQueryEngine.cardDocument(new URL(url));
     if (!result || result.type === 'error') {
       throw new Error(
@@ -54,7 +53,6 @@ module('Integration | card-delete', function (hooks) {
       result.doc,
       new URL(url),
     );
-    await ensureLinksLoaded(card);
     return card;
   }
   setupRenderingTest(hooks);
@@ -201,7 +199,8 @@ module('Integration | card-delete', function (hooks) {
     await click(
       `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
     );
-    await percySnapshot(assert);
+    // TODO: dropdown position keeps changing in snapshots, restore in CS-9808
+    // await percySnapshot(assert);
     await click('[data-test-boxel-menu-item-text="Delete"]');
     await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
     assert

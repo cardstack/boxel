@@ -365,6 +365,7 @@ test.describe('Skills', () => {
 
     // create a skill card
     await page.locator('[data-test-create-new-card-button]').click();
+    await page.locator('[data-test-search-field]').fill('Skill');
     await page
       .locator('[data-test-select="https://cardstack.com/base/cards/skill"]')
       .click();

@@ -15,13 +15,13 @@ import type {
   Subscription,
   Plan,
   RealmAdapter,
+  DefinitionLookup,
 } from '@cardstack/runtime-common';
 import {
   Realm,
   baseRealm,
   VirtualNetwork,
   Worker,
-  RunnerOptionsManager,
   insertPermissions,
   IndexWriter,
   asExpressions,
@@ -37,14 +37,13 @@ import {
   type MatrixConfig,
   type QueuePublisher,
   type QueueRunner,
-  type IndexRunner,
   type Definition,
   type Prerenderer,
+  CachingDefinitionLookup,
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
-import { makeFastBootIndexRunner } from '../../fastboot';
 import { RealmServer } from '../../server';
 
 import {
@@ -75,6 +74,8 @@ export const testRealmServerMatrixUserId = `@${testRealmServerMatrixUsername}:lo
 
 export { testRealmHref, testRealmURL };
 
+const REALM_EVENT_TS_SKEW_BUFFER_MS = 2000;
+
 export async function waitUntil<T>(
   condition: () => Promise<T>,
   options: {
@@ -104,7 +105,7 @@ export const testRealm = 'http://test-realm/';
 export const localBaseRealm = 'http://localhost:4441/';
 export const matrixURL = new URL('http://localhost:8008');
 const testPrerenderHost = '127.0.0.1';
-const testPrerenderPort = 4450;
+const testPrerenderPort = 4460;
 const testPrerenderURL = `http://${testPrerenderHost}:${testPrerenderPort}`;
 const testMatrix: MatrixConfig = {
   url: matrixURL,
@@ -115,6 +116,8 @@ export const testRealmInfo = {
   backgroundURL: null,
   iconURL: null,
   showAsCatalog: null,
+  interactHome: null,
+  hostHome: null,
   visibility: 'public',
   realmUserId: testMatrix.username,
   publishable: null,
@@ -135,11 +138,6 @@ let prerenderServer: Server | undefined;
 let prerenderServerStart: Promise<void> | undefined;
 
 const basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
-
-let manager = new RunnerOptionsManager();
-let fastbootState:
-  | { getRunner: IndexRunner; getIndexHTML: () => Promise<string> }
-  | undefined;
 
 export function cleanWhiteSpace(text: string) {
   return text
@@ -205,20 +203,7 @@ async function stopTestPrerenderServer() {
   prerenderServerStart = undefined;
 }
 
-async function getTestPrerenderer(
-  usePrerenderer?: boolean,
-): Promise<Prerenderer> {
-  if (!usePrerenderer) {
-    return {
-      async prerenderCard() {
-        throw new Error(`prerenderer not enabled`);
-      },
-      async prerenderModule() {
-        throw new Error(`prerenderer not enabled`);
-      },
-    };
-  }
-  (globalThis as any).__useHeadlessChromePrerender = true;
+export async function getTestPrerenderer(): Promise<Prerenderer> {
   let url = await startTestPrerenderServer();
   return createRemotePrerenderer(url);
 }
@@ -257,7 +242,6 @@ export function setupDB(
     }
     await dbAdapter?.close();
     await stopTestPrerenderServer();
-    delete (globalThis as any).__useHeadlessChromePrerender;
   };
 
   // we need to pair before/after and beforeEach/afterEach. within this setup
@@ -299,18 +283,15 @@ export function setupDB(
   }
 }
 
-export async function getFastbootState() {
-  if (!fastbootState) {
-    fastbootState = await makeFastBootIndexRunner(
-      new URL(process.env.HOST_URL ?? 'http://localhost:4200/'),
-      manager.getOptions.bind(manager),
-    );
-  }
-  return fastbootState;
+export async function getIndexHTML() {
+  let url = process.env.HOST_URL ?? 'http://localhost:4200/';
+  let request = await fetch(url);
+  return await request.text();
 }
 
 export async function createRealm({
   dir,
+  definitionLookup,
   fileSystem = {},
   realmURL = testRealm,
   permissions = { '*': ['read'] },
@@ -321,9 +302,9 @@ export async function createRealm({
   matrixConfig = testMatrix,
   withWorker,
   enableFileWatcher = false,
-  usePrerenderer,
 }: {
   dir: string;
+  definitionLookup: DefinitionLookup;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
   realmURL?: string;
   permissions?: RealmPermissions;
@@ -337,7 +318,6 @@ export async function createRealm({
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
-  usePrerenderer?: boolean;
 }): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
@@ -351,25 +331,21 @@ export async function createRealm({
 
   let adapter = new NodeAdapter(dir, enableFileWatcher);
   let worker: Worker | undefined;
+  let prerenderer = await getTestPrerenderer();
   if (withWorker) {
     if (!runner) {
       throw new Error(`must provider a QueueRunner when using withWorker`);
     }
-    let indexRunner = (await getFastbootState()).getRunner;
-    let prerenderer = await getTestPrerenderer(usePrerenderer);
     worker = new Worker({
       indexWriter: new IndexWriter(dbAdapter),
       queue: runner,
       dbAdapter,
       queuePublisher: publisher,
-      runnerOptsManager: manager,
-      indexRunner,
       virtualNetwork,
       matrixURL: matrixConfig.url,
       secretSeed: realmSecretSeed,
       realmServerMatrixUsername: testRealmServerMatrixUsername,
       prerenderer,
-      useHeadlessChromePrerender: Boolean(usePrerenderer),
     });
   }
   let realmServerMatrixClient = new MatrixClient({
@@ -386,6 +362,7 @@ export async function createRealm({
     dbAdapter,
     queue: publisher,
     realmServerMatrixClient,
+    definitionLookup,
   });
   if (worker) {
     virtualNetwork.mount(realm.handle);
@@ -394,11 +371,7 @@ export async function createRealm({
   return { realm, adapter };
 }
 
-export function setupBaseRealmServer(
-  hooks: NestedHooks,
-  matrixURL: URL,
-  options: { usePrerenderer?: boolean } = {},
-) {
+export function setupBaseRealmServer(hooks: NestedHooks, matrixURL: URL) {
   let baseRealmServer: Server | undefined;
   setupDB(hooks, {
     before: async (dbAdapter, publisher, runner) => {
@@ -411,7 +384,6 @@ export function setupBaseRealmServer(
         matrixURL,
         dir.name,
         { '*': ['read'] },
-        options,
       );
     },
     after: async () => {
@@ -431,27 +403,26 @@ export async function runBaseRealmServer(
   matrixURL: URL,
   realmsRootPath: string,
   permissions: RealmPermissions = { '*': ['read'] },
-  options: { usePrerenderer?: boolean } = {},
 ) {
-  let { usePrerenderer = false } = options;
   let localBaseRealmURL = new URL(localBaseRealm);
   virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 
-  let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
-  let prerenderer = await getTestPrerenderer(usePrerenderer);
+  let prerenderer = await getTestPrerenderer();
+  let definitionLookup = new CachingDefinitionLookup(
+    dbAdapter,
+    prerenderer,
+    virtualNetwork,
+  );
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue: runner,
     dbAdapter,
     queuePublisher: publisher,
-    runnerOptsManager: manager,
-    indexRunner,
     virtualNetwork,
     matrixURL,
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
-    useHeadlessChromePrerender: Boolean(usePrerenderer),
   });
   let { realm: testBaseRealm } = await createRealm({
     dir: basePath,
@@ -460,6 +431,7 @@ export async function runBaseRealmServer(
     publisher,
     dbAdapter,
     permissions,
+    definitionLookup,
   });
   // the base realm is public readable so it doesn't need a private network
   virtualNetwork.mount(testBaseRealm.handle);
@@ -470,8 +442,9 @@ export async function runBaseRealmServer(
     username: realmServerTestMatrix.username,
     seed: realmSecretSeed,
   });
+  let realms = [testBaseRealm];
   let testBaseRealmServer = new RealmServer({
-    realms: [testBaseRealm],
+    realms,
     virtualNetwork,
     matrixClient,
     realmServerSecretSeed,
@@ -484,6 +457,7 @@ export async function runBaseRealmServer(
     grafanaSecret,
     serverURL: new URL(localBaseRealmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
+    definitionLookup,
   });
   return testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
 }
@@ -505,7 +479,6 @@ export async function runTestRealmServer({
     boxelSpace: 'localhost',
     boxelSite: 'localhost',
   },
-  usePrerenderer = false,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -523,23 +496,23 @@ export async function runTestRealmServer({
     boxelSpace?: string;
     boxelSite?: string;
   };
-  usePrerenderer?: boolean;
 }) {
-  let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
-  let prerenderer = await getTestPrerenderer(usePrerenderer);
+  let prerenderer = await getTestPrerenderer();
+  let definitionLookup = new CachingDefinitionLookup(
+    dbAdapter,
+    prerenderer,
+    virtualNetwork,
+  );
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue: runner,
     dbAdapter,
     queuePublisher: publisher,
-    runnerOptsManager: manager,
-    indexRunner,
     virtualNetwork,
     matrixURL,
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
-    useHeadlessChromePrerender: Boolean(usePrerenderer),
   });
   await worker.run();
   let { realm: testRealm, adapter: testRealmAdapter } = await createRealm({
@@ -552,6 +525,7 @@ export async function runTestRealmServer({
     publisher,
     dbAdapter,
     enableFileWatcher,
+    definitionLookup,
   });
 
   await testRealm.logInToMatrix();
@@ -579,6 +553,7 @@ export async function runTestRealmServer({
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
     domainsForPublishedRealms,
+    definitionLookup,
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   await testRealmServer.start();
@@ -797,8 +772,10 @@ export function setupMatrixRoom(
     matrixClient,
     getMessagesSince: async function (since: number) {
       let allMessages = await matrixClient.roomMessages(testAuthRoomId!);
+      // Allow same-ms clock values between the test process and matrix so we don't
+      // miss events that are emitted immediately after we record the start time.
       let messagesAfterSentinel = allMessages.filter(
-        (m) => m.origin_server_ts > since,
+        (m) => m.origin_server_ts >= since,
       );
 
       return messagesAfterSentinel;
@@ -809,11 +786,48 @@ export function setupMatrixRoom(
 export async function waitForRealmEvent(
   getMessagesSince: (since: number) => Promise<MatrixEvent[]>,
   since: number,
-) {
-  await waitUntil(async () => {
-    let matrixMessages = await getMessagesSince(since);
-    return matrixMessages.length > 0;
-  });
+  options: {
+    predicate?: (event: RealmEvent) => boolean;
+    timeout?: number;
+    timeoutMessage?: string;
+  } = {},
+): Promise<RealmEvent> {
+  let { predicate = () => true, timeout, timeoutMessage } = options;
+
+  let event = await waitUntil<RealmEvent | undefined>(
+    async () => {
+      let findMatchingEvent = (messages: MatrixEvent[]) =>
+        messages.find((event): event is RealmEvent => {
+          if (event.type !== APP_BOXEL_REALM_EVENT_TYPE) {
+            return false;
+          }
+          return predicate(event as RealmEvent);
+        });
+
+      let matrixMessages = await getMessagesSince(since);
+      let matchingEvent = findMatchingEvent(matrixMessages);
+
+      if (!matchingEvent) {
+        let skewedSince = Math.max(0, since - REALM_EVENT_TS_SKEW_BUFFER_MS);
+        if (skewedSince !== since) {
+          let skewedMessages = await getMessagesSince(skewedSince);
+          matchingEvent = findMatchingEvent(skewedMessages);
+        }
+      }
+
+      if (matchingEvent) {
+        return matchingEvent;
+      }
+
+      return undefined;
+    },
+    {
+      timeout: timeout ?? 5000,
+      timeoutMessage,
+    },
+  );
+
+  return event!;
 }
 
 export function findRealmEvent(
@@ -954,7 +968,6 @@ export function setupPermissionedRealms(
     mode = 'beforeEach',
     realms: realmsArg,
     onRealmSetup,
-    usePrerenderer,
   }: {
     mode?: 'beforeEach' | 'before';
     realms: {
@@ -971,7 +984,6 @@ export function setupPermissionedRealms(
         realmAdapter: RealmAdapter;
       }[];
     }) => void;
-    usePrerenderer?: true;
   },
 ) {
   // We want 2 different realm users to test authorization between them - these
@@ -1013,7 +1025,6 @@ export function setupPermissionedRealms(
           dbAdapter,
           publisher,
           runner,
-          usePrerenderer,
         });
         realms.push({
           realm,

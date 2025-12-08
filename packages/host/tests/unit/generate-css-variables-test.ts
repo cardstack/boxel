@@ -3,6 +3,7 @@ import { module, test } from 'qunit';
 import {
   buildCssGroups,
   generateCssVariables,
+  type CssRuleMap,
 } from '@cardstack/boxel-ui/helpers';
 
 module('Unit | generate-css-variables', function () {
@@ -68,5 +69,21 @@ module('Unit | generate-css-variables', function () {
     );
 
     assert.strictEqual(result, '');
+  });
+
+  test('it supports preexisting rule maps and selector aliases', function (assert) {
+    const rules = new Map<string, string | null>([
+      ['--secondary', '  #000  ;;'],
+      ['radius', ' 8px '],
+    ]) as unknown as CssRuleMap;
+
+    const result = generateCssVariables(
+      buildCssGroups([{ selector: 'root', rules }]),
+    );
+
+    assert.strictEqual(
+      result,
+      [':root {', '  --secondary: #000;', '  --radius: 8px;', '}'].join('\n'),
+    );
   });
 });

@@ -1,7 +1,7 @@
 import Koa from 'koa';
 import cors from '@koa/cors';
 import { Memoize } from 'typescript-memoize';
-import type { RealmInfo } from '@cardstack/runtime-common';
+import type { DefinitionLookup, RealmInfo } from '@cardstack/runtime-common';
 import {
   Realm,
   logger,
@@ -17,6 +17,7 @@ import {
   PUBLISHED_DIRECTORY_NAME,
   fetchSessionRoom,
   REALM_SERVER_REALM,
+  userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import {
   ensureDirSync,
@@ -40,6 +41,7 @@ import { resolve, join } from 'path';
 import merge from 'lodash/merge';
 
 import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
+import { any, type Expression } from '@cardstack/runtime-common/expression';
 import * as Sentry from '@sentry/node';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
@@ -61,6 +63,7 @@ export class RealmServer {
   private realmsRootPath: string;
   private dbAdapter: DBAdapter;
   private queue: QueuePublisher;
+  private definitionLookup: DefinitionLookup;
   private assetsURL: URL;
   private getIndexHTML: () => Promise<string>;
   private serverURL: URL;
@@ -88,6 +91,7 @@ export class RealmServer {
     realmsRootPath,
     dbAdapter,
     queue,
+    definitionLookup,
     assetsURL,
     getIndexHTML,
     matrixRegistrationSecret,
@@ -105,6 +109,7 @@ export class RealmServer {
     realmsRootPath: string;
     dbAdapter: DBAdapter;
     queue: QueuePublisher;
+    definitionLookup: DefinitionLookup;
     assetsURL: URL;
     getIndexHTML: () => Promise<string>;
     matrixRegistrationSecret?: string;
@@ -133,6 +138,7 @@ export class RealmServer {
     this.realmsRootPath = realmsRootPath;
     this.dbAdapter = dbAdapter;
     this.queue = queue;
+    this.definitionLookup = definitionLookup;
     this.assetsURL = assetsURL;
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
@@ -151,7 +157,7 @@ export class RealmServer {
         cors({
           origin: '*',
           allowHeaders:
-            'Authorization, Content-Type, If-Match, If-None-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Building-Index, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename',
+            'Authorization, Content-Type, If-Match, If-None-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename',
         }),
       )
       .use(async (ctx, next) => {
@@ -291,7 +297,16 @@ export class RealmServer {
       }
 
       ctxt.type = 'html';
-      ctxt.body = await this.retrieveIndexHTML();
+
+      let [indexHTML, headHTML] = await Promise.all([
+        this.retrieveIndexHTML(),
+        this.retrieveHeadHTML(
+          new URL(`${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`),
+        ),
+      ]);
+
+      ctxt.body =
+        headHTML != null ? this.injectHeadHTML(indexHTML, headHTML) : indexHTML;
       return;
     }
     return next();
@@ -346,6 +361,66 @@ export class RealmServer {
 
     deferred.fulfill(indexHTML);
     return indexHTML;
+  }
+
+  private async retrieveHeadHTML(cardURL: URL): Promise<string | null> {
+    let candidates = this.headURLCandidates(cardURL);
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    // Proxying means the apparent request URL will be http but in the database it’s https
+    let candidateExpressions = (): Expression =>
+      any(
+        candidates.flatMap((candidate) => [
+          [
+            "regexp_replace(url, '^https?://', '') =",
+            param(this.stripProtocol(candidate)),
+          ],
+          [
+            "regexp_replace(file_alias, '^https?://', '') =",
+            param(this.stripProtocol(candidate)),
+          ],
+        ]),
+      ) as Expression;
+
+    let rows = await query(this.dbAdapter, [
+      `SELECT head_html, realm_version FROM boxel_index_working WHERE head_html IS NOT NULL AND`,
+      ...candidateExpressions(),
+      `UNION ALL
+       SELECT head_html, realm_version FROM boxel_index WHERE head_html IS NOT NULL AND`,
+      ...candidateExpressions(),
+      `ORDER BY realm_version DESC
+       LIMIT 1`,
+    ]);
+
+    let headRow = rows[0] as { head_html?: string | null } | undefined;
+    return headRow?.head_html ?? null;
+  }
+
+  private stripProtocol(href: string): string {
+    return href.replace(/^https?:\/\//, '');
+  }
+
+  private headURLCandidates(cardURL: URL): string[] {
+    let href = cardURL.href.replace(/\?.*/, '');
+    let candidates = [href].flatMap((url) => {
+      // strip trailing slash, but keep root realm URLs that end with slash
+      let trimmed = url.endsWith('/') ? url.slice(0, -1) : url;
+      let withIndex = url.endsWith('/') ? `${trimmed}/index` : `${url}/index`;
+      let withJson = `${url.replace(/\/?$/, '')}.json`;
+      let withIndexJson = `${withIndex}.json`;
+      return [url, trimmed, withIndex, withJson, withIndexJson];
+    });
+
+    return [...new Set(candidates)];
+  }
+
+  private injectHeadHTML(indexHTML: string, headHTML: string): string {
+    return indexHTML.replace(
+      /(<!-- HEADSTART -->)([\s\S]*?)(<!-- HEADEND -->)/,
+      `$1\n${headHTML}\n$3`,
+    );
   }
 
   private serveFromRealm = async (ctxt: Koa.Context, _next: Koa.Next) => {
@@ -454,7 +529,14 @@ export class RealmServer {
       },
     });
 
-    let realm = this.createAndMountRealm(realmPath, url, username);
+    let realm = this.createAndMountRealm(
+      realmPath,
+      url,
+      username,
+      undefined,
+      undefined,
+      userInitiatedPriority,
+    );
     await realm.ensureSessionRoom(ownerUserId);
 
     return {
@@ -469,11 +551,22 @@ export class RealmServer {
     username: string,
     copiedFromRealm?: URL,
     enableFileWatcher?: boolean,
+    fromScratchIndexPriority?: number,
   ) => {
     let adapter = new NodeAdapter(
       resolve(path),
       enableFileWatcher ?? this.enableFileWatcher,
     );
+    const realmOptions: {
+      copiedFromRealm?: URL;
+      fromScratchIndexPriority?: number;
+    } = {};
+    if (copiedFromRealm) {
+      realmOptions.copiedFromRealm = copiedFromRealm;
+    }
+    if (fromScratchIndexPriority !== undefined) {
+      realmOptions.fromScratchIndexPriority = fromScratchIndexPriority;
+    }
     let realm = new Realm(
       {
         url,
@@ -487,8 +580,9 @@ export class RealmServer {
           username,
         },
         realmServerMatrixClient: this.matrixClient,
+        definitionLookup: this.definitionLookup,
       },
-      copiedFromRealm ? { copiedFromRealm } : undefined,
+      Object.keys(realmOptions).length ? realmOptions : undefined,
     );
     this.realms.push(realm);
     this.virtualNetwork.mount(realm.handle);
@@ -554,6 +648,7 @@ export class RealmServer {
               username,
             },
             realmServerMatrixClient: this.matrixClient,
+            definitionLookup: this.definitionLookup,
           });
           this.virtualNetwork.mount(realm.handle);
           realms.push(realm);
@@ -682,6 +777,7 @@ export class RealmServer {
               username,
             },
             realmServerMatrixClient: this.matrixClient,
+            definitionLookup: this.definitionLookup,
           });
 
           this.virtualNetwork.mount(realm.handle);

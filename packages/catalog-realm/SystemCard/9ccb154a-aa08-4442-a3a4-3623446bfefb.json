@@ -1,0 +1,36 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SystemCard",
+        "module": "https://cardstack.com/base/system-card"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Pinecliff 3",
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "modelConfigurations": {
+        "links": {
+          "self": null
+        }
+      },
+      "defaultModelConfiguration": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

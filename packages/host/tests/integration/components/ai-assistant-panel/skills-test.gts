@@ -981,10 +981,45 @@ ${REPLACE_MARKER}
     await click('[data-test-send-message-btn]');
     await waitFor('[data-test-message-idx]');
 
+    let expectedCommandDefinitionCount =
+      afterCodeModeRoomStateSkillsJson.commandDefinitions?.length ?? 0;
+
+    await waitUntil(
+      () => {
+        let skillsState = getRoomState(
+          roomId,
+          APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+        );
+        let currentLength = skillsState?.commandDefinitions?.length ?? 0;
+        return currentLength === expectedCommandDefinitionCount;
+      },
+      {
+        timeoutMessage:
+          'timed out waiting for command definitions to settle to expected count',
+      },
+    );
+
     const finalRoomStateSkillsJson = getRoomState(
       roomId,
       APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
     );
+
+    if (
+      (finalRoomStateSkillsJson.commandDefinitions?.length ?? 0) !==
+      expectedCommandDefinitionCount
+    ) {
+      console.log(
+        `command definition count mismatch: afterCodeModeRoomStateSkills:\n${JSON.stringify(
+          afterCodeModeRoomStateSkillsJson,
+          null,
+          2,
+        )}\nfinalRoomStateSkillsJson:\n${JSON.stringify(
+          finalRoomStateSkillsJson,
+          null,
+          2,
+        )}`,
+      );
+    }
 
     assert.deepEqual(
       finalRoomStateSkillsJson.enabledSkillCards,
@@ -1002,14 +1037,14 @@ ${REPLACE_MARKER}
       'command definitions are different',
     );
 
-    let initialUnchangedCommandDefinitions =
-      initialRoomStateSkillsJson.commandDefinitions.filter(
+    let baselineUnchangedCommandDefinitions =
+      afterCodeModeRoomStateSkillsJson.commandDefinitions.filter(
         (cmd: any) =>
           cmd.sourceUrl !==
           `${testRealmURL}search-and-open-card-command/default`,
       );
-    let initialChangedCommandDefinitions =
-      initialRoomStateSkillsJson.commandDefinitions.filter(
+    let baselineChangedCommandDefinitions =
+      afterCodeModeRoomStateSkillsJson.commandDefinitions.filter(
         (cmd: any) =>
           cmd.sourceUrl ===
           `${testRealmURL}search-and-open-card-command/default`,
@@ -1029,12 +1064,12 @@ ${REPLACE_MARKER}
       );
     assert.deepEqual(
       finalUnchangedCommandDefinitions,
-      initialUnchangedCommandDefinitions,
+      baselineUnchangedCommandDefinitions,
       'unchanged command definitions are the same',
     );
     assert.notDeepEqual(
       finalChangedCommandDefinitions,
-      initialChangedCommandDefinitions,
+      baselineChangedCommandDefinitions,
       'changed command definitions are different',
     );
   });

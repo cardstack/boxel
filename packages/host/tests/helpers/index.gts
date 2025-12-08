@@ -22,21 +22,16 @@ import {
   baseRealm,
   RealmPermissions,
   Worker,
-  RunnerOptionsManager,
   IndexWriter,
   type RealmInfo,
   type TokenClaims,
-  type RunnerRegistration,
-  type IndexRunner,
   type Prerenderer,
-  type FromScratchArgs,
-  type IncrementalArgs,
-  type FromScratchResult,
-  type IncrementalResult,
   insertPermissions,
   unixTime,
   RealmAction,
   type RenderError,
+  type DefinitionLookup,
+  CachingDefinitionLookup,
 } from '@cardstack/runtime-common';
 import { getCreatedTime } from '@cardstack/runtime-common/file-meta';
 import {
@@ -53,6 +48,7 @@ import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
 import { render as renderIntoElement } from '@cardstack/host/lib/isolated-render';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
+import type NetworkService from '@cardstack/host/services/network';
 import { RealmServerTokenClaims } from '@cardstack/host/services/realm-server';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
 
@@ -378,7 +374,7 @@ type RenderingContextWithPrerender = TestContext & {
   __cardPrerenderElement?: HTMLElement;
 };
 
-async function makeRenderer() {
+export async function makeRenderer() {
   let context = getContext() as RenderingContextWithPrerender;
   let owner = context.owner;
   if (!owner) {
@@ -411,40 +407,15 @@ class MockLocalIndexer extends Service {
   #adapter: RealmAdapter | undefined;
   #indexWriter: IndexWriter | undefined;
   #prerenderer: Prerenderer | undefined;
-  #fromScratch:
-    | ((args: FromScratchArgs) => Promise<FromScratchResult>)
-    | undefined;
-  #incremental:
-    | ((args: IncrementalArgs) => Promise<IncrementalResult>)
-    | undefined;
-  setup(
-    fromScratch: (args: FromScratchArgs) => Promise<FromScratchResult>,
-    incremental: (args: IncrementalArgs) => Promise<IncrementalResult>,
-    prerenderer: Prerenderer,
-  ) {
+  setup(prerenderer: Prerenderer) {
     if (this.#prerenderer) {
       return;
     }
-    this.#fromScratch = fromScratch;
-    this.#incremental = incremental;
     this.#prerenderer = prerenderer;
   }
-  async configureRunner(
-    registerRunner: RunnerRegistration,
-    adapter: RealmAdapter,
-    indexWriter: IndexWriter,
-  ) {
-    if (!this.#fromScratch || !this.#incremental) {
-      throw new Error(
-        `fromScratch/incremental not registered with MockLocalIndexer`,
-      );
-    }
+  async configureRunner(adapter: RealmAdapter, indexWriter: IndexWriter) {
     this.#adapter = adapter;
     this.#indexWriter = indexWriter;
-    await registerRunner(
-      this.#fromScratch.bind(this),
-      this.#incremental.bind(this),
-    );
   }
   get adapter() {
     if (!this.#adapter) {
@@ -511,7 +482,6 @@ export function setupOnSave(hooks: NestedHooks) {
     this.unregisterOnSave = store._unregisterSaveSubscriber.bind(store);
   });
 }
-let runnerOptsMgr = new RunnerOptionsManager();
 
 interface RealmContents {
   [key: string]:
@@ -651,22 +621,22 @@ export async function setupAcceptanceTestRealm({
   realmURL,
   permissions,
   mockMatrixUtils,
-  usePrerenderer = true,
 }: {
   contents: RealmContents;
   realmURL?: string;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
-  usePrerenderer?: boolean;
 }) {
-  setupAuthEndpoints();
+  let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
+  setupAuthEndpoints({
+    [resolvedRealmURL]: deriveTestUserPermissions(permissions),
+  });
   return await setupTestRealm({
     contents,
-    realmURL,
+    realmURL: resolvedRealmURL,
     isAcceptanceTest: true,
     permissions,
     mockMatrixUtils,
-    usePrerenderer,
   });
 }
 
@@ -675,22 +645,22 @@ export async function setupIntegrationTestRealm({
   realmURL,
   permissions,
   mockMatrixUtils,
-  usePrerenderer = true,
 }: {
   contents: RealmContents;
   realmURL?: string;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
-  usePrerenderer?: boolean;
 }) {
-  setupAuthEndpoints();
+  let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
+  setupAuthEndpoints({
+    [resolvedRealmURL]: deriveTestUserPermissions(permissions),
+  });
   return await setupTestRealm({
     contents,
-    realmURL,
+    realmURL: resolvedRealmURL,
     isAcceptanceTest: false,
     permissions: permissions as RealmPermissions,
     mockMatrixUtils,
-    usePrerenderer,
   });
 }
 
@@ -710,140 +680,136 @@ async function setupTestRealm({
   isAcceptanceTest,
   permissions = { '*': ['read', 'write'] },
   mockMatrixUtils,
-  usePrerenderer,
 }: {
   contents: RealmContents;
   realmURL?: string;
   isAcceptanceTest?: boolean;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
-  usePrerenderer: boolean;
 }) {
-  let hadHeadlessFlag = Object.prototype.hasOwnProperty.call(
-    globalThis,
-    '__useHeadlessChromePrerender',
-  );
-  let previousHeadlessFlag = (globalThis as any).__useHeadlessChromePrerender;
-  // default to all tests using headless chrome
-  if (usePrerenderer) {
-    (globalThis as any).__useHeadlessChromePrerender = true;
+  let owner = (getContext() as TestContext).owner;
+  let { virtualNetwork } = getService('network');
+  let { queue } = getService('queue');
+
+  realmURL = realmURL ?? testRealmURL;
+
+  if (isAcceptanceTest) {
+    await visit('/acceptance-test-setup');
   } else {
-    delete (globalThis as any).__useHeadlessChromePrerender;
+    // We use a rendered component to facilitate our indexing (this emulates
+    // the work that the prerenderer is doing), which means that the
+    // `setupRenderingTest(hooks)` from ember-qunit must be used in your tests.
+    await makeRenderer();
   }
-  try {
-    let owner = (getContext() as TestContext).owner;
-    let { virtualNetwork } = getService('network');
-    let { queue } = getService('queue');
 
-    realmURL = realmURL ?? testRealmURL;
+  let localIndexer = owner.lookup(
+    'service:local-indexer',
+  ) as unknown as MockLocalIndexer;
+  let realm: Realm;
 
-    if (isAcceptanceTest) {
-      await visit('/acceptance-test-setup');
-    } else {
-      // We use a rendered component to facilitate our indexing (this emulates
-      // the work that the Fastboot renderer is doing), which means that the
-      // `setupRenderingTest(hooks)` from ember-qunit must be used in your tests.
-      await makeRenderer();
-    }
-
-    let localIndexer = owner.lookup(
-      'service:local-indexer',
-    ) as unknown as MockLocalIndexer;
-    let realm: Realm;
-
-    let adapter = new TestRealmAdapter(
-      contents,
-      new URL(realmURL),
-      mockMatrixUtils,
-      owner,
-    );
-    let indexRunner: IndexRunner = async (optsId) => {
-      let { registerRunner, indexWriter } = runnerOptsMgr.getOptions(optsId);
-      await localIndexer.configureRunner(registerRunner, adapter, indexWriter);
-    };
-
-    let dbAdapter = await getDbAdapter();
-    await insertPermissions(dbAdapter, new URL(realmURL), permissions);
-    let worker = new Worker({
-      indexWriter: new IndexWriter(dbAdapter),
-      queue,
-      dbAdapter,
-      queuePublisher: queue,
-      runnerOptsManager: runnerOptsMgr,
-      indexRunner,
-      virtualNetwork,
-      matrixURL: baseTestMatrix.url,
-      secretSeed: testRealmSecretSeed,
-      realmServerMatrixUsername: testRealmServerMatrixUsername,
-      prerenderer: localIndexer.prerenderer,
-      useHeadlessChromePrerender: usePrerenderer,
-    });
-
-    realm = new Realm({
-      url: realmURL,
-      adapter,
-      matrix: {
-        ...baseTestMatrix,
-        username: testRealmURLToUsername(realmURL),
+  let adapter = new TestRealmAdapter(
+    contents,
+    new URL(realmURL),
+    mockMatrixUtils,
+    owner,
+  );
+  let dbAdapter = await getDbAdapter();
+  let definitionLookup = owner.lookup('definition-lookup:main') as
+    | DefinitionLookup
+    | undefined;
+  if (!definitionLookup) {
+    owner.register(
+      'definition-lookup:main',
+      new CachingDefinitionLookup(
+        dbAdapter,
+        localIndexer.prerenderer,
+        virtualNetwork,
+      ),
+      {
+        instantiate: false,
       },
-      secretSeed: testRealmSecretSeed,
-      virtualNetwork,
-      dbAdapter,
-      queue,
-      realmServerMatrixClient: new MatrixClient({
-        matrixURL: baseTestMatrix.url,
-        username: testRealmServerMatrixUsername,
-        seed: testRealmSecretSeed,
-      }),
-    });
-
-    // we use this to run cards that were added to the test filesystem
-    adapter.setLoader(
-      new Loader(realm.__fetchForTesting, virtualNetwork.resolveImport),
     );
-
-    // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
-    virtualNetwork.mount(realm.maybeHandle);
-    await mockMatrixUtils.start();
-    await adapter.ready;
-    await worker.run();
-    await realm.start();
-
-    let realmServer = getService('realm-server');
-    if (!realmServer.availableRealmURLs.includes(realmURL)) {
-      realmServer.setAvailableRealmURLs([realmURL]);
-    }
-
-    return { realm, adapter };
-  } finally {
-    if (hadHeadlessFlag) {
-      (globalThis as any).__useHeadlessChromePrerender = previousHeadlessFlag;
-    } else {
-      delete (globalThis as any).__useHeadlessChromePrerender;
-    }
+    definitionLookup = owner.lookup(
+      'definition-lookup:main',
+    ) as DefinitionLookup;
   }
+
+  await insertPermissions(dbAdapter, new URL(realmURL), permissions);
+  let worker = new Worker({
+    indexWriter: new IndexWriter(dbAdapter),
+    queue,
+    dbAdapter,
+    queuePublisher: queue,
+    virtualNetwork,
+    matrixURL: baseTestMatrix.url,
+    secretSeed: testRealmSecretSeed,
+    realmServerMatrixUsername: testRealmServerMatrixUsername,
+    prerenderer: localIndexer.prerenderer,
+  });
+
+  realm = new Realm({
+    url: realmURL,
+    adapter,
+    matrix: {
+      ...baseTestMatrix,
+      username: testRealmURLToUsername(realmURL),
+    },
+    secretSeed: testRealmSecretSeed,
+    virtualNetwork,
+    dbAdapter,
+    queue,
+    realmServerMatrixClient: new MatrixClient({
+      matrixURL: baseTestMatrix.url,
+      username: testRealmServerMatrixUsername,
+      seed: testRealmSecretSeed,
+    }),
+    definitionLookup,
+  });
+
+  // we use this to run cards that were added to the test filesystem
+  adapter.setLoader(
+    new Loader(realm.__fetchForTesting, virtualNetwork.resolveImport),
+  );
+
+  // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
+  virtualNetwork.mount(realm.maybeHandle);
+  await mockMatrixUtils.start();
+  await adapter.ready;
+  await worker.run();
+  await realm.start();
+
+  let realmServer = getService('realm-server');
+  if (!realmServer.availableRealmURLs.includes(realmURL)) {
+    realmServer.setAvailableRealmURLs([realmURL]);
+  }
+
+  return { realm, adapter };
 }
 
-export function setupAuthEndpoints(
-  realmPermissions: Record<string, string[]> = {
-    [testRealmURL]: ['read', 'write'],
-  },
-) {
-  getService('network').mount(
-    async (req: Request) => {
+const authHandlerStateSymbol = Symbol('test-auth-handler-state');
+const TEST_MATRIX_USER = '@testuser:localhost';
+
+type AuthHandlerState = {
+  handler: (req: Request) => Promise<Response | null>;
+  realmPermissions: Map<string, RealmAction[]>;
+  mountedVirtualNetwork?: unknown;
+};
+
+function ensureAuthHandlerState(network: NetworkService): AuthHandlerState {
+  let state = (network as any)[authHandlerStateSymbol] as
+    | AuthHandlerState
+    | undefined;
+  if (!state) {
+    let realmPermissions = new Map<string, RealmAction[]>();
+    let handler = async (req: Request) => {
       if (req.url.includes('_realm-auth')) {
         const authTokens: Record<string, string> = {};
-        for (const [realmURL, permissions] of Object.entries(
-          realmPermissions,
-        )) {
+        for (let [realmURL, permissions] of realmPermissions.entries()) {
           authTokens[realmURL] = createJWT(
             {
-              user: '@testuser:localhost',
-              sessionRoom: getRoomIdForRealmAndUser(
-                realmURL,
-                '@testuser:localhost',
-              ),
-              permissions: permissions as RealmAction[],
+              user: TEST_MATRIX_USER,
+              sessionRoom: getRoomIdForRealmAndUser(realmURL, TEST_MATRIX_USER),
+              permissions,
               realm: realmURL,
             },
             '1d',
@@ -870,7 +836,7 @@ export function setupAuthEndpoints(
             headers: {
               Authorization: createJWT(
                 {
-                  user: '@testuser:localhost',
+                  user: TEST_MATRIX_USER,
                   sessionRoom: 'test-auth-realm-server-session-room',
                 },
                 '1d',
@@ -881,9 +847,56 @@ export function setupAuthEndpoints(
         }
       }
       return null;
-    },
-    { prepend: true },
-  );
+    };
+    state = { realmPermissions, handler };
+    (network as any)[authHandlerStateSymbol] = state;
+  }
+  if (state.mountedVirtualNetwork !== network.virtualNetwork) {
+    network.mount(state.handler, { prepend: true });
+    state.mountedVirtualNetwork = network.virtualNetwork;
+  }
+  return state;
+}
+
+export function setupAuthEndpoints(
+  realmPermissions: Record<string, RealmAction[]> = {
+    [testRealmURL]: ['read', 'write'],
+  },
+) {
+  let network = getService('network') as NetworkService;
+  let state = ensureAuthHandlerState(network);
+
+  for (let [realmURL, permissions] of Object.entries(realmPermissions)) {
+    state.realmPermissions.set(
+      ensureTrailingSlash(realmURL),
+      permissions as RealmAction[],
+    );
+  }
+}
+
+function deriveTestUserPermissions(
+  permissions?: RealmPermissions,
+): RealmAction[] {
+  if (!permissions) {
+    return ['read', 'write'];
+  }
+  let forTestUser = permissions[TEST_MATRIX_USER];
+  if (forTestUser) {
+    return forTestUser as RealmAction[];
+  }
+  let wildcard = permissions['*'];
+  if (wildcard) {
+    return wildcard as RealmAction[];
+  }
+  let firstEntry = Object.values(permissions)[0];
+  if (firstEntry) {
+    return firstEntry as RealmAction[];
+  }
+  return ['read', 'write'];
+}
+
+function ensureTrailingSlash(url: string): string {
+  return url.endsWith('/') ? url : `${url}/`;
 }
 
 export function setupUserSubscription() {

@@ -77,18 +77,10 @@ export default class HomePageResolverService extends Service {
       return null;
     }
 
-    let realmPaths = new RealmPaths(new URL(normalizedRealmURL));
-    let siteConfigURL = realmPaths.fileURL('site.json').href;
-
-    let siteConfigInstance: SiteConfig | undefined;
-    try {
-      siteConfigInstance = (await this.store.get(siteConfigURL)) as
-        | SiteConfig
-        | undefined;
-    } catch (_error) {
-      return null;
-    }
-
+    let siteConfigId = await this.hostHomeFor(normalizedRealmURL);
+    let siteConfigInstance =
+      siteConfigId &&
+      (await this.loadSiteConfig(siteConfigId, normalizedRealmURL));
     if (!siteConfigInstance) {
       return null;
     }
@@ -101,6 +93,51 @@ export default class HomePageResolverService extends Service {
     }
 
     return homeCard.id.replace(/\.json$/, '');
+  }
+
+  private async hostHomeFor(realmURL: string): Promise<string | null> {
+    try {
+      await this.realm.ensureRealmMeta(realmURL);
+    } catch (_error) {
+      return null;
+    }
+
+    let info = this.realm.info(realmURL);
+    return info.hostHome ?? null;
+  }
+
+  private async loadSiteConfig(
+    siteConfigId: string,
+    realmURL: string,
+  ): Promise<SiteConfig | undefined> {
+    let resolvedSiteConfigId = this.resolveCardURL(siteConfigId, realmURL);
+    if (!resolvedSiteConfigId) {
+      return undefined;
+    }
+
+    return await this.tryLoadSiteConfig(resolvedSiteConfigId);
+  }
+
+  private async tryLoadSiteConfig(
+    siteConfigURL: string,
+  ): Promise<SiteConfig | undefined> {
+    try {
+      return (await this.store.get(siteConfigURL)) as SiteConfig | undefined;
+    } catch (_error) {
+      return undefined;
+    }
+  }
+
+  private resolveCardURL(cardId: string, realmURL: string): string | undefined {
+    try {
+      return new URL(cardId).href.replace(/\.json$/, '');
+    } catch (_error) {
+      try {
+        return new URL(cardId, realmURL).href.replace(/\.json$/, '');
+      } catch (_error) {
+        return undefined;
+      }
+    }
   }
 
   private async identifyRealmURL(url: URL): Promise<string | undefined> {

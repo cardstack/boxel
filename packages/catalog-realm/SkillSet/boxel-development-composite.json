@@ -107,7 +107,7 @@
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "../Theme/b5b23e66-3b36-44a2-9625-8b50e170115d"
+          "self": "../Theme/cardstack"
         }
       },
       "relatedSkills.0.skill": {

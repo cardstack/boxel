@@ -39,6 +39,10 @@ import {
   coerceRenderError,
   normalizeRenderError,
 } from '../utils/render-error';
+import {
+  enableRenderTimerStub,
+  beginTimerBlock,
+} from '../utils/render-timer-stub';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
@@ -62,6 +66,7 @@ type ModelState = {
   state: TrackedMap<string, unknown>;
   readyDeferred: Deferred<void>;
   isReady: boolean;
+  readyWatchdogStarted?: boolean;
 };
 
 export default class RenderRoute extends Route<Model> {
@@ -77,44 +82,48 @@ export default class RenderRoute extends Route<Model> {
   private lastStoreResetKey: string | undefined;
   private renderBaseParams: [string, string, string] | undefined;
   private lastRenderErrorSignature: string | undefined;
+  #windowListenersAttached = false;
   #cardTypeTracker = new RenderCardTypeTracker();
   #modelStates = new Map<Model, ModelState>();
   #pendingReadyModels = new Set<Model>();
   #modelPromises = new Map<string, Promise<Model>>();
   #authGuard = createAuthErrorGuard();
+  #restoreRenderTimers: (() => void) | undefined;
+  #releaseTimerBlock: (() => void) | undefined;
 
   errorHandler = (event: Event) => {
+    if (this.isDestroying || this.isDestroyed) {
+      return;
+    }
+    let elements = this.#ensurePrerenderElements();
     windowErrorHandler({
       event,
-      setStatusToUnusable() {
-        let element: HTMLElement = document.querySelector('[data-prerender]')!;
-        element.dataset.prerenderStatus = 'unusable';
+      setStatusToUnusable: () => {
+        if (elements.container) {
+          elements.container.dataset.prerenderStatus = 'unusable';
+        }
       },
-      setError(error) {
-        let element: HTMLElement = document.querySelector('[data-prerender]')!;
-        element.innerHTML = error;
+      setError: (error) => {
+        if (elements.errorElement) {
+          elements.errorElement.textContent = error;
+        }
       },
       currentURL: this.router.currentURL,
     });
     this.#setAllModelStatuses('unusable');
-    (globalThis as any).__lazilyLoadLinks = undefined;
     (globalThis as any).__boxelRenderContext = undefined;
   };
 
   activate() {
-    window.addEventListener('error', this.errorHandler);
-    window.addEventListener('unhandledrejection', this.errorHandler);
     // this is for route errors, not window level error
     window.addEventListener('boxel-render-error', this.handleRenderError);
   }
 
   deactivate() {
-    (globalThis as any).__lazilyLoadLinks = undefined;
     (globalThis as any).__boxelRenderContext = undefined;
     (globalThis as any).__renderInstance = undefined;
-    window.removeEventListener('error', this.errorHandler);
-    window.removeEventListener('unhandledrejection', this.errorHandler);
     window.removeEventListener('boxel-render-error', this.handleRenderError);
+    this.#detachWindowErrorListeners();
     this.lastStoreResetKey = undefined;
     this.renderBaseParams = undefined;
     this.lastRenderErrorSignature = undefined;
@@ -124,14 +133,28 @@ export default class RenderRoute extends Route<Model> {
     this.#modelPromises.clear();
     this.#authGuard.unregister();
     this.#cardTypeTracker.clear();
+    this.#restoreRenderTimers?.();
+    this.#restoreRenderTimers = undefined;
+    this.#releaseTimerBlock?.();
+    this.#releaseTimerBlock = undefined;
   }
 
-  beforeModel() {
+  async beforeModel(transition: Transition) {
+    await super.beforeModel?.(transition);
+    if (!isTesting()) {
+      // tests have their own way of dealing with window level errors in card-prerender.gts
+      this.#attachWindowErrorListeners();
+    }
+
     // activate() doesn't run early enough for this to be set before the model()
     // hook is run
-    (globalThis as any).__lazilyLoadLinks = true;
     (globalThis as any).__boxelRenderContext = true;
     this.#authGuard.register();
+    if (!isTesting()) {
+      await this.store.ensureSetupComplete();
+      this.#restoreRenderTimers = enableRenderTimerStub();
+      this.#releaseTimerBlock = beginTimerBlock();
+    }
   }
 
   async model(
@@ -243,10 +266,8 @@ export default class RenderRoute extends Route<Model> {
         this.#cardTypeTracker.set({ cardId: canonicalId, nonce }, undefined);
         throw new Error(JSON.stringify(doc.errors[0], null, 2));
       }
-      let derivedCardType = await deriveCardTypeFromDoc(
-        doc,
-        id,
-        this.loaderService.loader,
+      let derivedCardType = await this.#authGuard.race(() =>
+        deriveCardTypeFromDoc(doc, id, this.loaderService.loader),
       );
       this.#cardTypeTracker.set(
         { cardId: canonicalId, nonce },
@@ -270,11 +291,13 @@ export default class RenderRoute extends Route<Model> {
         },
       };
 
-      instance = await this.store.add(enhancedDoc, {
-        relativeTo: new URL(id),
-        realm: realmURL,
-        doNotPersist: true,
-      });
+      instance = await this.#authGuard.race(() =>
+        this.store.add(enhancedDoc, {
+          relativeTo: new URL(id),
+          realm: realmURL,
+          doNotPersist: true,
+        }),
+      );
       model.instance = instance;
     } catch (e: any) {
       console.warn(
@@ -284,9 +307,9 @@ export default class RenderRoute extends Route<Model> {
       throw e;
     }
     if (instance) {
-      await this.#touchIsUsedFields(instance);
+      await this.#authGuard.race(() => this.#touchIsUsedFields(instance));
     }
-    await this.store.loaded();
+    await this.#authGuard.race(() => this.store.loaded());
     if (instance) {
       model.instance = instance;
     }
@@ -333,6 +356,7 @@ export default class RenderRoute extends Route<Model> {
     }
     this.#pendingReadyModels.add(model);
     scheduleOnce('afterRender', this, this.#processPendingReadyModels);
+    this.#startReadyWatchdog(model);
   }
 
   #processPendingReadyModels() {
@@ -349,12 +373,46 @@ export default class RenderRoute extends Route<Model> {
     this.#pendingReadyModels.clear();
   }
 
+  // In rare cases the afterRender queue does not fire, leaving prerender
+  // status stuck at "loading" forever. This watchdog forces the ready path
+  // after a few animation frames so we can unblock prerenders.
+  #startReadyWatchdog(model: Model) {
+    let modelState = this.#modelStates.get(model);
+    if (
+      !modelState ||
+      modelState.isReady ||
+      modelState.readyWatchdogStarted ||
+      typeof requestAnimationFrame !== 'function'
+    ) {
+      return;
+    }
+    modelState.readyWatchdogStarted = true;
+    let attempts = 0;
+    let tick = () => {
+      let current = this.#modelStates.get(model);
+      if (
+        !current ||
+        current.isReady ||
+        this.isDestroying ||
+        this.isDestroyed
+      ) {
+        return;
+      }
+      if (attempts++ >= 2) {
+        void this.#settleModelAfterRender(model);
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
   async #settleModelAfterRender(model: Model): Promise<void> {
     let modelState = this.#modelStates.get(model);
     if (!modelState || modelState.isReady) {
       return;
     }
-    await this.store.loaded();
+    await this.#authGuard.race(() => this.store.loaded());
     modelState.state.set('status', 'ready');
     modelState.isReady = true;
     modelState.readyDeferred.fulfill();
@@ -453,6 +511,9 @@ export default class RenderRoute extends Route<Model> {
   }
 
   private handleRenderError = (errorOrEvent: any, transition?: Transition) => {
+    if (this.isDestroying || this.isDestroyed) {
+      return;
+    }
     let event =
       'reason' in errorOrEvent || 'detail' in errorOrEvent
         ? errorOrEvent
@@ -470,6 +531,9 @@ export default class RenderRoute extends Route<Model> {
   };
 
   #processRenderError(error: any, transition?: Transition) {
+    if (this.isDestroying || this.isDestroyed) {
+      return;
+    }
     this.currentTransition?.abort();
     this.#rejectAllModelStates('error');
     let context = this.#deriveErrorContext(transition);
@@ -669,6 +733,50 @@ export default class RenderRoute extends Route<Model> {
         errorElement.dataset.prerenderNonce = context.nonce;
       }
     }
+  }
+
+  #attachWindowErrorListeners() {
+    if (this.#windowListenersAttached || typeof window === 'undefined') {
+      return;
+    }
+    window.addEventListener('error', this.errorHandler);
+    window.addEventListener('unhandledrejection', this.errorHandler);
+    this.#windowListenersAttached = true;
+  }
+
+  #detachWindowErrorListeners() {
+    if (!this.#windowListenersAttached || typeof window === 'undefined') {
+      return;
+    }
+    window.removeEventListener('error', this.errorHandler);
+    window.removeEventListener('unhandledrejection', this.errorHandler);
+    this.#windowListenersAttached = false;
+  }
+
+  #ensurePrerenderElements(): {
+    container: HTMLElement | null;
+    errorElement: HTMLElement | null;
+  } {
+    if (typeof document === 'undefined') {
+      return { container: null, errorElement: null };
+    }
+    let container = document.querySelector(
+      '[data-prerender]',
+    ) as HTMLElement | null;
+    if (!container) {
+      container = document.createElement('div');
+      container.setAttribute('data-prerender', '');
+      document.body.appendChild(container);
+    }
+    let errorElement = document.querySelector(
+      '[data-prerender-error]',
+    ) as HTMLElement | null;
+    if (!errorElement) {
+      errorElement = document.createElement('pre');
+      errorElement.setAttribute('data-prerender-error', '');
+      container.appendChild(errorElement);
+    }
+    return { container, errorElement };
   }
 
   #transitionToErrorRoute(transition?: Transition) {

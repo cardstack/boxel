@@ -275,6 +275,44 @@ module('Integration | card-basics', function (hooks) {
     });
   });
 
+  test('linksToMany declared with CardDef accepts heterogeneous polymorphic card instances', async function (assert) {
+    class DrumKitCard extends CardDef {
+      @field name = contains(StringField);
+    }
+
+    class BeatMakerCard extends CardDef {
+      @field title = contains(StringField);
+    }
+
+    class Listing extends CardDef {
+      @field examples = linksToMany(() => CardDef);
+    }
+
+    loader.shimModule(`${testRealmURL}test-cards`, {
+      Listing,
+      DrumKitCard,
+      BeatMakerCard,
+    });
+
+    let e1 = new DrumKitCard({ name: '808 Analog Kit' });
+    let e2 = new BeatMakerCard({ title: 'Beat Maker Studio' });
+
+    await saveCard(e1, `${testRealmURL}e1`, loader);
+    await saveCard(e2, `${testRealmURL}e2`, loader);
+
+    let listing = new Listing({ examples: [e1, e2] });
+
+    assert.strictEqual(listing.examples.length, 2, 'both cards are accepted');
+    assert.ok(
+      listing.examples[0] instanceof DrumKitCard,
+      'first example preserves its concrete type',
+    );
+    assert.ok(
+      listing.examples[1] instanceof BeatMakerCard,
+      'second example preserves its concrete type',
+    );
+  });
+
   module('cards allowed to be edited', function (hooks) {
     hooks.beforeEach(function () {
       provideConsumeContext(PermissionsContextName, {
@@ -3938,6 +3976,20 @@ module('Integration | card-basics', function (hooks) {
         getFieldDescription(new Person(), 'hometown'),
         'The place where the person was born',
         'getFieldDescription works for instance',
+      );
+
+      class Employee extends Person {}
+
+      assert.strictEqual(
+        getFieldDescription(Employee, 'hometown'),
+        'The place where the person was born',
+        'getFieldDescription works for subclasses',
+      );
+
+      assert.strictEqual(
+        getFieldDescription(new Employee(), 'hometown'),
+        'The place where the person was born',
+        'getFieldDescription works for subclass instances',
       );
     });
 
