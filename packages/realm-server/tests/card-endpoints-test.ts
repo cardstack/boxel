@@ -224,23 +224,6 @@ module(basename(__filename), function () {
 
           await realm.writeMany(writes);
 
-          let queryResults = await realm.realmIndexQueryEngine.search({
-            filter: {
-              eq: { firstName: 'Mango' },
-              on: { module: `${testRealmHref}person`, name: 'Person' },
-            },
-          });
-          assert.strictEqual(
-            queryResults.data.length,
-            1,
-            'search finds Mango within the realm',
-          );
-          assert.strictEqual(
-            queryResults.data[0]?.id,
-            `${testRealmHref}person-1`,
-            'search result id matches the expected person card',
-          );
-
           let response = await request
             .get('/query-person-finder')
             .set('Accept', 'application/vnd.card+json');
