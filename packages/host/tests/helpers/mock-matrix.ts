@@ -1,3 +1,4 @@
+/* eslint-disable import/order */
 import type Owner from '@ember/owner';
 
 import { getService } from '@universal-ember/test-support';
@@ -10,6 +11,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import { MockSDK } from './mock-matrix/_sdk';
 import { MockSlidingSync } from './mock-matrix/_sliding-sync';
 import { MockUtils, getRoomIdForRealmAndUser } from './mock-matrix/_utils';
+import { registerRealmAuthSessionRoomEnsurer } from './index';
 
 export const testRealmServerMatrixUsername = 'realm_server';
 export const testRealmServerMatrixUserId = `@${testRealmServerMatrixUsername}:localhost`;
@@ -79,6 +81,17 @@ export function setupMockMatrix(
     testState.opts = { ...opts, directRooms };
     let sdk = new MockSDK(testState.opts, this.owner);
     testState.sdk = sdk;
+
+    registerRealmAuthSessionRoomEnsurer(async (realmURL, userId) => {
+      let roomId = mockUtils.getRoomIdForRealmAndUser(realmURL, userId);
+      if (!mockUtils.getRoomIds().includes(roomId)) {
+        mockUtils.createAndJoinRoom({
+          sender: userId,
+          name: roomId,
+          id: roomId,
+        });
+      }
+    });
 
     // Needed for realm event subscriptions to receive events
     getService('message-service').register();

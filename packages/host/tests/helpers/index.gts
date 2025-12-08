@@ -857,11 +857,19 @@ async function setupTestRealm({
 const authHandlerStateSymbol = Symbol('test-auth-handler-state');
 const TEST_MATRIX_USER = '@testuser:localhost';
 
+type EnsureSessionRoom = (
+  realmURL: string,
+  userId: string,
+) => Promise<void> | void;
+
 type AuthHandlerState = {
   handler: (req: Request) => Promise<Response | null>;
   realmPermissions: Map<string, RealmAction[]>;
   mountedVirtualNetwork?: unknown;
+  ensureSessionRoom?: EnsureSessionRoom;
 };
+
+let sessionRoomEnsurer: EnsureSessionRoom | undefined;
 
 function ensureAuthHandlerState(network: NetworkService): AuthHandlerState {
   let state = (network as any)[authHandlerStateSymbol] as
@@ -871,8 +879,15 @@ function ensureAuthHandlerState(network: NetworkService): AuthHandlerState {
     let realmPermissions = new Map<string, RealmAction[]>();
     let handler = async (req: Request) => {
       if (req.url.includes('_realm-auth')) {
+        console.log(
+          '[mock realm auth] handling _realm-auth request for realms',
+          Array.from(state.realmPermissions.keys()),
+        );
         const authTokens: Record<string, string> = {};
         for (let [realmURL, permissions] of realmPermissions.entries()) {
+          if (state.ensureSessionRoom) {
+            await state.ensureSessionRoom(realmURL, TEST_MATRIX_USER);
+          }
           authTokens[realmURL] = createJWT(
             {
               user: TEST_MATRIX_USER,
@@ -888,35 +903,35 @@ function ensureAuthHandlerState(network: NetworkService): AuthHandlerState {
       }
       if (req.url.includes('_server-session')) {
         let data = await req.json();
-        if (!data.challenge) {
+        if (!data.access_token) {
           return new Response(
             JSON.stringify({
-              challenge: 'test',
-              room: 'test-auth-realm-server-session-room',
+              errors: [`Request body missing 'access_token' property`],
             }),
-            {
-              status: 401,
-            },
+            { status: 400 },
           );
-        } else {
-          return new Response('Ok', {
-            status: 200,
-            headers: {
-              Authorization: createJWT(
-                {
-                  user: TEST_MATRIX_USER,
-                  sessionRoom: 'test-auth-realm-server-session-room',
-                },
-                '1d',
-                testRealmSecretSeed,
-              ),
-            },
-          });
         }
+        return new Response(null, {
+          status: 201,
+          headers: {
+            Authorization: createJWT(
+              {
+                user: TEST_MATRIX_USER,
+                sessionRoom: 'test-auth-realm-server-session-room',
+              },
+              '1d',
+              testRealmSecretSeed,
+            ),
+          },
+        });
       }
       return null;
     };
-    state = { realmPermissions, handler };
+    state = {
+      realmPermissions,
+      handler,
+      ensureSessionRoom: sessionRoomEnsurer,
+    };
     (network as any)[authHandlerStateSymbol] = state;
   }
   if (state.mountedVirtualNetwork !== network.virtualNetwork) {
@@ -939,6 +954,19 @@ export function setupAuthEndpoints(
       ensureTrailingSlash(realmURL),
       permissions as RealmAction[],
     );
+  }
+}
+
+export function registerRealmAuthSessionRoomEnsurer(
+  callback: EnsureSessionRoom,
+) {
+  sessionRoomEnsurer = callback;
+  let network = getService('network') as NetworkService;
+  let state = (network as any)[authHandlerStateSymbol] as
+    | AuthHandlerState
+    | undefined;
+  if (state) {
+    state.ensureSessionRoom = callback;
   }
 }
 
@@ -1147,6 +1175,7 @@ export function setupRealmServerEndpoints(
     {
       route: '_realm-auth',
       getResponse: async function (_req: Request) {
+        console.log('_realm-auth endpoint hit', req.url);
         return new Response(JSON.stringify({}), { status: 200 });
       },
     },
@@ -1154,31 +1183,27 @@ export function setupRealmServerEndpoints(
       route: '_server-session',
       getResponse: async function (req: Request) {
         let data = await req.json();
-        if (!data.challenge) {
+        if (!data.access_token) {
           return new Response(
             JSON.stringify({
-              challenge: 'test',
-              room: 'boxel-session-room-id',
+              errors: [`Request body missing 'access_token' property`],
             }),
-            {
-              status: 401,
-            },
+            { status: 400 },
           );
-        } else {
-          return new Response('Ok', {
-            status: 200,
-            headers: {
-              Authorization: createJWT(
-                {
-                  user: '@testuser:localhost',
-                  sessionRoom: 'boxel-session-room-id',
-                },
-                '1d',
-                testRealmSecretSeed,
-              ),
-            },
-          });
         }
+        return new Response(null, {
+          status: 201,
+          headers: {
+            Authorization: createJWT(
+              {
+                user: '@testuser:localhost',
+                sessionRoom: 'boxel-session-room-id',
+              },
+              '1d',
+              testRealmSecretSeed,
+            ),
+          },
+        });
       },
     },
     {

@@ -13,7 +13,6 @@ export interface Utils {
 export class MatrixBackendAuthentication {
   constructor(
     private matrixClient: MatrixClient,
-    private secretSeed: string,
     private utils: Utils,
   ) {}
 
@@ -46,6 +45,13 @@ export class MatrixBackendAuthentication {
   private async verifyToken(openIdToken: string) {
     // Check openID token using the federation endpoint
     let user = await this.matrixClient.verifyOpenIdToken(openIdToken);
+    if (!user) {
+      return this.utils.badRequest(
+        JSON.stringify({
+          errors: [`Unable to verify OpenID token`],
+        }),
+      );
+    }
     let roomId = await this.utils.ensureSessionRoom(user);
 
     let jwt = await this.utils.createJWT(user, roomId);

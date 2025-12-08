@@ -1031,31 +1031,27 @@ module('Acceptance | operator mode tests', function (hooks) {
         route: '_server-session',
         getResponse: async (req: Request) => {
           let data = await req.json();
-          if (!data.challenge) {
+          if (!data.access_token) {
             return new Response(
               JSON.stringify({
-                challenge: 'test',
-                room: matrixRoomId,
+                errors: [`Request body missing 'access_token' property`],
               }),
-              {
-                status: 401,
-              },
+              { status: 400 },
             );
-          } else {
-            return new Response('Ok', {
-              status: 200,
-              headers: {
-                Authorization: createJWT(
-                  {
-                    user: '@testuser:localhost',
-                    sessionRoom: matrixRoomId,
-                  },
-                  '1d',
-                  testRealmSecretSeed,
-                ),
-              },
-            });
           }
+          return new Response(null, {
+            status: 201,
+            headers: {
+              Authorization: createJWT(
+                {
+                  user: '@testuser:localhost',
+                  sessionRoom: matrixRoomId,
+                },
+                '1d',
+                testRealmSecretSeed,
+              ),
+            },
+          });
         },
       },
     ]);
