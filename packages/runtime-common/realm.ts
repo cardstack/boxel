@@ -669,11 +669,12 @@ export class Realm {
 
     for (let [path, content] of files) {
       let url = this.paths.fileURL(path);
-      let currentWriteType: 'module' | 'instance' | undefined = hasExecutableExtension(path)
-        ? 'module'
-        : path.endsWith('.json') && isCardDocumentString(content)
-          ? 'instance'
-          : undefined;
+      let currentWriteType: 'module' | 'instance' | undefined =
+        hasExecutableExtension(path)
+          ? 'module'
+          : path.endsWith('.json') && isCardDocumentString(content)
+            ? 'instance'
+            : undefined;
       try {
         let doc = JSON.parse(content);
         if (isCardResource(doc.data) && options?.serializeFile) {

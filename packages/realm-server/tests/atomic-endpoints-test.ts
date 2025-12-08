@@ -622,7 +622,7 @@ module(basename(__filename), function () {
           );
         });
 
-        test.only('update is a no-op when content is unchanged', async function (assert) {
+        test('update is a no-op when content is unchanged', async function (assert) {
           let source = `
               import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
               import StringField from "https://cardstack.com/base/string";
