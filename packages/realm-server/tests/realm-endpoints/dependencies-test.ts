@@ -44,7 +44,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
 
   test('returns resource index entries for an existing module', async function (assert) {
     await testRealm.write(
-      'resource-index-card.gts',
+      'dependencies-card.gts',
       `
         import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
@@ -55,9 +55,9 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     );
     await testRealm.realmIndexUpdater.fullIndex();
 
-    let targetUrl = `${testRealm.url}resource-index-card.gts`;
+    let targetUrl = `${testRealm.url}dependencies-card.gts`;
     let response = await request
-      .get(`/_resource-index?url=${encodeURIComponent(targetUrl)}`)
+      .get(`/_dependencies?url=${encodeURIComponent(targetUrl)}`)
       .set('Accept', SupportedMimeType.JSON);
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -74,7 +74,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
   test('returns empty array for unknown resources', async function (assert) {
     let response = await request
       .get(
-        `/_resource-index?url=${encodeURIComponent(`${testRealm.url}missing-resource.gts`)}`,
+        `/_dependencies?url=${encodeURIComponent(`${testRealm.url}missing-resource.gts`)}`,
       )
       .set('Accept', SupportedMimeType.JSON);
 
@@ -88,7 +88,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
 
   test('returns bad request when url parameter is missing', async function (assert) {
     let response = await request
-      .get('/_resource-index')
+      .get('/_dependencies')
       .set('Accept', SupportedMimeType.JSON);
 
     assert.strictEqual(response.status, 400, 'HTTP 400 status');

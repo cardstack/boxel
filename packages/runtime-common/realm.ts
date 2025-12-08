@@ -480,7 +480,7 @@ export class Realm {
         this.fetchCardTypeSummary.bind(this),
       )
       .get(
-        '/_resource-index',
+        '/_dependencies',
         SupportedMimeType.JSON,
         this.getResourceIndex.bind(this),
       )
@@ -2959,7 +2959,7 @@ export class Realm {
       base: URL,
       resourceUrl: string,
     ): Promise<ResourceIndexEntry[] | undefined> => {
-      let endpoint = new URL('_resource-index', base);
+      let endpoint = new URL('_dependencies', base);
       endpoint.searchParams.set('url', resourceUrl);
       let response: Response;
       try {
