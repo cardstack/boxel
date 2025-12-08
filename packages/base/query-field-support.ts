@@ -91,7 +91,14 @@ export function ensureQueryFieldSearchResource(
         : undefined,
     },
   );
-  fieldState = fieldState || {};
+  if (!queryFieldState) {
+    queryFieldState = new Map<string, QueryFieldState>();
+    queryFieldStates.set(instance, queryFieldState);
+  }
+  if (!fieldState) {
+    fieldState = {};
+    queryFieldState.set(field.name, fieldState);
+  }
   fieldState.searchResource = searchResource;
 
   return searchResource;
