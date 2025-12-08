@@ -144,5 +144,20 @@ module(basename(__filename), function () {
       let jwtFromClient = await client.getJWT();
       assert.ok(jwtFromClient, 'received jwt after verifying openid token');
     });
+
+    test('it throws when the openid token cannot be verified by the realm', async function (assert) {
+      sessionHandler = async () => {
+        return new Response(JSON.stringify({ errors: ['invalid token'] }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      };
+
+      await assert.rejects(
+        client.getJWT(),
+        /expected 'Authorization' header/,
+        'missing Authorization header indicates verification failure',
+      );
+    });
   });
 });
