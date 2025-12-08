@@ -2,9 +2,6 @@ import type Koa from 'koa';
 import {
   SupportedMimeType,
   systemInitiatedPriority,
-  normalizeFullReindexBatchSize,
-  normalizeFullReindexCooldownSeconds,
-  normalizeFullReindexConcurrency,
 } from '@cardstack/runtime-common';
 import { setContextResponse } from '../middleware';
 import type { CreateRoutesArgs } from '../routes';
@@ -14,10 +11,6 @@ export default function handleFullReindex({
   realms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    let batchSize = normalizeFullReindexBatchSize();
-    let cooldownSeconds = normalizeFullReindexCooldownSeconds();
-    let concurrencyParam = ctxt.URL.searchParams.get('concurrency');
-    let concurrency = normalizeFullReindexConcurrency(concurrencyParam);
     await queue.publish<void>({
       jobType: `full-reindex`,
       concurrencyGroup: `full-reindex-group`,
@@ -25,9 +18,6 @@ export default function handleFullReindex({
       priority: systemInitiatedPriority,
       args: {
         realmUrls: realms.map((r) => r.url),
-        batchSize,
-        cooldownSeconds,
-        concurrency,
       },
     });
     await setContextResponse(

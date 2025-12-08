@@ -7,6 +7,8 @@ import type {
   RenderResponse,
 } from '@cardstack/runtime-common';
 import { Prerenderer } from '../prerender/index';
+import { PagePool } from '../prerender/page-pool';
+import { RenderRunner } from '../prerender/render-runner';
 
 import {
   setupBaseRealmServer,
@@ -1687,6 +1689,124 @@ module(basename(__filename), function () {
           secondA.pool.pageId,
           'A got a new page after eviction',
         );
+      });
+
+      test('serializes cross-realm prerenders when no more capacity', async function (assert) {
+        let prevPoolSize = process.env.PRERENDER_PAGE_POOL_SIZE;
+        let originalGetPage = PagePool.prototype.getPage;
+        let originalCloseAll = PagePool.prototype.closeAll;
+        let originalPrerenderAttempt =
+          RenderRunner.prototype.prerenderCardAttempt;
+        let originalRetrySignature =
+          RenderRunner.prototype.shouldRetryWithClearCache;
+        let localPrerenderer: Prerenderer | undefined;
+
+        let active = 0;
+        let maxActive = 0;
+
+        try {
+          process.env.PRERENDER_PAGE_POOL_SIZE = '1';
+          PagePool.prototype.getPage = async function (realm: string) {
+            return {
+              page: {} as any,
+              reused: false,
+              launchMs: 0,
+              pageId: `fake-${realm}`,
+            };
+          };
+          PagePool.prototype.closeAll = async function () {};
+          RenderRunner.prototype.shouldRetryWithClearCache = () => undefined;
+          RenderRunner.prototype.prerenderCardAttempt = async function ({
+            realm,
+            url,
+          }: {
+            realm: string;
+            url: string;
+          }) {
+            active++;
+            maxActive = Math.max(maxActive, active);
+            await new Promise((resolve) => setTimeout(resolve, 25));
+            active--;
+            return {
+              response: {
+                serialized: null,
+                searchDoc: null,
+                displayNames: null,
+                deps: null,
+                types: null,
+                iconHTML: null,
+                isolatedHTML: url,
+                headHTML: null,
+                atomHTML: null,
+                embeddedHTML: null,
+                fittedHTML: null,
+              },
+              timings: { launchMs: 0, renderMs: 5 },
+              pool: {
+                pageId: `fake-${realm}`,
+                realm,
+                reused: false,
+                evicted: false,
+                timedOut: false,
+              },
+            };
+          };
+
+          localPrerenderer = new Prerenderer({
+            secretSeed: realmSecretSeed,
+            maxPages: 1,
+            silent: true,
+            serverURL: 'http://127.0.0.1:4225',
+          });
+
+          let realmA = 'https://realm-a.example/';
+          let realmB = 'https://realm-b.example/';
+          let permissionsA: Record<string, ('read' | 'write')[]> = {
+            [realmA]: ['read'],
+          };
+          let permissionsB: Record<string, ('read' | 'write')[]> = {
+            [realmB]: ['read'],
+          };
+
+          let [resA, resB] = await Promise.all([
+            localPrerenderer.prerenderCard({
+              realm: realmA,
+              url: `${realmA}card`,
+              userId: testUserId,
+              permissions: permissionsA,
+            }),
+            localPrerenderer.prerenderCard({
+              realm: realmB,
+              url: `${realmB}card`,
+              userId: testUserId,
+              permissions: permissionsB,
+            }),
+          ]);
+
+          assert.strictEqual(
+            maxActive,
+            1,
+            'global prerender semaphore serializes cross-realm work when pool is full',
+          );
+          assert.deepEqual(
+            [resA.response.isolatedHTML, resB.response.isolatedHTML].sort(),
+            [`${realmA}card`, `${realmB}card`].sort(),
+            'responses come from stubbed render attempts',
+          );
+        } finally {
+          if (prevPoolSize === undefined) {
+            delete process.env.PRERENDER_PAGE_POOL_SIZE;
+          } else {
+            process.env.PRERENDER_PAGE_POOL_SIZE = prevPoolSize;
+          }
+          PagePool.prototype.getPage = originalGetPage;
+          PagePool.prototype.closeAll = originalCloseAll;
+          RenderRunner.prototype.prerenderCardAttempt =
+            originalPrerenderAttempt;
+          RenderRunner.prototype.shouldRetryWithClearCache =
+            originalRetrySignature;
+          await localPrerenderer?.stop();
+        }
       });
     });
   });
