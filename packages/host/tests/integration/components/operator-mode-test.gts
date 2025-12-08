@@ -926,7 +926,7 @@ module('Integration | operator-mode', function (hooks) {
         document
           .querySelector('[data-test-auto-save-indicator]')
           ?.textContent?.trim() ==
-        'Failed to save: Request blocked by Web Application Firewall. See x-blocked-by-waf-rule response header for detail. Rule: CrossSiteScripting_BODY',
+        'Failed to save: Request blocked by Web Application Firewall. X-blocked-by-waf-rule response header specifies rule: CrossSiteScripting_BODY',
       { timeoutMessage: 'Waiting for "Failed to save" to appear' },
     );
     assert
