@@ -257,7 +257,6 @@ export class RealmIndexQueryEngine {
       let queryDefinition = this.getQueryDefinition(fieldDefinition);
 
       if (
-        fieldName.includes('.') ||
         (fieldDefinition.type !== 'linksTo' &&
           fieldDefinition.type !== 'linksToMany') ||
         !queryDefinition
@@ -303,12 +302,16 @@ export class RealmIndexQueryEngine {
     errors: QueryFieldErrorDetail[];
     searchURL: string;
   }> {
+    let fieldPath = fieldName.includes('.')
+      ? fieldName.slice(0, fieldName.lastIndexOf('.'))
+      : '';
     let normalized = normalizeQueryDefinition({
       fieldDefinition,
       queryDefinition,
       resource,
       realmURL,
       fieldName,
+      fieldPath,
     });
     if (!normalized) {
       return { results: [], errors: [], searchURL: '' };

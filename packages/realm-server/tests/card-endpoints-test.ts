@@ -174,7 +174,7 @@ module(basename(__filename), function () {
             },
           });
         });
-        test('query-backed relationships resolve via search at read time', async function (assert) {
+        test('card-level query-backed relationships resolve via search at read time', async function (assert) {
           let { testRealm: realm, request } = getRealmSetup();
 
           let writes = new Map<string, string>([
@@ -259,6 +259,146 @@ module(basename(__filename), function () {
               (resource: any) => resource.id === `${testRealmHref}person-1`,
             ),
             'included contains resolved person card',
+          );
+        });
+
+        test('field-level query-backed relationships resolve at read time (nested contains)', async function (assert) {
+          let { testRealm: realm, request } = getRealmSetup();
+
+          let writes = new Map<string, string>([
+            [
+              'query-person-finder-nested.gts',
+              `
+                import { CardDef, FieldDef, field, contains, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+                import StringField from "https://cardstack.com/base/string";
+                import { Person } from "./person";
+
+                export class QueryLinksField extends FieldDef {
+                  @field title = contains(StringField);
+                  @field favorite = linksTo(Person, {
+                    query: {
+                      filter: {
+                        eq: { firstName: '$this.title' },
+                      },
+                    },
+                  });
+                  @field matches = linksToMany(Person, {
+                    query: {
+                      filter: {
+                        eq: { firstName: '$this.title' },
+                      },
+                    },
+                  });
+                }
+
+                export class WrapperField extends FieldDef {
+                  @field queries = contains(QueryLinksField);
+                }
+
+                export class OuterQueryCard extends CardDef {
+                  @field info = contains(WrapperField);
+                }
+
+                export class DeepWrapperField extends FieldDef {
+                  @field inner = contains(WrapperField);
+                }
+
+                export class DeepOuterQueryCard extends CardDef {
+                  @field details = contains(DeepWrapperField);
+                }
+              `,
+            ],
+            [
+              'query-person-finder-nested.json',
+              JSON.stringify({
+                data: {
+                  attributes: {
+                    info: {
+                      queries: {
+                        title: 'Mango',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './query-person-finder-nested.gts',
+                      name: 'OuterQueryCard',
+                    },
+                  },
+                },
+              }),
+            ],
+            [
+              'query-person-finder-deep.json',
+              JSON.stringify({
+                data: {
+                  attributes: {
+                    details: {
+                      inner: {
+                        queries: {
+                          title: 'Mango',
+                        },
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './query-person-finder-nested.gts',
+                      name: 'DeepOuterQueryCard',
+                    },
+                  },
+                },
+              }),
+            ],
+          ]);
+
+          await realm.writeMany(writes);
+
+          let response = await request
+            .get('/query-person-finder-nested')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            'HTTP 200 status for nested',
+          );
+          let doc = response.body;
+          assert.deepEqual(
+            doc.data.relationships['info.queries.favorite']?.data,
+            { type: 'card', id: `${testRealmHref}person-1` },
+            'nested linksTo query resolves to matching person',
+          );
+          assert.strictEqual(
+            doc.data.relationships['info.queries.favorite']?.links?.self,
+            `${testRealmHref}person-1`,
+            'nested linksTo relationship self link set',
+          );
+          assert.deepEqual(
+            doc.data.relationships['info.queries.matches.0']?.data,
+            { type: 'card', id: `${testRealmHref}person-1` },
+            'nested linksToMany returns first match',
+          );
+
+          let deepResponse = await request
+            .get('/query-person-finder-deep')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            deepResponse.status,
+            200,
+            'HTTP 200 status for deep nested',
+          );
+          let deepDoc = deepResponse.body;
+          assert.deepEqual(
+            deepDoc.data.relationships['details.inner.queries.favorite']?.data,
+            { type: 'card', id: `${testRealmHref}person-1` },
+            'deeply nested linksTo query resolves to matching person',
+          );
+          assert.deepEqual(
+            deepDoc.data.relationships['details.inner.queries.matches.0']?.data,
+            { type: 'card', id: `${testRealmHref}person-1` },
+            'deeply nested linksToMany returns first match',
           );
         });
       });
