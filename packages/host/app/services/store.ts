@@ -1196,7 +1196,7 @@ export default class StoreService extends Service implements StoreInterface {
         ([header]) => header.toLowerCase() === 'x-blocked-by-waf-rule',
       )?.[1];
       if (wafRule) {
-        return `Request blocked by Web Application Firewall. See x-blocked-by-waf-rule response header for detail. Rule: ${wafRule}`;
+        return `Request blocked by Web Application Firewall. X-blocked-by-waf-rule response header specifies rule: ${wafRule}`;
       }
     }
     if (error.message) {
