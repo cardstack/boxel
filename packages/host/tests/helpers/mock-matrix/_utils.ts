@@ -8,6 +8,7 @@ import type RealmService from '@cardstack/host/services/realm';
 import type { RealmEvent } from 'https://cardstack.com/base/matrix-event';
 
 import { setupAuthEndpoints } from '../';
+import type { SerializedServerState } from './_server-state';
 
 import type { MockSDK } from './_sdk';
 import type { Config } from '../mock-matrix';
@@ -113,6 +114,14 @@ export class MockUtils {
       id,
     );
     return roomId;
+  };
+
+  captureServerState = (): SerializedServerState => {
+    return this.testState.sdk!.serverState.serialize();
+  };
+
+  restoreServerState = (snapshot: SerializedServerState) => {
+    this.testState.sdk!.serverState.restore(snapshot);
   };
 }
 

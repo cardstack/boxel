@@ -42,55 +42,7 @@ export default class SQLiteAdapter implements DBAdapter {
     });
     this._sqlite = await waitForPromise(ready.promise, 'sqlite startup');
 
-    let response = await this.sqlite('open', {
-      // It is possible to write to the local
-      // filesystem via Origin Private Filesystem, but it requires _very_
-      // restrictive response headers that would cause our host app to break
-      //     "Cross-Origin-Embedder-Policy: require-corp"
-      //     "Cross-Origin-Opener-Policy: same-origin"
-      // https://webkit.org/blog/12257/the-file-system-access-api-with-origin-private-file-system/
-
-      // Otherwise, local storage and session storage are off limits to the
-      // worker (they are available in the synchronous interface), so only
-      // ephemeral memory storage is available
-      filename: ':memory:',
-    });
-    const { dbId } = response;
-    this._dbId = dbId;
-
-    if (this.schemaSQL) {
-      try {
-        await this.sqlite('exec', {
-          dbId: this.dbId,
-          sql: this.schemaSQL,
-        });
-      } catch (e: any) {
-        console.error(
-          `Error executing SQL: ${e.result.message}\n${this.schemaSQL}`,
-          e,
-        );
-        throw e;
-      }
-
-      this.tables = (
-        (await this.internalExecute(
-          `SELECT name FROM pragma_table_list WHERE schema = 'main' AND name != 'sqlite_schema'`,
-        )) as { name: string }[]
-      ).map((r) => r.name);
-      let pks = (await this.internalExecute(
-        `
-        SELECT m.name AS table_name,
-        GROUP_CONCAT(p.name, ', ') AS primary_keys
-        FROM sqlite_master AS m
-        JOIN pragma_table_info(m.name) AS p ON m.type = 'table'
-        WHERE p.pk > 0
-        GROUP BY m.name;
-        `,
-      )) as { table_name: string; primary_keys: string }[];
-      for (let { table_name, primary_keys } of pks) {
-        this.primaryKeys.set(table_name, primary_keys);
-      }
-    }
+    await this.#openDatabase(':memory:');
   }
 
   async execute(sql: string, opts?: ExecuteOptions) {
@@ -207,6 +159,56 @@ export default class SQLiteAdapter implements DBAdapter {
     }
 
     return results;
+  }
+
+  private async #openDatabase(filename: string) {
+    // It is possible to write to the local
+    // filesystem via Origin Private Filesystem, but it requires _very_
+    // restrictive response headers that would cause our host app to break
+    // so we always stick to in-memory files to keep behavior deterministic.
+    let response = await this.sqlite('open', {
+      filename,
+    });
+    const { dbId } = response;
+    this._dbId = dbId;
+
+    if (this.schemaSQL) {
+      try {
+        await this.sqlite('exec', {
+          dbId: this.dbId,
+          sql: this.schemaSQL,
+        });
+      } catch (e: any) {
+        console.error(
+          `Error executing SQL: ${e.result.message}\n${this.schemaSQL}`,
+          e,
+        );
+        throw e;
+      }
+    }
+
+    await this.#loadSchemaMetadata();
+  }
+
+  private async #loadSchemaMetadata() {
+    let tables = (await this.internalExecute(
+      `SELECT name FROM pragma_table_list WHERE schema = 'main' AND name != 'sqlite_schema'`,
+    )) as { name: string }[];
+    this.tables = tables.map((r) => r.name);
+    let pks = (await this.internalExecute(
+      `
+        SELECT m.name AS table_name,
+        GROUP_CONCAT(p.name, ', ') AS primary_keys
+        FROM sqlite_master AS m
+        JOIN pragma_table_info(m.name) AS p ON m.type = 'table'
+        WHERE p.pk > 0
+        GROUP BY m.name;
+        `,
+    )) as { table_name: string; primary_keys: string }[];
+    this.primaryKeys.clear();
+    for (let { table_name, primary_keys } of pks) {
+      this.primaryKeys.set(table_name, primary_keys);
+    }
   }
 
   private adjustSQL(sql: string): string {

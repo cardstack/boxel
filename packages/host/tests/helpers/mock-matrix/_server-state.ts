@@ -2,6 +2,22 @@ import * as MatrixSDK from 'matrix-js-sdk';
 
 type IEvent = MatrixSDK.IEvent;
 
+export interface SerializedServerState {
+  roomCounter: number;
+  eventCounter: number;
+  displayName: string;
+  rooms: {
+    id: string;
+    events: IEvent[];
+    receipts: IEvent[];
+    roomStateEvents: {
+      eventType: string;
+      entries: { stateKey: string; event: IEvent }[];
+    }[];
+  }[];
+  contents: { url: string; data: number[] }[];
+}
+
 export class ServerState {
   #roomCounter = 0;
   #eventCounter = 0;
@@ -326,4 +342,69 @@ export class ServerState {
   getContent(mxcUrl: string) {
     return this.#contents.get(mxcUrl);
   }
+
+  serialize(): SerializedServerState {
+    return {
+      roomCounter: this.#roomCounter,
+      eventCounter: this.#eventCounter,
+      displayName: this.#displayName,
+      rooms: Array.from(this.#rooms.entries()).map(([id, room]) => ({
+        id,
+        events: room.events.map(cloneEvent),
+        receipts: room.receipts.map(cloneEvent),
+        roomStateEvents: Array.from(room.roomStateEvents.entries()).map(
+          ([eventType, entries]) => ({
+            eventType,
+            entries: Array.from(entries.entries()).map(([stateKey, event]) => ({
+              stateKey,
+              event: cloneEvent(event.event as IEvent),
+            })),
+          }),
+        ),
+      })),
+      contents: Array.from(this.#contents.entries()).map(([url, buffer]) => ({
+        url,
+        data: Array.from(new Uint8Array(buffer)),
+      })),
+    };
+  }
+
+  restore(snapshot: SerializedServerState) {
+    this.#roomCounter = snapshot.roomCounter;
+    this.#eventCounter = snapshot.eventCounter;
+    this.#displayName = snapshot.displayName;
+    this.#rooms = new Map(
+      snapshot.rooms.map((room) => {
+        let roomStateEvents = new Map<string, Map<string, MatrixSDK.MatrixEvent>>(
+          room.roomStateEvents.map((state) => [
+            state.eventType,
+            new Map(
+              state.entries.map(({ stateKey, event }) => [
+                stateKey,
+                new MatrixSDK.MatrixEvent(cloneEvent(event)),
+              ]),
+            ),
+          ]),
+        );
+        return [
+          room.id,
+          {
+            events: room.events.map(cloneEvent),
+            receipts: room.receipts.map(cloneEvent),
+            roomStateEvents,
+          },
+        ];
+      }),
+    );
+    this.#contents = new Map(
+      snapshot.contents.map(({ url, data }) => [
+        url,
+        new Uint8Array(data).buffer,
+      ]),
+    );
+  }
+}
+
+function cloneEvent<T>(event: T): T {
+  return JSON.parse(JSON.stringify(event));
 }

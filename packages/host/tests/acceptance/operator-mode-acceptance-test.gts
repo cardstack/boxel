@@ -40,6 +40,9 @@ import {
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
+  getDbAdapter,
+  captureDbSnapshot,
+  restoreDbSnapshot,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   createJWT,
@@ -47,8 +50,11 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   setupRealmServerEndpoints,
+  createTimingLogger,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import type { DbSnapshot } from '../helpers';
+import type { SerializedServerState } from '../helpers/mock-matrix/_server-state';
 import {
   getPlaygroundSelections,
   setPlaygroundSelections,
@@ -67,6 +73,9 @@ let matrixRoomId: string;
 let realm2URL = 'http://test-realm/user/test2/';
 module('Acceptance | operator mode tests', function (hooks) {
   let testRealm: Realm;
+  let realmDbSnapshot: DbSnapshot | undefined;
+  let matrixStateSnapshot: SerializedServerState | undefined;
+  let cachedMatrixRoomId: string | undefined;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
@@ -85,20 +94,38 @@ module('Acceptance | operator mode tests', function (hooks) {
   } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
+    let timing = createTimingLogger('beforeEach module acceptance tests');
+    if (realmDbSnapshot) {
+      await restoreDbSnapshot(realmDbSnapshot);
+      timing.step('restoreDbSnapshot');
+    }
+    if (matrixStateSnapshot) {
+      mockMatrixUtils.restoreServerState(matrixStateSnapshot);
+      matrixRoomId = cachedMatrixRoomId!;
+      timing.step('restoreMatrixServerState');
+    } else {
+      matrixRoomId = createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'room-test',
+      });
+      timing.step('createAndJoinFirstRoom');
+    }
+
     setupUserSubscription();
+    timing.step('setupUserSubscription');
     setupAuthEndpoints();
+    timing.step('setupAuthEndpoints');
 
     setExpiresInSec(60 * 60);
 
     let loader = getService('loader-service').loader;
+    timing.step('get loader service');
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
+    timing.step('typeof imports');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
+    timing.step('cardapi imports');
 
     let {
       field,
@@ -293,7 +320,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       });
     }
 
-    ({ realm: testRealm } = await setupAcceptanceTestRealm({
+    let at1promise = setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -442,11 +469,11 @@ module('Acceptance | operator mode tests', function (hooks) {
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
         },
       },
-    }));
+    });
 
     setActiveRealms([testRealmURL, realm2URL]);
 
-    await setupAcceptanceTestRealm({
+    let at2promise = setupAcceptanceTestRealm({
       mockMatrixUtils,
       realmURL: realm2URL,
       contents: {
@@ -468,9 +495,20 @@ module('Acceptance | operator mode tests', function (hooks) {
       },
     });
 
+    let realms = await Promise.all([at1promise, at2promise]);
+    ({ realm: testRealm } = realms[0]);
+
     setRealmPermissions({
       [realm2URL]: ['read', 'write'],
     });
+
+    if (!realmDbSnapshot) {
+      realmDbSnapshot = await captureDbSnapshot();
+    }
+    if (!matrixStateSnapshot) {
+      matrixStateSnapshot = mockMatrixUtils.captureServerState();
+      cachedMatrixRoomId = matrixRoomId;
+    }
   });
 
   test('visiting operator mode', async function (assert) {

@@ -31,6 +31,7 @@ import {
   RealmAction,
   type RenderError,
   type DefinitionLookup,
+  type PgPrimitive,
   CachingDefinitionLookup,
 } from '@cardstack/runtime-common';
 import { getCreatedTime } from '@cardstack/runtime-common/file-meta';
@@ -95,6 +96,44 @@ const baseTestMatrix = {
   password: 'password',
 };
 
+const timingNow = (() => {
+  if (
+    typeof globalThis !== 'undefined' &&
+    globalThis.performance &&
+    typeof globalThis.performance.now === 'function'
+  ) {
+    return () => globalThis.performance.now();
+  }
+  return () => Date.now();
+})();
+
+interface TimingLogger {
+  step: (label: string) => void;
+  finish: (label?: string) => void;
+}
+
+export function createTimingLogger(scope: string): TimingLogger {
+  let start = timingNow();
+  let last = start;
+  return {
+    step(label: string) {
+      let current = timingNow();
+      console.log(
+        `[${scope}] ${label} took ${(current - last).toFixed(
+          2,
+        )}ms (total ${(current - start).toFixed(2)}ms)`,
+      );
+      last = current;
+    },
+    finish(label = 'total') {
+      let current = timingNow();
+      console.log(
+        `[${scope}] ${label} took ${(current - start).toFixed(2)}ms`,
+      );
+    },
+  };
+}
+
 export { provide as provideConsumeContext } from 'ember-provide-consume-context/test-support';
 
 export function cleanWhiteSpace(text: string) {
@@ -134,15 +173,67 @@ export function cleanupMonacoEditorModels() {
   }
 }
 
+let cachedDbAdapter: SQLiteAdapter | undefined;
 export async function getDbAdapter() {
-  let dbAdapter = (globalThis as any).__sqliteAdapter as
-    | SQLiteAdapter
-    | undefined;
-  if (!dbAdapter) {
-    dbAdapter = new SQLiteAdapter(sqlSchema);
-    (globalThis as any).__sqliteAdapter = dbAdapter;
+  if (!cachedDbAdapter) {
+    cachedDbAdapter = createDbAdapter();
   }
-  return dbAdapter;
+  return cachedDbAdapter;
+}
+
+function createDbAdapter() {
+  let adapter = new SQLiteAdapter(sqlSchema);
+  (globalThis as any).__sqliteAdapter = adapter;
+  return adapter;
+}
+
+export type DbSnapshot = {
+  tables: {
+    name: string;
+    columns: string[];
+    rows: Record<string, PgPrimitive>[];
+  }[];
+};
+
+export async function captureDbSnapshot(): Promise<DbSnapshot> {
+  let adapter = await getDbAdapter();
+  let tables = (await adapter.execute(
+    `SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`,
+  )) as { name: string }[];
+  let snapshotTables: DbSnapshot['tables'] = [];
+  for (let { name } of tables) {
+    let columns = await adapter.getColumnNames(name);
+    let rows = await adapter.execute(
+      `SELECT * FROM ${quoteIdentifier(name)};`,
+    );
+    snapshotTables.push({
+      name,
+      columns,
+      rows,
+    });
+  }
+  return { tables: snapshotTables };
+}
+
+export async function restoreDbSnapshot(snapshot: DbSnapshot) {
+  let adapter = await getDbAdapter();
+  for (let { name, columns, rows } of snapshot.tables) {
+    await adapter.execute(`DELETE FROM ${quoteIdentifier(name)};`);
+    if (!rows.length) {
+      continue;
+    }
+    let columnList = columns.map(quoteIdentifier).join(', ');
+    let placeholders = columns.map((_col, idx) => `$${idx + 1}`).join(', ');
+    let insertSQL = `INSERT INTO ${quoteIdentifier(name)} (${columnList}) VALUES (${placeholders});`;
+    for (let row of rows) {
+      let bind = columns.map((column) => row[column]);
+      await adapter.execute(insertSQL, { bind });
+    }
+  }
+}
+
+function quoteIdentifier(identifier: string) {
+  return `"${identifier.replace(/"/g, '""')}"`;
 }
 
 export async function withSlowSave(
@@ -627,17 +718,24 @@ export async function setupAcceptanceTestRealm({
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
 }) {
+  let timing = createTimingLogger('setupAcceptanceTestRealm');
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
   setupAuthEndpoints({
     [resolvedRealmURL]: deriveTestUserPermissions(permissions),
   });
-  return await setupTestRealm({
-    contents,
-    realmURL: resolvedRealmURL,
-    isAcceptanceTest: true,
-    permissions,
-    mockMatrixUtils,
-  });
+  timing.step('setupAuthEndpoints');
+  try {
+    return await setupTestRealm({
+      contents,
+      realmURL: resolvedRealmURL,
+      isAcceptanceTest: true,
+      permissions,
+      mockMatrixUtils,
+    });
+  } finally {
+    timing.step('setupTestRealm call');
+    timing.finish();
+  }
 }
 
 export async function setupIntegrationTestRealm({
@@ -687,6 +785,7 @@ async function setupTestRealm({
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
 }) {
+  let timing = createTimingLogger('setupTestRealm');
   let owner = (getContext() as TestContext).owner;
   let { virtualNetwork } = getService('network');
   let { queue } = getService('queue');
@@ -695,11 +794,13 @@ async function setupTestRealm({
 
   if (isAcceptanceTest) {
     await visit('/acceptance-test-setup');
+    timing.step('visit acceptance-test-setup');
   } else {
     // We use a rendered component to facilitate our indexing (this emulates
     // the work that the Fastboot renderer is doing), which means that the
     // `setupRenderingTest(hooks)` from ember-qunit must be used in your tests.
     await makeRenderer();
+    timing.step('makeRenderer');
   }
 
   let localIndexer = owner.lookup(
@@ -735,6 +836,7 @@ async function setupTestRealm({
   }
 
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
+  timing.step('insertPermissions');
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue,
@@ -768,26 +870,70 @@ async function setupTestRealm({
 
   // we use this to run cards that were added to the test filesystem
   adapter.setLoader(
-    new Loader(realm.__fetchForTesting, virtualNetwork.resolveImport),
+    await createPreloadedLoader(
+      realm.__fetchForTesting,
+      virtualNetwork.resolveImport,
+    ),
   );
 
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
   virtualNetwork.mount(realm.maybeHandle);
   await mockMatrixUtils.start();
+  timing.step('mockMatrixUtils.start');
   await adapter.ready;
+  timing.step('adapter.ready');
   await worker.run();
+  timing.step('worker.run');
   await realm.start();
+  timing.step('realm.start');
 
   let realmServer = getService('realm-server');
   if (!realmServer.availableRealmURLs.includes(realmURL)) {
     realmServer.setAvailableRealmURLs([realmURL]);
   }
 
+  timing.finish();
   return { realm, adapter };
 }
 
 const authHandlerStateSymbol = Symbol('test-auth-handler-state');
 const TEST_MATRIX_USER = '@testuser:localhost';
+
+const PRELOADED_MODULE_IDENTIFIERS = [
+  `${baseRealm.url}card-api`,
+  `${baseRealm.url}string`,
+];
+let cachedPreloadedLoader: Loader | undefined;
+let prewarmLoaderPromise: Promise<void> | undefined;
+
+async function createPreloadedLoader(
+  fetchImpl: typeof globalThis.fetch,
+  resolveImport: (moduleIdentifier: string) => string,
+) {
+  await ensurePreloadedLoader(fetchImpl, resolveImport);
+  return Loader.cloneLoader(cachedPreloadedLoader!, {
+    includeEvaluatedModules: true,
+  });
+}
+
+async function ensurePreloadedLoader(
+  fetchImpl: typeof globalThis.fetch,
+  resolveImport: (moduleIdentifier: string) => string,
+) {
+  if (cachedPreloadedLoader) {
+    return;
+  }
+  if (!prewarmLoaderPromise) {
+    prewarmLoaderPromise = (async () => {
+      let loader = new Loader(fetchImpl, resolveImport);
+      for (let identifier of PRELOADED_MODULE_IDENTIFIERS) {
+        await loader.import(identifier);
+      }
+      cachedPreloadedLoader = loader;
+    })();
+  }
+  await prewarmLoaderPromise;
+}
 
 type AuthHandlerState = {
   handler: (req: Request) => Promise<Response | null>;
