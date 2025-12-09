@@ -67,8 +67,18 @@ import {
   setRecentFiles,
 } from '../helpers/recent-files-cards';
 import { setupApplicationTest } from '../helpers/setup';
+import {
+  field,
+  contains,
+  linksTo,
+  linksToMany,
+  Component,
+  FieldDef,
+  CardDef,
+  StringField,
+  setupBaseRealm,
+} from '../helpers/base-realm';
 
-const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
 const realm2WorkspaceName = 'Test Workspace C';
 
 let matrixRoomId: string;
@@ -82,7 +92,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
-
+  setupBaseRealm(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
@@ -126,22 +136,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       Loader.cloneLoader(loaderService.loader, {
         includeEvaluatedModules: true,
       });
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-
-    let {
-      field,
-      contains,
-      linksTo,
-      linksToMany,
-      Component,
-      FieldDef,
-      CardDef,
-    } = cardApi;
-    let { default: StringField } = string;
 
     class Pet extends CardDef {
       static displayName = 'Pet';
