@@ -23,21 +23,6 @@
         "links": {
           "self": null
         }
-      },
-      "featuredFriend": {
-        "links": {
-          "self": "../Friend/dog/1"
-        }
-      },
-      "matchingFriends.0": {
-        "links": {
-          "self": "../Friend/dog/1"
-        }
-      },
-      "matchingFriends.1": {
-        "links": {
-          "self": "../Friend/1"
-        }
       }
     }
   }

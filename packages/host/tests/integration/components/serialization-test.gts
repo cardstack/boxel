@@ -5462,6 +5462,57 @@ module('Integration | serialization', function (hooks) {
     );
   });
 
+  test('query field relationships are omitted when serializing for persistence', async function (assert) {
+    class Person extends CardDef {
+      @field name = contains(StringField);
+    }
+      class QueryCard extends CardDef {
+        @field title = contains(StringField);
+        @field favorite = linksTo(() => Person, {
+          query: {
+            filter: {
+            eq: { name: '$this.title' },
+          },
+        },
+      });
+      @field matches = linksToMany(() => Person, {
+        query: {
+          filter: {
+            eq: { name: '$this.title' },
+          },
+          page: {
+            size: 5,
+            number: 0,
+          },
+        },
+        });
+      }
+
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'query-card.gts': { Person, QueryCard },
+        },
+      });
+
+      let card = new QueryCard({ title: 'Target' });
+      let serialized = serializeCard(card, {
+        includeUnrenderedFields: true,
+        omitQueryFields: true,
+      });
+
+    assert.strictEqual(
+      serialized.data.relationships?.favorite,
+      undefined,
+      'linksTo query field is not persisted',
+    );
+    assert.strictEqual(
+      serialized.data.relationships?.matches,
+      undefined,
+      'linksToMany query field is not persisted',
+    );
+  });
+
   module('linksToMany', function () {
     test('can serialize a linksToMany relationship', async function (assert) {
       class Pet extends CardDef {

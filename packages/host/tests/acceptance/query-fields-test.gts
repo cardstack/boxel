@@ -1,4 +1,12 @@
-import { click, fillIn, findAll, settled, waitFor } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  find,
+  findAll,
+  settled,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -381,9 +389,6 @@ module(
 
       network.virtualNetwork.mount(handler, { prepend: true });
       try {
-        console.log(
-          '************** *************** ************** **************',
-        );
         await visitOperatorMode({
           stacks: [[{ id: QUERY_CARD_NESTED_URL, format: 'isolated' }]],
         });
@@ -511,6 +516,57 @@ module(
         ['Not Target'],
         'linksToMany query field was updated after changing the interpolated value',
       );
+    });
+
+    test('saves omit query-backed relationships from JSON payload', async function (assert) {
+      let interceptedBody: any;
+      let network = getService('network') as NetworkService;
+      let handler = async (request: Request) => {
+        if (request.method === 'PATCH' && request.url.endsWith('/query-card')) {
+          interceptedBody = await request.clone().json();
+        }
+        console.log(interceptedBody);
+        return null;
+      };
+      network.virtualNetwork.mount(handler, { prepend: true });
+
+      try {
+        await visitOperatorMode({
+          stacks: [[{ id: QUERY_CARD_URL, format: 'isolated' }]],
+        });
+        await waitFor('[data-test-edit-button]');
+        await click('[data-test-edit-button]');
+        await fillIn('[data-test-field="title"] input', 'Not Target');
+
+        await waitUntil(
+          () => {
+            console.log(find('[data-test-last-saved]')?.textContent);
+            return (
+              find('[data-test-last-saved]')
+                ?.textContent?.trim()
+                ?.startsWith('Saved') ?? false
+            );
+          },
+          { timeoutMessage: 'auto-save did not complete' },
+        );
+
+        assert.ok(interceptedBody, 'captured auto-save payload');
+        let relationships = interceptedBody?.data?.relationships ?? {};
+        assert.notOk(
+          'favorite' in relationships,
+          'linksTo query field was omitted from PATCH body',
+        );
+        assert.notOk(
+          'matches' in relationships,
+          'linksToMany query field was omitted from PATCH body',
+        );
+        assert.notOk(
+          'matches.0' in relationships,
+          'linksToMany query field was omitted from PATCH body',
+        );
+      } finally {
+        network.virtualNetwork.unmount(handler);
+      }
     });
   },
 );

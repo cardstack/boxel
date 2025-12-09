@@ -428,7 +428,9 @@ export default class StoreService extends Service implements StoreInterface {
     if (opts?.doNotPersist) {
       await this.stopAutoSaving(instance);
     }
-    let doc = await this.cardService.serializeCard(instance);
+    let doc = await this.cardService.serializeCard(instance, {
+      omitQueryFields: true,
+    });
     if (patch.attributes) {
       doc.data.attributes = merge(doc.data.attributes, patch.attributes);
     }
@@ -1277,6 +1279,7 @@ export default class StoreService extends Service implements StoreInterface {
           // URL's should be absolute
           useAbsoluteURL: true,
           withIncluded: true,
+          omitQueryFields: true,
         });
 
         // send doc over the wire with absolute URL's. The realm server will convert

@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "queries": {
-        "title": "Dog"
+        "title": "Do"
       },
       "cardInfo": {
         "notes": null,
@@ -22,21 +22,6 @@
       "cardInfo.theme": {
         "links": {
           "self": null
-        }
-      },
-      "queries.favorite": {
-        "links": {
-          "self": "./Friend/2"
-        }
-      },
-      "queries.matches.0": {
-        "links": {
-          "self": "./Friend/2"
-        }
-      },
-      "queries.matches.1": {
-        "links": {
-          "self": "./friend-1"
         }
       }
     }
