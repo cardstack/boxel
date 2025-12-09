@@ -34,9 +34,12 @@ export interface CardOrField {
 }
 
 export type CardOrFieldDeclaration = CardOrField &
-  Partial<PossibleCardOrFieldDeclaration>;
+  Partial<PossibleCardOrFieldDeclaration> & { displayName?: string };
 
-export type CardOrFieldReexport = CardOrField & Reexport;
+export type CardOrFieldReexport = CardOrField &
+  Reexport & {
+    displayName?: string;
+  };
 
 export type CommandDeclaration = Omit<ClassDeclaration, 'type'> & {
   type: 'command';
@@ -141,6 +144,7 @@ export default class ModuleContentsService extends Service {
               cardType: await this.cardTypeService.assembleType(
                 cardOrField as typeof BaseDef,
               ),
+              displayName: cardOrField.displayName,
             } as CardOrFieldDeclaration;
           }
           // case where things statically look like cards or fields but are not
@@ -171,6 +175,7 @@ export default class ModuleContentsService extends Service {
                 cardType: await this.cardTypeService.assembleType(
                   cardOrField as typeof BaseDef,
                 ),
+                displayName: cardOrField.displayName,
               } as CardOrFieldReexport;
             }
           }
