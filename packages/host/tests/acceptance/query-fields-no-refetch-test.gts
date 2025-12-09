@@ -38,6 +38,7 @@ import { setupApplicationTest } from '../helpers/setup';
 const QUERY_CARD_URL = `${testRealmURL}query-card`;
 const QUERY_CARD_2_URL = `${testRealmURL}query-card-2`;
 const QUERY_CARD_NESTED_URL = `${testRealmURL}query-card-nested`;
+const QUERY_CARD_MISSING_URL = `${testRealmURL}query-card-missing`;
 
 module(
   'Acceptance | Query Fields | host respects server-populated results',
@@ -158,6 +159,9 @@ module(
               title: 'Target',
             }),
           }),
+          'query-card-missing.json': new QueryCard({
+            title: 'Missing',
+          }),
         },
       });
       loader = getService('loader-service').loader;
@@ -231,6 +235,55 @@ module(
         assert
           .dom(`${cardSelector} [data-test-links-to-many="matches"]`)
           .doesNotExist('linksToMany editor is hidden for query-backed field');
+      } finally {
+        network.virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('linksTo query field hydrates null without re-fetch when no result', async function (assert) {
+      assert.expect(4);
+      let network = getService('network') as NetworkService;
+      let interceptedSearchRequests: string[] = [];
+      let handler = async (request: Request) => {
+        let url = new URL(request.url);
+        if (url.pathname.endsWith('/_search')) {
+          interceptedSearchRequests.push(request.url);
+        }
+        return null;
+      };
+
+      network.virtualNetwork.mount(handler, { prepend: true });
+      try {
+        await visitOperatorMode({
+          stacks: [[{ id: QUERY_CARD_MISSING_URL, format: 'isolated' }]],
+        });
+        await settled();
+
+        let cardSelector = `[data-test-stack-card="${QUERY_CARD_MISSING_URL}"]`;
+        assert
+          .dom(cardSelector)
+          .exists('query card with missing result is rendered');
+        await waitFor(`${cardSelector} [data-test-matches]`);
+
+        assert.strictEqual(
+          interceptedSearchRequests.length,
+          0,
+          'no search requests triggered when server returned null query relationship',
+        );
+
+        let favoriteText = findAll(
+          `${cardSelector} [data-test-favorite]`,
+        )[0]?.textContent?.trim();
+        assert.strictEqual(
+          favoriteText,
+          '',
+          'linksTo query field renders empty when no result is returned',
+        );
+        assert.strictEqual(
+          findAll(`${cardSelector} [data-test-match]`).length,
+          0,
+          'linksToMany query field renders empty when no results are returned',
+        );
       } finally {
         network.virtualNetwork.unmount(handler);
       }

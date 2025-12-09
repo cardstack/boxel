@@ -1232,7 +1232,12 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     resource: LooseCardResource,
   ) {
     if (this.queryDefinition) {
-      captureQueryFieldSeedData(instance, this.name, [value], resource);
+      captureQueryFieldSeedData(
+        instance,
+        this.name,
+        value ? [value] : [],
+        resource,
+      );
     }
   }
 
@@ -3068,6 +3073,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         changed = applyFieldOverride(
           fieldName,
           value.constructor as typeof BaseDef,
+          field,
         );
       }
     } else if (field.fieldType === 'linksToMany') {
@@ -3077,6 +3083,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
           changed = applyFieldOverride(
             fieldName,
             linked.constructor as typeof BaseDef,
+            field,
           );
         }
       }

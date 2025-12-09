@@ -1,0 +1,44 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "NestedQueryFieldPlayground",
+        "module": "./nested-query-field-playground"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "queries": {
+        "title": "Dog"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "queries.favorite": {
+        "links": {
+          "self": "./Friend/2"
+        }
+      },
+      "queries.matches.0": {
+        "links": {
+          "self": "./Friend/2"
+        }
+      },
+      "queries.matches.1": {
+        "links": {
+          "self": "./friend-1"
+        }
+      }
+    }
+  }
+}
