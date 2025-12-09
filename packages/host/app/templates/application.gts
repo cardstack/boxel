@@ -1,6 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import { modifier } from 'ember-modifier';
+import { isTesting } from '@embroider/macros';
+
 import RouteTemplate from 'ember-route-template';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -9,18 +10,16 @@ interface ApplicationRouteSignature {
   Args: {};
 }
 
+const showCardPrerender = isTesting();
+
 const ApplicationRouteComponent: TemplateOnlyComponent<ApplicationRouteSignature> =
   <template>
     {{outlet}}
-    <CardPrerender />
 
-    {{! this is a signal for the Realm DOM tests to know that app has loaded }}
-    {{! template-lint-disable no-inline-styles }}
-    <div data-test-boxel-root style='display: none;' {{removeLoading}}></div>
+    {{! this is used to establish a prerenderer for browser-based indexing }}
+    {{#if showCardPrerender}}
+      <CardPrerender />
+    {{/if}}
   </template>;
-
-let removeLoading = modifier(() => {
-  document.querySelector('#host-loading')?.remove();
-});
 
 export default RouteTemplate(ApplicationRouteComponent);

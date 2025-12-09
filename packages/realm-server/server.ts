@@ -297,10 +297,13 @@ export class RealmServer {
       }
 
       ctxt.type = 'html';
-      let indexHTML = await this.retrieveIndexHTML();
-      let headHTML = await this.retrieveHeadHTML(
-        new URL(`${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`),
-      );
+
+      let [indexHTML, headHTML] = await Promise.all([
+        this.retrieveIndexHTML(),
+        this.retrieveHeadHTML(
+          new URL(`${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`),
+        ),
+      ]);
 
       ctxt.body =
         headHTML != null ? this.injectHeadHTML(indexHTML, headHTML) : indexHTML;
