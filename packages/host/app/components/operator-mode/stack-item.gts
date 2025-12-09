@@ -428,13 +428,25 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.url;
   }
 
-  private get headerTitle() {
+  private get headerType() {
     if (this.isIndexCard) {
       return 'Workspace';
     } else if (this.card) {
       return cardTypeDisplayName(this.card);
     }
     return undefined;
+  }
+
+  private get headerTitle() {
+    let cardTitle = this.card?.title;
+    if (this.card && cardTitle?.startsWith('Untitled ')) {
+      let strippedTitle = cardTitle.slice('Untitled '.length);
+      if (strippedTitle === cardTypeDisplayName(this.card)) {
+        return 'Untitled';
+      }
+    }
+
+    return cardTitle;
   }
 
   private get cardTitle() {
@@ -766,9 +778,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
           {{this.setWindowTitle}}
           {{#let (this.realm.info this.urlForRealmLookup) as |realmInfo|}}
             <CardHeader
-              @cardTypeDisplayName={{this.headerTitle}}
+              @cardTypeDisplayName={{this.headerType}}
               @cardTypeIcon={{cardTypeIcon this.card}}
-              @cardTitle={{this.card.title}}
+              @cardTitle={{this.headerTitle}}
               @isSaving={{this.cardResource.autoSaveState.isSaving}}
               @isTopCard={{this.isTopCard}}
               @lastSavedMessage={{this.cardResource.autoSaveState.lastSavedErrorMsg}}
