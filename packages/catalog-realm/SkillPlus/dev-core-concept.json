@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SkillPlus",
+        "module": "../skill-plus"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Core Concept",
+        "description": "Foundation concepts for Boxel card development",
+        "thumbnailURL": null
+      },
+      "commands": [],
+      "instructions": "## Foundational Concepts\n\n### The Boxel Universe\n\nBoxel is a composable card-based system where information lives in self-contained, reusable units. Each card knows how to display itself, connect to others, and transform its appearance based on context.\n\n* **Card:** The central unit of information and display\n  * **Definition (`CardDef` in `.gts`):** Defines the structure (fields) and presentation (templates) of a card type\n  * **Instance (`.json`):** Represents specific data conforming to a Card Definition\n\n* **Field:** Building blocks within a Card\n  * **Base Types:** System-provided fields (StringField, NumberField, etc.)\n  * **Custom Fields (`FieldDef`):** Reusable composite field types you define\n\n* **Realm/Workspace:** Your project's root directory. All imports and paths are relative to this context\n\n* **Formats:** Different visual representations of the same card:\n  * `isolated`: Full detailed view (should be scrollable for long content)\n  * `embedded`: Compact view for inclusion in other cards\n  * `fitted`: **🚨 ESSENTIAL** - Fixed dimensions for grids/galleries/dashboards (parent sets both width AND height)\n  * `atom`: Minimal inline representation\n  * `edit`: Form for data modification (default provided, override only if needed)\n\n**🔴 CRITICAL:** Modern Boxel cards require ALL THREE display formats: isolated, embedded, AND fitted. Missing custom fitted format will fallback to basic fitted view that won't look very nice or have enough info to show in grids, choosers, galleries, or dashboards.\n\n## Decision Trees\n\n**Data Structure Choice:**\n```\nNeeds own identity? → CardDef with linksTo\nReferenced from multiple places? → CardDef with linksTo  \nJust compound data? → FieldDef with contains\n```\n\n**Field Extension Choice:**\n```\nWant to customize a base field? → import BaseField, extend it\nCreating new field type? → extends FieldDef directly\nAdding to existing field? → extends BaseFieldName\n```\n\n**Value Setup:**\n```\nComputed from other fields? → computeVia\nUser-editable with default? → Field literal or computeVia\nSimple one-time value? → Field literal\n```\n\n**Circular Dependencies?**\n```\nUse arrow function: () => Type\n```\n\n## ✅ Quick Mental Check Before Every Field\n\nAsk yourself: \"Does this type extend CardDef or FieldDef?\"\n- Extends **CardDef** → MUST use `linksTo` or `linksToMany`\n- Extends **FieldDef** → MUST use `contains` or `containsMany`\n- **No exceptions!**\n\nFor computed fields, ask: \"Am I keeping this simple and unidirectional?\"\n- Only reference base fields, never self-reference\n- No circular dependencies between computed fields\n- Wrap in try-catch when accessing relationships\n- If it feels complex, simplify it!\n\n## Foundation Quick Reference\n\n**Data Structure Choice:**\n- Needs own identity? → `CardDef` with `linksTo`\n- Referenced from multiple places? → `CardDef` with `linksTo`\n- Just compound data? → `FieldDef` with `contains`\n\n**Formats (what they are):**\n- `isolated` - Full detailed view (scrollable)\n- `embedded` - Compact for inclusion in other cards\n- `fitted` - Fixed dimensions for grids/galleries\n- `atom` - Minimal inline representation\n- `edit` - Form for data modification\n\n**Every CardDef inherits:**\n- `title`, `description`, `thumbnailURL`\n\n### Inherited Fields and CardInfo\n\n**IMPORTANT:** Every CardDef automatically inherits these base fields from the CardDef base class:\n\n#### Direct Inherited Fields (Read-Only)\n- `title` (StringField) - Computed pass-through from `cardInfo.title`\n- `description` (StringField) - Computed pass-through from `cardInfo.description`\n- `thumbnailURL` (StringField) - Computed pass-through from `cardInfo.thumbnailURL`\n\n#### CardInfo Field (User-Editable)\n\nEvery card also inherits a `cardInfo` field which contains the actual user-editable values:\n- `cardInfo.title` (StringField) - User-editable card title\n- `cardInfo.description` (StringField) - User-editable card description\n- `cardInfo.thumbnailURL` (StringField) - User-editable thumbnail image URL\n- `cardInfo.theme` (linksTo ThemeCard) - Optional theme card link\n- `cardInfo.notes` (MarkdownField) - Optional internal notes\n\n**How It Works:**\nThe top-level `title`, `description`, and `thumbnailURL` fields are computed properties that automatically pass through the values from `cardInfo.title`, `cardInfo.description`, and `cardInfo.thumbnailURL` respectively. This means:\n\n- When you read `@model.title` in templates, you get the value from `cardInfo.title`\n- Users edit values through the `cardInfo` field in edit mode\n- Override to add custom logic that respects user input\n\n**Best Practice:** Define your own primary field and compute `title` to respect user's `cardInfo.title` choice:\n\n```gts\nexport class BlogPost extends CardDef {\n  @field headline = contains(StringField); // Your primary field\n  \n  // Override inherited title - respects user's cardInfo.title if set\n  @field title = contains(StringField, {\n    computeVia: function() {\n      return this.cardInfo?.title ?? this.headline ?? 'Untitled';\n    }\n  });\n}\n```"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/cardstack"
+        }
+      }
+    }
+  }
+}

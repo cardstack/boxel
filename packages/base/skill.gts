@@ -6,6 +6,7 @@ import {
   contains,
   containsMany,
   relativeTo,
+  type BaseDefComponent,
 } from './card-api';
 import BooleanField from './boolean';
 import { AbsoluteCodeRefField } from './code-ref';
@@ -128,7 +129,9 @@ export class Skill extends CardDef {
   @field instructions = contains(MarkdownField);
   @field commands = containsMany(CommandField);
 
-  static embedded = class Embedded extends Component<typeof this> {
+  static embedded: BaseDefComponent = class Embedded extends Component<
+    typeof this
+  > {
     <template>
       <@fields.title />
     </template>

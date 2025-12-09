@@ -2,8 +2,8 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "Skill",
-        "module": "https://cardstack.com/base/skill"
+        "name": "SkillPlus",
+        "module": "../skill-plus"
       }
     },
     "type": "card",
@@ -22,7 +22,7 @@
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": null
+          "self": "../Theme/cardstack"
         }
       }
     }

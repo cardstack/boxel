@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SkillPlus",
+        "module": "../skill-plus"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Searching and Querying",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "commands": [],
+      "instructions": "## Query Structure\n\n**Always wrap filter in query object:**\n```json\n{\n  \"query\": {\n    \"filter\": {\n      \"on\": { \"module\": \"...\", \"name\": \"Product\" },\n      \"contains\": { \"name\": \"laptop\" }\n    }\n  }\n}\n```\n\n**Operations:** `eq`, `contains`, `range`, `not`, `type`, `every` (AND), `any` (OR)\n\n**Find instances after schema change:**\n```json\n{\n  \"query\": {\n    \"filter\": {\n      \"type\": { \"module\": \"...\", \"name\": \"Employee\" }\n    }\n  }\n}\n```\n\n\n### SearchCardsByQueryCommand\n\n**Full tool call syntax:**\n```json\n{\n  \"name\": \"SearchCardsByQueryCommand_847d\",\n  \"payload\": {\n    \"description\": \"Search for products with 'laptop' in the name\",\n    \"attributes\": {\n      \"query\": {\n        \"filter\": {\n          \"on\": { \"module\": \"https://[boxel-app-domain]/jenna/shop/product\", \"name\": \"Product\" },\n          \"contains\": { \"name\": \"laptop\" }\n        },\n        \"sort\": [{\n          \"by\": \"price\",\n          \"on\": { \"module\": \"https://[boxel-app-domain]/jenna/shop/product\", \"name\": \"Product\" },\n          \"direction\": \"asc\"\n        }]\n      }\n    }\n  }\n}\n```\n\n\n### SearchCardsByTypeAndTitleCommand\n\n**Full tool call syntax:**\n```json\n{\n  \"name\": \"SearchCardsByTypeAndTitleCommand_a959\",\n  \"payload\": {\n    \"description\": \"Search for reports with the title 'quarterly report'\",\n    \"attributes\": {\n      \"title\": \"quarterly report\",\n      \"cardType\": \"https://[boxel-app-domain]/emma/finance/report#Report\"\n    }\n  }\n}\n```\n"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/cardstack"
+        }
+      }
+    }
+  }
+}

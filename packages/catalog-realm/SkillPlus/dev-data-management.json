@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SkillPlus",
+        "module": "../skill-plus"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Data Management",
+        "description": "File organization and JSON instance format",
+        "thumbnailURL": null
+      },
+      "commands": [],
+      "instructions": "## File Organization\n\n### Single App Structure\n```\nmy-realm/\n├── blog-post.gts          # Card definition (kebab-case)\n├── author.gts             # Another card\n├── address-field.gts      # Field definition (kebab-case-field)\n├── BlogPost/              # Instance directory (PascalCase)\n│   ├── hello-world.json   # Instance (any-name)\n│   └── second-post.json   \n└── Author/\n    └── jane-doe.json\n```\n\n### Related Cards App Structure\n**CRITICAL:** When creating apps with multiple related cards, organize them in common folders:\n\n```\nmy-realm/\n├── ecommerce/             # Common folder for related cards\n│   ├── product.gts        # Card definitions\n│   ├── order.gts\n│   ├── customer.gts\n│   ├── Product/           # Instance directories\n│   │   └── laptop-pro.json\n│   └── Order/\n│       └── order-001.json\n├── blog/                  # Another app's folder\n│   ├── post.gts\n│   ├── author.gts\n│   └── Post/\n│       └── welcome.json\n└── shared/                # Shared components\n    └── address-field.gts  # Common field definitions\n```\n\n**Directory Discipline:** When creating files within a specific directory structure (e.g., `ecommerce/`), keep ALL related files within that structure. Don't create files outside the intended directory organization.\n\n**Relationship Path Tracking:** When creating related JSON instances, maintain a mental map of your file paths. Links between instances must use the exact relative paths you've created - consistency prevents broken relationships.\n\n## JSON Instance Format Quick Reference\n\n**When creating `.json` card instances via SEARCH/REPLACE, follow this structure:**\n\n**Naming:** Use natural names for JSON files (e.g., `Author/jane-doe.json`, `Product/laptop-pro.json`) - don't append `-sample-data`\n\n**Path Consistency:** When creating multiple related JSON instances, track the exact file paths you create. Relationship links must match these paths exactly - if you create `Author/dr-nakamura.json`, reference it as `\"../Author/dr-nakamura\"` from other instances.\n\n### Root Structure\nAll data wrapped in a `data` object with:\n* `type`: Always `\"card\"` for instances\n* `attributes`: Field values go here\n* `relationships`: Links to other cards\n* `meta.adoptsFrom`: Connection to GTS definition\n\n### Instance Template\n```json\n{\n  \"data\": {\n    \"type\": \"card\",\n    \"attributes\": {\n      // Field values here\n    },\n    \"relationships\": {\n      // Card links here\n    },\n    \"meta\": {\n      \"adoptsFrom\": {\n        \"module\": \"../path-to-gts-file\",\n        \"name\": \"CardDefClassName\"\n      }\n    }\n  }\n}\n```\n\n### Field Value Patterns\n\n**Simple fields** (`contains(StringField)`, etc.):\n```json\n\"attributes\": {\n  \"title\": \"My Title\",\n  \"price\": 29.99,\n  \"isActive\": true\n}\n```\n\n**Compound fields** (`contains(AddressField)` - a FieldDef):\n```json\n\"attributes\": {\n  \"address\": {\n    \"street\": \"4827 Riverside Terrace\",\n    \"city\": \"Portland\",\n    \"postalCode\": \"97205\"\n  }\n}\n```\n\n**Array fields** (`containsMany`):\n```json\n\"attributes\": {\n  \"tags\": [\"urgent\", \"review\", \"frontend\"],\n  \"phoneNumbers\": [\n    { \"number\": \"+1-503-555-0134\", \"type\": \"work\" },\n    { \"number\": \"+1-971-555-0198\", \"type\": \"mobile\" }\n  ]\n}\n```\n\n### Relationship Patterns\n\n**Single link** (`linksTo`):\n```json\n\"relationships\": {\n  \"author\": {\n    \"links\": {\n      \"self\": \"../Author/dr-nakamura\"\n    }\n  }\n}\n```\n\n**Multiple links** (`linksToMany`) - note the `.0`, `.1` pattern:\n```json\n\"relationships\": {\n  \"teamMembers.0\": {\n    \"links\": { \"self\": \"../Person/kai-nakamura\" }\n  },\n  \"teamMembers.1\": {\n    \"links\": { \"self\": \"../Person/esperanza-cruz\" }\n  }\n}\n```\n\n**Empty linksToMany** - when no relationships exist:\n```json\n\"relationships\": {\n  \"nextLevels\": {\n    \"links\": {\n      \"self\": null\n    }\n  }\n}\n```\nNote: Use `null`, not an empty array `[]`\n\n### Path Conventions\n* **Module paths**: Relative to JSON location, no `.gts` extension\n  * Local: `\"../author\"` or `\"../../shared/address-field\"`\n  * Base: `\"https://cardstack.com/base/string\"`\n* **Relationship paths**: Relative paths, no `.json` extension\n  * `\"../Author/jane-doe\"` not `\"../Author/jane-doe.json\"`\n* **Date formats**: \n  * DateField: `\"2024-11-15\"`\n  * DatetimeField: `\"2024-11-15T10:00:00Z\"`"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/cardstack"
+        }
+      }
+    }
+  }
+}

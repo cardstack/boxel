@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SkillPlus",
+        "module": "../skill-plus"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Fitted Formats",
+        "description": "Four sub-format strategy for responsive grid layouts",
+        "thumbnailURL": null
+      },
+      "commands": [],
+      "instructions": "## Fitted Format Essentials\n\n**Four sub-formats strategy:**\n- **Badge** (≤150px width, <170px height) - Exportable graphics\n- **Strip** (>150px width, <170px height) - Dropdown/chooser panels\n- **Tile** (<400px width, ≥170px height) - Grid viewing\n- **Card** (≥400px width, ≥170px height) - Full layout\n\n**Container query skeleton:**\n```css\n.fitted-container {\n  container-type: size;\n  width: 100%;\n  height: 100%;\n}\n\n/* Hide all by default */\n.badge, .strip, .tile, .card {\n  display: none;\n  padding: clamp(0.25rem, 2%, 0.5rem);\n}\n\n/* Activate by size - NO GAPS! */\n@container (max-width: 150px) and (max-height: 169px) {\n  .badge { display: flex; }\n}\n```\n\n**Content priority:**\n1. Title/Name\n2. Image\n3. Short ID\n4. Key info\n5. Status badges"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/cardstack"
+        }
+      }
+    }
+  }
+}
