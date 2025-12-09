@@ -1,6 +1,9 @@
 import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
+import type Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
+
+import { isTesting } from '@embroider/macros';
 
 import { parse } from 'date-fns';
 
@@ -30,6 +33,7 @@ import {
 } from '@cardstack/runtime-common';
 import {
   serializableError,
+  isCardErrorJSONAPI,
   type SerializedError,
 } from '@cardstack/runtime-common/error';
 
@@ -37,6 +41,11 @@ import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
+import { ensureMessageIncludesUrl, stripSelfDeps } from '../utils/render-error';
+import {
+  enableRenderTimerStub,
+  beginTimerBlock,
+} from '../utils/render-timer-stub';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
@@ -80,20 +89,30 @@ export default class ModuleRoute extends Route<Model> {
   private typesCache = new WeakMap<typeof BaseDef, Promise<TypesWithErrors>>();
   private lastStoreResetKey: string | undefined;
   #authGuard = createAuthErrorGuard();
+  #restoreRenderTimers: (() => void) | undefined;
+  #releaseTimerBlock: (() => void) | undefined;
 
   deactivate() {
-    (globalThis as any).__lazilyLoadLinks = undefined;
     (globalThis as any).__boxelRenderContext = undefined;
     this.lastStoreResetKey = undefined;
     this.#authGuard.unregister();
+    this.#restoreRenderTimers?.();
+    this.#restoreRenderTimers = undefined;
+    this.#releaseTimerBlock?.();
+    this.#releaseTimerBlock = undefined;
   }
 
-  beforeModel() {
+  async beforeModel(transition: Transition) {
+    await super.beforeModel?.(transition);
     // activate() doesn't run early enough for this to be set before the model()
     // hook is run
-    (globalThis as any).__lazilyLoadLinks = true;
     (globalThis as any).__boxelRenderContext = true;
     this.#authGuard.register();
+    if (!isTesting()) {
+      await this.store.ensureSetupComplete();
+      this.#restoreRenderTimers = enableRenderTimerStub();
+      this.#releaseTimerBlock = beginTimerBlock();
+    }
   }
 
   async model({
@@ -397,7 +416,7 @@ export default class ModuleRoute extends Route<Model> {
   }
 }
 
-function modelWithError({
+export function modelWithError({
   id,
   nonce,
   message,
@@ -412,6 +431,50 @@ function modelWithError({
   deps?: string[];
   status?: number;
 }): Model {
+  let baseError: SerializedError;
+  let maybeCardError: CardError | undefined;
+  if (err instanceof CardError) {
+    maybeCardError = err;
+  } else if (isCardErrorJSONAPI(err) && err.status === 406) {
+    maybeCardError = CardError.fromCardErrorJsonAPI(err, err.id, err.status);
+  }
+
+  if (maybeCardError && maybeCardError.status === 406) {
+    let hoisted = CardError.fromSerializableError(
+      serializableError(maybeCardError),
+    );
+    let depsSet = new Set([...(hoisted.deps ?? []), ...deps]);
+    hoisted.deps = stripSelfDeps(
+      depsSet.size ? [...depsSet] : undefined,
+      id,
+      id,
+    );
+    hoisted.message = ensureMessageIncludesUrl(hoisted.message, id);
+    hoisted.additionalErrors = null;
+    baseError = serializableError(hoisted);
+  } else {
+    let additional = err !== undefined ? serializableError(err) : null;
+    let nestedStatus: number | undefined;
+    if (additional) {
+      if (typeof additional.status === 'number') {
+        nestedStatus = additional.status;
+      } else if (
+        typeof additional.status === 'string' &&
+        /^\d+$/.test(additional.status)
+      ) {
+        nestedStatus = Number(additional.status);
+      }
+    }
+    baseError = {
+      status: status ?? err?.status ?? 500,
+      message,
+      additionalErrors: additional ? [additional] : null,
+      deps: stripSelfDeps(deps, id, id),
+    };
+    if (nestedStatus && !status && !err?.status) {
+      baseError.status = nestedStatus;
+    }
+  }
   return {
     id,
     nonce,
@@ -423,12 +486,7 @@ function modelWithError({
     definitions: {},
     error: {
       type: 'error',
-      error: {
-        status: status ?? err?.status ?? 500,
-        message,
-        additionalErrors: err !== undefined ? [serializableError(err)] : null,
-        deps,
-      },
+      error: baseError,
     },
   };
 }

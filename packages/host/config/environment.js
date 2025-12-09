@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const DEFAULT_CARD_RENDER_TIMEOUT_MS = 30_000;
 
 let sqlSchema = fs.readFileSync(getLatestSchemaFile(), 'utf8');
 
@@ -27,8 +28,7 @@ module.exports = function (environment) {
       enabled: false,
     },
     logLevels:
-      process.env.LOG_LEVELS ||
-      '*=info,current-run=error,matrix=info,realm:events=debug',
+      process.env.LOG_LEVELS || '*=info,matrix=info,realm:events=debug',
     matrixURL: process.env.MATRIX_URL || 'http://localhost:8008',
     matrixServerName: process.env.MATRIX_SERVER_NAME || 'localhost',
     autoSaveDelayMs: 500,
@@ -37,7 +37,9 @@ module.exports = function (environment) {
     serverEchoDebounceMs: 5000,
     loginMessageTimeoutMs: 1000,
     minSaveTaskDurationMs: 1000,
-    renderTimeoutMs: 30_000,
+    cardRenderTimeout: Number(
+      process.env.RENDER_TIMEOUT_MS ?? DEFAULT_CARD_RENDER_TIMEOUT_MS,
+    ),
     iconsURL: process.env.ICONS_URL || 'https://boxel-icons.boxel.ai',
     publishedRealmBoxelSpaceDomain:
       process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost:4201',
@@ -105,7 +107,7 @@ module.exports = function (environment) {
 
   if (environment === 'production') {
     // here you can enable a production-specific feature
-    ENV.logLevels = '*=warn,current-run=debug';
+    ENV.logLevels = '*=warn';
     ENV.defaultSystemCardId =
       process.env.DEFAULT_SYSTEM_CARD_ID ??
       'https://app.boxel.ai/catalog/SystemCard/default';

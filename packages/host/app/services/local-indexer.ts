@@ -2,14 +2,7 @@ import Service from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
-import type {
-  FromScratchResult,
-  IncrementalResult,
-  IndexWriter,
-  Prerenderer,
-  FromScratchArgs,
-  IncrementalArgs,
-} from '@cardstack/runtime-common';
+import type { IndexWriter, Prerenderer } from '@cardstack/runtime-common';
 
 import type { TestRealmAdapter } from '@cardstack/host/tests/helpers/adapter';
 
@@ -19,11 +12,7 @@ export default class LocalIndexer extends Service {
   @tracked renderError: string | undefined;
   @tracked prerenderStatus: 'ready' | 'loading' | 'unusable' | undefined;
   #prerenderer: Prerenderer | undefined;
-  setup(
-    _fromScratch: (args: FromScratchArgs) => Promise<FromScratchResult>,
-    _incremental: (args: IncrementalArgs) => Promise<IncrementalResult>,
-    prerenderer: Prerenderer,
-  ) {
+  setup(prerenderer: Prerenderer) {
     if (this.#prerenderer) {
       return;
     }

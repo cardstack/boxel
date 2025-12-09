@@ -1,0 +1,69 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "ThemeListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Cardstack Theme",
+      "images": [],
+      "summary": "Cardstack’s house style theme with IBM Plex typography, vibrant purple accents, and paired light/dark tokens for backgrounds, borders, charts, and sidebars—ready to brand your cards with the official Cardstack look.",
+      "cardInfo": {
+        "notes": null,
+        "title": "Cardstack Theme",
+        "description": "IBM Plex-driven Cardstack brand theme with balanced light/dark palettes, chart colors, and sidebar tokens.",
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "specs": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/ed5a1a3f-0dbf-47b5-b2a6-d88b0d2a7642"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/b793225c-32f9-404c-b2a9-b4041b93090c"
+        }
+      },
+      "license": {
+        "links": {
+          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../Theme/cardstack"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/ui-components-design"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/cardstack"
+        }
+      }
+    }
+  }
+}

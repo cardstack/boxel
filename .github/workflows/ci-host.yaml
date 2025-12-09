@@ -53,7 +53,7 @@ jobs:
       # https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
       - name: Disable TCP/UDP network offloading
         run: sudo ethtool -K eth0 tx off rx off
-      - name: Start host to serve assets for fastboot
+      - name: Start host to serve assets for realm server
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
           run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
@@ -101,6 +101,13 @@ jobs:
         with:
           name: realm-server-log-${{ matrix.shardIndex }}
           path: /tmp/server.log
+          retention-days: 30
+      - name: Upload testem log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: testem-log-${{ matrix.shardIndex }}
+          path: junit/host-testem.log
           retention-days: 30
       - name: Upload icon server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1

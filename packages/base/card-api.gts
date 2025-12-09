@@ -20,7 +20,6 @@ import {
   isRelationship,
   CardError,
   CardContextName,
-  NotLoaded,
   getField,
   isField,
   primitive,
@@ -72,6 +71,7 @@ import DefaultFittedTemplate from './default-templates/fitted';
 import DefaultEmbeddedTemplate from './default-templates/embedded';
 import DefaultCardDefTemplate from './default-templates/isolated-and-edit';
 import DefaultAtomViewTemplate from './default-templates/atom';
+import DefaultHeadTemplate from './default-templates/head';
 import MissingTemplate from './default-templates/missing-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import MarkdownTemplate from './default-templates/markdown';
@@ -82,7 +82,11 @@ import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 import ImportIcon from '@cardstack/boxel-icons/import';
+import FilePencilIcon from '@cardstack/boxel-icons/file-pencil';
+import WandIcon from '@cardstack/boxel-icons/wand';
 // normalizeEnumOptions used by enum moved to packages/base/enum.gts
+import PatchThemeCommand from '@cardstack/boxel-host/commands/patch-theme';
+import CopyAndEditCommand from '@cardstack/boxel-host/commands/copy-and-edit';
 
 import {
   callSerializeHook,
@@ -106,7 +110,6 @@ import {
   getFieldDescription,
   getFieldOverrides,
   getFields,
-  getIfReady,
   getter,
   isArrayOfCardOrField,
   isCard,
@@ -136,7 +139,6 @@ export {
   getCardMeta,
   getFieldDescription,
   getFields,
-  getIfReady,
   isCard,
   isField,
   localId,
@@ -252,6 +254,7 @@ export interface FieldConstructor<T> {
   name: string;
   isUsed?: true;
   isPolymorphic?: true;
+  declaredCardThunk?: () => T;
 }
 
 type CardChangeSubscriber = (
@@ -259,10 +262,7 @@ type CardChangeSubscriber = (
   fieldName: string,
   fieldValue: any,
 ) => void;
-const loadLinksPromises = initSharedState(
-  'loadLinksPromises',
-  () => new WeakMap<BaseDef, Promise<any>>(),
-);
+
 const stores = initSharedState(
   'stores',
   () => new WeakMap<BaseDef, CardStore>(),
@@ -284,6 +284,9 @@ export function instanceOf(instance: BaseDef, clazz: typeof BaseDef): boolean {
   let instanceClazz: typeof BaseDef | null = instance.constructor;
   let codeRefInstance: CodeRef | undefined;
   let codeRefClazz = identifyCard(clazz);
+  if (!codeRefClazz) {
+    return instance instanceof (clazz as any);
+  }
   do {
     codeRefInstance = instanceClazz ? identifyCard(instanceClazz) : undefined;
     if (isEqual(codeRefInstance, codeRefClazz)) {
@@ -379,12 +382,6 @@ export interface Field<
   component(model: Box<BaseDef>): BoxComponent;
   getter(instance: BaseDef): BaseInstanceType<CardT> | undefined;
   queryableValue(value: any, stack: BaseDef[]): SearchT;
-  handleNotLoadedError(
-    instance: BaseInstanceType<CardT>,
-    e: NotLoaded,
-  ): Promise<
-    BaseInstanceType<CardT> | BaseInstanceType<CardT>[] | undefined | void
-  >;
 }
 
 function cardTypeFor(
@@ -450,9 +447,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     // a not loaded error can blow up thru a computed containsMany field that consumes a link
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance as CardDef, this, maybeNotLoaded.reference);
-      if ((globalThis as any).__lazilyLoadLinks) {
-        return this.emptyValue(instance) as BaseInstanceType<FieldT>;
-      }
+      return this.emptyValue(instance) as BaseInstanceType<FieldT>;
     }
     return getter(instance, this);
   }
@@ -706,10 +701,6 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     }, values);
   }
 
-  async handleNotLoadedError<T extends BaseDef>(_instance: T, _e: NotLoaded) {
-    return undefined;
-  }
-
   component(model: Box<BaseDef>): BoxComponent {
     let fieldName = this.name as keyof BaseDef;
     let arrayField = model.field(
@@ -760,9 +751,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     // a not loaded error can blow up thru a computed contains field that consumes a link
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance as CardDef, this, maybeNotLoaded.reference);
-      if ((globalThis as any).__lazilyLoadLinks) {
-        return undefined;
-      }
+      return undefined;
     }
     return getter(instance, this);
   }
@@ -833,7 +822,10 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
         }
       }
 
-      if (this.card === Reflect.getPrototypeOf(value)!.constructor) {
+      if (
+        this.card === Reflect.getPrototypeOf(value)!.constructor &&
+        !this.isPolymorphic
+      ) {
         // when our implementation matches the default we don't need to include
         // meta.adoptsFrom
         delete serialized.meta.adoptsFrom;
@@ -906,17 +898,14 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
 
   validate(_instance: BaseDef, value: any) {
     if (!(primitive in this.card)) {
-      if (value != null && !instanceOf(value, this.card)) {
+      let expectedCard = this.card;
+      if (value != null && !instanceOf(value, expectedCard)) {
         throw new Error(
-          `field validation error: tried set instance of ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
+          `field validation error: tried set instance of ${value.constructor.name} as field '${this.name}' but it is not an instance of ${expectedCard.name}`,
         );
       }
     }
     return value;
-  }
-
-  async handleNotLoadedError<T extends BaseDef>(_instance: T, _e: NotLoaded) {
-    return undefined;
   }
 
   component(model: Box<BaseDef>): BoxComponent {
@@ -927,6 +916,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
 class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly fieldType = 'linksTo';
   private cardThunk: () => CardT;
+  private declaredCardThunk: () => CardT;
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly description: string | undefined;
@@ -935,12 +925,14 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly configuration?: ConfigurationInput<any>;
   constructor({
     cardThunk,
+    declaredCardThunk,
     computeVia,
     name,
     isUsed,
     isPolymorphic,
   }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
+    this.declaredCardThunk = declaredCardThunk ?? cardThunk;
     this.computeVia = computeVia;
     this.name = name;
     this.isUsed = isUsed;
@@ -951,6 +943,10 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     return this.cardThunk();
   }
 
+  get declaredCardResolver(): () => CardT {
+    return this.declaredCardThunk;
+  }
+
   getter(instance: CardDef): BaseInstanceType<CardT> | undefined {
     let deserialized = getDataBucket(instance);
     // this establishes that our field should rerender when cardTracking for this card changes
@@ -958,9 +954,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     let maybeNotLoaded = deserialized.get(this.name);
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance, this, maybeNotLoaded.reference);
-      if ((globalThis as any).__lazilyLoadLinks) {
-        return undefined;
-      }
+      return undefined;
     }
     return getter(instance, this);
   }
@@ -1149,67 +1143,19 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         return value;
       }
       if (!instanceOf(value, this.card)) {
+        console.warn(
+          'linksTo instance mismatch',
+          JSON.stringify({
+            expected: identifyCard(this.card),
+            actual: identifyCard(value.constructor as typeof BaseDef),
+          }),
+        );
         throw new Error(
           `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
         );
       }
     }
     return value;
-  }
-
-  async handleNotLoadedError(
-    instance: BaseInstanceType<CardT>,
-    e: NotLoaded,
-  ): Promise<BaseInstanceType<CardT> | undefined> {
-    let deserialized = getDataBucket(instance as BaseDef);
-    let store = getStore(instance);
-    let fieldValue = store.get(e.reference as string);
-
-    if (fieldValue !== undefined) {
-      deserialized.set(this.name, fieldValue);
-      return fieldValue as BaseInstanceType<CardT>;
-    }
-
-    fieldValue = await this.loadMissingField(
-      instance,
-      e,
-      store,
-      instance[relativeTo],
-    );
-    deserialized.set(this.name, fieldValue);
-    return fieldValue as BaseInstanceType<CardT>;
-  }
-
-  // TODO we should be able to get rid of this when we decommission the old prerender
-  private async loadMissingField(
-    instance: CardDef,
-    notLoaded: NotLoadedValue | NotLoaded,
-    store: CardStore,
-    relativeTo: URL | undefined,
-  ): Promise<CardDef> {
-    let { reference: maybeRelativeReference } = notLoaded;
-    let reference = new URL(
-      maybeRelativeReference as string,
-      instance.id ?? relativeTo, // new instances may not yet have an ID, in that case fallback to the relativeTo
-    ).href;
-    let doc = await store.loadDocument(reference);
-    if (isCardError(doc)) {
-      let cardError = doc;
-      cardError.deps = [reference];
-      cardError.additionalErrors = [
-        new NotLoaded(instance, reference, this.name),
-      ];
-      throw cardError;
-    }
-    let fieldInstance = (await createFromSerialized(
-      doc.data,
-      doc,
-      new URL(doc.data.id!),
-      {
-        store,
-      },
-    )) as CardDef;
-    return fieldInstance;
   }
 
   component(model: Box<CardDef>): BoxComponent {
@@ -1291,6 +1237,8 @@ class LinksToMany<FieldT extends CardDefConstructor>
 {
   readonly fieldType = 'linksToMany';
   private cardThunk: () => FieldT;
+  private declaredCardThunk: () => FieldT;
+  private declaredCardCache: FieldT | undefined;
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly isUsed: undefined | true;
@@ -1298,12 +1246,14 @@ class LinksToMany<FieldT extends CardDefConstructor>
   readonly configuration?: ConfigurationInput<any>;
   constructor({
     cardThunk,
+    declaredCardThunk,
     computeVia,
     name,
     isUsed,
     isPolymorphic,
   }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
+    this.declaredCardThunk = declaredCardThunk ?? cardThunk;
     this.computeVia = computeVia;
     this.name = name;
     this.isUsed = isUsed;
@@ -1312,6 +1262,17 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
   get card(): FieldT {
     return this.cardThunk();
+  }
+
+  private get declaredCard(): FieldT {
+    if (!this.declaredCardCache) {
+      this.declaredCardCache = this.declaredCardThunk();
+    }
+    return this.declaredCardCache;
+  }
+
+  get declaredCardResolver(): () => FieldT {
+    return this.declaredCardThunk;
   }
 
   getter(instance: CardDef): BaseInstanceType<FieldT> {
@@ -1333,9 +1294,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
     // Handle the case where the field was set to a single NotLoadedValue during deserialization
     if (isNotLoadedValue(value)) {
-      if (!(globalThis as any).__lazilyLoadLinks) {
-        throw new NotLoaded(instance, value.reference, field.name);
-      }
       // TODO figure out this test case...
       value = this.emptyValue(instance);
       deserialized.set(this.name, value);
@@ -1385,9 +1343,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
       //   `<LoadableCard @card={{card}}/>` instead of calling `getComponent`
       //   themselves.
 
-      if (!(globalThis as any).__lazilyLoadLinks) {
-        throw new NotLoaded(instance, notLoadedRefs, this.name);
-      }
       for (let entry of value) {
         if (isNotLoadedValue(entry) && !(entry as any).loading) {
           lazilyLoadLink(instance, this, entry.reference, { value });
@@ -1668,14 +1623,15 @@ class LinksToMany<FieldT extends CardDefConstructor>
       );
     }
 
+    let expectedCard = this.declaredCard;
     for (let value of values) {
       if (
         !isNotLoadedValue(value) &&
         value != null &&
-        !instanceOf(value, this.card)
+        !instanceOf(value, expectedCard)
       ) {
         throw new Error(
-          `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
+          `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${expectedCard.name}`,
         );
       }
     }
@@ -1690,116 +1646,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
       notifySubscribers(instance, this.name, value);
       notifyCardTracking(instance);
     }, values);
-  }
-
-  async handleNotLoadedError<T extends CardDef>(
-    instance: T,
-    e: NotLoaded,
-  ): Promise<T[] | undefined> {
-    let result: T[] | undefined;
-    let fieldValues: CardDef[] = [];
-    let store = getStore(instance);
-
-    let references = !Array.isArray(e.reference) ? [e.reference] : e.reference;
-    for (let ref of references) {
-      let value = store.get(ref);
-      if (value !== undefined) {
-        fieldValues.push(value);
-      }
-    }
-
-    fieldValues = await this.loadMissingFields(
-      instance,
-      e,
-      store,
-      instance[relativeTo],
-    );
-
-    if (fieldValues.length === references.length) {
-      let values: T[] = [];
-      let deserialized = getDataBucket(instance);
-
-      for (let field of deserialized.get(this.name)) {
-        if (isNotLoadedValue(field)) {
-          // replace the not-loaded values with the loaded cards
-          values.push(
-            fieldValues.find(
-              (v) =>
-                v.id === new URL(field.reference, instance[relativeTo]).href,
-            )! as T,
-          );
-        } else {
-          // keep existing loaded cards
-          values.push(field);
-        }
-      }
-
-      deserialized.set(this.name, values);
-      result = values as T[];
-    }
-
-    return result;
-  }
-
-  // TODO we should be able to get rid of this when we decommission the old prerender
-  private async loadMissingFields(
-    instance: CardDef,
-    notLoaded: NotLoaded,
-    store: CardStore,
-    relativeTo: URL | undefined,
-  ): Promise<CardDef[]> {
-    let refs = (
-      !Array.isArray(notLoaded.reference)
-        ? [notLoaded.reference]
-        : notLoaded.reference
-    ).map(
-      (ref) => new URL(ref, instance.id ?? relativeTo).href, // new instances may not yet have an ID, in that case fallback to the relativeTo
-    );
-    let errors = [];
-    let fieldInstances: CardDef[] = [];
-
-    const loadPromises = refs.map(async (reference) => {
-      try {
-        let doc = await store.loadDocument(reference);
-        if (isCardError(doc)) {
-          let cardError = doc;
-          cardError.deps = [reference];
-          cardError.additionalErrors = [
-            new NotLoaded(instance, reference, this.name),
-          ];
-          throw cardError;
-        }
-        let fieldInstance = (await createFromSerialized(
-          doc.data,
-          doc,
-          new URL(doc.data.id!),
-          {
-            store,
-          },
-        )) as CardDef;
-        return { ok: true, value: fieldInstance };
-      } catch (e) {
-        return { ok: false, error: e };
-      }
-    });
-
-    const results = await Promise.allSettled(loadPromises);
-    for (let result of results) {
-      if (result.status === 'fulfilled') {
-        const fetchResult = result.value;
-        if (fetchResult.ok && fetchResult.value) {
-          fieldInstances.push(fetchResult.value);
-        } else if (!fetchResult.ok) {
-          errors.push(fetchResult.error);
-        }
-      } else {
-        errors.push(result.reason);
-      }
-    }
-    if (errors.length) {
-      throw errors;
-    }
-    return fieldInstances;
   }
 
   component(model: Box<CardDef>): BoxComponent {
@@ -1917,8 +1763,10 @@ export function linksTo<CardT extends CardDefConstructor>(
   return {
     setupField(fieldName: string) {
       let { computeVia, isUsed } = options ?? {};
+      let fieldCardThunk = cardThunk(cardOrThunk);
       let instance = new LinksTo({
-        cardThunk: cardThunk(cardOrThunk),
+        cardThunk: fieldCardThunk,
+        declaredCardThunk: fieldCardThunk,
         computeVia,
         name: fieldName,
         isUsed,
@@ -1937,8 +1785,10 @@ export function linksToMany<CardT extends CardDefConstructor>(
   return {
     setupField(fieldName: string) {
       let { computeVia, isUsed } = options ?? {};
+      let fieldCardThunk = cardThunk(cardOrThunk);
       let instance = new LinksToMany({
-        cardThunk: cardThunk(cardOrThunk),
+        cardThunk: fieldCardThunk,
+        declaredCardThunk: fieldCardThunk,
         computeVia,
         name: fieldName,
         isUsed,
@@ -2113,6 +1963,7 @@ export type ViewCardFn = (
   format?: Format,
   opts?: {
     openCardInRightMostStack?: boolean;
+    stackIndex?: number;
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
     fieldName?: string;
   },
@@ -2383,6 +2234,7 @@ export class CardDef extends BaseDef {
   static isolated: BaseDefComponent = DefaultCardDefTemplate;
   static edit: BaseDefComponent = DefaultCardDefTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
+  static head: BaseDefComponent = DefaultHeadTemplate;
 
   static prefersWideFormat = false; // whether the card is full-width in the stack
   static headerColor: string | null = null; // set string color value if the stack-item header has a background color
@@ -2426,8 +2278,49 @@ export class CssImportField extends StringField {
 export class Theme extends CardDef {
   static displayName = 'Theme';
   static icon = ThemeIcon;
-  @field cssVariables = contains(CSSField);
-  @field cssImports = containsMany(CssImportField);
+  @field cssVariables = contains(CSSField, {
+    description:
+      'CSS variable definitions that build on shadcn variables (typically for :root and .dark selectors) injected into the CardContainer.',
+  });
+  @field cssImports = containsMany(CssImportField, {
+    description:
+      'CSS links (e.g. Google Fonts) imported via the CardContainer.',
+  });
+
+  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
+    let menuItems = super[getCardMenuItems](params);
+    if (params.menuContext === 'interact' && params.commandContext && this.id) {
+      menuItems = [
+        ...menuItems,
+        {
+          label: 'Copy and Edit',
+          action: async () => {
+            if (!params.commandContext || !this.id) {
+              return;
+            }
+            let cmd = new CopyAndEditCommand(params.commandContext);
+            await cmd.execute({
+              card: this,
+            });
+          },
+          icon: FilePencilIcon,
+          disabled: !this.id,
+        },
+        {
+          label: 'Modify theme via AI',
+          action: async () => {
+            let cmd = new PatchThemeCommand(params.commandContext);
+            await cmd.execute({
+              cardId: this.id as unknown as string,
+            });
+          },
+          icon: WandIcon,
+          disabled: !this.id,
+        },
+      ];
+    }
+    return menuItems;
+  }
 }
 
 export type BaseDefConstructor = typeof BaseDef;
@@ -2595,122 +2488,117 @@ function lazilyLoadLink(
   link: string,
   pluralArgs?: { value: any[] },
 ) {
-  if ((globalThis as any).__lazilyLoadLinks) {
-    let inflightLoads = inflightLinkLoads.get(instance);
-    if (!inflightLoads) {
-      inflightLoads = new Map();
-      inflightLinkLoads.set(instance, inflightLoads);
-    }
-    let reference = new URL(link, instance.id ?? instance[relativeTo]).href;
-    let key = `${field.name}/${reference}`;
-    let promise = inflightLoads.get(key);
-    let store = getStore(instance);
-    if (promise) {
-      store.trackLoad(promise);
-      return;
-    }
-    let deferred = new Deferred<void>();
-    inflightLoads.set(key, deferred.promise);
-    store.trackLoad(
-      // we wrap the promise with a catch that will prevent the rejections from bubbling up but
-      // not interfere with the original deferred. this prevents QUnit from being really noisy
-      // and reporting a "global error" even though that is a normal operating circumstance for
-      // the rendering when it encounters an error. the original deferred.promise still
-      // rejects as expected for anyone awaiting it, but it won't cause unnecessary noise in QUnit.
-      deferred.promise.then(
-        () => {},
-        () => {},
-      ),
-    );
-    (async () => {
-      try {
-        let doc = await store.loadDocument(reference);
-        if (isCardError(doc)) {
-          let cardError = doc;
-          cardError.deps = [
-            !reference.endsWith('.json') ? `${reference}.json` : reference,
-          ];
-          throw cardError;
-        }
-        let fieldValue = (await createFromSerialized(
-          doc.data,
-          doc,
-          new URL(doc.data.id!),
-          {
-            store,
-          },
-        )) as CardDef;
-        if (pluralArgs) {
-          let { value } = pluralArgs;
-          let indices: number[] = [];
-          for (let [index, item] of value.entries()) {
-            if (!isNotLoadedValue(item)) {
-              continue;
-            }
-            let notLoadedRef = new URL(
-              item.reference,
-              instance.id ?? instance[relativeTo],
-            ).href;
-            if (reference === notLoadedRef) {
-              indices.push(index);
-            }
-          }
-          for (let index of indices) {
-            value[index] = fieldValue;
-          }
-        } else {
-          (instance as any)[field.name] = fieldValue;
-        }
-      } catch (e) {
-        // we replace the node-loaded value with a null
-        // TODO in the future consider recording some link meta that this reference is actually missing
-        (instance as any)[field.name] = null;
-
-        let error = e as Error;
-        let isMissingFile =
-          typeof error?.message === 'string' &&
-          /not found/i.test(error.message);
-        let payloadError: {
-          title: string;
-          status: number;
-          message: string;
-          stack?: string;
-          deps?: string[];
-        } = {
-          title: isMissingFile
-            ? 'Link Not Found'
-            : error?.message ?? 'Card Error',
-          status: isMissingFile ? 404 : (error as any)?.status ?? 500,
-          message: isMissingFile
-            ? `missing file ${reference}.json`
-            : error?.message ?? String(e),
-          stack: error?.stack,
-        };
-        if (isCardError(error) && error.deps?.length) {
-          payloadError.deps = [...new Set(error.deps)];
-        }
-        let payload = JSON.stringify({
-          type: 'error',
-          error: payloadError,
-        });
-        // We use a custom event for render errors--otherwise QUnit will report a "global error"
-        // when we use a promise rejection to signal to the prerender that there was an error
-        // even though everything is working as designed. QUnit is very noisy about these errors...
-        const event = new CustomEvent('boxel-render-error', {
-          detail: { reason: payload },
-        });
-        globalThis.dispatchEvent(event);
-      } finally {
-        deferred.fulfill();
-        inflightLoads.delete(key);
-        if (inflightLoads.size === 0) {
-          inflightLinkLoads.delete(instance);
-        }
-      }
-    })();
-  } else {
-    throw new NotLoaded(instance, link, field.name);
+  let inflightLoads = inflightLinkLoads.get(instance);
+  if (!inflightLoads) {
+    inflightLoads = new Map();
+    inflightLinkLoads.set(instance, inflightLoads);
   }
+  let reference = new URL(link, instance.id ?? instance[relativeTo]).href;
+  let key = `${field.name}/${reference}`;
+  let promise = inflightLoads.get(key);
+  let store = getStore(instance);
+  if (promise) {
+    store.trackLoad(promise);
+    return;
+  }
+  let deferred = new Deferred<void>();
+  inflightLoads.set(key, deferred.promise);
+  store.trackLoad(
+    // we wrap the promise with a catch that will prevent the rejections from bubbling up but
+    // not interfere with the original deferred. this prevents QUnit from being really noisy
+    // and reporting a "global error" even though that is a normal operating circumstance for
+    // the rendering when it encounters an error. the original deferred.promise still
+    // rejects as expected for anyone awaiting it, but it won't cause unnecessary noise in QUnit.
+    deferred.promise.then(
+      () => {},
+      () => {},
+    ),
+  );
+  (async () => {
+    try {
+      let doc = await store.loadDocument(reference);
+      if (isCardError(doc)) {
+        let cardError = doc;
+        cardError.deps = [
+          !reference.endsWith('.json') ? `${reference}.json` : reference,
+        ];
+        throw cardError;
+      }
+      let fieldValue = (await createFromSerialized(
+        doc.data,
+        doc,
+        new URL(doc.data.id!),
+        {
+          store,
+        },
+      )) as CardDef;
+      if (pluralArgs) {
+        let { value } = pluralArgs;
+        let indices: number[] = [];
+        for (let [index, item] of value.entries()) {
+          if (!isNotLoadedValue(item)) {
+            continue;
+          }
+          let notLoadedRef = new URL(
+            item.reference,
+            instance.id ?? instance[relativeTo],
+          ).href;
+          if (reference === notLoadedRef) {
+            indices.push(index);
+          }
+        }
+        for (let index of indices) {
+          value[index] = fieldValue;
+        }
+      } else {
+        (instance as any)[field.name] = fieldValue;
+      }
+    } catch (e) {
+      // we replace the node-loaded value with a null
+      // TODO in the future consider recording some link meta that this reference is actually missing
+      (instance as any)[field.name] = null;
+
+      let error = e as Error;
+      let isMissingFile =
+        typeof error?.message === 'string' && /not found/i.test(error.message);
+      let payloadError: {
+        title: string;
+        status: number;
+        message: string;
+        stack?: string;
+        deps?: string[];
+      } = {
+        title: isMissingFile
+          ? 'Link Not Found'
+          : error?.message ?? 'Card Error',
+        status: isMissingFile ? 404 : (error as any)?.status ?? 500,
+        message: isMissingFile
+          ? `missing file ${reference}.json`
+          : error?.message ?? String(e),
+        stack: error?.stack,
+      };
+      if (isCardError(error) && error.deps?.length) {
+        payloadError.deps = [...new Set(error.deps)];
+      }
+      let payload = JSON.stringify({
+        type: 'error',
+        error: payloadError,
+      });
+      // We use a custom event for render errors--otherwise QUnit will report a "global error"
+      // when we use a promise rejection to signal to the prerender that there was an error
+      // even though everything is working as designed. QUnit is very noisy about these errors...
+      const event = new CustomEvent('boxel-render-error', {
+        detail: { reason: payload },
+      });
+      globalThis.dispatchEvent(event);
+    } finally {
+      deferred.fulfill();
+      inflightLoads.delete(key);
+      if (inflightLoads.size === 0) {
+        inflightLinkLoads.delete(instance);
+      }
+    }
+  })();
 }
 
 type Scalar =
@@ -3007,21 +2895,114 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
 
   let existingOverrides = getFieldOverrides(instance);
   let loadedValues = getDataBucket(instance);
+  let instanceRelativeTo =
+    ('id' in instance && typeof instance.id === 'string'
+      ? new URL(instance.id)
+      : instance[relativeTo]) ?? undefined;
+
+  function getFieldMeta(
+    fieldsMeta: CardFields | undefined,
+    key: string,
+  ): Partial<Meta> | undefined {
+    let entry = fieldsMeta?.[key];
+    return Array.isArray(entry) ? undefined : entry;
+  }
+
+  function getFieldMetaArray(
+    fieldsMeta: CardFields | undefined,
+    key: string,
+  ): Partial<Meta>[] | undefined {
+    let entry = fieldsMeta?.[key];
+    return Array.isArray(entry) ? entry : undefined;
+  }
+  function isAssignableToField(
+    overrideCard: typeof BaseDef,
+    fieldCard: typeof BaseDef,
+  ): boolean {
+    let current: typeof BaseDef | undefined = overrideCard;
+    while (current) {
+      if (current === fieldCard) {
+        return true;
+      }
+      current = getAncestor(current) ?? undefined;
+    }
+    return false;
+  }
+
+  function applyFieldOverride(
+    fieldName: string,
+    overrideCard?: typeof BaseDef,
+    field?: Field<typeof BaseDef, any>,
+  ): boolean {
+    if (!overrideCard) {
+      return false;
+    }
+    if (
+      field &&
+      !isAssignableToField(overrideCard, field.card as typeof BaseDef)
+    ) {
+      return false;
+    }
+    if (existingOverrides.get(fieldName) === overrideCard) {
+      return false;
+    }
+    existingOverrides.set(fieldName, overrideCard);
+    return true;
+  }
   async function setDeserializedFieldOverride(
     fieldName: string,
     resource: LooseCardResource,
-  ) {
-    let serializedFieldOverride = resource.meta.fields?.[fieldName];
-    if (
-      !Array.isArray(serializedFieldOverride) &&
-      serializedFieldOverride?.adoptsFrom
-    ) {
-      let override = await loadCardDef(serializedFieldOverride.adoptsFrom, {
-        loader: myLoader(),
-        relativeTo: resource.id ? new URL(resource.id) : undefined,
-      });
-      existingOverrides.set(fieldName, override);
+    field: Field<typeof BaseDef, any>,
+    serializedFieldOverride?: Partial<Meta>,
+  ): Promise<boolean> {
+    let overrideMeta = serializedFieldOverride;
+    if (!overrideMeta) {
+      overrideMeta = getFieldMeta(resource.meta?.fields, fieldName);
     }
+    if (!overrideMeta || !overrideMeta.adoptsFrom) {
+      return false;
+    }
+    let override = await loadCardDef(overrideMeta.adoptsFrom, {
+      loader: myLoader(),
+      relativeTo:
+        resource.id && typeof resource.id === 'string'
+          ? new URL(resource.id)
+          : instanceRelativeTo,
+    });
+    if (!override) {
+      return false;
+    }
+    return applyFieldOverride(fieldName, override, field);
+  }
+
+  function applyLinkOverrideFromValue(
+    fieldName: string,
+    field: Field<typeof BaseDef, any>,
+    value: any,
+  ): Field<typeof BaseDef, any> {
+    let changed = false;
+    if (field.fieldType === 'linksTo') {
+      if (isCardInstance(value)) {
+        changed = applyFieldOverride(
+          fieldName,
+          value.constructor as typeof BaseDef,
+        );
+      }
+    } else if (field.fieldType === 'linksToMany') {
+      if (Array.isArray(value)) {
+        let linked = value.find((entry) => isCardInstance(entry));
+        if (linked) {
+          changed = applyFieldOverride(
+            fieldName,
+            linked.constructor as typeof BaseDef,
+          );
+        }
+      }
+    }
+    if (changed) {
+      return (getField(instance, fieldName) ?? field) as Field<T>;
+    }
+    return field;
   }
 
   let values = (await Promise.all(
@@ -3039,37 +3020,79 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         // and have a chance to fix it so that it adheres to the definition
         return [];
       }
-      if (primitive in field.card) {
-        if (Array.isArray(value)) {
-          for (let [index] of value.entries()) {
-            await setDeserializedFieldOverride(
-              `${fieldName}.${index}`,
-              resource,
-            );
+      let resourceMetaFields = resource.meta?.fields;
+      let overrideApplied = false;
+      if (field.fieldType === 'containsMany') {
+        if (primitive in field.card) {
+          if (Array.isArray(value)) {
+            for (let [index] of value.entries()) {
+              let key = `${fieldName}.${index}`;
+              overrideApplied =
+                (await setDeserializedFieldOverride(
+                  key,
+                  resource,
+                  field,
+                  getFieldMeta(resourceMetaFields, key),
+                )) || overrideApplied;
+            }
+          } else {
+            overrideApplied =
+              (await setDeserializedFieldOverride(
+                fieldName,
+                resource,
+                field,
+                getFieldMeta(resourceMetaFields, fieldName),
+              )) || overrideApplied;
           }
         } else {
-          await setDeserializedFieldOverride(fieldName, resource);
+          let metas = getFieldMetaArray(resourceMetaFields, fieldName);
+          if (metas) {
+            for (let [index, meta] of metas.entries()) {
+              overrideApplied =
+                (await setDeserializedFieldOverride(
+                  `${fieldName}.${index}`,
+                  resource,
+                  field,
+                  meta,
+                )) || overrideApplied;
+            }
+          }
         }
+      } else if (field.fieldType === 'contains') {
+        overrideApplied =
+          (await setDeserializedFieldOverride(
+            fieldName,
+            resource,
+            field,
+            getFieldMeta(resourceMetaFields, fieldName),
+          )) || overrideApplied;
+      }
+      if (overrideApplied) {
+        field = (getField(instance, fieldName) ?? field) as Field<T>;
       }
       let relativeToVal =
         'id' in instance && typeof instance.id === 'string'
           ? new URL(instance.id)
           : instance[relativeTo];
-      return [
+      let deserializedValue = await getDeserializedValue({
+        card,
+        loadedValue: loadedValues.get(fieldName),
+        fieldName,
+        value,
+        resource,
+        modelPromise: deferred.promise,
+        doc,
+        store,
+        relativeTo: relativeToVal,
+        opts,
+      });
+
+      field = applyLinkOverrideFromValue(
+        fieldName,
         field,
-        await getDeserializedValue({
-          card,
-          loadedValue: loadedValues.get(fieldName),
-          fieldName,
-          value,
-          resource,
-          modelPromise: deferred.promise,
-          doc,
-          store,
-          relativeTo: relativeToVal,
-          opts,
-        }),
-      ];
+        deserializedValue,
+      ) as Field<T>;
+      return [field, deserializedValue];
     }),
   )) as [Field<T>, any][];
 
@@ -3264,63 +3287,6 @@ export function getComponent(
     opts,
   );
   return boxComponent;
-}
-
-// TODO we should be able to get rid of this when we decommission the old prerender
-export async function ensureLinksLoaded(card: BaseDef): Promise<void> {
-  // Note that after each async step we check to see if we are still the
-  // current promise, otherwise we bail
-  let done: () => void;
-  let loadLinksPromise = new Promise<void>((res) => (done = res));
-  loadLinksPromises.set(card, loadLinksPromise);
-
-  // wait a full micro task before we start - this is simple debounce
-  await Promise.resolve();
-  if (loadLinksPromises.get(card) !== loadLinksPromise) {
-    return;
-  }
-
-  async function _loadModel<T extends BaseDef>(
-    model: T,
-    stack: BaseDef[] = [],
-  ): Promise<void> {
-    let pendingFields = new Set<string>(
-      Object.keys(
-        getFields(model, {
-          includeComputeds: false, // Not necessary to execute computed to load linked fields
-          usedLinksToFieldsOnly: true,
-        }),
-      ),
-    );
-    do {
-      for (let fieldName of [...pendingFields]) {
-        let value = await getIfReady(model, fieldName as keyof T);
-        pendingFields.delete(fieldName);
-        if (loadLinksPromises.get(card) !== loadLinksPromise) {
-          return;
-        }
-        if (Array.isArray(value)) {
-          for (let item of value) {
-            if (item && isCardOrField(item) && !stack.includes(item)) {
-              await _loadModel(item, [item, ...stack]);
-            }
-          }
-        } else if (isCardOrField(value) && !stack.includes(value)) {
-          await _loadModel(value, [value, ...stack]);
-        }
-      }
-      // TODO should we have a timeout?
-    } while (pendingFields.size > 0);
-  }
-
-  await _loadModel(card);
-  if (loadLinksPromises.get(card) !== loadLinksPromise) {
-    return;
-  }
-
-  // notify glimmer to rerender this card
-  notifyCardTracking(card);
-  done!();
 }
 
 export class Box<T> {

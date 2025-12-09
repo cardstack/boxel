@@ -233,7 +233,6 @@ export async function startServer({
     'worker-manager',
     `--port=${workerManagerPort}`,
     `--matrixURL='${matrixURL}'`,
-    `--distURL="${process.env.HOST_URL ?? 'http://localhost:4200'}"`,
     `--prerendererUrl='${prerenderURL}'`,
     `--migrateDB`,
 
@@ -267,6 +266,7 @@ export async function startServer({
     `--matrixURL='${matrixURL}'`,
     `--realmsRootPath='${dir.name}'`,
     `--workerManagerPort=${workerManagerPort}`,
+    `--prerendererUrl="${prerenderURL}"`,
     `--useRegistrationSecretFunction`,
 
     `--path='${testRealmDir}'`,

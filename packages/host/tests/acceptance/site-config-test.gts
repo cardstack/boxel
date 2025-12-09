@@ -25,6 +25,8 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 import visitOperatorMode from '../helpers/visit-operator-mode';
 
+import type { TestRealmAdapter } from '../helpers/adapter';
+
 let testHostModeRealmURLWithoutRealm = testHostModeRealmURL.replace(
   '/user/test/',
   '',
@@ -157,6 +159,7 @@ module('Acceptance | site config home page', function (hooks) {
       '.realm.json': {
         publishable: true,
         name: 'Site Config Workspace',
+        hostHome: `${testRealmURL}site`,
       },
     };
   });
@@ -173,11 +176,18 @@ module('Acceptance | site config home page', function (hooks) {
       setupUserSubscription();
       setupAuthEndpoints();
 
+      let contents = {
+        ...realmContents,
+        '.realm.json': {
+          ...(realmContents['.realm.json'] as any),
+          hostHome: `${testHostModeRealmURL}site`,
+        },
+      };
       setExpiresInSec(60 * 60);
       await setupAcceptanceTestRealm({
         realmURL: testHostModeRealmURL,
         mockMatrixUtils,
-        contents: realmContents,
+        contents,
         permissions: {
           '*': ['read'],
         },
@@ -285,6 +295,229 @@ module('Acceptance | site config home page', function (hooks) {
         .exists();
       assert
         .dom(`[data-test-host-mode-card="${testRealmURL}Pet/mango"]`)
+        .doesNotExist();
+    });
+  });
+
+  module('set site config command', function () {
+    let adapter: TestRealmAdapter;
+
+    module('when site config file does not exist', function (hooks) {
+      hooks.beforeEach(async function () {
+        let contents = {
+          ...realmContents,
+          '.realm.json': {
+            ...(realmContents['.realm.json'] as any),
+            hostHome: null,
+          },
+        };
+        delete contents['site.json'];
+        contents['SiteConfig/custom.json'] = {
+          data: {
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/site-config',
+                name: 'SiteConfig',
+              },
+            },
+            type: 'card',
+            attributes: {
+              cardInfo: {
+                notes: null,
+                title: null,
+                description: null,
+                thumbnailURL: null,
+              },
+            },
+            relationships: {
+              home: {
+                links: {
+                  self: '../Pet/peanut',
+                },
+              },
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
+            },
+          },
+        };
+
+        ({ adapter } = await setupAcceptanceTestRealm({
+          contents,
+          mockMatrixUtils,
+        }));
+      });
+
+      test('user can create a site config via stack menu', async function (assert) {
+        await visitOperatorMode({
+          submode: 'interact',
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}SiteConfig/custom`,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+
+        await waitFor(
+          `[data-test-stack-card="${testRealmURL}SiteConfig/custom"]`,
+        );
+        await click('[data-test-more-options-button]');
+        await click('[data-test-boxel-menu-item-text="Set as site home"]');
+
+        let realmDoc: any;
+        await waitUntil(async () => {
+          let file = await adapter.openFile('.realm.json');
+          if (!file) {
+            return false;
+          }
+          let content =
+            typeof file.content === 'string'
+              ? file.content
+              : JSON.stringify(file.content);
+          realmDoc = JSON.parse(content);
+          return realmDoc.hostHome === `${testRealmURL}SiteConfig/custom`;
+        });
+
+        assert.strictEqual(
+          realmDoc.hostHome,
+          `${testRealmURL}SiteConfig/custom`,
+          '.realm.json updated with selected site config',
+        );
+
+        let siteDoc = await adapter.openFile('site.json');
+        assert.strictEqual(siteDoc, undefined, 'site.json is not created');
+      });
+    });
+
+    module('when site config file exists', function (hooks) {
+      hooks.beforeEach(async function () {
+        let contents = {
+          ...realmContents,
+          '.realm.json': {
+            ...(realmContents['.realm.json'] as any),
+          },
+        };
+        contents['SiteConfig/custom.json'] = {
+          data: {
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/site-config',
+                name: 'SiteConfig',
+              },
+            },
+            type: 'card',
+            attributes: {
+              cardInfo: {
+                notes: null,
+                title: null,
+                description: null,
+                thumbnailURL: null,
+              },
+            },
+            relationships: {
+              home: {
+                links: {
+                  self: '../Pet/peanut',
+                },
+              },
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
+            },
+          },
+        };
+
+        ({ adapter } = await setupAcceptanceTestRealm({
+          contents,
+          mockMatrixUtils,
+        }));
+      });
+
+      test('user can update existing site config via stack menu', async function (assert) {
+        let initialDoc = await adapter.openFile('.realm.json');
+        assert.ok(initialDoc, '.realm.json exists before update');
+
+        await visitOperatorMode({
+          submode: 'interact',
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}SiteConfig/custom`,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+
+        await waitFor(
+          `[data-test-stack-card="${testRealmURL}SiteConfig/custom"]`,
+        );
+        await click('[data-test-more-options-button]');
+        await click('[data-test-boxel-menu-item-text="Set as site home"]');
+
+        let realmDoc: any;
+        await waitUntil(async () => {
+          let file = await adapter.openFile('.realm.json');
+          if (!file) {
+            return false;
+          }
+          let content =
+            typeof file.content === 'string'
+              ? file.content
+              : JSON.stringify(file.content);
+          realmDoc = JSON.parse(content);
+          return realmDoc.hostHome === `${testRealmURL}SiteConfig/custom`;
+        });
+
+        assert.strictEqual(
+          realmDoc.hostHome,
+          `${testRealmURL}SiteConfig/custom`,
+          'realm config updated with new site home',
+        );
+
+        let siteDoc = await adapter.openFile('site.json');
+        assert.ok(siteDoc, 'existing site.json remains available');
+        if (siteDoc) {
+          let content =
+            typeof siteDoc.content === 'string'
+              ? siteDoc.content
+              : JSON.stringify(siteDoc.content);
+          let parsedSiteDoc = JSON.parse(content);
+          assert.strictEqual(
+            parsedSiteDoc.data.relationships.home.links.self,
+            './Pet/mango',
+            'existing site.json content is unchanged',
+          );
+        }
+      });
+    });
+  });
+
+  module('site config menu visibility', function (hooks) {
+    hooks.beforeEach(async function () {
+      await setupAcceptanceTestRealm({
+        contents: realmContents,
+        mockMatrixUtils,
+      });
+    });
+
+    test('does not show menu for primary site config card', async function (assert) {
+      await visitOperatorMode({
+        submode: 'interact',
+        stacks: [[{ id: `${testRealmURL}site`, format: 'isolated' }]],
+      });
+
+      await waitFor(`[data-test-stack-card="${testRealmURL}site"]`);
+      await click('[data-test-more-options-button]');
+      assert
+        .dom('[data-test-boxel-menu-item-text="Set as site home"]')
         .doesNotExist();
     });
   });

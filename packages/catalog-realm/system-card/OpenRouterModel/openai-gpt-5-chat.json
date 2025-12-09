@@ -1,0 +1,57 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "openai/gpt-5-chat",
+      "canonicalSlug": "openai/gpt-5-chat-2025-08-07",
+      "name": "OpenAI: GPT-5 Chat",
+      "created": 1754587837,
+      "description": "GPT-5 Chat is designed for advanced, natural, multimodal, and context-aware conversations for enterprise applications.",
+      "pricing": {
+        "prompt": "0.00000125",
+        "completion": "0.00001",
+        "request": "0",
+        "image": "0"
+      },
+      "contextLength": 128000,
+      "architecture": {
+        "modality": "text+image->text",
+        "inputModalities": [
+          "file",
+          "image",
+          "text"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "GPT",
+        "instructType": ""
+      },
+      "topProvider": {
+        "isModerated": true,
+        "contextLength": 128000,
+        "maxCompletionTokens": 16384
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "max_tokens",
+        "response_format",
+        "seed",
+        "structured_outputs"
+      ],
+      "defaultParameters": {},
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

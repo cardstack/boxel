@@ -102,7 +102,9 @@ test.describe('Publish realm', () => {
       page.locator('[data-test-custom-subdomain-input]'),
     ).toHaveCount(0);
 
-    await page.locator('[data-test-custom-subdomain-checkbox]').click();
+    await expect(
+      page.locator('[data-test-custom-subdomain-checkbox]'),
+    ).toBeChecked();
     await page.locator('[data-test-publish-button]').click();
 
     let newTabPromise = page.waitForEvent('popup');

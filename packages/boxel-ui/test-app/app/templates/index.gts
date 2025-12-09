@@ -88,22 +88,21 @@ class IndexComponent extends Component {
         color: var(--foreground, var(--boxel-dark));
         font-family: var(--font-sans, var(--boxel-font-family));
         background-color: var(--background, var(--boxel-light));
-        font-size: var(--typescale-body, 13px);
-        line-height: var(--lineheight-base, calc(18 / 13));
+        font-size: var(--boxel-body-font-size, 0.875rem);
+        line-height: var(--boxel-body-line-height, calc(18 / 13));
       }
       .theme-selector {
         min-width: 10rem;
-      }
-      .FreestyleUsage {
-        --radius: var(--boxel-border-radius);
-        --border-color: var(--boxel-border-color);
       }
       .FreestyleUsageCssVar-name {
         width: 40%;
       }
       .FreestyleUsage-preview {
+        --radius: var(--theme-radius, var(--boxel-border-radius));
+
         color: var(--foreground, var(--boxel-dark));
         background-color: var(--background, var(--boxel-light));
+        border-radius: 4px;
       }
     </style>
   </template>

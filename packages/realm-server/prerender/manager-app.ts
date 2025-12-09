@@ -3,11 +3,18 @@ import Router from '@koa/router';
 import { logger } from '@cardstack/runtime-common';
 import { fetchRequestFromContext, fullRequestURL } from '../middleware';
 import { format } from 'date-fns';
+import {
+  PRERENDER_SERVER_DRAINING_STATUS_CODE,
+  PRERENDER_SERVER_STATUS_DRAINING,
+  PRERENDER_SERVER_STATUS_HEADER,
+} from './prerender-constants';
 
 type ServerInfo = {
   url: string;
   capacity: number;
   activeRealms: Set<string>;
+  warmedRealms: Set<string>;
+  status: 'active' | 'draining';
   registeredAt: number;
   lastSeenAt: number;
   lastAssignedAt: number;
@@ -37,18 +44,6 @@ function normalizeURL(u: string): string {
   }
 }
 
-async function ping(url: string, timeoutMs: number): Promise<boolean> {
-  try {
-    const ac = new AbortController();
-    const t = setTimeout(() => ac.abort(), timeoutMs).unref?.();
-    const res = await fetch(url, { method: 'GET', signal: ac.signal });
-    clearTimeout(t as any);
-    return res.ok;
-  } catch (e) {
-    return false;
-  }
-}
-
 function formatTimestampWithTimezone(timestamp: number): string {
   const date = new Date(timestamp);
   // Get timezone offset in hours and minutes
@@ -64,10 +59,16 @@ function formatTimestampWithTimezone(timestamp: number): string {
   return `${formattedDate} (${timezone})`;
 }
 
-export function buildPrerenderManagerApp(): {
+export function buildPrerenderManagerApp(options?: {
+  isDraining?: () => boolean;
+}): {
   app: Koa<Koa.DefaultState, Koa.Context>;
   registry: Registry;
   sweepServers: () => Promise<void>;
+  chooseServerForRealm: (
+    realm: string,
+    options?: { exclude?: Iterable<string> },
+  ) => string | null;
 } {
   const app = new Koa<Koa.DefaultState, Koa.Context>();
   const router = new Router();
@@ -76,20 +77,41 @@ export function buildPrerenderManagerApp(): {
     realms: new Map(),
     lastAccessByRealm: new Map(),
   };
+  let lastRegistrySnapshot: string | undefined;
 
   const multiplex = Math.max(1, Number(process.env.PRERENDER_MULTIPLEX ?? 1));
   const proxyTimeoutMs = Math.max(
     1000,
     Number(process.env.PRERENDER_SERVER_TIMEOUT_MS ?? 60000),
   );
-  const healthcheckTimeoutMs = Math.max(
-    100,
-    Number(process.env.PRERENDER_HEALTHCHECK_TIMEOUT_MS ?? 1000),
+  const heartbeatTimeoutMs = Math.max(
+    1000,
+    Number(
+      process.env.PRERENDER_HEARTBEAT_TIMEOUT_MS ??
+        process.env.PRERENDER_HEALTHCHECK_TIMEOUT_MS ??
+        30000,
+    ),
   );
-  const healthcheckIntervalMs = Math.max(
+  const heartbeatSweepIntervalMs = Math.max(
     0,
-    Number(process.env.PRERENDER_HEALTHCHECK_INTERVAL_MS ?? 0),
+    Number(
+      process.env.PRERENDER_HEARTBEAT_SWEEP_INTERVAL_MS ??
+        process.env.PRERENDER_HEALTHCHECK_INTERVAL_MS ??
+        5000,
+    ),
   );
+  const discoveryWaitMs = Math.max(
+    0,
+    Number(process.env.PRERENDER_SERVER_DISCOVERY_WAIT_MS ?? 10000),
+  );
+  const discoveryPollMs = Math.max(
+    50,
+    Number(process.env.PRERENDER_SERVER_DISCOVERY_POLL_MS ?? 100),
+  );
+
+  function delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
 
   function urlFromQuery(ctxt: Koa.Context): string | undefined {
     let raw = (ctxt.query as Record<string, unknown>)?.['url'];
@@ -102,11 +124,198 @@ export function buildPrerenderManagerApp(): {
     return undefined;
   }
 
+  function hasCapacity(info: ServerInfo) {
+    return info.activeRealms.size < info.capacity;
+  }
+
+  function isServerUsable(info: ServerInfo) {
+    let stale = now() - info.lastSeenAt > heartbeatTimeoutMs;
+    return !stale && info.status !== 'draining';
+  }
+
+  function normalizeServersForLog(): string {
+    return JSON.stringify(
+      [...registry.servers.values()].map((s) => ({
+        url: s.url,
+        status: s.status,
+        capacity: s.capacity,
+        activeRealms: Array.from(s.activeRealms),
+        warmedRealms: Array.from(s.warmedRealms),
+        lastSeenAt: s.lastSeenAt,
+      })),
+    );
+  }
+
+  function logRegistryIfChanged(reason: string) {
+    let snapshot = JSON.stringify({
+      servers: [...registry.servers.values()].map((s) => ({
+        url: s.url,
+        status: s.status,
+        capacity: s.capacity,
+        activeRealms: Array.from(s.activeRealms),
+        warmedRealms: Array.from(s.warmedRealms),
+      })),
+      realms: [...registry.realms.entries()],
+    });
+    if (snapshot !== lastRegistrySnapshot) {
+      lastRegistrySnapshot = snapshot;
+      log.debug('Registry changed (%s): %s', reason, snapshot);
+    }
+  }
+
+  function cleanupAssignments(): void {
+    for (let [realm, list] of registry.realms) {
+      let filtered: string[] = [];
+      for (let url of list) {
+        let info = registry.servers.get(url);
+        if (info && isServerUsable(info)) {
+          filtered.push(url);
+        } else {
+          registry.servers.get(url)?.activeRealms.delete(realm);
+        }
+      }
+      if (filtered.length === 0) {
+        registry.realms.delete(realm);
+        logRegistryIfChanged('cleanup removed realm');
+        continue;
+      }
+      if (filtered.length !== list.length) {
+        registry.realms.set(realm, filtered);
+        logRegistryIfChanged('cleanup pruned assignments');
+      }
+    }
+  }
+
+  function pruneServer(url: string) {
+    registry.servers.delete(url);
+    logRegistryIfChanged('prune server');
+    for (let [realm, list] of registry.realms) {
+      let idx;
+      while ((idx = list.indexOf(url)) !== -1) {
+        list.splice(idx, 1);
+      }
+      if (list.length === 0) registry.realms.delete(realm);
+    }
+  }
+
+  function recordHeartbeat({
+    url,
+    capacity,
+    status,
+    warmedRealms,
+  }: {
+    url: string;
+    capacity?: number;
+    status?: 'active' | 'draining';
+    warmedRealms?: string[];
+  }) {
+    log.debug(
+      `received heartbeat from ${url} status=${status} capacity=${capacity} warmedRealms=${warmedRealms ? warmedRealms.join() : 'none'}`,
+    );
+    let existing = registry.servers.get(url);
+    let changed = false;
+    if (existing) {
+      let warmSet = new Set(warmedRealms ?? []);
+      existing.lastSeenAt = now();
+      if (capacity && capacity !== existing.capacity) {
+        existing.capacity = capacity;
+        changed = true;
+      }
+      if (status && status !== existing.status) {
+        existing.status = status;
+        changed = true;
+      }
+      if (
+        warmedRealms &&
+        (warmedRealms.some((r) => !existing.warmedRealms.has(r)) ||
+          existing.warmedRealms.size !== warmSet.size)
+      ) {
+        existing.warmedRealms = warmSet;
+        changed = true;
+      }
+      if (warmSet.size === 0) {
+        // server restarted; clear tracked active realms and mappings
+        for (let realm of [...existing.activeRealms]) {
+          existing.activeRealms.delete(realm);
+          let arr = registry.realms.get(realm) || [];
+          let idx;
+          while ((idx = arr.indexOf(url)) !== -1) {
+            arr.splice(idx, 1);
+          }
+          if (arr.length === 0) {
+            registry.realms.delete(realm);
+            registry.lastAccessByRealm.delete(realm);
+          } else {
+            registry.realms.set(realm, arr);
+          }
+        }
+      } else {
+        // drop active realms that are not warmed to free capacity
+        for (let realm of [...existing.activeRealms]) {
+          if (!warmSet.has(realm)) {
+            existing.activeRealms.delete(realm);
+            let arr = registry.realms.get(realm) || [];
+            let idx;
+            while ((idx = arr.indexOf(url)) !== -1) {
+              arr.splice(idx, 1);
+            }
+            if (arr.length === 0) {
+              registry.realms.delete(realm);
+              registry.lastAccessByRealm.delete(realm);
+            } else {
+              registry.realms.set(realm, arr);
+            }
+          }
+        }
+      }
+      if (changed) {
+        logRegistryIfChanged('heartbeat update');
+      }
+      return existing;
+    }
+
+    let info: ServerInfo = {
+      url,
+      capacity: capacity || 4,
+      activeRealms: new Set(),
+      warmedRealms: new Set(warmedRealms ?? []),
+      status: status ?? 'active',
+      registeredAt: now(),
+      lastSeenAt: now(),
+      lastAssignedAt: 0,
+    };
+    registry.servers.set(url, info);
+    logRegistryIfChanged('heartbeat add');
+    return info;
+  }
+
+  function markDraining(url: string) {
+    let info = registry.servers.get(url);
+    if (info) {
+      info.status = 'draining';
+    }
+  }
+
   // health
   router.head('/', async (ctxt) => {
+    if (options?.isDraining?.()) {
+      ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+      ctxt.set(
+        PRERENDER_SERVER_STATUS_HEADER,
+        PRERENDER_SERVER_STATUS_DRAINING,
+      );
+      return;
+    }
     ctxt.status = 200;
   });
   router.get('/', async (ctxt) => {
+    if (options?.isDraining?.()) {
+      ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+      ctxt.set(
+        PRERENDER_SERVER_STATUS_HEADER,
+        PRERENDER_SERVER_STATUS_DRAINING,
+      );
+    }
     ctxt.set('Content-Type', 'application/vnd.api+json');
 
     // Build the list of active servers with their realms
@@ -132,6 +341,8 @@ export function buildPrerenderManagerApp(): {
           capacity: serverInfo.capacity,
           registeredAt: formatTimestampWithTimezone(serverInfo.registeredAt),
           lastSeenAt: formatTimestampWithTimezone(serverInfo.lastSeenAt),
+          status: serverInfo.status,
+          warmedRealms: Array.from(serverInfo.warmedRealms.values()),
           realms: realms,
         },
       });
@@ -142,7 +353,7 @@ export function buildPrerenderManagerApp(): {
         type: 'prerender-manager-health',
         id: 'health',
         attributes: {
-          ready: true,
+          ready: registry.servers.size > 0,
         },
       },
       included: servers,
@@ -167,8 +378,16 @@ export function buildPrerenderManagerApp(): {
       let attrs = requestBody?.data?.attributes || {};
       let capacity: number = Number(attrs.capacity ?? 4);
       let url: string | undefined = attrs.url;
+      let status: 'active' | 'draining' =
+        attrs.status === 'draining' ? 'draining' : 'active';
+      let warmedRealms: string[] | undefined;
+      if (Array.isArray(attrs.warmedRealms)) {
+        warmedRealms = attrs.warmedRealms.filter((v: unknown): v is string =>
+          Boolean(v && typeof v === 'string'),
+        );
+      }
       if (!url) {
-        log.warn('Registration rejected: prerender server URL not provided');
+        log.warn('Heartbeat rejected: prerender server URL not provided');
         ctxt.status = 400;
         ctxt.body = {
           errors: [{ status: 400, message: 'URL is required' }],
@@ -177,40 +396,25 @@ export function buildPrerenderManagerApp(): {
       }
       url = normalizeURL(url);
 
-      let ok = await ping(url, 2000);
-      if (!ok) {
-        log.warn('Registration rejected: server not reachable at %s', url);
-        ctxt.status = 400;
-        ctxt.body = {
-          errors: [{ status: 400, message: `Server not reachable at ${url}` }],
-        };
-        return;
-      }
-
-      let existing = registry.servers.get(url);
-      if (existing) {
-        existing.lastSeenAt = now();
-        existing.capacity = capacity || existing.capacity;
-        ctxt.status = 204;
-        ctxt.set('X-Prerender-Server-Id', url); // optional id header for convenience
-        return;
-      }
-
-      registry.servers.set(url, {
-        url,
-        capacity: capacity || 4,
-        activeRealms: new Set(),
-        registeredAt: now(),
-        lastSeenAt: now(),
-        lastAssignedAt: 0,
-      });
+      recordHeartbeat({ url, capacity, status, warmedRealms });
       ctxt.status = 204;
       ctxt.set('X-Prerender-Server-Id', url);
     } catch (e) {
-      log.error('Error in registration:', e);
+      log.error('Error in heartbeat:', e);
       ctxt.status = 500;
-      ctxt.body = { errors: [{ status: 500, message: 'Registration error' }] };
+      ctxt.body = { errors: [{ status: 500, message: 'Heartbeat error' }] };
     }
+  });
+
+  // maintenance: clear realm assignments and capacity tracking
+  router.post('/prerender-maintenance/reset', async (ctxt) => {
+    for (let [, info] of registry.servers) {
+      info.activeRealms.clear();
+    }
+    registry.realms.clear();
+    registry.lastAccessByRealm.clear();
+    log.warn('Maintenance reset: cleared realm assignments and activeRealms');
+    ctxt.status = 204;
   });
 
   // unregister server
@@ -269,16 +473,26 @@ export function buildPrerenderManagerApp(): {
     ctxt.status = 204;
   });
 
-  function leastRecentlyUsedServerWithCapacity(options?: {
-    exclude?: Iterable<string>;
-  }): string | undefined {
+  function leastRecentlyUsedServerWithCapacity(
+    realm: string,
+    options?: {
+      exclude?: Iterable<string>;
+    },
+  ): string | undefined {
     let excludeSet = new Set(options?.exclude ? [...options.exclude] : []);
+    let bestWarm: { url: string; info: ServerInfo } | undefined;
     let best: { url: string; info: ServerInfo } | undefined;
     for (let [url, info] of registry.servers) {
       if (excludeSet.has(url)) {
         continue;
       }
-      if (info.activeRealms.size >= info.capacity) {
+      if (!isServerUsable(info) || !hasCapacity(info)) {
+        continue;
+      }
+      if (info.warmedRealms.has(realm)) {
+        if (!bestWarm || info.lastAssignedAt < bestWarm.info.lastAssignedAt) {
+          bestWarm = { url, info };
+        }
         continue;
       }
       if (!best) {
@@ -289,53 +503,31 @@ export function buildPrerenderManagerApp(): {
         best = { url, info };
       }
     }
-    return best?.url;
+    return bestWarm?.url ?? best?.url;
   }
 
   // helper: choose server for realm
-  function chooseServerForRealm(realm: string): string | null {
-    let assigned = registry.realms.get(realm);
-    if (assigned && assigned.length > 0) {
-      // If we have fewer than multiplex servers assigned, try to add a new one and prefer returning it
-      if (assigned.length < multiplex) {
-        let candidate = leastRecentlyUsedServerWithCapacity({
-          exclude: assigned,
-        });
-        if (candidate) {
-          assigned.push(candidate);
-          if (assigned.length > multiplex) {
-            assigned.splice(0, assigned.length - multiplex);
-          }
-          registry.realms.set(realm, assigned);
-          let info = registry.servers.get(candidate);
-          if (info) {
-            info.activeRealms.add(realm);
-            info.lastAssignedAt = now();
-          }
-          return candidate;
-        }
-      }
-      // Otherwise rotate among the assigned set
-      let next = assigned.shift()!;
-      assigned.push(next);
-      if (assigned.length > multiplex) {
-        assigned.splice(0, assigned.length - multiplex);
-      }
-      registry.realms.set(realm, assigned);
-      let info = registry.servers.get(next);
-      if (info) {
-        info.lastAssignedAt = now();
-      }
-      return next;
-    }
-    // pick server with available capacity
-    {
-      let candidate = leastRecentlyUsedServerWithCapacity();
+  function chooseServerForRealm(
+    realm: string,
+    options?: { exclude?: Iterable<string> },
+  ): string | null {
+    cleanupAssignments();
+    let exclude = new Set(options?.exclude ? [...options.exclude] : []);
+    let assigned = (registry.realms.get(realm) || []).filter(
+      (url) => !exclude.has(url),
+    );
+    // If we have room to add another server for this realm, try to expand the
+    // assignment set before choosing among existing ones.
+    if (assigned.length < multiplex) {
+      let candidate = leastRecentlyUsedServerWithCapacity(realm, {
+        exclude: new Set([...assigned, ...exclude]),
+      });
       if (candidate) {
-        let list = registry.realms.get(realm) || [];
-        if (!list.includes(candidate)) list.push(candidate);
-        if (list.length > multiplex) list = list.slice(-multiplex);
-        registry.realms.set(realm, list);
+        assigned.push(candidate);
+        if (assigned.length > multiplex) {
+          assigned.splice(0, assigned.length - multiplex);
+        }
+        registry.realms.set(realm, assigned);
         let info = registry.servers.get(candidate);
         if (info) {
           info.activeRealms.add(realm);
@@ -344,7 +536,54 @@ export function buildPrerenderManagerApp(): {
         return candidate;
       }
     }
-    // pressure mode: pick server owning globally LRU realm
+    if (assigned.length > 0) {
+      // prefer warmed entries in assigned set
+      let warmed = assigned.find((url) => {
+        let info = registry.servers.get(url);
+        return info && isServerUsable(info) && hasCapacity(info);
+      });
+      let warmedPreferred = assigned.find((url) => {
+        let info = registry.servers.get(url);
+        return (
+          info &&
+          isServerUsable(info) &&
+          hasCapacity(info) &&
+          info.warmedRealms.has(realm)
+        );
+      });
+      let next = warmedPreferred ?? warmed;
+      if (next) {
+        assigned = assigned.filter((url) => url !== next);
+        assigned.push(next);
+        if (assigned.length > multiplex) {
+          assigned.splice(0, assigned.length - multiplex);
+        }
+        registry.realms.set(realm, assigned);
+        let info = registry.servers.get(next);
+        if (info) {
+          info.lastAssignedAt = now();
+          info.activeRealms.add(realm);
+        }
+        return next;
+      }
+    }
+    // pick server with available capacity, prefer warmed
+    let candidate = leastRecentlyUsedServerWithCapacity(realm, {
+      exclude,
+    });
+    if (candidate) {
+      let list = registry.realms.get(realm) || [];
+      if (!list.includes(candidate)) list.push(candidate);
+      if (list.length > multiplex) list = list.slice(-multiplex);
+      registry.realms.set(realm, list);
+      let info = registry.servers.get(candidate);
+      if (info) {
+        info.activeRealms.add(realm);
+        info.lastAssignedAt = now();
+      }
+      return candidate;
+    }
+    // pressure mode: pick server owning globally LRU realm (may evict to free capacity)
     let lruRealm: string | undefined;
     let lruTime = Infinity;
     for (let [r, t] of registry.lastAccessByRealm) {
@@ -354,70 +593,112 @@ export function buildPrerenderManagerApp(): {
       }
     }
     if (lruRealm) {
-      let arr = registry.realms.get(lruRealm);
-      let url = arr?.[0];
-      if (url) {
-        let list = registry.realms.get(realm) || [];
-        if (!list.includes(url)) list.push(url);
-        if (list.length > multiplex) list = list.slice(-multiplex);
-        registry.realms.set(realm, list);
+      let arr = [...(registry.realms.get(lruRealm) || [])];
+      while (arr.length > 0) {
+        let url = arr.shift()!;
         let info = registry.servers.get(url);
-        if (info) {
+        if (info && isServerUsable(info)) {
+          // evict lruRealm from this server to free capacity
+          info.activeRealms.delete(lruRealm);
+          let existing = registry.realms.get(lruRealm) || [];
+          let idx = existing.indexOf(url);
+          if (idx > -1) existing.splice(idx, 1);
+          if (existing.length === 0) {
+            registry.realms.delete(lruRealm);
+          } else {
+            registry.realms.set(lruRealm, existing);
+          }
+          registry.lastAccessByRealm.delete(lruRealm);
+
+          let list = registry.realms.get(realm) || [];
+          if (!list.includes(url)) list.push(url);
+          if (list.length > multiplex) list = list.slice(-multiplex);
+          registry.realms.set(realm, list);
+          info.activeRealms.add(realm);
           info.lastAssignedAt = now();
+          log.warn(
+            'Pressure-mode: evicted realm %s from %s to assign %s',
+            lruRealm,
+            url,
+            realm,
+          );
+          return url;
         }
-        // don't mark active until success
-        return url;
+        registry.servers.get(url)?.activeRealms.delete(lruRealm);
+      }
+      if (arr.length === 0) {
+        registry.realms.delete(lruRealm);
       }
     }
-    // fallback: any server
-    let any = [...registry.servers.keys()][0];
-    if (any) {
+    // fallback: any usable server (evict if needed)
+    for (let [url, info] of registry.servers) {
+      if (!isServerUsable(info)) continue;
+      if (!hasCapacity(info) && info.activeRealms.size > 0) {
+        let evictRealm: string | undefined;
+        let oldest = Infinity;
+        for (let r of info.activeRealms) {
+          let t = registry.lastAccessByRealm.get(r) ?? 0;
+          if (t < oldest) {
+            oldest = t;
+            evictRealm = r;
+          }
+        }
+        if (!evictRealm) evictRealm = [...info.activeRealms][0];
+        if (evictRealm) {
+          info.activeRealms.delete(evictRealm);
+          let existing = registry.realms.get(evictRealm) || [];
+          let idx = existing.indexOf(url);
+          if (idx > -1) existing.splice(idx, 1);
+          if (existing.length === 0) {
+            registry.realms.delete(evictRealm);
+          } else {
+            registry.realms.set(evictRealm, existing);
+          }
+          registry.lastAccessByRealm.delete(evictRealm);
+          log.warn(
+            'Fallback eviction: evicted realm %s from %s to assign %s',
+            evictRealm,
+            url,
+            realm,
+          );
+        }
+      }
       let list = registry.realms.get(realm) || [];
-      if (!list.includes(any)) list.push(any);
+      if (!list.includes(url)) list.push(url);
       if (list.length > multiplex) list = list.slice(-multiplex);
       registry.realms.set(realm, list);
-      let info = registry.servers.get(any);
-      if (info) {
-        info.lastAssignedAt = now();
-      }
-      return any;
+      info.activeRealms.add(realm);
+      info.lastAssignedAt = now();
+      return url;
     }
     return null;
   }
 
-  // health sweep: remove unreachable servers and clean up realm mappings
+  // health sweep: remove servers that have stopped heartbeating
   async function sweepServers() {
-    let toRemove: string[] = [];
-    for (let [url] of registry.servers) {
-      let ok = await ping(url, healthcheckTimeoutMs);
-      if (!ok) {
+    let expired: string[] = [];
+    for (let [url, info] of registry.servers) {
+      let stale = now() - info.lastSeenAt > heartbeatTimeoutMs;
+      if (stale) {
         log.warn(
-          'Health sweep: prerender server %s is unhealthy; scheduling removal',
+          'Heartbeat sweep: prerender server %s is stale; removing',
           url,
         );
-        toRemove.push(url);
+        expired.push(url);
       }
     }
-    if (toRemove.length === 0) return;
-    for (let url of toRemove) {
-      log.warn('Health sweep: removing unreachable prerender server %s', url);
-      registry.servers.delete(url);
-      for (let [realm, list] of registry.realms) {
-        let idx;
-        while ((idx = list.indexOf(url)) !== -1) {
-          list.splice(idx, 1);
-        }
-        if (list.length === 0) registry.realms.delete(realm);
-      }
-    }
+    expired.forEach((url) => {
+      pruneServer(url);
+      log.debug('Pruned prerender server due to missed heartbeat: %s', url);
+    });
   }
 
-  // Schedule periodic health sweeps if configured. Use unref so this interval
+  // Schedule periodic heartbeat sweeps if configured. Use unref so this interval
   // won't keep the Node.js process alive on shutdown.
-  if (healthcheckIntervalMs > 0) {
+  if (heartbeatSweepIntervalMs > 0) {
     const timer = setInterval(() => {
-      sweepServers().catch((e) => log.warn('Health sweep error:', e));
-    }, healthcheckIntervalMs);
+      sweepServers().catch((e) => log.warn('Heartbeat sweep error:', e));
+    }, heartbeatSweepIntervalMs);
     (timer as any).unref?.();
   }
 
@@ -427,6 +708,22 @@ export function buildPrerenderManagerApp(): {
     label: string,
   ) {
     try {
+      if (options?.isDraining?.()) {
+        ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+        ctxt.set(
+          PRERENDER_SERVER_STATUS_HEADER,
+          PRERENDER_SERVER_STATUS_DRAINING,
+        );
+        ctxt.body = {
+          errors: [
+            {
+              status: PRERENDER_SERVER_DRAINING_STATUS_CODE,
+              message: 'Prerender manager draining',
+            },
+          ],
+        };
+        return;
+      }
       // read body once
       const req = await fetchRequestFromContext(ctxt);
       const raw = await req.text().catch(() => '');
@@ -453,60 +750,149 @@ export function buildPrerenderManagerApp(): {
         };
         return;
       }
-      let target = chooseServerForRealm(realm);
-      if (!target) {
+      if (registry.servers.size === 0 && discoveryWaitMs > 0) {
+        let start = now();
+        while (registry.servers.size === 0 && now() - start < discoveryWaitMs) {
+          await delay(discoveryPollMs);
+        }
+      }
+      if (registry.servers.size === 0) {
+        log.debug('503 No servers: registry empty');
         ctxt.status = 503;
         ctxt.body = { errors: [{ status: 503, message: 'No servers' }] };
         return;
       }
+      let attempts = new Set<string>();
+      while (attempts.size < registry.servers.size) {
+        let target = chooseServerForRealm(realm, { exclude: attempts });
+        if (!target) {
+          log.debug(
+            '503 No servers: no usable target for realm=%s (registered=%d): %s',
+            realm,
+            registry.servers.size,
+            normalizeServersForLog(),
+          );
+          ctxt.status = 503;
+          ctxt.body = { errors: [{ status: 503, message: 'No servers' }] };
+          return;
+        }
+        attempts.add(target);
 
-      const targetURL = `${normalizeURL(target)}/${pathSuffix}`;
-      log.info(
-        `proxying ${label} prerender request for ${attrs.url} to ${targetURL}`,
-      );
-      const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(), proxyTimeoutMs).unref?.();
-      const res = await fetch(targetURL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/vnd.api+json',
-          Accept: ctxt.get('Accept') || 'application/vnd.api+json',
-        },
-        body: raw,
-        signal: ac.signal,
-      }).catch((e) => {
-        log.warn('Upstream error:', e);
-        return null as any;
-      });
-      clearTimeout(timer as any);
-      if (!res) {
-        ctxt.status = 502;
-        ctxt.body = { errors: [{ status: 502, message: 'Upstream error' }] };
-        return;
-      }
-      // on success, mark last access and active realm
-      if (res.ok) {
-        registry.lastAccessByRealm.set(realm, now());
-        // ensure activeRealms marks include this assignment
-        let assigned = registry.realms.get(realm) || [];
-        for (let url of assigned) {
-          if (url === target) {
-            registry.servers.get(url)?.activeRealms.add(realm);
-            break;
+        const targetURL = `${normalizeURL(target)}/${pathSuffix}`;
+        log.info(
+          `proxying ${label} prerender request for ${attrs.url} to ${targetURL}`,
+        );
+        let abortedDueToDrain = false;
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), proxyTimeoutMs).unref?.();
+        const drainPoll =
+          options?.isDraining && proxyTimeoutMs > 50
+            ? setInterval(
+                () => {
+                  if (options.isDraining!()) {
+                    ac.abort();
+                  }
+                },
+                Math.min(100, proxyTimeoutMs / 2),
+              )
+            : null;
+        (drainPoll as any)?.unref?.();
+        const res = await fetch(targetURL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/vnd.api+json',
+            Accept: ctxt.get('Accept') || 'application/vnd.api+json',
+          },
+          body: raw,
+          signal: ac.signal,
+        }).catch((e) => {
+          if (e?.name === 'AbortError' && options?.isDraining?.()) {
+            abortedDueToDrain = true;
+          } else {
+            log.warn('Upstream error:', e);
+          }
+          return null as any;
+        });
+        clearTimeout(timer as any);
+        if (drainPoll) clearInterval(drainPoll as any);
+
+        let draining =
+          abortedDueToDrain ||
+          res?.status === PRERENDER_SERVER_DRAINING_STATUS_CODE ||
+          res?.headers.get(PRERENDER_SERVER_STATUS_HEADER) ===
+            PRERENDER_SERVER_STATUS_DRAINING;
+        let upstreamFailure = !res && !draining;
+        let serverError =
+          res && res.status >= 500 && res.status < 600 && !draining;
+        if (!res || draining || serverError) {
+          if (upstreamFailure || serverError) {
+            pruneServer(target);
+            attempts.delete(target);
+            log.warn(
+              'Pruned prerender server %s due to %s; registry now has %d servers',
+              target,
+              upstreamFailure ? 'upstream failure' : `status ${res?.status}`,
+              registry.servers.size,
+            );
+          }
+          if (draining) {
+            markDraining(target);
+          }
+          // try next server if available
+          if (attempts.size < registry.servers.size) {
+            continue;
+          }
+          if (draining) {
+            ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+            ctxt.set(
+              PRERENDER_SERVER_STATUS_HEADER,
+              PRERENDER_SERVER_STATUS_DRAINING,
+            );
+            ctxt.body = {
+              errors: [
+                {
+                  status: PRERENDER_SERVER_DRAINING_STATUS_CODE,
+                  message: 'All prerender servers draining',
+                },
+              ],
+            };
+          } else if (upstreamFailure || serverError) {
+            ctxt.status = 503;
+            ctxt.body = { errors: [{ status: 503, message: 'No servers' }] };
+          } else {
+            ctxt.status = 502;
+            ctxt.body = {
+              errors: [{ status: 502, message: 'Upstream error' }],
+            };
+          }
+          return;
+        }
+
+        // on success, mark last access and active realm
+        if (res.ok) {
+          registry.lastAccessByRealm.set(realm, now());
+          // ensure activeRealms marks include this assignment
+          let assigned = registry.realms.get(realm) || [];
+          for (let url of assigned) {
+            if (url === target) {
+              registry.servers.get(url)?.activeRealms.add(realm);
+              break;
+            }
           }
         }
+        ctxt.status = res.status;
+        // pass through response
+        for (let [k, v] of res.headers) {
+          // avoid setting hop-by-hop headers
+          if (/^transfer-encoding|connection$/i.test(k)) continue;
+          ctxt.set(k, v);
+        }
+        ctxt.set('x-boxel-prerender-target', target);
+        ctxt.set('x-boxel-prerender-realm', realm);
+        const buf = Buffer.from(await res.arrayBuffer());
+        ctxt.body = buf;
+        return;
       }
-      ctxt.status = res.status;
-      // pass through response
-      for (let [k, v] of res.headers) {
-        // avoid setting hop-by-hop headers
-        if (/^transfer-encoding|connection$/i.test(k)) continue;
-        ctxt.set(k, v);
-      }
-      ctxt.set('x-boxel-prerender-target', target);
-      ctxt.set('x-boxel-prerender-realm', realm);
-      const buf = Buffer.from(await res.arrayBuffer());
-      ctxt.body = buf;
     } catch (e) {
       log.error(`Error in /${pathSuffix} proxy:`, e);
       ctxt.status = 500;
@@ -522,19 +908,25 @@ export function buildPrerenderManagerApp(): {
     proxyPrerenderRequest(ctxt, 'prerender-module', 'module'),
   );
 
+  let verboseManagerLogs =
+    process.env.PRERENDER_MANAGER_VERBOSE_LOGS === 'true';
   app
     .use((ctxt: Koa.Context, next: Koa.Next) => {
-      log.info(
-        `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}`,
-      );
-      ctxt.res.on('finish', () => {
+      if (verboseManagerLogs) {
         log.info(
-          `--> ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}: ${ctxt.status}`,
+          `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}`,
         );
-        log.debug(JSON.stringify(ctxt.req.headers));
+      }
+      ctxt.res.on('finish', () => {
+        if (verboseManagerLogs) {
+          log.info(
+            `--> ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}: ${ctxt.status}`,
+          );
+          log.debug(JSON.stringify(ctxt.req.headers));
+        }
       });
       return next();
     })
     .use(router.routes());
-  return { app, registry, sweepServers };
+  return { app, registry, sweepServers, chooseServerForRealm };
 }

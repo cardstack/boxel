@@ -73,7 +73,11 @@ import type StoreService from '@cardstack/host/services/store';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import type {
+  CardDef,
+  Format,
+  ViewCardFn,
+} from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import { Spec } from 'https://cardstack.com/base/spec';
 
@@ -167,6 +171,16 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       DEFAULT_MODULE_INSPECTOR_VIEW
     );
   }
+
+  private viewCardInCodeSubmode: ViewCardFn = async (cardOrURL) => {
+    let cardId = cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id;
+    if (!cardId) {
+      return;
+    }
+
+    const fileUrl = cardId.endsWith('.json') ? cardId : `${cardId}.json`;
+    await this.operatorModeStateService.updateCodePath(new URL(fileUrl));
+  };
 
   @action private setActivePanel(item: ModuleInspectorView) {
     this.operatorModeStateService.updateModuleInspectorView(item);
@@ -443,6 +457,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
               @codeRef={{@selectedCodeRef}}
               @isUpdating={{@moduleAnalysis.isLoading}}
               @cardOrField={{@selectedCardOrField.cardOrField}}
+              @viewCard={{this.viewCardInCodeSubmode}}
             />
           {{else if (eq this.activePanel 'spec')}}
             <SpecPreview
@@ -483,6 +498,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         @card={{@card}}
         @format={{@previewFormat}}
         @setFormat={{@setPreviewFormat}}
+        @viewCard={{this.viewCardInCodeSubmode}}
         data-test-card-resource-loaded
       />
     {{/if}}

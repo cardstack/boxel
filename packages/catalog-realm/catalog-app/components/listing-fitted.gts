@@ -92,6 +92,12 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
       : undefined;
   }
 
+  get themeActions() {
+    return this.listingActions?.type === 'theme'
+      ? this.listingActions
+      : undefined;
+  }
+
   viewDetails = () => {
     this.listingActions?.view();
   };
@@ -155,6 +161,16 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
                   @name='Remix'
                   @writableRealms={{this.writableRealms}}
                   @onAction={{this.regularActions.remix}}
+                  @context={{@context}}
+                  @size='extra-small'
+                />
+              {{/if}}
+            {{else if this.themeActions}}
+              {{#if this.themeActions.remix}}
+                <ChooseRealmAction
+                  @name='Remix'
+                  @writableRealms={{this.writableRealms}}
+                  @onAction={{this.themeActions.remix}}
                   @context={{@context}}
                   @size='extra-small'
                 />
@@ -307,7 +323,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
       /* Vertical Cards */
       @container fitted-card (aspect-ratio <= 1.0) and (400px <= width) {
         .card-title {
-          font-size: var(--boxel-font-size-med);
+          font-size: var(--boxel-font-size-md);
           -webkit-line-clamp: 4;
         }
       }
@@ -403,7 +419,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
       /* Full Card (400 x 275) */
       @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (275px <= height) {
         .card-title {
-          font-size: var(--boxel-font-size-med);
+          font-size: var(--boxel-font-size-md);
         }
         .info-section {
           padding: var(--boxel-sp);

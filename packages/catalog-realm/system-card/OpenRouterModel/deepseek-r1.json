@@ -1,0 +1,67 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "deepseek/deepseek-r1",
+      "canonicalSlug": "deepseek/deepseek-r1",
+      "name": "DeepSeek: R1",
+      "created": 1737381095,
+      "description": "DeepSeek R1 is here: Performance on par with [OpenAI o1](/openai/o1), but open-sourced and with fully open reasoning tokens. It's 671B parameters in size, with 37B active in an inference pass.\n\nFully open-source model & [technical report](https://api-docs.deepseek.com/news/news250120).\n\nMIT licensed: Distill & commercialize freely!",
+      "pricing": {
+        "prompt": "0.0000003",
+        "completion": "0.0000012",
+        "request": "0",
+        "image": "0"
+      },
+      "contextLength": 163840,
+      "architecture": {
+        "modality": "text->text",
+        "inputModalities": [
+          "text"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "DeepSeek",
+        "instructType": "deepseek-r1"
+      },
+      "topProvider": {
+        "isModerated": false,
+        "contextLength": 163840,
+        "maxCompletionTokens": null
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "reasoning",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_p"
+      ],
+      "defaultParameters": {},
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

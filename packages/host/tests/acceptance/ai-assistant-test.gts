@@ -1242,7 +1242,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
 
     // Test with AI assistant opened
-    operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -1252,12 +1252,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         ],
       ],
       aiAssistantOpen: true,
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
     assert.dom('[data-test-ai-assistant-panel]').exists();
   });
 
@@ -2935,6 +2930,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-new-session-settings-create-button]');
     await waitFor(`[data-room-settled]`);
     await waitForSessionPreparationToFinish();
+    await waitUntil(
+      () => document.querySelectorAll('[data-test-message-idx]').length >= 1,
+      {
+        timeout: 5000,
+        timeoutMessage:
+          'timed out waiting for summary message to arrive in new session',
+      },
+    );
 
     // Verify the summary message was sent to the new room
     assertMessages(assert, [
@@ -3012,6 +3015,13 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-new-session-settings-create-button]');
     await waitFor(`[data-room-settled]`);
     await waitForSessionPreparationToFinish();
+    await waitUntil(
+      () => document.querySelectorAll('[data-test-message-idx]').length >= 1,
+      {
+        timeoutMessage:
+          'timed out waiting for summary message to arrive in new session',
+      },
+    );
 
     // Verify the summary message was sent to the new room
     assertMessages(assert, [

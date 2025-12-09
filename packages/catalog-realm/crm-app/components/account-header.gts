@@ -76,7 +76,7 @@ class AccountHeader extends GlimmerComponent<AccountHeaderArgs> {
       }
       .account-header-name {
         margin: 0;
-        font: var(--account-header-name-font, 600 var(--boxel-font-med));
+        font: var(--account-header-name-font, 600 var(--boxel-font-md));
         letter-spacing: var(
           --account-header-name-letter-spacing,
           var(--boxel-lsp-sm)

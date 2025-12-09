@@ -56,8 +56,6 @@ export interface BoxComponentSignature {
 
 export type BoxComponent = ComponentLike<BoxComponentSignature>;
 
-const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
-
 interface CardContextConsumerSignature {
   Blocks: { default: [CardContext] };
 }
@@ -493,7 +491,7 @@ export function getBoxComponent(
     fields:
       // This is yet another band-aid around component stability. Remove this
       // after field.value refactor lands.
-      !isFastBoot && isCardInstance(model.value)
+      isCardInstance(model.value)
         ? getFields(cardOrField as typeof CardDef)
         : undefined,
   };
@@ -538,6 +536,8 @@ function defaultFieldFormats(containingFormat: Format): FieldFormats {
       return { fieldDef: 'embedded', cardDef: 'fitted' };
     case 'atom':
       return { fieldDef: 'atom', cardDef: 'atom' };
+    case 'head':
+      return { fieldDef: 'head', cardDef: 'head' };
   }
 }
 

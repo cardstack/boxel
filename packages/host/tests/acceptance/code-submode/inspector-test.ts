@@ -223,6 +223,20 @@ const inThisFileSource = `
   export default class DefaultClass {}
 `;
 
+const commandModuleSource = `
+  import { Command } from '@cardstack/runtime-common';
+
+  export class SampleCommand extends Command {
+    async getInputType() {
+      return undefined;
+    }
+
+    protected async run(input) {
+      return input;
+    }
+  }
+`;
+
 const friendCardSource = `
   import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
   import StringField from "https://cardstack.com/base/string";
@@ -453,6 +467,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         'imports.gts': importsSource,
         're-export.gts': reExportSource,
         'local-inherit.gts': localInheritSource,
+        'command-module.gts': commandModuleSource,
         'empty-file.gts': '',
         'person-entry.json': {
           data: {
@@ -1185,6 +1200,25 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     let notFound = await adapter.openFile('pet.gts');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
+  });
+
+  test('shows command panel for command declarations', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: Submodes.Code,
+      codePath: `${testRealmURL}command-module.gts`,
+    });
+
+    await waitFor('[data-test-command-panel-header]');
+    assert
+      .dom('[data-test-command-panel-header]')
+      .hasText('Command', 'renders command panel');
+    assert
+      .dom('[data-test-card-module-definition]')
+      .hasTextContaining('SampleCommand', 'shows command definition details');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText('SampleCommand command', 'selector shows command type');
   });
 
   test('can delete a misc file', async function (assert) {

@@ -56,8 +56,10 @@ import {
   type Definition,
   type FieldDefinition,
 } from './index-structure';
-import type { DefinitionsCache } from './definitions-cache';
-import { isFilterRefersToNonexistentTypeError } from './definitions-cache';
+import {
+  isFilterRefersToNonexistentTypeError,
+  type DefinitionLookup,
+} from './definition-lookup';
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
 interface IndexedModule {
@@ -84,6 +86,7 @@ export interface IndexedInstance {
   lastModified: number | null;
   resourceCreatedAt: number;
   isolatedHtml: string | null;
+  headHtml: string | null;
   embeddedHtml: { [refURL: string]: string } | null;
   fittedHtml: { [refURL: string]: string } | null;
   atomHtml: string | null;
@@ -128,7 +131,7 @@ type GetEntryOptions = WIPOptions;
 export type QueryOptions = WIPOptions & PrerenderedCardOptions;
 
 interface PrerenderedCardOptions {
-  htmlFormat?: 'embedded' | 'fitted' | 'atom';
+  htmlFormat?: 'embedded' | 'fitted' | 'atom' | 'head';
   renderType?: ResolvedCodeRef;
   includeErrors?: true;
   cardUrls?: string[];
@@ -164,17 +167,18 @@ export function isValidPrerenderedHtmlFormat(
   format: string | undefined,
 ): format is PrerenderedCardOptions['htmlFormat'] {
   return (
-    format !== undefined && ['embedded', 'fitted', 'atom'].includes(format)
+    format !== undefined &&
+    ['embedded', 'fitted', 'atom', 'head'].includes(format)
   );
 }
 
 export class IndexQueryEngine {
   #dbAdapter: DBAdapter;
-  #definitionsCache: DefinitionsCache;
+  #definitionLookup: DefinitionLookup;
 
-  constructor(dbAdapter: DBAdapter, definitionsCache: DefinitionsCache) {
+  constructor(dbAdapter: DBAdapter, definitionLookup: DefinitionLookup) {
     this.#dbAdapter = dbAdapter;
-    this.#definitionsCache = definitionsCache;
+    this.#definitionLookup = definitionLookup;
   }
 
   async #query(expression: Expression) {
@@ -310,6 +314,7 @@ export class IndexQueryEngine {
       url: canonicalURL,
       pristine_doc: instance,
       isolated_html: isolatedHtml,
+      head_html: headHtml,
       atom_html: atomHtml,
       embedded_html: embeddedHtml,
       fitted_html: fittedHtml,
@@ -327,6 +332,7 @@ export class IndexQueryEngine {
       realmURL,
       instance,
       isolatedHtml,
+      headHtml,
       embeddedHtml,
       fittedHtml,
       atomHtml,
@@ -369,7 +375,7 @@ export class IndexQueryEngine {
         `Your filter refers to a nonexistent type: ${stringify(codeRef)}`,
       );
     }
-    return await this.#definitionsCache.getDefinition(codeRef);
+    return await this.#definitionLookup.lookupDefinition(codeRef);
   }
 
   // we pass the loader in so there is no ambiguity which loader to use as this
@@ -528,7 +534,7 @@ export class IndexQueryEngine {
   }> {
     if (!isValidPrerenderedHtmlFormat(opts.htmlFormat)) {
       throw new Error(
-        `htmlFormat must be either 'embedded', 'fitted', or 'atom'`,
+        `htmlFormat must be either 'embedded', 'fitted', 'atom', or 'head'`,
       );
     }
 
@@ -605,11 +611,11 @@ export class IndexQueryEngine {
     htmlFormat,
     renderType,
   }: {
-    htmlFormat: 'embedded' | 'fitted' | 'atom' | undefined;
+    htmlFormat: 'embedded' | 'fitted' | 'atom' | 'head' | undefined;
     renderType?: ResolvedCodeRef;
   }): (string | Param | DBSpecificExpression)[] {
     let fieldName = htmlFormat ? `${htmlFormat}_html` : `atom_html`;
-    if (!htmlFormat || htmlFormat === 'atom') {
+    if (!htmlFormat || htmlFormat === 'atom' || htmlFormat === 'head') {
       return [`ANY_VALUE(${fieldName})`];
     }
 
@@ -650,11 +656,16 @@ export class IndexQueryEngine {
     htmlFormat,
     renderType,
   }: {
-    htmlFormat: 'embedded' | 'fitted' | 'atom' | undefined;
+    htmlFormat: 'embedded' | 'fitted' | 'atom' | 'head' | undefined;
     renderType?: ResolvedCodeRef;
   }): (string | Param | DBSpecificExpression)[] {
     let usedRenderTypeColumnExpression = [];
-    if (htmlFormat && htmlFormat !== 'atom' && renderType) {
+    if (
+      htmlFormat &&
+      htmlFormat !== 'atom' &&
+      htmlFormat !== 'head' &&
+      renderType
+    ) {
       usedRenderTypeColumnExpression.push(`CASE`);
       usedRenderTypeColumnExpression.push(
         `WHEN ANY_VALUE(${htmlFormat}_html) ->> `,
@@ -1164,7 +1175,7 @@ function getField(
     if (currentField(pathTraveled) === '_cardType') {
       // this is a little awkward--we have the need to treat '_cardType' as a
       // type of string field that we can query against from the index (e.g. the
-      // cards grid sorts by the card's display name). current-run is injecting
+      // cards grid sorts by the card's display name). index-runner is injecting
       // this into the searchDoc during index time.
       return {
         type: 'contains',

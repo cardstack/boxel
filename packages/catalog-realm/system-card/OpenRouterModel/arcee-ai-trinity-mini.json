@@ -1,0 +1,83 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "OpenRouterModel",
+        "module": "../openrouter-model"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Arcee AI: Trinity Mini",
+      "created": 1764601720,
+      "modelId": "arcee-ai/trinity-mini",
+      "pricing": {
+        "image": "0",
+        "prompt": "0.000000045",
+        "request": "0",
+        "completion": "0.00000015"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "description": "Trinity Mini is a 26B-parameter (3B active) sparse mixture-of-experts language model featuring 128 experts with 8 active per token. Engineered for efficient reasoning over long contexts (131k) with robust function calling and multi-step agent workflows.",
+      "topProvider": {
+        "isModerated": false,
+        "contextLength": 131072,
+        "maxCompletionTokens": null
+      },
+      "architecture": {
+        "modality": "text->text",
+        "tokenizer": "Other",
+        "instructType": "",
+        "inputModalities": [
+          "text"
+        ],
+        "outputModalities": [
+          "text"
+        ]
+      },
+      "canonicalSlug": "arcee-ai/trinity-mini-20251201",
+      "contextLength": 131072,
+      "perRequestLimits": {
+        "promptTokens": null,
+        "completionTokens": null
+      },
+      "defaultParameters": {
+        "top_p": null,
+        "max_tokens": null,
+        "temperature": null,
+        "presence_penalty": null,
+        "frequency_penalty": null
+      },
+      "supportedParameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "logit_bias",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "reasoning",
+        "repetition_penalty",
+        "response_format",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_p"
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
