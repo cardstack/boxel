@@ -27,6 +27,10 @@ class Isolated extends Component<typeof GamingHub> {
   @tracked showStreamingTools = false;
   @tracked gameSearchQuery = '';
 
+  get playerId() {
+    return this.args.model?.player?.id;
+  }
+
   get gameRecordQuery(): Query {
     const moduleRef = {
       module: new URL('../game-record/game-record', import.meta.url).href,
@@ -37,7 +41,7 @@ class Isolated extends Component<typeof GamingHub> {
       { type: moduleRef },
       {
         on: moduleRef,
-        eq: { 'player.id': this.args.model.player?.id ?? '' },
+        eq: { 'player.id': this.playerId ?? '' },
       },
     ];
 
@@ -76,7 +80,7 @@ class Isolated extends Component<typeof GamingHub> {
           { type: moduleRef },
           {
             on: moduleRef,
-            eq: { 'player.id': this.args.model.player?.id ?? '' },
+            eq: { 'player.id': this.playerId ?? '' },
           },
           {
             on: moduleRef,
@@ -328,7 +332,6 @@ class Isolated extends Component<typeof GamingHub> {
                 {{/if}}
               </div>
 
-              {{! Recent Game Records - queried }}
               <div class='current-games-panel'>
                 <h3 class='section-header'>Recent Activity</h3>
                 {{#let
@@ -344,7 +347,6 @@ class Isolated extends Component<typeof GamingHub> {
                     <:loading>
                       <div class='loading-state'>Loading recent activity...</div>
                     </:loading>
-
                     <:response as |records|>
                       {{#if (gt records.length 0)}}
                         <div class='current-games-container'>
