@@ -31,7 +31,6 @@ import {
   RealmAction,
   type RenderError,
   type DefinitionLookup,
-  type PgPrimitive,
   CachingDefinitionLookup,
 } from '@cardstack/runtime-common';
 import { getCreatedTime } from '@cardstack/runtime-common/file-meta';
@@ -119,17 +118,15 @@ export function createTimingLogger(scope: string): TimingLogger {
     step(label: string) {
       let current = timingNow();
       console.log(
-        `[${scope}] ${label} took ${(current - last).toFixed(
-          2,
-        )}ms (total ${(current - start).toFixed(2)}ms)`,
+        `[${scope}] ${label} took ${(current - last).toFixed(2)}ms (total ${(
+          current - start
+        ).toFixed(2)}ms)`,
       );
       last = current;
     },
     finish(label = 'total') {
       let current = timingNow();
-      console.log(
-        `[${scope}] ${label} took ${(current - start).toFixed(2)}ms`,
-      );
+      console.log(`[${scope}] ${label} took ${(current - start).toFixed(2)}ms`);
     },
   };
 }
@@ -187,75 +184,16 @@ function createDbAdapter() {
   return adapter;
 }
 
-export type DbSnapshot = {
-  tables: {
-    name: string;
-    columns: string[];
-    rows: Record<string, PgPrimitive>[];
-  }[];
-};
+export type DbSnapshot = string;
 
 export async function captureDbSnapshot(): Promise<DbSnapshot> {
   let adapter = await getDbAdapter();
-  let tables = (await adapter.execute(
-    `SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`,
-  )) as { name: string }[];
-  let snapshotTables: DbSnapshot['tables'] = [];
-  for (let { name } of tables) {
-    let columns = await adapter.getColumnNames(name);
-    let rows = await adapter.execute(
-      `SELECT * FROM ${quoteIdentifier(name)};`,
-    );
-    snapshotTables.push({
-      name,
-      columns,
-      rows,
-    });
-  }
-  return { tables: snapshotTables };
+  return await adapter.exportSnapshot();
 }
 
 export async function restoreDbSnapshot(snapshot: DbSnapshot) {
   let adapter = await getDbAdapter();
-  let timing = createTimingLogger('restoreDbSnapshot-internal');
-  await adapter.execute('BEGIN TRANSACTION;');
-  try {
-    for (let { name, columns, rows } of snapshot.tables) {
-      await adapter.execute(`DELETE FROM ${quoteIdentifier(name)};`);
-      timing.step(`delete ${name}`);
-      if (!rows.length) {
-        timing.finish(`empty table ${name}`);
-        continue;
-      }
-      let columnList = columns.map(quoteIdentifier).join(', ');
-      let valuePlaceholder = columns.map(() => '?').join(', ');
-      let batchSize = 50;
-      for (let i = 0; i < rows.length; i += batchSize) {
-        let chunk = rows.slice(i, i + batchSize);
-        let multiValues = chunk
-          .map(() => `(${valuePlaceholder})`)
-          .join(', ');
-        await adapter.execute(
-          `INSERT INTO ${quoteIdentifier(name)} (${columnList}) VALUES ${multiValues};`,
-          {
-            bind: chunk.flatMap((row) => columns.map((column) => row[column])),
-          },
-        );
-      }
-      timing.step(`${rows.length} rows restored ${name}`);
-    }
-    await adapter.execute('COMMIT;');
-    timing.step('commit');
-  } catch (err) {
-    await adapter.execute('ROLLBACK;');
-    throw err;
-  } finally {
-    timing.finish();
-  }
-}
-
-function quoteIdentifier(identifier: string) {
-  return `"${identifier.replace(/"/g, '""')}"`;
+  await adapter.importSnapshot(snapshot);
 }
 
 export async function withSlowSave(
@@ -925,7 +863,6 @@ async function setupTestRealm({
 
 const authHandlerStateSymbol = Symbol('test-auth-handler-state');
 const TEST_MATRIX_USER = '@testuser:localhost';
-
 
 type AuthHandlerState = {
   handler: (req: Request) => Promise<Response | null>;

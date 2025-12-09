@@ -18,6 +18,8 @@ export default class SQLiteAdapter implements DBAdapter {
   private _dbId: string | undefined;
   private primaryKeys = new Map<string, string>();
   private tables: string[] = [];
+  private snapshotCounter = 0;
+  private snapshotInfos = new Map<string, { filename: string; dbId: string }>();
   #isClosed = false;
   private started = this.#startClient();
 
@@ -42,7 +44,7 @@ export default class SQLiteAdapter implements DBAdapter {
     });
     this._sqlite = await waitForPromise(ready.promise, 'sqlite startup');
 
-    await this.#openDatabase(':memory:');
+    await this.#openDatabase(':memory:', true);
   }
 
   async execute(sql: string, opts?: ExecuteOptions) {
@@ -161,7 +163,106 @@ export default class SQLiteAdapter implements DBAdapter {
     return results;
   }
 
-  private async #openDatabase(filename: string) {
+  async exportSnapshot(): Promise<string> {
+    this.assertNotClosed();
+    await this.started;
+    let alias = `snapshot_${++this.snapshotCounter}`;
+    let filename = `file:${alias}?mode=memory&cache=shared`;
+    let response = await this.sqlite('open', {
+      filename,
+    });
+    this.snapshotInfos.set(alias, { filename, dbId: response.dbId });
+    console.log(
+      `[SQLiteAdapter] exporting snapshot ${alias} to ${response.dbId}`,
+    );
+    await this.sqlite('exec', {
+      dbId: this.dbId,
+      sql: `ATTACH DATABASE '${filename}' AS ${alias};`,
+    });
+    let schemaEntries = (await this.internalExecute(
+      `SELECT name, sql
+       FROM sqlite_schema
+       WHERE type = 'table'
+         AND sql IS NOT NULL
+         AND name NOT LIKE 'sqlite_%'
+       ORDER BY name;`,
+    )) as { name: string; sql: string }[];
+    for (let entry of schemaEntries) {
+      let rewritten = this.#rewriteSchemaSql(entry.sql, alias);
+      await this.sqlite('exec', { dbId: this.dbId, sql: rewritten });
+      console.log(
+        `[SQLiteAdapter] created snapshot table ${entry.name} via ${rewritten}`,
+      );
+      let [{ count }] = (await this.internalExecute(
+        `SELECT COUNT(*) as count FROM ${this.#quoteIdentifier(entry.name)};`,
+      )) as { count: number }[];
+      await this.sqlite('exec', {
+        dbId: this.dbId,
+        sql: `DELETE FROM ${alias}.${this.#quoteIdentifier(entry.name)};`,
+      });
+      await this.sqlite('exec', {
+        dbId: this.dbId,
+        sql: `INSERT INTO ${alias}.${this.#quoteIdentifier(entry.name)}
+              SELECT * FROM main.${this.#quoteIdentifier(entry.name)};`,
+      });
+      console.log(
+        `[SQLiteAdapter] copied ${count} rows into snapshot table ${entry.name}`,
+      );
+    }
+    return alias;
+  }
+
+  async importSnapshot(snapshotName: string) {
+    this.assertNotClosed();
+    await this.started;
+    let snapshotInfo = this.snapshotInfos.get(snapshotName);
+    if (!snapshotInfo) {
+      throw new Error(`Unknown snapshot database '${snapshotName}'`);
+    }
+    console.log(
+      `[SQLiteAdapter] restoring snapshot ${snapshotName} from ${snapshotInfo.dbId}`,
+    );
+    let attachStart = performance.now();
+    let attached = (await this.internalExecute(
+      `SELECT name FROM pragma_database_list WHERE name = '${snapshotName}'`,
+    )) as { name: string }[];
+    if (!attached.length) {
+      await this.sqlite('exec', {
+        dbId: this.dbId,
+        sql: `ATTACH DATABASE '${snapshotInfo.filename}' AS ${snapshotName};`,
+      });
+      console.log(
+        `[SQLiteAdapter] attach ${snapshotName} took ${(performance.now() - attachStart).toFixed(2)}ms`,
+      );
+    }
+    let tables = (await this.internalExecute(
+      `SELECT name
+       FROM ${snapshotName}.sqlite_schema
+       WHERE type = 'table'
+         AND name NOT LIKE 'sqlite_%';`,
+    )) as { name: string }[];
+    console.log(
+      `[SQLiteAdapter] restoring tables: ${tables
+        .map((t) => t.name)
+        .join(', ')}`,
+    );
+    let statements: string[] = [];
+    for (let { name } of tables) {
+      statements.push(`DELETE FROM main.${this.#quoteIdentifier(name)};`);
+      statements.push(
+        `INSERT INTO main.${this.#quoteIdentifier(name)}
+         SELECT * FROM ${snapshotName}.${this.#quoteIdentifier(name)};`,
+      );
+    }
+    let batchStart = performance.now();
+    await this.sqlite('exec', { dbId: this.dbId, sql: statements.join('\n') });
+    console.log(
+      `[SQLiteAdapter] restored ${tables.length} tables in ${(performance.now() - batchStart).toFixed(2)}ms`,
+    );
+    console.log(`[SQLiteAdapter] completed restore from ${snapshotName}`);
+  }
+
+  private async #openDatabase(filename: string, initializeSchema = true) {
     // It is possible to write to the local
     // filesystem via Origin Private Filesystem, but it requires _very_
     // restrictive response headers that would cause our host app to break
@@ -172,7 +273,7 @@ export default class SQLiteAdapter implements DBAdapter {
     const { dbId } = response;
     this._dbId = dbId;
 
-    if (this.schemaSQL) {
+    if (initializeSchema && this.schemaSQL) {
       try {
         await this.sqlite('exec', {
           dbId: this.dbId,
@@ -249,6 +350,17 @@ export default class SQLiteAdapter implements DBAdapter {
         `Cannot perform operation, the db connection has been closed`,
       );
     }
+  }
+
+  #quoteIdentifier(identifier: string) {
+    return `"${identifier.replace(/"/g, '""')}"`;
+  }
+
+  #rewriteSchemaSql(sql: string, schema: string) {
+    return sql.replace(
+      /^(CREATE\s+(?:TEMP\s+)?TABLE(?:\s+IF\s+NOT\s+EXISTS)?)\s+/i,
+      (match) => `${match} ${schema}.`,
+    );
   }
 }
 

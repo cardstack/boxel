@@ -527,6 +527,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     let realms = await Promise.all([at1promise, at2promise]);
     ({ realm: testRealm } = realms[0]);
+    timing.step('setupAcceptanceTestRealms, both finish');
 
     setRealmPermissions({
       [realm2URL]: ['read', 'write'],
