@@ -966,10 +966,17 @@ export async function saveCard(
   id: string,
   loader: Loader,
   store?: CardStore,
+  realmURL?: string,
 ) {
   let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
   let doc = api.serializeCard(instance);
   doc.data.id = id;
+  if (realmURL) {
+    doc.data.meta = {
+      ...(doc.data.meta ?? {}),
+      realmURL,
+    };
+  }
   await api.updateFromSerialized(instance, doc, store);
   return doc;
 }
