@@ -561,11 +561,21 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       }
 
       if (serialized && serialized.some((resource) => resource.meta)) {
-        result.meta = {
-          fields: {
-            [this.name]: serialized.map((resource) => resource.meta ?? {}),
-          },
-        };
+        let metas = serialized.map((resource) => {
+          if (!resource.meta) {
+            return {};
+          }
+          let metaForField = { ...resource.meta };
+          delete metaForField.realmURL;
+          return Object.keys(metaForField).length > 0 ? metaForField : {};
+        });
+        if (metas.some((m) => Object.keys(m).length > 0)) {
+          result.meta = {
+            fields: {
+              [this.name]: metas,
+            },
+          };
+        }
       }
 
       return result;
@@ -754,13 +764,15 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
       return undefined;
     }
     let value = getter(instance, this);
-    let realmURLString = getCardMeta(instance as CardDef, 'realmURL');
+    let realmURLString = getCardMeta(instance, 'realmURL');
     if (realmURLString) {
-      if (isCardOrField(value)) {
+      let shouldPropagateRealm = (item: any) =>
+        item && typeof item === 'object' && !(item.constructor as any)?.isCardDef;
+      if (shouldPropagateRealm(value) && isCardOrField(value)) {
         setRealmURLMeta(value, realmURLString);
       } else if (isArrayOfCardOrField(value)) {
         for (let v of value as any[]) {
-          if (isCardOrField(v)) {
+          if (shouldPropagateRealm(v) && isCardOrField(v)) {
             setRealmURLMeta(v, realmURLString);
           }
         }
@@ -845,11 +857,15 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
       }
 
       if (serialized.meta && Object.keys(serialized.meta).length > 0) {
-        resource.meta = {
-          fields: {
-            [this.name]: serialized.meta,
-          },
-        };
+        let metaForField = { ...serialized.meta };
+        delete metaForField.realmURL;
+        if (Object.keys(metaForField).length > 0) {
+          resource.meta = {
+            fields: {
+              [this.name]: metaForField,
+            },
+          };
+        }
       }
       return resource;
     }
@@ -3251,11 +3267,13 @@ function makeDescriptor<
 function setField(instance: BaseDef, field: Field, value: any) {
   let realmURLString = getCardMeta(instance as CardDef, 'realmURL');
   if (realmURLString) {
-    if (isCardOrField(value)) {
+    let shouldPropagateRealm = (item: any) =>
+      item && typeof item === 'object' && !(item.constructor as any)?.isCardDef;
+    if (shouldPropagateRealm(value) && isCardOrField(value)) {
       setRealmURLMeta(value, realmURLString);
     } else if (isArrayOfCardOrField(value)) {
       for (let v of value) {
-        if (isCardOrField(v)) {
+        if (shouldPropagateRealm(v) && isCardOrField(v)) {
           setRealmURLMeta(v, realmURLString);
         }
       }
@@ -3490,8 +3508,8 @@ function setRealmURLMeta(instance: BaseDef, realmURLString: string) {
     ...(existingMeta?.adoptsFrom
       ? { adoptsFrom: existingMeta.adoptsFrom }
       : identifyCard(instance.constructor)
-        ? { adoptsFrom: identifyCard(instance.constructor)! }
-        : {}),
+      ? { adoptsFrom: identifyCard(instance.constructor)! }
+      : {}),
     realmURL: realmURLString,
   };
 }
