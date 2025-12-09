@@ -61,17 +61,16 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
       .set('Accept', SupportedMimeType.JSONAPI);
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
-    assert.true(
-      Array.isArray(response.body.data) && response.body.data.length > 0,
-      'returns at least one entry',
-    );
+    assert.true(response.body.data.length > 0, 'returns at least one entry');
 
     let entry = response.body.data[0];
     assert.strictEqual(entry.id, targetUrl);
     assert.strictEqual(entry.attributes.canonicalUrl, targetUrl);
     assert.strictEqual(entry.attributes.realmUrl, testRealm.url);
     assert.true(
-      entry.attributes.dependencies.includes('https://cardstack.com/base/string'),
+      entry.attributes.dependencies.includes(
+        'https://cardstack.com/base/string',
+      ),
     );
   });
 
