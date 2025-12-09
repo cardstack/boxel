@@ -2,7 +2,6 @@ import type Koa from 'koa';
 
 import {
   fetchRealmPermissions,
-  logger,
   type DBAdapter,
 } from '@cardstack/runtime-common';
 
@@ -15,15 +14,9 @@ import {
 } from '../middleware';
 import type { RealmServerTokenClaim } from '../utils/jwt';
 
-const log = logger('prerender-proxy');
-const DEFAULT_TIMEOUT_MS = Number(
-  process.env.PRERENDER_PROXY_TIMEOUT_MS ?? 30_000,
-);
-
 export default function handlePrerenderProxy({
   path,
   prerendererUrl,
-  timeoutMs = DEFAULT_TIMEOUT_MS,
   dbAdapter,
 }: {
   path: '/prerender-card' | '/prerender-module';
