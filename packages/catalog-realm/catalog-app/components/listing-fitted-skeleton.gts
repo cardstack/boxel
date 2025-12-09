@@ -7,18 +7,18 @@ interface Signature {
 
 export default class ListingFittedSkeleton extends GlimmerComponent<Signature> {
   <template>
-    <div class='fitted-skeleton'>
-      <div class='display-section'>
-        <SkeletonPlaceholder class='image-skeleton' />
-      </div>
-      <div class='info-section'>
-        <div class='card-content'>
-          <SkeletonPlaceholder class='title-skeleton' />
-          <SkeletonPlaceholder class='publisher-skeleton' />
-        </div>
-        <div class='card-tags-action'>
-          <SkeletonPlaceholder class='tag-skeleton' />
-          <SkeletonPlaceholder class='button-skeleton' />
+    <div class='fitted-skeleton-wrapper' ...attributes>
+      <div class='fitted-skeleton'>
+        <div class='display-section'></div>
+        <div class='info-section'>
+          <div class='card-content'>
+            <SkeletonPlaceholder class='title-skeleton' />
+            <SkeletonPlaceholder class='publisher-skeleton' />
+          </div>
+          <div class='card-tags-action'>
+            <SkeletonPlaceholder class='tag-skeleton' />
+            <SkeletonPlaceholder class='button-skeleton' />
+          </div>
         </div>
       </div>
     </div>
@@ -27,6 +27,12 @@ export default class ListingFittedSkeleton extends GlimmerComponent<Signature> {
     {{! ignore the above error because ember-template-lint complains about the whitespace in the multi-line comment below }}
     <style scoped>
       @layer {
+        .fitted-skeleton-wrapper {
+          container-name: fitted-card;
+          container-type: size;
+          width: 100%;
+          height: 100%;
+        }
         .fitted-skeleton {
           width: 100%;
           height: 100%;
@@ -40,11 +46,6 @@ export default class ListingFittedSkeleton extends GlimmerComponent<Signature> {
           align-items: center;
           overflow: hidden;
           background-color: var(--boxel-200);
-        }
-        .image-skeleton {
-          width: 100%;
-          height: 100%;
-          border-radius: var(--boxel-border-radius-sm);
         }
         .info-section {
           display: flex;
@@ -101,6 +102,9 @@ export default class ListingFittedSkeleton extends GlimmerComponent<Signature> {
             justify-content: space-between;
             height: 100%;
             padding: var(--boxel-sp-xs);
+          }
+          .card-content {
+            flex: 1;
           }
           .card-tags-action {
             flex-direction: row;
