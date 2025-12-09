@@ -588,7 +588,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: '/missing-place/does-not-exist',
+                      module: '/place-modules/place.gts',
                       name: 'Place',
                     },
                   },
