@@ -190,12 +190,6 @@ export default class SQLiteAdapter implements DBAdapter {
     for (let entry of schemaEntries) {
       let rewritten = this.#rewriteSchemaSql(entry.sql, alias);
       await this.sqlite('exec', { dbId: this.dbId, sql: rewritten });
-      console.log(
-        `[SQLiteAdapter] created snapshot table ${entry.name} via ${rewritten}`,
-      );
-      let [{ count }] = (await this.internalExecute(
-        `SELECT COUNT(*) as count FROM ${this.#quoteIdentifier(entry.name)};`,
-      )) as { count: number }[];
       await this.sqlite('exec', {
         dbId: this.dbId,
         sql: `DELETE FROM ${alias}.${this.#quoteIdentifier(entry.name)};`,
@@ -205,9 +199,6 @@ export default class SQLiteAdapter implements DBAdapter {
         sql: `INSERT INTO ${alias}.${this.#quoteIdentifier(entry.name)}
               SELECT * FROM main.${this.#quoteIdentifier(entry.name)};`,
       });
-      console.log(
-        `[SQLiteAdapter] copied ${count} rows into snapshot table ${entry.name}`,
-      );
     }
     return alias;
   }
@@ -219,10 +210,6 @@ export default class SQLiteAdapter implements DBAdapter {
     if (!snapshotInfo) {
       throw new Error(`Unknown snapshot database '${snapshotName}'`);
     }
-    console.log(
-      `[SQLiteAdapter] restoring snapshot ${snapshotName} from ${snapshotInfo.dbId}`,
-    );
-    let attachStart = performance.now();
     let attached = (await this.internalExecute(
       `SELECT name FROM pragma_database_list WHERE name = '${snapshotName}'`,
     )) as { name: string }[];
@@ -231,9 +218,6 @@ export default class SQLiteAdapter implements DBAdapter {
         dbId: this.dbId,
         sql: `ATTACH DATABASE '${snapshotInfo.filename}' AS ${snapshotName};`,
       });
-      console.log(
-        `[SQLiteAdapter] attach ${snapshotName} took ${(performance.now() - attachStart).toFixed(2)}ms`,
-      );
     }
     let tables = (await this.internalExecute(
       `SELECT name
@@ -241,11 +225,6 @@ export default class SQLiteAdapter implements DBAdapter {
        WHERE type = 'table'
          AND name NOT LIKE 'sqlite_%';`,
     )) as { name: string }[];
-    console.log(
-      `[SQLiteAdapter] restoring tables: ${tables
-        .map((t) => t.name)
-        .join(', ')}`,
-    );
     let statements: string[] = [];
     for (let { name } of tables) {
       statements.push(`DELETE FROM main.${this.#quoteIdentifier(name)};`);
@@ -254,12 +233,7 @@ export default class SQLiteAdapter implements DBAdapter {
          SELECT * FROM ${snapshotName}.${this.#quoteIdentifier(name)};`,
       );
     }
-    let batchStart = performance.now();
     await this.sqlite('exec', { dbId: this.dbId, sql: statements.join('\n') });
-    console.log(
-      `[SQLiteAdapter] restored ${tables.length} tables in ${(performance.now() - batchStart).toFixed(2)}ms`,
-    );
-    console.log(`[SQLiteAdapter] completed restore from ${snapshotName}`);
   }
 
   private async #openDatabase(filename: string, initializeSchema = true) {
