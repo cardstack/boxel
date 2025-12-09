@@ -17,6 +17,7 @@ export interface RealmReindexTarget extends JSONTypes.Object {
 interface FullReindexArgs {
   realmUrls: string[];
 }
+
 export { fullReindex };
 
 const fullReindex: Task<FullReindexArgs, void> = ({
@@ -57,7 +58,6 @@ const fullReindex: Task<FullReindexArgs, void> = ({
       return;
     }
 
-    let enqueueFailures: { target: RealmReindexTarget; error: Error }[] = [];
     for (let target of realmsWithUsernames) {
       let { realmUrl, realmUsername } = target;
       try {
@@ -73,10 +73,6 @@ const fullReindex: Task<FullReindexArgs, void> = ({
           `${jobIdentity(jobInfo)} failed to enqueue from-scratch job for ${realmUrl}`,
           error,
         );
-        enqueueFailures.push({
-          target,
-          error: error instanceof Error ? error : new Error(String(error)),
-        });
         continue;
       }
     }
