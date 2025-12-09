@@ -167,13 +167,39 @@ export async function sendPromptAsDebugMessage(
 }
 
 function getErrorMessage(error: any): string {
+  let providerError = getProviderError(error);
+  if (providerError) {
+    return `${providerError.name} error: ${providerError.message}`;
+  }
   if (error instanceof OpenAIError) {
-    return `OpenAI error: ${error.name} - ${error.message}`;
+    return `${error.name} - ${error.message}`;
   }
   if (typeof error === 'string') {
     return error;
   }
+  if (error?.message) {
+    return error.message;
+  }
   return 'Unknown error';
+}
+
+function getProviderError(
+  error: any,
+): { name: string; message: string } | null {
+  let metadata = error?.error?.metadata;
+  if (metadata) {
+    try {
+      let raw = JSON.parse(metadata.raw);
+      return {
+        name: metadata.provider_name,
+        message: raw.error.message,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
 }
 
 interface CacheEntry {
