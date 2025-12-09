@@ -107,52 +107,18 @@ export default function handlePrerenderProxy({
     headers.set('content-type', 'application/vnd.api+json');
     headers.set('accept', 'application/vnd.api+json');
 
-    let controller = new AbortController();
-    let timer = setTimeout(() => controller.abort(), timeoutMs).unref?.();
-    let startMs = Date.now();
-
     try {
-      log.info(
-        `Forwarding ${path} realm=${attrs.realm} url=${attrs.url} user=${token.user} timeoutMs=${timeoutMs}`,
-      );
       let response = await fetch(upstream, {
         method: 'POST',
         headers,
         body: forwardBody,
-        signal: controller.signal,
       });
-      if (timer) {
-        clearTimeout(timer as any);
-      }
-      log.info(
-        `Upstream ${path} responded ${response.status} in ${Date.now() - startMs}ms`,
-      );
-      await setContextResponse(ctxt, filterHopByHop(response));
+      await setContextResponse(ctxt, response);
     } catch (err) {
-      if (timer) {
-        clearTimeout(timer as any);
-      }
-      log.error(`Error proxying prerender request to ${upstream.href}:`, err);
       await sendResponseForSystemError(
         ctxt,
         'Error proxying prerender request',
       );
     }
   };
-}
-
-function filterHopByHop(response: Response): Response {
-  let headers = new Headers();
-  for (let [key, value] of response.headers.entries()) {
-    if (/^connection$/i.test(key) || /^transfer-encoding$/i.test(key)) {
-      continue;
-    }
-    headers.set(key, value);
-  }
-
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
 }
