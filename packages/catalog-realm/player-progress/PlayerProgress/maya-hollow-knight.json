@@ -1,36 +1,47 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "PlayerProgress",
+        "module": "../player-progress"
+      }
+    },
     "type": "card",
     "attributes": {
-      "hoursPlayed": 42,
-      "status": "playing",
-      "rating": 10,
-      "achievementsUnlocked": 45,
-      "completionPercentage": 78,
-      "startDate": "2024-12-01",
-      "completedDate": null,
       "notes": "## Absolute Masterpiece\n\nHollow Knight is hands down one of the best Metroidvania games ever created. The art style is breathtaking and the gameplay is incredibly tight.\n\n**What I Love:**\n- Gorgeous hand-drawn art\n- Perfect controls and movement\n- Incredible boss fights\n- Amazing soundtrack by Christopher Larkin\n- Environmental storytelling at its finest\n\n**Current Progress:**\n- Just defeated the Mantis Lords\n- Exploring Deepnest (so creepy!)\n- Working on Steel Soul mode\n\nThis game keeps surprising me with its depth and attention to detail.",
+      "rating": 10,
+      "status": "playing",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "startDate": "2024-12-01",
+      "hoursPlayed": 42,
+      "completedDate": null,
+      "lastPlayedDate": "2025-01-05T19:45:00.000Z",
       "screenshotUrls": [
         "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=450&fit=crop"
       ],
-      "lastPlayedDate": "2025-01-05T19:45:00Z"
+      "achievementsUnlocked": 45,
+      "completionPercentage": 78
     },
     "relationships": {
+      "game": {
+        "links": {
+          "self": "../../video-game/VideoGame/hollow-knight"
+        }
+      },
       "player": {
         "links": {
           "self": "../../gaming-hub/GamingHub/maya-phoenixrise"
         }
       },
-      "game": {
+      "cardInfo.theme": {
         "links": {
-          "self": "../../video-game/VideoGame/hollow-knight"
+          "self": null
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../player-progress",
-        "name": "PlayerProgress"
       }
     }
   }
