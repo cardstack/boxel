@@ -12,7 +12,7 @@ import { createJWT } from '../utils/jwt';
 import { closeServer, realmSecretSeed } from './helpers';
 import { buildPrerenderApp } from '../prerender/prerender-app';
 
-module.only('prerender-proxy', function (hooks) {
+module('prerender-proxy', function (hooks) {
   let upstream: http.Server | undefined;
   let upstreamRequests: Array<{
     url: string;
@@ -306,7 +306,11 @@ module.only('prerender-proxy', function (hooks) {
         },
       });
 
-    assert.strictEqual(res.status, 403, 'forbidden when user lacks permissions');
+    assert.strictEqual(
+      res.status,
+      403,
+      'forbidden when user lacks permissions',
+    );
   });
 
   test('proxies to prerender server card and module endpoints', async function (assert) {
