@@ -1,137 +1,250 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
+import { on } from '@ember/modifier';
+
 import {
   FieldDef,
   field,
   contains,
   linksTo,
   Component,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import StringField from 'https://cardstack.com/base/string'; // ²⁶ Import StringField for inclusion parameters
-import MarkdownField from 'https://cardstack.com/base/markdown'; // ²² Changed from StringField to MarkdownField
-import { Skill } from 'https://cardstack.com/base/skill'; // ²⁴ Import base Skill
+} from 'https://cardstack.com/base/card-api';
+import enumField from 'https://cardstack.com/base/enum';
+import { Skill } from 'https://cardstack.com/base/skill';
+import StringField from 'https://cardstack.com/base/string';
+import MarkdownField from 'https://cardstack.com/base/markdown';
+import TextAreaField from 'https://cardstack.com/base/text-area';
+
+import ExternalLink from '@cardstack/boxel-icons/external-link';
+
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 export class SkillReference extends FieldDef {
-  // ² Skill reference field
   static displayName = 'Skill Reference';
 
-  @field skill = linksTo(Skill); // ²⁵ Link to base Skill
+  @field skill = linksTo(Skill); // Link to actual skill card
 
-  @field inclusionMode = contains(StringField, {
-    // ²⁷ How skill content should be included in skill set
+  // Enumerated inclusion mode with three valid options
+  @field inclusionMode = contains(
+    enumField(StringField, {
+      options: [
+        { value: 'full', label: 'Full Instructions' },
+        { value: 'essential', label: 'Essential Only' },
+        { value: 'link-only', label: 'Link Only' },
+      ],
+    }),
+  );
+
+  @field contentSummary = contains(TextAreaField, {
+    // Content summary (renamed from readFullWhen, using TextArea for multi-line)
     description:
-      'How to include this skill: "full" (entire instructions), "essential" (content before <!--more-->), or "link-only" (reference only, no content)',
+      'Brief summary of what content this skill contains (helps LLM decide whether to load full instructions)',
   });
 
-  @field readFullWhen = contains(StringField, {
-    // ²⁸ Condition for when to read the complete skill file
+  @field alternateTitle = contains(StringField, {
+    // Optional override title
     description:
-      'Optional: Specify when the full skill content should be read (e.g., "user requests code generation", "debugging needed")',
+      "Optional: Override the linked skill's title for this reference context",
   });
 
   @field topicName = contains(StringField, {
-    // ³⁰ Computed topic name from linked skill
+    // Computed topic from skill or override
     computeVia: function (this: SkillReference) {
-      try {
-        const skillCard = this.skill as any;
-        // First try topic field, then title field, then id-based fallback
-        if (skillCard?.topic) return skillCard.topic;
-        if (skillCard?.title) return skillCard.title;
-
-        // Extract name from ID as last resort
-        if (skillCard?.id) {
-          const parts = skillCard.id.split('/');
-          const lastPart = parts[parts.length - 1];
-          // Convert kebab-case or camelCase to Title Case
-          return lastPart
-            .replace(/-/g, ' ')
-            .replace(/([A-Z])/g, ' $1')
-            .split(' ')
-            .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(' ')
-            .trim();
-        }
-
-        return 'Untitled';
-      } catch (e) {
-        console.error('SkillReference: Error accessing topic name', e);
-        return 'Untitled';
-      }
+      return (
+        this.alternateTitle || this.skill?.cardInfo?.title || 'Untitled Skill'
+      );
     },
-    description:
-      'Topic name extracted from the linked skill (topic → title → id-based name)',
   });
 
   @field essentials = contains(MarkdownField, {
-    // ²³ Changed to MarkdownField for rich formatting
+    // Computed essentials from skill instructions
     computeVia: function (this: SkillReference) {
-      try {
-        // Access essentials field directly from the skill object
-        const skillCard = this.skill as any;
-        const essentials = skillCard?.essentials;
+      const instructions = this.skill?.instructions;
+      if (!instructions) return undefined;
 
-        // If essentials is blank/empty, use the full instructions instead
-        if (!essentials || essentials.trim() === '') {
-          return skillCard?.instructions ?? '';
-        }
-
-        return essentials;
-      } catch (e) {
-        console.error('SkillReference: Error accessing essentials', e);
-        return '';
+      // Extract content before <!--more--> marker
+      const moreMarkerIndex = instructions.indexOf('<!--more-->');
+      if (moreMarkerIndex === -1) {
+        // No marker found, return first paragraph or section
+        return instructions;
       }
+
+      return instructions.substring(0, moreMarkerIndex).trim();
     },
-    description:
-      'Essential content from the linked skill - uses instructions if essentials is blank',
   });
 
   static embedded = class Embedded extends Component<typeof this> {
-    // ⁵ Embedded template
+    // Embedded format
+
+    // Click handler to open linked skill card using viewCard API
+    openSkill = () => {
+      const skill = this.args.model?.skill;
+      if (skill && this.args.viewCard) {
+        this.args.viewCard(skill, 'isolated');
+      }
+    };
+
     <template>
-      {{#if @model.skill}}
-        <div class='skill-reference'>
-          <@fields.skill @format='embedded' />
-          {{#if @model.inclusionMode}}
-            <div class='inclusion-info'>
-              <span class='label'>Inclusion:</span>
-              {{@model.inclusionMode}}
-            </div>
-          {{/if}}
-          {{#if @model.readFullWhen}}
-            <div class='read-full-info'>
-              <span class='label'>Read full when:</span>
-              {{@model.readFullWhen}}
-            </div>
+      <div class='skill-reference-card'>
+        <div class='skill-ref-header'>
+          <div class='skill-ref-title-row'>
+            <h4 class='skill-ref-topic'>
+              {{if
+                @model.topicName
+                @model.topicName
+                (if @model.skill.title @model.skill.title 'Skill')
+              }}
+            </h4>
+            <span
+              class='skill-ref-mode skill-ref-mode-{{if
+                  @model.inclusionMode
+                  @model.inclusionMode
+                  "link-only"
+                }}'
+            >
+              {{#if (eq @model.inclusionMode 'full')}}
+                Full
+              {{else if (eq @model.inclusionMode 'essential')}}
+                Essential
+              {{else}}
+                Link Only
+              {{/if}}
+            </span>
+          </div>
+
+          {{#if @model.skill}}
+            {{! Button to open skill }}
+            <button
+              class='skill-view-button'
+              type='button'
+              {{on 'click' this.openSkill}}
+            >
+              <ExternalLink class='button-icon' width='14' height='14' />
+              Open Skill
+            </button>
           {{/if}}
         </div>
-      {{else}}
-        <div class='no-skill'>No skill linked</div>
-      {{/if}}
+
+        {{#if @model.contentSummary}}
+          <div class='content-summary'>
+            <strong>Contains:</strong>
+            {{@model.contentSummary}}
+          </div>
+        {{/if}}
+      </div>
 
       <style scoped>
-        /* ²⁹ Styling for skill reference display */
-        .skill-reference {
+        /* Enhanced skill reference card styles */
+        .skill-reference-card {
+          padding: 1rem;
+          border: 1px solid var(--border);
+          border-radius: var(--radius-lg);
+          background: var(--card);
+          box-shadow: var(--shadow-sm);
+          transition: all 0.2s ease;
+        }
+
+        .skill-reference-card:hover {
+          box-shadow: var(--shadow-md);
+          border-color: var(--primary);
+        }
+
+        .skill-ref-header {
           display: flex;
-          flex-direction: column;
+          flex-direction: column; /* Stack title row and button */
+          gap: 0.75rem;
+          margin-bottom: 0.75rem;
+          padding-bottom: 0.75rem;
+          border-bottom: 1px solid var(--border);
+        }
+
+        .skill-ref-title-row {
+          /* Row for title and mode badge */
+          display: flex;
+          justify-content: space-between;
+          align-items: baseline;
           gap: 0.5rem;
         }
 
-        .inclusion-info,
-        .read-full-info {
-          font-size: 0.875rem;
-          color: var(--boxel-600);
-          padding: 0.25rem 0.5rem;
-          background: var(--boxel-100);
-          border-radius: 0.25rem;
+        .skill-ref-topic {
+          font-size: 0.9375rem;
+          font-weight: 700;
+          margin: 0;
+          color: var(--foreground);
+          flex: 1;
+          min-width: 0;
         }
 
-        .label {
+        .skill-ref-mode {
+          /* Mode badge with color coding */
+          font-size: 0.6875rem;
           font-weight: 600;
-          margin-right: 0.25rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          padding: 0.125rem 0.5rem;
+          border-radius: var(--radius-sm);
+          flex-shrink: 0;
+          white-space: nowrap;
         }
 
-        .no-skill {
-          font-style: italic;
-          color: var(--boxel-500);
+        .skill-ref-mode-full {
+          /* Full mode - primary color */
+          background: var(--primary);
+          color: var(--primary-foreground);
+        }
+
+        .skill-ref-mode-essential {
+          /* Essential mode - accent color */
+          background: var(--accent);
+          color: var(--accent-foreground);
+        }
+
+        .skill-ref-mode-link-only {
+          /* Link only mode - muted color */
+          background: var(--muted);
+          color: var(--muted-foreground);
+          border: 1px solid var(--border);
+        }
+
+        .skill-view-button {
+          /* Button to open skill */
+          display: inline-flex;
+          align-items: center;
+          gap: 0.375rem;
+          padding: 0.375rem 0.75rem;
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: var(--primary);
+          background: transparent;
+          border: 1px solid var(--primary);
+          border-radius: var(--radius-sm);
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .skill-view-button:hover {
+          /* Button hover state */
+          background: var(--primary);
+          color: var(--primary-foreground);
+        }
+
+        .button-icon {
+          /* Icon in button */
+          width: 0.875rem;
+          height: 0.875rem;
+        }
+
+        .content-summary {
+          font-size: 0.75rem;
+          color: var(--muted-foreground);
+          margin-top: 0.5rem;
+          padding: 0.5rem;
+          background: var(--muted);
+          border-radius: var(--radius-sm);
+          border-left: 2px solid var(--primary);
+        }
+
+        .content-summary strong {
+          color: var(--foreground);
+          font-weight: 600;
         }
       </style>
     </template>

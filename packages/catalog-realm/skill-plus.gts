@@ -6,19 +6,18 @@ import { Button } from '@cardstack/boxel-ui/components';
 import { cn, gt } from '@cardstack/boxel-ui/helpers';
 import {
   Component,
-  FieldDef,
   field,
   contains,
-  linksToMany,
   containsMany,
   StringField,
+  type BaseDefComponent,
 } from 'https://cardstack.com/base/card-api';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Skill, CommandField } from 'https://cardstack.com/base/skill';
 import FileIcon from '@cardstack/boxel-icons/file';
 
 // Shared slugify function - SINGLE SOURCE OF TRUTH for ID generation
-function slugifyHeading(text: string): string {
+export function slugifyHeading(text: string): string {
   return (
     text
       .toLowerCase()
@@ -34,11 +33,11 @@ function slugifyHeading(text: string): string {
   );
 }
 
+type TocItem = { level: number; text: string; id: string };
+
 // Parse headers from markdown text with deterministic ID generation
-function parseMarkdownHeaders(
-  markdown: string,
-): Array<{ level: number; text: string; id: string }> {
-  const headers: Array<{ level: number; text: string; id: string }> = [];
+function parseMarkdownHeaders(markdown: string): Array<TocItem> {
+  const headers: Array<TocItem> = [];
   const usedIds = new Set<string>();
 
   const headerRegex = /^(#{2,3})\s+(.+)$/gm;
@@ -73,8 +72,8 @@ function parseMarkdownHeaders(
   return headers;
 }
 
-// Modifier to add IDs to rendered markdown headers
-const addHeaderIds = modifier((element: HTMLElement) => {
+// Modifier to add IDs to rendered markdown headers for TOC markdown anchor links
+export const addHeaderIds = modifier((element: HTMLElement) => {
   const headers = element.querySelectorAll('h2, h3, h4, h5, h6');
   const usedIds = new Set<string>();
 
@@ -110,9 +109,9 @@ const addHeaderIds = modifier((element: HTMLElement) => {
   });
 });
 
-class TocSection extends GlimmerComponent<{
+export class TocSection extends GlimmerComponent<{
   sectionTitle: string;
-  navItems?: { level: number; id: string; text: string }[];
+  navItems?: TocItem[];
 }> {
   <template>
     <div class='toc-section'>
@@ -138,7 +137,7 @@ class TocSection extends GlimmerComponent<{
       }
       li {
         margin-bottom: var(--boxel-sp-xs);
-        color: var(--foreground);
+        color: var(--db-foreground);
       }
       a:hover {
         color: inherit;
@@ -151,7 +150,7 @@ class TocSection extends GlimmerComponent<{
         letter-spacing: var(--boxel-lsp-xxl);
         margin-bottom: var(--boxel-sp-sm);
         padding-bottom: var(--boxel-sp-xs);
-        border-bottom: 1px solid var(--border, var(--boxel-border-color));
+        border-bottom: 1px solid var(--db-border);
       }
       .toc-section {
         margin-bottom: var(--boxel-sp-lg);
@@ -171,17 +170,122 @@ class TocSection extends GlimmerComponent<{
   };
 }
 
-class DocLayout extends GlimmerComponent<{
+export class EmptyStateContainer extends GlimmerComponent<{
+  Blocks: { default: [] };
+}> {
+  <template>
+    <div class='empty-state'>
+      <FileIcon class='empty-icon' width='64' height='64' role='presentation' />
+      {{yield}}
+    </div>
+    <style scoped>
+      .empty-state {
+        text-align: center;
+        padding: var(--boxel-sp-2xl);
+        max-width: 42rem;
+        margin: 0 auto;
+        color: var(--db-muted-foreground);
+      }
+      .empty-icon {
+        width: 4rem;
+        height: 4rem;
+        opacity: 0.5;
+      }
+      :deep(h3) {
+        margin-block: var(--boxel-sp-sm);
+        font-size: var(--boxel-font-size-lg);
+        color: var(--db-foreground);
+      }
+      :deep(p) {
+        margin-bottom: var(--boxel-sp-sm);
+        font-size: var(--boxel-font-size);
+      }
+      :deep(ul) {
+        display: inline-block;
+        list-style: none;
+        padding: 0;
+        margin-block: var(--boxel-sp);
+        margin-inline: 0;
+      }
+      :deep(li) {
+        display: flex;
+        gap: var(--boxel-sp-sm);
+        font-size: var(--boxel-font-size-sm);
+        line-height: 1.6;
+      }
+      :deep(li svg) {
+        width: 1.5rem;
+        height: 1.5rem;
+        flex-shrink: 0;
+      }
+      :deep(li + li) {
+        margin-top: var(--boxel-sp-lg);
+      }
+      :deep(strong) {
+        color: var(--db-foreground);
+        font-weight: 600;
+      }
+    </style>
+  </template>
+}
+
+export class AppendixSection extends GlimmerComponent<{
+  Blocks: { default: [] };
+}> {
+  <template>
+    <section id='appendix-section'>
+      <header class='appendix-header'>
+        <h2>Appendix</h2>
+      </header>
+      {{yield}}
+    </section>
+    <style scoped>
+      .appendix-header {
+        margin-block: var(--boxel-sp-xl);
+        padding-block: var(--boxel-sp);
+        border-top: 1px solid var(--db-border);
+        border-bottom: 1px solid var(--db-border);
+      }
+      :deep(h2) {
+        font-size: var(--boxel-font-size-lg);
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: var(--boxel-lsp-xl);
+        color: var(--db-muted-foreground);
+        text-align: center;
+      }
+      :deep(h3) {
+        font-size: var(--boxel-font-size-md);
+        margin-bottom: var(--boxel-sp-lg);
+      }
+      .commands-section {
+        padding: var(--boxel-sp-lg);
+        background: var(--db-muted);
+        border: 1px solid var(--db-border);
+        border-radius: var(--boxel-border-radius-lg);
+      }
+      .commands-container {
+        gap: var(--boxel-sp);
+      }
+    </style>
+  </template>
+}
+
+export class DocLayout extends GlimmerComponent<{
   Args: {
     description?: string;
     title?: string;
     titleMeta?: string;
     hideToc?: boolean;
   };
-  Blocks: { default: []; navbar: [] };
+  Element: HTMLElement;
+  Blocks: { default: []; navbar: []; headerRow: [] };
 }> {
   <template>
-    <div class={{cn 'doc-layout' doc-layout--single-col=@hideToc}}>
+    <div
+      class={{cn 'doc-layout' doc-layout--single-col=@hideToc}}
+      ...attributes
+    >
       {{#unless @hideToc}}
         <aside class='toc-sidebar'>
           <div class='toc-header'>
@@ -206,13 +310,14 @@ class DocLayout extends GlimmerComponent<{
 
       <main class='doc-main'>
         <header id='top' class='doc-header'>
-          {{#if @titleMeta}}
-            <div class='metadata-label'>{{@titleMeta}}</div>
-          {{/if}}
+          <div class='metadata-label'>
+            {{if @titleMeta @titleMeta 'Documentation'}}
+          </div>
           <h1 class='doc-heading'>{{@title}}</h1>
           {{#if @description}}
             <p class='doc-subtitle'>{{@description}}</p>
           {{/if}}
+          {{yield to='headerRow'}}
         </header>
 
         {{yield}}
@@ -222,6 +327,22 @@ class DocLayout extends GlimmerComponent<{
     <style scoped>
       @layer {
         .doc-layout {
+          --db-background: var(--background, var(--boxel-light));
+          --db-foreground: var(--foreground, var(--boxel-700));
+          --db-primary: var(--primary, var(--boxel-highlight-hover));
+          --db-muted-foreground: var(
+            --muted-foreground,
+            color-mix(in oklab, var(--db-foreground) 60%, transparent)
+          );
+          --db-muted: var(
+            --muted,
+            color-mix(in oklab, var(--db-foreground) 10%, transparent)
+          );
+          --db-border: var(
+            --border,
+            color-mix(in oklab, var(--db-foreground) 20%, transparent)
+          );
+
           width: 100%;
           height: 100%;
           max-width: 100rem;
@@ -231,6 +352,8 @@ class DocLayout extends GlimmerComponent<{
           margin: 0 auto;
           padding: var(--boxel-sp);
           padding-right: 0;
+          background-color: var(--db-background);
+          color: var(--db-foreground);
           overflow: hidden;
         }
         .doc-layout--single-col {
@@ -240,10 +363,10 @@ class DocLayout extends GlimmerComponent<{
         .toc-sidebar {
           display: flex;
           flex-direction: column;
-          background-color: var(--muted, var(--boxel-100));
-          color: var(--muted-foreground, var(--boxel-700));
+          background-color: var(--db-muted);
+          color: var(--db-muted-foreground);
           font-size: var(--boxel-font-size-xs);
-          border: 1px solid var(--border, var(--boxel-border-color));
+          border: 1px solid var(--db-border);
           border-radius: var(--boxel-border-radius-lg);
           padding: var(--boxel-sp);
           padding-bottom: var(--boxel-sp-lg);
@@ -270,29 +393,28 @@ class DocLayout extends GlimmerComponent<{
         .doc-main {
           overflow-y: auto;
           padding-right: var(--boxel-sp);
-          padding-bottom: var(--boxel-sp-2xl);
         }
         .doc-header {
-          padding-bottom: var(--boxel-sp-lg);
-          border-bottom: 2px solid var(--border, var(--boxel-border-color));
+          border-bottom: 2px solid var(--db-border);
         }
         .metadata-label {
+          margin-bottom: var(--boxel-sp-xs);
           font-size: var(--boxel-font-size-2xs);
           font-weight: 700;
           text-transform: uppercase;
           letter-spacing: var(--boxel-lsp-xxl);
-          color: var(--muted-foreground);
-          margin-bottom: var(--boxel-sp-xs);
+          color: var(--db-muted-foreground);
         }
         .doc-heading {
+          margin-bottom: var(--boxel-sp-xs);
           font-size: 1.5rem;
           line-height: 1.2;
-          margin-bottom: var(--boxel-sp-xs);
           letter-spacing: -0.01em;
         }
         .doc-subtitle {
+          margin-bottom: var(--boxel-sp);
           line-height: 1.5;
-          color: var(--muted-foreground);
+          color: var(--db-muted-foreground);
           max-width: 48rem;
         }
 
@@ -346,7 +468,9 @@ export class SkillPlus extends Skill {
   @field instructions = contains(MarkdownField);
   @field commands = containsMany(CommandField);
 
-  static isolated = class Isolated extends Component<typeof this> {
+  static isolated: BaseDefComponent = class Isolated extends Component<
+    typeof this
+  > {
     private tocAppendixItems = [
       {
         id: 'available-commands',
@@ -389,7 +513,6 @@ export class SkillPlus extends Skill {
           {{/if}}
         </:navbar>
         <:default>
-          {{log this.isTocEmpty}}
           {{#if @model.instructions}}
             <article
               class='instructions-article'
@@ -399,51 +522,41 @@ export class SkillPlus extends Skill {
               <@fields.instructions />
             </article>
           {{else}}
-            <div class='empty-state'>
-              <FileIcon
-                class='empty-icon'
-                width='64'
-                height='64'
-                role='presentation'
-              />
-              <h3 class='empty-heading'>Welcome to SkillPlus</h3>
-              <p class='empty-description'>This skill is currently empty. Get
-                started by adding instructions.</p>
-            </div>
+            <EmptyStateContainer>
+              <h3>Welcome to SkillPlus</h3>
+              <p>
+                This skill is currently empty. Get started by adding
+                instructions.
+              </p>
+            </EmptyStateContainer>
           {{/if}}
 
           {{! Commands section }}
           {{#if @model.commands.length}}
-            <div class='appendix-divider' id='appendix-section'>
-              <h2>Appendix</h2>
-            </div>
-            <section class='commands-section' id='available-commands'>
-              <h3 class='section-heading'>Available Commands</h3>
-              <div class='commands-container'>
-                <@fields.commands @format='embedded' />
-              </div>
-            </section>
+            <AppendixSection>
+              <section class='commands-section' id='available-commands'>
+                <h3 class='section-heading'>Available Commands</h3>
+                <@fields.commands
+                  @format='embedded'
+                  class='commands-container'
+                />
+              </section>
+            </AppendixSection>
           {{/if}}
         </:default>
       </DocLayout>
 
       <style scoped>
         @layer {
-          /* markdown content */
           .instructions-article :deep(pre),
           .instructions-article :deep(code) {
-            --code-bg: color-mix(
-              in lab,
-              var(--primary, var(--boxel-highlight)) 8%,
-              var(--muted, var(--boxel-100))
-            );
-            background-color: var(--code-bg, var(--muted, var(--boxel-100)));
+            --code-bg: color-mix(in lab, var(--db-primary) 8%, var(--db-muted));
+            background-color: var(--code-bg, var(--db-muted));
           }
           .instructions-article :deep(pre) {
-            border-top-left-radius: 0;
-            border-bottom-left-radius: 0;
-            border: 1px solid var(--border, var(--boxel-border-color));
-            border-left: 3px solid var(--primary, var(--boxel-highlight));
+            border-radius: 0;
+            border: 1px solid var(--db-border);
+            border-left: 3px solid var(--db-primary);
             font-size: 0.8125rem;
             line-height: 1.5;
           }
@@ -453,60 +566,6 @@ export class SkillPlus extends Skill {
           }
           .instructions-article :deep(p) {
             margin-top: var(--boxel-sp);
-          }
-
-          /* appendix */
-          .appendix-divider {
-            margin-top: var(--boxel-sp-5xl);
-            margin-bottom: var(--boxel-sp-3xl);
-            padding-block: var(--boxel-sp-xl);
-            border-top: 1px solid var(--border, var(--boxel-border-color));
-            border-bottom: 1px solid var(--border, var(--boxel-border-color));
-          }
-          .appendix-divider h2 {
-            font-size: 1.5rem;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: var(--boxel-lsp-xl);
-            color: var(--muted-foreground);
-            text-align: center;
-          }
-          .commands-section {
-            padding: var(--boxel-sp-lg);
-            background: var(--muted, var(--boxel-100));
-            border: 1px solid var(--border, var(--boxel-border-color));
-            border-radius: var(--boxel-border-radius-lg);
-          }
-          .section-heading {
-            font-size: 1.125rem;
-            margin-bottom: var(--boxel-sp-lg);
-          }
-          .commands-container > .containsMany-field {
-            display: flex;
-            flex-direction: column;
-            gap: var(--boxel-sp);
-          }
-
-          /* empty state */
-          .empty-state {
-            text-align: center;
-            padding: var(--boxel-sp-4xl) var(--boxel-sp-2xl);
-            max-width: 42rem;
-            margin: 0 auto;
-            color: var(--muted-foreground, var(--boxel-700));
-          }
-          .empty-icon {
-            width: 4rem;
-            height: 4rem;
-            opacity: 0.5;
-          }
-          .empty-heading {
-            margin-block: var(--boxel-sp-sm);
-            font-size: 1.5rem;
-            color: var(--foreground);
-          }
-          .empty-description {
-            font-size: 1rem;
           }
         }
       </style>

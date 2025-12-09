@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SkillPlus",
+        "module": "../skill-plus"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Quick Reference",
+        "description": "Essential imports, helpers, and file structure patterns",
+        "thumbnailURL": null
+      },
+      "commands": [],
+      "instructions": "**Core imports:**\n```gts\nimport { CardDef, FieldDef, Component, field, contains, linksTo } from 'https://cardstack.com/base/card-api';\nimport StringField from 'https://cardstack.com/base/string';\nimport NumberField from 'https://cardstack.com/base/number';\n```\n\n**UI Components:**\n```gts\nimport { Button, Pill, BoxelSelect } from '@cardstack/boxel-ui/components';\n```\n\n**Helpers:**\n```gts\nimport { eq, gt, and, or, not } from '@cardstack/boxel-ui/helpers';\nimport { formatDateTime, formatCurrency } from '@cardstack/boxel-ui/helpers';\n```\n\n## Quick Reference\n\n**File Types:** `.gts` (definitions) | `.json` (instances)  \n**Core Pattern:** CardDef/FieldDef → contains/linksTo → Templates → Instances  \n**Essential Formats:** Every CardDef MUST implement `isolated`, `embedded`, AND `fitted` formats\n\n```gts\n// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══\n// ¹ Core imports - ALWAYS needed for definitions\nimport { CardDef, FieldDef, Component, field, contains, containsMany, linksTo, linksToMany } from 'https://cardstack.com/base/card-api';\n\n// ² Base field imports (only what you use)\nimport StringField from 'https://cardstack.com/base/string';\nimport NumberField from 'https://cardstack.com/base/number';\nimport BooleanField from 'https://cardstack.com/base/boolean';\nimport DateField from 'https://cardstack.com/base/date';\nimport DatetimeField from 'https://cardstack.com/base/datetime';\nimport MarkdownField from 'https://cardstack.com/base/markdown';\nimport TextAreaField from 'https://cardstack.com/base/text-area';\nimport BigIntegerField from 'https://cardstack.com/base/big-integer';\nimport CodeRefField from 'https://cardstack.com/base/code-ref';\nimport Base64ImageField from 'https://cardstack.com/base/base64-image'; // Don't use - too large for AI processing\nimport ColorField from 'https://cardstack.com/base/color';\nimport EmailField from 'https://cardstack.com/base/email';\nimport PercentageField from 'https://cardstack.com/base/percentage';\nimport PhoneNumberField from 'https://cardstack.com/base/phone-number';\nimport UrlField from 'https://cardstack.com/base/url';\nimport AddressField from 'https://cardstack.com/base/address';\n\n// ⚠️ EXTENDING BASE FIELDS: To customize a base field, import it and extend:\n// import BaseAddressField from 'https://cardstack.com/base/address';\n// export class FancyAddressField extends BaseAddressField { }\n// Never import and define the same field name - it causes conflicts!\n\n// ³ UI Component imports\nimport { Button, Pill, Avatar, FieldContainer, CardContainer, BoxelSelect, ViewSelector } from '@cardstack/boxel-ui/components';\n\n// ⁴ Helper imports\nimport { eq, gt, gte, lt, lte, and, or, not, cn, add, subtract, multiply, divide } from '@cardstack/boxel-ui/helpers';\nimport { currencyFormat, formatDateTime, optional, pick } from '@cardstack/boxel-ui/helpers';\nimport { concat, fn } from '@ember/helper';\nimport { get } from '@ember/helper';\nimport { on } from '@ember/modifier';\nimport Modifier from 'ember-modifier';\nimport { action } from '@ember/object';\nimport { tracked } from '@glimmer/tracking';\nimport { task, restartableTask } from 'ember-concurrency';\n// NOTE: 'if' is built into Glimmer templates - DO NOT import it\n\n// ⁶ TIMING RULE: NEVER use requestAnimationFrame\n// - DOM timing: Use Glimmer modifiers with cleanup\n// - Async coordination: Use task/restartableTask from ember-concurrency  \n// - Delays: Use await timeout(ms) from ember-concurrency, not setTimeout\n\n// ⁵ Icon imports\nimport EmailIcon from '@cardstack/boxel-icons/mail';\nimport PhoneIcon from '@cardstack/boxel-icons/phone';\nimport RocketIcon from '@cardstack/boxel-icons/rocket';\n// Available from Lucide, Lucide Labs, and Tabler icon sets\n// NOTE: Only use for static card/field type icons, NOT in templates\n\n// CRITICAL IMPORT RULES:\n// ⚠️ If you don't see an import in the approved lists above, DO NOT assume it exists!\n// ⚠️ Only use imports explicitly shown in this guide - no exceptions!\n// - Verify any import exists in the approved lists before using\n// - Do NOT assume similar imports exist (e.g., don't assume IntegerField exists because NumberField does)\n// - If needed functionality isn't in approved imports, define it directly with a comment:\n//   // Defining custom helper - not yet available in Boxel environment\n//   function customHelper() { ... }\n```"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/cardstack"
+        }
+      }
+    }
+  }
+}
