@@ -172,9 +172,6 @@ export default class SQLiteAdapter implements DBAdapter {
       filename,
     });
     this.snapshotInfos.set(alias, { filename, dbId: response.dbId });
-    console.log(
-      `[SQLiteAdapter] exporting snapshot ${alias} to ${response.dbId}`,
-    );
     await this.sqlite('exec', {
       dbId: this.dbId,
       sql: `ATTACH DATABASE '${filename}' AS ${alias};`,

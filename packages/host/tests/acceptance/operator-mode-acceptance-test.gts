@@ -97,27 +97,21 @@ module('Acceptance | operator mode tests', function (hooks) {
   } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    let timing = createTimingLogger('beforeEach module acceptance tests');
     if (realmDbSnapshot) {
       await restoreDbSnapshot(realmDbSnapshot);
-      timing.step('restoreDbSnapshot');
     }
     if (matrixStateSnapshot) {
       mockMatrixUtils.restoreServerState(matrixStateSnapshot);
       matrixRoomId = cachedMatrixRoomId!;
-      timing.step('restoreMatrixServerState');
     } else {
       matrixRoomId = createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'room-test',
       });
-      timing.step('createAndJoinFirstRoom');
     }
 
     setupUserSubscription();
-    timing.step('setupUserSubscription');
     setupAuthEndpoints();
-    timing.step('setupAuthEndpoints');
 
     setExpiresInSec(60 * 60);
 
@@ -126,20 +120,17 @@ module('Acceptance | operator mode tests', function (hooks) {
       loaderService.loader = Loader.cloneLoader(loaderSnapshot, {
         includeEvaluatedModules: true,
       });
-      timing.step('restoreLoaderSnapshot');
     }
     let loader = loaderService.loader;
     let cloneCurrentLoader = () =>
       Loader.cloneLoader(loaderService.loader, {
         includeEvaluatedModules: true,
       });
-    timing.step('get loader service');
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
-    timing.step('typeof imports');
+
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
-    timing.step('cardapi imports');
 
     let {
       field,
@@ -527,7 +518,6 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     let realms = await Promise.all([at1promise, at2promise]);
     ({ realm: testRealm } = realms[0]);
-    timing.step('setupAcceptanceTestRealms, both finish');
 
     setRealmPermissions({
       [realm2URL]: ['read', 'write'],
@@ -537,19 +527,15 @@ module('Acceptance | operator mode tests', function (hooks) {
       loaderSnapshot = Loader.cloneLoader(loaderService.loader, {
         includeEvaluatedModules: true,
       });
-      timing.step('storeLoaderSnapshot');
     }
 
     if (!realmDbSnapshot) {
       realmDbSnapshot = await captureDbSnapshot();
-      timing.step('captureDbSnapshot');
     }
     if (!matrixStateSnapshot) {
       matrixStateSnapshot = mockMatrixUtils.captureServerState();
       cachedMatrixRoomId = matrixRoomId;
-      timing.step('captureMatrixServerState');
     }
-    timing.step('complete');
   });
 
   test('visiting operator mode', async function (assert) {
