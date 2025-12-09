@@ -680,25 +680,18 @@ export async function setupAcceptanceTestRealm({
   mockMatrixUtils: MockUtils;
   loader?: Loader;
 }) {
-  let timing = createTimingLogger('setupAcceptanceTestRealm');
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
   setupAuthEndpoints({
     [resolvedRealmURL]: deriveTestUserPermissions(permissions),
   });
-  timing.step('setupAuthEndpoints');
-  try {
-    return await setupTestRealm({
-      contents,
-      realmURL: resolvedRealmURL,
-      isAcceptanceTest: true,
-      permissions,
-      mockMatrixUtils,
-      loader,
-    });
-  } finally {
-    timing.step('setupTestRealm call');
-    timing.finish();
-  }
+  return await setupTestRealm({
+    contents,
+    realmURL: resolvedRealmURL,
+    isAcceptanceTest: true,
+    permissions,
+    mockMatrixUtils,
+    loader,
+  });
 }
 
 export async function setupIntegrationTestRealm({
@@ -753,7 +746,6 @@ async function setupTestRealm({
   mockMatrixUtils: MockUtils;
   loader?: Loader;
 }) {
-  let timing = createTimingLogger('setupTestRealm');
   let owner = (getContext() as TestContext).owner;
   let { virtualNetwork } = getService('network');
   let { queue } = getService('queue');
@@ -762,13 +754,11 @@ async function setupTestRealm({
 
   if (isAcceptanceTest) {
     await visit('/acceptance-test-setup');
-    timing.step('visit acceptance-test-setup');
   } else {
     // We use a rendered component to facilitate our indexing (this emulates
     // the work that the Fastboot renderer is doing), which means that the
     // `setupRenderingTest(hooks)` from ember-qunit must be used in your tests.
     await makeRenderer();
-    timing.step('makeRenderer');
   }
 
   let localIndexer = owner.lookup(
@@ -804,7 +794,6 @@ async function setupTestRealm({
   }
 
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
-  timing.step('insertPermissions');
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue,
@@ -844,20 +833,15 @@ async function setupTestRealm({
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
   virtualNetwork.mount(realm.maybeHandle);
   await mockMatrixUtils.start();
-  timing.step('mockMatrixUtils.start');
   await adapter.ready;
-  timing.step('adapter.ready');
   await worker.run();
-  timing.step('worker.run');
   await realm.start();
-  timing.step('realm.start');
 
   let realmServer = getService('realm-server');
   if (!realmServer.availableRealmURLs.includes(realmURL)) {
     realmServer.setAvailableRealmURLs([realmURL]);
   }
 
-  timing.finish();
   return { realm, adapter };
 }
 
