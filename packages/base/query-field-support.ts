@@ -290,7 +290,7 @@ function resolveQueryAndRealm(
   };
 
   const resolvePathValue = (path: string) => {
-    return instance[path];
+    return (instance as any)[path];
   };
 
   const interpolateNode = (node: any, context?: string): any => {
