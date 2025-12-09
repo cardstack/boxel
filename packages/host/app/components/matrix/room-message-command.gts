@@ -67,7 +67,7 @@ export default class RoomMessageCommand extends Component<Signature> {
 
   @cached
   private get applyButtonState(): ApplyButtonState {
-    if (this.failedCommandState) {
+    if (this.failedCommandState || this.correctnessFailure) {
       return 'failed';
     }
     return this.args.messageCommand?.status ?? 'ready';
@@ -134,6 +134,22 @@ export default class RoomMessageCommand extends Component<Signature> {
     );
   }
 
+  private get correctnessFailure() {
+    if (this.args.messageCommand.name !== 'checkCorrectness') {
+      return false;
+    }
+    let card = this.commandResultCard.card as
+      | { correct?: boolean; errors?: unknown[] }
+      | undefined;
+    if (!card) {
+      return false;
+    }
+    let hasErrors =
+      Array.isArray(card.errors) && card.errors.filter(Boolean).length > 0;
+    let isMarkedIncorrect = card.correct === false;
+    return hasErrors || isMarkedIncorrect;
+  }
+
   private get moreOptionsMenuItems() {
     let menuItems =
       this.commandResultCard.card?.[getCardMenuItems]?.({
@@ -173,13 +189,17 @@ export default class RoomMessageCommand extends Component<Signature> {
     return this.args.messageCommand.description ?? 'Preparing tool call...';
   }
 
+  private get hasFailedState() {
+    return !!(this.failedCommandState || this.correctnessFailure);
+  }
+
   <template>
     <div
       class={{cn
         'room-message-command'
         is-pending=@isPending
         is-error=@isError
-        is-failed=(bool this.failedCommandState)
+        is-failed=(bool this.hasFailedState)
       }}
       data-test-command-id={{@messageCommand.commandRequest.id}}
       ...attributes

@@ -317,7 +317,7 @@ ${brokenContent}
     await failingCommandContainer.waitFor();
 
     await failingCommandContainer
-      .locator('[data-test-apply-state="applied"]')
+      .locator('[data-test-apply-state="failed"]')
       .waitFor();
 
     let failingCommandResultEvent: any;
