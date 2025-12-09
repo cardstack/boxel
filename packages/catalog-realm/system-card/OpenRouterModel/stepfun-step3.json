@@ -1,0 +1,62 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "stepfun-ai/step3",
+      "canonicalSlug": "stepfun-ai/step3",
+      "name": "StepFun: Step3",
+      "created": 1756415375,
+      "description": "Step3 is a cutting-edge multimodal reasoning model—built on a Mixture-of-Experts architecture with 321B total parameters and 38B active. It is designed end-to-end to minimize decoding costs while delivering top-tier performance in vision–language reasoning. Through the co-design of Multi-Matrix Factorization Attention (MFA) and Attention-FFN Disaggregation (AFD), Step3 maintains exceptional efficiency across both flagship and low-end accelerators.",
+      "pricing": {
+        "prompt": "0.00000057",
+        "completion": "0.00000142",
+        "request": "0",
+        "image": "0"
+      },
+      "contextLength": 65536,
+      "architecture": {
+        "modality": "text+image->text",
+        "inputModalities": [
+          "image",
+          "text"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "Other",
+        "instructType": ""
+      },
+      "topProvider": {
+        "isModerated": false,
+        "contextLength": 65536,
+        "maxCompletionTokens": 65536
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "reasoning",
+        "response_format",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_p"
+      ],
+      "defaultParameters": {},
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

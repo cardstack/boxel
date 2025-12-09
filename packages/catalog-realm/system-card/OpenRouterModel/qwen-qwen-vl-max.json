@@ -1,0 +1,64 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "qwen/qwen-vl-max",
+      "canonicalSlug": "qwen/qwen-vl-max-2025-01-25",
+      "name": "Qwen: Qwen VL Max",
+      "created": 1738434304,
+      "description": "Qwen VL Max is a visual understanding model with 7500 tokens context length. It excels in delivering optimal performance for a broader spectrum of complex tasks.\n",
+      "pricing": {
+        "prompt": "0.0000008",
+        "completion": "0.0000032",
+        "request": "0",
+        "image": "0.001024"
+      },
+      "contextLength": 131072,
+      "architecture": {
+        "modality": "text+image->text",
+        "inputModalities": [
+          "text",
+          "image"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "Qwen",
+        "instructType": ""
+      },
+      "topProvider": {
+        "isModerated": false,
+        "contextLength": 131072,
+        "maxCompletionTokens": 8192
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "max_tokens",
+        "presence_penalty",
+        "response_format",
+        "seed",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_p"
+      ],
+      "defaultParameters": {
+        "temperature": null,
+        "top_p": null,
+        "frequency_penalty": null
+      },
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

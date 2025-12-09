@@ -1,0 +1,59 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "openai/o1",
+      "canonicalSlug": "openai/o1-2024-12-17",
+      "name": "OpenAI: o1",
+      "created": 1734459999,
+      "description": "The latest and strongest model family from OpenAI, o1 is designed to spend more time thinking before responding. The o1 model series is trained with large-scale reinforcement learning to reason using chain of thought. \n\nThe o1 models are optimized for math, science, programming, and other STEM-related tasks. They consistently exhibit PhD-level accuracy on benchmarks in physics, chemistry, and biology. Learn more in the [launch announcement](https://openai.com/o1).\n",
+      "pricing": {
+        "prompt": "0.000015",
+        "completion": "0.00006",
+        "request": "0",
+        "image": "0.021675"
+      },
+      "contextLength": 200000,
+      "architecture": {
+        "modality": "text+image->text",
+        "inputModalities": [
+          "text",
+          "image",
+          "file"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "GPT",
+        "instructType": ""
+      },
+      "topProvider": {
+        "isModerated": true,
+        "contextLength": 200000,
+        "maxCompletionTokens": 100000
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "max_tokens",
+        "response_format",
+        "seed",
+        "structured_outputs",
+        "tool_choice",
+        "tools"
+      ],
+      "defaultParameters": {},
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

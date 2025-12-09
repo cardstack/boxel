@@ -71,7 +71,7 @@ export default class ColorPalette extends Component<Signature> {
       <ColorPicker
         @color={{@color}}
         @onChange={{@onChange}}
-        @placeholder='Custom Color'
+        @placeholder='Custom hex color (#ff00ff)'
         @disabled={{@disabled}}
       />
     </div>

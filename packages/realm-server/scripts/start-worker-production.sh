@@ -12,7 +12,6 @@ NODE_NO_WARNINGS=1 \
   --highPriorityCount="${WORKER_HIGH_PRIORITY_COUNT:-0}" \
   --prerendererUrl='http://boxel-prerender-manager.boxel-production-internal:4222' \
   --matrixURL='https://matrix.boxel.ai' \
-  --distURL='https://boxel-host.boxel.ai' \
   \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='https://app.boxel.ai/base/' \

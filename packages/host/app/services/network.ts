@@ -1,7 +1,6 @@
 import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
-import type { RunnerOpts } from '@cardstack/runtime-common';
 import {
   VirtualNetwork,
   authorizationMiddleware,
@@ -18,25 +17,7 @@ import type LoaderService from './loader-service';
 import type RealmService from './realm';
 import type ResetService from './reset';
 
-const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
-
-function getNativeFetch(): typeof fetch {
-  if (isFastBoot) {
-    let optsId = (globalThis as any).runnerOptsId;
-    if (optsId == null) {
-      throw new Error(`Runner Options Identifier was not set`);
-    }
-    let getRunnerOpts = (globalThis as any).getRunnerOpts as (
-      optsId: number,
-    ) => RunnerOpts;
-    return getRunnerOpts(optsId)._fetch;
-  } else {
-    return fetch;
-  }
-}
-
 export default class NetworkService extends Service {
-  @service declare fastboot: { isFastBoot: boolean };
   @service declare loaderService: LoaderService;
   @service declare realm: RealmService;
   @service declare reset: ResetService;
@@ -57,16 +38,7 @@ export default class NetworkService extends Service {
   }
 
   get authedFetch() {
-    if (this.fastboot.isFastBoot) {
-      return this.fetch; // "nativeFetch" already handles auth
-    }
     return fetcher(this.fetch, [
-      async (req, next) => {
-        if (this.loaderService.isIndexing) {
-          req.headers.set('X-Boxel-Building-Index', 'true');
-        }
-        return next(req);
-      },
       authorizationMiddleware(this.realm),
       authErrorEventMiddleware(),
     ]);
@@ -77,16 +49,11 @@ export default class NetworkService extends Service {
   }
 
   private makeVirtualNetwork() {
-    let virtualNetwork = new VirtualNetwork(getNativeFetch());
-    if (!this.fastboot.isFastBoot) {
-      let resolvedBaseRealmURL = new URL(
-        withTrailingSlash(config.resolvedBaseRealmURL),
-      );
-      virtualNetwork.addURLMapping(
-        new URL(baseRealm.url),
-        resolvedBaseRealmURL,
-      );
-    }
+    let virtualNetwork = new VirtualNetwork(globalThis.fetch);
+    let resolvedBaseRealmURL = new URL(
+      withTrailingSlash(config.resolvedBaseRealmURL),
+    );
+    virtualNetwork.addURLMapping(new URL(baseRealm.url), resolvedBaseRealmURL);
     shimExternals(virtualNetwork);
     virtualNetwork.addImportMap('@cardstack/boxel-icons/', (rest) => {
       return `${config.iconsURL}/@cardstack/boxel-icons/v1/icons/${rest}.js`;

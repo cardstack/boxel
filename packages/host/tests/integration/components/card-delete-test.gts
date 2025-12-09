@@ -39,7 +39,7 @@ module('Integration | card-delete', function (hooks) {
   let adapter: TestRealmAdapter;
   let noop = () => {};
   async function loadCard(url: string): Promise<CardDef> {
-    let { createFromSerialized, ensureLinksLoaded } = cardApi;
+    let { createFromSerialized } = cardApi;
     let result = await realm.realmIndexQueryEngine.cardDocument(new URL(url));
     if (!result || result.type === 'error') {
       throw new Error(
@@ -53,7 +53,6 @@ module('Integration | card-delete', function (hooks) {
       result.doc,
       new URL(url),
     );
-    await ensureLinksLoaded(card);
     return card;
   }
   setupRenderingTest(hooks);

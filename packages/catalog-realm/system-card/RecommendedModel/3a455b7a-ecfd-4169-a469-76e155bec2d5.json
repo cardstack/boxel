@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "RecommendedModel",
+        "module": "../recommended-model"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "purpose": "chat",
+      "cardInfo": {
+        "notes": null,
+        "title": "",
+        "description": "",
+        "thumbnailURL": null
+      },
+      "thinkingEffort": "none"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "modelConfiguration": {
+        "links": {
+          "self": "../OpenRouterModel/anthropic-claude-haiku-4-5"
+        }
+      }
+    }
+  }
+}

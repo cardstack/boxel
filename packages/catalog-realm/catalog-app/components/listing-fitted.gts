@@ -129,9 +129,9 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
             <h3 class='card-title' data-test-card-title={{@model.name}}>
               {{@model.name}}
             </h3>
-            <h4 class='card-display-name' data-test-card-display-name>
+            <p class='card-display-name' data-test-card-display-name>
               {{this.publisherInfo}}
-            </h4>
+            </p>
           </div>
           <div class='card-tags-action'>
             {{#if this.hasTags}}
@@ -247,6 +247,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           text-overflow: ellipsis;
           white-space: nowrap;
           overflow: hidden;
+          min-height: 15px;
         }
         .card-tags {
           color: var(--boxel-400);

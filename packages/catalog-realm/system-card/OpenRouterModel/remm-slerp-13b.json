@@ -1,0 +1,67 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "undi95/remm-slerp-l2-13b",
+      "canonicalSlug": "undi95/remm-slerp-l2-13b",
+      "name": "ReMM SLERP 13B",
+      "created": 1689984000,
+      "description": "A recreation trial of the original MythoMax-L2-B13 but with updated models. #merge",
+      "pricing": {
+        "prompt": "0.00000045",
+        "completion": "0.00000065",
+        "request": "0",
+        "image": "0"
+      },
+      "contextLength": 6144,
+      "architecture": {
+        "modality": "text->text",
+        "inputModalities": [
+          "text"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "Llama2",
+        "instructType": "alpaca"
+      },
+      "topProvider": {
+        "isModerated": false,
+        "contextLength": 6144,
+        "maxCompletionTokens": null
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "frequency_penalty",
+        "logit_bias",
+        "logprobs",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "top_a",
+        "top_k",
+        "top_logprobs",
+        "top_p"
+      ],
+      "defaultParameters": {},
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

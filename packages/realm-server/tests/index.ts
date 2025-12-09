@@ -16,6 +16,9 @@
   }) as typeof setTimeout;
 }
 
+import * as ContentTagGlobal from 'content-tag';
+(globalThis as any).ContentTagGlobal = ContentTagGlobal;
+
 import QUnit from 'qunit';
 
 QUnit.config.testTimeout = 60000;
@@ -30,7 +33,6 @@ import './card-endpoints-test';
 import './card-source-endpoints-test';
 import './definition-lookup-test';
 import './file-watcher-events-test';
-import './headless-chrome-indexing-test';
 import './indexing-test';
 import './module-syntax-test';
 import './permissions/permission-checker-test';

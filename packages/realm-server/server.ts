@@ -161,7 +161,7 @@ export class RealmServer {
         cors({
           origin: '*',
           allowHeaders:
-            'Authorization, Content-Type, If-Match, If-None-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Building-Index, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename',
+            'Authorization, Content-Type, If-Match, If-None-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename',
         }),
       )
       .use(async (ctx, next) => {
@@ -302,10 +302,13 @@ export class RealmServer {
       }
 
       ctxt.type = 'html';
-      let indexHTML = await this.retrieveIndexHTML();
-      let headHTML = await this.retrieveHeadHTML(
-        new URL(`${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`),
-      );
+
+      let [indexHTML, headHTML] = await Promise.all([
+        this.retrieveIndexHTML(),
+        this.retrieveHeadHTML(
+          new URL(`${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`),
+        ),
+      ]);
 
       ctxt.body =
         headHTML != null ? this.injectHeadHTML(indexHTML, headHTML) : indexHTML;

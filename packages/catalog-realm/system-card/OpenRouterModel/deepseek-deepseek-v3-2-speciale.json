@@ -1,0 +1,77 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "OpenRouterModel",
+        "module": "../openrouter-model"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "DeepSeek: DeepSeek V3.2 Speciale",
+      "created": 1764594837,
+      "modelId": "deepseek/deepseek-v3.2-speciale",
+      "pricing": {
+        "image": "0",
+        "prompt": "0.00000028",
+        "request": "0",
+        "completion": "0.0000004"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "description": "DeepSeek-V3.2-Speciale is a high-compute variant of DeepSeek-V3.2 optimized for maximum reasoning and agentic performance. It builds on DeepSeek Sparse Attention (DSA) for efficient long-context processing, then scales post-training reinforcement learning to push capability beyond the base model. Reported evaluations place Speciale ahead of GPT-5 on difficult reasoning workloads, with proficiency comparable to Gemini-3.0-Pro, while retaining strong coding and tool-use reliability. Like V3.2, it benefits from a large-scale agentic task synthesis pipeline that improves compliance and generalization in interactive environments.",
+      "topProvider": {
+        "isModerated": false,
+        "contextLength": 163840,
+        "maxCompletionTokens": 65536
+      },
+      "architecture": {
+        "modality": "text->text",
+        "tokenizer": "DeepSeek",
+        "instructType": "",
+        "inputModalities": [
+          "text"
+        ],
+        "outputModalities": [
+          "text"
+        ]
+      },
+      "canonicalSlug": "deepseek/deepseek-v3.2-speciale-20251201",
+      "contextLength": 163840,
+      "perRequestLimits": {
+        "promptTokens": null,
+        "completionTokens": null
+      },
+      "defaultParameters": {
+        "top_p": 0.95,
+        "max_tokens": null,
+        "temperature": 1,
+        "presence_penalty": null,
+        "frequency_penalty": null
+      },
+      "supportedParameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "logprobs",
+        "max_tokens",
+        "presence_penalty",
+        "reasoning",
+        "stop",
+        "temperature",
+        "top_logprobs",
+        "top_p"
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

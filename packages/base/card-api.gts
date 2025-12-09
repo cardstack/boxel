@@ -20,7 +20,6 @@ import {
   isRelationship,
   CardError,
   CardContextName,
-  NotLoaded,
   getField,
   isField,
   primitive,
@@ -111,7 +110,6 @@ import {
   getFieldDescription,
   getFieldOverrides,
   getFields,
-  getIfReady,
   getter,
   isArrayOfCardOrField,
   isCard,
@@ -141,7 +139,6 @@ export {
   getCardMeta,
   getFieldDescription,
   getFields,
-  getIfReady,
   isCard,
   isField,
   localId,
@@ -265,10 +262,7 @@ type CardChangeSubscriber = (
   fieldName: string,
   fieldValue: any,
 ) => void;
-const loadLinksPromises = initSharedState(
-  'loadLinksPromises',
-  () => new WeakMap<BaseDef, Promise<any>>(),
-);
+
 const stores = initSharedState(
   'stores',
   () => new WeakMap<BaseDef, CardStore>(),
@@ -388,12 +382,6 @@ export interface Field<
   component(model: Box<BaseDef>): BoxComponent;
   getter(instance: BaseDef): BaseInstanceType<CardT> | undefined;
   queryableValue(value: any, stack: BaseDef[]): SearchT;
-  handleNotLoadedError(
-    instance: BaseInstanceType<CardT>,
-    e: NotLoaded,
-  ): Promise<
-    BaseInstanceType<CardT> | BaseInstanceType<CardT>[] | undefined | void
-  >;
 }
 
 function cardTypeFor(
@@ -459,9 +447,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     // a not loaded error can blow up thru a computed containsMany field that consumes a link
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance as CardDef, this, maybeNotLoaded.reference);
-      if ((globalThis as any).__lazilyLoadLinks) {
-        return this.emptyValue(instance) as BaseInstanceType<FieldT>;
-      }
+      return this.emptyValue(instance) as BaseInstanceType<FieldT>;
     }
     return getter(instance, this);
   }
@@ -715,10 +701,6 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     }, values);
   }
 
-  async handleNotLoadedError<T extends BaseDef>(_instance: T, _e: NotLoaded) {
-    return undefined;
-  }
-
   component(model: Box<BaseDef>): BoxComponent {
     let fieldName = this.name as keyof BaseDef;
     let arrayField = model.field(
@@ -769,9 +751,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     // a not loaded error can blow up thru a computed contains field that consumes a link
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance as CardDef, this, maybeNotLoaded.reference);
-      if ((globalThis as any).__lazilyLoadLinks) {
-        return undefined;
-      }
+      return undefined;
     }
     return getter(instance, this);
   }
@@ -928,10 +908,6 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     return value;
   }
 
-  async handleNotLoadedError<T extends BaseDef>(_instance: T, _e: NotLoaded) {
-    return undefined;
-  }
-
   component(model: Box<BaseDef>): BoxComponent {
     return fieldComponent(this, model);
   }
@@ -978,9 +954,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     let maybeNotLoaded = deserialized.get(this.name);
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance, this, maybeNotLoaded.reference);
-      if ((globalThis as any).__lazilyLoadLinks) {
-        return undefined;
-      }
+      return undefined;
     }
     return getter(instance, this);
   }
@@ -1184,61 +1158,6 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     return value;
   }
 
-  async handleNotLoadedError(
-    instance: BaseInstanceType<CardT>,
-    e: NotLoaded,
-  ): Promise<BaseInstanceType<CardT> | undefined> {
-    let deserialized = getDataBucket(instance as BaseDef);
-    let store = getStore(instance);
-    let fieldValue = store.get(e.reference as string);
-
-    if (fieldValue !== undefined) {
-      deserialized.set(this.name, fieldValue);
-      return fieldValue as BaseInstanceType<CardT>;
-    }
-
-    fieldValue = await this.loadMissingField(
-      instance,
-      e,
-      store,
-      instance[relativeTo],
-    );
-    deserialized.set(this.name, fieldValue);
-    return fieldValue as BaseInstanceType<CardT>;
-  }
-
-  // TODO we should be able to get rid of this when we decommission the old prerender
-  private async loadMissingField(
-    instance: CardDef,
-    notLoaded: NotLoadedValue | NotLoaded,
-    store: CardStore,
-    relativeTo: URL | undefined,
-  ): Promise<CardDef> {
-    let { reference: maybeRelativeReference } = notLoaded;
-    let reference = new URL(
-      maybeRelativeReference as string,
-      instance.id ?? relativeTo, // new instances may not yet have an ID, in that case fallback to the relativeTo
-    ).href;
-    let doc = await store.loadDocument(reference);
-    if (isCardError(doc)) {
-      let cardError = doc;
-      cardError.deps = [reference];
-      cardError.additionalErrors = [
-        new NotLoaded(instance, reference, this.name),
-      ];
-      throw cardError;
-    }
-    let fieldInstance = (await createFromSerialized(
-      doc.data,
-      doc,
-      new URL(doc.data.id!),
-      {
-        store,
-      },
-    )) as CardDef;
-    return fieldInstance;
-  }
-
   component(model: Box<CardDef>): BoxComponent {
     let isComputed = !!this.computeVia;
     let fieldName = this.name as keyof CardDef;
@@ -1375,9 +1294,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
     // Handle the case where the field was set to a single NotLoadedValue during deserialization
     if (isNotLoadedValue(value)) {
-      if (!(globalThis as any).__lazilyLoadLinks) {
-        throw new NotLoaded(instance, value.reference, field.name);
-      }
       // TODO figure out this test case...
       value = this.emptyValue(instance);
       deserialized.set(this.name, value);
@@ -1427,9 +1343,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
       //   `<LoadableCard @card={{card}}/>` instead of calling `getComponent`
       //   themselves.
 
-      if (!(globalThis as any).__lazilyLoadLinks) {
-        throw new NotLoaded(instance, notLoadedRefs, this.name);
-      }
       for (let entry of value) {
         if (isNotLoadedValue(entry) && !(entry as any).loading) {
           lazilyLoadLink(instance, this, entry.reference, { value });
@@ -1733,116 +1646,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
       notifySubscribers(instance, this.name, value);
       notifyCardTracking(instance);
     }, values);
-  }
-
-  async handleNotLoadedError<T extends CardDef>(
-    instance: T,
-    e: NotLoaded,
-  ): Promise<T[] | undefined> {
-    let result: T[] | undefined;
-    let fieldValues: CardDef[] = [];
-    let store = getStore(instance);
-
-    let references = !Array.isArray(e.reference) ? [e.reference] : e.reference;
-    for (let ref of references) {
-      let value = store.get(ref);
-      if (value !== undefined) {
-        fieldValues.push(value);
-      }
-    }
-
-    fieldValues = await this.loadMissingFields(
-      instance,
-      e,
-      store,
-      instance[relativeTo],
-    );
-
-    if (fieldValues.length === references.length) {
-      let values: T[] = [];
-      let deserialized = getDataBucket(instance);
-
-      for (let field of deserialized.get(this.name)) {
-        if (isNotLoadedValue(field)) {
-          // replace the not-loaded values with the loaded cards
-          values.push(
-            fieldValues.find(
-              (v) =>
-                v.id === new URL(field.reference, instance[relativeTo]).href,
-            )! as T,
-          );
-        } else {
-          // keep existing loaded cards
-          values.push(field);
-        }
-      }
-
-      deserialized.set(this.name, values);
-      result = values as T[];
-    }
-
-    return result;
-  }
-
-  // TODO we should be able to get rid of this when we decommission the old prerender
-  private async loadMissingFields(
-    instance: CardDef,
-    notLoaded: NotLoaded,
-    store: CardStore,
-    relativeTo: URL | undefined,
-  ): Promise<CardDef[]> {
-    let refs = (
-      !Array.isArray(notLoaded.reference)
-        ? [notLoaded.reference]
-        : notLoaded.reference
-    ).map(
-      (ref) => new URL(ref, instance.id ?? relativeTo).href, // new instances may not yet have an ID, in that case fallback to the relativeTo
-    );
-    let errors = [];
-    let fieldInstances: CardDef[] = [];
-
-    const loadPromises = refs.map(async (reference) => {
-      try {
-        let doc = await store.loadDocument(reference);
-        if (isCardError(doc)) {
-          let cardError = doc;
-          cardError.deps = [reference];
-          cardError.additionalErrors = [
-            new NotLoaded(instance, reference, this.name),
-          ];
-          throw cardError;
-        }
-        let fieldInstance = (await createFromSerialized(
-          doc.data,
-          doc,
-          new URL(doc.data.id!),
-          {
-            store,
-          },
-        )) as CardDef;
-        return { ok: true, value: fieldInstance };
-      } catch (e) {
-        return { ok: false, error: e };
-      }
-    });
-
-    const results = await Promise.allSettled(loadPromises);
-    for (let result of results) {
-      if (result.status === 'fulfilled') {
-        const fetchResult = result.value;
-        if (fetchResult.ok && fetchResult.value) {
-          fieldInstances.push(fetchResult.value);
-        } else if (!fetchResult.ok) {
-          errors.push(fetchResult.error);
-        }
-      } else {
-        errors.push(result.reason);
-      }
-    }
-    if (errors.length) {
-      throw errors;
-    }
-    return fieldInstances;
   }
 
   component(model: Box<CardDef>): BoxComponent {
@@ -2475,8 +2278,14 @@ export class CssImportField extends StringField {
 export class Theme extends CardDef {
   static displayName = 'Theme';
   static icon = ThemeIcon;
-  @field cssVariables = contains(CSSField);
-  @field cssImports = containsMany(CssImportField);
+  @field cssVariables = contains(CSSField, {
+    description:
+      'CSS variable definitions that build on shadcn variables (typically for :root and .dark selectors) injected into the CardContainer.',
+  });
+  @field cssImports = containsMany(CssImportField, {
+    description:
+      'CSS links (e.g. Google Fonts) imported via the CardContainer.',
+  });
 
   [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
     let menuItems = super[getCardMenuItems](params);
@@ -2679,122 +2488,117 @@ function lazilyLoadLink(
   link: string,
   pluralArgs?: { value: any[] },
 ) {
-  if ((globalThis as any).__lazilyLoadLinks) {
-    let inflightLoads = inflightLinkLoads.get(instance);
-    if (!inflightLoads) {
-      inflightLoads = new Map();
-      inflightLinkLoads.set(instance, inflightLoads);
-    }
-    let reference = new URL(link, instance.id ?? instance[relativeTo]).href;
-    let key = `${field.name}/${reference}`;
-    let promise = inflightLoads.get(key);
-    let store = getStore(instance);
-    if (promise) {
-      store.trackLoad(promise);
-      return;
-    }
-    let deferred = new Deferred<void>();
-    inflightLoads.set(key, deferred.promise);
-    store.trackLoad(
-      // we wrap the promise with a catch that will prevent the rejections from bubbling up but
-      // not interfere with the original deferred. this prevents QUnit from being really noisy
-      // and reporting a "global error" even though that is a normal operating circumstance for
-      // the rendering when it encounters an error. the original deferred.promise still
-      // rejects as expected for anyone awaiting it, but it won't cause unnecessary noise in QUnit.
-      deferred.promise.then(
-        () => {},
-        () => {},
-      ),
-    );
-    (async () => {
-      try {
-        let doc = await store.loadDocument(reference);
-        if (isCardError(doc)) {
-          let cardError = doc;
-          cardError.deps = [
-            !reference.endsWith('.json') ? `${reference}.json` : reference,
-          ];
-          throw cardError;
-        }
-        let fieldValue = (await createFromSerialized(
-          doc.data,
-          doc,
-          new URL(doc.data.id!),
-          {
-            store,
-          },
-        )) as CardDef;
-        if (pluralArgs) {
-          let { value } = pluralArgs;
-          let indices: number[] = [];
-          for (let [index, item] of value.entries()) {
-            if (!isNotLoadedValue(item)) {
-              continue;
-            }
-            let notLoadedRef = new URL(
-              item.reference,
-              instance.id ?? instance[relativeTo],
-            ).href;
-            if (reference === notLoadedRef) {
-              indices.push(index);
-            }
-          }
-          for (let index of indices) {
-            value[index] = fieldValue;
-          }
-        } else {
-          (instance as any)[field.name] = fieldValue;
-        }
-      } catch (e) {
-        // we replace the node-loaded value with a null
-        // TODO in the future consider recording some link meta that this reference is actually missing
-        (instance as any)[field.name] = null;
-
-        let error = e as Error;
-        let isMissingFile =
-          typeof error?.message === 'string' &&
-          /not found/i.test(error.message);
-        let payloadError: {
-          title: string;
-          status: number;
-          message: string;
-          stack?: string;
-          deps?: string[];
-        } = {
-          title: isMissingFile
-            ? 'Link Not Found'
-            : error?.message ?? 'Card Error',
-          status: isMissingFile ? 404 : (error as any)?.status ?? 500,
-          message: isMissingFile
-            ? `missing file ${reference}.json`
-            : error?.message ?? String(e),
-          stack: error?.stack,
-        };
-        if (isCardError(error) && error.deps?.length) {
-          payloadError.deps = [...new Set(error.deps)];
-        }
-        let payload = JSON.stringify({
-          type: 'error',
-          error: payloadError,
-        });
-        // We use a custom event for render errors--otherwise QUnit will report a "global error"
-        // when we use a promise rejection to signal to the prerender that there was an error
-        // even though everything is working as designed. QUnit is very noisy about these errors...
-        const event = new CustomEvent('boxel-render-error', {
-          detail: { reason: payload },
-        });
-        globalThis.dispatchEvent(event);
-      } finally {
-        deferred.fulfill();
-        inflightLoads.delete(key);
-        if (inflightLoads.size === 0) {
-          inflightLinkLoads.delete(instance);
-        }
-      }
-    })();
-  } else {
-    throw new NotLoaded(instance, link, field.name);
+  let inflightLoads = inflightLinkLoads.get(instance);
+  if (!inflightLoads) {
+    inflightLoads = new Map();
+    inflightLinkLoads.set(instance, inflightLoads);
   }
+  let reference = new URL(link, instance.id ?? instance[relativeTo]).href;
+  let key = `${field.name}/${reference}`;
+  let promise = inflightLoads.get(key);
+  let store = getStore(instance);
+  if (promise) {
+    store.trackLoad(promise);
+    return;
+  }
+  let deferred = new Deferred<void>();
+  inflightLoads.set(key, deferred.promise);
+  store.trackLoad(
+    // we wrap the promise with a catch that will prevent the rejections from bubbling up but
+    // not interfere with the original deferred. this prevents QUnit from being really noisy
+    // and reporting a "global error" even though that is a normal operating circumstance for
+    // the rendering when it encounters an error. the original deferred.promise still
+    // rejects as expected for anyone awaiting it, but it won't cause unnecessary noise in QUnit.
+    deferred.promise.then(
+      () => {},
+      () => {},
+    ),
+  );
+  (async () => {
+    try {
+      let doc = await store.loadDocument(reference);
+      if (isCardError(doc)) {
+        let cardError = doc;
+        cardError.deps = [
+          !reference.endsWith('.json') ? `${reference}.json` : reference,
+        ];
+        throw cardError;
+      }
+      let fieldValue = (await createFromSerialized(
+        doc.data,
+        doc,
+        new URL(doc.data.id!),
+        {
+          store,
+        },
+      )) as CardDef;
+      if (pluralArgs) {
+        let { value } = pluralArgs;
+        let indices: number[] = [];
+        for (let [index, item] of value.entries()) {
+          if (!isNotLoadedValue(item)) {
+            continue;
+          }
+          let notLoadedRef = new URL(
+            item.reference,
+            instance.id ?? instance[relativeTo],
+          ).href;
+          if (reference === notLoadedRef) {
+            indices.push(index);
+          }
+        }
+        for (let index of indices) {
+          value[index] = fieldValue;
+        }
+      } else {
+        (instance as any)[field.name] = fieldValue;
+      }
+    } catch (e) {
+      // we replace the node-loaded value with a null
+      // TODO in the future consider recording some link meta that this reference is actually missing
+      (instance as any)[field.name] = null;
+
+      let error = e as Error;
+      let isMissingFile =
+        typeof error?.message === 'string' && /not found/i.test(error.message);
+      let payloadError: {
+        title: string;
+        status: number;
+        message: string;
+        stack?: string;
+        deps?: string[];
+      } = {
+        title: isMissingFile
+          ? 'Link Not Found'
+          : error?.message ?? 'Card Error',
+        status: isMissingFile ? 404 : (error as any)?.status ?? 500,
+        message: isMissingFile
+          ? `missing file ${reference}.json`
+          : error?.message ?? String(e),
+        stack: error?.stack,
+      };
+      if (isCardError(error) && error.deps?.length) {
+        payloadError.deps = [...new Set(error.deps)];
+      }
+      let payload = JSON.stringify({
+        type: 'error',
+        error: payloadError,
+      });
+      // We use a custom event for render errors--otherwise QUnit will report a "global error"
+      // when we use a promise rejection to signal to the prerender that there was an error
+      // even though everything is working as designed. QUnit is very noisy about these errors...
+      const event = new CustomEvent('boxel-render-error', {
+        detail: { reason: payload },
+      });
+      globalThis.dispatchEvent(event);
+    } finally {
+      deferred.fulfill();
+      inflightLoads.delete(key);
+      if (inflightLoads.size === 0) {
+        inflightLinkLoads.delete(instance);
+      }
+    }
+  })();
 }
 
 type Scalar =
@@ -3483,63 +3287,6 @@ export function getComponent(
     opts,
   );
   return boxComponent;
-}
-
-// TODO we should be able to get rid of this when we decommission the old prerender
-export async function ensureLinksLoaded(card: BaseDef): Promise<void> {
-  // Note that after each async step we check to see if we are still the
-  // current promise, otherwise we bail
-  let done: () => void;
-  let loadLinksPromise = new Promise<void>((res) => (done = res));
-  loadLinksPromises.set(card, loadLinksPromise);
-
-  // wait a full micro task before we start - this is simple debounce
-  await Promise.resolve();
-  if (loadLinksPromises.get(card) !== loadLinksPromise) {
-    return;
-  }
-
-  async function _loadModel<T extends BaseDef>(
-    model: T,
-    stack: BaseDef[] = [],
-  ): Promise<void> {
-    let pendingFields = new Set<string>(
-      Object.keys(
-        getFields(model, {
-          includeComputeds: false, // Not necessary to execute computed to load linked fields
-          usedLinksToFieldsOnly: true,
-        }),
-      ),
-    );
-    do {
-      for (let fieldName of [...pendingFields]) {
-        let value = await getIfReady(model, fieldName as keyof T);
-        pendingFields.delete(fieldName);
-        if (loadLinksPromises.get(card) !== loadLinksPromise) {
-          return;
-        }
-        if (Array.isArray(value)) {
-          for (let item of value) {
-            if (item && isCardOrField(item) && !stack.includes(item)) {
-              await _loadModel(item, [item, ...stack]);
-            }
-          }
-        } else if (isCardOrField(value) && !stack.includes(value)) {
-          await _loadModel(value, [value, ...stack]);
-        }
-      }
-      // TODO should we have a timeout?
-    } while (pendingFields.size > 0);
-  }
-
-  await _loadModel(card);
-  if (loadLinksPromises.get(card) !== loadLinksPromise) {
-    return;
-  }
-
-  // notify glimmer to rerender this card
-  notifyCardTracking(card);
-  done!();
 }
 
 export class Box<T> {

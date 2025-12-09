@@ -1,8 +1,6 @@
 import type * as JSONTypes from 'json-typescript';
 import { parse } from 'date-fns';
 import {
-  Deferred,
-  reportError,
   authorizationMiddleware,
   maybeHandleScopedCSSRequest,
   RealmAuthDataSource,
@@ -12,7 +10,6 @@ import {
   fileContentToText,
   unixTime,
   logger,
-  jobIdentity,
   userIdFromUsername,
   type QueueRunner,
   type TextFileRef,
@@ -25,14 +22,7 @@ import {
 } from '.';
 import { MatrixClient } from './matrix-client';
 import * as Tasks from './tasks';
-import type {
-  WorkerArgs,
-  TaskArgs,
-  IncrementalArgs,
-  IncrementalResult,
-  FromScratchArgs,
-  FromScratchResult,
-} from './tasks';
+import type { WorkerArgs, TaskArgs } from './tasks';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
@@ -62,62 +52,8 @@ export interface StatusArgs {
   deps?: string[];
 }
 
-export type RunnerRegistration = (
-  fromScratch: (args: FromScratchArgs) => Promise<FromScratchResult>,
-  incremental: (args: IncrementalArgs) => Promise<IncrementalResult>,
-) => Promise<void>;
-
-export interface RunnerOpts {
-  _fetch: typeof fetch;
-  reader: Reader;
-  prerenderer: Prerenderer;
-  registerRunner: RunnerRegistration;
-  indexWriter: IndexWriter;
-  jobInfo?: JobInfo;
-  reportStatus?(args: StatusArgs): void;
-}
-
-export type IndexRunner = (optsId: number) => Promise<void>;
-
-// This class is used to support concurrent index runs against the same fastboot
-// instance. While each index run calls visit on the fastboot instance and has
-// its own memory space, the globals that are passed into fastboot are shared.
-// This global is what holds loader context (specifically the loader fetch) and
-// index mutators for the fastboot instance. each index run will have a
-// different loader fetch and its own index mutator. in order to keep these from
-// colliding during concurrent indexing we hold each set of fastboot globals in
-// a map that is unique for the index run. When the server visits fastboot it
-// will provide the indexer route with the id for the fastboot global that is
-// specific to the index run.
-let optsId = 0;
-
-export class RunnerOptionsManager {
-  #opts = new Map<number, RunnerOpts>();
-  setOptions(opts: RunnerOpts): number {
-    let id = optsId++;
-    this.#opts.set(id, opts);
-    return id;
-  }
-  getOptions(id: number): RunnerOpts {
-    let opts = this.#opts.get(id);
-    if (!opts) {
-      throw new Error(`No runner opts for id ${id}`);
-    }
-    return opts;
-  }
-  removeOptions(id: number) {
-    this.#opts.delete(id);
-  }
-}
-
-function isHeadlessChromeFeatureFlagEnabled() {
-  return Boolean((globalThis as any).__useHeadlessChromePrerender);
-}
-
 export class Worker {
   #log = logger('worker');
-  #runner: IndexRunner;
-  runnerOptsMgr: RunnerOptionsManager;
   #indexWriter: IndexWriter;
   #queue: QueueRunner;
   #dbAdapter: DBAdapter;
@@ -128,58 +64,42 @@ export class Worker {
   #matrixClientCache: Map<string, MatrixClient> = new Map();
   #realmAuthCache: Map<string, RealmAuthDataSource> = new Map();
   #secretSeed: string;
-  #fromScratch:
-    | ((args: FromScratchArgs & { boom?: true }) => Promise<FromScratchResult>)
-    | undefined;
-  #incremental:
-    | ((args: IncrementalArgs) => Promise<IncrementalResult>)
-    | undefined;
   #reportStatus: ((args: StatusArgs) => void) | undefined;
   #realmServerMatrixUsername;
-  #useHeadlessChromePrerender: boolean | undefined;
 
   constructor({
     indexWriter,
     queue,
     dbAdapter,
     queuePublisher,
-    indexRunner,
-    runnerOptsManager,
     virtualNetwork,
     matrixURL,
     realmServerMatrixUsername,
     secretSeed,
     reportStatus,
     prerenderer,
-    useHeadlessChromePrerender,
   }: {
     indexWriter: IndexWriter;
     queue: QueueRunner;
     dbAdapter: DBAdapter;
     queuePublisher: QueuePublisher;
-    indexRunner: IndexRunner;
-    runnerOptsManager: RunnerOptionsManager;
     virtualNetwork: VirtualNetwork;
     matrixURL: URL;
     realmServerMatrixUsername: string;
     secretSeed: string;
     prerenderer: Prerenderer;
     reportStatus?: (args: StatusArgs) => void;
-    useHeadlessChromePrerender?: boolean;
   }) {
     this.#queue = queue;
     this.#indexWriter = indexWriter;
     this.#virtualNetwork = virtualNetwork;
     this.#matrixURL = matrixURL;
     this.#secretSeed = secretSeed;
-    this.runnerOptsMgr = runnerOptsManager;
-    this.#runner = indexRunner;
     this.#reportStatus = reportStatus;
     this.#realmServerMatrixUsername = realmServerMatrixUsername;
     this.#dbAdapter = dbAdapter;
     this.#queuePublisher = queuePublisher;
     this.#prerenderer = prerenderer;
-    this.#useHeadlessChromePrerender = useHeadlessChromePrerender;
   }
 
   async run() {
@@ -195,20 +115,14 @@ export class Worker {
       reportStatus: this.reportStatus.bind(this),
     };
 
-    let isFeatureFlagEnabled =
-      this.#useHeadlessChromePrerender ?? isHeadlessChromeFeatureFlagEnabled();
     await Promise.all([
       this.#queue.register(
         `from-scratch-index`,
-        isFeatureFlagEnabled
-          ? Tasks['fromScratchIndex'](taskArgs)
-          : this.fromScratch,
+        Tasks['fromScratchIndex'](taskArgs),
       ),
       this.#queue.register(
         `incremental-index`,
-        isFeatureFlagEnabled
-          ? Tasks['incrementalIndex'](taskArgs)
-          : this.incremental,
+        Tasks['incrementalIndex'](taskArgs),
       ),
       this.#queue.register(`copy-index`, Tasks['copy'](taskArgs)),
       this.#queue.register(`lint-source`, Tasks['lintSource'](taskArgs)),
@@ -259,7 +173,6 @@ export class Worker {
     );
     _fetch = fetcher(this.#virtualNetwork.fetch, [
       async (req, next) => {
-        req.headers.set('X-Boxel-Building-Index', 'true');
         req.headers.set('X-Boxel-Assume-User', realmUserId);
         return next(req);
       },
@@ -271,129 +184,11 @@ export class Worker {
     return _fetch;
   }
 
-  private async prepareAndRunJob<T>(
-    args: WorkerArgs & { jobInfo?: JobInfo },
-    run: () => Promise<T>,
-  ): Promise<T> {
-    let deferred = new Deferred<T>();
-    let _fetch = await this.makeAuthedFetch(args);
-    let optsId = this.runnerOptsMgr.setOptions({
-      _fetch,
-      jobInfo: args.jobInfo,
-      reader: getReader(_fetch, args.realmURL),
-      indexWriter: this.#indexWriter,
-      reportStatus: this.#reportStatus,
-      prerenderer: this.#prerenderer,
-      registerRunner: async (fromScratch, incremental) => {
-        this.#fromScratch = fromScratch;
-        this.#incremental = incremental;
-        try {
-          let result = await run();
-          deferred.fulfill(result);
-        } catch (e: any) {
-          // this exception is _very_ difficult to thread thru fastboot (a
-          // `deferred.reject(e)` doesn't do the thing you'd expect). Presumably
-          // the only kind of exceptions that get raised at this level would be
-          // indexer DB issues. Let's just log in sentry here and let developers
-          // followup on the issue from the sentry logs. Likely if an exception
-          // was raised to this level the fastboot instance is probably no
-          // longer usable.
-          reportError(e);
-          this.#log.error(
-            `${jobIdentity(args.jobInfo)} Error raised during indexing has likely stopped the indexer`,
-            e,
-          );
-          deferred.reject(
-            new Error(
-              'Rethrowing error from inside registerRunner: ' + e?.message,
-            ),
-          );
-        }
-      },
-    });
-    await this.#runner(optsId);
-    let result = await deferred.promise;
-    try {
-      // the result needs to be safe to stringify
-      // so we check for issues here where we can gracefully handle it
-      JSON.stringify(result);
-    } catch (e: any) {
-      this.#log.error(
-        `${jobIdentity(args.jobInfo)} Unable to stringify the job result`,
-        e,
-      );
-      throw e;
-    }
-    this.runnerOptsMgr.removeOptions(optsId);
-    return result;
-  }
-
   private reportStatus(args: JobInfo | undefined, status: 'start' | 'finish') {
     if (args?.jobId) {
       this.#reportStatus?.({ ...args, jobId: String(args.jobId), status });
     }
   }
-
-  // TODO this is the legacy fromScratch task that depends on FastBoot, this
-  // will eventually get removed
-  private fromScratch = async (
-    args: FromScratchArgs & { jobInfo?: JobInfo },
-  ) => {
-    this.#log.debug(
-      `${jobIdentity(args.jobInfo)} starting from-scratch indexing for job: ${JSON.stringify(args)}`,
-    );
-    this.reportStatus(args.jobInfo, 'start');
-    return await this.prepareAndRunJob<FromScratchResult>(args, async () => {
-      if (!this.#fromScratch) {
-        throw new Error(`Index runner has not been registered`);
-      }
-      let { ignoreData, stats } = await this.#fromScratch({
-        ...args,
-      });
-      this.#log.debug(
-        `${jobIdentity(args.jobInfo)} completed from-scratch indexing for realm ${
-          args.realmURL
-        }:\n${JSON.stringify(stats, null, 2)}`,
-      );
-      this.reportStatus(args.jobInfo, 'finish');
-      return {
-        ignoreData: { ...ignoreData },
-        stats,
-      };
-    });
-  };
-
-  // TODO this is the legacy incremental task that depends on FastBoot, this
-  // will eventually get removed
-  private incremental = async (
-    args: IncrementalArgs & { jobInfo?: JobInfo },
-  ) => {
-    this.#log.debug(
-      `${jobIdentity(args.jobInfo)} starting incremental indexing for job: ${JSON.stringify(args)}`,
-    );
-    this.reportStatus(args.jobInfo, 'start');
-    return await this.prepareAndRunJob<IncrementalResult>(args, async () => {
-      if (!this.#incremental) {
-        throw new Error(`Index runner has not been registered`);
-      }
-      let { ignoreData, stats, invalidations } = await this.#incremental({
-        ...args,
-      });
-      this.#log.debug(
-        `${jobIdentity(args.jobInfo)} completed incremental indexing for  ${args.urls.join()}:\n${JSON.stringify(
-          { ...stats, invalidations },
-          null,
-          2,
-        )}`,
-      );
-      this.reportStatus(args.jobInfo, 'finish');
-      return {
-        ignoreData: { ...ignoreData },
-        invalidations,
-        stats,
-      };
-    });
-  };
 }
 
 export function getReader(

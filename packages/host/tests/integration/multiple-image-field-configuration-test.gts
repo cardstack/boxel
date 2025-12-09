@@ -30,13 +30,14 @@ module('Integration | multiple image field configuration', function (hooks) {
 
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
+
     const multipleImageModule: any = await loader.import(
-      `${catalogRealmURL}fields/multiple-image-field`,
+      `${catalogRealmURL}fields/multiple-image`,
     );
     CatalogMultipleImageFieldClass = multipleImageModule.default;
 
     const imageModule: any = await loader.import(
-      `${catalogRealmURL}fields/image-field`,
+      `${catalogRealmURL}fields/image`,
     );
     CatalogImageFieldClass = imageModule.default;
   });

@@ -1,0 +1,66 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "mancer/weaver",
+      "canonicalSlug": "mancer/weaver",
+      "name": "Mancer: Weaver (alpha)",
+      "created": 1690934400,
+      "description": "An attempt to recreate Claude-style verbosity, but don't expect the same level of coherence or memory. Meant for use in roleplay/narrative situations.",
+      "pricing": {
+        "prompt": "0.000001125",
+        "completion": "0.000001125",
+        "request": "0",
+        "image": "0"
+      },
+      "contextLength": 8000,
+      "architecture": {
+        "modality": "text->text",
+        "inputModalities": [
+          "text"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "Llama2",
+        "instructType": "alpaca"
+      },
+      "topProvider": {
+        "isModerated": false,
+        "contextLength": 8000,
+        "maxCompletionTokens": 2000
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "frequency_penalty",
+        "logit_bias",
+        "logprobs",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "temperature",
+        "top_a",
+        "top_k",
+        "top_logprobs",
+        "top_p"
+      ],
+      "defaultParameters": {},
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

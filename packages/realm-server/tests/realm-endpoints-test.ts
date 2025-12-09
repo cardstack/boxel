@@ -36,7 +36,7 @@ import {
   createVirtualNetwork,
   matrixURL,
   closeServer,
-  getFastbootState,
+  getIndexHTML,
   matrixRegistrationSecret,
   testRealmInfo,
   waitUntil,
@@ -1563,7 +1563,6 @@ module(basename(__filename), function () {
           username: realmServerTestMatrix.username,
           seed: realmSecretSeed,
         });
-        let getIndexHTML = (await getFastbootState()).getIndexHTML;
         testRealmServer = new RealmServer({
           realms: [base, testRealm],
           virtualNetwork,

@@ -50,7 +50,6 @@ let {
   matrixURL,
   allPriorityCount = 1,
   highPriorityCount = 0,
-  distURL = process.env.HOST_URL ?? 'http://localhost:4200',
   fromUrl: fromUrls,
   toUrl: toUrls,
   migrateDB,
@@ -88,18 +87,13 @@ let {
       demandOption: true,
       type: 'array',
     },
-    distURL: {
-      description:
-        'the URL of a deployed host app. (This can be provided instead of the --distPath)',
-      type: 'string',
-    },
     matrixURL: {
       description: 'The matrix homeserver for the realm server',
       demandOption: true,
       type: 'string',
     },
     prerendererUrl: {
-      // TODO make this required when feature flag is removed
+      demandOption: true,
       description: 'URL of the prerender server to invoke',
       type: 'string',
     },
@@ -397,7 +391,6 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
       '--transpileOnly',
       'worker',
       `--matrixURL='${matrixURL}'`,
-      `--distURL='${distURL}'`,
       `--prerendererUrl=${prerendererUrl}`,
       `--priority=${priority}`,
       ...flattenDeep(

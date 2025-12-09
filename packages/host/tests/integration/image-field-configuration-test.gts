@@ -30,7 +30,7 @@ module('Integration | image field configuration', function (hooks) {
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
     const imageModule: any = await loader.import(
-      `${catalogRealmURL}fields/image-field`,
+      `${catalogRealmURL}fields/image`,
     );
     CatalogImageFieldClass = imageModule.default;
   });

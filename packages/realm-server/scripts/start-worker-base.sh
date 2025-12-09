@@ -18,7 +18,6 @@ NODE_ENV=development \
   --transpileOnly worker-manager \
   --port=4213 \
   --matrixURL='http://localhost:8008' \
-  --distURL="${HOST_URL:-http://localhost:4200}" \
   --prerendererUrl="${PRERENDER_URL}" \
   \
   --fromUrl='https://cardstack.com/base/' \

@@ -1,0 +1,55 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "openai/gpt-4o-mini-search-preview",
+      "canonicalSlug": "openai/gpt-4o-mini-search-preview-2025-03-11",
+      "name": "OpenAI: GPT-4o-mini Search Preview",
+      "created": 1741818122,
+      "description": "GPT-4o mini Search Preview is a specialized model for web search in Chat Completions. It is trained to understand and execute web search queries.",
+      "pricing": {
+        "prompt": "0.00000015",
+        "completion": "0.0000006",
+        "request": "0.0275",
+        "image": "0.000217"
+      },
+      "contextLength": 128000,
+      "architecture": {
+        "modality": "text->text",
+        "inputModalities": [
+          "text"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "GPT",
+        "instructType": ""
+      },
+      "topProvider": {
+        "isModerated": true,
+        "contextLength": 128000,
+        "maxCompletionTokens": 16384
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "max_tokens",
+        "response_format",
+        "structured_outputs",
+        "web_search_options"
+      ],
+      "defaultParameters": {},
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "openai/o3-deep-research",
+      "canonicalSlug": "openai/o3-deep-research-2025-06-26",
+      "name": "OpenAI: o3 Deep Research",
+      "created": 1760129661,
+      "description": "o3-deep-research is OpenAI's advanced model for deep research, designed to tackle complex, multi-step research tasks.\n\nNote: This model always uses the 'web_search' tool which adds additional cost.",
+      "pricing": {
+        "prompt": "0.00001",
+        "completion": "0.00004",
+        "request": "0",
+        "image": "0.00765"
+      },
+      "contextLength": 200000,
+      "architecture": {
+        "modality": "text+image->text",
+        "inputModalities": [
+          "image",
+          "text",
+          "file"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "GPT",
+        "instructType": ""
+      },
+      "topProvider": {
+        "isModerated": true,
+        "contextLength": 200000,
+        "maxCompletionTokens": 100000
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "logit_bias",
+        "logprobs",
+        "max_tokens",
+        "presence_penalty",
+        "reasoning",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_logprobs",
+        "top_p"
+      ],
+      "defaultParameters": {
+        "temperature": null,
+        "top_p": null,
+        "frequency_penalty": null
+      },
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}
