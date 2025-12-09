@@ -712,11 +712,13 @@ export async function setupAcceptanceTestRealm({
   realmURL,
   permissions,
   mockMatrixUtils,
+  loader,
 }: {
   contents: RealmContents;
   realmURL?: string;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
+  loader?: Loader;
 }) {
   let timing = createTimingLogger('setupAcceptanceTestRealm');
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
@@ -731,6 +733,7 @@ export async function setupAcceptanceTestRealm({
       isAcceptanceTest: true,
       permissions,
       mockMatrixUtils,
+      loader,
     });
   } finally {
     timing.step('setupTestRealm call');
@@ -743,11 +746,13 @@ export async function setupIntegrationTestRealm({
   realmURL,
   permissions,
   mockMatrixUtils,
+  loader,
 }: {
   contents: RealmContents;
   realmURL?: string;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
+  loader?: Loader;
 }) {
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
   setupAuthEndpoints({
@@ -759,6 +764,7 @@ export async function setupIntegrationTestRealm({
     isAcceptanceTest: false,
     permissions: permissions as RealmPermissions,
     mockMatrixUtils,
+    loader,
   });
 }
 
@@ -778,12 +784,14 @@ async function setupTestRealm({
   isAcceptanceTest,
   permissions = { '*': ['read', 'write'] },
   mockMatrixUtils,
+  loader,
 }: {
   contents: RealmContents;
   realmURL?: string;
   isAcceptanceTest?: boolean;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
+  loader?: Loader;
 }) {
   let timing = createTimingLogger('setupTestRealm');
   let owner = (getContext() as TestContext).owner;
@@ -869,11 +877,9 @@ async function setupTestRealm({
   });
 
   // we use this to run cards that were added to the test filesystem
-  let loader = await createTestLoader(
-    realm.__fetchForTesting,
-    virtualNetwork.resolveImport,
-  );
-  adapter.setLoader(loader);
+  let loaderInstance =
+    loader ?? new Loader(realm.__fetchForTesting, virtualNetwork.resolveImport);
+  adapter.setLoader(loaderInstance);
 
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
   virtualNetwork.mount(realm.maybeHandle);
@@ -885,7 +891,6 @@ async function setupTestRealm({
   timing.step('worker.run');
   await realm.start();
   timing.step('realm.start');
-  maybeStoreLoaderSnapshot(loader);
 
   let realmServer = getService('realm-server');
   if (!realmServer.availableRealmURLs.includes(realmURL)) {
@@ -899,27 +904,6 @@ async function setupTestRealm({
 const authHandlerStateSymbol = Symbol('test-auth-handler-state');
 const TEST_MATRIX_USER = '@testuser:localhost';
 
-let cachedLoaderSnapshot: Loader | undefined;
-
-async function createTestLoader(
-  fetchImpl: typeof globalThis.fetch,
-  resolveImport: (moduleIdentifier: string) => string,
-) {
-  if (cachedLoaderSnapshot) {
-    return Loader.cloneLoader(cachedLoaderSnapshot, {
-      includeEvaluatedModules: true,
-    });
-  }
-  return new Loader(fetchImpl, resolveImport);
-}
-
-function maybeStoreLoaderSnapshot(loader: Loader) {
-  if (!cachedLoaderSnapshot) {
-    cachedLoaderSnapshot = Loader.cloneLoader(loader, {
-      includeEvaluatedModules: true,
-    });
-  }
-}
 
 type AuthHandlerState = {
   handler: (req: Request) => Promise<Response | null>;

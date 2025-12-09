@@ -21,6 +21,7 @@ import {
   type Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
 
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
@@ -76,6 +77,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   let realmDbSnapshot: DbSnapshot | undefined;
   let matrixStateSnapshot: SerializedServerState | undefined;
   let cachedMatrixRoomId: string | undefined;
+  let loaderSnapshot: Loader | undefined;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
@@ -118,7 +120,18 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     setExpiresInSec(60 * 60);
 
-    let loader = getService('loader-service').loader;
+    let loaderService = getService('loader-service');
+    if (loaderSnapshot) {
+      loaderService.loader = Loader.cloneLoader(loaderSnapshot, {
+        includeEvaluatedModules: true,
+      });
+      timing.step('restoreLoaderSnapshot');
+    }
+    let loader = loaderService.loader;
+    let cloneCurrentLoader = () =>
+      Loader.cloneLoader(loaderService.loader, {
+        includeEvaluatedModules: true,
+      });
     timing.step('get loader service');
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
@@ -322,6 +335,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     let at1promise = setupAcceptanceTestRealm({
       mockMatrixUtils,
+      loader: cloneCurrentLoader(),
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'address.gts': { Address },
@@ -476,6 +490,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     let at2promise = setupAcceptanceTestRealm({
       mockMatrixUtils,
       realmURL: realm2URL,
+      loader: cloneCurrentLoader(),
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
@@ -502,12 +517,21 @@ module('Acceptance | operator mode tests', function (hooks) {
       [realm2URL]: ['read', 'write'],
     });
 
+    if (!loaderSnapshot) {
+      loaderSnapshot = Loader.cloneLoader(loaderService.loader, {
+        includeEvaluatedModules: true,
+      });
+      timing.step('storeLoaderSnapshot');
+    }
+
     if (!realmDbSnapshot) {
       realmDbSnapshot = await captureDbSnapshot();
+      timing.step('captureDbSnapshot');
     }
     if (!matrixStateSnapshot) {
       matrixStateSnapshot = mockMatrixUtils.captureServerState();
       cachedMatrixRoomId = matrixRoomId;
+      timing.step('captureMatrixServerState');
     }
   });
 
