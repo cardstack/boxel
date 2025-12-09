@@ -81,13 +81,13 @@ export default class ColorPalette extends Component<Signature> {
         .color-palette-group {
           max-width: var(--boxel-palette-max-width, 18.75rem);
           display: grid;
-          gap: var(--boxel-sp);
+          gap: var(--boxel-sp-xs);
         }
         .color-palette {
           --swatch-size: 1.8rem;
           display: grid;
           grid-template-columns: repeat(auto-fill, var(--swatch-size));
-          gap: var(--boxel-sp-xs);
+          gap: var(--boxel-sp-3xs);
         }
         .swatch-button {
           --_swatch-border: color-mix(
