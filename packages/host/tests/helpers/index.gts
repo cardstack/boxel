@@ -869,12 +869,11 @@ async function setupTestRealm({
   });
 
   // we use this to run cards that were added to the test filesystem
-  adapter.setLoader(
-    await createPreloadedLoader(
-      realm.__fetchForTesting,
-      virtualNetwork.resolveImport,
-    ),
+  let loader = await createTestLoader(
+    realm.__fetchForTesting,
+    virtualNetwork.resolveImport,
   );
+  adapter.setLoader(loader);
 
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
   virtualNetwork.mount(realm.maybeHandle);
@@ -886,6 +885,7 @@ async function setupTestRealm({
   timing.step('worker.run');
   await realm.start();
   timing.step('realm.start');
+  maybeStoreLoaderSnapshot(loader);
 
   let realmServer = getService('realm-server');
   if (!realmServer.availableRealmURLs.includes(realmURL)) {
@@ -899,40 +899,26 @@ async function setupTestRealm({
 const authHandlerStateSymbol = Symbol('test-auth-handler-state');
 const TEST_MATRIX_USER = '@testuser:localhost';
 
-const PRELOADED_MODULE_IDENTIFIERS = [
-  `${baseRealm.url}card-api`,
-  `${baseRealm.url}string`,
-];
-let cachedPreloadedLoader: Loader | undefined;
-let prewarmLoaderPromise: Promise<void> | undefined;
+let cachedLoaderSnapshot: Loader | undefined;
 
-async function createPreloadedLoader(
+async function createTestLoader(
   fetchImpl: typeof globalThis.fetch,
   resolveImport: (moduleIdentifier: string) => string,
 ) {
-  await ensurePreloadedLoader(fetchImpl, resolveImport);
-  return Loader.cloneLoader(cachedPreloadedLoader!, {
-    includeEvaluatedModules: true,
-  });
+  if (cachedLoaderSnapshot) {
+    return Loader.cloneLoader(cachedLoaderSnapshot, {
+      includeEvaluatedModules: true,
+    });
+  }
+  return new Loader(fetchImpl, resolveImport);
 }
 
-async function ensurePreloadedLoader(
-  fetchImpl: typeof globalThis.fetch,
-  resolveImport: (moduleIdentifier: string) => string,
-) {
-  if (cachedPreloadedLoader) {
-    return;
+function maybeStoreLoaderSnapshot(loader: Loader) {
+  if (!cachedLoaderSnapshot) {
+    cachedLoaderSnapshot = Loader.cloneLoader(loader, {
+      includeEvaluatedModules: true,
+    });
   }
-  if (!prewarmLoaderPromise) {
-    prewarmLoaderPromise = (async () => {
-      let loader = new Loader(fetchImpl, resolveImport);
-      for (let identifier of PRELOADED_MODULE_IDENTIFIERS) {
-        await loader.import(identifier);
-      }
-      cachedPreloadedLoader = loader;
-    })();
-  }
-  await prewarmLoaderPromise;
 }
 
 type AuthHandlerState = {

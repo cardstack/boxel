@@ -117,10 +117,26 @@ export class Loader {
       resolveImport ?? ((moduleIdentifier) => moduleIdentifier);
   }
 
-  static cloneLoader(loader: Loader): Loader {
+  static cloneLoader(
+    loader: Loader,
+    options?: { includeEvaluatedModules?: boolean },
+  ): Loader {
     let clone = new Loader(loader.fetchImplementation, loader.resolveImport);
     for (let [moduleIdentifier, module] of loader.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
+    }
+    if (options?.includeEvaluatedModules) {
+      for (let [moduleIdentifier, module] of loader.modules) {
+        if (loader.moduleShims.has(moduleIdentifier)) {
+          continue;
+        }
+        if (module.state === 'evaluated') {
+          clone.shimModule(
+            moduleIdentifier,
+            module.moduleInstance as Record<string, any>,
+          );
+        }
+      }
     }
     return clone;
   }
