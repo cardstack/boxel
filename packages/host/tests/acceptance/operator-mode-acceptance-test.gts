@@ -69,6 +69,7 @@ import {
 import { setupApplicationTest } from '../helpers/setup';
 
 const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
+const realm2WorkspaceName = 'Test Workspace C';
 
 let matrixRoomId: string;
 let realm2URL = 'http://test-realm/user/test2/';
@@ -493,6 +494,20 @@ module('Acceptance | operator mode tests', function (hooks) {
       loader: cloneCurrentLoader(),
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
+        '.realm.json': {
+          name: realm2WorkspaceName,
+        },
+        'index.json': {
+          data: {
+            type: 'card',
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/cards-grid',
+                name: 'CardsGrid',
+              },
+            },
+          },
+        },
         'person.gts': { Person },
         'Person/1.json': {
           data: {
@@ -871,10 +886,12 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     await click('[data-test-workspace-chooser-toggle]');
 
-    await click('[data-test-workspace="Cardstack Catalog"]');
+    await click(`[data-test-workspace="${realm2WorkspaceName}"]`);
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    assert.dom(`[data-test-realm-name]`).includesText('In Cardstack Catalog');
+    assert
+      .dom(`[data-test-realm-name]`)
+      .includesText(`In ${realm2WorkspaceName}`);
     assert.dom(`[data-test-file="index.json"]`).hasClass('selected');
     assert.dom('[data-test-recent-file]').exists({ count: 4 });
     assert
@@ -900,9 +917,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert
       .dom(`[data-test-recent-file="${testRealmURL}Pet/vangogh.json"]`)
       .exists();
-    assert
-      .dom(`[data-test-recent-file="${catalogRealmURL}index.json"]`)
-      .exists();
+    assert.dom(`[data-test-recent-file="${realm2URL}index.json"]`).exists();
     assert
       .dom(`[data-test-recent-file="${testRealmURL}Pet/mango.json"]`)
       .exists();
