@@ -86,6 +86,7 @@ jobs:
               - 'packages/billing/**'
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
+              - 'packages/host/**'
               - 'packages/eslint-plugin-boxel/**'
               - 'packages/postgres/**'
               - 'packages/realm-server/**'
