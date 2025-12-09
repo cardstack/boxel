@@ -548,6 +548,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       cachedMatrixRoomId = matrixRoomId;
       timing.step('captureMatrixServerState');
     }
+    timing.step('complete');
   });
 
   test('visiting operator mode', async function (assert) {

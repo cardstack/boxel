@@ -217,18 +217,40 @@ export async function captureDbSnapshot(): Promise<DbSnapshot> {
 
 export async function restoreDbSnapshot(snapshot: DbSnapshot) {
   let adapter = await getDbAdapter();
-  for (let { name, columns, rows } of snapshot.tables) {
-    await adapter.execute(`DELETE FROM ${quoteIdentifier(name)};`);
-    if (!rows.length) {
-      continue;
+  let timing = createTimingLogger('restoreDbSnapshot-internal');
+  await adapter.execute('BEGIN TRANSACTION;');
+  try {
+    for (let { name, columns, rows } of snapshot.tables) {
+      await adapter.execute(`DELETE FROM ${quoteIdentifier(name)};`);
+      timing.step(`delete ${name}`);
+      if (!rows.length) {
+        timing.finish(`empty table ${name}`);
+        continue;
+      }
+      let columnList = columns.map(quoteIdentifier).join(', ');
+      let valuePlaceholder = columns.map(() => '?').join(', ');
+      let batchSize = 50;
+      for (let i = 0; i < rows.length; i += batchSize) {
+        let chunk = rows.slice(i, i + batchSize);
+        let multiValues = chunk
+          .map(() => `(${valuePlaceholder})`)
+          .join(', ');
+        await adapter.execute(
+          `INSERT INTO ${quoteIdentifier(name)} (${columnList}) VALUES ${multiValues};`,
+          {
+            bind: chunk.flatMap((row) => columns.map((column) => row[column])),
+          },
+        );
+      }
+      timing.step(`${rows.length} rows restored ${name}`);
     }
-    let columnList = columns.map(quoteIdentifier).join(', ');
-    let placeholders = columns.map((_col, idx) => `$${idx + 1}`).join(', ');
-    let insertSQL = `INSERT INTO ${quoteIdentifier(name)} (${columnList}) VALUES (${placeholders});`;
-    for (let row of rows) {
-      let bind = columns.map((column) => row[column]);
-      await adapter.execute(insertSQL, { bind });
-    }
+    await adapter.execute('COMMIT;');
+    timing.step('commit');
+  } catch (err) {
+    await adapter.execute('ROLLBACK;');
+    throw err;
+  } finally {
+    timing.finish();
   }
 }
 
