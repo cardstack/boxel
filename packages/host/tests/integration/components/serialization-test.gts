@@ -445,7 +445,7 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(
       post.author[realmURL]?.href,
       testRealmURL,
-      'computed field instance receives the realm URL after saving',
+      'computed field instance knows the realm URL',
     );
   });
 

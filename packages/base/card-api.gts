@@ -63,6 +63,7 @@ import {
   loadDocument,
   LocalPath,
   getCardMenuItems,
+  isFieldInstance,
 } from '@cardstack/runtime-common';
 
 import type { ComponentLike } from '@glint/template';
@@ -105,6 +106,7 @@ import {
   getCardMeta,
 } from './card-serialization';
 import {
+  assertScalar,
   entangleWithCardTracking,
   getDataBucket,
   getFieldDescription,
@@ -117,8 +119,11 @@ import {
   isNotLoadedValue,
   notifyCardTracking,
   peekAtField,
+  propagateRealmContext,
+  realmContext,
   relationshipMeta,
   setFieldDescription,
+  setRealmContextOnField,
   type NotLoadedValue,
 } from './field-support';
 import {
@@ -561,21 +566,11 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       }
 
       if (serialized && serialized.some((resource) => resource.meta)) {
-        let metas = serialized.map((resource) => {
-          if (!resource.meta) {
-            return {};
-          }
-          let metaForField = { ...resource.meta };
-          delete metaForField.realmURL;
-          return Object.keys(metaForField).length > 0 ? metaForField : {};
-        });
-        if (metas.some((m) => Object.keys(m).length > 0)) {
-          result.meta = {
-            fields: {
-              [this.name]: metas,
-            },
-          };
-        }
+        result.meta = {
+          fields: {
+            [this.name]: serialized.map((resource) => resource.meta ?? {}),
+          },
+        };
       }
 
       return result;
@@ -764,20 +759,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
       return undefined;
     }
     let value = getter(instance, this);
-    let realmURLString = getCardMeta(instance, 'realmURL');
-    if (realmURLString) {
-      let shouldPropagateRealm = (item: any) =>
-        item && typeof item === 'object' && !(item.constructor as any)?.isCardDef;
-      if (shouldPropagateRealm(value) && isCardOrField(value)) {
-        setRealmURLMeta(value, realmURLString);
-      } else if (isArrayOfCardOrField(value)) {
-        for (let v of value as any[]) {
-          if (shouldPropagateRealm(v) && isCardOrField(v)) {
-            setRealmURLMeta(v, realmURLString);
-          }
-        }
-      }
-    }
+    propagateRealmContext(value, instance);
     return value;
   }
 
@@ -856,16 +838,10 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
         delete serialized.meta.adoptsFrom;
       }
 
-      if (serialized.meta && Object.keys(serialized.meta).length > 0) {
-        let metaForField = { ...serialized.meta };
-        delete metaForField.realmURL;
-        if (Object.keys(metaForField).length > 0) {
-          resource.meta = {
-            fields: {
-              [this.name]: metaForField,
-            },
-          };
-        }
+      if (Object.keys(serialized.meta).length > 0) {
+        resource.meta = {
+          fields: { [this.name]: serialized.meta },
+        };
       }
       return resource;
     }
@@ -1838,7 +1814,6 @@ export class BaseDef {
   // this is here because CardBase has no public instance methods, so without it
   // typescript considers everything a valid card.
   [isBaseInstance] = true;
-  [meta]: CardResourceMeta | undefined = undefined;
   // [relativeTo] actually becomes really important for Card/Field separation. FieldDefs
   // may contain interior fields that have relative links. FieldDef's though have no ID.
   // So we need a [relativeTo] property that derives from the root document ID in order to
@@ -1857,9 +1832,8 @@ export class BaseDef {
     return instance.constructor.icon;
   }
 
-  get [realmURL]() {
-    let realmURLString = getCardMeta(this, 'realmURL');
-    return realmURLString ? new URL(realmURLString) : undefined;
+  get [realmURL](): URL | undefined {
+    return undefined; // override in CardDef, FieldDef
   }
 
   static [emptyValue]: object | string | number | null | boolean | undefined;
@@ -2048,6 +2022,12 @@ export class FieldDef extends BaseDef {
   static isFieldDef = true;
   static displayName = 'Field';
   static icon = RectangleEllipsisIcon;
+  [realmContext]?: string;
+
+  get [realmURL](): URL | undefined {
+    let realmURLString = this[realmContext];
+    return realmURLString ? new URL(realmURLString) : undefined;
+  }
 
   // Optional provider for default configuration, merged with per-usage configuration
   static configuration?: ConfigurationInput<any>;
@@ -2201,6 +2181,7 @@ export class CardInfoField extends FieldDef {
 export class CardDef extends BaseDef {
   readonly [localId]: string = uuidv4();
   [isSavedInstance] = false;
+  [meta]: CardResourceMeta | undefined = undefined;
   get [fieldsUntracked](): Record<string, typeof BaseDef> | undefined {
     let overrides = getFieldOverrides(this);
     return overrides ? Object.fromEntries(getFieldOverrides(this)) : undefined;
@@ -2294,6 +2275,11 @@ export class CardDef extends BaseDef {
 
   get [realmInfo]() {
     return getCardMeta(this, 'realmInfo');
+  }
+
+  get [realmURL](): URL | undefined {
+    let realmURLString: string | undefined = getCardMeta(this, 'realmURL');
+    return realmURLString ? new URL(realmURLString) : undefined;
   }
 
   [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
@@ -2630,46 +2616,6 @@ function lazilyLoadLink(
       }
     }
   })();
-}
-
-type Scalar =
-  | string
-  | number
-  | boolean
-  | null
-  | undefined
-  | (string | null | undefined)[]
-  | (number | null | undefined)[]
-  | (boolean | null | undefined)[];
-
-function assertScalar(
-  scalar: any,
-  fieldCard: typeof BaseDef,
-): asserts scalar is Scalar {
-  if (Array.isArray(scalar)) {
-    if (
-      scalar.find(
-        (i) =>
-          !['undefined', 'string', 'number', 'boolean'].includes(typeof i) &&
-          i !== null,
-      )
-    ) {
-      throw new Error(
-        `expected queryableValue for field type ${
-          fieldCard.name
-        } to be scalar but was ${typeof scalar}`,
-      );
-    }
-  } else if (
-    !['undefined', 'string', 'number', 'boolean'].includes(typeof scalar) &&
-    scalar !== null
-  ) {
-    throw new Error(
-      `expected queryableValue for field type ${
-        fieldCard.name
-      } to be scalar but was ${typeof scalar}`,
-    );
-  }
 }
 
 export function setId(instance: CardDef, id: string) {
@@ -3150,17 +3096,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
           `cannot change the id for saved instance ${originalId}`,
         );
       }
-      if (realmURLString) {
-        if (isCardOrField(value)) {
-          setRealmURLMeta(value, realmURLString);
-        } else if (isArrayOfCardOrField(value)) {
-          for (let v of value as any[]) {
-            if (isCardOrField(v)) {
-              setRealmURLMeta(v, realmURLString);
-            }
-          }
-        }
-      }
+      propagateRealmContext(value, realmURLString);
       field.validate(instance, value);
 
       // Before updating field's value, we also have to make sure
@@ -3178,20 +3114,11 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     }
 
     // assign the realm meta before we compute as computeds may be relying on this
-    if (resource.meta && !isCardInstance(instance)) {
-      (instance as any)[meta] = resource.meta;
-    }
     if (isCardInstance(instance) && resource.id != null) {
       (instance as any)[meta] = resource.meta;
-      if (
-        realmURLString &&
-        !(instance as any)[meta]?.realmURL &&
-        (instance as any)[meta]
-      ) {
-        (instance as any)[meta]!.realmURL = realmURLString;
-      }
-    } else if (realmURLString && !(instance as any)[meta]) {
-      setRealmURLMeta(instance, realmURLString);
+    }
+    if (realmURLString && isFieldInstance(instance)) {
+      setRealmContextOnField(instance, realmURLString);
     }
     notifyCardTracking(instance);
     if (isCardInstance(instance) && resource.id != null) {
@@ -3265,20 +3192,7 @@ function makeDescriptor<
 }
 
 function setField(instance: BaseDef, field: Field, value: any) {
-  let realmURLString = getCardMeta(instance as CardDef, 'realmURL');
-  if (realmURLString) {
-    let shouldPropagateRealm = (item: any) =>
-      item && typeof item === 'object' && !(item.constructor as any)?.isCardDef;
-    if (shouldPropagateRealm(value) && isCardOrField(value)) {
-      setRealmURLMeta(value, realmURLString);
-    } else if (isArrayOfCardOrField(value)) {
-      for (let v of value) {
-        if (shouldPropagateRealm(v) && isCardOrField(v)) {
-          setRealmURLMeta(v, realmURLString);
-        }
-      }
-    }
-  }
+  propagateRealmContext(value, instance);
   // TODO: refactor validate to not have a return value and accomplish this normalization another way
   value = field.validate(instance, value);
   let deserialized = getDataBucket(instance);
@@ -3499,19 +3413,6 @@ declare module 'ember-provide-consume-context/context-registry' {
 
 function getStore(instance: BaseDef): CardStore {
   return stores.get(instance as BaseDef) ?? new FallbackCardStore();
-}
-
-function setRealmURLMeta(instance: BaseDef, realmURLString: string) {
-  let existingMeta = (instance as any)[meta] as CardResourceMeta | undefined;
-  (instance as any)[meta] = {
-    ...existingMeta,
-    ...(existingMeta?.adoptsFrom
-      ? { adoptsFrom: existingMeta.adoptsFrom }
-      : identifyCard(instance.constructor)
-      ? { adoptsFrom: identifyCard(instance.constructor)! }
-      : {}),
-    realmURL: realmURLString,
-  };
 }
 
 function myLoader(): Loader {

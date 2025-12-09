@@ -7,6 +7,7 @@ import type {
   CardResource,
   CardResourceMeta,
   LooseSingleCardDocument,
+  Meta,
 } from '@cardstack/runtime-common';
 import type { BaseDef, BaseDefConstructor, CardDef } from './card-api';
 import type { ResourceID } from '@cardstack/runtime-common';
@@ -133,17 +134,17 @@ export function callSerializeHook(
 }
 
 export function getCardMeta<K extends keyof CardResourceMeta>(
-  card: BaseDef,
+  card: CardDef,
   metaKey: K,
 ): CardResourceMeta[K] | undefined {
   return card[meta]?.[metaKey] as CardResourceMeta[K] | undefined;
 }
 
 export function makeMetaForField(
-  meta: Partial<CardResourceMeta> | undefined,
+  meta: Partial<Meta> | undefined,
   fieldName: string,
   fallback: typeof BaseDef,
-): CardResourceMeta {
+): Meta {
   let adoptsFrom = meta?.adoptsFrom ?? identifyCard(fallback);
   if (!adoptsFrom) {
     throw new Error(`bug: cannot determine identity for field '${fieldName}'`);
@@ -154,7 +155,6 @@ export function makeMetaForField(
   return {
     adoptsFrom,
     ...(Object.keys(fields).length > 0 ? { fields } : {}),
-    ...(meta?.realmURL ? { realmURL: meta.realmURL } : {}),
   };
 }
 
@@ -257,13 +257,13 @@ export function serializeCardResource(
     usedLinksToFieldsOnly: !opts?.includeUnrenderedFields,
   });
   let overrides = getFieldOverrides(model);
-  let realmURL = getCardMeta(model, 'realmURL');
   opts = { ...(opts ?? {}), overrides };
   let fieldResources = Object.entries(fields)
     .filter(([_fieldName, field]) =>
       opts?.omitFields ? !opts.omitFields.includes(field.card) : true,
     )
     .map(([fieldName]) => serializedGet(model, fieldName, doc, visited, opts));
+  let realmURL = getCardMeta(model, 'realmURL');
   return merge(
     {
       attributes: {},

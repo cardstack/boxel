@@ -107,6 +107,12 @@ export function isFieldDef(field: any): field is typeof FieldDef {
   return isBaseDef(field) && 'isFieldDef' in field;
 }
 
+export function isFieldInstance<T extends FieldDef>(
+  fieldInstance: any,
+): fieldInstance is T {
+  return isFieldDef(fieldInstance?.constructor);
+}
+
 export function isPrimitive(def: any) {
   return isBaseDef(def) && primitive in def;
 }
