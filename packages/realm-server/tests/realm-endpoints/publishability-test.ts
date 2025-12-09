@@ -100,8 +100,8 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
       let sourceRealm: Realm;
       let privateRealm: Realm;
       let request: SuperTest<Test>;
-      let sourceRealmURL = new URL('http://127.0.0.1:4460/source/');
-      let privateRealmURL = new URL('http://127.0.0.1:4461/private/');
+      let sourceRealmURL = new URL('http://127.0.0.1:4700/');
+      let privateRealmURL = new URL('http://127.0.0.1:4701/');
 
       setupPermissionedRealms(hooks, {
         realms: [
