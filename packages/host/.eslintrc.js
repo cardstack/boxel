@@ -112,7 +112,8 @@ module.exports = {
         './config/**/*.js',
         './lib/**/*.js',
         './server/**/*.js',
-        './scripts/**/*.js',
+        './vite.config.mjs',
+        './babel.config.cjs',
       ],
       parserOptions: {
         sourceType: 'script',

@@ -1,5 +1,4 @@
 'use strict';
-
 const MultiReporter = require('testem-multi-reporter');
 const TapReporter = require('testem/lib/reporters/tap_reporter');
 const XunitReporter = require('testem/lib/reporters/xunit_reporter');
@@ -67,4 +66,6 @@ if (process.env.CI) {
   config.reporter = multiReporter;
 }
 
-module.exports = config;
+if (typeof module !== 'undefined') {
+  module.exports = config;
+}
