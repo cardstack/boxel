@@ -40,8 +40,6 @@ import { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 import {
   setupLocalIndexing,
   setupOnSave,
-  setupAuthEndpoints,
-  setupUserSubscription,
   testRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -51,6 +49,7 @@ import {
   type TestContextWithSave,
   delay,
   getMonacoContent,
+  setupSnapshotRealm,
 } from '../helpers';
 
 import {
@@ -62,7 +61,6 @@ import {
   linksTo,
   linksToMany,
   field,
-  setupBaseRealm,
   StringField,
   SystemCard,
   ModelConfiguration,
@@ -104,6 +102,7 @@ let countryDefinition = `import { field, contains, CardDef } from 'https://cards
   }`;
 
 let matrixRoomId: string;
+let defaultMatrixRoomId: string;
 let mockedFileContent = 'Hello, world!';
 const TEST_MODEL_NAMES: Record<string, string> = {
   'openai/gpt-5': 'OpenAI: GPT-5',
@@ -214,280 +213,294 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     },
   ]);
 
-  setupBaseRealm(hooks);
+  let snapshot = setupSnapshotRealm<{ matrixRoomId: string }>(hooks, {
+    mockMatrixUtils,
+    acceptanceTest: true,
+    async build({ loader, isInitialBuild }) {
+      mockedFileContent = 'Hello, world!';
 
-  hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
-    setupUserSubscription();
-    setupAuthEndpoints();
+      if (isInitialBuild || !defaultMatrixRoomId) {
+        defaultMatrixRoomId = createAndJoinRoom({
+          sender: '@testuser:localhost',
+          name: 'room-test',
+        });
+      }
+      matrixRoomId = defaultMatrixRoomId;
 
-    class Pet extends CardDef {
-      static displayName = 'Pet';
-      @field name = contains(StringField);
-      @field favoriteTreat = contains(StringField);
+      class Pet extends CardDef {
+        static displayName = 'Pet';
+        @field name = contains(StringField);
+        @field favoriteTreat = contains(StringField);
 
-      @field title = contains(StringField, {
-        computeVia: function (this: Pet) {
-          return this.name;
-        },
-      });
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <h3 data-test-pet={{@model.name}}>
-            <@fields.name />
-          </h3>
-        </template>
-      };
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <GridContainer class='container'>
-            <h2><@fields.title /></h2>
-            <div>
-              <div>Favorite Treat: <@fields.favoriteTreat /></div>
-              <div data-test-editable-meta>
-                {{#if @canEdit}}
-                  <@fields.title />
-                  is editable.
-                {{else}}
-                  <@fields.title />
-                  is NOT editable.
-                {{/if}}
+        @field title = contains(StringField, {
+          computeVia: function (this: Pet) {
+            return this.name;
+          },
+        });
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <h3 data-test-pet={{@model.name}}>
+              <@fields.name />
+            </h3>
+          </template>
+        };
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <GridContainer class='container'>
+              <h2><@fields.title /></h2>
+              <div>
+                <div>Favorite Treat: <@fields.favoriteTreat /></div>
+                <div data-test-editable-meta>
+                  {{#if @canEdit}}
+                    <@fields.title />
+                    is editable.
+                  {{else}}
+                    <@fields.title />
+                    is NOT editable.
+                  {{/if}}
+                </div>
               </div>
-            </div>
-          </GridContainer>
-        </template>
-      };
-    }
+            </GridContainer>
+          </template>
+        };
+      }
 
-    class Person extends CardDef {
-      static displayName = 'Person';
-      @field firstName = contains(StringField);
-      @field lastName = contains(StringField);
-      @field pet = linksTo(Pet);
-      @field friends = linksToMany(Pet);
-      @field firstLetterOfTheName = contains(StringField, {
-        computeVia: function (this: Person) {
-          if (!this.firstName) {
-            return;
-          }
-          return this.firstName[0];
-        },
+      class Person extends CardDef {
+        static displayName = 'Person';
+        @field firstName = contains(StringField);
+        @field lastName = contains(StringField);
+        @field pet = linksTo(Pet);
+        @field friends = linksToMany(Pet);
+        @field firstLetterOfTheName = contains(StringField, {
+          computeVia: function (this: Person) {
+            if (!this.firstName) {
+              return;
+            }
+            return this.firstName[0];
+          },
+        });
+        @field title = contains(StringField, {
+          computeVia: function (this: Person) {
+            return [this.firstName, this.lastName].filter(Boolean).join(' ');
+          },
+        });
+
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h2 data-test-person={{@model.firstName}}>
+              <@fields.firstName />
+            </h2>
+            <p
+              data-test-first-letter-of-the-name={{@model.firstLetterOfTheName}}
+            >
+              <@fields.firstLetterOfTheName />
+            </p>
+            Pet:
+            <@fields.pet />
+            Friends:
+            <@fields.friends />
+          </template>
+        };
+      }
+
+      let mangoPet = new Pet({ name: 'Mango' });
+
+      // Create model configurations for testing
+      let openAiGpt5Model = new ModelConfiguration({
+        cardInfo: new CardInfoField({
+          title: modelNameFor('openai/gpt-5'),
+        }),
+        modelId: 'openai/gpt-5',
+        toolsSupported: true,
+        reasoningEffort: 'minimal',
       });
-      @field title = contains(StringField, {
-        computeVia: function (this: Person) {
-          return [this.firstName, this.lastName].filter(Boolean).join(' ');
-        },
+
+      let openAiGpt4oMiniModel = new ModelConfiguration({
+        cardInfo: new CardInfoField({
+          title: modelNameFor('openai/gpt-4o-mini'),
+        }),
+        modelId: 'openai/gpt-4o-mini',
+        toolsSupported: true,
       });
 
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <h2 data-test-person={{@model.firstName}}>
-            <@fields.firstName />
-          </h2>
-          <p data-test-first-letter-of-the-name={{@model.firstLetterOfTheName}}>
-            <@fields.firstLetterOfTheName />
-          </p>
-          Pet:
-          <@fields.pet />
-          Friends:
-          <@fields.friends />
-        </template>
-      };
-    }
+      let anthropicClaudeSonnet45Model = new ModelConfiguration({
+        cardInfo: new CardInfoField({
+          title: modelNameFor('anthropic/claude-sonnet-4.5'),
+        }),
+        modelId: 'anthropic/claude-sonnet-4.5',
+        toolsSupported: true,
+      });
 
-    let mangoPet = new Pet({ name: 'Mango' });
+      let anthropicClaudeSonnet37Model = new ModelConfiguration({
+        cardInfo: new CardInfoField({
+          title: modelNameFor('anthropic/claude-3.7-sonnet'),
+        }),
+        modelId: 'anthropic/claude-3.7-sonnet',
+        toolsSupported: true,
+      });
 
-    // Create model configurations for testing
-    let openAiGpt5Model = new ModelConfiguration({
-      cardInfo: new CardInfoField({
-        title: modelNameFor('openai/gpt-5'),
-      }),
-      modelId: 'openai/gpt-5',
-      toolsSupported: true,
-      reasoningEffort: 'minimal',
-    });
+      // Create system card with model configurations
+      let defaultSystemCard = new SystemCard({
+        defaultModelConfiguration: anthropicClaudeSonnet45Model,
+        modelConfigurations: [
+          openAiGpt5Model,
+          openAiGpt4oMiniModel,
+          anthropicClaudeSonnet45Model,
+          anthropicClaudeSonnet37Model,
+        ],
+      });
 
-    let openAiGpt4oMiniModel = new ModelConfiguration({
-      cardInfo: new CardInfoField({
-        title: modelNameFor('openai/gpt-4o-mini'),
-      }),
-      modelId: 'openai/gpt-4o-mini',
-      toolsSupported: true,
-    });
+      let deepseekModel = new ModelConfiguration({
+        cardInfo: new CardInfoField({
+          title: modelNameFor('deepseek/deepseek-chat-v3-0324'),
+        }),
+        modelId: 'deepseek/deepseek-chat-v3-0324',
+        toolsSupported: true,
+      });
 
-    let anthropicClaudeSonnet45Model = new ModelConfiguration({
-      cardInfo: new CardInfoField({
-        title: modelNameFor('anthropic/claude-sonnet-4.5'),
-      }),
-      modelId: 'anthropic/claude-sonnet-4.5',
-      toolsSupported: true,
-    });
+      let geminiFlashModel = new ModelConfiguration({
+        cardInfo: new CardInfoField({
+          title: modelNameFor('google/gemini-2.5-flash'),
+        }),
+        modelId: 'google/gemini-2.5-flash',
+        toolsSupported: true,
+      });
 
-    let anthropicClaudeSonnet37Model = new ModelConfiguration({
-      cardInfo: new CardInfoField({
-        title: modelNameFor('anthropic/claude-3.7-sonnet'),
-      }),
-      modelId: 'anthropic/claude-3.7-sonnet',
-      toolsSupported: true,
-    });
+      let alternateSystemCard = new SystemCard({
+        defaultModelConfiguration: deepseekModel,
+        modelConfigurations: [deepseekModel, geminiFlashModel, openAiGpt5Model],
+      });
 
-    // Create system card with model configurations
-    let defaultSystemCard = new SystemCard({
-      defaultModelConfiguration: anthropicClaudeSonnet45Model,
-      modelConfigurations: [
-        openAiGpt5Model,
-        openAiGpt4oMiniModel,
-        anthropicClaudeSonnet45Model,
-        anthropicClaudeSonnet37Model,
-      ],
-    });
-
-    let deepseekModel = new ModelConfiguration({
-      cardInfo: new CardInfoField({
-        title: modelNameFor('deepseek/deepseek-chat-v3-0324'),
-      }),
-      modelId: 'deepseek/deepseek-chat-v3-0324',
-      toolsSupported: true,
-    });
-
-    let geminiFlashModel = new ModelConfiguration({
-      cardInfo: new CardInfoField({
-        title: modelNameFor('google/gemini-2.5-flash'),
-      }),
-      modelId: 'google/gemini-2.5-flash',
-      toolsSupported: true,
-    });
-
-    let alternateSystemCard = new SystemCard({
-      defaultModelConfiguration: deepseekModel,
-      modelConfigurations: [deepseekModel, geminiFlashModel, openAiGpt5Model],
-    });
-
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'person.gts': { Person },
-        'pet.gts': { Pet },
-        'country.gts': countryDefinition,
-        'Country/indonesia.json': {
-          data: {
-            attributes: {
-              name: 'Indonesia',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}country`,
-                name: 'Country',
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        loader,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'person.gts': { Person },
+          'pet.gts': { Pet },
+          'country.gts': countryDefinition,
+          'Country/indonesia.json': {
+            data: {
+              attributes: {
+                name: 'Indonesia',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}country`,
+                  name: 'Country',
+                },
               },
             },
           },
-        },
-        'Pet/ringo.json': new Pet({ name: 'Ringo' }),
-        'Person/hassan.json': new Person({
-          firstName: 'Hassan',
-          lastName: 'Abdel-Rahman',
-          pet: mangoPet,
-          friends: [mangoPet],
-        }),
-        'Pet/mango.json': mangoPet,
-        'Pet/vangogh.json': new Pet({ name: 'Van Gogh' }),
-        'Person/fadhlan.json': new Person({
-          firstName: 'Fadhlan',
-          pet: mangoPet,
-          friends: [mangoPet],
-        }),
-        'plant.gts': `
+          'Pet/ringo.json': new Pet({ name: 'Ringo' }),
+          'Person/hassan.json': new Person({
+            firstName: 'Hassan',
+            lastName: 'Abdel-Rahman',
+            pet: mangoPet,
+            friends: [mangoPet],
+          }),
+          'Pet/mango.json': mangoPet,
+          'Pet/vangogh.json': new Pet({ name: 'Van Gogh' }),
+          'Person/fadhlan.json': new Person({
+            firstName: 'Fadhlan',
+            pet: mangoPet,
+            friends: [mangoPet],
+          }),
+          'plant.gts': `
           import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
           export class Plant extends CardDef {
             static displayName = "Plant";
             @field commonName = contains(StringField);
           }
-        `,
-        'Plant/highbush-blueberry.json': {
-          data: {
-            attributes: {
-              commonName: 'Highbush Blueberry',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `../plant`,
-                name: 'Plant',
+          `,
+          'Plant/highbush-blueberry.json': {
+            data: {
+              attributes: {
+                commonName: 'Highbush Blueberry',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `../plant`,
+                  name: 'Plant',
+                },
               },
             },
           },
-        },
-        'Spec/plant-spec.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              ref: {
-                name: 'Plant',
-                module: `${testRealmURL}plant`,
+          'Spec/plant-spec.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                ref: {
+                  name: 'Plant',
+                  module: `${testRealmURL}plant`,
+                },
+                specType: 'card',
+                title: 'Plant spec',
               },
-              specType: 'card',
-              title: 'Plant spec',
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
-                name: 'Spec',
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/spec',
+                  name: 'Spec',
+                },
               },
             },
           },
-        },
-        'Skill/example.json': {
-          data: {
-            attributes: {
-              title: 'Exanple Skill',
-              description: 'This skill card is for testing purposes',
-              instructions: 'This is an example skill card',
-              commands: [],
-            },
-            meta: {
-              adoptsFrom: skillCardRef,
-            },
-          },
-        },
-        'Skill/example2.json': {
-          data: {
-            attributes: {
-              title: 'Example 2 Skill',
-              description: 'This skill card is also for testing purposes',
-              instructions: 'This is a second example skill card',
-              commands: [],
-            },
-            meta: {
-              adoptsFrom: skillCardRef,
+          'Skill/example.json': {
+            data: {
+              attributes: {
+                title: 'Exanple Skill',
+                description: 'This skill card is for testing purposes',
+                instructions: 'This is an example skill card',
+                commands: [],
+              },
+              meta: {
+                adoptsFrom: skillCardRef,
+              },
             },
           },
+          'Skill/example2.json': {
+            data: {
+              attributes: {
+                title: 'Example 2 Skill',
+                description: 'This skill card is also for testing purposes',
+                instructions: 'This is a second example skill card',
+                commands: [],
+              },
+              meta: {
+                adoptsFrom: skillCardRef,
+              },
+            },
+          },
+          'ModelConfiguration/gpt-4o-mini.json': openAiGpt4oMiniModel,
+          'ModelConfiguration/gpt-5.json': openAiGpt5Model,
+          'ModelConfiguration/claude-sonnet-4.5.json':
+            anthropicClaudeSonnet45Model,
+          'ModelConfiguration/claude-sonnet-3.7.json':
+            anthropicClaudeSonnet37Model,
+          'SystemCard/default.json': defaultSystemCard,
+          'ModelConfiguration/deepseek-chat-v3-0324.json': deepseekModel,
+          'ModelConfiguration/gemini-2.5-flash.json': geminiFlashModel,
+          'SystemCard/productivity.json': alternateSystemCard,
+          'index.json': new CardsGrid(),
+          '.realm.json': {
+            name: 'Test Workspace B',
+            backgroundURL:
+              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          },
         },
-        'ModelConfiguration/gpt-4o-mini.json': openAiGpt4oMiniModel,
-        'ModelConfiguration/gpt-5.json': openAiGpt5Model,
-        'ModelConfiguration/claude-sonnet-4.5.json':
-          anthropicClaudeSonnet45Model,
-        'ModelConfiguration/claude-sonnet-3.7.json':
-          anthropicClaudeSonnet37Model,
-        'SystemCard/default.json': defaultSystemCard,
-        'ModelConfiguration/deepseek-chat-v3-0324.json': deepseekModel,
-        'ModelConfiguration/gemini-2.5-flash.json': geminiFlashModel,
-        'SystemCard/productivity.json': alternateSystemCard,
-        'index.json': new CardsGrid(),
-        '.realm.json': {
-          name: 'Test Workspace B',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
-      },
-    });
+      });
 
-    getService('matrix-service').fetchMatrixHostedFile = async (_url) => {
-      return new Response(mockedFileContent);
-    };
+      getService('matrix-service').fetchMatrixHostedFile = async (_url) => {
+        return new Response(mockedFileContent);
+      };
+
+      return { matrixRoomId };
+    },
+  });
+
+  hooks.beforeEach(function () {
+    ({ matrixRoomId } = snapshot.get());
   });
 
   test('attaches a card in a conversation multiple times', async function (assert) {
@@ -1759,9 +1772,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       contextSent.codeMode!.selectionRange,
       {
         startLine: 3,
-        startColumn: 45,
+        startColumn: 47,
         endLine: 3,
-        endColumn: 45,
+        endColumn: 47,
       },
       'Context sent with message contains correct selectionRange',
     );

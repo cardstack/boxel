@@ -25,8 +25,7 @@ import {
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
-  setupAuthEndpoints,
-  setupUserSubscription,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
@@ -208,87 +207,104 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
 
   let { setRealmPermissions, createAndJoinRoom } = mockMatrixUtils;
 
-  hooks.beforeEach(async function () {
-    setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
+  let cachedMatrixRoomId: string | undefined;
+  type FileTreeSnapshotState = {
+    matrixRoomId: string;
+  };
 
-    createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
-    setupUserSubscription();
-    setupAuthEndpoints();
+  let fileTreeSnapshot = setupSnapshotRealm<FileTreeSnapshotState>(hooks, {
+    mockMatrixUtils,
+    acceptanceTest: true,
+    async build({ loader }) {
+      if (!cachedMatrixRoomId) {
+        cachedMatrixRoomId = await createAndJoinRoom({
+          sender: '@testuser:localhost',
+          name: 'room-test',
+        });
+      }
 
-    const numStubFiles = 100;
-    let stubFiles: Record<string, string> = {};
-    for (let i = 0; i < numStubFiles; i++) {
-      stubFiles[`z${String(i).padStart(2, '0')}.json`] = '{}';
-    }
+      setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
 
-    // this seeds the loader used during index which obtains url mappings
-    // from the global loader
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.gts': indexCardSource,
-        'pet-person.gts': personCardSource,
-        'person.gts': personCardSource,
-        'friend.gts': friendCardSource,
-        'employee.gts': employeeCardSource,
-        'in-this-file.gts': inThisFileSource,
-        'person-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Person',
-              description: 'Spec',
-              specType: 'card',
-              ref: {
-                module: `./person`,
-                name: 'Person',
+      const numStubFiles = 100;
+      let stubFiles: Record<string, string> = {};
+      for (let i = 0; i < numStubFiles; i++) {
+        stubFiles[`z${String(i).padStart(2, '0')}.json`] = '{}';
+      }
+
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        loader,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.gts': indexCardSource,
+          'pet-person.gts': personCardSource,
+          'person.gts': personCardSource,
+          'friend.gts': friendCardSource,
+          'employee.gts': employeeCardSource,
+          'in-this-file.gts': inThisFileSource,
+          'person-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                title: 'Person',
+                description: 'Spec',
+                specType: 'card',
+                ref: {
+                  module: `./person`,
+                  name: 'Person',
+                },
               },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${baseRealm.url}spec`,
-                name: 'Spec',
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
               },
             },
           },
-        },
-        'index.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: './index',
-                name: 'Index',
+          'index.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './index',
+                  name: 'Index',
+                },
               },
             },
           },
-        },
-        'not-json.json': 'I am not JSON.',
-        'Person/1.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Hassan',
-              lastName: 'Abdel-Rahman',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../person',
-                name: 'Person',
+          'not-json.json': 'I am not JSON.',
+          'Person/1.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Hassan',
+                lastName: 'Abdel-Rahman',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
               },
             },
           },
+          ...stubFiles,
+          'zzz/zzz/file.json': '{}',
+          '.realm.json': realmInfo,
         },
-        ...stubFiles,
-        'zzz/zzz/file.json': '{}',
-        '.realm.json': realmInfo,
-      },
-    });
+      });
+
+      return {
+        matrixRoomId: cachedMatrixRoomId,
+      };
+    },
+  });
+
+  hooks.beforeEach(function () {
+    let snapshot = fileTreeSnapshot.get();
+    // matrixRoomId available if needed: snapshot.matrixRoomId
   });
 
   test('can navigate file tree, file view mode is persisted in query parameter', async function (assert) {
