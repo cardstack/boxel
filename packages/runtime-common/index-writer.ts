@@ -60,10 +60,7 @@ export class IndexWriter {
   }
 }
 
-export type IndexEntry =
-  | InstanceEntry
-  | ModuleEntry
-  | ErrorEntry;
+export type IndexEntry = InstanceEntry | ModuleEntry | ErrorEntry;
 export type LastModifiedTimes = Map<
   string,
   { type: string; lastModified: number | null }
@@ -289,19 +286,19 @@ export class Batch {
         : entry.type === 'module'
           ? {
               type: 'module',
-            deps: [...entry.deps],
-            last_modified: entry.lastModified,
-            resource_created_at: entry.resourceCreatedAt,
-            error_doc: null,
-          }
-        : {
-            types: entry.types,
-            search_doc: entry.searchData,
-            // favor the last known good types over the types derived from the error state
-            ...((await this.getProductionVersion(url)) ?? {}),
-            type: 'error',
-            error_doc: errorEntry?.error ?? entry.error,
-          }),
+              deps: [...entry.deps],
+              last_modified: entry.lastModified,
+              resource_created_at: entry.resourceCreatedAt,
+              error_doc: null,
+            }
+          : {
+              types: entry.types,
+              search_doc: entry.searchData,
+              // favor the last known good types over the types derived from the error state
+              ...((await this.getProductionVersion(url)) ?? {}),
+              type: 'error',
+              error_doc: errorEntry?.error ?? entry.error,
+            }),
     } as Omit<BoxelIndexTable, 'last_modified' | 'indexed_at'> & {
       // we do this because pg automatically casts big ints into strings, so
       // we unwind that to accurately type the structure that we want to pass
