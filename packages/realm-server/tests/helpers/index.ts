@@ -65,6 +65,7 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 import { createRemotePrerenderer } from '../../prerender/remote-prerenderer';
 import { createPrerenderHttpServer } from '../../prerender/prerender-app';
+import { buildCreatePrerenderAuth } from '../../prerender/auth';
 
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
@@ -133,6 +134,8 @@ export const realmSecretSeed = `shhh! it's a secret`;
 export const grafanaSecret = `shhh! it's a secret`;
 export const matrixRegistrationSecret: string =
   getSynapseConfig()!.registration_shared_secret; // as long as synapse has been started at least once, this will always exist
+export const testCreatePrerenderAuth =
+  buildCreatePrerenderAuth(realmSecretSeed);
 
 let prerenderServer: Server | undefined;
 let prerenderServerStart: Promise<void> | undefined;
@@ -169,7 +172,6 @@ async function startTestPrerenderServer(): Promise<string> {
     return testPrerenderURL;
   }
   let server = createPrerenderHttpServer({
-    secretSeed: realmSecretSeed,
     silent: Boolean(process.env.SILENT_PRERENDERER),
   });
   prerenderServer = server;
@@ -346,6 +348,7 @@ export async function createRealm({
       secretSeed: realmSecretSeed,
       realmServerMatrixUsername: testRealmServerMatrixUsername,
       prerenderer,
+      createPrerenderAuth: testCreatePrerenderAuth,
     });
   }
   let realmServerMatrixClient = new MatrixClient({
@@ -412,6 +415,7 @@ export async function runBaseRealmServer(
     dbAdapter,
     prerenderer,
     virtualNetwork,
+    testCreatePrerenderAuth,
   );
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
@@ -423,6 +427,7 @@ export async function runBaseRealmServer(
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
+    createPrerenderAuth: testCreatePrerenderAuth,
   });
   let { realm: testBaseRealm } = await createRealm({
     dir: basePath,
@@ -502,6 +507,7 @@ export async function runTestRealmServer({
     dbAdapter,
     prerenderer,
     virtualNetwork,
+    testCreatePrerenderAuth,
   );
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
@@ -513,6 +519,7 @@ export async function runTestRealmServer({
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
+    createPrerenderAuth: testCreatePrerenderAuth,
   });
   await worker.run();
   let { realm: testRealm, adapter: testRealmAdapter } = await createRealm({

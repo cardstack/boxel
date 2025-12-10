@@ -1,4 +1,4 @@
-import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '../index';
+import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '../tasks/indexer';
 import type {
   DBAdapter,
   FromScratchArgs,

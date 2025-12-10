@@ -5,6 +5,7 @@ import type {
   IndexWriter,
   Prerenderer,
   Reader,
+  RealmPermissions,
 } from '../index';
 import type { JobInfo } from '../worker';
 export * from './lint';
@@ -23,6 +24,7 @@ export interface TaskArgs {
   matrixURL: string;
   getReader(fetch: typeof global.fetch, realmURL: string): Reader;
   getAuthedFetch(args: WorkerArgs): Promise<typeof globalThis.fetch>;
+  createPrerenderAuth(userId: string, permissions: RealmPermissions): string;
   reportStatus(jobInfo: JobInfo | undefined, status: 'start' | 'finish'): void;
 }
 

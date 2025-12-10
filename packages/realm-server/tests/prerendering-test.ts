@@ -7,13 +7,15 @@ import type {
   RenderResponse,
 } from '@cardstack/runtime-common';
 import { Prerenderer } from '../prerender/index';
+import { PagePool } from '../prerender/page-pool';
+import { RenderRunner } from '../prerender/render-runner';
 
 import {
   setupBaseRealmServer,
   setupPermissionedRealms,
   matrixURL,
-  realmSecretSeed,
   cleanWhiteSpace,
+  testCreatePrerenderAuth,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import {
@@ -32,10 +34,10 @@ module(basename(__filename), function () {
     let prerenderer: Prerenderer;
     let realmAdapter: RealmAdapter;
     let realm: Realm;
+    let auth = () => testCreatePrerenderAuth(testUserId, permissions);
 
     hooks.before(async () => {
       prerenderer = new Prerenderer({
-        secretSeed: realmSecretSeed,
         maxPages: 2,
         serverURL: prerenderServerURL,
       });
@@ -179,8 +181,7 @@ module(basename(__filename), function () {
       let first = await prerenderer.prerenderCard({
         realm: realmURL,
         url: cardURL,
-        userId: testUserId,
-        permissions,
+        auth: auth(),
       });
 
       assert.false(first.pool.reused, 'first call not reused');
@@ -218,8 +219,7 @@ module(basename(__filename), function () {
       let second = await prerenderer.prerenderCard({
         realm: realmURL,
         url: cardURL,
-        userId: testUserId,
-        permissions,
+        auth: auth(),
       });
 
       assert.true(second.pool.reused, 'second call reused pooled page');
@@ -242,8 +242,7 @@ module(basename(__filename), function () {
       let result = await prerenderer.prerenderModule({
         realm: realmURL,
         url: moduleURL,
-        userId: testUserId,
-        permissions,
+        auth: auth(),
       });
 
       assert.false(result.pool.reused, 'first module render not reused');
@@ -273,8 +272,7 @@ module(basename(__filename), function () {
       let first = await prerenderer.prerenderModule({
         realm: realmURL,
         url: moduleURL,
-        userId: testUserId,
-        permissions,
+        auth: auth(),
       });
 
       assert.false(first.pool.reused, 'first module render not reused');
@@ -297,8 +295,7 @@ module(basename(__filename), function () {
       let second = await prerenderer.prerenderModule({
         realm: realmURL,
         url: moduleURL,
-        userId: testUserId,
-        permissions,
+        auth: auth(),
         renderOptions: { clearCache: true },
       });
 
@@ -340,8 +337,7 @@ module(basename(__filename), function () {
       let result = await prerenderer.prerenderModule({
         realm: realmURL,
         url: moduleURL,
-        userId: testUserId,
-        permissions,
+        auth: auth(),
       });
 
       assert.strictEqual(
@@ -363,8 +359,7 @@ module(basename(__filename), function () {
       let result = await prerenderer.prerenderCard({
         realm: realmURL,
         url: brokenCard,
-        userId: testUserId,
-        permissions,
+        auth: auth(),
       });
 
       assert.ok(result.response.error, 'prerender reports error');
@@ -400,8 +395,7 @@ module(basename(__filename), function () {
       let result = await prerenderer.prerenderCard({
         realm: realmURL,
         url: cardURL,
-        userId: testUserId,
-        permissions,
+        auth: auth(),
       });
 
       assert.ok(result.response.error, 'prerender reports error');
@@ -424,8 +418,7 @@ module(basename(__filename), function () {
       let result = await prerenderer.prerenderCard({
         realm: realmURL,
         url: cardURL,
-        userId: testUserId,
-        permissions,
+        auth: auth(),
       });
 
       assert.ok(result.response.error, 'prerender reports error');
@@ -454,8 +447,7 @@ module(basename(__filename), function () {
       let result = await prerenderer.prerenderCard({
         realm: realmURL,
         url: cardURL,
-        userId: testUserId,
-        permissions,
+        auth: auth(),
       });
 
       assert.ok(result.response.error, 'prerender reports error');
@@ -484,8 +476,7 @@ module(basename(__filename), function () {
       let first = await prerenderer.prerenderModule({
         realm: realmURL,
         url: moduleURL,
-        userId: testUserId,
-        permissions,
+        auth: auth(),
       });
       assert.false(first.pool.reused, 'initial module render not reused');
       assert.false(first.pool.evicted, 'initial module render not evicted');
@@ -493,8 +484,7 @@ module(basename(__filename), function () {
       let timedOut = await prerenderer.prerenderModule({
         realm: realmURL,
         url: moduleURL,
-        userId: testUserId,
-        permissions,
+        auth: auth(),
         opts: { timeoutMs: 1, simulateTimeoutMs: 25 },
       });
 
@@ -524,8 +514,7 @@ module(basename(__filename), function () {
       let afterTimeout = await prerenderer.prerenderModule({
         realm: realmURL,
         url: moduleURL,
-        userId: testUserId,
-        permissions,
+        auth: auth(),
       });
       assert.false(
         afterTimeout.pool.reused,
@@ -550,10 +539,10 @@ module(basename(__filename), function () {
     let testUserId = '@user1:localhost';
     let permissions: RealmPermissions = {};
     let prerenderer: Prerenderer;
+    let auth = () => testCreatePrerenderAuth(testUserId, permissions);
 
     hooks.before(async () => {
       prerenderer = new Prerenderer({
-        secretSeed: realmSecretSeed,
         maxPages: 2,
         serverURL: prerenderServerURL,
       });
@@ -689,8 +678,7 @@ module(basename(__filename), function () {
       let result = await prerenderer.prerenderModule({
         realm: consumerRealmURL,
         url: moduleURL,
-        userId: testUserId,
-        permissions,
+        auth: auth(),
       });
 
       assert.ok(
@@ -720,8 +708,7 @@ module(basename(__filename), function () {
       let result = await prerenderer.prerenderCard({
         realm: consumerRealmURL,
         url: cardURL,
-        userId: testUserId,
-        permissions,
+        auth: auth(),
       });
 
       assert.ok(
@@ -751,8 +738,7 @@ module(basename(__filename), function () {
       let result = await prerenderer.prerenderCard({
         realm: consumerRealmURL,
         url: cardURL,
-        userId: testUserId,
-        permissions,
+        auth: auth(),
       });
 
       assert.ok(result.response.error, 'auth failure returns an error');
@@ -780,6 +766,7 @@ module(basename(__filename), function () {
     let testUserId = '@user1:localhost';
     let permissions: RealmPermissions = {};
     let prerenderer: Prerenderer;
+    let auth = () => testCreatePrerenderAuth(testUserId, permissions);
     const disposeAllRealms = async () => {
       await Promise.all([
         prerenderer.disposeRealm(realmURL1),
@@ -790,7 +777,6 @@ module(basename(__filename), function () {
 
     hooks.before(async function () {
       prerenderer = new Prerenderer({
-        secretSeed: realmSecretSeed,
         maxPages: 2,
         serverURL: prerenderServerURL,
       });
@@ -1101,8 +1087,7 @@ module(basename(__filename), function () {
         let { response } = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: testCardURL,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
         result = response;
       });
@@ -1221,8 +1206,7 @@ module(basename(__filename), function () {
         let { response } = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: testCardURL,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
 
         assert.ok(
@@ -1248,8 +1232,7 @@ module(basename(__filename), function () {
         let { response } = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: testCardURL,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
         let { error, ...restOfResult } = response;
 
@@ -1284,8 +1267,7 @@ module(basename(__filename), function () {
         let result = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: testCardURL,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
         let { response } = result;
 
@@ -1310,8 +1292,7 @@ module(basename(__filename), function () {
         let result = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: testCardURL,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
         let { response } = result;
 
@@ -1336,8 +1317,7 @@ module(basename(__filename), function () {
         let { response } = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: testCardURL,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
         assert.ok(response.error, 'error captured');
         assert.strictEqual(response.error?.error.id, 'embedded-error');
@@ -1354,14 +1334,12 @@ module(basename(__filename), function () {
         await prerenderer.prerenderCard({
           realm: realmURL2,
           url: testCardURL,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
         let timedOut = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: testCardURL,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
           opts: { timeoutMs: 1000, simulateTimeoutMs: 2000 },
         });
 
@@ -1391,8 +1369,7 @@ module(basename(__filename), function () {
         let next = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: `${realmURL2}1`,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
         assert.false(
           next.pool.reused,
@@ -1411,15 +1388,13 @@ module(basename(__filename), function () {
         await prerenderer.prerenderCard({
           realm: realmURL2,
           url: errorCardURL,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
 
         let timedOut = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: errorCardURL,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
           opts: { timeoutMs: 500, simulateTimeoutMs: 2000 },
         });
 
@@ -1450,8 +1425,7 @@ module(basename(__filename), function () {
         let unusable = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: unusableURL,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
 
         // We should see an error with evict semantics and short-circuited payloads
@@ -1515,8 +1489,7 @@ module(basename(__filename), function () {
         let next = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: healthyURL,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
         assert.false(next.pool.reused, 'did not reuse after unusable eviction');
         assert.false(next.pool.evicted, 'subsequent render not evicted');
@@ -1527,8 +1500,7 @@ module(basename(__filename), function () {
         let broken = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: cardURL,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
         assert.ok(broken.response.error, 'syntax error captured');
         assert.strictEqual(
@@ -1548,8 +1520,7 @@ module(basename(__filename), function () {
         let first = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: testCardURL,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
         assert.false(first.pool.reused, 'first call not reused');
 
@@ -1557,8 +1528,7 @@ module(basename(__filename), function () {
         let timeoutRun = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: testCardURL,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
           opts: { timeoutMs: 1, simulateTimeoutMs: 5 },
         });
         assert.strictEqual(
@@ -1578,8 +1548,7 @@ module(basename(__filename), function () {
         let afterTimeout = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: testCardURL,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
         assert.false(
           afterTimeout.pool.reused,
@@ -1594,14 +1563,12 @@ module(basename(__filename), function () {
         let first = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: testCardURL,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
         let second = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: testCardURL,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
         assert.strictEqual(first.pool.realm, realmURL2, 'first realm matches');
         assert.strictEqual(
@@ -1626,14 +1593,12 @@ module(basename(__filename), function () {
         let r1 = await prerenderer.prerenderCard({
           realm: realmURL1,
           url: testCardURL1,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
         let r2 = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: testCardURL2,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
         assert.notStrictEqual(
           r1.pool.pageId,
@@ -1652,16 +1617,14 @@ module(basename(__filename), function () {
         let firstA = await prerenderer.prerenderCard({
           realm: realmURL1,
           url: cardA,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
         assert.false(firstA.pool.reused, 'first A not reused');
 
         let firstB = await prerenderer.prerenderCard({
           realm: realmURL2,
           url: cardB,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
         assert.false(firstB.pool.reused, 'first B not reused');
 
@@ -1669,8 +1632,7 @@ module(basename(__filename), function () {
         let firstC = await prerenderer.prerenderCard({
           realm: realmURL3,
           url: cardC,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
         assert.false(firstC.pool.reused, 'first C not reused');
 
@@ -1678,8 +1640,7 @@ module(basename(__filename), function () {
         let secondA = await prerenderer.prerenderCard({
           realm: realmURL1,
           url: cardA,
-          userId: testUserId,
-          permissions,
+          auth: auth(),
         });
         assert.false(secondA.pool.reused, 'A was evicted, so not reused');
         assert.notStrictEqual(
@@ -1687,6 +1648,121 @@ module(basename(__filename), function () {
           secondA.pool.pageId,
           'A got a new page after eviction',
         );
+      });
+
+      test('serializes cross-realm prerenders when no more capacity', async function (assert) {
+        let prevPoolSize = process.env.PRERENDER_PAGE_POOL_SIZE;
+        let originalGetPage = PagePool.prototype.getPage;
+        let originalCloseAll = PagePool.prototype.closeAll;
+        let originalPrerenderAttempt =
+          RenderRunner.prototype.prerenderCardAttempt;
+        let originalRetrySignature =
+          RenderRunner.prototype.shouldRetryWithClearCache;
+        let localPrerenderer: Prerenderer | undefined;
+
+        let active = 0;
+        let maxActive = 0;
+
+        try {
+          process.env.PRERENDER_PAGE_POOL_SIZE = '1';
+          PagePool.prototype.getPage = async function (realm: string) {
+            return {
+              page: {} as any,
+              reused: false,
+              launchMs: 0,
+              pageId: `fake-${realm}`,
+            };
+          };
+          PagePool.prototype.closeAll = async function () {};
+          RenderRunner.prototype.shouldRetryWithClearCache = () => undefined;
+          RenderRunner.prototype.prerenderCardAttempt = async function ({
+            realm,
+            url,
+          }: {
+            realm: string;
+            url: string;
+          }) {
+            active++;
+            maxActive = Math.max(maxActive, active);
+            await new Promise((resolve) => setTimeout(resolve, 25));
+            active--;
+            return {
+              response: {
+                serialized: null,
+                searchDoc: null,
+                displayNames: null,
+                deps: null,
+                types: null,
+                iconHTML: null,
+                isolatedHTML: url,
+                headHTML: null,
+                atomHTML: null,
+                embeddedHTML: null,
+                fittedHTML: null,
+              },
+              timings: { launchMs: 0, renderMs: 5 },
+              pool: {
+                pageId: `fake-${realm}`,
+                realm,
+                reused: false,
+                evicted: false,
+                timedOut: false,
+              },
+            };
+          };
+
+          localPrerenderer = new Prerenderer({
+            maxPages: 1,
+            silent: true,
+            serverURL: 'http://127.0.0.1:4225',
+          });
+
+          let realmA = 'https://realm-a.example/';
+          let realmB = 'https://realm-b.example/';
+          let authA = testCreatePrerenderAuth(testUserId, {
+            [realmA]: ['read'],
+          });
+          let authB = testCreatePrerenderAuth(testUserId, {
+            [realmB]: ['read'],
+          });
+
+          let [resA, resB] = await Promise.all([
+            localPrerenderer.prerenderCard({
+              realm: realmA,
+              url: `${realmA}card`,
+              auth: authA,
+            }),
+            localPrerenderer.prerenderCard({
+              realm: realmB,
+              url: `${realmB}card`,
+              auth: authB,
+            }),
+          ]);
+
+          assert.strictEqual(
+            maxActive,
+            1,
+            'global prerender semaphore serializes cross-realm work when pool is full',
+          );
+          assert.deepEqual(
+            [resA.response.isolatedHTML, resB.response.isolatedHTML].sort(),
+            [`${realmA}card`, `${realmB}card`].sort(),
+            'responses come from stubbed render attempts',
+          );
+        } finally {
+          if (prevPoolSize === undefined) {
+            delete process.env.PRERENDER_PAGE_POOL_SIZE;
+          } else {
+            process.env.PRERENDER_PAGE_POOL_SIZE = prevPoolSize;
+          }
+          PagePool.prototype.getPage = originalGetPage;
+          PagePool.prototype.closeAll = originalCloseAll;
+          RenderRunner.prototype.prerenderCardAttempt =
+            originalPrerenderAttempt;
+          RenderRunner.prototype.shouldRetryWithClearCache =
+            originalRetrySignature;
+          await localPrerenderer?.stop();
+        }
       });
     });
   });

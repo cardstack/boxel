@@ -8,6 +8,7 @@ import {
   type ModuleRenderResponse,
   type Prerenderer,
   type Realm,
+  type RealmPermissions,
   type ResolvedCodeRef,
 } from './index';
 import type { VirtualNetwork } from './virtual-network';
@@ -69,15 +70,24 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   #prerenderer: Prerenderer;
   #fetch: typeof fetch;
   #realms: LocalRealm[] = [];
+  #createPrerenderAuth: (
+    userId: string,
+    permissions: RealmPermissions,
+  ) => string;
 
   constructor(
     dbAdapter: DBAdapter,
     prerenderer: Prerenderer,
     virtualNetwork: VirtualNetwork,
+    createPrerenderAuth: (
+      userId: string,
+      permissions: RealmPermissions,
+    ) => string,
   ) {
     this.#dbAdapter = dbAdapter;
     this.#prerenderer = prerenderer;
     this.#fetch = virtualNetwork.fetch;
+    this.#createPrerenderAuth = createPrerenderAuth;
   }
 
   async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
@@ -263,11 +273,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     userId: string,
   ): Promise<ModuleRenderResponse> {
     let permissions = await fetchUserPermissions(this.#dbAdapter, { userId });
+    let auth = this.#createPrerenderAuth(userId, permissions);
     return await this.#prerenderer.prerenderModule({
       realm: realmURL,
       url: moduleUrl,
-      userId,
-      permissions,
+      auth,
     });
   }
 

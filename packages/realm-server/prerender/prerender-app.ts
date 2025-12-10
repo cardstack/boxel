@@ -6,7 +6,6 @@ import * as Sentry from '@sentry/node';
 import {
   Deferred,
   logger,
-  type RealmPermissions,
   type RenderRouteOptions,
   type RenderResponse,
   type ModuleRenderResponse,
@@ -28,16 +27,13 @@ import {
 let log = logger('prerender-server');
 const defaultPrerenderServerPort = 4221;
 
-export function buildPrerenderApp(
-  secretSeed: string,
-  options: {
-    serverURL: string;
-    maxPages?: number;
-    silent?: boolean;
-    isDraining?: () => boolean;
-    drainingPromise?: Promise<void>;
-  },
-): {
+export function buildPrerenderApp(options: {
+  serverURL: string;
+  maxPages?: number;
+  silent?: boolean;
+  isDraining?: () => boolean;
+  drainingPromise?: Promise<void>;
+}): {
   app: Koa<Koa.DefaultState, Koa.Context>;
   prerenderer: Prerenderer;
 } {
@@ -47,7 +43,6 @@ export function buildPrerenderApp(
     options?.maxPages ?? Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 4);
   let silent = options?.silent || process.env.PRERENDER_SILENT === 'true';
   let prerenderer = new Prerenderer({
-    secretSeed,
     maxPages,
     silent,
     serverURL: options.serverURL,
@@ -83,8 +78,7 @@ export function buildPrerenderApp(
   type PrerenderArgs = {
     realm: string;
     url: string;
-    userId: string;
-    permissions: RealmPermissions;
+    auth: string;
     renderOptions: RenderRouteOptions;
   };
 
@@ -135,8 +129,7 @@ export function buildPrerenderApp(
 
         let attrs = body?.data?.attributes ?? {};
         let url = attrs.url as string | undefined;
-        let userId = attrs.userId as string | undefined;
-        let permissions = attrs.permissions as RealmPermissions | undefined;
+        let auth = attrs.auth as string | undefined;
         let realm = attrs.realm as string | undefined;
         let renderOptions: RenderRouteOptions =
           attrs.renderOptions &&
@@ -146,22 +139,16 @@ export function buildPrerenderApp(
             : {};
 
         log.debug(
-          `received ${options.requestDescription} ${url}: realm=${realm} userId=${userId} options=${JSON.stringify(renderOptions)} permissions=${JSON.stringify(permissions)}`,
+          `received ${options.requestDescription} ${url}: realm=${realm} options=${JSON.stringify(renderOptions)}`,
         );
-        if (
-          !url ||
-          !userId ||
-          !permissions ||
-          typeof permissions !== 'object' ||
-          !realm
-        ) {
+        if (!url || !auth || typeof auth !== 'string' || !realm) {
           ctxt.status = 400;
           ctxt.body = {
             errors: [
               {
                 status: 400,
                 message:
-                  'Missing or invalid required attributes: url, userId, permissions, realm',
+                  'Missing or invalid required attributes: url, auth, realm',
               },
             ],
           };
@@ -173,8 +160,7 @@ export function buildPrerenderApp(
           .execute({
             realm,
             url,
-            userId,
-            permissions,
+            auth,
             renderOptions,
           })
           .then((result) => ({ result }));
@@ -373,7 +359,6 @@ async function unregisterWithManager(serverURL: string) {
 }
 
 export function createPrerenderHttpServer(options?: {
-  secretSeed?: string;
   maxPages?: number;
   silent?: boolean;
   port?: number;
@@ -384,10 +369,9 @@ export function createPrerenderHttpServer(options?: {
   let heartbeatTimer: NodeJS.Timeout | undefined;
   let isClosing = false;
   let fatalExitInProgress = false;
-  let secretSeed = options?.secretSeed ?? process.env.REALM_SECRET_SEED ?? '';
   let silent = options?.silent || process.env.PRERENDER_SILENT === 'true';
   let serverURL = resolvePrerenderServerURL(options?.port);
-  let { app, prerenderer } = buildPrerenderApp(secretSeed, {
+  let { app, prerenderer } = buildPrerenderApp({
     maxPages: options?.maxPages,
     silent,
     serverURL,
