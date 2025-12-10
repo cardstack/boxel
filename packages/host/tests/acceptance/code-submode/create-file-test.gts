@@ -215,6 +215,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
   let createFileSnapshot = setupSnapshotRealm<CreateFileSnapshotState>(hooks, {
     mockMatrixUtils,
+    acceptanceTest: true,
     async build({ loader }) {
       if (!cachedMatrixRoomId) {
         cachedMatrixRoomId = await createAndJoinRoom({

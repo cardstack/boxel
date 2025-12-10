@@ -104,6 +104,7 @@ module('Acceptance | Commands tests', function (hooks) {
 
   let commandsSnapshot = setupSnapshotRealm<CommandsSnapshotState>(hooks, {
     mockMatrixUtils,
+    acceptanceTest: true,
     async build({ loader }) {
       if (!cachedMatrixRoomId) {
         cachedMatrixRoomId = await createAndJoinRoom({

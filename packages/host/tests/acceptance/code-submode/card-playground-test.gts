@@ -20,16 +20,15 @@ import {
 import {
   percySnapshot,
   setupAcceptanceTestRealm,
-  setupAuthEndpoints,
   setupLocalIndexing,
   setupOnSave,
-  setupUserSubscription,
   testRealmURL,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   withoutLoaderMonitoring,
   type TestContextWithSave,
   assertMessages,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
@@ -190,192 +189,315 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     setupOnSave(hooks);
 
-    hooks.beforeEach(async function () {
-      let loader = getService('loader-service').loader;
-      let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-      cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
-      let { CardsGrid } = cardsGrid;
+    let playgroundSnapshot = setupSnapshotRealm<{ realm: Realm }>(hooks, {
+      mockMatrixUtils,
+      acceptanceTest: true,
+      async build({ loader, isInitialBuild }) {
+        let { CardsGrid } = await loader.import(`${baseRealm.url}cards-grid`);
 
-      createAndJoinRoom({
-        sender: '@testuser:localhost',
-        name: 'room-test',
-      });
-      setupUserSubscription();
-      setupAuthEndpoints();
+        if (isInitialBuild) {
+          createAndJoinRoom({
+            sender: '@testuser:localhost',
+            name: 'room-test',
+          });
+        }
 
-      ({ realm } = await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: testRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'index.json': new CardsGrid(),
-          'author.gts': authorCard,
-          'blog-post.gts': blogPostCard,
-          'code-ref-driver.gts': codeRefDriverCard,
-          'person.gts': personCard,
-          'Author/jane-doe.json': {
-            data: {
-              attributes: {
-                firstName: 'Jane',
-                lastName: 'Doe',
-                bio: "Jane Doe is the Senior Managing Editor at <em>Ramped.com</em>, where she leads content strategy, editorial direction, and ensures the highest standards of quality across all publications. With over a decade of experience in digital media and editorial management, Jane has a proven track record of shaping impactful narratives, growing engaged audiences, and collaborating with cross-functional teams to deliver compelling content. When she's not editing, you can find her exploring new books, hiking, or indulging in her love of photography.",
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}author`,
-                  name: 'Author',
+        ({ realm } = await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: testRealmURL,
+          loader,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'index.json': new CardsGrid(),
+            'author.gts': authorCard,
+            'blog-post.gts': blogPostCard,
+            'code-ref-driver.gts': codeRefDriverCard,
+            'person.gts': personCard,
+            'Author/jane-doe.json': {
+              data: {
+                attributes: {
+                  firstName: 'Jane',
+                  lastName: 'Doe',
+                  bio: "Jane Doe is the Senior Managing Editor at <em>Ramped.com</em>, where she leads content strategy, editorial direction, and ensures the highest standards of quality across all publications. With over a decade of experience in digital media and editorial management, Jane has a proven track record of shaping impactful narratives, growing engaged audiences, and collaborating with cross-functional teams to deliver compelling content. When she's not editing, you can find her exploring new books, hiking, or indulging in her love of photography.",
                 },
-              },
-            },
-          },
-          'BlogPost/remote-work.json': {
-            data: {
-              attributes: {
-                title: 'The Ultimate Guide to Remote Work',
-                description:
-                  'In today’s digital age, remote work has transformed from a luxury to a necessity. This comprehensive guide will help you navigate the world of remote work, offering tips, tools, and best practices for success.',
-              },
-              relationships: {
-                author: {
-                  links: {
-                    self: `${testRealmURL}Author/jane-doe`,
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}author`,
+                    name: 'Author',
                   },
                 },
               },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'BlogPost',
-                },
-              },
             },
-          },
-          'BlogPost/mad-hatter.json': {
-            data: {
-              attributes: { title: 'Mad As a Hatter' },
-              relationships: {
-                author: {
-                  links: {
-                    self: `${testRealmURL}Author/jane-doe`,
+            'BlogPost/remote-work.json': {
+              data: {
+                attributes: {
+                  title: 'The Ultimate Guide to Remote Work',
+                  description:
+                    'In today’s digital age, remote work has transformed from a luxury to a necessity. This comprehensive guide will help you navigate the world of remote work, offering tips, tools, and best practices for success.',
+                },
+                relationships: {
+                  author: {
+                    links: {
+                      self: `${testRealmURL}Author/jane-doe`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'BlogPost',
                   },
                 },
               },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'BlogPost',
-                },
-              },
             },
-          },
-          'BlogPost/urban-living.json': {
-            data: {
-              attributes: {
-                title:
-                  'The Future of Urban Living: Skyscrapers or Sustainable Communities?',
-              },
-              relationships: {
-                author: {
-                  links: {
-                    self: `${testRealmURL}Author/jane-doe`,
+            'Author/tom.json': {
+              data: {
+                attributes: {
+                  firstName: 'Tom',
+                  lastName: 'Sampson',
+                  bio: 'A dude',
+                  title: 'Tom',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}author`,
+                    name: 'Author',
                   },
                 },
               },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'BlogPost',
+            },
+            'BlogPost/tom.json': {
+              data: {
+                attributes: {
+                  title: 'Blog Post',
+                  publishDate: '2023-05-06T00:00:00.000-07:00',
+                  categories: [{ title: 'technology', id: 'technology-id' }],
+                  author: { id: 'tom-id' },
+                },
+                relationships: {
+                  author: {
+                    links: {
+                      self: `${testRealmURL}Author/tom`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'BlogPost',
+                  },
                 },
               },
             },
-          },
-          'Category/city-design.json': {
-            data: {
-              attributes: { cardInfo: { title: 'City Design' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'Category',
+            'Author/tom-id.json': {
+              data: {
+                attributes: {
+                  firstName: 'Tom',
+                  lastName: 'Sampson',
+                  bio: 'A dude',
+                  title: 'Tom',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}author`,
+                    name: 'Author',
+                  },
                 },
               },
             },
-          },
-          'Category/future-tech.json': {
-            data: {
-              attributes: { cardInfo: { title: 'Future Tech' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'Category',
+            'BlogPost/mad-hatter.json': {
+              data: {
+                attributes: { title: 'Mad As a Hatter' },
+                relationships: {
+                  author: {
+                    links: {
+                      self: `${testRealmURL}Author/jane-doe`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'BlogPost',
+                  },
                 },
               },
             },
-          },
-          'Category/interior-design.json': {
-            data: {
-              attributes: { cardInfo: { title: 'Interior Design' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'Category',
+            'BlogPost/urban-living.json': {
+              data: {
+                attributes: {
+                  title:
+                    'The Future of Urban Living: Skyscrapers or Sustainable Communities?',
+                },
+                relationships: {
+                  author: {
+                    links: {
+                      self: `${testRealmURL}Author/jane-doe`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'BlogPost',
+                  },
                 },
               },
             },
-          },
-          'Category/landscaping.json': {
-            data: {
-              attributes: { cardInfo: { title: 'Landscaping' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'Category',
+            'BlogPost/technology-id.json': {
+              data: {
+                attributes: {
+                  title: 'Blog Post',
+                  publishDate: '2023-05-06T00:00:00.000-07:00',
+                  categories: [{ title: 'technology', id: 'technology-id' }],
+                  author: { id: 'tom-id' },
+                },
+                relationships: {
+                  author: {
+                    links: {
+                      self: `${testRealmURL}Author/tom-id`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'BlogPost',
+                  },
                 },
               },
             },
-          },
-          'Category/home-gym.json': {
-            data: {
-              attributes: { cardInfo: { title: 'Home Gym' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'Category',
+            'BlogPost/sliding-doors.json': {
+              data: {
+                attributes: {
+                  title: 'The Success Story of Sliding Doors',
+                  description:
+                    'Go beyond just open and close, sliding doors will change your life',
+                  publishDate: '2023-05-06T00:00:00.000-07:00',
+                  localCategories: [
+                    { title: 'garage', id: 'garage-id' },
+                    { title: 'home improvement', id: 'home-improvement-id' },
+                  ],
+                },
+                relationships: {
+                  author: {
+                    links: {
+                      self: `${testRealmURL}Author/jane-doe`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'BlogPost',
+                  },
                 },
               },
             },
-          },
-          'Person/pet-mango.json': {
-            data: {
-              attributes: { cardInfo: { title: 'Mango' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}person`,
-                  name: 'Pet',
+            'BlogPost/urban-living.json': {
+              data: {
+                attributes: {
+                  title:
+                    'The Future of Urban Living: Skyscrapers or Sustainable Communities?',
+                },
+                relationships: {
+                  author: {
+                    links: {
+                      self: `${testRealmURL}Author/jane-doe`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'BlogPost',
+                  },
                 },
               },
             },
-          },
-        },
-      }));
+            'Category/city-design.json': {
+              data: {
+                attributes: { cardInfo: { title: 'City Design' } },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'Category',
+                  },
+                },
+              },
+            },
+            'Category/future-tech.json': {
+              data: {
+                attributes: { cardInfo: { title: 'Future Tech' } },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'Category',
+                  },
+                },
+              },
+            },
 
-      setRecentFiles([
-        [testRealmURL, 'blog-post.gts'],
-        [testRealmURL, 'author.gts'],
-        [testRealmURL, 'BlogPost/mad-hatter.json'],
-        [testRealmURL, 'Category/city-design.json'],
-        [testRealmURL, 'Category/future-tech.json'],
-        [testRealmURL, 'BlogPost/remote-work.json'],
-        [testRealmURL, 'BlogPost/urban-living.json'],
-        [testRealmURL, 'Author/jane-doe.json'],
-      ]);
-      removePlaygroundSelections();
+            'Category/landscaping.json': {
+              data: {
+                attributes: { cardInfo: { title: 'Landscaping' } },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'Category',
+                  },
+                },
+              },
+            },
+            'Category/home-gym.json': {
+              data: {
+                attributes: { cardInfo: { title: 'Home Gym' } },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'Category',
+                  },
+                },
+              },
+            },
+            'Person/pet-mango.json': {
+              data: {
+                attributes: { cardInfo: { title: 'Mango' } },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}person`,
+                    name: 'Pet',
+                  },
+                },
+              },
+            },
+          },
+        }));
 
-      setActiveRealms([testRealmURL]);
-      setRealmPermissions({
-        [testRealmURL]: ['read', 'write'],
-      });
+        setRecentFiles([
+          [testRealmURL, 'blog-post.gts'],
+          [testRealmURL, 'author.gts'],
+          [testRealmURL, 'BlogPost/mad-hatter.json'],
+          [testRealmURL, 'Category/city-design.json'],
+          [testRealmURL, 'Category/future-tech.json'],
+          [testRealmURL, 'BlogPost/remote-work.json'],
+          [testRealmURL, 'BlogPost/urban-living.json'],
+          [testRealmURL, 'Author/jane-doe.json'],
+        ]);
+        removePlaygroundSelections();
+
+        setActiveRealms([testRealmURL]);
+        setRealmPermissions({
+          [testRealmURL]: ['read', 'write'],
+        });
+
+        return { realm };
+      },
     });
 
+    hooks.beforeEach(function () {
+      realm = playgroundSnapshot.get().realm;
+    });
     test('can render playground panel when an exported card def is selected', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
@@ -1356,52 +1478,68 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     let { setActiveRealms, setRealmPermissions, createAndJoinRoom } =
       mockMatrixUtils;
 
-    hooks.beforeEach(async function () {
-      createAndJoinRoom({
-        sender: '@testuser:localhost',
-        name: 'room-test',
-      });
-      setupUserSubscription();
-      setupAuthEndpoints();
+    let multiRealmSnapshot = setupSnapshotRealm<{
+      personalRealmURL: string;
+      additionalRealmURL: string;
+    }>(hooks, {
+      mockMatrixUtils,
+      acceptanceTest: true,
+      async build({ isInitialBuild }) {
+        if (isInitialBuild) {
+          createAndJoinRoom({
+            sender: '@testuser:localhost',
+            name: 'room-test',
+          });
+        }
 
-      let realmServerService = getService('realm-server');
-      personalRealmURL = `${realmServerService.url}testuser/personal/`;
-      additionalRealmURL = `${realmServerService.url}testuser/aaa/`; // writeable realm that is lexically before the personal realm
-      setActiveRealms([additionalRealmURL, personalRealmURL]);
+        let realmServerService = getService('realm-server');
+        personalRealmURL = `${realmServerService.url}testuser/personal/`;
+        additionalRealmURL = `${realmServerService.url}testuser/aaa/`;
+        setActiveRealms([additionalRealmURL, personalRealmURL]);
 
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: personalRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'author-card.gts': authorCard,
-          'StyleReference/local-style.json': localStyleReferenceCard,
-          '.realm.json': {
-            name: `Test User's Workspace`,
-            backgroundURL: 'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
-            iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: personalRealmURL,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'author-card.gts': authorCard,
+            'StyleReference/local-style.json': localStyleReferenceCard,
+            '.realm.json': {
+              name: `Test User's Workspace`,
+              backgroundURL:
+                'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
+              iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
+            },
           },
-        },
-      });
+        });
 
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: additionalRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'author-card.gts': authorCard,
-          '.realm.json': {
-            name: `Additional Workspace`,
-            backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
-            iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: additionalRealmURL,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'author-card.gts': authorCard,
+            '.realm.json': {
+              name: `Additional Workspace`,
+              backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
+              iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
+            },
           },
-        },
-      });
+        });
 
-      setRealmPermissions({
-        [additionalRealmURL]: ['read', 'write', 'realm-owner'],
-        [personalRealmURL]: ['read', 'write', 'realm-owner'],
-      });
+        setRealmPermissions({
+          [additionalRealmURL]: ['read', 'write', 'realm-owner'],
+          [personalRealmURL]: ['read', 'write', 'realm-owner'],
+        });
+
+        return { personalRealmURL, additionalRealmURL };
+      },
+    });
+
+    hooks.beforeEach(function () {
+      let snapshot = multiRealmSnapshot.get();
+      personalRealmURL = snapshot.personalRealmURL;
+      additionalRealmURL = snapshot.additionalRealmURL;
     });
 
     test('can create new instance in currently open realm', async function (assert) {
@@ -1565,39 +1703,49 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       }
     `;
 
-    hooks.beforeEach(async function () {
-      createAndJoinRoom({
-        sender: '@testuser:localhost',
-        name: 'room-test',
-      });
-      setupUserSubscription();
-      setupAuthEndpoints();
-      setActiveRealms([testRealmURL]);
-      setRealmPermissions({
-        [testRealmURL]: ['read', 'write'],
-      });
-      ({ realm } = await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: testRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'boom-pet.gts': boomPet,
-          'person.gts': personCard,
-          'boom-person.gts': boomPerson,
-          'syntax-error.gts': syntaxError,
-          'Person/delilah.json': {
-            data: {
-              attributes: { cardInfo: { title: 'Delilah' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}person`,
-                  name: 'Person',
+    let errorSnapshot = setupSnapshotRealm<{ realm: Realm }>(hooks, {
+      mockMatrixUtils,
+      acceptanceTest: true,
+      async build({ loader, isInitialBuild }) {
+        if (isInitialBuild) {
+          createAndJoinRoom({
+            sender: '@testuser:localhost',
+            name: 'room-test',
+          });
+        }
+        setActiveRealms([testRealmURL]);
+        setRealmPermissions({
+          [testRealmURL]: ['read', 'write'],
+        });
+        let { realm } = await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: testRealmURL,
+          loader,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'boom-pet.gts': boomPet,
+            'person.gts': personCard,
+            'boom-person.gts': boomPerson,
+            'syntax-error.gts': syntaxError,
+            'Person/delilah.json': {
+              data: {
+                attributes: { cardInfo: { title: 'Delilah' } },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}person`,
+                    name: 'Person',
+                  },
                 },
               },
             },
           },
-        },
-      }));
+        });
+        return { realm };
+      },
+    });
+
+    hooks.beforeEach(function () {
+      realm = errorSnapshot.get().realm;
     });
 
     test('it renders a module error', async function (assert) {

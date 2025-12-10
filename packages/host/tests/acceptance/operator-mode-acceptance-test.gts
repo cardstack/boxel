@@ -101,6 +101,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     hooks,
     {
       mockMatrixUtils,
+      acceptanceTest: true,
       async build({ loader }) {
         if (!cachedMatrixRoomId) {
           cachedMatrixRoomId = createAndJoinRoom({
