@@ -126,10 +126,6 @@ export class Worker {
       ),
       this.#queue.register(`copy-index`, Tasks['copy'](taskArgs)),
       this.#queue.register(`lint-source`, Tasks['lintSource'](taskArgs)),
-      this.#queue.register(
-        Tasks.FULL_REINDEX_BATCH_JOB,
-        Tasks['fullReindexBatch'](taskArgs),
-      ),
       this.#queue.register(`full-reindex`, Tasks['fullReindex'](taskArgs)),
     ]);
     await this.#queue.start();

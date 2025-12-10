@@ -221,6 +221,9 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     <style scoped>
       .host-mode-content {
         height: 100%;
+        position: fixed;
+        top: 0;
+        left: 0;
       }
     </style>
   </template>
