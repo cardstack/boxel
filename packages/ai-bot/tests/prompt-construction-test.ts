@@ -1,7 +1,6 @@
 import { module, test, assert } from 'qunit';
 import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
-
 import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -37,6 +36,7 @@ import {
   getTools,
   SKILL_INSTRUCTIONS_MESSAGE,
 } from '@cardstack/runtime-common/ai';
+import type { TextContent } from '@cardstack/runtime-common/ai/types';
 
 const DEFAULT_CATALOG_REALM_URL = 'http://localhost:4201/catalog/';
 const catalogRealmURL = ensureTrailingSlash(
@@ -516,7 +516,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(result[1].role, 'system');
     assert.equal(result[2].role, 'user');
     assert.true(
-      result[2].content?.startsWith('Hey'),
+      (result[2].content as string).startsWith('Hey'),
       'message body should be in the user prompt',
     );
     if (
@@ -524,29 +524,29 @@ Current date and time: 2025-06-11T11:43:00.533Z
       history[0].content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
     ) {
       assert.true(
-        result[2].content?.includes(`"firstName": "Terry"`),
+        (result[2].content as string).includes(`"firstName": "Terry"`),
         'attached card should be in the message that it was sent with 1',
       );
       assert.true(
-        result[2].content?.includes(`"lastName": "Pratchett"`),
+        (result[2].content as string).includes(`"lastName": "Pratchett"`),
         'attached card should be in the message that it was sent with 2',
       );
       assert.true(
-        result[1].content?.includes('Room ID: room1'),
+        (result[1].content as string).includes('Room ID: room1'),
         'roomId should be in the system context message',
       );
       assert.true(
-        result[1].content?.includes('Submode: interact'),
+        (result[1].content as string).includes('Submode: interact'),
         'submode should be in the system context message',
       );
       assert.true(
-        result[1].content?.includes(
+        (result[1].content as string).includes(
           'Workspace: http://localhost:4201/experiments',
         ),
         'workspace should be in the system context message',
       );
       assert.true(
-        result[1].content?.includes(
+        (result[1].content as string).includes(
           'Open cards:\n - http://localhost:4201/experiments/Author/1\n',
         ),
         'open card ids should be in the system context message',
@@ -1015,7 +1015,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
 
     let userMessages = prompt.filter((message) => message.role === 'user');
     assert.ok(
-      userMessages[0]?.content?.includes(
+      (userMessages[0]?.content as string).includes(
         `
 Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
@@ -1024,7 +1024,7 @@ Attached Files (files with newer versions don't show their content):
       ),
     );
     assert.ok(
-      userMessages[1]?.content?.includes(
+      (userMessages[1]?.content as string).includes(
         `
 Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
@@ -1035,7 +1035,7 @@ Attached Files (files with newer versions don't show their content):
       ),
     );
     assert.ok(
-      userMessages[2]?.content?.includes(
+      (userMessages[2]?.content as string).includes(
         `
 Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts):
@@ -1047,7 +1047,7 @@ Attached Files (files with newer versions don't show their content):
     );
 
     assert.ok(
-      prompt[prompt.length - 2].content?.includes(
+      (prompt[prompt.length - 2].content as string).includes(
         'File open in code editor: http://test-realm-server/my-realm/spaghetti-recipe.gts',
       ),
       'Context should include the URL of the file open in the code editor',
@@ -1350,24 +1350,26 @@ Attached Files (files with newer versions don't show their content):
       (message) => message.role === 'user',
     );
     assert.true(
-      userMessages[0]?.content?.includes(
+      (userMessages[0]?.content as string).includes(
         'http://localhost:4201/experiments/Author/1',
       ),
     );
     assert.false(
-      userMessages[0]?.content?.includes('"firstName": "Terry"'),
+      (userMessages[0]?.content as string).includes('"firstName": "Terry"'),
       'should not include the contents of the first version of the card in the first user message',
     );
     assert.true(
-      userMessages[1]?.content?.includes(
+      (userMessages[1]?.content as string).includes(
         'http://localhost:4201/experiments/Author/1',
       ),
     );
     assert.true(
-      userMessages[1]?.content?.includes('"firstName": "Newer Terry"'),
+      (userMessages[1]?.content as string).includes(
+        '"firstName": "Newer Terry"',
+      ),
     );
     assert.true(
-      userMessages[1]?.content?.includes(
+      (userMessages[1]?.content as string).includes(
         'http://localhost:4201/experiments/Author/2',
       ),
     );
@@ -1739,7 +1741,7 @@ Attached Files (files with newer versions don't show their content):
 
     let userContextMessage = messages?.[messages.length - 2];
     assert.ok(
-      userContextMessage?.content?.includes(nonEditableCardsMessage),
+      (userContextMessage?.content as string).includes(nonEditableCardsMessage),
       'System context message should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files, but was ' +
         userContextMessage?.content,
     );
@@ -1760,7 +1762,7 @@ Attached Files (files with newer versions don't show their content):
     );
 
     assert.ok(
-      !messages2?.[messages2.length - 2].content?.includes(
+      !(messages2?.[messages2.length - 2].content as string).includes(
         nonEditableCardsMessage,
       ),
       'System context message should not include the "unable to edit cards" message when there are attached cards and a tool',
@@ -1786,7 +1788,7 @@ Attached Files (files with newer versions don't show their content):
     );
 
     assert.ok(
-      !messages3?.[messages3.length - 2].content?.includes(
+      !(messages3?.[messages3.length - 2].content as string).includes(
         nonEditableCardsMessage,
       ),
       'System context message should not include the "unable to edit cards" message when there is an attached file',
@@ -1967,21 +1969,24 @@ Attached Files (files with newer versions don't show their content):
     ).messages!;
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
-    assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.true(
-      result[0].content?.includes(
+      (result[0].content[1] as TextContent).text.includes(
+        SKILL_INSTRUCTIONS_MESSAGE,
+      ),
+    );
+    assert.true(
+      (result[0].content[2] as TextContent).text.includes(
         'Skill (id: https://cardstack.com/base/Skill/card-editing, title: Card Editing):',
       ),
       'includes skill title metadata when present',
     );
-    assert.false(result[0].content?.includes('['));
     assert.true(
-      result[0].content?.includes(
+      (result[0].content[2] as TextContent).text.includes(
         'If the user wants the data they see edited, AND the patchCardInstance function is available',
       ),
     );
     assert.true(
-      result[0].content?.includes(
+      (result[0].content[3] as TextContent).text.includes(
         'Given a prompt, fill in the product requirements document.',
       ),
     );
@@ -2082,20 +2087,26 @@ Attached Files (files with newer versions don't show their content):
     ).messages!;
 
     assert.equal(result[0].role, 'system');
-    assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.true(
-      result[0].content?.includes(
+      (result[0].content[1] as TextContent).text.includes(
+        SKILL_INSTRUCTIONS_MESSAGE,
+      ),
+    );
+    assert.true(
+      (result[0].content[2] as TextContent).text.includes(
         'If the user wants the data they see edited, AND the patchCardInstance function is available',
       ),
       'skill card instructions included in the system message',
     );
     assert.true(
-      result[0].content?.includes('Use pirate colloquialism when responding.'),
+      (result[0].content[3] as TextContent).text.includes(
+        'Use pirate colloquialism when responding.',
+      ),
       'skill card instructions included in the system message',
     );
     assert.equal(result[2].role, 'user');
     assert.true(
-      result![2].content?.includes(
+      (result[2].content as string).includes(
         '"appTitle": "Radio Episode Tracker for Nerds"',
       ),
       'attached card details included in the user message',
@@ -2145,10 +2156,20 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.true(messages!.length > 0);
     assert.true(messages![0].role === 'system');
-    let systemPrompt = messages![0].content;
-    assert.true(systemPrompt?.includes(SKILL_INSTRUCTIONS_MESSAGE));
-    assert.false(systemPrompt?.includes('This is skill 1'));
-    assert.true(systemPrompt?.includes('This is skill 2'));
+    let systemPromptParts = messages![0].content;
+    assert.true(
+      (systemPromptParts[1] as TextContent).text.includes(
+        SKILL_INSTRUCTIONS_MESSAGE,
+      ),
+    );
+    assert.false(
+      (systemPromptParts as TextContent[])
+        .map((c) => c.text)
+        .includes('This is skill 1'),
+    );
+    assert.true(
+      (systemPromptParts[2] as TextContent).text.includes('This is skill 2'),
+    );
   });
 
   test('If there are no skill cards active in the latest matrix room state, remove from system prompt', async () => {
@@ -2193,7 +2214,7 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.true(messages!.length > 0);
     assert.true(messages![0].role === 'system');
-    let systemPrompt = messages![0].content;
+    let systemPrompt = (messages![0].content as TextContent[]).join('\n');
     assert.false(systemPrompt?.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.false(systemPrompt?.includes('This is skill 1'));
     assert.false(systemPrompt?.includes('This is skill 2'));
@@ -2254,7 +2275,11 @@ Attached Files (files with newer versions don't show their content):
       '@aibot:localhost',
       fakeMatrixClient,
     );
-    assert.true(messages![0]!.content?.includes('Skill Instructions'));
+    assert.true(
+      (messages![0]!.content[1] as TextContent).text.includes(
+        'Skill Instructions',
+      ),
+    );
   });
 
   test('Has the skill card specified by the last state update, even if there are other skill cards with the same id', async () => {
@@ -2294,11 +2319,20 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.true(messages!.length > 0);
     assert.equal(messages![0].role, 'system');
-    assert.true(messages![0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
-    assert.false(messages![0].content?.includes('SKILL_INSTRUCTIONS_V1'));
     assert.true(
-      messages![0].content?.includes(
-        'Skill (id: skill-card-1):\nSKILL_INSTRUCTIONS_V2\n',
+      (messages![0].content[1] as TextContent).text.includes(
+        SKILL_INSTRUCTIONS_MESSAGE,
+      ),
+    );
+    assert.false(
+      (messages![0].content as TextContent[])
+        .map((c) => c.text)
+        .join('')
+        .includes('SKILL_INSTRUCTIONS_V1'),
+    );
+    assert.true(
+      (messages![0].content[2] as TextContent).text.includes(
+        'Skill (id: skill-card-1):\nSKILL_INSTRUCTIONS_V2',
       ),
     );
   });
@@ -2675,7 +2709,7 @@ Attached Files (files with newer versions don't show their content):
     assert.equal(result[5].tool_call_id, 'tool-call-id-1');
     const expected = `Tool call executed, with result card: {"data":{"type":"card","attributes":{"title":"Search Results","description":"Here are the search results","results":[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Alice is a software engineer at Google.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]},"meta":{"adoptsFrom":{"module":"https://cardstack.com/base/search-results","name":"SearchResults"}}}}.`;
 
-    assert.equal(result[5].content!.trim(), expected.trim());
+    assert.equal((result[5].content as string).trim(), expected.trim());
   });
 
   test('Tools remain available in prompt parts even when not in last message', async () => {
@@ -2792,7 +2826,7 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.ok(toolCallMessage, 'Should have a tool call message');
     assert.ok(
-      toolCallMessage!.content!.includes('Cloudy'),
+      (toolCallMessage!.content as string).includes('Cloudy'),
       'Tool call result should include "Cloudy"',
     );
   });
@@ -2917,7 +2951,7 @@ Attached Files (files with newer versions don't show their content):
       'Should have one tool call message',
     );
     assert.ok(
-      toolCallMessages[0].content!.includes('Tool call executed'),
+      (toolCallMessages[0].content as string).includes('Tool call executed'),
       'Tool call result should include "Tool call executed"',
     );
   });
@@ -3032,11 +3066,11 @@ Attached Files (files with newer versions don't show their content):
       'Should have two tool call messages',
     );
     assert.ok(
-      toolCallMessages[0].content!.includes('Cloudy'),
+      (toolCallMessages[0].content as string).includes('Cloudy'),
       'Tool call result should include "Cloudy"',
     );
     assert.ok(
-      toolCallMessages[1].content!.includes('Sunny'),
+      (toolCallMessages[1].content as string).includes('Sunny'),
       'Tool call result should include "Sunny"',
     );
   });
@@ -3463,7 +3497,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.equal(messages!.length, 10);
     assert.equal(messages![0].role, 'system');
-    assert.false(messages![0].content!.includes('Business Card V1'));
+    assert.false((messages![0].content as string).includes('Business Card V1'));
     assert.equal(messages![2].role, 'assistant');
     assert.equal(
       messages![2].content,
@@ -3471,7 +3505,9 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.equal(messages![3].role, 'user');
     assert.true(
-      messages![3].content!.startsWith('change the name to stephanie'),
+      (messages![3].content as string).startsWith(
+        'change the name to stephanie',
+      ),
     );
     assert.equal(messages![4].role, 'assistant');
     assert.equal(
@@ -3485,7 +3521,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       'patchCardInstance',
       'Should have patchCardInstance tool call',
     );
-    assert.true(messages![6].content!.includes('Business Card V2'));
+    assert.true((messages![6].content as string).includes('Business Card V2'));
   });
 
   test('Responds to successful completion of lone code patch', async function () {
@@ -3644,7 +3680,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       'Should have one tool result message',
     );
     assert.ok(
-      toolResultMessages[0].content!.includes('Cloudy'),
+      (toolResultMessages[0].content as string).includes('Cloudy'),
       'Tool call result should include "Cloudy"',
     );
   });
@@ -3712,7 +3748,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       'Should have one tool result message',
     );
     assert.ok(
-      toolResultMessages[0].content!.includes('Cloudy'),
+      (toolResultMessages[0].content as string).includes('Cloudy'),
       'Tool call result should include "Cloudy"',
     );
   });
@@ -3835,7 +3871,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.equal(messages![3].role, 'system');
     assert.true(
-      !!messages![3].content!.match(
+      !!(messages![3].content as string).match(
         /Current date and time: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,
       ),
       'Context message should contain the current date and time but was ' +
@@ -3867,11 +3903,11 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.ok(toolCallMessage, 'Should have a tool call message');
     assert.true(
-      toolCallMessage!.content!.includes('executed'),
+      (toolCallMessage!.content as string).includes('executed'),
       'Tool call result should reflect that the tool was executed',
     );
     assert.true(
-      toolCallMessage!.content!.includes(
+      (toolCallMessage!.content as string).includes(
         `
 Attached Files (files with newer versions don't show their content):
 [postcard.gts](http://test-realm-server/user/test-realm/postcard.gts):
@@ -3905,11 +3941,11 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.ok(toolCallMessage, 'Should have a tool call message');
     assert.true(
-      toolCallMessage!.content!.includes('executed'),
+      (toolCallMessage!.content as string).includes('executed'),
       'Tool call result should reflect that the tool was executed',
     );
     assert.true(
-      toolCallMessage!.content!.includes(
+      (toolCallMessage!.content as string).includes(
         `
 Attached Cards (cards with newer versions don't show their content):
 [
@@ -3956,13 +3992,13 @@ Attached Cards (cards with newer versions don't show their content):
     );
     assert.ok(lastUserMessage, 'Should have a code patch result message');
     assert.ok(
-      lastUserMessage!.content!.includes(
+      (lastUserMessage!.content as string).includes(
         'The user has successfully applied code patch 1.',
       ),
       'Code patch result should reflect that the code patch was applied',
     );
     assert.ok(
-      lastUserMessage!.content!.includes(
+      (lastUserMessage!.content as string).includes(
         `
 Attached Files (files with newer versions don't show their content):
 [postcard.gts](http://test-realm-server/user/test-realm/postcard.gts):
@@ -4312,7 +4348,7 @@ new
     );
     assert.true(
       disabledUserMessages.some((message) =>
-        message.content?.includes(
+        (message.content as string).includes(
           'The user has successfully applied code patch 1.',
         ),
       ),
@@ -4335,7 +4371,7 @@ new
     );
     assert.false(
       enabledUserMessages.some((message) =>
-        message.content?.includes(
+        (message.content as string).includes(
           'The user has successfully applied code patch 1.',
         ),
       ),
