@@ -167,7 +167,6 @@ export * from './worker';
 export * from './stream';
 export * from './realm';
 export * from './realm-index-updater';
-export * from './reindex-config';
 export * from './fetcher';
 export * from './scoped-css';
 export * from './html-utils';
