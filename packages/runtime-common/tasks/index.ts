@@ -8,7 +8,8 @@ import type {
   RealmPermissions,
 } from '../index';
 import type { JobInfo } from '../worker';
-export * from './lint';
+export type * from './lint';
+export * from '#lint-task';
 export * from './full-reindex';
 export * from './copy';
 export * from './indexer';

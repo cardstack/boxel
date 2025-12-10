@@ -2,6 +2,12 @@
   "name": "@cardstack/runtime-common",
   "version": "1.0.0",
   "license": "MIT",
+  "imports": {
+    "#lint-task": {
+      "node": "./tasks/lint.ts",
+      "browser": "./tasks/lint-browser.ts"
+    }
+  },
   "dependencies": {
     "@aws-crypto/sha256-js": "catalog:",
     "@babel/generator": "catalog:",

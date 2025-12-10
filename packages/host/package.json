@@ -11,7 +11,7 @@
     "test": "tests"
   },
   "scripts": {
-    "build": "ember build",
+    "build": "vite build",
     "build:production": "NODE_OPTIONS='--max-old-space-size=8192' ember build --environment=production",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:css:fix": "concurrently \"pnpm:lint:css -- --fix\"",
@@ -22,13 +22,14 @@
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:glint": "glint",
     "ensure-boxel-ui": "../boxel-ui/addon/bin/conditional-build.sh",
-    "start": "pnpm ensure-boxel-ui && NODE_OPTIONS='--max-old-space-size=8192' ember serve",
+    "start": "vite",
     "start:build": "NODE_OPTIONS='--max-old-space-size=8192' ember build --watch",
     "test": "concurrently \"pnpm:lint\" \"pnpm:test:*\" --names \"lint,test:\"",
     "test-with-percy": "percy exec --parallel -- pnpm test:wait-for-servers",
     "test:wait-for-servers": "./scripts/test-wait-for-servers.sh",
     "ember-test-pre-built": "sleep 15 && ember exam --path ./dist --split $HOST_TEST_PARTITION_COUNT --partition $HOST_TEST_PARTITION --preserve-test-name",
-    "wait": "sleep 10000000"
+    "wait": "sleep 10000000",
+    "test:ember": "vite build --mode development && ember test --path dist"
   },
   "devDependencies": {
     "@babel/core": "catalog:",
@@ -36,6 +37,8 @@
     "@babel/plugin-syntax-class-properties": "catalog:",
     "@babel/plugin-syntax-decorators": "catalog:",
     "@babel/plugin-syntax-typescript": "catalog:",
+    "@babel/plugin-transform-runtime": "^7.26.9",
+    "@babel/plugin-transform-typescript": "^7.28.0",
     "@cardstack/base": "workspace:*",
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
@@ -44,13 +47,14 @@
     "@cardstack/requirejs-monaco-ember-polyfill": "catalog:",
     "@cardstack/runtime-common": "workspace:*",
     "@ember/optional-features": "^2.0.0",
-    "@ember/string": "^3.1.1",
-    "@ember/test-helpers": "^3.3.1",
+    "@ember/string": "^4.0.0",
+    "@ember/test-helpers": "^4.0.0",
     "@ember/test-waiters": "catalog:",
-    "@embroider/compat": "^3.5.5",
-    "@embroider/core": "^3.4.15",
+    "@embroider/compat": "^4.0.3",
+    "@embroider/config-meta-loader": "^1.0.0",
+    "@embroider/core": "^4.0.3",
     "@embroider/macros": "^1.16.5",
-    "@embroider/webpack": "^4.0.4",
+    "@embroider/vite": "^1.1.1",
     "@floating-ui/dom": "catalog:",
     "@glimmer/component": "catalog:",
     "@glimmer/tracking": "^1.1.2",
@@ -60,6 +64,7 @@
     "@glint/template": "1.3.0",
     "@percy/cli": "catalog:",
     "@percy/ember": "catalog:",
+    "@rollup/plugin-babel": "^6.0.4",
     "@simple-dom/interface": "catalog:",
     "@simple-dom/parser": "catalog:",
     "@simple-dom/serializer": "catalog:",
@@ -82,7 +87,7 @@
     "@universal-ember/test-support": "catalog:",
     "ajv": "catalog:",
     "awesome-phonenumber": "catalog:",
-    "broccoli-asset-rev": "catalog:",
+    "babel-plugin-ember-template-compilation": "^2.3.0",
     "broccoli-funnel": "catalog:",
     "broccoli-merge-trees": "catalog:",
     "broccoli-plugin": "catalog:",
@@ -98,10 +103,7 @@
     "ember-auto-import": "^2.7.2",
     "ember-basic-dropdown": "8.0.4",
     "ember-cli": "~5.4.1",
-    "ember-cli-app-version": "^6.0.1",
     "ember-cli-babel": "^8.2.0",
-    "ember-cli-clean-css": "^3.0.0",
-    "ember-cli-dependency-checker": "^3.3.2",
     "ember-cli-deploy": "^1.0.2",
     "ember-cli-deploy-build": "^2.0.0",
     "ember-cli-deploy-cloudfront": "^5.0.0",
@@ -110,9 +112,6 @@
     "ember-cli-deploy-smart-compress": "^2.0.0",
     "ember-cli-deprecation-workflow": "^3.0.2",
     "ember-cli-htmlbars": "^6.3.0",
-    "ember-cli-inject-live-reload": "^2.1.0",
-    "ember-cli-sri": "^2.1.1",
-    "ember-cli-terser": "^4.0.2",
     "ember-cli-typescript-blueprints": "^3.0.0",
     "ember-click-outside": "^6.0.1",
     "ember-concurrency": "catalog:",
@@ -123,16 +122,15 @@
     "ember-freestyle": "^0.20.0",
     "ember-keyboard": "^8.2.1",
     "ember-lifeline": "^7.0.0",
-    "ember-load-initializers": "^2.1.2",
+    "ember-load-initializers": "^3.0.0",
     "ember-modifier": "^4.1.0",
     "ember-page-title": "^8.2.3",
     "ember-provide-consume-context": "^0.7.0",
-    "ember-qunit": "catalog:",
-    "ember-resolver": "^11.0.1",
+    "ember-qunit": "^9.0.0",
+    "ember-resolver": "^13.0.0",
     "ember-resources": "catalog:",
     "ember-route-template": "^1.0.3",
     "ember-source": "catalog:",
-    "ember-template-imports": "^4.1.1",
     "ember-template-lint": "catalog:",
     "ember-test-selectors": "^6.0.0",
     "ember-velcro": "^2.1.3",
@@ -154,7 +152,6 @@
     "glimmer-scoped-css": "catalog:",
     "ignore": "catalog:",
     "indefinite": "catalog:",
-    "loader.js": "catalog:",
     "lodash": "catalog:",
     "loglevel": "catalog:",
     "matrix-js-sdk": "catalog:",
@@ -182,8 +179,8 @@
     "tracked-built-ins": "catalog:",
     "typescript": "catalog:",
     "uuid": "catalog:",
-    "wait-for-localhost-cli": "catalog:",
-    "webpack": "catalog:"
+    "vite": "^7.2.7",
+    "wait-for-localhost-cli": "catalog:"
   },
   "dependencies": {
     "ember-modify-based-class-resource": "catalog:",
@@ -199,9 +196,11 @@
     "edition": "octane"
   },
   "ember-addon": {
-    "paths": [
-      "lib/development-cors-middleware",
-      "lib/setup-ast-transforms"
-    ]
+    "type": "app",
+    "version": 2
+  },
+  "exports": {
+    "./tests/*": "./tests/*",
+    "./*": "./app/*"
   }
 }

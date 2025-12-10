@@ -8,18 +8,10 @@
 
     {{content-for "head"}}
 
-    <link integrity="" rel="stylesheet" href="{{rootURL}}assets/vendor.css" />
-    <link
-      integrity=""
-      rel="stylesheet"
-      href="{{rootURL}}assets/@cardstack/host.css"
-    />
-    <link
-      href="{{rootURL}}boxel-favicon.png"
-      rel="shortcut icon"
-      type="image/x-icon"
-    />
-    <link href="{{rootURL}}boxel-webclip.png" rel="apple-touch-icon" />
+    <link integrity="" rel="stylesheet" href="/@embroider/virtual/vendor.css" />
+    <link integrity="" rel="stylesheet" href="/@embroider/virtual/app.css" />
+    <link href="/boxel-favicon.png" rel="shortcut icon" type="image/x-icon" />
+    <link href="/boxel-webclip.png" rel="apple-touch-icon" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -103,12 +95,18 @@
     <div id="ember-basic-dropdown-wormhole"></div>
     {{content-for "body"}}
 
-    <script type="module">
-      import * as ContentTag from '{{rootURL}}assets/content-tag/standalone.js';
-      globalThis.ContentTagGlobal = ContentTag;
+    <script>
+      globalThis.process = { env: {} };
+      globalThis.global = globalThis;
     </script>
-    <script src="{{rootURL}}assets/vendor.js"></script>
-    <script src="{{rootURL}}assets/@cardstack/host.js"></script>
+
+    <script src="/@embroider/virtual/vendor.js"></script>
+    <script type="module">
+      import Application from './app/app';
+      import environment from './app/config/environment';
+
+      Application.create(environment.APP);
+    </script>
 
     {{content-for "body-footer"}}
   </body>

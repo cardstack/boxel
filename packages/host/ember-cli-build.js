@@ -1,8 +1,6 @@
 'use strict';
-
 const EmberApp = require('ember-cli/lib/broccoli/ember-app');
 const { compatBuild } = require('@embroider/compat');
-const { Webpack } = require('@embroider/webpack');
 const webpack = require('webpack');
 const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 const MomentLocalesPlugin = require('moment-locales-webpack-plugin');
@@ -11,7 +9,9 @@ const withSideWatch = require('./lib/with-side-watch');
 const Funnel = require('broccoli-funnel');
 const { BoxelUIChecksumPlugin } = require('./lib/build/package-dist-checksums');
 
-module.exports = function (defaults) {
+module.exports = async function (defaults) {
+  const { buildOnce } = await import('@embroider/vite');
+
   const app = new EmberApp(defaults, {
     trees: {
       app: withSideWatch('app', {
@@ -29,7 +29,7 @@ module.exports = function (defaults) {
       ],
     },
   });
-  return compatBuild(app, Webpack, {
+  return compatBuild(app, buildOnce, {
     staticAddonTrees: true,
     staticAddonTestSupportTrees: true,
     staticHelpers: true,
@@ -38,12 +38,6 @@ module.exports = function (defaults) {
 
     staticModifiers: true,
     staticAppPaths: ['lib'],
-    extraPublicTrees: [
-      new Funnel('node_modules/content-tag/pkg', {
-        include: ['standalone.js', 'standalone/*'],
-        destDir: 'assets/content-tag',
-      }),
-    ],
     packagerOptions: {
       ...{
         webpackConfig: {
