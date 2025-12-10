@@ -125,7 +125,7 @@
     "ember-lifeline": "^7.0.0",
     "ember-load-initializers": "^2.1.2",
     "ember-modifier": "^4.1.0",
-    "ember-moment": "^10.0.0",
+    "ember-moment": "^10.0.2",
     "ember-page-title": "^8.2.3",
     "ember-provide-consume-context": "^0.7.0",
     "ember-qunit": "catalog:",
@@ -140,13 +140,13 @@
     "ember-window-mock": "^1.0.1",
     "eslint": "catalog:",
     "eslint-config-prettier": "catalog:",
+    "eslint-plugin-cardstack-host": "workspace:*",
     "eslint-plugin-ember": "catalog:",
     "eslint-plugin-import": "catalog:",
     "eslint-plugin-n": "catalog:",
     "eslint-plugin-prettier": "catalog:",
     "eslint-plugin-qunit": "catalog:",
     "eslint-plugin-qunit-dom": "catalog:",
-    "eslint-plugin-cardstack-host": "workspace:*",
     "ethers": "catalog:",
     "eventemitter3": "catalog:",
     "fast-json-stable-stringify": "catalog:",
@@ -187,8 +187,8 @@
     "webpack": "catalog:"
   },
   "dependencies": {
-    "reactiveweb": "catalog:",
-    "ember-modify-based-class-resource": "catalog:"
+    "ember-modify-based-class-resource": "catalog:",
+    "reactiveweb": "catalog:"
   },
   "engines": {
     "node": ">= 20"
