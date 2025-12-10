@@ -1,10 +1,13 @@
 import { test, expect } from './fixtures';
 import type { Page } from '@playwright/test';
+import { randomUUID } from 'crypto';
 import { appURL } from '../helpers/isolated-realm-server';
 import {
   clearLocalStorage,
   createRealm,
   createSubscribedUserAndLogin,
+  logout,
+  postCardSource,
 } from '../helpers';
 
 test.describe('Head tags', () => {
@@ -61,5 +64,248 @@ test.describe('Head tags', () => {
     //   'content',
     //   publishedRealmURLString,
     // );
+  });
+
+  test('host mode updates head tags when navigating between cards', async ({
+    page,
+  }) => {
+    let serverIndexUrl = new URL(appURL).origin;
+    await clearLocalStorage(page, serverIndexUrl);
+
+    user = await createSubscribedUserAndLogin(
+      page,
+      'host-head-tags',
+      serverIndexUrl,
+    );
+
+    let realmName = `head-tags-${randomUUID()}`;
+    await createRealm(page, realmName);
+    let realmURL = new URL(`${user.username}/${realmName}/`, serverIndexUrl)
+      .href;
+
+    await page.goto(realmURL);
+    await page.locator('[data-test-stack-item-content]').first().waitFor();
+
+    let defaultHeadCardSource = `
+      import { action } from '@ember/object';
+      import { on } from '@ember/modifier';
+      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+      import StringField from "https://cardstack.com/base/string";
+
+      export class DefaultHeadCard extends CardDef {
+        @field title = contains(StringField);
+
+        static isolated = class Isolated extends Component<typeof this> {
+          get customTarget() {
+            try {
+              return new URL('./custom-head-card', new URL(this.args.model?.id));
+            } catch {
+              return null;
+            }
+          }
+
+          @action viewCustom() {
+            let target = this.customTarget;
+            if (target) {
+              window.history.pushState({}, '', target.toString());
+              window.dispatchEvent(new PopStateEvent('popstate'));
+            }
+          }
+
+          <template>
+            <article data-test-default-head-card>
+              <h1>{{@model.title}}</h1>
+              <button type="button" data-test-head-nav="custom" {{on "click" this.viewCustom}}>
+                Go to custom head card
+              </button>
+            </article>
+          </template>
+        };
+      }
+    `;
+
+    let customHeadCardSource = `
+      import { action } from '@ember/object';
+      import { on } from '@ember/modifier';
+      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+      import StringField from "https://cardstack.com/base/string";
+
+      export class CustomHeadCard extends CardDef {
+        @field title = contains(StringField);
+
+        static head = class Head extends Component<typeof this> {
+          get url() {
+            return this.args.model?.id;
+          }
+
+          <template>
+            <meta name='custom-head-flag' content='custom-head' />
+            <meta property='og:title' content='Custom Head Title' />
+            {{#if this.url}}
+              <meta property='og:url' content={{this.url}} />
+            {{/if}}
+          </template>
+        };
+
+        static isolated = class Isolated extends Component<typeof this> {
+          get defaultTarget() {
+            try {
+              return new URL('./default-head-card', new URL(this.args.model?.id));
+            } catch {
+              return null;
+            }
+          }
+
+          @action viewDefault() {
+            let target = this.defaultTarget;
+            if (target) {
+              window.history.pushState({}, '', target.toString());
+              window.dispatchEvent(new PopStateEvent('popstate'));
+            }
+          }
+
+          <template>
+            <article data-test-custom-head-card>
+              <h1>{{@model.title}}</h1>
+              <button type="button" data-test-head-nav="default" {{on "click" this.viewDefault}}>
+                Go to default head card
+              </button>
+            </article>
+          </template>
+        };
+      }
+    `;
+
+    await postCardSource(
+      page,
+      realmURL,
+      'default-head-card.gts',
+      defaultHeadCardSource,
+    );
+    await postCardSource(
+      page,
+      realmURL,
+      'custom-head-card.gts',
+      customHeadCardSource,
+    );
+
+    await postCardSource(
+      page,
+      realmURL,
+      'default-head-card.json',
+      JSON.stringify(
+        {
+          data: {
+            type: 'card',
+            id: `${realmURL}default-head-card`,
+            attributes: {
+              title: 'Default Head Card',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './default-head-card',
+                name: 'DefaultHeadCard',
+              },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    await postCardSource(
+      page,
+      realmURL,
+      'custom-head-card.json',
+      JSON.stringify(
+        {
+          data: {
+            type: 'card',
+            id: `${realmURL}custom-head-card`,
+            attributes: {
+              title: 'Custom Head Card',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './custom-head-card',
+                name: 'CustomHeadCard',
+              },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    let publishedRealmURL = `http://${user.username}.localhost:4205/${realmName}/`;
+
+    await page.evaluate(
+      async ({ realmURL, publishedRealmURL }) => {
+        let sessions = JSON.parse(
+          window.localStorage.getItem('boxel-session') ?? '{}',
+        );
+        let token = sessions[realmURL];
+        if (!token) {
+          throw new Error(`No session token found for ${realmURL}`);
+        }
+
+        let response = await fetch('http://localhost:4205/_publish-realm', {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            Authorization: token,
+          },
+          body: JSON.stringify({
+            sourceRealmURL: realmURL,
+            publishedRealmURL,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+
+        return response.json();
+      },
+      { realmURL, publishedRealmURL },
+    );
+
+    await logout(page);
+
+    let defaultCardURL = `${publishedRealmURL}default-head-card`;
+    let customCardURL = `${publishedRealmURL}custom-head-card`;
+
+    await page.goto(defaultCardURL);
+    await expect(page).toHaveURL(defaultCardURL);
+    await expect(page.locator('head meta[property="og:title"]')).toHaveAttribute(
+      'content',
+      'Default Head Card',
+    );
+    await expect(
+      page.locator('head meta[name="custom-head-flag"]'),
+    ).toHaveCount(0);
+
+    await page.locator('[data-test-head-nav="custom"]').click();
+    await expect(page).toHaveURL(customCardURL);
+    await expect(
+      page.locator('head meta[name="custom-head-flag"]'),
+    ).toHaveAttribute('content', 'custom-head');
+    await expect(page.locator('head meta[property="og:title"]')).toHaveAttribute(
+      'content',
+      'Custom Head Title',
+    );
+
+    await page.locator('[data-test-head-nav="default"]').click();
+    await expect(page).toHaveURL(defaultCardURL);
+    await expect(
+      page.locator('head meta[name="custom-head-flag"]'),
+    ).toHaveCount(0);
+    await expect(page.locator('head meta[property="og:title"]')).toHaveAttribute(
+      'content',
+      'Default Head Card',
+    );
   });
 });

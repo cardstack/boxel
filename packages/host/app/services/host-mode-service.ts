@@ -13,6 +13,8 @@ interface PublishedRealmMetadata {
 
 export default class HostModeService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;
+  private currentHeadCardURL: string | null = null;
+  private headUpdateRequestId = 0;
 
   get isActive() {
     if (this.simulatingHostMode) {
@@ -69,6 +71,11 @@ export default class HostModeService extends Service {
   }
 
   get currentCardId() {
+    let stack = this.operatorModeStateService.hostModeStack;
+    if (stack.length > 0) {
+      return stack[stack.length - 1];
+    }
+
     return this.operatorModeStateService.hostModePrimaryCard ?? undefined;
   }
 
@@ -137,6 +144,112 @@ export default class HostModeService extends Service {
 
   isPublished(url: string) {
     return this.lastPublishedTimestamp(url) !== null;
+  }
+
+  async updateHeadTemplate(cardURL?: string | null) {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    let normalizedCardURL =
+      (cardURL ?? this.currentCardId)?.replace(/\.json$/, '') ?? null;
+    let requestId = ++this.headUpdateRequestId;
+    let headHTML: string | null = null;
+    let shouldReplace = normalizedCardURL === null;
+
+    if (normalizedCardURL) {
+      try {
+        let response = await fetch(normalizedCardURL, {
+          headers: { Accept: 'text/html' },
+          credentials: 'include',
+        });
+
+        if (requestId !== this.headUpdateRequestId) {
+          return;
+        }
+
+        if (response.ok) {
+          headHTML = this.extractHeadTemplate(await response.text());
+          console.log('head html?', headHTML);
+          console.log('for', normalizedCardURL);
+          shouldReplace = true;
+        } else {
+          return;
+        }
+      } catch (_error) {
+        return;
+      }
+    }
+
+    if (requestId !== this.headUpdateRequestId || !shouldReplace) {
+      return;
+    }
+
+    this.replaceHeadTemplate(headHTML);
+    this.currentHeadCardURL = normalizedCardURL;
+  }
+
+  private extractHeadTemplate(indexHTML: string): string | null {
+    let match = indexHTML.match(/<!-- HEADSTART -->([\s\S]*?)<!-- HEADEND -->/);
+    return match ? match[1].trim() : null;
+  }
+
+  private replaceHeadTemplate(headHTML: string | null) {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    let markers = this.findHeadMarkers();
+    if (!markers) {
+      return;
+    }
+
+    let [start, end] = markers;
+    let parent = start.parentNode;
+
+    if (!parent) {
+      return;
+    }
+
+    for (let node = start.nextSibling; node && node !== end; ) {
+      let next = node.nextSibling;
+      parent.removeChild(node);
+      node = next;
+    }
+
+    if (!headHTML || headHTML.trim().length === 0) {
+      return;
+    }
+
+    let fragment = document.createRange().createContextualFragment(headHTML);
+    parent.insertBefore(fragment, end);
+  }
+
+  private findHeadMarkers(): [Comment, Comment] | null {
+    let head = document.head;
+    if (!head) {
+      return null;
+    }
+
+    let start: Comment | null = null;
+    let end: Comment | null = null;
+
+    head.childNodes.forEach((node) => {
+      if (node.nodeType === Node.COMMENT_NODE) {
+        let content = (node as Comment).data.trim();
+        if (content === 'HEADSTART') {
+          start = node as Comment;
+        } else if (content === 'HEADEND') {
+          end = node as Comment;
+        }
+      }
+    });
+
+    if (start && end) {
+      return [start, end];
+    }
+
+    return null;
   }
 
   private parsePublishedAt(value: unknown) {
