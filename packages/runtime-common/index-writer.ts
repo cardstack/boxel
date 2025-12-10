@@ -5,14 +5,12 @@ import {
   type CardResource,
   type RealmInfo,
   type JobInfo,
-  type CodeRef,
   jobIdentity,
   hasExecutableExtension,
   trimExecutableExtension,
   RealmPaths,
   unixTime,
   logger,
-  isUrlLike,
 } from './index';
 import { getCreatedTime, ensureFileCreatedAt } from './file-meta';
 import {
@@ -35,7 +33,6 @@ import {
   coerceTypes,
   type BoxelIndexTable,
   type RealmVersionsTable,
-  type Definition,
 } from './index-structure';
 
 export class IndexWriter {
@@ -66,7 +63,6 @@ export class IndexWriter {
 export type IndexEntry =
   | InstanceEntry
   | ModuleEntry
-  | DefinitionEntry
   | ErrorEntry;
 export type LastModifiedTimes = Map<
   string,
@@ -105,16 +101,6 @@ interface ModuleEntry {
   deps: Set<string>;
 }
 
-interface DefinitionEntry {
-  type: 'definition';
-  definition: Definition;
-  types: string[];
-  fileAlias: string;
-  lastModified: number;
-  resourceCreatedAt: number;
-  deps: Set<string>;
-}
-
 export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
@@ -132,9 +118,7 @@ export class Batch {
   }
 
   get invalidations() {
-    // the card def id's are notional, they are not file resources that can be
-    // visited, so we don't expose them to the outside world
-    return [...this.#invalidations].filter((i) => !isDefinitionId(i));
+    return [...this.#invalidations];
   }
 
   // Look up created_at for a given file path from realm_file_meta
@@ -161,18 +145,12 @@ export class Batch {
        FROM boxel_index as i
           WHERE i.realm_url =`,
       param(this.realmURL.href),
-      // definition entries are notional so we skip over those
-      `AND type != 'definition'`,
     ] as Expression)) as Pick<
       BoxelIndexTable,
       'url' | 'type' | 'last_modified'
     >[];
     let result: LastModifiedTimes = new Map();
     for (let { url, type, last_modified: lastModified } of results) {
-      // there might be errors docs from definition entries that we need to strip out
-      if (isDefinitionId(url)) {
-        continue;
-      }
       result.set(url, {
         type,
         // lastModified is unix time, so it should be safe to cast to number
@@ -249,21 +227,6 @@ export class Batch {
       }
       entry.indexed_at = now;
 
-      entry.definition = entry.definition
-        ? {
-            type: entry.definition.type,
-            displayName: entry.definition.displayName,
-            codeRef: this.copiedCodeRef(
-              sourceRealmURL,
-              entry.definition.codeRef,
-            ),
-            fields: this.fieldDefinitionsWithCopiedCodeRefs(
-              sourceRealmURL,
-              entry.definition.fields,
-            ),
-          }
-        : entry.definition;
-
       let { valueExpressions, nameExpressions } = asExpressions(entry);
       columns = nameExpressions;
       return valueExpressions;
@@ -326,30 +289,19 @@ export class Batch {
         : entry.type === 'module'
           ? {
               type: 'module',
-              deps: [...entry.deps],
-              last_modified: entry.lastModified,
-              resource_created_at: entry.resourceCreatedAt,
-              error_doc: null,
-            }
-          : entry.type === 'definition'
-            ? {
-                type: 'definition',
-                definition: entry.definition,
-                types: entry.types,
-                file_alias: entry.fileAlias,
-                deps: [...entry.deps],
-                last_modified: entry.lastModified,
-                resource_created_at: entry.resourceCreatedAt,
-                error_doc: null,
-              }
-            : {
-                types: entry.types,
-                search_doc: entry.searchData,
-                // favor the last known good types over the types derived from the error state
-                ...((await this.getProductionVersion(url)) ?? {}),
-                type: 'error',
-                error_doc: errorEntry?.error ?? entry.error,
-              }),
+            deps: [...entry.deps],
+            last_modified: entry.lastModified,
+            resource_created_at: entry.resourceCreatedAt,
+            error_doc: null,
+          }
+        : {
+            types: entry.types,
+            search_doc: entry.searchData,
+            // favor the last known good types over the types derived from the error state
+            ...((await this.getProductionVersion(url)) ?? {}),
+            type: 'error',
+            error_doc: errorEntry?.error ?? entry.error,
+          }),
     } as Omit<BoxelIndexTable, 'last_modified' | 'indexed_at'> & {
       // we do this because pg automatically casts big ints into strings, so
       // we unwind that to accurately type the structure that we want to pass
@@ -577,14 +529,8 @@ export class Batch {
     let rows = invalidations.map((id) =>
       [
         id,
-        isDefinitionId(id)
-          ? trimExportNameFromDefinitionId(id)
-          : trimExecutableExtension(new URL(id)).href,
-        hasExecutableExtension(id)
-          ? 'module'
-          : isDefinitionId(id)
-            ? 'definition'
-            : 'instance',
+        trimExecutableExtension(new URL(id)).href,
+        hasExecutableExtension(id) ? 'module' : 'instance',
         this.realmVersion,
         this.realmURL.href,
         true,
@@ -646,16 +592,16 @@ export class Batch {
     {
       url: string;
       alias: string;
-      type: 'instance' | 'module' | 'definition' | 'error';
+      type: 'instance' | 'module' | 'error';
     }[]
   > {
     let start = Date.now();
     const pageSize = 1000;
     let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: 'instance' | 'module' | 'definition' | 'error';
+      type: 'instance' | 'module' | 'error';
     })[] = [];
     let rows: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: 'instance' | 'module' | 'definition' | 'error';
+      type: 'instance' | 'module' | 'error';
     })[] = [];
     let pageNumber = 0;
     do {
@@ -687,7 +633,7 @@ export class Batch {
         ]),
         `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
       ] as Expression)) as (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-        type: 'instance' | 'definition' | 'module' | 'error';
+        type: 'instance' | 'module' | 'error';
       })[];
       results = [...results, ...rows];
       pageNumber++;
@@ -721,10 +667,7 @@ export class Batch {
       type === 'instance'
         ? // for instances we expect that the deps for an entry always includes .json extension
           url
-        : type === 'definition'
-          ? // for definition we expect that the deps for an entry doesn't include the final export name path segment
-            trimExportNameFromDefinitionId(url)
-          : moduleAlias,
+        : moduleAlias,
     );
     let results = [
       ...invalidations,
@@ -756,39 +699,6 @@ export class Batch {
       result[this.copiedRealmURL(fromRealm, new URL(key)).href] = value;
     }
     return result;
-  }
-
-  private fieldDefinitionsWithCopiedCodeRefs(
-    fromRealm: URL,
-    fieldDefinitions: Definition['fields'],
-  ): Definition['fields'] {
-    return Object.fromEntries(
-      Object.entries(fieldDefinitions).map(([fieldName, fieldDefinition]) => [
-        fieldName,
-        {
-          ...fieldDefinition,
-          fieldOrCard: this.copiedCodeRef(
-            fromRealm,
-            fieldDefinition.fieldOrCard,
-          ),
-        },
-      ]),
-    );
-  }
-
-  private copiedCodeRef(fromRealm: URL, codeRef: CodeRef): CodeRef {
-    if (!('type' in codeRef)) {
-      if (isUrlLike(codeRef.module)) {
-        let module = this.copiedRealmURL(
-          fromRealm,
-          new URL(codeRef.module),
-        ).href;
-        return { ...codeRef, module };
-      } else {
-        return { ...codeRef };
-      }
-    }
-    return { ...codeRef, card: this.copiedCodeRef(fromRealm, codeRef.card) };
   }
 
   private normalizeErrorDoc(
@@ -846,12 +756,4 @@ export class Batch {
       }
     }
   }
-}
-
-export function isDefinitionId(id: string) {
-  return !id.split('/').pop()!.includes('.'); // URL without an extension
-}
-
-export function trimExportNameFromDefinitionId(id: string) {
-  return id.split('/').slice(0, -1).join('/');
 }

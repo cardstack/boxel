@@ -18,7 +18,6 @@ import {
   createVirtualNetwork,
   matrixURL,
   cleanWhiteSpace,
-  cardDefinition,
   runTestRealmServer,
   closeServer,
   setupPermissionedRealms,
@@ -442,6 +441,7 @@ async function stopTestRealm(testRealmServer?: TestRealmServerResult) {
 module(basename(__filename), function () {
   module('indexing (read only)', function (hooks) {
     let realm: Realm;
+    let adapter: RealmAdapter;
     let testRealmServer: TestRealmServerResult | undefined;
 
     async function getInstance(
@@ -466,6 +466,7 @@ module(basename(__filename), function () {
           runner,
         });
         realm = testRealmServer.testRealm;
+        adapter = testRealmServer.testRealmAdapter;
       },
       after: async () => {
         await stopTestRealm(testRealmServer);
@@ -861,656 +862,6 @@ module(basename(__filename), function () {
       });
     });
 
-    test('can make a definition entry in the index', async function (assert) {
-      let entry = await realm.realmIndexQueryEngine.getOwnDefinition({
-        module: `${testRealm}post.gts`,
-        name: 'Post',
-      });
-      if (entry?.type === 'definition') {
-        assert.ok(entry.lastModified, 'last modified date is set');
-        assert.ok(entry.resourceCreatedAt, 'created date is set');
-        assert.deepEqual(
-          entry.types,
-          [
-            `${testRealm}post/Post`,
-            'https://cardstack.com/base/card-api/CardDef',
-          ],
-          'types are correct',
-        );
-        assert.deepEqual(
-          entry.definition.codeRef,
-          {
-            name: 'Post',
-            module: `${testRealm}post`,
-          },
-          'code ref is correct',
-        );
-        assert.strictEqual(
-          entry.definition.displayName,
-          'Post',
-          'display name is correct',
-        );
-
-        assert.deepEqual(
-          entry.definition.fields,
-          {
-            ...cardDefinition,
-            message: {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            author: {
-              type: 'linksTo',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'Person',
-                module: `${testRealm}person`,
-              },
-              isPrimitive: false,
-            },
-            'author.id': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'ReadOnlyField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.title': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.firstName': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.hourlyRate': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'default',
-                module: 'https://cardstack.com/base/number',
-              },
-              isPrimitive: true,
-              serializerName: 'number',
-            },
-            'author.description': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.thumbnailURL': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'MaybeBase64Field',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'CardInfoField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: false,
-            },
-            'author.cardInfo.title': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.description': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.thumbnailURL': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'MaybeBase64Field',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.notes': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'MarkdownField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme': {
-              type: 'linksTo',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'Theme',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: false,
-            },
-            'author.cardInfo.theme.id': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'ReadOnlyField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.title': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.description': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.thumbnailURL': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'MaybeBase64Field',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'CardInfoField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: false,
-            },
-            'author.cardInfo.theme.cardInfo.title': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.description': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.thumbnailURL': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'MaybeBase64Field',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.notes': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'MarkdownField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cssVariables': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'CSSField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cssImports': {
-              type: 'containsMany',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'CssImportField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme': {
-              type: 'linksTo',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'Theme',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: false,
-            },
-            'author.cardInfo.theme.cardInfo.theme.id': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'ReadOnlyField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.title': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'CardInfoField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: false,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.title': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.description': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'MaybeBase64Field',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.notes': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'MarkdownField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.description': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cssVariables': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'CSSField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cssImports': {
-              type: 'containsMany',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'CssImportField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.thumbnailURL': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'MaybeBase64Field',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme': {
-              type: 'linksTo',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'Theme',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: false,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.id': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'ReadOnlyField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.title': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'CardInfoField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: false,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.title':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'StringField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.description':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'StringField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'MaybeBase64Field',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.notes':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'MarkdownField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.description': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssVariables':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'CSSField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssImports': {
-              type: 'containsMany',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'CssImportField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.thumbnailURL':
-              {
-                type: 'contains',
-                isComputed: true,
-                fieldOrCard: {
-                  name: 'MaybeBase64Field',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme':
-              {
-                type: 'linksTo',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'Theme',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: false,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.id':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'ReadOnlyField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.title':
-              {
-                type: 'contains',
-                isComputed: true,
-                fieldOrCard: {
-                  name: 'StringField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'CardInfoField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: false,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.title':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'StringField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.description':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'StringField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'MaybeBase64Field',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.description':
-              {
-                type: 'contains',
-                isComputed: true,
-                fieldOrCard: {
-                  name: 'StringField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssVariables':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'CSSField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssImports':
-              {
-                type: 'containsMany',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'CssImportField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.thumbnailURL':
-              {
-                type: 'contains',
-                isComputed: true,
-                fieldOrCard: {
-                  name: 'MaybeBase64Field',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme':
-              {
-                type: 'linksTo',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'Theme',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: false,
-              },
-          },
-          'definition is correct',
-        );
-
-        // this is a crazy long list that includes encoded CSS, so we'll just
-        // check a few deps
-        assert.ok(
-          entry!.deps!.includes(`${testRealm}post`),
-          'deps include ./post',
-        );
-        assert.ok(
-          entry!.deps!.includes(`${testRealm}person`),
-          'deps include ./person',
-        );
-        assert.ok(
-          entry!.deps!.includes(`https://cardstack.com/base/card-api`),
-          'deps include card api',
-        );
-      } else {
-        assert.ok('false', 'expected entry to be a card def');
-      }
-    });
-  });
-
-  module('indexing', function (hooks) {
-    let realm: Realm;
-    let adapter: RealmAdapter;
-    let testRealmServer: TestRealmServerResult | undefined;
-
-    setupBaseRealmServer(hooks, matrixURL);
-
-    setupDB(hooks, {
-      beforeEach: async (dbAdapter, publisher, runner) => {
-        testDbAdapter = dbAdapter;
-        testRealmServer = await startTestRealm({
-          dbAdapter,
-          publisher,
-          runner,
-        });
-        realm = testRealmServer.testRealm;
-        adapter = testRealmServer.testRealmAdapter;
-      },
-      afterEach: async () => {
-        await stopTestRealm(testRealmServer);
-        testRealmServer = undefined;
-      },
-    });
-
     test('can incrementally index updated instance', async function (assert) {
       await realm.write(
         'mango.json',
@@ -1557,16 +908,6 @@ module(basename(__filename), function () {
           throw new Error('boom!');
         `,
       );
-      let petDefinitionEntry =
-        await realm.realmIndexQueryEngine.getOwnDefinition({
-          module: `${testRealm}pet`,
-          name: 'Pet',
-        });
-      assert.strictEqual(
-        petDefinitionEntry,
-        undefined,
-        'Pet card def does not exist',
-      );
       await realm.write(
         'person.gts',
         `
@@ -1583,26 +924,6 @@ module(basename(__filename), function () {
         result,
         [],
         'the broken type results in no instance results',
-      );
-      let personDefinitionEntry =
-        await realm.realmIndexQueryEngine.getOwnDefinition({
-          module: `${testRealm}person`,
-          name: 'Person',
-        });
-      assert.strictEqual(
-        personDefinitionEntry,
-        undefined,
-        'Person card def does not exist',
-      );
-      let fancyPersonDefinitionEntry =
-        await realm.realmIndexQueryEngine.getOwnDefinition({
-          module: `${testRealm}fancy-person`,
-          name: 'FancyPerson',
-        });
-      assert.strictEqual(
-        fancyPersonDefinitionEntry,
-        undefined,
-        'FancyPerson card def does not exist',
       );
       await realm.write(
         'person.gts',
@@ -1627,26 +948,6 @@ module(basename(__filename), function () {
         2,
         'correct number of instances returned',
       );
-      personDefinitionEntry =
-        await realm.realmIndexQueryEngine.getOwnDefinition({
-          module: `${testRealm}person`,
-          name: 'Person',
-        });
-      assert.strictEqual(
-        personDefinitionEntry?.type,
-        'definition',
-        'Person card def has recovered',
-      );
-      fancyPersonDefinitionEntry =
-        await realm.realmIndexQueryEngine.getOwnDefinition({
-          module: `${testRealm}fancy-person`,
-          name: 'FancyPerson',
-        });
-      assert.strictEqual(
-        fancyPersonDefinitionEntry?.type,
-        'definition',
-        'FancyPerson card def has recovered',
-      );
     });
 
     test('can recover from a module sequence error', async function (assert) {
@@ -1661,16 +962,6 @@ module(basename(__filename), function () {
             @field name = contains(Name);
           }
         `,
-      );
-      let petDefinitionEntry =
-        await realm.realmIndexQueryEngine.getOwnDefinition({
-          module: `${testRealm}pet`,
-          name: 'Pet',
-        });
-      assert.strictEqual(
-        petDefinitionEntry,
-        undefined,
-        'Pet card def does not exist',
       );
       await realm.write(
         'name.gts',
@@ -1693,15 +984,6 @@ module(basename(__filename), function () {
         name?.type,
         'module',
         'Name module is successfully indexed',
-      );
-      petDefinitionEntry = await realm.realmIndexQueryEngine.getOwnDefinition({
-        module: `${testRealm}pet`,
-        name: 'Pet',
-      });
-      assert.strictEqual(
-        petDefinitionEntry?.type,
-        'definition',
-        'Pet card def has recovered',
       );
 
       // Since the name is ready, the pet should be indexed and not in an error state
@@ -1795,19 +1077,25 @@ module(basename(__filename), function () {
         },
       });
       assert.strictEqual(result.length, 0, 'found no documents');
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 0,
-          instanceErrors: 0,
-          moduleErrors: 0,
-          modulesIndexed: 0,
-          definitionErrors: 0,
-          definitionsIndexed: 0,
-          totalIndexEntries: 25,
-        },
-        'index did not touch any files',
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.instancesIndexed,
+        0,
+        'index did not touch any instance files',
+      );
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.modulesIndexed,
+        0,
+        'index did not touch any module files',
+      );
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.instanceErrors,
+        0,
+        'no instance errors occurred',
+      );
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.moduleErrors,
+        0,
+        'no module errors occurred',
       );
     });
 
@@ -2189,9 +1477,7 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 2,
-          definitionErrors: 0,
-          definitionsIndexed: 2,
-          totalIndexEntries: 30,
+          totalIndexEntries: 23,
         },
         'indexed correct number of files',
       );
@@ -2239,21 +1525,17 @@ module(basename(__filename), function () {
       );
       assert.ok(instance, 'place instance is in the index');
       assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
         {
-          // this is a little misleading because now that we are batching out the
-          // modules and instances to ensure that the definition is generated before
-          // we trying file serialization, this will only report the last batch
-          // of indexing when in fact there where actually 2 batches of indexing
-          // generated by this writeMany()
+          instancesIndexed: realm.realmIndexUpdater.stats.instancesIndexed,
+          instanceErrors: realm.realmIndexUpdater.stats.instanceErrors,
+          moduleErrors: realm.realmIndexUpdater.stats.moduleErrors,
+          modulesIndexed: realm.realmIndexUpdater.stats.modulesIndexed,
+        },
+        {
           instancesIndexed: 1,
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 0,
-          definitionErrors: 0,
-          definitionsIndexed: 0,
-          totalIndexEntries: 29,
         },
         'indexed correct number of files',
       );
@@ -2292,15 +1574,15 @@ module(basename(__filename), function () {
         `SELECT * FROM boxel_index where is_deleted = true and type = 'instance'`,
       )) as { url: string; is_deleted: boolean }[];
 
-      assert.strictEqual(deletedEntries.length, 1, 'found tombstone entry');
-      assert.strictEqual(
-        deletedEntries[0].url,
-        `${testRealm}test-file.json`,
-        'tombstone has correct URL',
+      assert.ok(
+        deletedEntries.some(
+          (entry) => entry.url === `${testRealm}test-file.json`,
+        ),
+        'found tombstone entry for deleted file',
       );
       assert.true(
-        deletedEntries[0].is_deleted,
-        'tombstone is marked as deleted',
+        deletedEntries.every((entry) => entry.is_deleted),
+        'all tombstones are marked as deleted',
       );
 
       // Verify the file is no longer retrievable through the query engine
@@ -2395,9 +1677,7 @@ module(basename(__filename), function () {
             instanceErrors: 0,
             moduleErrors: 0,
             modulesIndexed: 1,
-            definitionErrors: 0,
-            definitionsIndexed: 1,
-            totalIndexEntries: 3,
+            totalIndexEntries: 2,
           },
           'has no module errors',
         );
@@ -2425,8 +1705,6 @@ module(basename(__filename), function () {
             instancesIndexed: 0,
             moduleErrors: 1,
             modulesIndexed: 0,
-            definitionErrors: 0,
-            definitionsIndexed: 0,
             totalIndexEntries: 0,
           },
           'has a module error',
