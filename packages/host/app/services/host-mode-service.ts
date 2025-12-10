@@ -159,19 +159,15 @@ export default class HostModeService extends Service {
 
     if (normalizedCardURL) {
       try {
-        let response = await fetch(normalizedCardURL, {
-          headers: { Accept: 'text/html' },
-          credentials: 'include',
-        });
+        let prerenderedHead =
+          await this.fetchPrerenderedHead(normalizedCardURL);
 
         if (requestId !== this.headUpdateRequestId) {
           return;
         }
 
-        if (response.ok) {
-          headHTML = this.extractHeadTemplate(await response.text());
-          console.log('head html?', headHTML);
-          console.log('for', normalizedCardURL);
+        if (prerenderedHead !== undefined) {
+          headHTML = prerenderedHead;
           shouldReplace = true;
         } else {
           return;
@@ -189,9 +185,28 @@ export default class HostModeService extends Service {
     this.currentHeadCardURL = normalizedCardURL;
   }
 
-  private extractHeadTemplate(indexHTML: string): string | null {
-    let match = indexHTML.match(/<!-- HEADSTART -->([\s\S]*?)<!-- HEADEND -->/);
-    return match ? match[1].trim() : null;
+  private async fetchPrerenderedHead(
+    cardURL: string,
+  ): Promise<string | null | undefined> {
+    let realmURL = this.realmURL;
+    let searchURL = new URL(`${realmURL}_search-prerendered`);
+    let cardJsonURL = cardURL.endsWith('.json') ? cardURL : `${cardURL}.json`;
+
+    searchURL.searchParams.set('prerenderedHtmlFormat', 'head');
+    searchURL.searchParams.append('cardUrls[]', cardJsonURL);
+
+    let response = await fetch(searchURL.toString(), {
+      headers: { Accept: 'application/vnd.card+json' },
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      return undefined;
+    }
+
+    let json = await response.json();
+    let headHTML: unknown = json?.data?.[0]?.attributes?.html;
+    return typeof headHTML === 'string' ? headHTML : null;
   }
 
   private replaceHeadTemplate(headHTML: string | null) {
