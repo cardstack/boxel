@@ -166,7 +166,6 @@ export * from './worker';
 export * from './stream';
 export * from './realm';
 export * from './realm-index-updater';
-export * from './reindex-config';
 export * from './fetcher';
 export * from './scoped-css';
 export * from './html-utils';
@@ -186,6 +185,7 @@ export {
 export * from './helpers/ensure-extension';
 export * from './url';
 export * from './render-route-options';
+export * from './publishability';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';

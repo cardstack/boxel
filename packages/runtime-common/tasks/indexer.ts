@@ -10,6 +10,7 @@ import { IndexRunner } from '../index-runner';
 import type { Stats } from '../worker';
 
 export { fromScratchIndex, incrementalIndex };
+export const FROM_SCRATCH_JOB_TIMEOUT_SEC = 20 * 60;
 
 export interface IncrementalArgs extends WorkerArgs {
   urls: string[];
