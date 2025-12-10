@@ -16,7 +16,6 @@ import {
 } from '.';
 
 import { setupBaseRealm } from '../helpers/base-realm';
-import { setup } from 'qunit-dom';
 
 export interface SnapshotBuildContext {
   isInitialBuild: boolean;
@@ -39,7 +38,7 @@ interface SetupSnapshotRealmOptions<T> {
   build: (context: SnapshotBuildContext) => Promise<T>;
   mockMatrixUtils: MockUtils;
   realmPermissions?: Record<string, RealmAction[]>;
-  acceptanceTest: boolean;
+  acceptanceTest?: boolean;
 }
 
 export function setupSnapshotRealm<T>(

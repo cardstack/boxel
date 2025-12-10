@@ -760,6 +760,12 @@ async function setupTestRealm({
   let { queue } = getService('queue');
 
   realmURL = realmURL ?? testRealmURL;
+  // For now, if we're not given a loader, we assume this is
+  // one of the older tests
+  // If there's a loader we assume it's a cached test.
+  if (!loader) {
+    await setupRendering(!!isAcceptanceTest);
+  }
 
   let localIndexer = owner.lookup(
     'service:local-indexer',
