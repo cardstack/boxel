@@ -33,6 +33,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import LimitedSet from '../lib/limited-set';
+import { waitForRealmState } from '../commands/utils';
 
 import type LoaderService from './loader-service';
 import type OperatorModeStateService from './operator-mode-state-service';
@@ -65,12 +66,13 @@ export default class CommandService extends Service {
     string,
     LimitedSet<string>
   >();
-  private aiAssistantCardRequests = new Map<
+  private aiAssistantInvalidations = new Map<
     string,
     {
       clientRequestId: string;
-      invalidationReceived: boolean;
-      roomId?: string;
+      roomId: string;
+      targetHref: string;
+      deferred: Deferred<void>;
     }
   >();
   private commandProcessingEventQueue: string[] = [];
@@ -92,119 +94,87 @@ export default class CommandService extends Service {
     return clientRequestId;
   }
 
-  private aiAssistantCardRequestKey(cardId: string, roomId: string) {
-    let normalizedCardId = cardId.replace(/\.json$/, '');
-    return `${roomId}::${normalizedCardId}`;
-  }
-
-  trackAiAssistantCardPatchRequest(
-    cardId: string,
-    clientRequestId: string,
-    roomId: string,
-  ) {
-    if (!cardId || !clientRequestId) {
+  trackAiAssistantCardManipulationRequest({
+    action,
+    roomId,
+    fileUrl,
+  }: {
+    action: string;
+    roomId: string;
+    fileUrl: string;
+  }): string | undefined {
+    if (!action || !roomId || !fileUrl) {
       return;
     }
-    this.aiAssistantCardRequests.set(
-      this.aiAssistantCardRequestKey(cardId, roomId),
-      {
-        clientRequestId,
-        invalidationReceived: false,
-        roomId,
-      },
-    );
-
-    this.trackInvalidationAfterAIAssistantRequest(
-      cardId,
-      clientRequestId,
+    let clientRequestId = this.registerAiAssistantClientRequestId(
+      action,
       roomId,
     );
-  }
+    let normalizedTarget = fileUrl.endsWith('.json')
+      ? fileUrl.replace(/\.json$/, '')
+      : fileUrl;
+    let key = `${roomId}::${normalizedTarget}`;
 
-  private aiAssistantRequestInvalidations = new Map<
-    string,
-    {
-      clientRequestId: string;
-      invalidationReceived: boolean;
-      deferred?: Deferred<void>;
+    let realmURL: URL | undefined;
+    try {
+      realmURL = this.realm.realmOfURL(new URL(fileUrl)) ?? undefined;
+    } catch (_e) {
+      return clientRequestId;
     }
-  >();
-
-  markInvalidationAfterAIAssistantRequest(clientRequestId?: string) {
-    if (!clientRequestId) {
-      return;
-    }
-    for (let [cardId, data] of this.aiAssistantCardRequests) {
-      if (data.clientRequestId === clientRequestId) {
-        this.aiAssistantCardRequests.set(cardId, {
-          ...data,
-          invalidationReceived: true,
-        });
-      }
+    if (!realmURL) {
+      return clientRequestId;
     }
 
-    for (let [key, data] of this.aiAssistantRequestInvalidations) {
-      if (data.clientRequestId === clientRequestId) {
-        this.aiAssistantRequestInvalidations.set(key, {
-          ...data,
-          invalidationReceived: true,
-        });
-        data.deferred?.fulfill();
-      }
-    }
-  }
-
-  invalidationAfterCardPatchDidArrive(cardId: string, roomId: string): boolean {
-    return Boolean(
-      this.aiAssistantCardRequests.get(
-        this.aiAssistantCardRequestKey(cardId, roomId),
-      )?.invalidationReceived,
-    );
-  }
-
-  clearAiAssistantRequestForCard(cardId: string, roomId: string) {
-    this.aiAssistantCardRequests.delete(
-      this.aiAssistantCardRequestKey(cardId, roomId),
-    );
-  }
-
-  hasPendingAiAssistantCardRequest(cardId: string, roomId: string): boolean {
-    return this.aiAssistantCardRequests.has(
-      this.aiAssistantCardRequestKey(cardId, roomId),
-    );
-  }
-
-  trackInvalidationAfterAIAssistantRequest(
-    targetHref: string,
-    clientRequestId: string,
-    roomId: string,
-  ) {
-    let key = this.aiAssistantRequestKey(targetHref, roomId);
-    this.aiAssistantRequestInvalidations.set(key, {
+    let deferred = new Deferred<void>();
+    this.aiAssistantInvalidations.set(key, {
       clientRequestId,
-      invalidationReceived: false,
+      roomId,
+      targetHref: normalizedTarget,
+      deferred,
     });
+
+    waitForRealmState(
+      this.commandContext,
+      realmURL.href,
+      (event) => {
+        return Boolean(
+          event &&
+            event.eventName === 'index' &&
+            event.indexType === 'incremental' &&
+            event.clientRequestId === clientRequestId,
+        );
+      },
+      { timeoutMs: 5 * 60 * 1000 },
+    )
+      .then(() => {
+        let current = this.aiAssistantInvalidations.get(key);
+        current?.deferred.fulfill();
+        this.aiAssistantInvalidations.delete(key);
+      })
+      .catch(() => {
+        this.aiAssistantInvalidations.delete(key);
+      });
+    return clientRequestId;
   }
 
   async waitForInvalidationAfterAIAssistantRequest(
-    targetHref: string,
     roomId: string,
+    targetHref: string,
     timeoutMs?: number,
   ): Promise<void> {
-    let key = this.aiAssistantRequestKey(targetHref, roomId);
-    let existing = this.aiAssistantRequestInvalidations.get(key);
+    if (!roomId || !targetHref) {
+      return;
+    }
+    let normalizedTarget = targetHref.endsWith('.json')
+      ? targetHref.replace(/\.json$/, '')
+      : targetHref;
+    let key = `${roomId}::${normalizedTarget}`;
+    let existing = this.aiAssistantInvalidations.get(key);
     if (!existing) {
       return;
     }
-    if (existing.invalidationReceived) {
-      this.aiAssistantRequestInvalidations.delete(key);
-      return;
-    }
-    if (!existing.deferred) {
-      existing.deferred = new Deferred<void>();
-      this.aiAssistantRequestInvalidations.set(key, existing);
-    }
-    let waitPromise = existing.deferred.promise;
+
+    let waitPromise: Promise<void> = existing.deferred.promise;
     if (timeoutMs) {
       waitPromise = Promise.race([
         waitPromise,
@@ -212,11 +182,7 @@ export default class CommandService extends Service {
       ]);
     }
     await waitPromise;
-    this.aiAssistantRequestInvalidations.delete(key);
-  }
-
-  private aiAssistantRequestKey(targetHref: string, roomId: string) {
-    return `${roomId}::${targetHref}`;
+    this.aiAssistantInvalidations.delete(key);
   }
 
   public queueEventForCommandProcessing(event: Partial<IEvent>) {
@@ -525,22 +491,14 @@ export default class CommandService extends Service {
           );
         }
         let cardId = payload.attributes.cardId;
-        let clientRequestId = this.registerAiAssistantClientRequestId(
-          'patch-instance',
-          command.message.roomId,
-        );
-        this.trackAiAssistantCardPatchRequest(
-          cardId,
-          clientRequestId,
-          command.message.roomId,
-        );
+
         await this.store.patch(
           cardId,
           {
             attributes: payload?.attributes?.patch?.attributes,
             relationships: payload?.attributes?.patch?.relationships,
           },
-          { doNotWaitForPersist: true, clientRequestId },
+          { doNotWaitForPersist: true },
         );
       } else {
         // Unrecognized command. This can happen if a programmatically-provided command is no longer available due to a browser refresh.

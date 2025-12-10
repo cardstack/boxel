@@ -98,8 +98,8 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     roomId: string,
   ): Promise<string[]> {
     await this.commandService.waitForInvalidationAfterAIAssistantRequest(
-      cardId,
       roomId,
+      cardId,
       cardIndexingTimeout,
     );
 
@@ -146,11 +146,11 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
       ];
     }
 
-    let { moduleURL, realmURL } = moduleInfo;
+    let { moduleURL, realmURL, fileURL } = moduleInfo;
 
     await this.commandService.waitForInvalidationAfterAIAssistantRequest(
-      moduleURL.href,
       roomId,
+      fileURL.href,
       cardIndexingTimeout,
     );
 
@@ -165,7 +165,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
 
   private moduleInfoFromFile(
     fileUrl: string,
-  ): { moduleURL: URL; realmURL: URL } | undefined {
+  ): { moduleURL: URL; realmURL: URL; fileURL: URL } | undefined {
     try {
       let fileURL = new URL(fileUrl);
       let realmURL = this.realm.realmOfURL(fileURL);
@@ -175,7 +175,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
 
       let moduleHref = fileURL.href.replace(/\.gts$/, '');
       let moduleURL = new URL(moduleHref);
-      return { moduleURL, realmURL };
+      return { moduleURL, realmURL, fileURL };
     } catch {
       return undefined;
     }
