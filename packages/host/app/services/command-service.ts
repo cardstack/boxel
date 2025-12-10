@@ -94,7 +94,7 @@ export default class CommandService extends Service {
     return clientRequestId;
   }
 
-  trackAiAssistantCardManipulationRequest({
+  trackAiAssistantCardRequest({
     action,
     roomId,
     fileUrl,

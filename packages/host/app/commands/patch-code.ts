@@ -66,12 +66,11 @@ export default class PatchCodeCommand extends HostBaseCommand<
         hasEmptySearchPortion,
       );
 
-      let clientRequestId =
-        this.commandService.trackAiAssistantCardManipulationRequest({
-          action: 'patch-code',
-          roomId,
-          fileUrl: finalFileUrl,
-        });
+      let clientRequestId = this.commandService.trackAiAssistantCardRequest({
+        action: 'patch-code',
+        roomId,
+        fileUrl: finalFileUrl,
+      });
 
       let savedThroughOpenFile = await this.trySaveThroughOpenFile(
         finalFileUrl,
