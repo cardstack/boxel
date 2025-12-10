@@ -125,7 +125,6 @@
     "ember-lifeline": "^7.0.0",
     "ember-load-initializers": "^2.1.2",
     "ember-modifier": "^4.1.0",
-    "ember-moment": "^10.0.2",
     "ember-page-title": "^8.2.3",
     "ember-provide-consume-context": "^0.7.0",
     "ember-qunit": "catalog:",
