@@ -427,20 +427,20 @@ export class IndexRunner {
 
   private async indexModule(url: URL): Promise<void> {
     let clearCache = this.#consumeClearCacheForRender();
-      let prerenderOptions: RenderRouteOptions | undefined = clearCache
-        ? { clearCache }
-        : undefined;
-      let moduleResult: ModuleRenderResponse;
-      try {
-        moduleResult = await this.#prerenderer.prerenderModule({
-          url: url.href,
-          realm: this.#realmURL.href,
-          auth: this.#auth,
-          renderOptions: prerenderOptions,
-        });
-      } catch (err: any) {
-        this.stats.moduleErrors++;
-        this.#log.warn(
+    let prerenderOptions: RenderRouteOptions | undefined = clearCache
+      ? { clearCache }
+      : undefined;
+    let moduleResult: ModuleRenderResponse;
+    try {
+      moduleResult = await this.#prerenderer.prerenderModule({
+        url: url.href,
+        realm: this.#realmURL.href,
+        auth: this.#auth,
+        renderOptions: prerenderOptions,
+      });
+    } catch (err: any) {
+      this.stats.moduleErrors++;
+      this.#log.warn(
         `${jobIdentity(this.#jobInfo)} encountered error rendering module "${url.href}": ${err.message}`,
       );
       await this.batch.updateEntry(url, {
