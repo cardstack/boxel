@@ -143,20 +143,13 @@ export class TestRealmAdapter implements RealmAdapter {
     if (!this.#loader) {
       throw new Error('bug: loader needs to be set in test adapter');
     }
-
-    this.#log(
-      `prepareInstances starting with ${this.#potentialModulesAndInstances.length} potential modules`,
-    );
-    let cardApiImportStart = this.#now();
     let cardApi = await this.#loader.import<CardAPI>(
       `${baseRealm.url}card-api`,
     );
-    this.#logDuration('card-api import', cardApiImportStart);
     let cardsPrepared = 0;
     let modulesShimmed = 0;
     let firstEntryLogged = false;
     for (let { content, url } of this.#potentialModulesAndInstances) {
-      let entryStart = this.#now();
       if (cardApi.isCard(content)) {
         cardApi.setCardAsSavedForTest(
           content,
@@ -164,11 +157,6 @@ export class TestRealmAdapter implements RealmAdapter {
         );
         cardsPrepared++;
         if (!firstEntryLogged) {
-          this.#log(
-            `first module ${url.href} detected as card (setCardAsSavedForTest) in ${(
-              this.#now() - entryStart
-            ).toFixed(2)}ms`,
-          );
           firstEntryLogged = true;
         }
         continue;
@@ -178,40 +166,13 @@ export class TestRealmAdapter implements RealmAdapter {
           this.#loader.shimModule(url.href, content);
           modulesShimmed++;
           if (!firstEntryLogged) {
-            this.#log(
-              `first module ${url.href} shimmed in ${(
-                this.#now() - entryStart
-              ).toFixed(2)}ms`,
-            );
             firstEntryLogged = true;
           }
           continue;
         }
       }
     }
-    this.#log(
-      `prepareInstances processed ${cardsPrepared} cards and ${modulesShimmed} module shims`,
-    );
-    this.#logDuration(
-      'constructor -> ready',
-      this.#readyStartedAt,
-      this.#now(),
-    );
     this.#ready.fulfill();
-  }
-
-  #now() {
-    return typeof performance !== 'undefined' ? performance.now() : Date.now();
-  }
-
-  #log(message: string) {
-    console.log(`[TestRealmAdapter] ${message}`);
-  }
-
-  #logDuration(label: string, startedAt: number, finishedAt?: number) {
-    let end = finishedAt ?? this.#now();
-    let durationMs = end - startedAt;
-    this.#log(`${label} took ${durationMs.toFixed(2)}ms`);
   }
 
   setLoader(loader: Loader) {
