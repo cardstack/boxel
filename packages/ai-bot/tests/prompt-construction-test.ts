@@ -2214,7 +2214,7 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.true(messages!.length > 0);
     assert.true(messages![0].role === 'system');
-    let systemPrompt = (messages![0].content as TextContent[]).join('\n');
+    let systemPrompt = (messages![0].content as TextContent[]).map((c) => c.text).join('\n');
     assert.false(systemPrompt?.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.false(systemPrompt?.includes('This is skill 1'));
     assert.false(systemPrompt?.includes('This is skill 2'));
