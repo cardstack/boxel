@@ -19,6 +19,7 @@ import {
   type IndexWriter,
   type QueuePublisher,
   type DBAdapter,
+  type RealmPermissions,
 } from '.';
 import { MatrixClient } from './matrix-client';
 import * as Tasks from './tasks';
@@ -66,6 +67,10 @@ export class Worker {
   #secretSeed: string;
   #reportStatus: ((args: StatusArgs) => void) | undefined;
   #realmServerMatrixUsername;
+  #createPrerenderAuth: (
+    userId: string,
+    permissions: RealmPermissions,
+  ) => string;
 
   constructor({
     indexWriter,
@@ -78,6 +83,7 @@ export class Worker {
     secretSeed,
     reportStatus,
     prerenderer,
+    createPrerenderAuth,
   }: {
     indexWriter: IndexWriter;
     queue: QueueRunner;
@@ -89,6 +95,10 @@ export class Worker {
     secretSeed: string;
     prerenderer: Prerenderer;
     reportStatus?: (args: StatusArgs) => void;
+    createPrerenderAuth: (
+      userId: string,
+      permissions: RealmPermissions,
+    ) => string;
   }) {
     this.#queue = queue;
     this.#indexWriter = indexWriter;
@@ -100,6 +110,7 @@ export class Worker {
     this.#dbAdapter = dbAdapter;
     this.#queuePublisher = queuePublisher;
     this.#prerenderer = prerenderer;
+    this.#createPrerenderAuth = createPrerenderAuth;
   }
 
   async run() {
@@ -113,6 +124,7 @@ export class Worker {
       queuePublisher: this.#queuePublisher,
       getAuthedFetch: this.makeAuthedFetch.bind(this),
       reportStatus: this.reportStatus.bind(this),
+      createPrerenderAuth: this.#createPrerenderAuth,
     };
 
     await Promise.all([

@@ -31,7 +31,6 @@ import {
   type LastModifiedTimes,
   type JobInfo,
   type Prerenderer,
-  type RealmPermissions,
   type RenderRouteOptions,
   type LocalPath,
   type Reader,
@@ -62,8 +61,7 @@ export class IndexRunner {
   #realmPaths: RealmPaths;
   #ignoreData: Record<string, string>;
   #prerenderer: Prerenderer;
-  #userId: string;
-  #permissions: RealmPermissions;
+  #auth: string;
   #realmURL: URL;
   #realmInfo?: RealmInfo;
   #jobInfo: JobInfo;
@@ -90,8 +88,7 @@ export class IndexRunner {
     jobInfo,
     reportStatus,
     prerenderer,
-    userId,
-    permissions,
+    auth,
     fetch,
   }: {
     realmURL: URL;
@@ -99,8 +96,7 @@ export class IndexRunner {
     indexWriter: IndexWriter;
     ignoreData?: Record<string, string>;
     prerenderer: Prerenderer;
-    userId: string;
-    permissions: RealmPermissions;
+    auth: string;
     fetch: typeof globalThis.fetch;
     jobInfo?: JobInfo;
     reportStatus?(
@@ -116,16 +112,7 @@ export class IndexRunner {
     this.#jobInfo = jobInfo ?? { jobId: -1, reservationId: -1 };
     this.#reportStatus = reportStatus;
     this.#prerenderer = prerenderer;
-    this.#userId = userId;
-    this.#permissions = { ...permissions };
-    let ownerPermissions = new Set(
-      this.#permissions[this.#realmURL.href] ?? [],
-    );
-    // we assert that the userID provided is always the owner of the realm being
-    // indexed
-    ownerPermissions.add('read');
-    ownerPermissions.add('realm-owner');
-    this.#permissions[this.#realmURL.href] = [...ownerPermissions];
+    this.#auth = auth;
     this.#fetch = fetch;
   }
 
@@ -448,8 +435,7 @@ export class IndexRunner {
       moduleResult = await this.#prerenderer.prerenderModule({
         url: url.href,
         realm: this.#realmURL.href,
-        userId: this.#userId,
-        permissions: this.#permissions,
+        auth: this.#auth,
         renderOptions: prerenderOptions,
       });
     } catch (err: any) {
@@ -569,8 +555,7 @@ export class IndexRunner {
         renderResult = await this.#prerenderer.prerenderCard({
           url: fileURL,
           realm: this.#realmURL.href,
-          userId: this.#userId,
-          permissions: this.#permissions,
+          auth: this.#auth,
           renderOptions: prerenderOptions,
         });
 

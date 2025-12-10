@@ -73,8 +73,7 @@ export interface ModuleRenderResponse extends ModulePrerenderModel {}
 export type ModulePrerenderArgs = {
   realm: string;
   url: string;
-  userId: string;
-  permissions: RealmPermissions;
+  auth: string;
   renderOptions?: RenderRouteOptions;
 };
 

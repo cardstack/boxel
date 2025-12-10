@@ -44,8 +44,7 @@ module(basename(__filename), function (hooks) {
       let result = await prerenderer.prerenderCard({
         realm: 'realm',
         url: 'https://example.com/card',
-        userId: '@user:localhost',
-        permissions: {},
+        auth: '{}',
       });
 
       assert.true((result as any).ok, 'eventually succeeds after retries');
@@ -67,8 +66,7 @@ module(basename(__filename), function (hooks) {
         await prerenderer.prerenderCard({
           realm: 'realm',
           url: 'https://example.com/card',
-          userId: '@user:localhost',
-          permissions: {},
+          auth: '{}',
         });
         assert.ok(false, 'should have thrown');
       } catch (e: any) {
@@ -113,8 +111,7 @@ module(basename(__filename), function (hooks) {
         let result = await prerenderer.prerenderCard({
           realm: 'realm',
           url: 'https://example.com/card',
-          userId: '@user:localhost',
-          permissions: {},
+          auth: '{}',
         });
 
         assert.true((result as any).ok, 'eventually succeeds after 500');
@@ -148,8 +145,7 @@ module(basename(__filename), function () {
           prerenderer.prerenderCard({
             realm: 'realm',
             url: 'https://example.com/card',
-            userId: '@user:localhost',
-            permissions: {},
+            auth: '{}',
           }),
           /aborted/,
           'throws after client-side abort',

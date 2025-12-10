@@ -138,28 +138,26 @@ export function createRemotePrerenderer(
   }
 
   return {
-    async prerenderCard({ realm, url, userId, permissions, renderOptions }) {
+    async prerenderCard({ realm, url, auth, renderOptions }) {
       return await requestWithRetry<RenderResponse>(
         'prerender-card',
         'prerender-request',
         {
           realm,
           url,
-          userId,
-          permissions,
+          auth,
           renderOptions: renderOptions ?? {},
         },
       );
     },
-    async prerenderModule({ realm, url, userId, permissions, renderOptions }) {
+    async prerenderModule({ realm, url, auth, renderOptions }) {
       return await requestWithRetry<ModuleRenderResponse>(
         'prerender-module',
         'prerender-module-request',
         {
           realm,
           url,
-          userId,
-          permissions,
+          auth,
           renderOptions: renderOptions ?? {},
         },
       );

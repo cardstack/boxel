@@ -4,7 +4,6 @@ import {
   type RenderResponse,
   type ModuleRenderResponse,
   type RenderRouteOptions,
-  type RealmPermissions,
   serializeRenderRouteOptions,
   logger,
 } from '@cardstack/runtime-common';
@@ -51,16 +50,12 @@ export class RenderRunner {
   async prerenderCardAttempt({
     realm,
     url,
-    userId,
-    permissions,
     auth,
     opts,
     renderOptions,
   }: {
     realm: string;
     url: string;
-    userId: string;
-    permissions: RealmPermissions;
     auth: string;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
@@ -76,12 +71,7 @@ export class RenderRunner {
     };
   }> {
     this.#nonce++;
-    log.info(
-      `prerendering url ${url}, nonce=${this.#nonce} realm=${realm} userId=${userId}`,
-    );
-    log.debug(
-      `prerendering url ${url} with permissions=${JSON.stringify(permissions)}`,
-    );
+    log.info(`prerendering url ${url}, nonce=${this.#nonce} realm=${realm}`);
 
     const { page, reused, launchMs, pageId } =
       await this.#pagePool.getPage(realm);
@@ -361,16 +351,12 @@ export class RenderRunner {
   async prerenderModuleAttempt({
     realm,
     url,
-    userId,
-    permissions,
     auth,
     opts,
     renderOptions,
   }: {
     realm: string;
     url: string;
-    userId: string;
-    permissions: RealmPermissions;
     auth: string;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
@@ -387,10 +373,7 @@ export class RenderRunner {
   }> {
     this.#nonce++;
     log.info(
-      `module prerendering url ${url}, nonce=${this.#nonce} realm=${realm} userId=${userId}`,
-    );
-    log.debug(
-      `module prerendering url ${url} with permissions=${JSON.stringify(permissions)}`,
+      `module prerendering url ${url}, nonce=${this.#nonce} realm=${realm}`,
     );
 
     const { page, reused, launchMs, pageId } =
