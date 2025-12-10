@@ -121,6 +121,7 @@ export default class CopyAndEditCommand extends HostBaseCommand<
     originalCardId: string,
     newCardId: string,
     relationshipContext?: {
+      // fieldName may be a dotted path (e.g. "cardInfo.theme")
       fieldName?: string;
       fieldType?: 'linksTo' | 'linksToMany';
     },
@@ -141,7 +142,15 @@ export default class CopyAndEditCommand extends HostBaseCommand<
 
     let cardApi = await this.loadCardAPI();
     let normalizedOriginal = originalCardId.replace(/\.json$/, '');
-    let fields = cardApi.getFields(parentCard, {
+    let targetPath = relationshipContext?.fieldName?.includes('.')
+      ? relationshipContext.fieldName
+      : relationshipContext?.fieldName
+        ? this.findRelationshipPath(parentCard, relationshipContext.fieldName)
+        : undefined;
+    let containerForFields =
+      targetPath && this.getWrappedInstance(targetPath, parentCard);
+    let fieldContainer = containerForFields ?? parentCard;
+    let fields = cardApi.getFields(fieldContainer, {
       usedLinksToFieldsOnly: true,
       includeComputeds: false,
     });
@@ -150,10 +159,10 @@ export default class CopyAndEditCommand extends HostBaseCommand<
     // but the copied card is still created/added and can be used independently.
     // Only update parent relationships that are defined as fields (linksTo/linksToMany)
     for (let [fieldName, fieldDef] of Object.entries(fields)) {
-      if (
-        relationshipContext?.fieldName &&
-        fieldName !== relationshipContext.fieldName
-      ) {
+      if (!fieldDef) {
+        continue;
+      }
+      if (targetPath && fieldName !== targetPath.split('.').pop()) {
         continue;
       }
       if (
@@ -174,12 +183,9 @@ export default class CopyAndEditCommand extends HostBaseCommand<
       ) {
         continue;
       }
-      let currentValue = (parentCard as any)[fieldName];
+      let currentValue = (fieldContainer as any)[fieldName];
       if (fieldDef.fieldType === 'linksTo') {
-        (parentCard as any)[fieldName] = newCard;
-        if (parentCard.id) {
-          this.store.save(parentCard.id as string);
-        }
+        this.assignAndSave(parentCard, fieldContainer, fieldName, newCard);
         return;
       } else if (
         fieldDef.fieldType === 'linksToMany' &&
@@ -197,10 +203,7 @@ export default class CopyAndEditCommand extends HostBaseCommand<
           }
         }
         if (found) {
-          (parentCard as any)[fieldName] = replaced;
-          if (parentCard.id) {
-            this.store.save(parentCard.id as string);
-          }
+          this.assignAndSave(parentCard, fieldContainer, fieldName, replaced);
           return;
         }
       }
@@ -257,5 +260,52 @@ export default class CopyAndEditCommand extends HostBaseCommand<
       }
     }
     return undefined;
+  }
+
+  private assignAndSave(
+    parentCard: CardAPI.CardDef,
+    targetContainer: any,
+    fieldName: string,
+    value: unknown,
+  ) {
+    (targetContainer as any)[fieldName] = value;
+    if (parentCard.id) {
+      this.store.save(parentCard.id as string);
+    }
+  }
+
+  private findRelationshipPath(
+    card: CardAPI.CardDef,
+    fieldName: string,
+  ): string | undefined {
+    try {
+      let serialized = this.#cardAPI?.serializeCard(card);
+      let relationships = (serialized?.data as any)?.relationships ?? {};
+      return Object.keys(relationships).find(
+        (key) => key === fieldName || key.endsWith(`.${fieldName}`),
+      );
+    } catch {
+      return undefined;
+    }
+  }
+
+  // Example: dotGetter('cardInfo.theme', card) -> card.cardInfo.theme
+  private dotGetter(fieldName: string, base: CardAPI.BaseDef) {
+    return fieldName
+      .split('.')
+      .reduce(
+        (memo, part) => (memo == null ? undefined : (memo as any)[part]),
+        base as any,
+      );
+  }
+
+  // Example: getWrappedInstance('cardInfo.theme', card) -> card.cardInfo
+  private getWrappedInstance(fieldName: string, base: CardAPI.BaseDef) {
+    let parts = fieldName.split('.');
+    if (parts.length < 2) {
+      return base;
+    }
+    let parentPath = parts.slice(0, parts.length - 1).join('.');
+    return this.dotGetter(parentPath, base);
   }
 }

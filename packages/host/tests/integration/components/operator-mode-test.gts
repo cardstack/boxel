@@ -925,12 +925,15 @@ module('Integration | operator-mode', function (hooks) {
       () =>
         document
           .querySelector('[data-test-auto-save-indicator]')
-          ?.textContent?.trim() == 'Failed to save: Rejected by firewall',
+          ?.textContent?.trim() ==
+        'Failed to save: Request blocked by Web Application Firewall. X-blocked-by-waf-rule response header specifies rule: CrossSiteScripting_BODY',
       { timeoutMessage: 'Waiting for "Failed to save" to appear' },
     );
     assert
       .dom('[data-test-auto-save-indicator]')
-      .containsText('Failed to save: Rejected by firewall');
+      .containsText(
+        'Failed to save: Request blocked by Web Application Firewall. X-blocked-by-waf-rule response header specifies rule: CrossSiteScripting_BODY',
+      );
   });
 
   test('opens workspace chooser after closing the only remaining card on the stack', async function (assert) {
@@ -1986,7 +1989,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom(
         '[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]',
       )
-      .hasText('Publishing Packet - Untitled Publishing Packet');
+      .hasText('Publishing Packet - Untitled');
   });
 
   test(`can search by card title when opening card chooser from a field editor`, async function (assert) {

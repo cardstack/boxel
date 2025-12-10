@@ -1175,7 +1175,7 @@ module('Responding', (hooks) => {
     });
     assert.strictEqual(
       sentEvents[3].content.errorMessage,
-      'OpenAI error: Error - All your base are belong to us',
+      'Error - All your base are belong to us',
       'Error message should be sent, replacing the original message',
     );
   });
