@@ -15,7 +15,7 @@ import {
   type CopyArgs,
   type CopyResult,
 } from '.';
-import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from './reindex-config';
+import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from './tasks/indexer';
 import type { Realm } from './realm';
 import { RealmPaths } from './paths';
 import ignore, { type Ignore } from 'ignore';

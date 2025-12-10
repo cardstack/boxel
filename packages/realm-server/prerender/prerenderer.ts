@@ -14,6 +14,34 @@ import { RenderRunner } from './render-runner';
 const log = logger('prerenderer');
 const boxelHostURL = process.env.BOXEL_HOST_URL ?? 'http://localhost:4200';
 
+class AsyncSemaphore {
+  #available: number;
+  #queue: Array<(release: () => void) => void> = [];
+
+  constructor(max: number) {
+    this.#available = Math.max(1, max);
+  }
+
+  async acquire(): Promise<() => void> {
+    if (this.#available > 0) {
+      this.#available--;
+      return this.#release;
+    }
+    return await new Promise<() => void>((resolve) => {
+      this.#queue.push(resolve);
+    });
+  }
+
+  #release = () => {
+    let next = this.#queue.shift();
+    if (next) {
+      next(this.#release);
+      return;
+    }
+    this.#available++;
+  };
+}
+
 export class Prerenderer {
   #pendingByRealm = new Map<string, Promise<void>>();
   #secretSeed: string;
@@ -22,6 +50,7 @@ export class Prerenderer {
   #pagePool: PagePool;
   #renderRunner: RenderRunner;
   #cleanupInterval: NodeJS.Timeout | undefined;
+  #semaphore: AsyncSemaphore;
 
   constructor(options: {
     secretSeed: string;
@@ -32,6 +61,7 @@ export class Prerenderer {
     this.#secretSeed = options.secretSeed;
     let maxPages = options.maxPages ?? 4;
     let silent = options.silent || process.env.PRERENDER_SILENT === 'true';
+    this.#semaphore = new AsyncSemaphore(maxPages);
     this.#browserManager = new BrowserManager();
     this.#pagePool = new PagePool({
       maxPages,
@@ -100,10 +130,12 @@ export class Prerenderer {
       prev.then(() => deferred.promise),
     );
 
+    let releaseGlobal: (() => void) | undefined;
     try {
       await prev.catch((e) => {
         log.debug('Previous prerender in chain failed (continuing):', e);
       }); // ensure chain continues even after errors
+      releaseGlobal = await this.#semaphore.acquire();
 
       let sessions: { [realm: string]: string } = {};
       for (let [realmURL, realmPermissions] of Object.entries(
@@ -222,6 +254,11 @@ export class Prerenderer {
       }
       throw new Error(`prerender attempts exhausted for ${url}`);
     } finally {
+      try {
+        releaseGlobal?.();
+      } catch (_e) {
+        // best-effort release; avoids blocking future renders
+      }
       deferred.fulfill();
     }
   }
@@ -261,10 +298,12 @@ export class Prerenderer {
       prev.then(() => deferred.promise),
     );
 
+    let releaseGlobal: (() => void) | undefined;
     try {
       await prev.catch((e) => {
         log.debug('Previous prerender in chain failed (continuing):', e);
       });
+      releaseGlobal = await this.#semaphore.acquire();
 
       let sessions: { [realm: string]: string } = {};
       for (let [realmURL, realmPermissions] of Object.entries(
@@ -310,6 +349,11 @@ export class Prerenderer {
         });
       }
     } finally {
+      try {
+        releaseGlobal?.();
+      } catch (_e) {
+        // best-effort release; avoids blocking future renders
+      }
       deferred.fulfill();
     }
   }

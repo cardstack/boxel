@@ -1,13 +1,13 @@
 // --- Type Imports ---
 
 import type {
-  Meta,
   LooseCardResource,
   Loader,
   CardDocument,
   CardResource,
   CardResourceMeta,
   LooseSingleCardDocument,
+  Meta,
 } from '@cardstack/runtime-common';
 import type { BaseDef, BaseDefConstructor, CardDef } from './card-api';
 import type { ResourceID } from '@cardstack/runtime-common';
