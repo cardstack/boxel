@@ -103,9 +103,6 @@ export default class ListingFittedSkeleton extends GlimmerComponent<Signature> {
             height: 100%;
             padding: var(--boxel-sp-xs);
           }
-          .card-content {
-            flex: 1;
-          }
           .card-tags-action {
             flex-direction: row;
             justify-content: space-between;
