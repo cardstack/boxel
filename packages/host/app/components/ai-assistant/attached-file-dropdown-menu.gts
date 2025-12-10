@@ -25,13 +25,13 @@ import { IconCode } from '@cardstack/boxel-ui/icons';
 import { hasExecutableExtension } from '@cardstack/runtime-common';
 
 import RestorePatchedFileModal from '@cardstack/host/components/ai-assistant/restore-file-modal';
-import CardService from '@cardstack/host/services/card-service';
-import MatrixService from '@cardstack/host/services/matrix-service';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type CardService from '@cardstack/host/services/card-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { type FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
-import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
+import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import { Submodes } from '../submode-switcher';
 

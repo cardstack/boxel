@@ -10,11 +10,6 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
 
-import {
-  type RegisterResponse,
-  type IRequestTokenResponse,
-  type LoginResponse,
-} from 'matrix-js-sdk';
 import { v4 as uuidv4 } from 'uuid';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
@@ -38,7 +33,12 @@ import {
 } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import { AuthMode } from './auth';
+import type { AuthMode } from './auth';
+import type {
+  RegisterResponse,
+  IRequestTokenResponse,
+  LoginResponse,
+} from 'matrix-js-sdk';
 
 const MATRIX_REGISTRATION_TYPES = {
   sendToken: 'm.login.registration_token',

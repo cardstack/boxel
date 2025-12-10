@@ -6,10 +6,10 @@ import { modifier } from 'ember-modifier';
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
-import { SessionRoomData } from '../../services/ai-assistant-panel-service';
-
 import AiAssistantPanelPopover from './panel-popover';
 import PastSessionItem, { type RoomActions } from './past-session-item';
+
+import type { SessionRoomData } from '../../services/ai-assistant-panel-service';
 
 import type MatrixService from '../../services/matrix-service';
 

@@ -16,9 +16,9 @@ import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
 
-import { Message } from '@cardstack/host/lib/matrix-classes/message';
-import LocalPersistenceService from '@cardstack/host/services/local-persistence-service';
-import MatrixService from '@cardstack/host/services/matrix-service';
+import type { Message } from '@cardstack/host/lib/matrix-classes/message';
+import type LocalPersistenceService from '@cardstack/host/services/local-persistence-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import assistantIcon from './ai-assist-icon.webp';
 

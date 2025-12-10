@@ -6,12 +6,12 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
-import { Realm } from '@cardstack/runtime-common/realm';
+import type { Loader } from '@cardstack/runtime-common/loader';
+import type { Realm } from '@cardstack/runtime-common/realm';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   testRealmURL,
@@ -22,10 +22,12 @@ import {
   setupIntegrationTestRealm,
   setupOperatorModeStateCleanup,
 } from '../../helpers';
-import { TestRealmAdapter } from '../../helpers/adapter';
+
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { TestRealmAdapter } from '../../helpers/adapter';
 
 let loader: Loader;
 let cardApi: typeof import('https://cardstack.com/base/card-api');

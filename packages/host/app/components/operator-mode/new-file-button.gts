@@ -1,7 +1,8 @@
-import { TemplateOnlyComponent } from '@ember/component/template-only';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
-import { type MenuDivider, MenuItem } from '@cardstack/boxel-ui/helpers';
+import type { MenuItem } from '@cardstack/boxel-ui/helpers';
+import type { MenuDivider } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowDown, IconPlus } from '@cardstack/boxel-ui/icons';
 
 export interface NewFileOptions {

@@ -6,7 +6,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
-import RecentCards from '@cardstack/host/services/recent-cards-service';
+import type RecentCards from '@cardstack/host/services/recent-cards-service';
 
 import ResultsSection from './results-section';
 

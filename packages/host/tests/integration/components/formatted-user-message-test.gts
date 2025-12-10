@@ -1,4 +1,5 @@
-import { RenderingTestContext, render } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
+import { render } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 

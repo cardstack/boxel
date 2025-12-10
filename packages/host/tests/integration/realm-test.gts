@@ -1,4 +1,4 @@
-import { RenderingTestContext } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { stringify } from 'qs';
@@ -6,7 +6,8 @@ import { module, test } from 'qunit';
 
 import { validate as uuidValidate } from 'uuid';
 
-import { baseRealm, Realm } from '@cardstack/runtime-common';
+import type { Realm } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 import { isSingleCardDocument } from '@cardstack/runtime-common/document-types';
 import {
   cardSrc,
@@ -14,7 +15,7 @@ import {
 } from '@cardstack/runtime-common/etc/test-fixtures';
 
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as StringFieldMod from 'https://cardstack.com/base/string';
