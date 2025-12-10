@@ -924,6 +924,16 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
     }
   }
 
+  // Ensure audio stops when this instance is torn down (e.g., switching cards)
+  willDestroy(): void {
+    this.stop();
+    if (this.audioContext) {
+      // Close without awaiting to avoid blocking teardown
+      this.audioContext.close().catch(() => undefined);
+    }
+    this.audioContext = null;
+  }
+
   // ⁴⁹ Dynamic sound synthesis using kit parameters
   playKick(time: number, volume: number) {
     if (!this.audioContext) return;
