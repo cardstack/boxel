@@ -13,11 +13,14 @@ import {
   type InstanceOrError,
   type ResolvedCodeRef,
   type DefinitionLookup,
+  visitInstanceURLs,
+  maybeRelativeURL,
 } from '.';
 import type { Realm } from './realm';
 import { RealmPaths } from './paths';
 import type { Query } from './query';
 import { CardError, type SerializedError } from './error';
+import { visitModuleDeps } from './code-ref';
 import {
   isSingleCardDocument,
   type SingleCardDocument,
@@ -320,6 +323,18 @@ export class RealmIndexQueryEngine {
           type: 'card',
           id: relationshipId.href,
         };
+      }
+      for (const includedResource of included) {
+        function visitURL(url: string, setURL: (newURL: string) => void) {
+          let urlObj = new URL(url, includedResource.id);
+          if (resource.id) {
+            setURL(maybeRelativeURL(urlObj, new URL(resource.id), realmURL));
+          } else {
+            setURL(urlObj.href);
+          }
+        }
+        visitInstanceURLs(includedResource, visitURL);
+        visitModuleDeps(includedResource, visitURL);
       }
     }
     return included;

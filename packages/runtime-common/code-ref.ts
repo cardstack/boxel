@@ -16,7 +16,7 @@ import {
 } from './constants';
 import { CardError } from './error';
 import { meta } from './constants';
-import { isUrlLike, trimExecutableExtension } from './index';
+import { isUrlLike, LooseCardResource, trimExecutableExtension } from './index';
 
 export type ResolvedCodeRef = {
   module: string;
@@ -408,4 +408,44 @@ function isRelativePath(moduleId: unknown): moduleId is string {
     !moduleId.startsWith('/') &&
     !moduleId.startsWith('data:')
   );
+}
+
+type VisitModuleDep = (
+  moduleURL: string,
+  setModuleURL: (newURL: string) => void,
+) => void;
+
+function visitCodeRef(codeRef: CodeRef, visit: VisitModuleDep): void {
+  if (!('type' in codeRef)) {
+    visit(codeRef.module, (newURL) => {
+      codeRef.module = newURL;
+    });
+  } else {
+    visitCodeRef(codeRef.card, visit);
+  }
+}
+
+export function visitModuleDeps(
+  resourceJson: LooseCardResource,
+  visit: VisitModuleDep,
+): void {
+  let resourceMeta = resourceJson.meta;
+  if (resourceMeta?.adoptsFrom && isCodeRef(resourceMeta.adoptsFrom)) {
+    visitCodeRef(resourceMeta.adoptsFrom, visit);
+  }
+  if (resourceMeta?.fields) {
+    for (let fieldMeta of Object.values(resourceMeta.fields)) {
+      if (Array.isArray(fieldMeta)) {
+        for (let meta of fieldMeta) {
+          if (meta.adoptsFrom && isCodeRef(meta.adoptsFrom)) {
+            visitCodeRef(meta.adoptsFrom, visit);
+          }
+        }
+      } else {
+        if (fieldMeta.adoptsFrom && isCodeRef(fieldMeta.adoptsFrom)) {
+          visitCodeRef(fieldMeta.adoptsFrom, visit);
+        }
+      }
+    }
+  }
 }

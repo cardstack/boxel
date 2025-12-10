@@ -56,6 +56,7 @@ import {
   isCardDocumentString,
   isBrowserTestEnv,
 } from './index';
+import { visitModuleDeps } from './code-ref';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
@@ -2267,6 +2268,9 @@ export class Realm {
           resource,
           included,
           realmURL: new URL(this.url),
+        });
+        visitModuleDeps(resource, (moduleURL, setModuleURL) => {
+          setModuleURL(new URL(moduleURL, instanceURL).href);
         });
       }
       let fileSerialization: LooseSingleCardDocument | undefined;

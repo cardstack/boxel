@@ -4,8 +4,12 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import type { Loader } from '@cardstack/runtime-common';
-import { baseRealm, loadCardDef } from '@cardstack/runtime-common';
+import type { Loader, LooseCardResource } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  loadCardDef,
+  visitModuleDeps,
+} from '@cardstack/runtime-common';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
@@ -102,5 +106,73 @@ module('code-ref', function (hooks) {
       undefined,
     );
     assert.deepEqual(testCard.ref, ref, 'card data is correct');
+  });
+
+  test('can visit module URLs of different types of modules', async function (assert) {
+    let json: LooseCardResource = {
+      meta: {
+        adoptsFrom: {
+          module: `${testRealmURL}code-ref-test`,
+          name: 'TestCard',
+        },
+        fields: {
+          field1: {
+            adoptsFrom: {
+              type: 'ancestorOf',
+              card: {
+                module: `${testRealmURL}code-ref-test-1`,
+                name: 'TestCard1',
+              },
+            },
+          },
+          field2: [
+            {
+              adoptsFrom: {
+                type: 'fieldOf',
+                card: {
+                  module: `${testRealmURL}code-ref-test-3`,
+                  name: 'TestCard3',
+                },
+                field: 'someField',
+              },
+            },
+          ],
+        },
+      },
+    };
+    visitModuleDeps(json, (moduleURL, setModuleURL) => {
+      setModuleURL(moduleURL.replace('code-ref-test', 'foo-bar'));
+    });
+    assert.deepEqual(json, {
+      meta: {
+        adoptsFrom: {
+          module: `${testRealmURL}foo-bar`,
+          name: 'TestCard',
+        },
+        fields: {
+          field1: {
+            adoptsFrom: {
+              type: 'ancestorOf',
+              card: {
+                module: `${testRealmURL}foo-bar-1`,
+                name: 'TestCard1',
+              },
+            },
+          },
+          field2: [
+            {
+              adoptsFrom: {
+                type: 'fieldOf',
+                card: {
+                  module: `${testRealmURL}foo-bar-3`,
+                  name: 'TestCard3',
+                },
+                field: 'someField',
+              },
+            },
+          ],
+        },
+      },
+    });
   });
 });
