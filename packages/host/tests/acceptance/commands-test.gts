@@ -56,6 +56,8 @@ import {
   visitOperatorMode,
   setupAuthEndpoints,
   setupUserSubscription,
+  setupSnapshotRealm,
+  setupRendering,
 } from '../helpers';
 
 import {
@@ -95,359 +97,377 @@ module('Acceptance | Commands tests', function (hooks) {
     createAndJoinRoom,
   } = mockMatrixUtils;
 
-  setupBaseRealm(hooks);
+  let cachedMatrixRoomId: string | undefined;
+  type CommandsSnapshotState = {
+    matrixRoomId: string;
+  };
 
-  hooks.beforeEach(async function () {
-    matrixRoomId = await createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
-    setupUserSubscription();
-    setupAuthEndpoints();
+  let commandsSnapshot = setupSnapshotRealm<CommandsSnapshotState>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      if (!cachedMatrixRoomId) {
+        cachedMatrixRoomId = await createAndJoinRoom({
+          sender: '@testuser:localhost',
+          name: 'room-test',
+        });
+      }
+      let matrixRoomForTest = cachedMatrixRoomId!;
+      class Pet extends CardDef {
+        static displayName = 'Pet';
+        @field name = contains(StringField);
+        @field favoriteTreat = contains(StringField);
 
-    class Pet extends CardDef {
-      static displayName = 'Pet';
-      @field name = contains(StringField);
-      @field favoriteTreat = contains(StringField);
-
-      @field title = contains(StringField, {
-        computeVia: function (this: Pet) {
-          return this.name;
-        },
-      });
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <h3 data-test-pet={{@model.name}}>
-            <@fields.name />
-          </h3>
-        </template>
-      };
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <GridContainer class='container'>
-            <h2><@fields.title /></h2>
-            <div>
-              <div>Favorite Treat: <@fields.favoriteTreat /></div>
-              <div data-test-editable-meta>
-                {{#if @canEdit}}
-                  <@fields.title />
-                  is editable.
-                {{else}}
-                  <@fields.title />
-                  is NOT editable.
-                {{/if}}
+        @field title = contains(StringField, {
+          computeVia: function (this: Pet) {
+            return this.name;
+          },
+        });
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <h3 data-test-pet={{@model.name}}>
+              <@fields.name />
+            </h3>
+          </template>
+        };
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <GridContainer class='container'>
+              <h2><@fields.title /></h2>
+              <div>
+                <div>Favorite Treat: <@fields.favoriteTreat /></div>
+                <div data-test-editable-meta>
+                  {{#if @canEdit}}
+                    <@fields.title />
+                    is editable.
+                  {{else}}
+                    <@fields.title />
+                    is NOT editable.
+                  {{/if}}
+                </div>
               </div>
-            </div>
-          </GridContainer>
-        </template>
-      };
-    }
-
-    class ScheduleMeetingInput extends CardDef {
-      @field topic = contains(StringField);
-      @field participants = linksToMany(() => Person);
-    }
-
-    class Meeting extends CardDef {
-      static displayName = 'Meeting';
-      @field participants = linksToMany(() => Person);
-      @field topic = contains(StringField);
-    }
-
-    class ScheduleMeetingCommand extends Command<typeof ScheduleMeetingInput> {
-      static displayName = 'ScheduleMeetingCommand';
-      static actionVerb = 'Schedule';
-
-      async getInputType() {
-        return ScheduleMeetingInput;
-      }
-      protected async run(input: ScheduleMeetingInput) {
-        let meeting = new Meeting({
-          topic: 'unset topic',
-          participants: input.participants,
-        });
-        let saveCardCommand = new SaveCardCommand(this.commandContext);
-        await saveCardCommand.execute({
-          card: meeting,
-          realm: testRealmURL,
-        });
-
-        let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
-          this.commandContext,
-        );
-        let { roomId } = await createAIAssistantRoomCommand.execute({
-          name: 'AI Assistant Room',
-        });
-        let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
-          this.commandContext,
-        );
-        let { eventId } = await sendAiAssistantMessageCommand.execute({
-          roomId,
-          prompt: `Change the topic of the meeting to "${input.topic}"`,
-          attachedCards: [meeting],
-        });
-
-        await waitForCompletedCommandRequest(
-          this.commandContext,
-          roomId,
-          (commandRequest) => commandRequest.name === 'patchCardInstance',
-          { afterEventId: eventId },
-        );
-
-        await waitForRealmState(
-          this.commandContext,
-          testRealmURL,
-          () => meeting.topic === input.topic,
-        );
-
-        let showCardCommand = new ShowCardCommand(this.commandContext);
-        await showCardCommand.execute({
-          cardId: meeting.id,
-        });
-
-        return undefined;
-      }
-    }
-
-    class MaybeBoomCommand extends Command<undefined, undefined> {
-      static displayName = 'MaybeBoomCommand';
-      static actionVerb = 'Boom?';
-      async getInputType() {
-        return undefined;
-      }
-      protected async run(): Promise<undefined> {
-        if (maybeBoomShouldBoom) {
-          throw new Error('Boom!');
-        }
-        return undefined;
-      }
-    }
-
-    class SearchAndOpenCardCommand extends Command<
-      typeof SearchCardsByTypeAndTitleInput,
-      undefined
-    > {
-      static displayName = 'SearchAndOpenCardCommand';
-      static actionVerb = 'Search';
-      async getInputType() {
-        return new SearchCardsByTypeAndTitleCommand(
-          this.commandContext,
-        ).getInputType();
-      }
-      protected async run(
-        input: SearchCardsByTypeAndTitleInput,
-      ): Promise<undefined> {
-        let searchCommand = new SearchCardsByTypeAndTitleCommand(
-          this.commandContext,
-        );
-        let searchResult = await searchCommand.execute(input);
-        if (searchResult.cardIds.length > 0) {
-          let showCardCommand = new ShowCardCommand(this.commandContext);
-          await showCardCommand.execute({
-            cardId: searchResult.cardIds[0],
-          });
-        }
-        return undefined;
-      }
-    }
-
-    class Person extends CardDef {
-      static displayName = 'Person';
-      @field firstName = contains(StringField);
-      @field lastName = contains(StringField);
-      @field pet = linksTo(Pet);
-      @field friends = linksToMany(Pet);
-      @field firstLetterOfTheName = contains(StringField, {
-        computeVia: function (this: Person) {
-          if (!this.firstName) {
-            return;
-          }
-          return this.firstName[0];
-        },
-      });
-      @field title = contains(StringField, {
-        computeVia: function (this: Person) {
-          return [this.firstName, this.lastName].filter(Boolean).join(' ');
-        },
-      });
-
-      static isolated = class Isolated extends Component<typeof this> {
-        runScheduleMeetingCommand = async () => {
-          let commandContext = this.args.context?.commandContext;
-          if (!commandContext) {
-            console.error('No command context found');
-            return;
-          }
-          let scheduleMeeting = new ScheduleMeetingCommand(commandContext);
-          setOwner(scheduleMeeting, getOwner(this)!);
-          await scheduleMeeting.execute({
-            topic: 'Meeting with Hassan',
-            participants: [this.args.model as Person],
-          });
+            </GridContainer>
+          </template>
         };
+      }
 
-        runOpenAiAssistantRoomCommand = async () => {
-          let commandContext = this.args.context?.commandContext;
-          if (!commandContext) {
-            console.error('No command context found');
-            return;
-          }
+      class ScheduleMeetingInput extends CardDef {
+        @field topic = contains(StringField);
+        @field participants = linksToMany(() => Person);
+      }
 
-          let openAiAssistantRoomCommand = new OpenAiAssistantRoomCommand(
-            commandContext,
-          );
-          await openAiAssistantRoomCommand.execute({
-            roomId: getRoomIds().pop()!,
+      class Meeting extends CardDef {
+        static displayName = 'Meeting';
+        @field participants = linksToMany(() => Person);
+        @field topic = contains(StringField);
+      }
+
+      class ScheduleMeetingCommand extends Command<
+        typeof ScheduleMeetingInput
+      > {
+        static displayName = 'ScheduleMeetingCommand';
+        static actionVerb = 'Schedule';
+
+        async getInputType() {
+          return ScheduleMeetingInput;
+        }
+        protected async run(input: ScheduleMeetingInput) {
+          let meeting = new Meeting({
+            topic: 'unset topic',
+            participants: input.participants,
           });
-        };
+          let saveCardCommand = new SaveCardCommand(this.commandContext);
+          await saveCardCommand.execute({
+            card: meeting,
+            realm: testRealmURL,
+          });
 
-        runMaybeBoomCommandViaAiAssistant = async () => {
-          let commandContext = this.args.context?.commandContext;
-          if (!commandContext) {
-            console.error('No command context found');
-            return;
-          }
           let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
-            commandContext,
+            this.commandContext,
           );
           let { roomId } = await createAIAssistantRoomCommand.execute({
             name: 'AI Assistant Room',
-            enabledSkills: [
-              (await getService('store').get<Skill>(
-                `${testRealmURL}Skill/useful-commands`,
-              )) as Skill,
-            ],
           });
           let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
-            commandContext,
+            this.commandContext,
           );
-          await sendAiAssistantMessageCommand.execute({
-            prompt: "Let's find out if it will boom",
+          let { eventId } = await sendAiAssistantMessageCommand.execute({
             roomId,
+            prompt: `Change the topic of the meeting to "${input.topic}"`,
+            attachedCards: [meeting],
           });
+
+          await waitForCompletedCommandRequest(
+            this.commandContext,
+            roomId,
+            (commandRequest) => commandRequest.name === 'patchCardInstance',
+            { afterEventId: eventId },
+          );
+
+          await waitForRealmState(
+            this.commandContext,
+            testRealmURL,
+            () => meeting.topic === input.topic,
+          );
+
+          let showCardCommand = new ShowCardCommand(this.commandContext);
+          await showCardCommand.execute({
+            cardId: meeting.id,
+          });
+        }
+      }
+
+      class MaybeBoomCommand extends Command<undefined, undefined> {
+        static displayName = 'MaybeBoomCommand';
+        static actionVerb = 'Boom?';
+        async getInputType() {
+          return undefined;
+        }
+        protected async run(): Promise<undefined> {
+          if (maybeBoomShouldBoom) {
+            throw new Error('Boom!');
+          }
+          return undefined;
+        }
+      }
+
+      class SearchAndOpenCardCommand extends Command<
+        typeof SearchCardsByTypeAndTitleInput,
+        undefined
+      > {
+        static displayName = 'SearchAndOpenCardCommand';
+        static actionVerb = 'Search';
+        async getInputType() {
+          return new SearchCardsByTypeAndTitleCommand(
+            this.commandContext,
+          ).getInputType();
+        }
+        protected async run(
+          input: SearchCardsByTypeAndTitleInput,
+        ): Promise<undefined> {
+          let searchCommand = new SearchCardsByTypeAndTitleCommand(
+            this.commandContext,
+          );
+          let searchResult = await searchCommand.execute(input);
+          if (searchResult.cardIds.length > 0) {
+            let showCardCommand = new ShowCardCommand(this.commandContext);
+            await showCardCommand.execute({
+              cardId: searchResult.cardIds[0],
+            });
+          }
+          return undefined;
+        }
+      }
+
+      class Person extends CardDef {
+        static displayName = 'Person';
+        @field firstName = contains(StringField);
+        @field lastName = contains(StringField);
+        @field pet = linksTo(Pet);
+        @field friends = linksToMany(Pet);
+        @field firstLetterOfTheName = contains(StringField, {
+          computeVia: function (this: Person) {
+            if (!this.firstName) {
+              return;
+            }
+            return this.firstName[0];
+          },
+        });
+        @field title = contains(StringField, {
+          computeVia: function (this: Person) {
+            return [this.firstName, this.lastName].filter(Boolean).join(' ');
+          },
+        });
+
+        static isolated = class Isolated extends Component<typeof this> {
+          runScheduleMeetingCommand = async () => {
+            let commandContext = this.args.context?.commandContext;
+            if (!commandContext) {
+              console.error('No command context found');
+              return;
+            }
+            let scheduleMeeting = new ScheduleMeetingCommand(commandContext);
+            setOwner(scheduleMeeting, getOwner(this)!);
+            await scheduleMeeting.execute({
+              topic: 'Meeting with Hassan',
+              participants: [this.args.model as Person],
+            });
+          };
+
+          runOpenAiAssistantRoomCommand = async () => {
+            let commandContext = this.args.context?.commandContext;
+            if (!commandContext) {
+              console.error('No command context found');
+              return;
+            }
+
+            let openAiAssistantRoomCommand = new OpenAiAssistantRoomCommand(
+              commandContext,
+            );
+            await openAiAssistantRoomCommand.execute({
+              roomId: getRoomIds().pop()!,
+            });
+          };
+
+          runMaybeBoomCommandViaAiAssistant = async () => {
+            let commandContext = this.args.context?.commandContext;
+            if (!commandContext) {
+              console.error('No command context found');
+              return;
+            }
+            let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
+              commandContext,
+            );
+            let { roomId } = await createAIAssistantRoomCommand.execute({
+              name: 'AI Assistant Room',
+              enabledSkills: [
+                (await getService('store').get<Skill>(
+                  `${testRealmURL}Skill/useful-commands`,
+                )) as Skill,
+              ],
+            });
+            let sendAiAssistantMessageCommand =
+              new SendAiAssistantMessageCommand(commandContext);
+            await sendAiAssistantMessageCommand.execute({
+              prompt: "Let's find out if it will boom",
+              roomId,
+            });
+          };
+
+          <template>
+            <h2 data-test-person={{@model.firstName}}>
+              <@fields.firstName />
+            </h2>
+            <p
+              data-test-first-letter-of-the-name={{@model.firstLetterOfTheName}}
+            >
+              <@fields.firstLetterOfTheName />
+            </p>
+            Pet:
+            <@fields.pet />
+            Friends:
+            <@fields.friends />
+            <button
+              {{on 'click' this.runScheduleMeetingCommand}}
+              data-test-schedule-meeting-button
+            >Schedule meeting</button>
+            <button
+              {{on 'click' this.runOpenAiAssistantRoomCommand}}
+              data-test-open-ai-assistant-room-button
+            >Open AI Assistant Room</button>
+            <button
+              {{on 'click' this.runMaybeBoomCommandViaAiAssistant}}
+              data-test-maybe-boom-via-ai-assistant
+            >Maybe Boom</button>
+          </template>
         };
+      }
 
-        <template>
-          <h2 data-test-person={{@model.firstName}}>
-            <@fields.firstName />
-          </h2>
-          <p data-test-first-letter-of-the-name={{@model.firstLetterOfTheName}}>
-            <@fields.firstLetterOfTheName />
-          </p>
-          Pet:
-          <@fields.pet />
-          Friends:
-          <@fields.friends />
-          <button
-            {{on 'click' this.runScheduleMeetingCommand}}
-            data-test-schedule-meeting-button
-          >Schedule meeting</button>
-          <button
-            {{on 'click' this.runOpenAiAssistantRoomCommand}}
-            data-test-open-ai-assistant-room-button
-          >Open AI Assistant Room</button>
-          <button
-            {{on 'click' this.runMaybeBoomCommandViaAiAssistant}}
-            data-test-maybe-boom-via-ai-assistant
-          >Maybe Boom</button>
-        </template>
-      };
-    }
-    let mangoPet = new Pet({ name: 'Mango' });
+      let mangoPet = new Pet({ name: 'Mango' });
 
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'person.gts': { Person, Meeting },
-        'pet.gts': { Pet },
-        'Pet/ringo.json': new Pet({ name: 'Ringo' }),
-        'AiCommandExample/london.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              location: 'London',
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'http://localhost:4202/test/ai-command-example',
-                name: 'AiCommandExample',
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        loader: loader,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'person.gts': { Person, Meeting },
+          'pet.gts': { Pet },
+          'Pet/ringo.json': new Pet({ name: 'Ringo' }),
+          'AiCommandExample/london.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                location: 'London',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'http://localhost:4202/test/ai-command-example',
+                  name: 'AiCommandExample',
+                },
               },
             },
           },
-        },
-        'Person/hassan.json': new Person({
-          firstName: 'Hassan',
-          lastName: 'Abdel-Rahman',
-          pet: mangoPet,
-          friends: [mangoPet],
-        }),
-        'Pet/mango.json': mangoPet,
-        'Pet/vangogh.json': new Pet({ name: 'Van Gogh' }),
-        'Person/fadhlan.json': new Person({
-          firstName: 'Fadhlan',
-          pet: mangoPet,
-          friends: [mangoPet],
-        }),
-        'maybe-boom-command.ts': { default: MaybeBoomCommand },
-        'search-and-open-card-command.ts': {
-          default: SearchAndOpenCardCommand,
-        },
-        'Skill/useful-commands.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              instructions:
-                'Here are few commands you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode. * search-cards-by-type-and-title: search for cards by name or description.',
-              commands: [
-                {
-                  codeRef: {
-                    name: 'SearchCardsByTypeAndTitleCommand',
-                    module: '@cardstack/boxel-host/commands/search-cards',
+          'Person/hassan.json': new Person({
+            firstName: 'Hassan',
+            lastName: 'Abdel-Rahman',
+            pet: mangoPet,
+            friends: [mangoPet],
+          }),
+          'Pet/mango.json': mangoPet,
+          'Pet/vangogh.json': new Pet({ name: 'Van Gogh' }),
+          'Person/fadhlan.json': new Person({
+            firstName: 'Fadhlan',
+            pet: mangoPet,
+            friends: [mangoPet],
+          }),
+          'maybe-boom-command.ts': { default: MaybeBoomCommand },
+          'search-and-open-card-command.ts': {
+            default: SearchAndOpenCardCommand,
+          },
+          'Skill/useful-commands.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                instructions:
+                  'Here are few commands you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode. * search-cards-by-type-and-title: search for cards by name or description.',
+                commands: [
+                  {
+                    codeRef: {
+                      name: 'SearchCardsByTypeAndTitleCommand',
+                      module: '@cardstack/boxel-host/commands/search-cards',
+                    },
+                    requiresApproval: true,
                   },
-                  requiresApproval: true,
-                },
-                {
-                  codeRef: {
-                    name: 'default',
-                    module: '@cardstack/boxel-host/commands/switch-submode',
+                  {
+                    codeRef: {
+                      name: 'default',
+                      module: '@cardstack/boxel-host/commands/switch-submode',
+                    },
+                    requiresApproval: true,
                   },
-                  requiresApproval: true,
-                },
-                {
-                  codeRef: {
-                    name: 'default',
-                    module: `/test/maybe-boom-command`,
+                  {
+                    codeRef: {
+                      name: 'default',
+                      module: `/test/maybe-boom-command`,
+                    },
+                    requiresApproval: false,
                   },
-                  requiresApproval: false,
-                },
-                {
-                  codeRef: {
-                    name: 'default',
-                    module: '../search-and-open-card-command',
+                  {
+                    codeRef: {
+                      name: 'default',
+                      module: '../search-and-open-card-command',
+                    },
+                    requiresApproval: true,
                   },
-                  requiresApproval: true,
-                },
-              ],
-              title: 'Useful Commands',
-              description: null,
-              thumbnailURL: null,
-            },
-            meta: {
-              adoptsFrom: skillCardRef,
+                ],
+                title: 'Useful Commands',
+                description: null,
+                thumbnailURL: null,
+              },
+              meta: {
+                adoptsFrom: skillCardRef,
+              },
             },
           },
+          'index.json': new CardsGrid(),
+          '.realm.json': {
+            name: 'Test Workspace B',
+            backgroundURL:
+              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          },
+          'hi.txt': 'hi',
         },
-        'index.json': new CardsGrid(),
-        '.realm.json': {
-          name: 'Test Workspace B',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
-        'hi.txt': 'hi',
-      },
-    });
+      });
+
+      return {
+        matrixRoomId: matrixRoomForTest,
+      };
+    },
+    acceptanceTest: true,
+  });
+
+  hooks.beforeEach(function () {
+    matrixRoomId = commandsSnapshot.get().matrixRoomId;
   });
 
   test('OpenAiAssistantRoomCommand opens the AI assistant room', async function (assert) {

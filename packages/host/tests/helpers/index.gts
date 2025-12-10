@@ -80,6 +80,7 @@ export {
   percySnapshot,
 };
 export { setupOperatorModeStateCleanup } from './operator-mode-state';
+export { setupSnapshotRealm } from './snapshot-realm';
 export * from '@cardstack/runtime-common/helpers';
 export * from './indexer';
 
@@ -730,6 +731,14 @@ export async function withoutLoaderMonitoring<T>(cb: () => Promise<T>) {
   }
 }
 
+export async function setupRendering(acceptanceTest: boolean) {
+  if (acceptanceTest) {
+    await visit('/acceptance-test-setup');
+  } else {
+    await makeRenderer();
+  }
+}
+
 export const testRealmSecretSeed = "shhh! it's a secret";
 async function setupTestRealm({
   contents,
@@ -751,15 +760,6 @@ async function setupTestRealm({
   let { queue } = getService('queue');
 
   realmURL = realmURL ?? testRealmURL;
-
-  if (isAcceptanceTest) {
-    await visit('/acceptance-test-setup');
-  } else {
-    // We use a rendered component to facilitate our indexing (this emulates
-    // the work that the Fastboot renderer is doing), which means that the
-    // `setupRenderingTest(hooks)` from ember-qunit must be used in your tests.
-    await makeRenderer();
-  }
 
   let localIndexer = owner.lookup(
     'service:local-indexer',

@@ -16,13 +16,9 @@ import { module, test } from 'qunit';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 import {
-  baseRealm,
-  ensureTrailingSlash,
   type Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
-
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
@@ -41,21 +37,15 @@ import {
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
-  getDbAdapter,
-  captureDbSnapshot,
-  restoreDbSnapshot,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   createJWT,
   testRealmSecretSeed,
-  setupAuthEndpoints,
-  setupUserSubscription,
+  setupRendering,
   setupRealmServerEndpoints,
-  createTimingLogger,
+  setupSnapshotRealm,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
-import type { DbSnapshot } from '../helpers';
-import type { SerializedServerState } from '../helpers/mock-matrix/_server-state';
 import {
   getPlaygroundSelections,
   setPlaygroundSelections,
@@ -85,10 +75,11 @@ let matrixRoomId: string;
 let realm2URL = 'http://test-realm/user/test2/';
 module('Acceptance | operator mode tests', function (hooks) {
   let testRealm: Realm;
-  let realmDbSnapshot: DbSnapshot | undefined;
-  let matrixStateSnapshot: SerializedServerState | undefined;
   let cachedMatrixRoomId: string | undefined;
-  let loaderSnapshot: Loader | undefined;
+  type OperatorModeSnapshotState = {
+    testRealm: Realm;
+    matrixRoomId: string;
+  };
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
@@ -106,430 +97,425 @@ module('Acceptance | operator mode tests', function (hooks) {
     setRealmPermissions,
   } = mockMatrixUtils;
 
-  hooks.beforeEach(async function () {
-    if (realmDbSnapshot) {
-      await restoreDbSnapshot(realmDbSnapshot);
-    }
-    if (matrixStateSnapshot) {
-      mockMatrixUtils.restoreServerState(matrixStateSnapshot);
-      matrixRoomId = cachedMatrixRoomId!;
-    } else {
-      matrixRoomId = createAndJoinRoom({
-        sender: '@testuser:localhost',
-        name: 'room-test',
-      });
-    }
-
-    setupUserSubscription();
-    setupAuthEndpoints();
-
-    setExpiresInSec(60 * 60);
-
-    let loaderService = getService('loader-service');
-    if (loaderSnapshot) {
-      loaderService.loader = Loader.cloneLoader(loaderSnapshot, {
-        includeEvaluatedModules: true,
-      });
-    }
-    let loader = loaderService.loader;
-    let cloneCurrentLoader = () =>
-      Loader.cloneLoader(loaderService.loader, {
-        includeEvaluatedModules: true,
-      });
-
-    class Pet extends CardDef {
-      static displayName = 'Pet';
-      static headerColor = '#355e3b';
-      @field name = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia: function (this: Pet) {
-          return this.name;
-        },
-      });
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <h3 data-test-pet={{@model.name}}>
-            <@fields.name />
-          </h3>
-        </template>
-      };
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <div class='pet-isolated'>
-            <h2 data-test-pet-isolated={{@model.name}}>
-              <@fields.name />
-            </h2>
-          </div>
-          <style scoped>
-            .pet-isolated {
-              height: 100%;
-              background-color: #355e3b;
-            }
-            h2 {
-              margin: 0;
-              padding: 20px;
-              color: white;
-            }
-          </style>
-        </template>
-      };
-    }
-    class ShippingInfo extends FieldDef {
-      static displayName = 'Shipping Info';
-      @field preferredCarrier = contains(StringField);
-      @field remarks = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia: function (this: ShippingInfo) {
-          return this.preferredCarrier;
-        },
-      });
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <span data-test-preferredCarrier={{@model.preferredCarrier}}></span>
-          <@fields.preferredCarrier />
-        </template>
-      };
-    }
-
-    class CountryWithNoEmbedded extends CardDef {
-      static displayName = 'Country';
-      @field name = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia(this: CountryWithNoEmbedded) {
-          return this.name;
-        },
-      });
-    }
-
-    class AddressWithNoEmbedded extends FieldDef {
-      static displayName = 'Address';
-      @field city = contains(StringField);
-      @field country = contains(StringField);
-      @field shippingInfo = contains(ShippingInfo);
-
-      static edit = class Edit extends Component<typeof this> {
-        <template>
-          <FieldContainer @label='city' @tag='label' data-test-boxel-input-city>
-            <@fields.city />
-          </FieldContainer>
-          <FieldContainer
-            @label='country'
-            @tag='label'
-            data-test-boxel-input-country
-          >
-            <@fields.country />
-          </FieldContainer>
-          <div data-test-shippingInfo-field><@fields.shippingInfo /></div>
-        </template>
-      };
-    }
-
-    class Address extends FieldDef {
-      static displayName = 'Address';
-      @field city = contains(StringField);
-      @field country = contains(StringField);
-      @field shippingInfo = contains(ShippingInfo);
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <h3 data-test-city={{@model.city}}>
-            <@fields.city />
-          </h3>
-          <h3 data-test-country={{@model.country}}>
-            <@fields.country />
-          </h3>
-          <div data-test-shippingInfo-field><@fields.shippingInfo /></div>
-        </template>
-      };
-
-      static edit = class Edit extends Component<typeof this> {
-        <template>
-          <FieldContainer @label='city' @tag='label' data-test-boxel-input-city>
-            <@fields.city />
-          </FieldContainer>
-          <FieldContainer
-            @label='country'
-            @tag='label'
-            data-test-boxel-input-country
-          >
-            <@fields.country />
-          </FieldContainer>
-          <div data-test-shippingInfo-field><@fields.shippingInfo /></div>
-        </template>
-      };
-    }
-
-    class Person extends CardDef {
-      static displayName = 'Person';
-      @field firstName = contains(StringField);
-      @field pet = linksTo(Pet);
-      @field friends = linksToMany(Pet);
-      @field firstLetterOfTheName = contains(StringField, {
-        computeVia: function (this: Person) {
-          if (!this.firstName) {
-            return;
-          }
-          return this.firstName[0];
-        },
-      });
-      @field title = contains(StringField, {
-        computeVia: function (this: Person) {
-          return this.firstName;
-        },
-      });
-      @field address = contains(Address);
-      @field addressWithNoEmbedded = contains(AddressWithNoEmbedded);
-      @field countryWithNoEmbedded = linksTo(CountryWithNoEmbedded);
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <h2 data-test-person={{@model.firstName}}>
-            <@fields.firstName />
-          </h2>
-          <p data-test-first-letter-of-the-name={{@model.firstLetterOfTheName}}>
-            <@fields.firstLetterOfTheName />
-          </p>
-          Pet:
-          <@fields.pet />
-          Friends:
-          <@fields.friends />
-          Address:
-          <@fields.address />
-          <div data-test-address-with-no-embedded>
-            Address With No Embedded:
-            <@fields.addressWithNoEmbedded />
-          </div>
-          <div data-test-country-with-no-embedded>Country With No Embedded:
-            <@fields.countryWithNoEmbedded />
-          </div>
-        </template>
-      };
-    }
-
-    class BoomPerson extends CardDef {
-      static displayName = 'Boom Person';
-      @field firstName = contains(StringField);
-      @field boom = contains(StringField, {
-        computeVia: function (this: BoomPerson) {
-          throw new Error('Boom!');
-        },
-      });
-      @field title = contains(StringField, {
-        computeVia: function (this: BoomPerson) {
-          return this.firstName;
-        },
-      });
-    }
-
-    let at1promise = setupAcceptanceTestRealm({
+  let operatorModeSnapshot = setupSnapshotRealm<OperatorModeSnapshotState>(
+    hooks,
+    {
       mockMatrixUtils,
-      loader: cloneCurrentLoader(),
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'address.gts': { Address },
-        'boom-person.gts': { BoomPerson },
-        'country-with-no-embedded-template.gts': { CountryWithNoEmbedded },
-        'address-with-no-embedded-template.gts': { AddressWithNoEmbedded },
-        'person.gts': { Person },
-        'pet.gts': { Pet },
-        'shipping-info.gts': { ShippingInfo },
-        'README.txt': `Hello World`,
-        'person-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Person Card',
-              description: 'Spec for Person Card',
-              specType: 'card',
-              ref: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
-              },
+      async build({ loader }) {
+        if (!cachedMatrixRoomId) {
+          cachedMatrixRoomId = createAndJoinRoom({
+            sender: '@testuser:localhost',
+            name: 'room-test',
+          });
+        }
+        let matrixRoomForTest = cachedMatrixRoomId!;
+
+        setExpiresInSec(60 * 60);
+
+        class Pet extends CardDef {
+          static displayName = 'Pet';
+          static headerColor = '#355e3b';
+          @field name = contains(StringField);
+          @field title = contains(StringField, {
+            computeVia: function (this: Pet) {
+              return this.name;
             },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
-                name: 'Spec',
-              },
+          });
+          static embedded = class Embedded extends Component<typeof this> {
+            <template>
+              <h3 data-test-pet={{@model.name}}>
+                <@fields.name />
+              </h3>
+            </template>
+          };
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <div class='pet-isolated'>
+                <h2 data-test-pet-isolated={{@model.name}}>
+                  <@fields.name />
+                </h2>
+              </div>
+              <style scoped>
+                .pet-isolated {
+                  height: 100%;
+                  background-color: #355e3b;
+                }
+                h2 {
+                  margin: 0;
+                  padding: 20px;
+                  color: white;
+                }
+              </style>
+            </template>
+          };
+        }
+        class ShippingInfo extends FieldDef {
+          static displayName = 'Shipping Info';
+          @field preferredCarrier = contains(StringField);
+          @field remarks = contains(StringField);
+          @field title = contains(StringField, {
+            computeVia: function (this: ShippingInfo) {
+              return this.preferredCarrier;
             },
-          },
-        },
-        'Pet/mango.json': {
-          data: {
-            attributes: {
-              name: 'Mango',
+          });
+          static embedded = class Embedded extends Component<typeof this> {
+            <template>
+              <span
+                data-test-preferredCarrier={{@model.preferredCarrier}}
+              ></span>
+              <@fields.preferredCarrier />
+            </template>
+          };
+        }
+
+        class CountryWithNoEmbedded extends CardDef {
+          static displayName = 'Country';
+          @field name = contains(StringField);
+          @field title = contains(StringField, {
+            computeVia(this: CountryWithNoEmbedded) {
+              return this.name;
             },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
-              },
+          });
+        }
+
+        class AddressWithNoEmbedded extends FieldDef {
+          static displayName = 'Address';
+          @field city = contains(StringField);
+          @field country = contains(StringField);
+          @field shippingInfo = contains(ShippingInfo);
+
+          static edit = class Edit extends Component<typeof this> {
+            <template>
+              <FieldContainer
+                @label='city'
+                @tag='label'
+                data-test-boxel-input-city
+              >
+                <@fields.city />
+              </FieldContainer>
+              <FieldContainer
+                @label='country'
+                @tag='label'
+                data-test-boxel-input-country
+              >
+                <@fields.country />
+              </FieldContainer>
+              <div data-test-shippingInfo-field><@fields.shippingInfo /></div>
+            </template>
+          };
+        }
+
+        class Address extends FieldDef {
+          static displayName = 'Address';
+          @field city = contains(StringField);
+          @field country = contains(StringField);
+          @field shippingInfo = contains(ShippingInfo);
+          static embedded = class Embedded extends Component<typeof this> {
+            <template>
+              <h3 data-test-city={{@model.city}}>
+                <@fields.city />
+              </h3>
+              <h3 data-test-country={{@model.country}}>
+                <@fields.country />
+              </h3>
+              <div data-test-shippingInfo-field><@fields.shippingInfo /></div>
+            </template>
+          };
+
+          static edit = class Edit extends Component<typeof this> {
+            <template>
+              <FieldContainer
+                @label='city'
+                @tag='label'
+                data-test-boxel-input-city
+              >
+                <@fields.city />
+              </FieldContainer>
+              <FieldContainer
+                @label='country'
+                @tag='label'
+                data-test-boxel-input-country
+              >
+                <@fields.country />
+              </FieldContainer>
+              <div data-test-shippingInfo-field><@fields.shippingInfo /></div>
+            </template>
+          };
+        }
+
+        class Person extends CardDef {
+          static displayName = 'Person';
+          @field firstName = contains(StringField);
+          @field pet = linksTo(Pet);
+          @field friends = linksToMany(Pet);
+          @field firstLetterOfTheName = contains(StringField, {
+            computeVia: function (this: Person) {
+              if (!this.firstName) {
+                return;
+              }
+              return this.firstName[0];
             },
-          },
-        },
-        'Pet/vangogh.json': {
-          data: {
-            attributes: {
-              name: 'Van Gogh',
+          });
+          @field title = contains(StringField, {
+            computeVia: function (this: Person) {
+              return this.firstName;
             },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
-              },
+          });
+          @field address = contains(Address);
+          @field addressWithNoEmbedded = contains(AddressWithNoEmbedded);
+          @field countryWithNoEmbedded = linksTo(CountryWithNoEmbedded);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <h2 data-test-person={{@model.firstName}}>
+                <@fields.firstName />
+              </h2>
+              <p
+                data-test-first-letter-of-the-name={{@model.firstLetterOfTheName}}
+              >
+                <@fields.firstLetterOfTheName />
+              </p>
+              Pet:
+              <@fields.pet />
+              Friends:
+              <@fields.friends />
+              Address:
+              <@fields.address />
+              <div data-test-address-with-no-embedded>
+                Address With No Embedded:
+                <@fields.addressWithNoEmbedded />
+              </div>
+              <div data-test-country-with-no-embedded>Country With No Embedded:
+                <@fields.countryWithNoEmbedded />
+              </div>
+            </template>
+          };
+        }
+
+        class BoomPerson extends CardDef {
+          static displayName = 'Boom Person';
+          @field firstName = contains(StringField);
+          @field boom = contains(StringField, {
+            computeVia: function (this: BoomPerson) {
+              throw new Error('Boom!');
             },
-          },
-        },
-        'Person/fadhlan.json': {
-          data: {
-            attributes: {
-              firstName: 'Fadhlan',
-              address: {
-                city: 'Bandung',
-                country: 'Indonesia',
-                shippingInfo: {
-                  preferredCarrier: 'DHL',
-                  remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+          });
+          @field title = contains(StringField, {
+            computeVia: function (this: BoomPerson) {
+              return this.firstName;
+            },
+          });
+        }
+
+        let at1promise = setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          loader,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'address.gts': { Address },
+            'boom-person.gts': { BoomPerson },
+            'country-with-no-embedded-template.gts': { CountryWithNoEmbedded },
+            'address-with-no-embedded-template.gts': { AddressWithNoEmbedded },
+            'person.gts': { Person },
+            'pet.gts': { Pet },
+            'shipping-info.gts': { ShippingInfo },
+            'README.txt': `Hello World`,
+            'person-entry.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  title: 'Person Card',
+                  description: 'Spec for Person Card',
+                  specType: 'card',
+                  ref: {
+                    module: `${testRealmURL}person`,
+                    name: 'Person',
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/spec',
+                    name: 'Spec',
+                  },
                 },
               },
             },
-            relationships: {
-              pet: {
-                links: {
-                  self: `${testRealmURL}Pet/mango`,
+            'Pet/mango.json': {
+              data: {
+                attributes: {
+                  name: 'Mango',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}pet`,
+                    name: 'Pet',
+                  },
                 },
               },
             },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
-              },
-            },
-          },
-        },
-        'Person/error.json': {
-          data: {
-            attributes: {
-              firstName: 'Error',
-            },
-            relationships: {
-              pet: {
-                links: {
-                  self: './missing-link',
+            'Pet/vangogh.json': {
+              data: {
+                attributes: {
+                  name: 'Van Gogh',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}pet`,
+                    name: 'Pet',
+                  },
                 },
               },
             },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
+            'Person/fadhlan.json': {
+              data: {
+                attributes: {
+                  firstName: 'Fadhlan',
+                  address: {
+                    city: 'Bandung',
+                    country: 'Indonesia',
+                    shippingInfo: {
+                      preferredCarrier: 'DHL',
+                      remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+                    },
+                  },
+                },
+                relationships: {
+                  pet: {
+                    links: {
+                      self: `${testRealmURL}Pet/mango`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}person`,
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'Person/error.json': {
+              data: {
+                attributes: {
+                  firstName: 'Error',
+                },
+                relationships: {
+                  pet: {
+                    links: {
+                      self: './missing-link',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}person`,
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'boom.json': {
+              data: {
+                attributes: {
+                  firstName: 'Boom!',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './boom-person',
+                    name: 'BoomPerson',
+                  },
+                },
+              },
+            },
+            'grid.json': {
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/cards-grid',
+                    name: 'CardsGrid',
+                  },
+                },
+              },
+            },
+            'index.json': {
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/cards-grid',
+                    name: 'CardsGrid',
+                  },
+                },
+              },
+            },
+            '.realm.json': {
+              name: 'Test Workspace B',
+              backgroundURL:
+                'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+              iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+            },
+          },
+        });
+
+        setActiveRealms([testRealmURL, realm2URL]);
+
+        let at2promise = setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: realm2URL,
+          loader,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            '.realm.json': {
+              name: realm2WorkspaceName,
+            },
+            'index.json': {
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/cards-grid',
+                    name: 'CardsGrid',
+                  },
+                },
+              },
+            },
+            'person.gts': { Person },
+            'Person/1.json': {
+              data: {
+                attributes: {
+                  firstName: 'Fadhlan',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${realm2URL}person`,
+                    name: 'Person',
+                  },
+                },
               },
             },
           },
-        },
-        'boom.json': {
-          data: {
-            attributes: {
-              firstName: 'Boom!',
-            },
-            meta: {
-              adoptsFrom: {
-                module: './boom-person',
-                name: 'BoomPerson',
-              },
-            },
-          },
-        },
-        'grid.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
-              },
-            },
-          },
-        },
-        'index.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
-              },
-            },
-          },
-        },
-        '.realm.json': {
-          name: 'Test Workspace B',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
+        });
+
+        let realms = await Promise.all([at1promise, at2promise]);
+
+        setRealmPermissions({
+          [realm2URL]: ['read', 'write'],
+        });
+
+        return {
+          testRealm: realms[0].realm,
+          matrixRoomId: matrixRoomForTest,
+        };
       },
-    });
+      acceptanceTest: true,
+    },
+  );
 
-    setActiveRealms([testRealmURL, realm2URL]);
-
-    let at2promise = setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      realmURL: realm2URL,
-      loader: cloneCurrentLoader(),
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        '.realm.json': {
-          name: realm2WorkspaceName,
-        },
-        'index.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
-              },
-            },
-          },
-        },
-        'person.gts': { Person },
-        'Person/1.json': {
-          data: {
-            attributes: {
-              firstName: 'Fadhlan',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${realm2URL}person`,
-                name: 'Person',
-              },
-            },
-          },
-        },
-      },
-    });
-
-    let realms = await Promise.all([at1promise, at2promise]);
-    ({ realm: testRealm } = realms[0]);
-
-    setRealmPermissions({
-      [realm2URL]: ['read', 'write'],
-    });
-
-    if (!loaderSnapshot) {
-      loaderSnapshot = Loader.cloneLoader(loaderService.loader, {
-        includeEvaluatedModules: true,
-      });
-    }
-
-    if (!realmDbSnapshot) {
-      realmDbSnapshot = await captureDbSnapshot();
-    }
-    if (!matrixStateSnapshot) {
-      matrixStateSnapshot = mockMatrixUtils.captureServerState();
-      cachedMatrixRoomId = matrixRoomId;
-    }
+  hooks.beforeEach(function () {
+    let snapshot = operatorModeSnapshot.get();
+    testRealm = snapshot.testRealm;
+    matrixRoomId = snapshot.matrixRoomId;
   });
 
   test('visiting operator mode', async function (assert) {
