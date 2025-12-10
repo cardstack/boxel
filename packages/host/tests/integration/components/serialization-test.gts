@@ -5466,11 +5466,11 @@ module('Integration | serialization', function (hooks) {
     class Person extends CardDef {
       @field name = contains(StringField);
     }
-      class QueryCard extends CardDef {
-        @field title = contains(StringField);
-        @field favorite = linksTo(() => Person, {
-          query: {
-            filter: {
+    class QueryCard extends CardDef {
+      @field title = contains(StringField);
+      @field favorite = linksTo(() => Person, {
+        query: {
+          filter: {
             eq: { name: '$this.title' },
           },
         },
@@ -5485,21 +5485,21 @@ module('Integration | serialization', function (hooks) {
             number: 0,
           },
         },
-        });
-      }
-
-      await setupIntegrationTestRealm({
-        mockMatrixUtils,
-        contents: {
-          'query-card.gts': { Person, QueryCard },
-        },
       });
+    }
 
-      let card = new QueryCard({ title: 'Target' });
-      let serialized = serializeCard(card, {
-        includeUnrenderedFields: true,
-        omitQueryFields: true,
-      });
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'query-card.gts': { Person, QueryCard },
+      },
+    });
+
+    let card = new QueryCard({ title: 'Target' });
+    let serialized = serializeCard(card, {
+      includeUnrenderedFields: true,
+      omitQueryFields: true,
+    });
 
     assert.strictEqual(
       serialized.data.relationships?.favorite,
