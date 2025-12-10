@@ -1712,7 +1712,6 @@ module(basename(__filename), function () {
           };
 
           localPrerenderer = new Prerenderer({
-            secretSeed: realmSecretSeed,
             maxPages: 1,
             silent: true,
             serverURL: 'http://127.0.0.1:4225',
@@ -1720,25 +1719,23 @@ module(basename(__filename), function () {
 
           let realmA = 'https://realm-a.example/';
           let realmB = 'https://realm-b.example/';
-          let permissionsA: Record<string, ('read' | 'write')[]> = {
+          let authA = testCreatePrerenderAuth(testUserId, {
             [realmA]: ['read'],
-          };
-          let permissionsB: Record<string, ('read' | 'write')[]> = {
+          });
+          let authB = testCreatePrerenderAuth(testUserId, {
             [realmB]: ['read'],
-          };
+          });
 
           let [resA, resB] = await Promise.all([
             localPrerenderer.prerenderCard({
               realm: realmA,
               url: `${realmA}card`,
-              userId: testUserId,
-              permissions: permissionsA,
+              auth: authA,
             }),
             localPrerenderer.prerenderCard({
               realm: realmB,
               url: `${realmB}card`,
-              userId: testUserId,
-              permissions: permissionsB,
+              auth: authB,
             }),
           ]);
 
