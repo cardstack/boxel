@@ -1,7 +1,6 @@
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { ComponentLike } from '@glint/template';
 import FreestyleGuide from 'ember-freestyle/components/freestyle-guide';
 import FreestyleSection from 'ember-freestyle/components/freestyle-section';
 
@@ -33,6 +32,7 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 import formatComponentName from '../helpers/format-component-name';
 
 import type StoreService from '../services/store';
+import type { ComponentLike } from '@glint/template';
 
 interface UsageComponent {
   title: string;

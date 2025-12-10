@@ -12,9 +12,9 @@ import { identifyCard } from '@cardstack/runtime-common';
 
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
-import { Ready } from '@cardstack/host/resources/file';
+import type { Ready } from '@cardstack/host/resources/file';
 
-import { FieldOfType } from '@cardstack/host/services/card-type-service';
+import type { FieldOfType } from '@cardstack/host/services/card-type-service';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 

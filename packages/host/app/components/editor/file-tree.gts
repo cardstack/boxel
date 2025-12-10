@@ -5,7 +5,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
 
-import { type LocalPath } from '@cardstack/runtime-common';
+import type { LocalPath } from '@cardstack/runtime-common';
 
 import Directory from './directory';
 

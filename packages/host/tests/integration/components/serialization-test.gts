@@ -1,4 +1,5 @@
-import { fillIn, RenderingTestContext } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
+import { fillIn } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import formatISO from 'date-fns/formatISO';
@@ -8,6 +9,11 @@ import { parse as parseQueryString } from 'qs';
 
 import { module, test } from 'qunit';
 
+import type {
+  LooseCardResource,
+  LooseSingleCardDocument,
+  Permissions,
+} from '@cardstack/runtime-common';
 import {
   baseRealm,
   fields,
@@ -15,12 +21,9 @@ import {
   localId,
   meta,
   PermissionsContextName,
-  type LooseSingleCardDocument,
-  type Permissions,
-  type LooseCardResource,
 } from '@cardstack/runtime-common';
 import { realmURL } from '@cardstack/runtime-common/constants';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type CardService from '@cardstack/host/services/card-service';
 

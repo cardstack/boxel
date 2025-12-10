@@ -26,20 +26,21 @@ import {
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 
-import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
+import type MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 
-import { RoomResource } from '@cardstack/host/resources/room';
+import type { RoomResource } from '@cardstack/host/resources/room';
 import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import CodeBlock from '../ai-assistant/code-block';
 import CardRenderer from '../card-renderer';
+
+import type { ApplyButtonState } from '../ai-assistant/apply-button';
 
 interface Signature {
   Element: HTMLDivElement;

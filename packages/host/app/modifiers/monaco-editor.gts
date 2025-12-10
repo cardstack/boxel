@@ -7,7 +7,7 @@ import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import { createMonacoWaiterManager } from '@cardstack/host/utils/editor/monaco-test-waiter';
 
-import { MonacoEditorOptions } from './monaco';
+import type { MonacoEditorOptions } from './monaco';
 
 import type * as _MonacoSDK from 'monaco-editor';
 

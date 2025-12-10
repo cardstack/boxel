@@ -31,7 +31,7 @@ import InteractSubmode from '@cardstack/host/components/operator-mode/interact-s
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
-import MessageService from '@cardstack/host/services/message-service';
+import type MessageService from '@cardstack/host/services/message-service';
 
 import type { CardContext } from 'https://cardstack.com/base/card-api';
 

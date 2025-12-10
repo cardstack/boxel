@@ -5,7 +5,7 @@ import type {
   RouteInfo,
   RouteInfoWithAttributes,
 } from '@ember/routing/-internals';
-import RouterService from '@ember/routing/router-service';
+import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 
 import { isTesting } from '@embroider/macros';

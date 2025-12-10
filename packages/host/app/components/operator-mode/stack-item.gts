@@ -5,7 +5,8 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
-import { htmlSafe, SafeString } from '@ember/template';
+import type { SafeString } from '@ember/template';
+import { htmlSafe } from '@ember/template';
 
 import { isTesting } from '@embroider/macros';
 
@@ -36,6 +37,7 @@ import { cssVar, optional, not } from '@cardstack/boxel-ui/helpers';
 
 import { IconTrash } from '@cardstack/boxel-ui/icons';
 
+import type { CommandContext } from '@cardstack/runtime-common';
 import {
   type Permissions,
   type getCard,
@@ -48,7 +50,6 @@ import {
   GetCardsContextName,
   GetCardCollectionContextName,
   cardTypeIcon,
-  CommandContext,
   realmURL,
   localId as localIdSymbol,
   CardContextName,
@@ -56,7 +57,7 @@ import {
   getCardMenuItems,
 } from '@cardstack/runtime-common';
 
-import { type StackItem } from '@cardstack/host/lib/stack-item';
+import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type {

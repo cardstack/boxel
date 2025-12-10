@@ -6,15 +6,15 @@ import { bool } from '@cardstack/boxel-ui/helpers';
 
 import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
 
-import { type Message as MatrixMessage } from '@cardstack/host/lib/matrix-classes/message';
-import CardService from '@cardstack/host/services/card-service';
+import type { Message as MatrixMessage } from '@cardstack/host/lib/matrix-classes/message';
+import type CardService from '@cardstack/host/services/card-service';
 
-import MatrixService from '@cardstack/host/services/matrix-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { type FileDef } from 'https://cardstack.com/base/file-api';
-import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import AttachedFileDropdownMenu from '../attached-file-dropdown-menu';
 

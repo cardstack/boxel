@@ -5,18 +5,18 @@ import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
 import { getPlural } from '@cardstack/runtime-common';
-import { type CodeRef } from '@cardstack/runtime-common/code-ref';
+import type { CodeRef } from '@cardstack/runtime-common/code-ref';
 
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
-import { Ready } from '@cardstack/host/resources/file';
+import type { Ready } from '@cardstack/host/resources/file';
 import { inheritanceChain } from '@cardstack/host/resources/inheritance-chain';
 import type {
   ModuleAnalysis,
   ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
-import { type Type } from '@cardstack/host/services/card-type-service';
+import type { Type } from '@cardstack/host/services/card-type-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
