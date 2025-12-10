@@ -2165,7 +2165,7 @@ Attached Files (files with newer versions don't show their content):
     assert.false(
       (systemPromptParts as TextContent[])
         .map((c) => c.text)
-        .includes('This is skill 1'),
+        .some(text => text.includes('This is skill 1')),
     );
     assert.true(
       (systemPromptParts[2] as TextContent).text.includes('This is skill 2'),
