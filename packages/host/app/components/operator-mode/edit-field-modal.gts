@@ -34,20 +34,20 @@ import {
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
-import { Ready } from '@cardstack/host/resources/file';
+import type { Ready } from '@cardstack/host/resources/file';
 
 import {
   getCodeRefFromType,
   type FieldOfType,
 } from '@cardstack/host/services/card-type-service';
-import LoaderService from '@cardstack/host/services/loader-service';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
 import type { BaseDef, FieldType } from 'https://cardstack.com/base/card-api';
-import { Spec } from 'https://cardstack.com/base/spec';
+import type { Spec } from 'https://cardstack.com/base/spec';
 
 import { SelectedTypePill } from './create-file-modal';
 

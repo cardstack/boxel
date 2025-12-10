@@ -16,7 +16,7 @@ import {
   Deferred,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import { Realm } from '@cardstack/runtime-common/realm';
+import type { Realm } from '@cardstack/runtime-common/realm';
 
 import type {
   IncrementalIndexEventContent,

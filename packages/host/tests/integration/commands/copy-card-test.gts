@@ -7,7 +7,7 @@ import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card';
 import CopyCardToStackCommand from '@cardstack/host/commands/copy-card-to-stack';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   setupIntegrationTestRealm,

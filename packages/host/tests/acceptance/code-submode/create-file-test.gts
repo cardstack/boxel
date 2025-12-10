@@ -18,9 +18,11 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
 } from '../../helpers';
-import { TestRealmAdapter } from '../../helpers/adapter';
+
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
+
+import type { TestRealmAdapter } from '../../helpers/adapter';
 
 const testRealmURL2 = 'http://test-realm/test2/';
 const testRealmAIconURL = 'https://i.postimg.cc/L8yXRvws/icon.png';

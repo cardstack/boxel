@@ -6,7 +6,7 @@ import {
   CardContainer,
   Menu,
 } from '@cardstack/boxel-ui/components';
-import { MenuItem } from '@cardstack/boxel-ui/helpers';
+import type { MenuItem } from '@cardstack/boxel-ui/helpers';
 
 import {
   cardTypeDisplayName,

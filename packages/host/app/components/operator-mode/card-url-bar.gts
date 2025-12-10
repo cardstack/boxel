@@ -8,9 +8,8 @@ import { and, bool, not } from '@cardstack/boxel-ui/helpers';
 
 import { IconGlobe, Warning as IconWarning } from '@cardstack/boxel-ui/icons';
 
-import URLBarResource, {
-  urlBarResource,
-} from '@cardstack/host/resources/url-bar';
+import type URLBarResource from '@cardstack/host/resources/url-bar';
+import { urlBarResource } from '@cardstack/host/resources/url-bar';
 
 import type RealmService from '@cardstack/host/services/realm';
 

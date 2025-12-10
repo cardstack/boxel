@@ -1,8 +1,8 @@
-import { TemplateOnlyComponent } from '@ember/component/template-only';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import RouteTemplate from 'ember-route-template';
 
-import { Model } from '../routes/render';
+import type { Model } from '../routes/render';
 
 const Render = <template>
   <div

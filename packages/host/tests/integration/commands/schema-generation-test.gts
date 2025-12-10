@@ -4,16 +4,14 @@ import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
-import {
-  AttributesSchema,
-  basicMappings,
-} from '@cardstack/runtime-common/helpers/ai';
+import type { AttributesSchema } from '@cardstack/runtime-common/helpers/ai';
+import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 
 import { HostCommandClasses } from '@cardstack/host/commands';
 
-import HostBaseCommand from '@cardstack/host/lib/host-base-command';
+import type HostBaseCommand from '@cardstack/host/lib/host-base-command';
 
-import * as CardAPI from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import { setupRenderingTest } from '../../helpers/setup';
 

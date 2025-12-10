@@ -6,11 +6,11 @@ import { createConstRef } from '@glimmer/reference';
 // @ts-expect-error
 import { renderMain, inTransaction } from '@glimmer/runtime';
 
-import { type ComponentLike } from '@glint/template';
-
 import { CardError } from '@cardstack/runtime-common/error';
 
 import type { Format } from 'https://cardstack.com/base/card-api';
+
+import type { ComponentLike } from '@glint/template';
 
 import type { SimpleElement } from '@simple-dom/interface';
 

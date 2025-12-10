@@ -24,7 +24,7 @@ import {
   Copy as CopyIcon,
 } from '@cardstack/boxel-ui/icons';
 
-import { SessionRoomData } from '@cardstack/host/services/ai-assistant-panel-service';
+import type { SessionRoomData } from '@cardstack/host/services/ai-assistant-panel-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 export type RoomActions = {

@@ -1,4 +1,5 @@
-import { RenderingTestContext, render, waitFor } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
+import { render, waitFor } from '@ember/test-helpers';
 
 import { waitUntil } from '@ember/test-helpers';
 
@@ -9,8 +10,8 @@ import Modifier from 'ember-modifier';
 import { provide } from 'ember-provide-consume-context';
 import { module, test } from 'qunit';
 
+import type { Query } from '@cardstack/runtime-common';
 import {
-  Query,
   baseRealm,
   type Realm,
   type LooseSingleCardDocument,
@@ -20,7 +21,6 @@ import {
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
 
 import {
-  CardDocFiles,
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
@@ -36,6 +36,8 @@ import {
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDocFiles } from '../../helpers';
 
 interface CardContextWithModifierSignature {
   Blocks: { default: [] };

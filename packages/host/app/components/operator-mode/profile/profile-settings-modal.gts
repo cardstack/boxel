@@ -10,8 +10,6 @@ import { restartableTask, timeout, all } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
 
-import { type IAuthData } from 'matrix-js-sdk';
-
 import {
   BoxelButton,
   BoxelInput,
@@ -25,10 +23,12 @@ import ModalContainer from '@cardstack/host/components/modal-container';
 import { ProfileInfo } from '@cardstack/host/components/operator-mode/profile-info-popover';
 import config from '@cardstack/host/config/environment';
 import { isValidPassword } from '@cardstack/host/lib/matrix-utils';
-import MatrixService from '@cardstack/host/services/matrix-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import ProfileEmail from './profile-email';
 import ProfileSubscription from './profile-subscription';
+
+import type { IAuthData } from 'matrix-js-sdk';
 
 interface Signature {
   Args: {
