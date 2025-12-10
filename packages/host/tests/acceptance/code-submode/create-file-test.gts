@@ -17,6 +17,8 @@ import {
   type TestContextWithSave,
   setupAuthEndpoints,
   setupUserSubscription,
+  setupRendering,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -194,6 +196,11 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   }
 
   let adapter: TestRealmAdapter;
+  let cachedMatrixRoomId: string | undefined;
+  type CreateFileSnapshotState = {
+    adapter: TestRealmAdapter;
+    matrixRoomId: string;
+  };
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -206,34 +213,52 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
   let { setRealmPermissions, createAndJoinRoom } = mockMatrixUtils;
 
-  hooks.beforeEach(async function () {
-    await setupAcceptanceTestRealm({
-      contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...filesB },
-      realmURL: testRealmURL2,
-      mockMatrixUtils,
-    });
-    ({ adapter } = await setupAcceptanceTestRealm({
-      contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...files },
-      mockMatrixUtils,
-    }));
+  let createFileSnapshot = setupSnapshotRealm<CreateFileSnapshotState>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      if (!cachedMatrixRoomId) {
+        cachedMatrixRoomId = await createAndJoinRoom({
+          sender: '@testuser:localhost',
+          name: 'room-test',
+        });
+      }
 
-    createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
-    setupUserSubscription();
-    setupAuthEndpoints();
+      await setupAcceptanceTestRealm({
+        contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...filesB },
+        realmURL: testRealmURL2,
+        mockMatrixUtils,
+        loader,
+      });
+      let { adapter } = await setupAcceptanceTestRealm({
+        contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...files },
+        mockMatrixUtils,
+        loader,
+      });
 
-    getService('network').mount(
-      async (req: Request) => {
-        // Some tests need a simulated creation failure
-        if (req.url.includes('fetch-failure')) {
-          throw new Error('A deliberate fetch error');
-        }
-        return null;
-      },
-      { prepend: true },
-    );
+      setupUserSubscription();
+      setupAuthEndpoints();
+
+      getService('network').mount(
+        async (req: Request) => {
+          // Some tests need a simulated creation failure
+          if (req.url.includes('fetch-failure')) {
+            throw new Error('A deliberate fetch error');
+          }
+          return null;
+        },
+        { prepend: true },
+      );
+
+      return {
+        adapter,
+        matrixRoomId: cachedMatrixRoomId,
+      };
+    },
+  });
+
+  hooks.beforeEach(function () {
+    let snapshot = createFileSnapshot.get();
+    adapter = snapshot.adapter;
   });
 
   module('when user has permissions to both test realms', function (hooks) {
@@ -1053,6 +1078,10 @@ export class TestCard extends CardDef {
           'the realm dropdown list is correct',
         );
       }
+
+      hooks.beforeEach(async function () {
+        setupRendering(true);
+      });
 
       hooks.beforeEach(async function () {
         setRealmPermissions({
