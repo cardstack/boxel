@@ -675,12 +675,10 @@ export async function withoutLoaderMonitoring<T>(cb: () => Promise<T>) {
 
 export const testRealmSecretSeed = "shhh! it's a secret";
 export const createPrerenderAuth = (
-  userId: string,
-  permissions: RealmPermissions,
+  _userId: string,
+  _permissions: RealmPermissions,
 ) => {
   // Host tests prerender via the in-app card-prerender component, so we don't need real JWT auth.
-  userId; // intentional no-op to satisfy signature
-  permissions; // intentional no-op to satisfy signature
   return JSON.stringify({});
 };
 async function setupTestRealm({
