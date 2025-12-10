@@ -1,7 +1,3 @@
-/* eslint-disable camelcase */
-
-exports.shorthands = undefined;
-
 exports.up = (pgm) => {
   pgm.sql(
     `DELETE FROM boxel_index WHERE type = 'definition'; DELETE FROM boxel_index_working WHERE type = 'definition';`,
