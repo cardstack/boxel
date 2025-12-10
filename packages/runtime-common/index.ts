@@ -73,8 +73,7 @@ export interface ModuleRenderResponse extends ModulePrerenderModel {}
 export type ModulePrerenderArgs = {
   realm: string;
   url: string;
-  userId: string;
-  permissions: RealmPermissions;
+  auth: string;
   renderOptions?: RenderRouteOptions;
 };
 
@@ -167,7 +166,6 @@ export * from './worker';
 export * from './stream';
 export * from './realm';
 export * from './realm-index-updater';
-export * from './reindex-config';
 export * from './fetcher';
 export * from './scoped-css';
 export * from './html-utils';

@@ -22,7 +22,6 @@ import {
   type RenderError,
   type ModuleRenderResponse,
   type Prerenderer,
-  type RealmPermissions,
   type Format,
   type PrerenderMeta,
   type RenderRouteOptions,
@@ -103,14 +102,12 @@ export default class CardPrerender extends Component {
   private async prerender({
     url,
     realm,
-    userId,
-    permissions,
+    auth,
     renderOptions,
   }: {
     realm: string;
     url: string;
-    userId: string;
-    permissions: RealmPermissions;
+    auth: string;
     renderOptions?: RenderRouteOptions;
   }): Promise<RenderResponse> {
     return await withRenderContext(async () => {
@@ -119,8 +116,7 @@ export default class CardPrerender extends Component {
           this.prerenderTask.perform({
             url,
             realm,
-            userId,
-            permissions,
+            auth,
             renderOptions,
           });
         let results = isTesting() ? await run() : await withTimersBlocked(run);
@@ -139,14 +135,12 @@ export default class CardPrerender extends Component {
   private async prerenderModule({
     url,
     realm,
-    userId,
-    permissions,
+    auth,
     renderOptions,
   }: {
     realm: string;
     url: string;
-    userId: string;
-    permissions: RealmPermissions;
+    auth: string;
     renderOptions?: RenderRouteOptions;
   }): Promise<ModuleRenderResponse> {
     return await withRenderContext(async () => {
@@ -155,8 +149,7 @@ export default class CardPrerender extends Component {
           this.modulePrerenderTask.perform({
             url,
             realm,
-            userId,
-            permissions,
+            auth,
             renderOptions,
           });
         return isTesting() ? await run() : await withTimersBlocked(run);
@@ -179,8 +172,7 @@ export default class CardPrerender extends Component {
     }: {
       realm: string;
       url: string;
-      userId: string;
-      permissions: RealmPermissions;
+      auth: string;
       renderOptions?: RenderRouteOptions;
     }): Promise<RenderResponse> => {
       this.#nonce++;
@@ -310,8 +302,7 @@ export default class CardPrerender extends Component {
     }: {
       realm: string;
       url: string;
-      userId: string;
-      permissions: RealmPermissions;
+      auth: string;
       renderOptions?: RenderRouteOptions;
     }): Promise<ModuleRenderResponse> => {
       this.#nonce++;

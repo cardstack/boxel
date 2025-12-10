@@ -7,8 +7,8 @@ import {
   setupBaseRealmServer,
   setupPermissionedRealm,
   matrixURL,
-  realmSecretSeed,
   testRealmHref,
+  testCreatePrerenderAuth,
 } from './helpers';
 import { buildPrerenderApp } from '../prerender/prerender-app';
 import type { Prerenderer } from '../prerender';
@@ -55,7 +55,7 @@ module(basename(__filename), function () {
 
     hooks.before(function () {
       draining = false;
-      let built = buildPrerenderApp(realmSecretSeed, {
+      let built = buildPrerenderApp({
         serverURL: 'http://127.0.0.1:4221',
         isDraining: () => draining,
       });
@@ -82,6 +82,7 @@ module(basename(__filename), function () {
           | 'realm-owner'
         )[],
       };
+      let auth = testCreatePrerenderAuth(testUserId, permissions);
       let res = await request
         .post('/prerender-card')
         .set('Accept', 'application/vnd.api+json')
@@ -91,8 +92,7 @@ module(basename(__filename), function () {
             type: 'prerender-request',
             attributes: {
               url,
-              userId: testUserId,
-              permissions,
+              auth,
               realm: testRealmHref,
             },
           },
@@ -160,6 +160,7 @@ module(basename(__filename), function () {
           | 'realm-owner'
         )[],
       };
+      let auth = testCreatePrerenderAuth(testUserId, permissions);
       let res = await request
         .post('/prerender-module')
         .set('Accept', 'application/vnd.api+json')
@@ -169,8 +170,7 @@ module(basename(__filename), function () {
             type: 'prerender-module-request',
             attributes: {
               url,
-              userId: testUserId,
-              permissions,
+              auth,
               realm: testRealmHref,
             },
           },
@@ -204,6 +204,7 @@ module(basename(__filename), function () {
       draining = true;
       const permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> =
         { [testRealmHref]: ['read', 'write', 'realm-owner'] };
+      let auth = testCreatePrerenderAuth(testUserId, permissions);
       let res = await request
         .post('/prerender-card')
         .set('Accept', 'application/vnd.api+json')
@@ -213,8 +214,7 @@ module(basename(__filename), function () {
             type: 'prerender-request',
             attributes: {
               url: `${testRealmHref}drain`,
-              userId: testUserId,
-              permissions,
+              auth,
               realm: testRealmHref,
             },
           },
@@ -254,6 +254,7 @@ module(basename(__filename), function () {
       let url = `${testRealmHref}2`;
       const permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> =
         { [testRealmHref]: ['read', 'write', 'realm-owner'] };
+      let auth = testCreatePrerenderAuth(testUserId, permissions);
       await request
         .post('/prerender-card')
         .set('Accept', 'application/vnd.api+json')
@@ -263,8 +264,7 @@ module(basename(__filename), function () {
             type: 'prerender-request',
             attributes: {
               url,
-              userId: testUserId,
-              permissions,
+              auth,
               realm: testRealmHref,
             },
           },
@@ -283,7 +283,7 @@ module(basename(__filename), function () {
     test('responds draining immediately when shutdown begins during an in-flight prerender', async function (assert) {
       let localDraining = false;
       let drainingDeferred = new Deferred<void>();
-      let built = buildPrerenderApp(realmSecretSeed, {
+      let built = buildPrerenderApp({
         serverURL: 'http://127.0.0.1:4222',
         isDraining: () => localDraining,
         drainingPromise: drainingDeferred.promise,
@@ -312,6 +312,7 @@ module(basename(__filename), function () {
       let permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> = {
         [testRealmHref]: ['read', 'write', 'realm-owner'],
       };
+      let auth = testCreatePrerenderAuth(testUserId, permissions);
       let resPromise = localRequest
         .post('/prerender-card')
         .set('Accept', 'application/vnd.api+json')
@@ -321,8 +322,7 @@ module(basename(__filename), function () {
             type: 'prerender-request',
             attributes: {
               url: `${testRealmHref}drain-midflight`,
-              userId: testUserId,
-              permissions,
+              auth,
               realm: testRealmHref,
             },
           },
@@ -357,7 +357,7 @@ module(basename(__filename), function () {
       let onUnhandled = () => unhandled++;
       process.on('unhandledRejection', onUnhandled);
       try {
-        let built = buildPrerenderApp(realmSecretSeed, {
+        let built = buildPrerenderApp({
           serverURL: 'http://127.0.0.1:4223',
           isDraining: () => true,
           drainingPromise: Promise.resolve(),
@@ -371,6 +371,7 @@ module(basename(__filename), function () {
 
         let permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> =
           { [testRealmHref]: ['read', 'write', 'realm-owner'] };
+        let auth = testCreatePrerenderAuth(testUserId, permissions);
         let res = await localRequest
           .post('/prerender-card')
           .set('Accept', 'application/vnd.api+json')
@@ -380,8 +381,7 @@ module(basename(__filename), function () {
               type: 'prerender-request',
               attributes: {
                 url: `${testRealmHref}drain-unhandled`,
-                userId: testUserId,
-                permissions,
+                auth,
                 realm: testRealmHref,
               },
             },

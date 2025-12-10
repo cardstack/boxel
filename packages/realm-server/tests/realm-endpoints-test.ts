@@ -45,6 +45,7 @@ import {
   createJWT,
   cardInfo,
   getTestPrerenderer,
+  testCreatePrerenderAuth,
 } from './helpers';
 import { expectIncrementalIndexEvent } from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -1529,6 +1530,7 @@ module(basename(__filename), function () {
           dbAdapter,
           prerenderer,
           virtualNetwork,
+          testCreatePrerenderAuth,
         );
         virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 
