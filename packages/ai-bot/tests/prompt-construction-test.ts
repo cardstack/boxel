@@ -3497,7 +3497,9 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.equal(messages!.length, 10);
     assert.equal(messages![0].role, 'system');
-    assert.false((messages![0].content as string).includes('Business Card V1'));
+    assert.false(
+      ((messages![0].content as TextContent[]).map(c => c.text).join('')).includes('Business Card V1')
+    );
     assert.equal(messages![2].role, 'assistant');
     assert.equal(
       messages![2].content,
