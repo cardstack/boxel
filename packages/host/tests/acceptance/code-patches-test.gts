@@ -968,12 +968,6 @@ ${REPLACE_MARKER}
       codePath: `${testRealmURL}hello.txt`,
     });
 
-    let commandService = getService('command-service');
-    let originalTrackAiAssistantCardRequest =
-      commandService.trackAiAssistantCardRequest;
-    // TODO: investigate why this test is failing when trackAiAssistantCardRequest is called
-    commandService.trackAiAssistantCardRequest = () => undefined;
-
     // there are 3 patches in the message
     // 1. file1.gts -> I am a newly created file1
     // 2. file2.gts -> I am a newly created file2
@@ -1125,9 +1119,6 @@ ${REPLACE_MARKER}
       'This file will be created with a suffix because hi.txt already exists',
       'hi-1.txt should be opened in code mode and the content should be the new file content',
     );
-
-    commandService.trackAiAssistantCardRequest =
-      originalTrackAiAssistantCardRequest;
   });
 
   test('when code patch is historic (user moved on to the next message), or it was applied, it will render the code (replace portion of the search/replace block) in a standard (non-diff) editor', async function (assert) {

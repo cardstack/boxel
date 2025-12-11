@@ -148,7 +148,7 @@ export default class CommandService extends Service {
             event.clientRequestId === clientRequestId,
         );
       },
-      { timeoutMs: 5 * 60 * 1000 },
+      { timeoutMs: 5 * 60 * 1000, keepRealmSubscription: true }, // we don't wanna close the realm subscription since other places could be subscribed, like the store service
     )
       .then(() => {
         let current = this.aiAssistantInvalidations.get(key);
