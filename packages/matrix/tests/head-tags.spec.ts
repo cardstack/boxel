@@ -6,7 +6,6 @@ import {
   clearLocalStorage,
   createRealm,
   createSubscribedUserAndLogin,
-  logout,
   openRoot,
   postCardSource,
 } from '../helpers';
