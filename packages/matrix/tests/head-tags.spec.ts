@@ -280,8 +280,8 @@ test.describe('Head tags', () => {
     await page.waitForSelector('[data-test-unpublish-button]');
 
     let publishedRealmURL = `http://${user.username}.localhost:4205/${realmName}/`;
-    let defaultCardURL = `${publishedRealmURL}default-head-card`;
-    let customCardURL = `${publishedRealmURL}custom-head-card`;
+    let defaultCardURL = `${publishedRealmURL}default-head-card.json`;
+    let customCardURL = `${publishedRealmURL}custom-head-card.json`;
 
     await page.goto(defaultCardURL);
     await expect(page).toHaveURL(defaultCardURL);
