@@ -7,14 +7,13 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
+  setupSnapshotRealm,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | commands | open-workspace', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -22,12 +21,22 @@ module('Integration | commands | open-workspace', function (hooks) {
     activeRealms: [testRealmURL],
     autostart: true,
   });
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+        loader,
+      });
+      return {};
+    },
+  });
 
   hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {},
-    });
+    snapshot.get();
   });
 
   test('opens specified workspace in interact submode', async function (assert) {

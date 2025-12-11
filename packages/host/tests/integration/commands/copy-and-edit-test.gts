@@ -1,6 +1,5 @@
 import { settled } from '@ember/test-helpers';
 
-import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
@@ -14,9 +13,11 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+import { getService } from '@universal-ember/test-support';
 
 const otherRealmURL = 'http://other-realm/test2/';
 
@@ -27,6 +28,15 @@ module('Integration | commands | copy-and-edit', function (hooks) {
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL, otherRealmURL],
+  });
+
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return {};
+    },
   });
 
   hooks.beforeEach(async function () {

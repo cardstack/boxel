@@ -15,6 +15,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
   testRealmInfo,
+  setupSnapshotRealm,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -37,16 +38,15 @@ module('Integration | commands | read-card-for-ai-assistant', function (hooks) {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
   });
-
-  hooks.beforeEach(function (this: RenderingTestContext) {
-    getOwner(this)!.register('service:realm', StubRealmService);
-  });
-
-  hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'person.gts': `
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'person.gts': `
             import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
             import StringField from "https://cardstack.com/base/string";
             import NumberField from "https://cardstack.com/base/number";
@@ -84,21 +84,32 @@ module('Integration | commands | read-card-for-ai-assistant', function (hooks) {
               }
             }
           `,
-        'mango.json': {
-          data: {
-            attributes: {
-              firstName: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: './person',
-                name: 'Person',
+          'mango.json': {
+            data: {
+              attributes: {
+                firstName: 'Mango',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person',
+                  name: 'Person',
+                },
               },
             },
           },
         },
-      },
-    });
+        loader,
+      });
+      return {};
+    },
+  });
+
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    getOwner(this)!.register('service:realm', StubRealmService);
+  });
+
+  hooks.beforeEach(function () {
+    snapshot.get();
   });
 
   test('read card', async function (assert) {

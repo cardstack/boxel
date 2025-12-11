@@ -26,6 +26,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
   testRealmInfo,
+  setupSnapshotRealm,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -51,81 +52,92 @@ module('Integration | commands | ai-assistant', function (hooks) {
     activeRealms: [testRealmURL],
     autostart: true,
   });
-
   let { createAndJoinRoom, getRoomEvents, getRoomState, getRoomIds } =
     mockMatrixUtils;
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealmURL,
+        contents: {
+          'empty1.json': {
+            data: {
+              attributes: {
+                title: 'Empty Card 1',
+                description: 'This is an empty card.',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'CardDef',
+                },
+              },
+            },
+          },
+          'empty2.json': {
+            data: {
+              attributes: {
+                title: 'Empty Card 2',
+                description: 'This is an empty card.',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'CardDef',
+                },
+              },
+            },
+          },
+          'file1.gts': 'This is file 1 content',
+          'file2.gts': 'This is file 2 content',
+          'skill1.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                instructions: 'Here is the one thing you need to know.',
+                commands: [],
+                title: 'Skill1',
+                description: null,
+                thumbnailURL: null,
+              },
+              meta: {
+                adoptsFrom: skillCardRef,
+              },
+            },
+          },
+          'skill2.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                instructions: 'Here is the two thing you need to know.',
+                commands: [],
+                title: 'Skill2',
+                description: null,
+                thumbnailURL: null,
+              },
+              meta: {
+                adoptsFrom: skillCardRef,
+              },
+            },
+          },
+        },
+        loader,
+      });
+      return {
+        commandService: getService('command-service'),
+      };
+    },
+  });
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
   });
 
-  hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'empty1.json': {
-          data: {
-            attributes: {
-              title: 'Empty Card 1',
-              description: 'This is an empty card.',
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
-                name: 'CardDef',
-              },
-            },
-          },
-        },
-        'empty2.json': {
-          data: {
-            attributes: {
-              title: 'Empty Card 2',
-              description: 'This is an empty card.',
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
-                name: 'CardDef',
-              },
-            },
-          },
-        },
-        'file1.gts': 'This is file 1 content',
-        'file2.gts': 'This is file 2 content',
-        'skill1.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              instructions: 'Here is the one thing you need to know.',
-              commands: [],
-              title: 'Skill1',
-              description: null,
-              thumbnailURL: null,
-            },
-            meta: {
-              adoptsFrom: skillCardRef,
-            },
-          },
-        },
-        'skill2.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              instructions: 'Here is the two thing you need to know.',
-              commands: [],
-              title: 'Skill2',
-              description: null,
-              thumbnailURL: null,
-            },
-            meta: {
-              adoptsFrom: skillCardRef,
-            },
-          },
-        },
-      },
-    });
-    commandService = getService('command-service');
+  hooks.beforeEach(function () {
+    ({ commandService } = snapshot.get());
   });
 
   test('creates a new room when no roomId is provided', async function (assert) {

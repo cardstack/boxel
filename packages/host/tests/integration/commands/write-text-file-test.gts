@@ -14,6 +14,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
   testRealmInfo,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -42,17 +43,27 @@ module('Integration | commands | write-text-file', function (hooks) {
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks);
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+        loader,
+      });
+      return {};
+    },
+  });
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
     fetch = getService('network').fetch;
   });
 
-  hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {},
-    });
+  hooks.beforeEach(function () {
+    snapshot.get();
   });
 
   test('writes a text file', async function (assert) {
@@ -143,7 +154,7 @@ module('Integration | commands | write-text-file', function (hooks) {
       await writeTextFileCommand.execute({
         path: 'bad.txt',
         content: 'Nope',
-        realm: 'https://not-a-known-realm.example/',
+        realm: 'http://localhost:4200/i-do-not-exist',
       });
       assert.notOk(true, 'Should have thrown an error for invalid realm');
     } catch (error: any) {

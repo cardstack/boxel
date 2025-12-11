@@ -17,8 +17,9 @@ import {
   setupLocalIndexing,
   testRealmURL,
   testRealmInfo,
+  setupSnapshotRealm,
 } from '../../helpers';
-import { CardDef, setupBaseRealm } from '../../helpers/base-realm';
+import { CardDef } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -35,7 +36,6 @@ class StubRealmService extends RealmService {
 
 module('Integration | commands | switch-submode', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -44,16 +44,23 @@ module('Integration | commands | switch-submode', function (hooks) {
     autostart: true,
   });
 
-  hooks.beforeEach(function (this: RenderingTestContext) {
-    getOwner(this)!.register('service:realm', StubRealmService);
-    store = getService('store');
+  let snapshot = setupSnapshotRealm<{ store: StoreService }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+        loader,
+      });
+      return { store: getService('store') as StoreService };
+    },
   });
 
-  hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {},
-    });
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    getOwner(this)!.register('service:realm', StubRealmService);
+    ({ store } = snapshot.get());
   });
 
   test('switch to code submode by local id of a saved instance', async function (assert) {

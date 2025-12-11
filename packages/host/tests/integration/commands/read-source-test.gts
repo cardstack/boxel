@@ -13,6 +13,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
   testRealmInfo,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -31,21 +32,32 @@ module('Integration | commands | read-source', function (hooks) {
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks);
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'component.gts': `import Component from '@glimmer/component';\n\nexport default class TestComponent extends Component {}`,
+        },
+        loader,
+      });
+      let commandService = getService('command-service');
+      return {
+        readSourceCommand: new ReadSourceCommand(commandService.commandContext),
+      };
+    },
+  });
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
   });
 
   let readSourceCommand: ReadSourceCommand;
-  hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'component.gts': `import Component from '@glimmer/component';\n\nexport default class TestComponent extends Component {}`,
-      },
-    });
-    let commandService = getService('command-service');
-    readSourceCommand = new ReadSourceCommand(commandService.commandContext);
+  hooks.beforeEach(function () {
+    ({ readSourceCommand } = snapshot.get());
   });
 
   test('reads a GTS file as card source', async function (assert) {

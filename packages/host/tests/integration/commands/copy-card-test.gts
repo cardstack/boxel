@@ -1,4 +1,3 @@
-import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
@@ -13,9 +12,11 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+import { getService } from '@universal-ember/test-support';
 
 const testRealm2URL = 'http://test-realm/test2/';
 
@@ -29,6 +30,15 @@ module('Integration | commands | copy-card', function (hooks) {
   });
 
   hooks.beforeEach(async function () {
+    let snapshot = setupSnapshotRealm(hooks, {
+      mockMatrixUtils,
+      async build({ loader }) {
+        let loaderService = getService('loader-service');
+        loaderService.loader = loader;
+        return {};
+      },
+    });
+    snapshot.get();
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       realmURL: testRealmURL,

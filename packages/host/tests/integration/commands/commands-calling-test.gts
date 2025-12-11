@@ -8,13 +8,12 @@ import { Command, CommandContext } from '@cardstack/runtime-common';
 
 import RealmService from '@cardstack/host/services/realm';
 
-import { testRealmURL, testRealmInfo } from '../../helpers';
+import { testRealmURL, testRealmInfo, setupSnapshotRealm } from '../../helpers';
 import {
   CardDef,
   StringField,
   contains,
   field,
-  setupBaseRealm,
 } from '../../helpers/base-realm';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -29,14 +28,21 @@ class StubRealmService extends RealmService {
 
 module('Integration | commands | commands-calling', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils: undefined as any,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return {
+        commandContext: getService('command-service').commandContext,
+      };
+    },
+  });
   let commandContext: CommandContext;
 
   hooks.beforeEach(function (this: RenderingTestContext) {
+    ({ commandContext } = snapshot.get());
     getOwner(this)!.register('service:realm', StubRealmService);
-
-    let commandService = getService('command-service');
-    commandContext = commandService.commandContext;
   });
 
   test('can be called with a card as input', async function (assert) {

@@ -26,6 +26,7 @@ import {
   setupOnSave,
   testRealmInfo,
   testRealmURL,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -126,11 +127,19 @@ module('Integration | Command | update-room-skills', function (hooks) {
 
   let loader: Loader;
   let matrixService: StubMatrixService;
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils: undefined as any,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
 
   hooks.beforeEach(function (this: RenderingTestContext) {
+    ({ loader } = snapshot.get());
     getOwner(this)!.register('service:realm', StubRealmService);
     getOwner(this)!.register('service:matrix-service', StubMatrixService);
-    loader = getService('loader-service').loader;
     matrixService = getService(
       'matrix-service',
     ) as unknown as StubMatrixService;

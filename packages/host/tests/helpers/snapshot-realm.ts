@@ -63,7 +63,9 @@ export function setupSnapshotRealm<T>(
 
     if (cache) {
       await restoreDbSnapshot(cache.dbSnapshot);
-      options.mockMatrixUtils.restoreServerState(cache.matrixState);
+      if (options.mockMatrixUtils) {
+        options.mockMatrixUtils.restoreServerState(cache.matrixState);
+      }
       loaderService.loader = Loader.cloneLoader(cache.loaderSnapshot, {
         includeEvaluatedModules: true,
       });
@@ -82,7 +84,9 @@ export function setupSnapshotRealm<T>(
           includeEvaluatedModules: true,
         }),
         dbSnapshot: await captureDbSnapshot(),
-        matrixState: options.mockMatrixUtils.captureServerState(),
+        matrixState: options.mockMatrixUtils
+          ? options.mockMatrixUtils.captureServerState()
+          : undefined,
       };
       timer.step('captured snapshot');
     }

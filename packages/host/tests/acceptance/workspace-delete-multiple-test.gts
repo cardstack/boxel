@@ -9,10 +9,9 @@ import {
   setupLocalIndexing,
   setupAcceptanceTestRealm,
   testRealmURL,
-  setupAuthEndpoints,
-  setupUserSubscription,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
+  setupSnapshotRealm,
 } from '../helpers';
 import { setupBaseRealm, CardsGrid } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -21,6 +20,7 @@ import { setupApplicationTest } from '../helpers/setup';
 module('Acceptance | workspace-delete-multiple', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
+  setupBaseRealm(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -28,71 +28,77 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
   });
 
   let { createAndJoinRoom } = mockMatrixUtils;
+  let defaultMatrixRoomId: string;
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    acceptanceTest: true,
+    async build({ loader, isInitialBuild }) {
+      if (isInitialBuild || !defaultMatrixRoomId) {
+        defaultMatrixRoomId = createAndJoinRoom({
+          sender: '@testuser:localhost',
+          name: 'room-test',
+        });
+      }
 
-  setupBaseRealm(hooks);
+      let { field, contains, CardDef, Component } = await loader.import<
+        typeof import('https://cardstack.com/base/card-api')
+      >(`${baseRealm.url}card-api`);
+      let { default: StringField } = await loader.import<
+        typeof import('https://cardstack.com/base/string')
+      >(`${baseRealm.url}string`);
 
-  hooks.beforeEach(async function () {
-    createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
-    setupUserSubscription();
-    setupAuthEndpoints();
+      class Pet extends CardDef {
+        static displayName = 'Pet';
+        @field name = contains(StringField);
+        @field species = contains(StringField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Pet) {
+            return this.name;
+          },
+        });
 
-    let loaderService = getService('loader-service');
-    let loader = loaderService.loader;
-    let { field, contains, CardDef, Component } = await loader.import<
-      typeof import('https://cardstack.com/base/card-api')
-    >(`${baseRealm.url}card-api`);
-    let { default: StringField } = await loader.import<
-      typeof import('https://cardstack.com/base/string')
-    >(`${baseRealm.url}string`);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <div data-test-pet>
+              <h1><@fields.name /></h1>
+              <p>Species: <@fields.species /></p>
+            </div>
+          </template>
+        };
+      }
 
-    class Pet extends CardDef {
-      static displayName = 'Pet';
-      @field name = contains(StringField);
-      @field species = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia: function (this: Pet) {
-          return this.name;
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        loader,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.json': new CardsGrid(),
+          'pet.gts': { Pet },
+          'Pet/1.json': new Pet({
+            name: 'Fluffy',
+            species: 'Cat',
+          }),
+          'Pet/2.json': new Pet({
+            name: 'Buddy',
+            species: 'Dog',
+          }),
+          'Pet/3.json': new Pet({
+            name: 'Charlie',
+            species: 'Bird',
+          }),
+          '.realm.json': {
+            name: 'Test Realm',
+            backgroundURL: null,
+            iconURL: null,
+          },
         },
       });
+      return {};
+    },
+  });
 
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <div data-test-pet>
-            <h1><@fields.name /></h1>
-            <p>Species: <@fields.species /></p>
-          </div>
-        </template>
-      };
-    }
-
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.json': new CardsGrid(),
-        'pet.gts': { Pet },
-        'Pet/1.json': new Pet({
-          name: 'Fluffy',
-          species: 'Cat',
-        }),
-        'Pet/2.json': new Pet({
-          name: 'Buddy',
-          species: 'Dog',
-        }),
-        'Pet/3.json': new Pet({
-          name: 'Charlie',
-          species: 'Bird',
-        }),
-        '.realm.json': {
-          name: 'Test Realm',
-          backgroundURL: null,
-          iconURL: null,
-        },
-      },
-    });
+  hooks.beforeEach(function () {
+    snapshot.get();
   });
 
   async function selectCard(cardPath: string) {

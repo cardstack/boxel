@@ -14,8 +14,8 @@ import {
   testRealmInfo,
   testRealmURL,
   SYSTEM_CARD_FIXTURE_CONTENTS,
+  setupSnapshotRealm,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -32,13 +32,27 @@ class StubRealmService extends RealmService {
 
 module('Integration | commands | upload-image', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
+  });
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+        },
+        loader,
+      });
+      return {};
+    },
   });
 
   let lastForwardPayload: any;
@@ -96,6 +110,7 @@ module('Integration | commands | upload-image', function (hooks) {
   ]);
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
+    snapshot.get();
     getOwner(this)!.register('service:realm', StubRealmService);
     lastForwardPayload = undefined;
     forwardPayloads = [];

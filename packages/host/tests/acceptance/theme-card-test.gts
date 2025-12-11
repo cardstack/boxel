@@ -11,13 +11,12 @@ import {
   percySnapshot,
   setupLocalIndexing,
   setupOnSave,
-  setupUserSubscription,
-  setupAuthEndpoints,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   testRealmURL,
   type TestContextWithSave,
+  setupSnapshotRealm,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -157,117 +156,143 @@ module('Acceptance | theme-card-test', function (hooks) {
   });
 
   let { createAndJoinRoom } = mockMatrixUtils;
+  let defaultMatrixRoomId: string;
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    acceptanceTest: true,
+    async build({ loader, isInitialBuild }) {
+      if (isInitialBuild || !defaultMatrixRoomId) {
+        defaultMatrixRoomId = createAndJoinRoom({
+          sender: '@testuser:localhost',
+          name: 'room-test',
+        });
+      }
+
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        loader,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          '.realm.json': {
+            name: 'Theme Playground',
+          },
+          'starry-night.json': {
+            data: {
+              meta: {
+                adoptsFrom: {
+                  name: 'default',
+                  module: 'https://cardstack.com/base/structured-theme',
+                },
+              },
+              type: 'card',
+              attributes: {
+                cardInfo: {
+                  title: 'Starry Night',
+                  description: 'A celestial theme',
+                  thumbnailURL:
+                    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?q=80&w=400&auto=format&fit=crop',
+                },
+                cssImports: [
+                  'https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap',
+                  'https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap',
+                  'https://fonts.googleapis.com/css2?family=Source+Code+Pro:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap',
+                ],
+                rootVariables: ROOT_CSS_VARS,
+                darkModeVariables: DARK_MODE_VARS,
+              },
+            },
+          },
+          'style-ref-starry-night.json': {
+            data: {
+              meta: {
+                adoptsFrom: {
+                  name: 'default',
+                  module: 'https://cardstack.com/base/style-reference',
+                },
+              },
+              type: 'card',
+              attributes: {
+                cardInfo: {
+                  notes:
+                    'Color palette extracted from the famous painting: deep Prussian blue (#0a0f23), golden yellow (#ffd700), warm amber (#ffb347), and creamy highlights (#f4f1e8). Uses elegant serif fonts to match the artistic, classical nature of the inspiration.',
+                  title: 'Starry Night',
+                  description:
+                    "A celestial theme inspired by Van Gogh's masterpiece, featuring deep midnight blues swirling with golden yellows and warm amber accents.",
+                  thumbnailURL:
+                    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?q=80&w=400&auto=format&fit=crop',
+                },
+                styleName: 'Starry Night',
+                visualDNA:
+                  "A celestial theme inspired by Van Gogh's masterpiece, featuring deep midnight blues swirling with golden yellows and warm amber accents. The palette captures the cosmic energy of a starlit night with flowing, organic movements and luminous highlights that dance across dark surfaces.",
+                cssImports: [
+                  'https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap',
+                  'https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap',
+                  'https://fonts.googleapis.com/css2?family=Source+Code+Pro:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap',
+                ],
+                inspirations: [
+                  'Van Gogh',
+                  'Post-Impressionism',
+                  'Cosmic swirls',
+                  'Night sky',
+                  'Cypress trees',
+                  'Village lights',
+                  'Impasto technique',
+                  'Dynamic brushstrokes',
+                ],
+                rootVariables: ROOT_CSS_VARS,
+                wallpaperImages: [
+                  'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?q=80&w=1200&auto=format&fit=crop',
+                  'https://images.unsplash.com/photo-1447433589675-4aaa569f3e05?q=80&w=1200&auto=format&fit=crop',
+                  'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?q=80&w=1200&auto=format&fit=crop',
+                ],
+                darkModeVariables: DARK_MODE_VARS,
+              },
+            },
+          },
+          'soft-pop.json': {
+            data: {
+              meta: {
+                adoptsFrom: {
+                  name: 'default',
+                  module: 'https://cardstack.com/base/structured-theme',
+                },
+              },
+              type: 'card',
+              attributes: {
+                cardInfo: {
+                  title: 'Soft Pop',
+                  description: 'A theme with soft color pops',
+                },
+              },
+            },
+          },
+          '.theme-preferences.json': {
+            data: {
+              meta: {
+                adoptsFrom: {
+                  name: 'ThemePreferences',
+                  module: 'https://cardstack.com/base/theme-preferences',
+                },
+              },
+              type: 'card',
+              attributes: {
+                selectedThemeURL: testRealmURL,
+                prefersDarkMode: false,
+              },
+            },
+          },
+        },
+      });
+      return {};
+    },
+  });
+
   const themeCardId = `${testRealmURL}starry-night`;
   const softPopCardId = `${testRealmURL}soft-pop`;
   const styleRefCardId = `${testRealmURL}style-ref-starry-night`;
 
-  hooks.beforeEach(async function () {
-    createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
-    setupUserSubscription();
-    setupAuthEndpoints();
-
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        '.realm.json': {
-          name: 'Theme Playground',
-        },
-        'starry-night.json': {
-          data: {
-            meta: {
-              adoptsFrom: {
-                name: 'default',
-                module: 'https://cardstack.com/base/structured-theme',
-              },
-            },
-            type: 'card',
-            attributes: {
-              cardInfo: {
-                title: 'Starry Night',
-                description: 'A celestial theme',
-                thumbnailURL:
-                  'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?q=80&w=400&auto=format&fit=crop',
-              },
-              cssImports: [
-                'https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap',
-                'https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap',
-                'https://fonts.googleapis.com/css2?family=Source+Code+Pro:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap',
-              ],
-              rootVariables: ROOT_CSS_VARS,
-              darkModeVariables: DARK_MODE_VARS,
-            },
-          },
-        },
-        'style-ref-starry-night.json': {
-          data: {
-            meta: {
-              adoptsFrom: {
-                name: 'default',
-                module: 'https://cardstack.com/base/style-reference',
-              },
-            },
-            type: 'card',
-            attributes: {
-              cardInfo: {
-                notes:
-                  'Color palette extracted from the famous painting: deep Prussian blue (#0a0f23), golden yellow (#ffd700), warm amber (#ffb347), and creamy highlights (#f4f1e8). Uses elegant serif fonts to match the artistic, classical nature of the inspiration.',
-                title: 'Starry Night',
-                description:
-                  "A celestial theme inspired by Van Gogh's masterpiece, featuring deep midnight blues swirling with golden yellows and warm amber accents.",
-                thumbnailURL:
-                  'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?q=80&w=400&auto=format&fit=crop',
-              },
-              styleName: 'Starry Night',
-              visualDNA:
-                "A celestial theme inspired by Van Gogh's masterpiece, featuring deep midnight blues swirling with golden yellows and warm amber accents. The palette captures the cosmic energy of a starlit night with flowing, organic movements and luminous highlights that dance across dark surfaces.",
-              cssImports: [
-                'https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap',
-                'https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap',
-                'https://fonts.googleapis.com/css2?family=Source+Code+Pro:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap',
-              ],
-              inspirations: [
-                'Van Gogh',
-                'Post-Impressionism',
-                'Cosmic swirls',
-                'Night sky',
-                'Cypress trees',
-                'Village lights',
-                'Impasto technique',
-                'Dynamic brushstrokes',
-              ],
-              rootVariables: ROOT_CSS_VARS,
-              wallpaperImages: [
-                'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?q=80&w=1200&auto=format&fit=crop',
-                'https://images.unsplash.com/photo-1447433589675-4aaa569f3e05?q=80&w=1200&auto=format&fit=crop',
-                'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?q=80&w=1200&auto=format&fit=crop',
-              ],
-              darkModeVariables: DARK_MODE_VARS,
-            },
-          },
-        },
-        'soft-pop.json': {
-          data: {
-            meta: {
-              adoptsFrom: {
-                name: 'default',
-                module: 'https://cardstack.com/base/structured-theme',
-              },
-            },
-            type: 'card',
-            attributes: {
-              cardInfo: {
-                title: 'Soft Pop',
-                description: 'A theme with soft color pops',
-              },
-            },
-          },
-        },
-      },
-    });
+  hooks.beforeEach(function () {
+    snapshot.get();
   });
 
   module('style-reference-card', () => {

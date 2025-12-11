@@ -1,4 +1,3 @@
-import { getService } from '@universal-ember/test-support';
 import { module, test, skip } from 'qunit';
 
 import {
@@ -9,10 +8,18 @@ import {
 
 import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
 
+import { setupSnapshotRealm } from '../../helpers';
 import { setupRenderingTest } from '../../helpers/setup';
+import { getService } from '@universal-ember/test-support';
 
 module('Integration | commands | apply-search-replace-block', function (hooks) {
   setupRenderingTest(hooks);
+  setupSnapshotRealm(hooks, {
+    mockMatrixUtils: undefined as any,
+    async build() {
+      return {};
+    },
+  });
 
   test('handles basic search and replace pattern', async function (assert) {
     let commandService = getService('command-service');

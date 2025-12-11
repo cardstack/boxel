@@ -1,7 +1,6 @@
 import { getOwner } from '@ember/owner';
 import { RenderingTestContext } from '@ember/test-helpers';
 
-import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import CopySourceCommand from '@cardstack/host/commands/copy-source';
@@ -14,9 +13,11 @@ import {
   setupLocalIndexing,
   testRealmURL,
   testRealmInfo,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+import { getService } from '@universal-ember/test-support';
 
 let fetch: NetworkService['fetch'];
 
@@ -35,17 +36,16 @@ module('Integration | commands | copy-source', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks);
 
-  hooks.beforeEach(function (this: RenderingTestContext) {
-    getOwner(this)!.register('service:realm', StubRealmService);
-    fetch = getService('network').fetch;
-  });
-
-  hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      realmURL: testRealmURL,
-      contents: {
-        'person.gts': `
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealmURL,
+        contents: {
+          'person.gts': `
           import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
           export class Person extends CardDef {
@@ -53,8 +53,20 @@ module('Integration | commands | copy-source', function (hooks) {
             @field firstName = contains(StringField);
           }
         `,
-      },
-    });
+        },
+        loader,
+      });
+      return {};
+    },
+  });
+
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    getOwner(this)!.register('service:realm', StubRealmService);
+    fetch = getService('network').fetch;
+  });
+
+  hooks.beforeEach(function () {
+    snapshot.get();
   });
 
   test('able to copy source or file', async function (assert) {

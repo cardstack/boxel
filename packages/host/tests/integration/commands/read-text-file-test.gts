@@ -13,6 +13,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
   testRealmInfo,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -31,27 +32,38 @@ module('Integration | commands | read-text-file', function (hooks) {
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks);
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'test.txt': 'Hello World!',
+          'subdir/nested.txt': 'I am nested.',
+          'empty.txt': '',
+          'data.json': JSON.stringify({ message: 'test data' }),
+          'component.gts': `import Component from '@glimmer/component';\nexport default class TestComponent extends Component {}`,
+        },
+        loader,
+      });
+      let commandService = getService('command-service');
+      return {
+        readTextFileCommand: new ReadTextFileCommand(
+          commandService.commandContext,
+        ),
+      };
+    },
+  });
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
   });
 
   let readTextFileCommand: ReadTextFileCommand;
-  hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'test.txt': 'Hello World!',
-        'subdir/nested.txt': 'I am nested.',
-        'empty.txt': '',
-        'data.json': JSON.stringify({ message: 'test data' }),
-        'component.gts': `import Component from '@glimmer/component';\nexport default class TestComponent extends Component {}`,
-      },
-    });
-    let commandService = getService('command-service');
-    readTextFileCommand = new ReadTextFileCommand(
-      commandService.commandContext,
-    );
+  hooks.beforeEach(function () {
+    ({ readTextFileCommand } = snapshot.get());
   });
 
   test('reads an existing text file', async function (assert) {

@@ -1,4 +1,3 @@
-import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { type CommandContext } from '@cardstack/runtime-common';
@@ -11,14 +10,14 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  setupSnapshotRealm,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+import { getService } from '@universal-ember/test-support';
 
 module('Integration | commands | check-correctness', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, {
     autostart: true,
@@ -26,49 +25,60 @@ module('Integration | commands | check-correctness', function (hooks) {
     activeRealms: [testRealmURL],
   });
 
-  hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'pet.gts': `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
-          import BooleanField from "https://cardstack.com/base/boolean";
-          export class Pet extends CardDef {
-            static displayName = 'Pet';
-            @field name = contains(StringField);
-            @field hasError = contains(BooleanField);
-            @field boom = contains(StringField, {
-              computeVia: function (this: Pet) {
-                if (this.hasError) {
-                  throw new Error('Name cannot be "Bill"');
-                }
-                return 'ok';
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'pet.gts': `
+            import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+            import StringField from "https://cardstack.com/base/string";
+            import BooleanField from "https://cardstack.com/base/boolean";
+            export class Pet extends CardDef {
+              static displayName = 'Pet';
+              @field name = contains(StringField);
+              @field hasError = contains(BooleanField);
+              @field boom = contains(StringField, {
+                computeVia: function (this: Pet) {
+                  if (this.hasError) {
+                    throw new Error('Name cannot be "Bill"');
+                  }
+                  return 'ok';
+                },
+              });
+            }
+          `,
+          'Pet/billy.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Billy',
+                hasError: false,
               },
-            });
-          }
-        `,
-        'Pet/billy.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Billy',
-              hasError: false,
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
               },
             },
           },
         },
-      },
-    });
-    let realmService = getService('realm');
-    let messageService = getService('message-service');
-    messageService.register();
-    await realmService.login(testRealmURL);
+        loader,
+      });
+      let realmService = getService('realm');
+      let messageService = getService('message-service');
+      messageService.register();
+      await realmService.login(testRealmURL);
+      return {};
+    },
+  });
+
+  hooks.beforeEach(async function () {
+    snapshot.get(); // ensure built
   });
 
   test('reports card instance correctness when PatchCardInstanceCommand is used', async function (assert) {
