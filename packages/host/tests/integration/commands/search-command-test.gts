@@ -15,6 +15,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -24,10 +25,6 @@ module('Integration | commands | search', function (hooks) {
 
   const realmName = 'Operator Mode Workspace';
   let loader: Loader;
-
-  hooks.beforeEach(function () {
-    loader = getService('loader-service').loader;
-  });
 
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
@@ -41,40 +38,49 @@ module('Integration | commands | search', function (hooks) {
     activeRealms: [testRealmURL],
     autostart: true,
   });
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      let cardApi: typeof import('https://cardstack.com/base/card-api');
+      let string: typeof import('https://cardstack.com/base/string');
 
-  hooks.beforeEach(async function () {
-    loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
+      cardApi = await loader.import(`${baseRealm.url}card-api`);
+      string = await loader.import(`${baseRealm.url}string`);
 
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+      let { field, contains, CardDef } = cardApi;
+      let { default: StringField } = string;
 
-    let { field, contains, CardDef } = cardApi;
-    let { default: StringField } = string;
-
-    class Author extends CardDef {
-      static displayName = 'Author';
-      @field firstName = contains(StringField);
-      @field lastName = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia: function (this: Author) {
-          return [this.firstName, this.lastName].filter(Boolean).join(' ');
+      class Author extends CardDef {
+        static displayName = 'Author';
+        @field firstName = contains(StringField);
+        @field lastName = contains(StringField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Author) {
+            return [this.firstName, this.lastName].filter(Boolean).join(' ');
+          },
+        });
+      }
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'author.gts': { Author },
+          'Author/r2.json': new Author({ firstName: 'R2-D2' }),
+          'Author/mark.json': new Author({
+            firstName: 'Mark',
+            lastName: 'Jackson',
+          }),
+          '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-o.png" }`,
         },
+        loader,
       });
-    }
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'author.gts': { Author },
-        'Author/r2.json': new Author({ firstName: 'R2-D2' }),
-        'Author/mark.json': new Author({
-          firstName: 'Mark',
-          lastName: 'Jackson',
-        }),
-        '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-o.png" }`,
-      },
-    });
+      return { loader };
+    },
+  });
+
+  hooks.beforeEach(function () {
+    ({ loader } = snapshot.get());
   });
 
   test('search for a title', async function (assert) {

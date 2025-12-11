@@ -19,6 +19,7 @@ import {
   setupOnSave,
   testRealmURL,
   testRealmInfo,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -38,32 +39,20 @@ module('Integration | Command | preview-format', function (hooks) {
 
   const realmName = 'Preview Format Test Realm';
   let loader: Loader;
-
-  hooks.beforeEach(function (this: RenderingTestContext) {
-    getOwner(this)!.register('service:realm', StubRealmService);
-    loader = getService('loader-service').loader;
-  });
-
-  setupLocalIndexing(hooks);
-  setupOnSave(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
-  );
-
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
   });
-
-  let command: PreviewFormatCommand;
-
-  hooks.beforeEach(async function (this: RenderingTestContext) {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'rental-item.gts': `
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'rental-item.gts': `
           import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
           import StringField from 'https://cardstack.com/base/string';
           import NumberField from 'https://cardstack.com/base/number';
@@ -80,30 +69,48 @@ module('Integration | Command | preview-format', function (hooks) {
             });
           }
         `,
-        'RentalItem/example.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Bike Rental',
-              description: 'Mountain bike for rent',
-              price: 25,
-            },
-            meta: {
-              adoptsFrom: {
-                module: `../rental-item`,
-                name: 'RentalItem',
+          'RentalItem/example.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Bike Rental',
+                description: 'Mountain bike for rent',
+                price: 25,
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `../rental-item`,
+                  name: 'RentalItem',
+                },
               },
             },
           },
+          '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-s.png" }`,
         },
-        '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-s.png" }`,
-      },
-    });
-
-    command = new PreviewFormatCommand(
-      getService('command-service').commandContext,
-    );
+        loader,
+      });
+      return {
+        command: new PreviewFormatCommand(
+          getService('command-service').commandContext,
+        ),
+        loader,
+      };
+    },
   });
+
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    getOwner(this)!.register('service:realm', StubRealmService);
+    ({ loader, command } = snapshot.get());
+  });
+
+  setupLocalIndexing(hooks);
+  setupOnSave(hooks);
+  setupCardLogs(
+    hooks,
+    async () => await loader.import(`${baseRealm.url}card-api`),
+  );
+
+  let command: PreviewFormatCommand;
 
   test('switches to code submode and sets up preview', async function (assert) {
     const cardId = `${testRealmURL}RentalItem/example`;

@@ -10,6 +10,7 @@ import { module, test } from 'qunit';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 import { CardContextName } from '@cardstack/runtime-common';
+import { getService } from '@universal-ember/test-support';
 
 import { getSearch } from '@cardstack/host/resources/search';
 

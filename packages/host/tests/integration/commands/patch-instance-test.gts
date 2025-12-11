@@ -20,6 +20,7 @@ import {
   setupOnSave,
   withSlowSave,
   type TestContextWithSave,
+  setupSnapshotRealm,
 } from '../../helpers';
 import {
   CardDef,
@@ -29,43 +30,52 @@ import {
   linksTo,
   linksToMany,
   StringField,
-  setupBaseRealm,
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | commands | patch-instance', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, { autostart: true });
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      let commandService = getService('command-service');
+      class Person extends CardDef {
+        @field name = contains(StringField);
+        @field nickNames = containsMany(StringField);
+        @field bestFriend = linksTo(() => Person);
+        @field friends = linksToMany(() => Person);
+      }
+      let { realm } = await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'person.gts': { Person },
+          'Person/hassan.json': new Person({ name: 'Hassan' }),
+          'Person/jade.json': new Person({ name: 'Jade' }),
+          'Person/queenzy.json': new Person({ name: 'Queenzy' }),
+          'Person/germaine.json': new Person({ name: 'Germaine' }),
+        },
+        loader,
+      });
+      return {
+        commandService,
+        PersonDef: Person as typeof CardDefType,
+        indexQuery: realm.realmIndexQueryEngine,
+      };
+    },
+  });
   let commandService: CommandService;
   let PersonDef: typeof CardDefType;
   let indexQuery: RealmIndexQueryEngine;
 
-  hooks.beforeEach(async function () {
-    commandService = getService('command-service');
-    class Person extends CardDef {
-      @field name = contains(StringField);
-      @field nickNames = containsMany(StringField);
-      @field bestFriend = linksTo(() => Person);
-      @field friends = linksToMany(() => Person);
-    }
-    PersonDef = Person;
-
-    let { realm } = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'person.gts': { Person },
-        'Person/hassan.json': new Person({ name: 'Hassan' }),
-        'Person/jade.json': new Person({ name: 'Jade' }),
-        'Person/queenzy.json': new Person({ name: 'Queenzy' }),
-        'Person/germaine.json': new Person({ name: 'Germaine' }),
-      },
-    });
-    indexQuery = realm.realmIndexQueryEngine;
+  hooks.beforeEach(function () {
+    ({ commandService, PersonDef, indexQuery } = snapshot.get());
   });
 
   test<TestContextWithSave>('can patch a contains field', async function (assert) {

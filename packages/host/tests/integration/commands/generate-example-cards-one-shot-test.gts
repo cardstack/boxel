@@ -8,8 +8,8 @@ import {
   setupLocalIndexing,
   setupRealmServerEndpoints,
   testRealmURL,
+  setupSnapshotRealm,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -17,13 +17,39 @@ module(
   'Integration | Command | generate-example-cards (one-shot)',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
       activeRealms: [testRealmURL],
       autostart: true,
+    });
+    let snapshot = setupSnapshotRealm(hooks, {
+      mockMatrixUtils,
+      async build({ loader }) {
+        let loaderService = getService('loader-service');
+        loaderService.loader = loader;
+        await setupIntegrationTestRealm({
+          mockMatrixUtils,
+          contents: {
+            'test-card.gts': `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import StringField from 'https://cardstack.com/base/string';
+
+export class TestCard extends CardDef {
+  static displayName = 'Test Card';
+  @field title = contains(StringField);
+  @field description = contains(StringField);
+}`,
+          },
+          loader,
+        });
+        const commandService = getService('command-service');
+        return {
+          generateExampleCommand: new GenerateExampleCardsOneShotCommand(
+            commandService.commandContext,
+          ),
+        };
+      },
     });
 
     let llmResponseContent = JSON.stringify({
@@ -68,25 +94,8 @@ module(
       typeof GenerateExampleCardsOneShotCommand
     >;
 
-    hooks.beforeEach(async function () {
-      await setupIntegrationTestRealm({
-        mockMatrixUtils,
-        contents: {
-          'test-card.gts': `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-
-export class TestCard extends CardDef {
-  static displayName = 'Test Card';
-  @field title = contains(StringField);
-  @field description = contains(StringField);
-}`,
-        },
-      });
-
-      const commandService = getService('command-service');
-      generateExampleCommand = new GenerateExampleCardsOneShotCommand(
-        commandService.commandContext,
-      );
+    hooks.beforeEach(function () {
+      ({ generateExampleCommand } = snapshot.get());
     });
 
     test('creates a new card instance from LLM output', async function (assert) {

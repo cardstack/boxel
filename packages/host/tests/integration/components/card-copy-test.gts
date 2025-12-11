@@ -14,6 +14,7 @@ import {
 import { Loader } from '@cardstack/runtime-common/loader';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { Realm } from '@cardstack/runtime-common/realm';
+import { getService } from '@universal-ember/test-support';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
@@ -59,23 +60,6 @@ module('Integration | card-copy', function (hooks) {
 
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
-  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
-    mockMatrixUtils,
-    async build({ loader }) {
-      let loaderService = getService('loader-service');
-      loaderService.loader = loader;
-      return { loader };
-    },
-  });
-  hooks.beforeEach(function () {
-    ({ loader } = snapshot.get());
-  });
-  setupLocalIndexing(hooks);
-  setupOnSave(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
-  );
 
   let loggedInAs = '@testuser:localhost';
 
@@ -95,6 +79,24 @@ module('Integration | card-copy', function (hooks) {
 
   let { getRoomIdForRealmAndUser, getRealmEventMessagesSince } =
     mockMatrixUtils;
+
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
+  hooks.beforeEach(function () {
+    ({ loader } = snapshot.get());
+  });
+  setupLocalIndexing(hooks);
+  setupOnSave(hooks);
+  setupCardLogs(
+    hooks,
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
+  );
 
   hooks.beforeEach(async function () {
     setCardInOperatorModeState = async (

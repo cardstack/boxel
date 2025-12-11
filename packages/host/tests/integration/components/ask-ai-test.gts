@@ -29,40 +29,22 @@ import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | ask-ai', function (hooks) {
-  let loader: Loader;
   let operatorModeStateService: OperatorModeStateService;
 
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
-  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
-    mockMatrixUtils: setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:localhost',
-      activeRealms: [testRealmURL],
-      autostart: true,
-    }),
-    async build({ loader }) {
-      let loaderService = getService('loader-service');
-      loaderService.loader = loader;
-      return { loader };
-    },
-  });
-  hooks.beforeEach(function () {
-    ({ loader } = snapshot.get());
-  });
-
   setupLocalIndexing(hooks);
-  setupOnSave(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
-  );
 
-  let noop = () => {};
-
-  hooks.beforeEach(async function () {
-    operatorModeStateService = getService('operator-mode-state-service');
-
-    const petCard = `import { CardDef, Component, contains, field, StringField } from "https://cardstack.com/base/card-api";
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+    autostart: true,
+  });
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils: mockMatrixUtils,
+    async build({ loader }) {
+      operatorModeStateService = getService('operator-mode-state-service');
+      const petCard = `import { CardDef, Component, contains, field, StringField } from "https://cardstack.com/base/card-api";
       export class Pet extends CardDef {
         static displayName = 'Pet';
         @field title = contains(StringField);
@@ -73,36 +55,52 @@ module('Integration | ask-ai', function (hooks) {
       };
     }`;
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'pet.gts': petCard,
-        'Pet/marco.json': {
-          data: {
-            attributes: { title: 'Marco' },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'pet.gts': petCard,
+          'Pet/marco.json': {
+            data: {
+              attributes: { title: 'Marco' },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
+                },
               },
             },
           },
-        },
-        'Pet/mango.json': {
-          data: {
-            attributes: { title: 'Mango' },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
+          'Pet/mango.json': {
+            data: {
+              attributes: { title: 'Mango' },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
+                },
               },
             },
           },
+          '.realm.json': `{ "name": "Operator Mode Workspace" }`,
         },
-        '.realm.json': `{ "name": "Operator Mode Workspace" }`,
-      },
-    });
+        loader,
+      });
+      return { loader };
+    },
   });
+  hooks.beforeEach(function () {
+    ({ loader } = snapshot.get());
+  });
+
+  setupOnSave(hooks);
+  setupCardLogs(
+    hooks,
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
+  );
+
+  let noop = () => {};
+
+  hooks.beforeEach(async function () {});
 
   const sendAskAiMessage = async (message: string, assert: Assert) => {
     assert.dom('[data-test-ask-ai-input]').hasStyle({ width: '140px' });

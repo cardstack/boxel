@@ -14,6 +14,7 @@ import {
   setupOnSave,
   withSlowSave,
   type TestContextWithSave,
+  setupSnapshotRealm,
 } from '../../helpers';
 import {
   CardDef,
@@ -24,7 +25,6 @@ import {
   FieldDef,
   StringField,
   NumberField,
-  setupBaseRealm,
   linksTo,
   linksToMany,
   isCard,
@@ -34,127 +34,137 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | Command | patch-fields', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, { autostart: true });
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      let commandService = getService('command-service');
+
+      class Coordinates extends FieldDef {
+        @field latitude = contains(NumberField);
+        @field longitude = contains(NumberField);
+      }
+      class Country extends CardDef {
+        @field name = contains(StringField);
+        @field code = contains(StringField);
+      }
+      class Address extends FieldDef {
+        @field street = contains(StringField);
+        @field city = contains(StringField);
+        @field zipCode = contains(StringField);
+        // @ts-ignore
+        @field coordinates = contains(Coordinates);
+        @field country = linksTo(Country);
+      }
+
+      class Author extends CardDef {
+        @field firstName = contains(StringField);
+        @field lastName = contains(StringField);
+        @field email = contains(StringField);
+        // @ts-ignore
+        @field address = contains(Address);
+        @field tags = containsMany(StringField);
+        // Relationship fields for testing
+        @field bestBook = linksTo(() => Book);
+        @field books = linksToMany(() => Book);
+        static isolated = class Isolated extends Component<typeof Author> {
+          <template>
+            <h1>{{@model.firstName}} {{@model.lastName}} - {{@model.email}}</h1>
+            <div>
+              Address:
+              <@fields.address />
+            </div>
+            <div>
+              Best Book:
+              <@fields.bestBook />
+            </div>
+            <div>All books:</div>
+            <@fields.books />
+          </template>
+        };
+      }
+
+      class Book extends CardDef {
+        @field title = contains(StringField);
+        @field isbn = contains(StringField);
+        @field publishYear = contains(NumberField);
+        @field chapters = containsMany(StringField);
+      }
+
+      let johnTheAuthor = new Author({
+        firstName: 'John',
+        lastName: 'Doe',
+        email: 'john@example.com',
+        address: new Address({
+          street: '123 Main St',
+          city: 'Anytown',
+          zipCode: '12345',
+        }),
+        tags: ['writer', 'programmer'],
+      });
+      let usa = new Country({
+        name: 'United States',
+        code: 'US',
+      });
+      johnTheAuthor.address.country = usa;
+
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'author.gts': { Author, Address, Coordinates, Book, Country },
+          'Book/relationship-book.json': new Book({
+            title: 'Relationship Book',
+            isbn: '123-REL',
+            publishYear: 2025,
+            chapters: ['Rel 1'],
+          }),
+          'Book/book-1.json': new Book({
+            title: 'Book 1',
+            isbn: '111',
+            publishYear: 2020,
+            chapters: ['A'],
+          }),
+          'Book/book-2.json': new Book({
+            title: 'Book 2',
+            isbn: '222',
+            publishYear: 2021,
+            chapters: ['B'],
+          }),
+          'Book/test-book.json': new Book({
+            title: 'Test Book',
+            isbn: '978-0123456789',
+            publishYear: 2023,
+            chapters: ['Introduction', 'Chapter 1'],
+          }),
+          'Author/john.json': johnTheAuthor,
+          'Country/canada.json': new Country({
+            name: 'Canada',
+            code: 'CA',
+          }),
+          'Country/usa.json': usa,
+        },
+        loader,
+      });
+      return {
+        commandService,
+        AuthorDef: Author,
+        BookDef: Book,
+        store: getService('store'),
+      };
+    },
+  });
 
   let commandService: CommandService;
   let AuthorDef: typeof CardDef;
   let BookDef: typeof CardDef;
   let store: StoreService;
 
-  hooks.beforeEach(async function () {
-    commandService = getService('command-service');
-
-    class Coordinates extends FieldDef {
-      @field latitude = contains(NumberField);
-      @field longitude = contains(NumberField);
-    }
-    class Country extends CardDef {
-      @field name = contains(StringField);
-      @field code = contains(StringField);
-    }
-    class Address extends FieldDef {
-      @field street = contains(StringField);
-      @field city = contains(StringField);
-      @field zipCode = contains(StringField);
-      // @ts-ignore
-      @field coordinates = contains(Coordinates);
-      @field country = linksTo(Country);
-    }
-
-    class Author extends CardDef {
-      @field firstName = contains(StringField);
-      @field lastName = contains(StringField);
-      @field email = contains(StringField);
-      // @ts-ignore
-      @field address = contains(Address);
-      @field tags = containsMany(StringField);
-      // Relationship fields for testing
-      @field bestBook = linksTo(() => Book);
-      @field books = linksToMany(() => Book);
-      static isolated = class Isolated extends Component<typeof Author> {
-        <template>
-          <h1>{{@model.firstName}} {{@model.lastName}} - {{@model.email}}</h1>
-          <div>
-            Address:
-            <@fields.address />
-          </div>
-          <div>
-            Best Book:
-            <@fields.bestBook />
-          </div>
-          <div>All books:</div>
-          <@fields.books />
-        </template>
-      };
-    }
-
-    class Book extends CardDef {
-      @field title = contains(StringField);
-      @field isbn = contains(StringField);
-      @field publishYear = contains(NumberField);
-      @field chapters = containsMany(StringField);
-    }
-
-    AuthorDef = Author;
-    BookDef = Book;
-
-    let johnTheAuthor = new Author({
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'john@example.com',
-      address: new Address({
-        street: '123 Main St',
-        city: 'Anytown',
-        zipCode: '12345',
-      }),
-      tags: ['writer', 'programmer'],
-    });
-    let usa = new Country({
-      name: 'United States',
-      code: 'US',
-    });
-    johnTheAuthor.address.country = usa;
-
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'author.gts': { Author, Address, Coordinates, Book, Country },
-        'Book/relationship-book.json': new Book({
-          title: 'Relationship Book',
-          isbn: '123-REL',
-          publishYear: 2025,
-          chapters: ['Rel 1'],
-        }),
-        'Book/book-1.json': new Book({
-          title: 'Book 1',
-          isbn: '111',
-          publishYear: 2020,
-          chapters: ['A'],
-        }),
-        'Book/book-2.json': new Book({
-          title: 'Book 2',
-          isbn: '222',
-          publishYear: 2021,
-          chapters: ['B'],
-        }),
-        'Book/test-book.json': new Book({
-          title: 'Test Book',
-          isbn: '978-0123456789',
-          publishYear: 2023,
-          chapters: ['Introduction', 'Chapter 1'],
-        }),
-        'Author/john.json': johnTheAuthor,
-        'Country/canada.json': new Country({
-          name: 'Canada',
-          code: 'CA',
-        }),
-        'Country/usa.json': usa,
-      },
-    });
-    store = getService('store');
+  hooks.beforeEach(function () {
+    ({ commandService, AuthorDef, BookDef, store } = snapshot.get());
   });
 
   module('Optimistic persistence behavior', function () {

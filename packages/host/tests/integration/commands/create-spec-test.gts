@@ -15,14 +15,13 @@ import {
   setupLocalIndexing,
   setupAuthEndpoints,
   setupRealmServerEndpoints,
+  setupSnapshotRealm,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | Command | create-specs', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   const realmName = 'Create Spec Test Realm';
   let loader: Loader;
   let createSpecCommand: CreateSpecCommand;
@@ -56,60 +55,69 @@ module('Integration | Command | create-specs', function (hooks) {
     },
   ]);
 
-  hooks.beforeEach(function () {
-    loader = getService('loader-service').loader;
-    let commandService = getService('command-service');
-    createSpecCommand = new CreateSpecCommand(commandService.commandContext);
-  });
-
   setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
   });
-  setupCardLogs(
-    hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
-  );
-
-  hooks.beforeEach(async function () {
-    setupAuthEndpoints();
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      realmURL: testRealmURL,
-      contents: {
-        'test-card.gts': `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      setupAuthEndpoints();
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealmURL,
+        contents: {
+          'test-card.gts': `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 
 export class TestCard extends CardDef {
   static displayName = 'Test Card';
   @field name = contains(StringField);
 }`,
-        'test-field.gts': `import { FieldDef } from 'https://cardstack.com/base/card-api';
+          'test-field.gts': `import { FieldDef } from 'https://cardstack.com/base/card-api';
 
 export class TestField extends FieldDef {
   static displayName = 'Test Field';
 }`,
-        'app-card.gts': `import { CardDef } from 'https://cardstack.com/base/card-api';
+          'app-card.gts': `import { CardDef } from 'https://cardstack.com/base/card-api';
 
 export class AppCard extends CardDef {
   static displayName = 'App Card';
 }`,
-        'test-component.gts': `import Component from '@glimmer/component';
+          'test-component.gts': `import Component from '@glimmer/component';
 
 export default class TestComponent extends Component {
   static displayName = 'Test Component';
 }`,
-        'test-command.gts': `import { Command } from '@cardstack/runtime-common';
+          'test-command.gts': `import { Command } from '@cardstack/runtime-common';
 
 export default class TestCommand extends Command {
   static displayName = 'Test Command';
 }`,
-        '.realm.json': `{ "name": "${realmName}" }`,
-      },
-    });
+          '.realm.json': `{ "name": "${realmName}" }`,
+        },
+        loader,
+      });
+      let commandService = getService('command-service');
+      return {
+        loader,
+        createSpecCommand: new CreateSpecCommand(commandService.commandContext),
+      };
+    },
   });
+
+  hooks.beforeEach(function () {
+    ({ loader, createSpecCommand } = snapshot.get());
+  });
+
+  setupCardLogs(
+    hooks,
+    async () => await loader.import(`${baseRealm.url}card-api`),
+  );
 
   test('creates spec with correct type for card definition', async function (assert) {
     const result = await createSpecCommand.execute({

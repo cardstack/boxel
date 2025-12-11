@@ -13,8 +13,8 @@ import {
   testRealmURL,
   testRealmInfo,
   setupRealmServerEndpoints,
+  setupSnapshotRealm,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -29,13 +29,25 @@ class StubRealmService extends RealmService {
 
 module('Integration | commands | summarize-session', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
+  });
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+        loader,
+      });
+      return {};
+    },
   });
 
   let { createAndJoinRoom, simulateRemoteMessage } = mockMatrixUtils;
@@ -122,11 +134,8 @@ module('Integration | commands | summarize-session', function (hooks) {
     getOwner(this)!.register('service:realm', StubRealmService);
   });
 
-  hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {},
-    });
+  hooks.beforeEach(function () {
+    snapshot.get();
   });
 
   // Helper function to create mock summarize session input

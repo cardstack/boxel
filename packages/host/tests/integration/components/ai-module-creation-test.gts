@@ -31,6 +31,7 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+import { getService } from '@universal-ember/test-support';
 
 class MockRouterService extends Service {
   replaceWith(_route: any, _args: any) {

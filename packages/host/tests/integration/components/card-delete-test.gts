@@ -58,6 +58,17 @@ module('Integration | card-delete', function (hooks) {
   }
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [baseRealm.url, testRealmURL, testModuleRealm],
+    realmPermissions: {
+      [testRealmURL]: ['read', 'write'],
+      [testModuleRealm]: ['read', 'write'],
+    },
+    autostart: true,
+  });
+
   let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
     mockMatrixUtils,
     async build({ loader }) {
@@ -76,16 +87,6 @@ module('Integration | card-delete', function (hooks) {
     hooks,
     async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
   );
-
-  let mockMatrixUtils = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:localhost',
-    activeRealms: [baseRealm.url, testRealmURL, testModuleRealm],
-    realmPermissions: {
-      [testRealmURL]: ['read', 'write'],
-      [testModuleRealm]: ['read', 'write'],
-    },
-    autostart: true,
-  });
 
   hooks.beforeEach(async function () {
     setCardInOperatorModeState = (

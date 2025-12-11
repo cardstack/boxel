@@ -28,6 +28,7 @@ import {
   setupOnSave,
   testRealmURL,
   testRealmInfo,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -121,34 +122,20 @@ module('Integration | Command | show-card', function (hooks) {
 
   const realmName = 'Show Card Test Realm';
   let loader: Loader;
-
-  hooks.beforeEach(function (this: RenderingTestContext) {
-    getOwner(this)!.register('service:realm', StubRealmService);
-    loader = getService('loader-service').loader;
-  });
-
-  setupLocalIndexing(hooks);
-  setupOnSave(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
-  );
-
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
   });
-
-  let command: ShowCardCommand;
-  let mockOperatorModeStateService: MockOperatorModeStateService;
-  let mockPlaygroundPanelService: MockPlaygroundPanelService;
-
-  hooks.beforeEach(async function (this: RenderingTestContext) {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'person.gts': `
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'person.gts': `
           import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
           import StringField from 'https://cardstack.com/base/string';
 
@@ -163,7 +150,7 @@ module('Integration | Command | show-card', function (hooks) {
             });
           }
         `,
-        'pet.gts': `
+          'pet.gts': `
           import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
           import StringField from 'https://cardstack.com/base/string';
 
@@ -178,54 +165,77 @@ module('Integration | Command | show-card', function (hooks) {
             });
           }
         `,
-        'Person/alice.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Alice',
-              lastName: 'Johnson',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `../person`,
-                name: 'Person',
+          'Person/alice.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Alice',
+                lastName: 'Johnson',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `../person`,
+                  name: 'Person',
+                },
               },
             },
           },
-        },
-        'Person/bob.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Bob',
-              lastName: 'Smith',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `../person`,
-                name: 'Person',
+          'Person/bob.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Bob',
+                lastName: 'Smith',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `../person`,
+                  name: 'Person',
+                },
               },
             },
           },
-        },
-        'Pet/fluffy.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Fluffy',
-              species: 'Cat',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `../pet`,
-                name: 'Pet',
+          'Pet/fluffy.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Fluffy',
+                species: 'Cat',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `../pet`,
+                  name: 'Pet',
+                },
               },
             },
           },
+          '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-s.png" }`,
         },
-        '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-s.png" }`,
-      },
-    });
+        loader,
+      });
+      return { loader };
+    },
+  });
+
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    getOwner(this)!.register('service:realm', StubRealmService);
+    ({ loader } = snapshot.get());
+  });
+
+  setupLocalIndexing(hooks);
+  setupOnSave(hooks);
+  setupCardLogs(
+    hooks,
+    async () => await loader.import(`${baseRealm.url}card-api`),
+  );
+
+  let command: ShowCardCommand;
+  let mockOperatorModeStateService: MockOperatorModeStateService;
+  let mockPlaygroundPanelService: MockPlaygroundPanelService;
+
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    snapshot.get();
 
     mockOperatorModeStateService = new MockOperatorModeStateService();
     mockPlaygroundPanelService = new MockPlaygroundPanelService();

@@ -1,4 +1,4 @@
-import { fillIn } from '@ember/test-helpers';
+import { RenderingTestContext, fillIn } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import formatISO from 'date-fns/formatISO';

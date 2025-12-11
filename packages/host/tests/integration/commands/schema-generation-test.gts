@@ -15,24 +15,34 @@ import HostBaseCommand from '@cardstack/host/lib/host-base-command';
 
 import * as CardAPI from 'https://cardstack.com/base/card-api';
 
+import { setupSnapshotRealm } from '../../helpers';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module(
   'Integration | Command | host command schema generation test',
   function (hooks) {
+    let loader,
+      mappings: Map<typeof CardAPI.FieldDef, AttributesSchema>,
+      cardAPI: typeof CardAPI;
     setupRenderingTest(hooks);
     setupWindowMock(hooks);
-
-    module('command schema generation', function (hooks) {
-      let loader,
-        mappings: Map<typeof CardAPI.FieldDef, AttributesSchema>,
-        cardAPI: typeof CardAPI;
-      hooks.beforeEach(async function () {
-        loader = getService('loader-service').loader;
+    let snapshot = setupSnapshotRealm(hooks, {
+      mockMatrixUtils: undefined as any,
+      async build({ loader }) {
+        let loaderService = getService('loader-service');
+        loaderService.loader = loader;
         mappings = await basicMappings(loader);
         cardAPI = await loader.import<typeof CardAPI>(
           `${baseRealm.url}card-api`,
         );
+        await loader.import(`${baseRealm.url}command`);
+        return { loader };
+      },
+    });
+
+    module('command schema generation', function (hooks) {
+      hooks.beforeEach(async function () {
+        ({ loader } = snapshot.get());
       });
       // for each host command, attempt to generate a JSON schema with strict: true
       for (const CommandClass of HostCommandClasses) {

@@ -50,7 +50,7 @@ export function setupSnapshotRealm<T>(
 
   setupBaseRealm(hooks);
   hooks.beforeEach(async function () {
-    setupRendering(options.acceptanceTest);
+    setupRendering(options.acceptanceTest!!);
   });
 
   hooks.beforeEach(async function () {

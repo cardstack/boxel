@@ -20,27 +20,25 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  setupSnapshotRealm,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | commands | patch-code', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, { autostart: true });
-
-  const testFileName = 'task.gts';
-  const fileUrl = `${testRealmURL}${testFileName}`;
-  let adapter: any;
-
-  hooks.beforeEach(async function () {
-    let realmSetup = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        [testFileName]: `import {
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      let realmSetup = await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          [testFileName]: `import {
   contains,
   field,
   CardDef,
@@ -54,9 +52,21 @@ export class Task extends CardDef {
   @field description = contains(StringField);
   @field priority = contains(NumberField);
 }`,
-      },
-    });
-    adapter = realmSetup.adapter;
+        },
+        loader,
+      });
+      let realmService = getService('realm');
+      await realmService.login(testRealmURL);
+      return { adapter: realmSetup.adapter };
+    },
+  });
+
+  const testFileName = 'task.gts';
+  const fileUrl = `${testRealmURL}${testFileName}`;
+  let adapter: any;
+
+  hooks.beforeEach(function () {
+    ({ adapter } = snapshot.get());
     adapter.lintStub = async (
       request: Request,
       _requestContext: any,
@@ -69,8 +79,6 @@ export class Task extends CardDef {
         messages: [],
       };
     };
-    let realmService = getService('realm');
-    await realmService.login(testRealmURL);
   });
 
   test('lint-fixes contents before returning them', async function (assert) {

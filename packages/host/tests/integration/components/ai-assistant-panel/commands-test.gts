@@ -54,21 +54,6 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
 
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
-  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
-    mockMatrixUtils,
-    async build({ loader }) {
-      let loaderService = getService('loader-service');
-      loaderService.loader = loader;
-      return { loader };
-    },
-  });
-
-  setupLocalIndexing(hooks);
-  setupOnSave(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
-  );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -84,6 +69,22 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
 
   let { createAndJoinRoom, simulateRemoteMessage, getRoomEvents } =
     mockMatrixUtils;
+
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
+
+  setupLocalIndexing(hooks);
+  setupOnSave(hooks);
+  setupCardLogs(
+    hooks,
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
+  );
 
   let noop = () => {};
 

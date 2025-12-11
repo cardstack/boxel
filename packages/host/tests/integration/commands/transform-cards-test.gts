@@ -21,6 +21,7 @@ import {
   setupOnSave,
   testRealmURL,
   testRealmInfo,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -39,121 +40,111 @@ module('Integration | commands | transform-cards', function (hooks) {
 
   const realmName = 'Transform Cards Test Realm';
   let loader: Loader;
-
-  hooks.beforeEach(function (this: RenderingTestContext) {
-    getOwner(this)!.register('service:realm', StubRealmService);
-    loader = getService('loader-service').loader;
-  });
-
-  setupLocalIndexing(hooks);
-  setupOnSave(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
-  );
-
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
   });
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      let cardApi: typeof import('https://cardstack.com/base/card-api');
+      let string: typeof import('https://cardstack.com/base/string');
+      let CommandModule = await loader.import<typeof import('https://cardstack.com/base/command')>(
+        `${baseRealm.url}command`,
+      );
 
-  hooks.beforeEach(async function () {
-    loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    let CommandModule: typeof import('https://cardstack.com/base/command');
+      cardApi = await loader.import(`${baseRealm.url}card-api`);
+      string = await loader.import(`${baseRealm.url}string`);
 
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    CommandModule = await loader.import(`${baseRealm.url}command`);
+      let { field, contains, CardDef } = cardApi;
+      let { default: StringField } = string;
+      let { JsonCard } = CommandModule;
 
-    let { field, contains, CardDef } = cardApi;
-    let { default: StringField } = string;
-    let { JsonCard } = CommandModule;
-
-    class Person extends CardDef {
-      static displayName = 'Person';
-      @field name = contains(StringField);
-      @field age = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia: function (this: Person) {
-          return this.name;
-        },
-      });
-    }
-
-    class Pet extends CardDef {
-      static displayName = 'Pet';
-      @field name = contains(StringField);
-      @field species = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia: function (this: Pet) {
-          return this.name;
-        },
-      });
-    }
-
-    // Mock command that transforms JSON by adding a prefix to the name field
-    class PrefixNameCommand extends Command<typeof JsonCard, typeof JsonCard> {
-      async getInputType() {
-        return JsonCard;
+      class Person extends CardDef {
+        static displayName = 'Person';
+        @field name = contains(StringField);
+        @field age = contains(StringField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Person) {
+            return this.name;
+          },
+        });
       }
 
-      protected async run(
-        input: CommandModule.JsonCard,
-      ): Promise<CommandModule.JsonCard> {
-        let json = { ...input.json };
-        if (json.data?.attributes?.name) {
-          json.data.attributes.name = `Transformed: ${json.data.attributes.name}`;
+      class Pet extends CardDef {
+        static displayName = 'Pet';
+        @field name = contains(StringField);
+        @field species = contains(StringField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Pet) {
+            return this.name;
+          },
+        });
+      }
+
+      class PrefixNameCommand extends Command<typeof JsonCard, typeof JsonCard> {
+        async getInputType() {
+          return JsonCard;
         }
-        return new JsonCard({ json });
-      }
-    }
 
-    // Mock command that transforms JSON by uppercasing the name field
-    class UppercaseNameCommand extends Command<
-      typeof JsonCard,
-      typeof JsonCard
-    > {
-      async getInputType() {
-        return JsonCard;
-      }
-
-      protected async run(
-        input: CommandModule.JsonCard,
-      ): Promise<CommandModule.JsonCard> {
-        let json = { ...input.json };
-        if (json.data?.attributes?.name) {
-          json.data.attributes.name = json.data.attributes.name.toUpperCase();
+        protected async run(
+          input: CommandModule.JsonCard,
+        ): Promise<CommandModule.JsonCard> {
+          let json = { ...input.json };
+          if (json.data?.attributes?.name) {
+            json.data.attributes.name = `Transformed: ${json.data.attributes.name}`;
+          }
+          return new JsonCard({ json });
         }
-        return new JsonCard({ json });
-      }
-    }
-
-    // Mock command that adds metadata to the JSON
-    class AddMetadataCommand extends Command<typeof JsonCard, typeof JsonCard> {
-      async getInputType() {
-        return JsonCard;
       }
 
-      protected async run(
-        input: CommandModule.JsonCard,
-      ): Promise<CommandModule.JsonCard> {
-        let json = { ...input.json };
-        if (!json.data.attributes.metadata) {
-          json.data.attributes.metadata = 'Added by TransformCardsCommand';
+      class UppercaseNameCommand extends Command<
+        typeof JsonCard,
+        typeof JsonCard
+      > {
+        async getInputType() {
+          return JsonCard;
         }
-        return new JsonCard({ json });
-      }
-    }
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'person.gts': { Person },
-        'pet.gts': { Pet },
-        'Person/alice.json': `{
+        protected async run(
+          input: CommandModule.JsonCard,
+        ): Promise<CommandModule.JsonCard> {
+          let json = { ...input.json };
+          if (json.data?.attributes?.name) {
+            json.data.attributes.name = json.data.attributes.name.toUpperCase();
+          }
+          return new JsonCard({ json });
+        }
+      }
+
+      class AddMetadataCommand extends Command<
+        typeof JsonCard,
+        typeof JsonCard
+      > {
+        async getInputType() {
+          return JsonCard;
+        }
+
+        protected async run(
+          input: CommandModule.JsonCard,
+        ): Promise<CommandModule.JsonCard> {
+          let json = { ...input.json };
+          if (!json.data.attributes.metadata) {
+            json.data.attributes.metadata = 'Added by TransformCardsCommand';
+          }
+          return new JsonCard({ json });
+        }
+      }
+
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'person.gts': { Person },
+          'pet.gts': { Pet },
+          'Person/alice.json': `{
           "data": {
             "type": "card",
             "attributes": {
@@ -168,7 +159,7 @@ module('Integration | commands | transform-cards', function (hooks) {
             }
           }
         }`,
-        'Person/bob.json': `{
+          'Person/bob.json': `{
           "data": {
             "type": "card",
             "attributes": {
@@ -183,7 +174,7 @@ module('Integration | commands | transform-cards', function (hooks) {
             }
           }
         }`,
-        'Person/charlie.json': `{
+          'Person/charlie.json': `{
           "data": {
             "type": "card",
             "attributes": {
@@ -198,7 +189,7 @@ module('Integration | commands | transform-cards', function (hooks) {
             }
           }
         }`,
-        'Pet/fluffy.json': `{
+          'Pet/fluffy.json': `{
           "data": {
             "type": "card",
             "attributes": {
@@ -213,7 +204,7 @@ module('Integration | commands | transform-cards', function (hooks) {
             }
           }
         }`,
-        'Pet/rover.json': `{
+          'Pet/rover.json': `{
           "data": {
             "type": "card",
             "attributes": {
@@ -228,12 +219,31 @@ module('Integration | commands | transform-cards', function (hooks) {
             }
           }
         }`,
-        'prefix-name-command.ts': { default: PrefixNameCommand },
-        'uppercase-name-command.ts': { default: UppercaseNameCommand },
-        'add-metadata-command.ts': { default: AddMetadataCommand },
-        '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-t.png" }`,
-      },
-    });
+          'prefix-name-command.ts': { default: PrefixNameCommand },
+          'uppercase-name-command.ts': { default: UppercaseNameCommand },
+          'add-metadata-command.ts': { default: AddMetadataCommand },
+          '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-t.png" }`,
+        },
+        loader,
+      });
+      return { loader };
+    },
+  });
+
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    getOwner(this)!.register('service:realm', StubRealmService);
+    ({ loader } = snapshot.get());
+  });
+
+  setupLocalIndexing(hooks);
+  setupOnSave(hooks);
+  setupCardLogs(
+    hooks,
+    async () => await loader.import(`${baseRealm.url}card-api`),
+  );
+
+  hooks.beforeEach(function () {
+    snapshot.get();
   });
 
   test('transforms all cards matching a query', async function (assert) {

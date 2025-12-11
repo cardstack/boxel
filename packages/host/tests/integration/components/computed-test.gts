@@ -1,4 +1,4 @@
-import { settled } from '@ember/test-helpers';
+import { RenderingTestContext, settled } from '@ember/test-helpers';
 import { module, test } from 'qunit';
 
 import {
@@ -7,6 +7,7 @@ import {
   baseRealm,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
+import { getService } from '@universal-ember/test-support';
 
 import {
   cleanWhiteSpace,

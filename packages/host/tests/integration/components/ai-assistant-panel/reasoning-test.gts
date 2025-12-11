@@ -43,6 +43,20 @@ module('Integration | ai-assistant-panel | reasoning', function (hooks) {
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
 
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+    autostart: true,
+    now: (() => {
+      // deterministic clock so that, for example, screenshots
+      // have consistent content
+      let clock = new Date(2024, 8, 19).getTime();
+      return () => (clock += 10);
+    })(),
+  });
+
+  let { simulateRemoteMessage } = mockMatrixUtils;
+
   let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
     mockMatrixUtils,
     async build({ loader }) {
@@ -58,20 +72,6 @@ module('Integration | ai-assistant-panel | reasoning', function (hooks) {
     hooks,
     async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
   );
-
-  let mockMatrixUtils = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:localhost',
-    activeRealms: [testRealmURL],
-    autostart: true,
-    now: (() => {
-      // deterministic clock so that, for example, screenshots
-      // have consistent content
-      let clock = new Date(2024, 8, 19).getTime();
-      return () => (clock += 10);
-    })(),
-  });
-
-  let { simulateRemoteMessage } = mockMatrixUtils;
 
   let noop = () => {};
 

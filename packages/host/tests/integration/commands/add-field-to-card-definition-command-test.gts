@@ -13,6 +13,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
   testRealmInfo,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -32,16 +33,15 @@ module(
     setupRenderingTest(hooks);
     setupLocalIndexing(hooks);
     let mockMatrixUtils = setupMockMatrix(hooks);
-
-    hooks.beforeEach(function (this: RenderingTestContext) {
-      getOwner(this)!.register('service:realm', StubRealmService);
-    });
-
-    hooks.beforeEach(async function () {
-      await setupIntegrationTestRealm({
-        mockMatrixUtils,
-        contents: {
-          'person.gts': `
+    let snapshot = setupSnapshotRealm(hooks, {
+      mockMatrixUtils,
+      async build({ loader }) {
+        let loaderService = getService('loader-service');
+        loaderService.loader = loader;
+        await setupIntegrationTestRealm({
+          mockMatrixUtils,
+          contents: {
+            'person.gts': `
           import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
           export class Person extends CardDef {
@@ -49,9 +49,20 @@ module(
             @field firstName = contains(StringField);
           }
         `,
-        },
-        realmURL: 'http://test-realm/test/',
-      });
+          },
+          realmURL: testRealmURL,
+          loader,
+        });
+        return {};
+      },
+    });
+
+    hooks.beforeEach(function (this: RenderingTestContext) {
+      getOwner(this)!.register('service:realm', StubRealmService);
+    });
+
+    hooks.beforeEach(function () {
+      snapshot.get();
     });
 
     test('adds a field to a card definition', async function (assert) {

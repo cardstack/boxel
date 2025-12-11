@@ -8,20 +8,32 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupRealmServerEndpoints,
+  setupSnapshotRealm,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | commands | search-google-images', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
+  });
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+        loader,
+      });
+      return {};
+    },
   });
 
   // Setup realm server endpoints to mock Google Custom Search API
@@ -83,18 +95,19 @@ module('Integration | commands | search-google-images', function (hooks) {
                 kind: 'customsearch#result',
                 title: 'Test Image 1',
                 htmlTitle: '<b>Test</b> Image 1',
-                link: 'https://example.com/image1.jpg',
-                displayLink: 'example.com',
+                link: 'http://localhost:4200/i-do-not-exist/image1.jpg',
+                displayLink: 'localhost',
                 snippet: 'Test Image 1',
                 htmlSnippet: '<b>Test</b> Image 1',
                 mime: 'image/jpeg',
                 fileFormat: 'image/jpeg',
                 image: {
-                  contextLink: 'https://example.com/page1',
+                  contextLink: 'http://localhost:4200/i-do-not-exist/page1',
                   height: 600,
                   width: 800,
                   byteSize: 50000,
-                  thumbnailLink: 'https://example.com/thumb1.jpg',
+                  thumbnailLink:
+                    'http://localhost:4200/i-do-not-exist/thumb1.jpg',
                   thumbnailHeight: 84,
                   thumbnailWidth: 150,
                 },
@@ -103,18 +116,19 @@ module('Integration | commands | search-google-images', function (hooks) {
                 kind: 'customsearch#result',
                 title: 'Test Image 2',
                 htmlTitle: '<b>Test</b> Image 2',
-                link: 'https://example.com/image2.jpg',
-                displayLink: 'example.com',
+                link: 'http://localhost:4200/i-do-not-exist/image2.jpg',
+                displayLink: 'localhost',
                 snippet: 'Test Image 2',
                 htmlSnippet: '<b>Test</b> Image 2',
                 mime: 'image/png',
                 fileFormat: 'image/png',
                 image: {
-                  contextLink: 'https://example.com/page2',
+                  contextLink: 'http://localhost:4200/i-do-not-exist/page2',
                   height: 768,
                   width: 1024,
                   byteSize: 75000,
-                  thumbnailLink: 'https://example.com/thumb2.jpg',
+                  thumbnailLink:
+                    'http://localhost:4200/i-do-not-exist/thumb2.jpg',
                   thumbnailHeight: 100,
                   thumbnailWidth: 150,
                 },
@@ -137,11 +151,8 @@ module('Integration | commands | search-google-images', function (hooks) {
     },
   ]);
 
-  hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {},
-    });
+  hooks.beforeEach(function () {
+    snapshot.get();
   });
 
   test('successfully searches Google Images and returns results', async function (assert) {

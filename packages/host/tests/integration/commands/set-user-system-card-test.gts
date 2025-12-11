@@ -12,6 +12,7 @@ import {
   setupLocalIndexing,
   testRealmInfo,
   testRealmURL,
+  setupSnapshotRealm,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -34,16 +35,26 @@ module('Integration | commands | set-user-system-card', function (hooks) {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
   });
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+        loader,
+      });
+      return {};
+    },
+  });
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
   });
 
-  hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {},
-    });
+  hooks.beforeEach(function () {
+    snapshot.get();
   });
 
   test('sets the system card account data', async function (assert) {

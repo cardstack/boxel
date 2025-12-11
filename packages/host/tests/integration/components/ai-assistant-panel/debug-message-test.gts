@@ -44,6 +44,18 @@ module('Integration | ai-assistant-panel | debug-message', function (hooks) {
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
 
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+    autostart: true,
+    now: (() => {
+      let clock = new Date(2024, 8, 20).getTime();
+      return () => (clock += 10);
+    })(),
+  });
+
+  let { simulateRemoteMessage } = mockMatrixUtils;
+
   let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
     mockMatrixUtils,
     async build({ loader }) {
@@ -59,18 +71,6 @@ module('Integration | ai-assistant-panel | debug-message', function (hooks) {
     hooks,
     async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
   );
-
-  let mockMatrixUtils = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:localhost',
-    activeRealms: [testRealmURL],
-    autostart: true,
-    now: (() => {
-      let clock = new Date(2024, 8, 20).getTime();
-      return () => (clock += 10);
-    })(),
-  });
-
-  let { simulateRemoteMessage } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
     ({ loader } = snapshot.get());

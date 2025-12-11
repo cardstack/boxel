@@ -48,6 +48,7 @@ import {
   saveCard,
   provideConsumeContext,
   testModuleRealm,
+  setupSnapshotRealm,
 } from '../../helpers';
 import {
   Base64ImageField,
@@ -82,6 +83,7 @@ import {
   instanceOf,
   CardInfoField,
 } from '../../helpers/base-realm';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { mango } from '../../helpers/image-fixture';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';

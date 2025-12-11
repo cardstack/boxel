@@ -8,6 +8,7 @@ import {
   baseRealm,
 } from '@cardstack/runtime-common';
 import { type Loader } from '@cardstack/runtime-common/loader';
+import { getService } from '@universal-ember/test-support';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 

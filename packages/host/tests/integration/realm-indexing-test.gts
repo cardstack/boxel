@@ -1,4 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
+import { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
