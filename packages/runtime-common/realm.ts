@@ -2192,12 +2192,9 @@ export class Realm {
         meta: { adoptsFrom: patch.meta.adoptsFrom },
       },
     ) as CardResource;
-    if (!originalClone.meta) {
-      originalClone.meta = { adoptsFrom: patch.meta.adoptsFrom };
-    } else {
-      originalClone.meta.adoptsFrom =
-        originalClone.meta.adoptsFrom ?? patch.meta.adoptsFrom;
-    }
+    originalClone.meta ??= { adoptsFrom: patch.meta.adoptsFrom };
+    originalClone.meta.adoptsFrom =
+      originalClone.meta.adoptsFrom ?? patch.meta.adoptsFrom;
     delete originalClone.meta.lastModified;
 
     if (
