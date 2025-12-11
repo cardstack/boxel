@@ -1,5 +1,6 @@
 import { Memoize } from 'typescript-memoize';
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
+import cloneDeep from 'lodash/cloneDeep';
 import {
   SupportedMimeType,
   maxLinkDepth,
@@ -188,6 +189,7 @@ export class RealmIndexQueryEngine {
         doc.included = included;
       }
     }
+    relativizeDocument(doc, this.realmURL);
     return { type: 'doc', doc };
   }
 
@@ -301,10 +303,16 @@ export class RealmIndexQueryEngine {
             !omit.includes(includedResource.id) &&
             !included.find((r) => r.id === includedResource.id)
           ) {
-            included.push({
+            let rewrittenResource = cloneDeep({
               ...includedResource,
               ...{ links: { self: includedResource.id } },
             });
+            function visitURL(url: string, setURL: (newURL: string) => void) {
+              setURL(new URL(url, rewrittenResource.id).href);
+            }
+            visitInstanceURLs(rewrittenResource, visitURL);
+            visitModuleDeps(rewrittenResource, visitURL);
+            included.push(rewrittenResource);
           }
         }
       }
@@ -324,19 +332,44 @@ export class RealmIndexQueryEngine {
           id: relationshipId.href,
         };
       }
-      for (const includedResource of included) {
-        function visitURL(url: string, setURL: (newURL: string) => void) {
-          let urlObj = new URL(url, includedResource.id);
-          if (resource.id) {
-            setURL(maybeRelativeURL(urlObj, new URL(resource.id), realmURL));
-          } else {
-            setURL(urlObj.href);
-          }
-        }
-        visitInstanceURLs(includedResource, visitURL);
-        visitModuleDeps(includedResource, visitURL);
-      }
     }
     return included;
   }
+}
+
+function relativizeDocument(doc: SingleCardDocument, realmURL: URL): void {
+  let primarySelf = doc.data.links?.self ?? doc.data.id;
+  if (!primarySelf) {
+    return;
+  }
+  let primaryURL = new URL(primarySelf);
+  relativizeResource(
+    doc.data as unknown as LooseCardResource,
+    primaryURL,
+    realmURL,
+  );
+  if (doc.included) {
+    for (let resource of doc.included) {
+      relativizeResource(
+        resource as unknown as LooseCardResource,
+        primaryURL,
+        realmURL,
+      );
+    }
+  }
+}
+
+function relativizeResource(
+  resource: LooseCardResource,
+  primaryURL: URL,
+  realmURL: URL,
+) {
+  visitInstanceURLs(resource, (url, setURL) => {
+    let urlObj = new URL(url, resource.id ?? primaryURL);
+    setURL(maybeRelativeURL(urlObj, primaryURL, realmURL));
+  });
+  visitModuleDeps(resource, (moduleURL, setModuleURL) => {
+    let absoluteModuleURL = new URL(moduleURL, resource.id ?? primaryURL);
+    setModuleURL(maybeRelativeURL(absoluteModuleURL, primaryURL, realmURL));
+  });
 }

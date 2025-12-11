@@ -1,4 +1,4 @@
-import type { LooseCardResource } from 'resource-types';
+import type { LooseCardResource } from './index';
 import { RealmPaths } from './paths';
 
 export function maybeURL(

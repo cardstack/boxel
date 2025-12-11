@@ -1,4 +1,5 @@
 import { module, test } from 'qunit';
+
 import {
   type LooseCardResource,
   relativeURL,
@@ -72,6 +73,16 @@ module('Unit | url', function () {
       let result = relativeURL(
         new URL('https://example.com/a/b'),
         new URL('https://example.com/a/b'),
+        undefined,
+      );
+
+      assert.strictEqual(result, './b');
+    });
+
+    test('returns ./file when relativeTo is root', function (assert) {
+      let result = relativeURL(
+        new URL('https://example.com/b'),
+        new URL('https://example.com/'),
         undefined,
       );
 

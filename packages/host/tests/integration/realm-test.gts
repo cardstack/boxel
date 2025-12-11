@@ -36,6 +36,7 @@ import {
   contains,
   containsMany,
   linksTo,
+  linksToMany,
   Component,
   CardDef,
   StringField,
@@ -3308,6 +3309,106 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
+  });
+
+  test('included card uses correct module path when realm is mounted', async function (assert) {
+    let catalogRealmURL = 'http://localhost:4201/catalog/';
+    let spreadsheet1Id = 'spreadsheet-1';
+    let spreadsheet2Id = 'spreadsheet-2';
+
+    class Spreadsheet extends CardDef {
+      static displayName = 'Spreadsheet';
+      @field name = contains(StringField);
+    }
+
+    class CatalogIndex extends CardDef {
+      static displayName = 'CatalogIndex';
+      @field spreadsheets = linksToMany(Spreadsheet);
+    }
+
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      realmURL: catalogRealmURL,
+      contents: {
+        'spreadsheet/spreadsheet.gts': {
+          Spreadsheet,
+        },
+        'index.gts': {
+          CatalogIndex,
+        },
+        [`spreadsheet/Spreadsheet/${spreadsheet1Id}.json`]: {
+          data: {
+            attributes: {
+              name: 'Sheet 1',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../spreadsheet',
+                name: 'Spreadsheet',
+              },
+            },
+          },
+        },
+        [`spreadsheet/Spreadsheet/${spreadsheet2Id}.json`]: {
+          data: {
+            attributes: {
+              name: 'Sheet 2',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../spreadsheet',
+                name: 'Spreadsheet',
+              },
+            },
+          },
+        },
+        'index.json': {
+          data: {
+            relationships: {
+              'spreadsheets.0': {
+                links: {
+                  self: `./spreadsheet/Spreadsheet/${spreadsheet1Id}`,
+                },
+              },
+              'spreadsheets.1': {
+                links: {
+                  self: `./spreadsheet/Spreadsheet/${spreadsheet2Id}`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './index',
+                name: 'CatalogIndex',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let response = await handle(
+      realm,
+      new Request(`${catalogRealmURL}index`, {
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+      }),
+    );
+    assert.strictEqual(response.status, 200, 'successful http status');
+    let json = await response.json();
+    console.log(JSON.stringify(json, null, 2));
+    let included = json.included?.find(
+      (resource: any) =>
+        resource.id ===
+        `${catalogRealmURL}spreadsheet/Spreadsheet/${spreadsheet1Id}`,
+    );
+    assert.ok(included, 'linked spreadsheet card is included');
+    assert.strictEqual(
+      included?.meta?.adoptsFrom?.module,
+      './spreadsheet/spreadsheet',
+      'adoptsFrom.module has the correct path',
+    );
   });
 
   test('realm can serve directory requests', async function (assert) {

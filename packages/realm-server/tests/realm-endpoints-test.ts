@@ -978,7 +978,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: '/person',
+                module: '../person',
                 name: 'Person',
               },
               realmInfo: {
