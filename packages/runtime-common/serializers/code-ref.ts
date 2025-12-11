@@ -23,7 +23,12 @@ export function serialize(
   codeRef: ResolvedCodeRef | {},
   doc: any,
   _visited?: Set<string>,
-  opts?: SerializeOpts & { relativeTo?: URL; trimExecutableExtension?: true },
+  opts?: SerializeOpts & {
+    relativeTo?: URL;
+    trimExecutableExtension?: true;
+    maybeRelativeURL?: (url: string) => string;
+    allowRelative?: true;
+  },
 ): ResolvedCodeRef | {} {
   let baseURL =
     opts?.relativeTo instanceof URL
@@ -63,7 +68,11 @@ export async function deserializeAbsolute<T extends BaseDefConstructor>(
 function codeRefAdjustments(
   codeRef: any,
   relativeTo?: URL,
-  opts?: SerializeOpts & { trimExecutableExtension?: true },
+  opts?: SerializeOpts & {
+    trimExecutableExtension?: true;
+    maybeRelativeURL?: (url: string) => string;
+    allowRelative?: true;
+  },
 ) {
   if (!codeRef) {
     return {};
@@ -76,11 +85,13 @@ function codeRefAdjustments(
   }
   if (relativeTo) {
     let module = new URL(codeRef.module, relativeTo).href;
-    return {
-      module: opts?.trimExecutableExtension
-        ? trimExecutableExtension(module)
-        : module,
-    };
+    if (opts?.trimExecutableExtension) {
+      module = trimExecutableExtension(module);
+    }
+    if (opts?.allowRelative && opts?.maybeRelativeURL) {
+      module = opts.maybeRelativeURL(module);
+    }
+    return { module };
   }
   return {};
 }

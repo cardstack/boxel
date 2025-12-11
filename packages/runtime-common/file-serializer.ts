@@ -7,6 +7,7 @@ import {
 } from './index';
 import type { CardFields, Meta } from './resource-types';
 import { serialize as serializeCodeRef } from './serializers/code-ref';
+import { maybeRelativeURL as makeRelativeURL } from './url';
 
 export default function serialize({
   doc,
@@ -19,9 +20,21 @@ export default function serialize({
   relativeTo: URL;
   customFieldDefinitions?: Record<string, FieldDefinition>;
 }): LooseSingleCardDocument {
+  const realmURL = doc.data.meta?.realmURL
+    ? new URL(doc.data.meta.realmURL)
+    : undefined;
+
   const codeRefOpts = {
     relativeTo,
     trimExecutableExtension: true as true,
+  };
+  const metaCodeRefOpts = {
+    ...codeRefOpts,
+    allowRelative: true as true,
+    ...(realmURL && {
+      maybeRelativeURL: (url: string) =>
+        makeRelativeURL(new URL(url, relativeTo), relativeTo, realmURL),
+    }),
   };
 
   const result: LooseSingleCardDocument = {
@@ -35,7 +48,7 @@ export default function serialize({
       result.data.meta.adoptsFrom,
       doc,
       undefined,
-      codeRefOpts,
+      metaCodeRefOpts,
     ) as any;
   }
 
@@ -44,7 +57,7 @@ export default function serialize({
       fields: result.data.meta.fields,
       doc,
       relativeTo,
-      codeRefOpts,
+      codeRefOpts: metaCodeRefOpts,
     });
   }
 
@@ -105,7 +118,12 @@ function processAttributes({
   basePath?: string;
   doc: LooseSingleCardDocument;
   relativeTo: URL;
-  codeRefOpts: { relativeTo: URL; trimExecutableExtension: true };
+  codeRefOpts: {
+    relativeTo: URL;
+    trimExecutableExtension: true;
+    allowRelative?: true;
+    maybeRelativeURL?: (url: string) => string;
+  };
   customFieldDefinitions?: Record<string, FieldDefinition>;
 }): Record<string, any> {
   const result: Record<string, any> = {};
@@ -276,7 +294,12 @@ function processMetaFields({
   fields: CardFields;
   doc: LooseSingleCardDocument;
   relativeTo: URL;
-  codeRefOpts: { relativeTo: URL; trimExecutableExtension: true };
+  codeRefOpts: {
+    relativeTo: URL;
+    trimExecutableExtension: true;
+    allowRelative?: true;
+    maybeRelativeURL?: (url: string) => string;
+  };
 }): CardFields {
   const result: CardFields = {};
   for (const [fieldName, fieldValue] of Object.entries(fields)) {
@@ -311,7 +334,12 @@ function processMetaField({
   field: Partial<Meta>;
   doc: LooseSingleCardDocument;
   relativeTo: URL;
-  codeRefOpts: { relativeTo: URL; trimExecutableExtension: true };
+  codeRefOpts: {
+    relativeTo: URL;
+    trimExecutableExtension: true;
+    allowRelative?: true;
+    maybeRelativeURL?: (url: string) => string;
+  };
 }): Partial<Meta> {
   const result = { ...field };
   if (result.adoptsFrom && isCodeRef(result.adoptsFrom)) {
