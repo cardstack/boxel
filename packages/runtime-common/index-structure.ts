@@ -1,15 +1,17 @@
-import type { CardResource, SerializerName, CodeRef } from './index';
+import type { CardResource } from './resource-types';
 import type { SerializedError } from './error';
 import type { PgPrimitive } from './expression';
 import type { FieldType } from 'https://cardstack.com/base/card-api';
 import type { Query } from './query';
+import type { CodeRef } from './code-ref';
+import type { SerializerName } from './serializers';
 
 export interface BoxelIndexTable {
   url: string;
   file_alias: string;
   realm_version: number;
   realm_url: string;
-  type: 'instance' | 'definition' | 'module' | 'error';
+  type: 'instance' | 'module' | 'error';
   // TODO in followup PR update this to be a document not a resource
   pristine_doc: CardResource | null;
   error_doc: SerializedError | null;
@@ -19,7 +21,6 @@ export interface BoxelIndexTable {
   deps: string[] | null;
   // `types` is the adoption chain for card where each code ref is serialized
   // using `internalKeyFor()`
-  definition: Definition | null;
   types: string[] | null;
   display_names: string[] | null;
   head_html: string | null;
@@ -80,7 +81,6 @@ export const coerceTypes = Object.freeze({
   embedded_html: 'JSON',
   fitted_html: 'JSON',
   display_names: 'JSON',
-  definition: 'JSON',
   is_deleted: 'BOOLEAN',
   last_modified: 'VARCHAR',
   resource_created_at: 'VARCHAR',

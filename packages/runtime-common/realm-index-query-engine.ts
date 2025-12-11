@@ -11,9 +11,7 @@ import {
   type DBAdapter,
   type QueryOptions,
   type IndexedModuleOrError,
-  type IndexedDefinitionOrError,
   type InstanceOrError,
-  type ResolvedCodeRef,
   type DefinitionLookup,
 } from '.';
 import type { Realm } from './realm';
@@ -213,13 +211,6 @@ export class RealmIndexQueryEngine {
     opts?: Options,
   ): Promise<IndexedModuleOrError | undefined> {
     return await this.#indexQueryEngine.getModule(url, opts);
-  }
-
-  async getOwnDefinition(
-    codeRef: ResolvedCodeRef,
-    opts?: Options,
-  ): Promise<IndexedDefinitionOrError | undefined> {
-    return await this.#indexQueryEngine.getOwnDefinition(codeRef, opts);
   }
 
   async instance(

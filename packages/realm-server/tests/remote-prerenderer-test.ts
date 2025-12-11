@@ -16,6 +16,118 @@ module(basename(__filename), function (hooks) {
     delete process.env.PRERENDER_MANAGER_MAX_DELAY_MS;
   });
 
+  module('remote prerenderer payload', function () {
+    async function expectValidationFailure(
+      assert: Assert,
+      attrs: any,
+      message: RegExp,
+    ) {
+      let originalFetch = globalThis.fetch;
+      let fetchCalled = false;
+      (globalThis as any).fetch = () => {
+        fetchCalled = true;
+        throw new Error('fetch should not be called when validation fails');
+      };
+
+      try {
+        let prerenderer = createRemotePrerenderer('http://127.0.0.1:0');
+        await assert.rejects(
+          prerenderer.prerenderModule(attrs as any),
+          message,
+        );
+        assert.false(fetchCalled, 'does not hit network on validation failure');
+      } finally {
+        (globalThis as any).fetch = originalFetch;
+      }
+    }
+
+    test('sends JSON:API headers and attributes', async function (assert) {
+      let receivedHeaders: any;
+      let receivedBody: any;
+      let server = createServer((req, res) => {
+        receivedHeaders = req.headers;
+        let body: Buffer[] = [];
+        req.on('data', (chunk) => body.push(chunk));
+        req.on('end', () => {
+          receivedBody = JSON.parse(Buffer.concat(body).toString('utf-8'));
+          res.statusCode = 201;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(
+            JSON.stringify({
+              data: { attributes: { ok: true } },
+            }),
+          );
+        });
+      }).listen(0);
+
+      try {
+        let url = `http://127.0.0.1:${(server.address() as any).port}`;
+        let prerenderer = createRemotePrerenderer(url);
+
+        await prerenderer.prerenderModule({
+          realm: 'realm-1',
+          url: 'https://example.com/module',
+          auth: '{"token":"x"}',
+        });
+
+        assert.strictEqual(
+          receivedHeaders?.['content-type'],
+          'application/vnd.api+json',
+          'content-type header set',
+        );
+        assert.strictEqual(
+          receivedHeaders?.accept,
+          'application/vnd.api+json',
+          'accept header set',
+        );
+        assert.deepEqual(
+          receivedBody?.data?.attributes,
+          {
+            realm: 'realm-1',
+            url: 'https://example.com/module',
+            auth: '{"token":"x"}',
+            renderOptions: {},
+          },
+          'sends expected attributes',
+        );
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+
+    test('rejects empty realm before sending', async function (assert) {
+      await expectValidationFailure(
+        assert,
+        { realm: '', url: 'https://example.com/module', auth: '{}' },
+        /Missing prerender prerender-module-request attributes: realm/,
+      );
+    });
+
+    test('rejects empty url before sending', async function (assert) {
+      await expectValidationFailure(
+        assert,
+        { realm: 'realm', url: '', auth: '{}' },
+        /Missing prerender prerender-module-request attributes: url/,
+      );
+    });
+
+    test('rejects empty auth before sending', async function (assert) {
+      await expectValidationFailure(
+        assert,
+        { realm: 'realm', url: 'https://example.com/module', auth: '' },
+        /Missing prerender prerender-module-request attributes: auth/,
+      );
+    });
+
+    test('rejects missing auth before sending', async function (assert) {
+      await expectValidationFailure(
+        assert,
+        { realm: 'realm', url: 'https://example.com/module' },
+        /Missing prerender prerender-module-request attributes: auth/,
+      );
+    });
+  });
+
   module('remote prerenderer retries', function () {
     test('retries draining responses and succeeds', async function (assert) {
       let attempts = 0;

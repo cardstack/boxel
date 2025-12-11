@@ -3,13 +3,30 @@ import {
   identifyCard,
   primitive,
   fieldSerializer,
-  type Definition,
-  type SerializerName,
 } from './index';
-
+import type { CodeRef } from './code-ref';
+import type { SerializerName } from './serializers';
+import type { FieldType } from 'https://cardstack.com/base/card-api';
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { Query } from './query';
+
+export interface FieldDefinition {
+  type: FieldType;
+  isPrimitive: boolean;
+  isComputed: boolean;
+  fieldOrCard: CodeRef;
+  serializerName?: SerializerName;
+}
+
+export interface Definition {
+  type: 'card-def' | 'field-def';
+  codeRef: CodeRef;
+  displayName: string | null;
+  fields: {
+    [fieldName: string]: FieldDefinition;
+  };
+}
 
 // we are only recursing 3 levels deep when we see a card def that we have already encountered,
 // we capture this: Person -> bestFriend (Person) -> bestFriend (Person) -> bestFriend (Person)
