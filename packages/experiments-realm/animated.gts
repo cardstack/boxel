@@ -1,8 +1,8 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { TrackedArray } from 'tracked-built-ins';
 
 import {
   AnimatedContainer,
@@ -16,6 +16,7 @@ import move from 'ember-animated/motions/move';
 import scale from 'ember-animated/motions/scale';
 import { fadeOut } from 'ember-animated/motions/opacity';
 import fade from 'ember-animated/transitions/fade';
+import { toLeft, toRight } from 'ember-animated/transitions/move-over';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
@@ -90,17 +91,22 @@ class AnimatedEachExample extends GlimmerComponent {
     }
   }
 
-  guests = new TrackedArray([{ icon: User, id: 1 }]);
-  addGuest = () => {
-    if (this.guests?.length < 6) {
-      this.guests.push({ icon: User, id: this.guests.length + 1 });
-    }
+  @tracked guests = 1;
+
+  getGuestArray = () => {
+    return Array.from({ length: this.guests }, (_, i) => i);
   };
-  removeGuest = () => {
-    if (this.guests?.length > 1) {
-      this.guests.pop();
+
+  @action addGuest() {
+    if (this.guests < 6) {
+      this.guests++;
     }
-  };
+  }
+  @action removeGuest() {
+    if (this.guests > 1) {
+      this.guests--;
+    }
+  }
 
   <template>
     <AnimatedContainer>
@@ -113,27 +119,37 @@ class AnimatedEachExample extends GlimmerComponent {
 
     <hr />
 
-    <BoxelContainer @display='flex'>
+    <div class='flex gap-xs'>
       <p>How many guests?</p>
       <IconButton
         @icon={{CircleMinus}}
         @size='small'
-        @disabled={{lte this.guests.length 1}}
+        @disabled={{lte this.guests 1}}
         {{on 'click' this.removeGuest}}
       />
-      {{this.guests.length}}
+      {{this.guests}}
       <IconButton
         @icon={{CirclePlus}}
         @size='small'
-        @disabled={{gte this.guests.length 6}}
+        @disabled={{gte this.guests 6}}
         {{on 'click' this.addGuest}}
       />
-    </BoxelContainer>
-    <AnimatedContainer>
-      {{#animatedEach this.guests key='id' use=fade as |Guest|}}
-        <Guest.icon />
+    </div>
+    <AnimatedContainer class='flex'>
+      {{#animatedEach (this.getGuestArray) use=fade}}
+        <div><User /></div>
       {{/animatedEach}}
     </AnimatedContainer>
+
+    <style scoped>
+      .flex {
+        display: flex;
+        align-items: center;
+      }
+      .gap-xs {
+        gap: var(--boxel-sp-xs);
+      }
+    </style>
   </template>
 }
 
@@ -178,6 +194,133 @@ class AnimatedIfExample extends GlimmerComponent {
   </template>
 }
 
+class TransitionFadeExample extends GlimmerComponent {
+  <template>
+    <div class='controls'>
+      <label>
+        Show Message
+        <input
+          type='checkbox'
+          checked={{this.fadeMessage}}
+          {{on 'change' this.toggleFadeMessage}}
+        />
+      </label>
+    </div>
+
+    <div class='scenario-transitions clearfix'>
+      <AnimatedContainer>
+        {{#animatedIf this.fadeMessage use=this.transition}}
+          <div class='message'>
+            Hello
+          </div>
+        {{/animatedIf}}
+      </AnimatedContainer>
+    </div>
+
+    <style scoped>
+      .scenario-transitions {
+        display: flex;
+        margin-block-start: 2em;
+        height: 7em;
+      }
+      .scenario-transitions .message {
+        width: 7em;
+        background-color: lightblue;
+        color: white;
+        font: italic bold 16px/2 cursive;
+        box-sizing: border-box;
+        padding: 2em;
+        border-radius: 10px;
+      }
+      .scenario-transitions .selector {
+        width: 25%;
+      }
+      .scenario-transitions .h1 {
+        font: sans-serif;
+        font-style: bold;
+        background-color: blue;
+      }
+    </style>
+  </template>
+
+  transition = fade;
+
+  @tracked fadeMessage = false;
+
+  @action toggleFadeMessage() {
+    this.fadeMessage = !this.fadeMessage;
+  }
+}
+
+class TransitionMoveOverExample extends GlimmerComponent {
+  <template>
+    <div class='move-over'>
+      <label>
+        Show Hello
+        <input
+          type='checkbox'
+          checked={{this.showHello}}
+          {{on 'change' this.toggleShowHello}}
+        />
+      </label>
+
+      <AnimatedContainer>
+        {{#animatedIf this.showHello rules=this.rules}}
+          <div class='hello'>
+            Hello
+          </div>
+        {{else}}
+          <div class='goodbye'>
+            Goodbye
+          </div>
+        {{/animatedIf}}
+      </AnimatedContainer>
+    </div>
+
+    <style scoped>
+      .move-over {
+        display: flex;
+      }
+
+      .move-over > .animated-container {
+        overflow: hidden;
+      }
+
+      .move-over .hello {
+        width: 7em;
+        background-color: lightblue;
+        color: white;
+        font: italic bold 16px/2 cursive;
+        box-sizing: border-box;
+        padding: 2em;
+      }
+
+      .move-over .goodbye {
+        width: 7em;
+        background-color: darkblue;
+        color: white;
+        font: italic bold 16px/2 cursive;
+        box-sizing: border-box;
+        padding: 2em;
+      }
+    </style>
+  </template>
+
+  @tracked showHello = false;
+
+  @action toggleShowHello() {
+    this.showHello = !this.showHello;
+  }
+
+  rules({ newItems }: any) {
+    if (newItems[0]) {
+      return toRight;
+    } else {
+      return toLeft;
+    }
+  }
+}
+
 export class Animated extends CardDef {
   static displayName = 'animated';
 
@@ -189,6 +332,10 @@ export class Animated extends CardDef {
         <AnimatedIfExample />
         <hr />
         <AnimatedBeaconExample />
+        <hr />
+        <TransitionFadeExample />
+        <hr />
+        <TransitionMoveOverExample />
       </BoxelContainer>
 
       <style scoped>
