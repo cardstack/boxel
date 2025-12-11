@@ -46,148 +46,149 @@ module('Integration | card-catalog', function (hooks) {
     async build({ loader }) {
       let loaderService = getService('loader-service');
       loaderService.loader = loader;
+      let cardApi: typeof import('https://cardstack.com/base/card-api');
+      let string: typeof import('https://cardstack.com/base/string');
+      let textArea: typeof import('https://cardstack.com/base/text-area');
+      let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
+      let spec: typeof import('https://cardstack.com/base/spec');
+      cardApi = await loader.import(`${baseRealm.url}card-api`);
+      string = await loader.import(`${baseRealm.url}string`);
+      textArea = await loader.import(`${baseRealm.url}text-area`);
+      cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
+      spec = await loader.import(`${baseRealm.url}spec`);
+
+      let { field, contains, linksTo, CardDef, FieldDef } = cardApi;
+      let { default: StringField } = string;
+      let { default: TextAreaField } = textArea;
+      let { CardsGrid } = cardsGrid;
+      let { Spec } = spec;
+
+      class Author extends CardDef {
+        static displayName = 'Author';
+        @field firstName = contains(StringField);
+        @field lastName = contains(StringField);
+      }
+
+      class Person extends CardDef {
+        static displayName = 'Person';
+        @field firstName = contains(StringField);
+        @field lastName = contains(StringField);
+      }
+
+      class Pet extends CardDef {
+        static displayName = 'Pet';
+        @field firstName = contains(StringField);
+      }
+
+      class Tree extends CardDef {
+        static displayName = 'Tree';
+        @field species = contains(StringField);
+      }
+
+      class BlogPost extends CardDef {
+        static displayName = 'Blog Post';
+        @field title = contains(StringField);
+        @field body = contains(TextAreaField);
+        @field authorBio = linksTo(Author);
+      }
+
+      class Address extends FieldDef {
+        static displayName = 'Address';
+        @field street = contains(StringField);
+        @field city = contains(StringField);
+        @field state = contains(StringField);
+        @field zip = contains(StringField);
+      }
+
+      class PublishingPacket extends CardDef {
+        static displayName = 'Publishing Packet';
+        @field blogPost = linksTo(BlogPost);
+      }
+
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'blog-post.gts': { BlogPost },
+          'address.gts': { Address },
+          'author.gts': { Author },
+          'person.gts': { Person },
+          'pet.gts': { Pet },
+          'tree.gts': { Tree },
+          'publishing-packet.gts': { PublishingPacket },
+          '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
+          'index.json': new CardsGrid(),
+          'Spec/publishing-packet.json': new Spec({
+            title: 'Publishing Packet',
+            description: 'Spec for PublishingPacket',
+            specType: 'card',
+            ref: {
+              module: `${testRealmURL}publishing-packet`,
+              name: 'PublishingPacket',
+            },
+          }),
+          'Spec/author.json': new Spec({
+            title: 'Author',
+            description: 'Spec for Author',
+            specType: 'card',
+            ref: {
+              module: `${testRealmURL}author`,
+              name: 'Author',
+            },
+          }),
+          'Spec/person.json': new Spec({
+            title: 'Person',
+            description: 'Spec for Person',
+            specType: 'card',
+            ref: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          }),
+          'Spec/pet.json': new Spec({
+            title: 'Pet',
+            description: 'Spec for Pet',
+            specType: 'card',
+            ref: {
+              module: `${testRealmURL}pet`,
+              name: 'Pet',
+            },
+          }),
+          'Spec/tree.json': new Spec({
+            title: 'Tree',
+            description: 'Spec for Tree',
+            specType: 'card',
+            ref: {
+              module: `${testRealmURL}tree`,
+              name: 'Tree',
+            },
+          }),
+          'Spec/blog-post.json': new Spec({
+            title: 'BlogPost',
+            description: 'Spec for BlogPost',
+            specType: 'card',
+            ref: {
+              module: `${testRealmURL}blog-post`,
+              name: 'BlogPost',
+            },
+          }),
+          'Spec/address.json': new Spec({
+            title: 'Address',
+            description: 'Spec for Address field',
+            specType: 'field',
+            ref: {
+              module: `${testRealmURL}address`,
+              name: 'Address',
+            },
+          }),
+        },
+        loader,
+      });
       return { loader };
     },
   });
 
   hooks.beforeEach(async function () {
     let { loader } = snapshot.get();
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    let textArea: typeof import('https://cardstack.com/base/text-area');
-    let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-    let spec: typeof import('https://cardstack.com/base/spec');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    textArea = await loader.import(`${baseRealm.url}text-area`);
-    cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
-    spec = await loader.import(`${baseRealm.url}spec`);
-
-    let { field, contains, linksTo, CardDef, FieldDef } = cardApi;
-    let { default: StringField } = string;
-    let { default: TextAreaField } = textArea;
-    let { CardsGrid } = cardsGrid;
-    let { Spec } = spec;
-
-    class Author extends CardDef {
-      static displayName = 'Author';
-      @field firstName = contains(StringField);
-      @field lastName = contains(StringField);
-    }
-
-    class Person extends CardDef {
-      static displayName = 'Person';
-      @field firstName = contains(StringField);
-      @field lastName = contains(StringField);
-    }
-
-    class Pet extends CardDef {
-      static displayName = 'Pet';
-      @field firstName = contains(StringField);
-    }
-
-    class Tree extends CardDef {
-      static displayName = 'Tree';
-      @field species = contains(StringField);
-    }
-
-    class BlogPost extends CardDef {
-      static displayName = 'Blog Post';
-      @field title = contains(StringField);
-      @field body = contains(TextAreaField);
-      @field authorBio = linksTo(Author);
-    }
-
-    class Address extends FieldDef {
-      static displayName = 'Address';
-      @field street = contains(StringField);
-      @field city = contains(StringField);
-      @field state = contains(StringField);
-      @field zip = contains(StringField);
-    }
-
-    class PublishingPacket extends CardDef {
-      static displayName = 'Publishing Packet';
-      @field blogPost = linksTo(BlogPost);
-    }
-
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'blog-post.gts': { BlogPost },
-        'address.gts': { Address },
-        'author.gts': { Author },
-        'person.gts': { Person },
-        'pet.gts': { Pet },
-        'tree.gts': { Tree },
-        'publishing-packet.gts': { PublishingPacket },
-        '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
-        'index.json': new CardsGrid(),
-        'Spec/publishing-packet.json': new Spec({
-          title: 'Publishing Packet',
-          description: 'Spec for PublishingPacket',
-          specType: 'card',
-          ref: {
-            module: `${testRealmURL}publishing-packet`,
-            name: 'PublishingPacket',
-          },
-        }),
-        'Spec/author.json': new Spec({
-          title: 'Author',
-          description: 'Spec for Author',
-          specType: 'card',
-          ref: {
-            module: `${testRealmURL}author`,
-            name: 'Author',
-          },
-        }),
-        'Spec/person.json': new Spec({
-          title: 'Person',
-          description: 'Spec for Person',
-          specType: 'card',
-          ref: {
-            module: `${testRealmURL}person`,
-            name: 'Person',
-          },
-        }),
-        'Spec/pet.json': new Spec({
-          title: 'Pet',
-          description: 'Spec for Pet',
-          specType: 'card',
-          ref: {
-            module: `${testRealmURL}pet`,
-            name: 'Pet',
-          },
-        }),
-        'Spec/tree.json': new Spec({
-          title: 'Tree',
-          description: 'Spec for Tree',
-          specType: 'card',
-          ref: {
-            module: `${testRealmURL}tree`,
-            name: 'Tree',
-          },
-        }),
-        'Spec/blog-post.json': new Spec({
-          title: 'BlogPost',
-          description: 'Spec for BlogPost',
-          specType: 'card',
-          ref: {
-            module: `${testRealmURL}blog-post`,
-            name: 'BlogPost',
-          },
-        }),
-        'Spec/address.json': new Spec({
-          title: 'Address',
-          description: 'Spec for Address field',
-          specType: 'field',
-          ref: {
-            module: `${testRealmURL}address`,
-            name: 'Address',
-          },
-        }),
-      },
-    });
 
     let operatorModeStateService = getService('operator-mode-state-service');
 

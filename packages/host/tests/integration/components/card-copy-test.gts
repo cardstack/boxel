@@ -60,6 +60,7 @@ module('Integration | card-copy', function (hooks) {
 
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
+  setupLocalIndexing(hooks);
 
   let loggedInAs = '@testuser:localhost';
 
@@ -85,120 +86,210 @@ module('Integration | card-copy', function (hooks) {
     async build({ loader }) {
       let loaderService = getService('loader-service');
       loaderService.loader = loader;
-      return { loader };
-    },
-  });
-  hooks.beforeEach(function () {
-    ({ loader } = snapshot.get());
-  });
-  setupLocalIndexing(hooks);
-  setupOnSave(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
-  );
+      setCardInOperatorModeState = async (
+        leftCards: string[],
+        rightCards: string[] = [],
+      ) => {
+        let operatorModeStateService = getService(
+          'operator-mode-state-service',
+        );
 
-  hooks.beforeEach(async function () {
-    setCardInOperatorModeState = async (
-      leftCards: string[],
-      rightCards: string[] = [],
-    ) => {
-      let operatorModeStateService = getService('operator-mode-state-service');
-
-      let stacks = [
-        leftCards.map((url) => ({
-          type: 'card' as const,
-          id: url,
-          format: 'isolated' as const,
-        })),
-        rightCards.map((url) => ({
-          type: 'card' as const,
-          id: url,
-          format: 'isolated' as const,
-        })),
-      ].filter((a) => a.length > 0);
-      operatorModeStateService.restore({ stacks });
-    };
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-
-    let { field, contains, linksTo, CardDef, Component } = cardApi;
-    let { default: StringField } = string;
-
-    class Pet extends CardDef {
-      static displayName = 'Pet';
-      @field firstName = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia: function (this: Pet) {
-          return this.firstName;
-        },
-      });
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <h2 data-test-pet={{@model.firstName}}><@fields.firstName /></h2>
-        </template>
+        let stacks = [
+          leftCards.map((url) => ({
+            type: 'card' as const,
+            id: url,
+            format: 'isolated' as const,
+          })),
+          rightCards.map((url) => ({
+            type: 'card' as const,
+            id: url,
+            format: 'isolated' as const,
+          })),
+        ].filter((a) => a.length > 0);
+        operatorModeStateService.restore({ stacks });
       };
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <h3 data-test-pet={{@model.firstName}}><@fields.firstName /></h3>
-        </template>
-      };
-    }
+      let cardApi: typeof import('https://cardstack.com/base/card-api');
+      let string: typeof import('https://cardstack.com/base/string');
+      cardApi = await loader.import(`${baseRealm.url}card-api`);
+      string = await loader.import(`${baseRealm.url}string`);
 
-    class Person extends CardDef {
-      static displayName = 'Person';
-      @field firstName = contains(StringField);
-      @field pet = linksTo(Pet);
-      @field title = contains(StringField, {
-        computeVia: function (this: Person) {
-          return this.firstName;
-        },
-      });
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <h2 data-test-person={{@model.firstName}}><@fields.firstName /></h2>
-          <div class='pet-container'>
-            <@fields.pet />
-          </div>
-          <style scoped>
-            .pet-container {
-              height: 80px;
-              padding: 10px;
-            }
-          </style>
-        </template>
-      };
-    }
+      let { field, contains, linksTo, CardDef, Component } = cardApi;
+      let { default: StringField } = string;
 
-    ({ realm: realm1 } = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'person.gts': { Person },
-        'pet.gts': { Pet },
-        'index.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
+      class Pet extends CardDef {
+        static displayName = 'Pet';
+        @field firstName = contains(StringField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Pet) {
+            return this.firstName;
+          },
+        });
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h2 data-test-pet={{@model.firstName}}><@fields.firstName /></h2>
+          </template>
+        };
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <h3 data-test-pet={{@model.firstName}}><@fields.firstName /></h3>
+          </template>
+        };
+      }
+
+      class Person extends CardDef {
+        static displayName = 'Person';
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+        @field title = contains(StringField, {
+          computeVia: function (this: Person) {
+            return this.firstName;
+          },
+        });
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h2 data-test-person={{@model.firstName}}><@fields.firstName /></h2>
+            <div class='pet-container'>
+              <@fields.pet />
+            </div>
+            <style scoped>
+              .pet-container {
+                height: 80px;
+                padding: 10px;
+              }
+            </style>
+          </template>
+        };
+      }
+
+      ({ realm: realm1 } = await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'person.gts': { Person },
+          'pet.gts': { Pet },
+          'index.json': {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/cards-grid',
+                  name: 'CardsGrid',
+                },
               },
             },
           },
+          'Person/hassan.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Hassan',
+              },
+              relationships: {
+                pet: {
+                  links: {
+                    self: '../Pet/mango',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `../person`,
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          'Pet/mango.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Mango',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'Pet/vangogh.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          '.realm.json': {
+            name: 'Test Workspace 1',
+            backgroundURL:
+              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          },
         },
-        'Person/hassan.json': {
+        loader,
+      }));
+
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealm2URL,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.json': {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/cards-grid',
+                  name: 'CardsGrid',
+                },
+              },
+            },
+          },
+          'Pet/paper.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Paper',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          '.realm.json': {
+            name: 'Test Workspace 2',
+            backgroundURL:
+              'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
+            iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+          },
+        },
+        loader,
+      });
+
+      // write in the new record last because it's link didn't exist until realm2 was created
+      await realm1.write(
+        'Person/sakura.json',
+        JSON.stringify({
           data: {
             type: 'card',
             attributes: {
-              firstName: 'Hassan',
+              firstName: 'Sakura',
             },
             relationships: {
               pet: {
                 links: {
-                  self: '../Pet/mango',
+                  self: `${testRealm2URL}Pet/paper`,
                 },
               },
             },
@@ -209,109 +300,21 @@ module('Integration | card-copy', function (hooks) {
               },
             },
           },
-        },
-        'Pet/mango.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Pet/vangogh.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Van Gogh',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        '.realm.json': {
-          name: 'Test Workspace 1',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
-      },
-    }));
-
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      realmURL: testRealm2URL,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
-              },
-            },
-          },
-        },
-        'Pet/paper.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Paper',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        '.realm.json': {
-          name: 'Test Workspace 2',
-          backgroundURL:
-            'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
-          iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
-        },
-      },
-    });
-
-    // write in the new record last because it's link didn't exist until realm2 was created
-    await realm1.write(
-      'Person/sakura.json',
-      JSON.stringify({
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Sakura',
-          },
-          relationships: {
-            pet: {
-              links: {
-                self: `${testRealm2URL}Pet/paper`,
-              },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `../person`,
-              name: 'Person',
-            },
-          },
-        },
-      } as LooseSingleCardDocument),
-    );
+        } as LooseSingleCardDocument),
+      );
+      return { loader };
+    },
   });
+  hooks.beforeEach(function () {
+    ({ loader } = snapshot.get());
+  });
+  setupOnSave(hooks);
+  setupCardLogs(
+    hooks,
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
+  );
+
+  hooks.beforeEach(async function () {});
 
   test('copy button does not appear when there is 1 stack for single card item', async function (assert) {
     await setCardInOperatorModeState([

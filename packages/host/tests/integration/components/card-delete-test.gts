@@ -11,8 +11,6 @@ import { Realm } from '@cardstack/runtime-common/realm';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import { CardDef } from 'https://cardstack.com/base/card-api';
-
 import {
   testRealmURL,
   testModuleRealm,
@@ -29,18 +27,41 @@ import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 let loader: Loader;
-let cardApi: typeof import('https://cardstack.com/base/card-api');
-let setCardInOperatorModeState: (
+import {
+  createFromSerialized,
+  field,
+  contains,
+  CardDef,
+  Component,
+  StringField,
+} from '../../helpers/base-realm';
+
+async function setCardInOperatorModeState(
   leftCards: string[],
-  rightCards?: string[],
-) => void;
+  rightCards: string[] = [],
+) {
+  let operatorModeStateService = getService('operator-mode-state-service');
+
+  let stacks = [
+    leftCards.map((url) => ({
+      type: 'card' as const,
+      id: url,
+      format: 'isolated' as const,
+    })),
+    rightCards.map((url) => ({
+      type: 'card' as const,
+      id: url,
+      format: 'isolated' as const,
+    })),
+  ].filter((a) => a.length > 0);
+  operatorModeStateService.restore({ stacks });
+}
 
 module('Integration | card-delete', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
   let noop = () => {};
   async function loadCard(url: string): Promise<CardDef> {
-    let { createFromSerialized } = cardApi;
     let result = await realm.realmIndexQueryEngine.cardDocument(new URL(url));
     if (!result || result.type === 'error') {
       throw new Error(
@@ -57,6 +78,7 @@ module('Integration | card-delete', function (hooks) {
     return card;
   }
   setupRenderingTest(hooks);
+  setupLocalIndexing(hooks);
   setupOperatorModeStateCleanup(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -74,120 +96,87 @@ module('Integration | card-delete', function (hooks) {
     async build({ loader }) {
       let loaderService = getService('loader-service');
       loaderService.loader = loader;
+
+      class Pet extends CardDef {
+        static displayName = 'Pet';
+        @field firstName = contains(StringField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Pet) {
+            return this.firstName;
+          },
+        });
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h2 data-test-pet={{@model.firstName}}><@fields.firstName /></h2>
+          </template>
+        };
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <h3 data-test-pet={{@model.firstName}}><@fields.firstName /></h3>
+          </template>
+        };
+      }
+      ({ realm, adapter } = await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'pet.gts': { Pet },
+          'index.json': {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/cards-grid',
+                  name: 'CardsGrid',
+                },
+              },
+            },
+          },
+          'Pet/mango.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Mango',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'Pet/vangogh.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          '.realm.json': {
+            name: 'Test Workspace 1',
+            backgroundURL:
+              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          },
+        },
+        loader,
+      }));
       return { loader };
     },
   });
-  hooks.beforeEach(async function () {
-    ({ loader } = snapshot.get());
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-  });
-  setupLocalIndexing(hooks);
+
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
     async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
   );
-
-  hooks.beforeEach(async function () {
-    setCardInOperatorModeState = (
-      leftCards: string[],
-      rightCards: string[] = [],
-    ) => {
-      let operatorModeStateService = getService('operator-mode-state-service');
-
-      let stacks = [
-        leftCards.map((url) => ({
-          type: 'card' as const,
-          id: url,
-          format: 'isolated' as const,
-        })),
-        rightCards.map((url) => ({
-          type: 'card' as const,
-          id: url,
-          format: 'isolated' as const,
-        })),
-      ].filter((a) => a.length > 0);
-      operatorModeStateService.restore({ stacks });
-    };
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-
-    let { field, contains, CardDef, Component } = cardApi;
-    let { default: StringField } = string;
-
-    class Pet extends CardDef {
-      static displayName = 'Pet';
-      @field firstName = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia: function (this: Pet) {
-          return this.firstName;
-        },
-      });
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <h2 data-test-pet={{@model.firstName}}><@fields.firstName /></h2>
-        </template>
-      };
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <h3 data-test-pet={{@model.firstName}}><@fields.firstName /></h3>
-        </template>
-      };
-    }
-    ({ realm, adapter } = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'pet.gts': { Pet },
-        'index.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
-              },
-            },
-          },
-        },
-        'Pet/mango.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Pet/vangogh.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Van Gogh',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        '.realm.json': {
-          name: 'Test Workspace 1',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
-      },
-    }));
-  });
 
   test('can delete a card from the index card stack item', async function (assert) {
     setCardInOperatorModeState([`${testRealmURL}index`]);

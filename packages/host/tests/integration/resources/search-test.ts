@@ -302,7 +302,6 @@ module(`Integration | search resource`, function (hooks) {
     },
   });
 
-  let loader: Loader;
   let loaderService: LoaderService;
   let storeService: StoreService;
   let realm: Realm;

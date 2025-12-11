@@ -26,25 +26,28 @@ module('Integration | number field configuration', function (hooks) {
 
   let snapshot = setupSnapshotRealm<{
     loader: Loader;
-    CatalogNumberFieldClass: any;
   }>(hooks, {
     mockMatrixUtils,
     async build({ loader }) {
       let loaderService = getService('loader-service');
       loaderService.loader = loader;
+      // do the load here too so it's cached
       const numberModule: any = await loader.import(
         `${catalogRealmURL}fields/number`,
       );
 
       return {
         loader,
-        CatalogNumberFieldClass: numberModule.default,
       };
     },
   });
 
   hooks.beforeEach(function () {
-    ({ loader, CatalogNumberFieldClass } = snapshot.get());
+    ({ loader } = snapshot.get());
+    const numberModule: any = await loader.import(
+        `${catalogRealmURL}fields/number`,
+      );
+    CatalogNumberFieldClass = numberModule.default;
   });
 
   async function renderConfiguredField(
