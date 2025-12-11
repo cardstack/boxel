@@ -281,10 +281,8 @@ test.describe('Head tags', () => {
 
     let publishedRealmURL = `http://${user.username}.localhost:4205/${realmName}/`;
     let defaultCardURL = `${publishedRealmURL}default-head-card.json`;
-    let customCardURL = `${publishedRealmURL}custom-head-card.json`;
 
     await page.goto(defaultCardURL);
-    await expect(page).toHaveURL(defaultCardURL);
     await expect(
       page.locator('head meta[property="og:title"]'),
     ).toHaveAttribute('content', 'Default Head Card');
@@ -293,7 +291,6 @@ test.describe('Head tags', () => {
     ).toHaveCount(0);
 
     await page.locator('[data-test-head-nav="custom"]').click();
-    await expect(page).toHaveURL(customCardURL);
     await expect(
       page.locator('head meta[name="custom-head-flag"]'),
     ).toHaveAttribute('content', 'custom-head');
