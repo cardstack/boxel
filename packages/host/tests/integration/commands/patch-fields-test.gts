@@ -4,6 +4,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import PatchFieldsCommand from '@cardstack/host/commands/patch-fields';
+import { baseRealm } from '@cardstack/runtime-common';
 import type CommandService from '@cardstack/host/services/command-service';
 import type StoreService from '@cardstack/host/services/store';
 
@@ -36,13 +37,19 @@ module('Integration | Command | patch-fields', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  let commandService: CommandService;
+  let store: StoreService;
+  let AuthorDef: any;
+  let BookDef: any;
+
   let mockMatrixUtils = setupMockMatrix(hooks, { autostart: true });
   let snapshot = setupSnapshotRealm(hooks, {
     mockMatrixUtils,
     async build({ loader }) {
       let loaderService = getService('loader-service');
       loaderService.loader = loader;
-      let commandService = getService('command-service');
+
+      await loader.import(`${baseRealm.url}command`);
 
       class Coordinates extends FieldDef {
         @field latitude = contains(NumberField);
@@ -112,6 +119,9 @@ module('Integration | Command | patch-fields', function (hooks) {
       });
       johnTheAuthor.address.country = usa;
 
+      AuthorDef = Author;
+      BookDef = Book;
+
       await setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
@@ -149,22 +159,13 @@ module('Integration | Command | patch-fields', function (hooks) {
         },
         loader,
       });
-      return {
-        commandService,
-        AuthorDef: Author,
-        BookDef: Book,
-        store: getService('store'),
-      };
+      return {};
     },
   });
 
-  let commandService: CommandService;
-  let AuthorDef: typeof CardDef;
-  let BookDef: typeof CardDef;
-  let store: StoreService;
-
   hooks.beforeEach(function () {
-    ({ commandService, AuthorDef, BookDef, store } = snapshot.get());
+    commandService = getService('command-service');
+    store = getService('store');
   });
 
   module('Optimistic persistence behavior', function () {

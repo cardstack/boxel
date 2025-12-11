@@ -34,13 +34,6 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
-class Person extends CardDef {
-  @field name = contains(StringField);
-  @field nickNames = containsMany(StringField);
-  @field bestFriend = linksTo(() => Person);
-  @field friends = linksToMany(() => Person);
-}
-
 module('Integration | commands | patch-instance', function (hooks) {
   setupRenderingTest(hooks);
 
@@ -48,11 +41,22 @@ module('Integration | commands | patch-instance', function (hooks) {
   setupOnSave(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, { autostart: true });
   let commandService: CommandService;
+  let indexQuery: RealmIndexQueryEngine;
+  let PersonDef: any;
   let snapshot = setupSnapshotRealm(hooks, {
     mockMatrixUtils,
     async build({ loader }) {
       let loaderService = getService('loader-service');
       loaderService.loader = loader;
+
+      class Person extends CardDef {
+        @field name = contains(StringField);
+        @field nickNames = containsMany(StringField);
+        @field bestFriend = linksTo(() => Person);
+        @field friends = linksToMany(() => Person);
+      }
+
+      PersonDef = Person;
 
       let { realm } = await setupIntegrationTestRealm({
         mockMatrixUtils,
@@ -65,19 +69,21 @@ module('Integration | commands | patch-instance', function (hooks) {
         },
         loader,
       });
-      return {};
+      return { realm };
     },
   });
 
   hooks.beforeEach(function () {
     commandService = getService('command-service');
+    let { realm } = snapshot.get();
+    indexQuery = realm.realmIndexQueryEngine;
   });
 
   test<TestContextWithSave>('can patch a contains field', async function (assert) {
     let patchInstanceCommand = new PatchCardInstanceCommand(
       commandService.commandContext,
       {
-        cardType: Person,
+        cardType: PersonDef,
       },
     );
     let url = new URL(`${testRealmURL}Person/hassan`);
@@ -144,7 +150,7 @@ module('Integration | commands | patch-instance', function (hooks) {
     let patchInstanceCommand = new PatchCardInstanceCommand(
       commandService.commandContext,
       {
-        cardType: Person,
+        cardType: PersonDef,
       },
     );
     let url = new URL(`${testRealmURL}Person/hassan`);
@@ -211,7 +217,7 @@ module('Integration | commands | patch-instance', function (hooks) {
     let patchInstanceCommand = new PatchCardInstanceCommand(
       commandService.commandContext,
       {
-        cardType: Person,
+        cardType: PersonDef,
       },
     );
     let url = new URL(`${testRealmURL}Person/hassan`);
@@ -278,7 +284,7 @@ module('Integration | commands | patch-instance', function (hooks) {
     let patchInstanceCommand = new PatchCardInstanceCommand(
       commandService.commandContext,
       {
-        cardType: Person,
+        cardType: PersonDef,
       },
     );
     let url = new URL(`${testRealmURL}Person/hassan`);
@@ -347,7 +353,7 @@ module('Integration | commands | patch-instance', function (hooks) {
     let patchInstanceCommand = new PatchCardInstanceCommand(
       commandService.commandContext,
       {
-        cardType: Person,
+        cardType: PersonDef,
       },
     );
 
@@ -432,7 +438,7 @@ module('Integration | commands | patch-instance', function (hooks) {
     let patchInstanceCommand = new PatchCardInstanceCommand(
       commandService.commandContext,
       {
-        cardType: Person,
+        cardType: PersonDef,
       },
     );
     await patchInstanceCommand.execute({
