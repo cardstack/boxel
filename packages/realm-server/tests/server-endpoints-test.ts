@@ -1277,8 +1277,6 @@ module(basename(__filename), function () {
               instanceErrors: 0,
               modulesIndexed: 0,
               instancesIndexed: 1,
-              definitionErrors: 0,
-              definitionsIndexed: 0,
               totalIndexEntries: 1,
             });
           }

@@ -286,6 +286,8 @@ export async function startServer({
     `--toUrl='http://localhost:4205/base/'`,
   ]);
 
+  console.log(`realm server database: ${testDBName}`);
+
   let realmServer = spawn('ts-node', serverArgs, {
     cwd: realmServerDir,
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],

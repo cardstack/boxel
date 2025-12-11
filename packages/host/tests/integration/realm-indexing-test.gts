@@ -206,9 +206,7 @@ module(`Integration | realm indexing`, function (hooks) {
         instancesIndexed: 2,
         moduleErrors: 0,
         modulesIndexed: 1,
-        definitionErrors: 0,
-        definitionsIndexed: 1,
-        totalIndexEntries: 4,
+        totalIndexEntries: 3,
       },
       'indexer stats are correct',
     );
@@ -233,16 +231,6 @@ module(`Integration | realm indexing`, function (hooks) {
       } as LooseSingleCardDocument),
     );
 
-    let definitionEntry = await realm.realmIndexQueryEngine.getOwnDefinition({
-      module: `${testRealmURL}pet`,
-      name: 'Pet',
-    });
-    assert.strictEqual(
-      definitionEntry?.type,
-      'definition',
-      'definition entry exists',
-    );
-
     await realm.fullIndex();
 
     assert.deepEqual(
@@ -252,23 +240,9 @@ module(`Integration | realm indexing`, function (hooks) {
         instancesIndexed: 1,
         moduleErrors: 0,
         modulesIndexed: 0,
-        definitionErrors: 0,
-        definitionsIndexed: 0,
-        totalIndexEntries: 4,
+        totalIndexEntries: 3,
       },
       'indexer stats are correct',
-    );
-
-    // meta entries are notional so we want to make sure they didn't
-    // get tombstoned because the file wasn't found
-    definitionEntry = await realm.realmIndexQueryEngine.getOwnDefinition({
-      module: `${testRealmURL}pet`,
-      name: 'Pet',
-    });
-    assert.strictEqual(
-      definitionEntry?.type,
-      'definition',
-      'definition entry exists',
     );
   });
 
@@ -3569,8 +3543,6 @@ module(`Integration | realm indexing`, function (hooks) {
         instancesIndexed: 3,
         moduleErrors: 0,
         modulesIndexed: 0,
-        definitionErrors: 0,
-        definitionsIndexed: 0,
         totalIndexEntries: 3,
       },
       'instances are indexed without error',
