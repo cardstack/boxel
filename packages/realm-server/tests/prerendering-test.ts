@@ -145,15 +145,12 @@ module(basename(__filename), function () {
             },
             'rsvp-rejects.gts': `
               import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import * as RSVP from 'rsvp';
               export class RsvpRejects extends CardDef {
                 static isolated = class extends Component<typeof this> {
                   constructor(...args) {
                     super(...args);
-                    let rsvp = (globalThis as any).RSVP;
-                    if (!rsvp?.reject) {
-                      throw new Error('RSVP.reject is required for this test');
-                    }
-                    rsvp.reject(new Error('rsvp boom'));
+                    RSVP.reject(new Error('rsvp boom'));
                   }
                   <template>oops</template>
                 }
