@@ -59,6 +59,10 @@ export class RenderRunner {
     return pageInfo;
   }
 
+  clearAuthCache(realm: string) {
+    this.#lastAuthByRealm.delete(realm);
+  }
+
   async prerenderCardAttempt({
     realm,
     url,
