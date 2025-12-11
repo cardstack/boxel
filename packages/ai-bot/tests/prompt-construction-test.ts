@@ -4454,12 +4454,14 @@ new
     // Find the system message
     const systemMessage = result.find((msg) => msg.role === 'system');
     assert.ok(systemMessage, 'Should have a system message');
+
+    const content = systemMessage.content;
     assert.ok(
-      Array.isArray(systemMessage!.content),
+      Array.isArray(content),
       'System message content should be an array',
     );
 
-    const contentParts = systemMessage!.content as TextContent[];
+    const contentParts = content as TextContent[];
     assert.true(
       contentParts.length > 1,
       'Should have multiple system message parts',
