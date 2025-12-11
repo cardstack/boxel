@@ -291,6 +291,7 @@ test.describe('Head tags', () => {
     let customCardURL = `${publishedRealmURL}custom-head-card`;
 
     await page.goto(defaultCardURL);
+    await page.pause();
     await expect(page).toHaveURL(defaultCardURL);
     await expect(
       page.locator('head meta[property="og:title"]'),
