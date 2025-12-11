@@ -591,7 +591,7 @@ export class IndexRunner {
           }
           let fallback = new CardError(
             (err as Error)?.message ?? 'unknown render error',
-            { status: (err as CardError)?.status ?? 500 },
+            { status: 500 },
           );
           fallback.stack = (err as Error)?.stack;
           return { type: 'error', error: serializableError(fallback) };
