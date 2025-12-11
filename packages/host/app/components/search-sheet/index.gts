@@ -25,7 +25,7 @@ import { IconSearch } from '@cardstack/boxel-ui/icons';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
-import RealmServerService from '@cardstack/host/services/realm-server';
+import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import CardQueryResults from './card-query-results';
 import CardURLResults from './card-url-results';

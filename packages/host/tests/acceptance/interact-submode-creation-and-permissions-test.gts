@@ -13,11 +13,8 @@ import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
-import {
-  Deferred,
-  SingleCardDocument,
-  isLocalId,
-} from '@cardstack/runtime-common';
+import type { SingleCardDocument } from '@cardstack/runtime-common';
+import { Deferred, isLocalId } from '@cardstack/runtime-common';
 
 import { claimsFromRawToken } from '@cardstack/host/services/realm';
 import { RecentCards } from '@cardstack/host/utils/local-storage-keys';

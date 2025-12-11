@@ -3,11 +3,11 @@ import Component from '@glimmer/component';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
-import { type CodeRef } from '@cardstack/runtime-common/code-ref';
-import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
+import type { CodeRef } from '@cardstack/runtime-common/code-ref';
+import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import CardSchemaEditor from '@cardstack/host/components/operator-mode/card-schema-editor';
-import { CardInheritance } from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
+import type { CardInheritance } from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
 import { Divider } from '@cardstack/host/components/operator-mode/definition-container';
 
 import { stripFileExtension } from '@cardstack/host/lib/utils';

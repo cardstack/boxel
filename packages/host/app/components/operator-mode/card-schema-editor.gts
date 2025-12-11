@@ -20,7 +20,7 @@ import { ArrowTopLeft, IconLink, IconPlus } from '@cardstack/boxel-ui/icons';
 
 import { getPlural } from '@cardstack/runtime-common';
 
-import { type CodeRef } from '@cardstack/runtime-common/code-ref';
+import type { CodeRef } from '@cardstack/runtime-common/code-ref';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import EditFieldModal from '@cardstack/host/components/operator-mode/edit-field-modal';
@@ -37,8 +37,8 @@ import {
 } from '@cardstack/host/services/card-type-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import RealmService from '@cardstack/host/services/realm';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type RealmService from '@cardstack/host/services/realm';
 import {
   isOwnField,
   calculateTotalOwnFields,

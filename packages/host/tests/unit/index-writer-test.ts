@@ -26,6 +26,7 @@ import {
   testRealmURL,
   setupIndex,
   makeRenderer,
+  createPrerenderAuth,
 } from '../helpers';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -65,6 +66,7 @@ module('Unit | index-writer', function (hooks) {
       adapter,
       localIndexer.prerenderer,
       virtualNetwork,
+      createPrerenderAuth,
     );
 
     definitionLookup.registerRealm({

@@ -1,10 +1,6 @@
 /* eslint-disable no-irregular-whitespace */
-import {
-  waitFor,
-  waitUntil,
-  click,
-  RenderingTestContext,
-} from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
+import { waitFor, waitUntil, click } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
@@ -19,7 +15,7 @@ import {
   SEPARATOR_MARKER,
   baseRealm,
 } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 

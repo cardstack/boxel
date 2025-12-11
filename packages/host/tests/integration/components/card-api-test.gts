@@ -1,5 +1,5 @@
 import { action } from '@ember/object';
-import { RenderingTestContext } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { fillIn } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
@@ -16,7 +16,6 @@ import { CardContextName } from '@cardstack/runtime-common';
 import { getSearch } from '@cardstack/host/resources/search';
 
 import {
-  CardDocFiles,
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
@@ -32,6 +31,8 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDocFiles } from '../../helpers';
 
 interface CardContextProviderSignature {
   Args: {};

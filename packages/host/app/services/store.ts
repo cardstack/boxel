@@ -244,6 +244,9 @@ export default class StoreService extends Service implements StoreInterface {
     opts?: CreateOptions,
   ): Promise<string | CardErrorJSONAPI> {
     return await this.withTestWaiters(async () => {
+      if (opts?.realm) {
+        doc.data.meta = { ...(doc.data.meta ?? {}), realmURL: opts.realm };
+      }
       let cardOrError = await this.getInstance({
         idOrDoc: doc,
         relativeTo: opts?.relativeTo,

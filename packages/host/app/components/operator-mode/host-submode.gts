@@ -25,8 +25,8 @@ import PublishingRealmPopover from '@cardstack/host/components/operator-mode/hos
 import PublishRealmModal from '@cardstack/host/components/operator-mode/publish-realm-modal';
 
 import type HomePageResolverService from '@cardstack/host/services/home-page-resolver';
-import HostModeService from '@cardstack/host/services/host-mode-service';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type HostModeService from '@cardstack/host/services/host-mode-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 

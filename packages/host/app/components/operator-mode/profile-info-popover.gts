@@ -9,8 +9,8 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 
 import WithSubscriptionData from '@cardstack/host/components/with-subscription-data';
 
-import BillingService from '@cardstack/host/services/billing-service';
-import MatrixService from '@cardstack/host/services/matrix-service';
+import type BillingService from '@cardstack/host/services/billing-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 
 interface ProfileInfoPopoverSignature {
   Args: {

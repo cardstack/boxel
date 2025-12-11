@@ -19,6 +19,7 @@ import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
   testRealmURL,
   captureModuleResult,
+  createPrerenderAuth,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -227,12 +228,12 @@ module('Acceptance | prerender | module', function (hooks) {
     let permissions: RealmPermissions = {
       [testRealmURL]: ['read', 'write', 'realm-owner'],
     };
+    let auth = createPrerenderAuth('@testuser:localhost', permissions);
 
     let response = await prerenderer.prerenderModule({
       realm: testRealmURL,
       url: moduleURL,
-      userId: '@testuser:localhost',
-      permissions,
+      auth,
     });
 
     assert.strictEqual(
@@ -256,12 +257,12 @@ module('Acceptance | prerender | module', function (hooks) {
     let permissions: RealmPermissions = {
       [testRealmURL]: ['read', 'write', 'realm-owner'],
     };
+    let auth = createPrerenderAuth('@testuser:localhost', permissions);
 
     let response = await prerenderer.prerenderModule({
       realm: testRealmURL,
       url: moduleURL,
-      userId: '@testuser:localhost',
-      permissions,
+      auth,
     });
 
     assert.strictEqual(

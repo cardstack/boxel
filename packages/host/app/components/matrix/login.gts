@@ -8,7 +8,6 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
-import { type LoginResponse } from 'matrix-js-sdk';
 import moment from 'moment';
 
 import {
@@ -23,7 +22,8 @@ import {
 } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import { AuthMode } from './auth';
+import type { AuthMode } from './auth';
+import type { LoginResponse } from 'matrix-js-sdk';
 
 interface Signature {
   Args: {

@@ -19,6 +19,7 @@ import * as ContentTagGlobal from 'content-tag';
 
 import 'decorator-transforms/globals';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer';
+import { buildCreatePrerenderAuth } from './prerender/auth';
 
 (globalThis as any).ContentTagGlobal = ContentTagGlobal;
 
@@ -233,11 +234,13 @@ const getIndexHTML = async () => {
     seed: REALM_SECRET_SEED,
   });
   let prerenderer = createRemotePrerenderer(prerendererUrl);
+  let createPrerenderAuth = buildCreatePrerenderAuth(REALM_SECRET_SEED);
 
   let definitionLookup = new CachingDefinitionLookup(
     dbAdapter,
     prerenderer,
     virtualNetwork,
+    createPrerenderAuth,
   );
 
   for (let [i, path] of paths.entries()) {

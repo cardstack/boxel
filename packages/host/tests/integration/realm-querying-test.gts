@@ -1,13 +1,13 @@
-import { RenderingTestContext } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, baseCardRef } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
-import { RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-index-query-engine';
+import type { RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-index-query-engine';
 
 import {
   testRealmURL,

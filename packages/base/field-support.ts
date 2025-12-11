@@ -1,4 +1,10 @@
-import { getField, isBaseInstance, primitive } from '@cardstack/runtime-common';
+import {
+  getField,
+  isBaseInstance,
+  isCardInstance,
+  isFieldInstance,
+  primitive,
+} from '@cardstack/runtime-common';
 import type {
   BaseDef,
   BaseDefConstructor,
@@ -8,6 +14,7 @@ import type {
   FieldDef,
 } from './card-api';
 import {
+  getCardMeta,
   type JSONAPIResource,
   type JSONAPISingleResourceDocument,
   type SerializeOpts,
@@ -21,6 +28,8 @@ export interface NotLoadedValue {
   type: 'not-loaded';
   reference: string;
 }
+
+export const realmContext = Symbol.for('cardstack-realm-context');
 
 // our place for notifying Glimmer when a card is ready to re-render
 const cardTracking = initSharedState(
@@ -283,7 +292,7 @@ function getUsedFields(instance: BaseDef): string[] {
 
 export function isArrayOfCardOrField(
   cardsOrFields: any,
-): cardsOrFields is CardDef[] | FieldDef[] {
+): cardsOrFields is BaseDef[] {
   return (
     Array.isArray(cardsOrFields) &&
     (cardsOrFields.length === 0 ||
@@ -291,7 +300,14 @@ export function isArrayOfCardOrField(
   );
 }
 
-export function isCardOrField(card: any): card is CardDef | FieldDef {
+export function isArrayOfField(fields: any): fields is FieldDef[] {
+  return (
+    Array.isArray(fields) &&
+    (fields.length === 0 || fields.every((item) => isFieldDef(item)))
+  );
+}
+
+export function isCardOrField(card: any): card is BaseDef {
   return card && typeof card === 'object' && isBaseInstance in card;
 }
 
@@ -403,6 +419,46 @@ export function serializedGet<CardT extends BaseDefConstructor>(
   return field.serialize(peekAtField(model, fieldName), doc, visited, opts);
 }
 
+type Scalar =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | (string | null | undefined)[]
+  | (number | null | undefined)[]
+  | (boolean | null | undefined)[];
+
+export function assertScalar(
+  scalar: any,
+  fieldCard: typeof BaseDef,
+): asserts scalar is Scalar {
+  if (Array.isArray(scalar)) {
+    if (
+      scalar.find(
+        (i) =>
+          !['undefined', 'string', 'number', 'boolean'].includes(typeof i) &&
+          i !== null,
+      )
+    ) {
+      throw new Error(
+        `expected queryableValue for field type ${
+          fieldCard.name
+        } to be scalar but was ${typeof scalar}`,
+      );
+    }
+  } else if (
+    !['undefined', 'string', 'number', 'boolean'].includes(typeof scalar) &&
+    scalar !== null
+  ) {
+    throw new Error(
+      `expected queryableValue for field type ${
+        fieldCard.name
+      } to be scalar but was ${typeof scalar}`,
+    );
+  }
+}
+
 export function setFieldDescription(
   cardOrFieldKlass: typeof BaseDef,
   fieldName: string,
@@ -414,4 +470,52 @@ export function setFieldDescription(
     fieldDescriptions.set(cardOrFieldKlass, descriptionsMap);
   }
   descriptionsMap.set(fieldName, description);
+}
+
+export function setRealmContextOnField(
+  instance: FieldDef,
+  realmURLString: string,
+) {
+  instance[realmContext] = realmURLString;
+}
+
+function getRealmURLString(realmOrInstance: string | BaseDef | undefined) {
+  if (!realmOrInstance) {
+    return undefined;
+  }
+  if (typeof realmOrInstance === 'string') {
+    return realmOrInstance;
+  }
+  if (isFieldInstance(realmOrInstance)) {
+    return realmOrInstance[realmContext];
+  }
+  if (isCardInstance(realmOrInstance)) {
+    return getCardMeta(realmOrInstance, 'realmURL');
+  }
+  return undefined;
+}
+
+export function propagateRealmContext(
+  target: BaseDef | BaseDef[] | Scalar,
+  realmURLString: string | undefined,
+): void;
+export function propagateRealmContext(
+  target: BaseDef | BaseDef[] | Scalar,
+  source: BaseDef,
+): void;
+export function propagateRealmContext(
+  target: BaseDef | BaseDef[] | Scalar,
+  realmOrSource: string | BaseDef | undefined,
+): void {
+  let realmURLString = getRealmURLString(realmOrSource);
+  if (!realmURLString) {
+    return;
+  }
+  if (isFieldDef(target)) {
+    setRealmContextOnField(target, realmURLString);
+  } else if (isArrayOfField(target)) {
+    for (let v of target) {
+      setRealmContextOnField(v, realmURLString);
+    }
+  }
 }

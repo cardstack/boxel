@@ -10,7 +10,7 @@ import onKeyMod from 'ember-keyboard/modifiers/on-key';
 import { BoxelInput, Button } from '@cardstack/boxel-ui/components';
 
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
-import { SessionRoomData } from '@cardstack/host/services/ai-assistant-panel-service';
+import type { SessionRoomData } from '@cardstack/host/services/ai-assistant-panel-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import AiAssistantPanelPopover from './panel-popover';

@@ -17,19 +17,17 @@ import { TrackedSet } from 'tracked-built-ins';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
 
+import type { QueryResultsMeta } from '@cardstack/runtime-common';
 import {
   type Query,
   RealmPaths,
   type PrerenderedCardLike,
   type PrerenderedCardData,
   type PrerenderedCardComponentSignature,
-  QueryResultsMeta,
   CardContextName,
 } from '@cardstack/runtime-common';
-import {
-  PrerenderedCardCollectionDocument,
-  isPrerenderedCardCollectionDocument,
-} from '@cardstack/runtime-common/document-types';
+import type { PrerenderedCardCollectionDocument } from '@cardstack/runtime-common/document-types';
+import { isPrerenderedCardCollectionDocument } from '@cardstack/runtime-common/document-types';
 
 import type { CardContext, Format } from 'https://cardstack.com/base/card-api';
 
