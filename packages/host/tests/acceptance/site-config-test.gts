@@ -14,11 +14,10 @@ import HostModeService from '@cardstack/host/services/host-mode-service';
 
 import {
   setupAcceptanceTestRealm,
-  setupAuthEndpoints,
   setupLocalIndexing,
   setupOnSave,
-  setupUserSubscription,
   SYSTEM_CARD_FIXTURE_CONTENTS,
+  setupSnapshotRealm,
 } from '../helpers';
 import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -57,111 +56,122 @@ module('Acceptance | site config home page', function (hooks) {
   });
 
   setupBaseRealm(hooks);
+  let defaultMatrixRoomId: string;
   let realmContents: any;
+  let snapshot = setupSnapshotRealm<{ realmContents: any }>(hooks, {
+    mockMatrixUtils,
+    acceptanceTest: true,
+    async build({ loader, isInitialBuild }) {
+      if (isInitialBuild || !defaultMatrixRoomId) {
+        defaultMatrixRoomId = mockMatrixUtils.createAndJoinRoom({
+          sender: '@testuser:localhost',
+          name: 'room-test',
+        });
+      }
+      let { field, contains, CardDef, Component } = await loader.import<
+        typeof import('https://cardstack.com/base/card-api')
+      >(`${baseRealm.url}card-api`);
+      let { default: StringField } = await loader.import<
+        typeof import('https://cardstack.com/base/string')
+      >(`${baseRealm.url}string`);
 
-  hooks.beforeEach(async function () {
-    let loader = getService('loader-service').loader;
-    let { field, contains, CardDef, Component } = await loader.import<
-      typeof import('https://cardstack.com/base/card-api')
-    >(`${baseRealm.url}card-api`);
-    let { default: StringField } = await loader.import<
-      typeof import('https://cardstack.com/base/string')
-    >(`${baseRealm.url}string`);
+      class Pet extends CardDef {
+        static displayName = 'Pet';
+        @field name = contains(StringField);
+        @field title = contains(StringField, {
+          computeVia(this: Pet) {
+            return this.name;
+          },
+        });
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <div data-test-pet-isolated={{@model.name}}>
+              <@fields.name />
+            </div>
+          </template>
+        };
+      }
 
-    class Pet extends CardDef {
-      static displayName = 'Pet';
-      @field name = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia(this: Pet) {
-          return this.name;
+      realmContents = {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
+        'pet.gts': { Pet },
+        'Pet/mango.json': {
+          data: {
+            attributes: {
+              name: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `../pet`,
+                name: 'Pet',
+              },
+            },
+          },
         },
-      });
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <div data-test-pet-isolated={{@model.name}}>
-            <@fields.name />
-          </div>
-        </template>
+        'Pet/peanut.json': {
+          data: {
+            attributes: {
+              name: 'Peanut',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `../pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'site.json': {
+          data: {
+            meta: {
+              adoptsFrom: {
+                name: 'SiteConfig',
+                module: 'https://cardstack.com/base/site-config',
+              },
+            },
+            type: 'card',
+            attributes: {
+              cardInfo: {
+                notes: null,
+                title: null,
+                description: null,
+                thumbnailURL: null,
+              },
+            },
+            relationships: {
+              home: {
+                links: {
+                  self: `./Pet/mango`,
+                },
+              },
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
+            },
+          },
+        },
+        'index.json': {
+          data: {
+            type: 'card',
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/cards-grid',
+                name: 'CardsGrid',
+              },
+            },
+          },
+        },
+        '.realm.json': {
+          publishable: true,
+          name: 'Site Config Workspace',
+          hostHome: `${testRealmURL}site`,
+        },
       };
-    }
 
-    realmContents = {
-      ...SYSTEM_CARD_FIXTURE_CONTENTS,
-      'pet.gts': { Pet },
-      'Pet/mango.json': {
-        data: {
-          attributes: {
-            name: 'Mango',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `../pet`,
-              name: 'Pet',
-            },
-          },
-        },
-      },
-      'Pet/peanut.json': {
-        data: {
-          attributes: {
-            name: 'Peanut',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `../pet`,
-              name: 'Pet',
-            },
-          },
-        },
-      },
-      'site.json': {
-        data: {
-          meta: {
-            adoptsFrom: {
-              name: 'SiteConfig',
-              module: 'https://cardstack.com/base/site-config',
-            },
-          },
-          type: 'card',
-          attributes: {
-            cardInfo: {
-              notes: null,
-              title: null,
-              description: null,
-              thumbnailURL: null,
-            },
-          },
-          relationships: {
-            home: {
-              links: {
-                self: `./Pet/mango`,
-              },
-            },
-            'cardInfo.theme': {
-              links: {
-                self: null,
-              },
-            },
-          },
-        },
-      },
-      'index.json': {
-        data: {
-          type: 'card',
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/cards-grid',
-              name: 'CardsGrid',
-            },
-          },
-        },
-      },
-      '.realm.json': {
-        publishable: true,
-        name: 'Site Config Workspace',
-        hostHome: `${testRealmURL}site`,
-      },
-    };
+      return { realmContents };
+    },
   });
 
   module('host mode', function (hooks) {
@@ -169,12 +179,7 @@ module('Acceptance | site config home page', function (hooks) {
       mockMatrixUtils;
 
     hooks.beforeEach(async function () {
-      createAndJoinRoom({
-        sender: '@testuser:localhost',
-        name: 'room-test',
-      });
-      setupUserSubscription();
-      setupAuthEndpoints();
+      snapshot.get();
 
       let contents = {
         ...realmContents,

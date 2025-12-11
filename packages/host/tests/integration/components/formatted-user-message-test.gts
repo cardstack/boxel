@@ -1,4 +1,5 @@
 import { RenderingTestContext, render } from '@ember/test-helpers';
+import { setupSnapshotRealm } from '../../helpers';
 
 import { module, test } from 'qunit';
 
@@ -8,6 +9,10 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | Component | FormattedUserMessage', function (hooks) {
   setupRenderingTest(hooks);
+  setupSnapshotRealm(hooks, {
+    mockMatrixUtils: undefined as any, // no matrix needed for this render-only test
+    build: async () => ({}),
+  });
 
   async function renderFormattedUserMessage(testScenario: any) {
     await render(<template>

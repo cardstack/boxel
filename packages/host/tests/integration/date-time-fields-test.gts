@@ -1,7 +1,7 @@
 import { click } from '@ember/test-helpers';
 
-import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
+import { getService } from '@universal-ember/test-support';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
@@ -9,12 +9,10 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import ENV from '@cardstack/host/config/environment';
 
 import {
-  setupBaseRealm,
-  field,
-  contains,
-  CardDef,
-  Component,
-} from '../helpers/base-realm';
+  setupSnapshotRealm,
+} from '../helpers';
+import { field, contains, CardDef, Component } from '../helpers/base-realm';
+import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -22,7 +20,6 @@ type FieldFormat = 'embedded' | 'atom' | 'edit';
 
 module('Integration | date-time fields', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let loader: Loader;
   let catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
@@ -45,102 +42,162 @@ module('Integration | date-time fields', function (hooks) {
   let QuarterFieldClass: any;
   let RecurringPatternFieldClass: any;
 
-  let catalogFieldsLoaded = false;
+  let mockMatrixUtils = setupMockMatrix(hooks);
 
-  hooks.beforeEach(async function () {
-    loader = getService('loader-service').loader;
-    if (!catalogFieldsLoaded) {
-      await loadCatalogFields();
-      catalogFieldsLoaded = true;
-    }
-  });
+  let snapshot = setupSnapshotRealm<{
+    loader: Loader;
+    DateFieldClass: any;
+    TimeFieldClass: any;
+    DatetimeFieldClass: any;
+    DatetimeStampFieldClass: any;
+    DayFieldClass: any;
+    DateRangeFieldClass: any;
+    TimeRangeFieldClass: any;
+    DurationFieldClass: any;
+    RelativeTimeFieldClass: any;
+    TimePeriodFieldClass: any;
+    MonthDayFieldClass: any;
+    YearFieldClass: any;
+    MonthFieldClass: any;
+    MonthYearFieldClass: any;
+    WeekFieldClass: any;
+    QuarterFieldClass: any;
+    RecurringPatternFieldClass: any;
+  }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
 
-  async function loadCatalogFields() {
-    const dateModule: any = await loader.import(
-      `${catalogRealmURL}fields/date`,
-    );
+      const dateModule: any = await loader.import(
+        `${catalogRealmURL}fields/date`,
+      );
     DateFieldClass = dateModule.DateField ?? dateModule.default;
 
-    const timeModule: any = await loader.import(
-      `${catalogRealmURL}fields/time`,
-    );
+      const timeModule: any = await loader.import(
+        `${catalogRealmURL}fields/time`,
+      );
     TimeFieldClass = timeModule.TimeField;
 
-    const datetimeModule: any = await loader.import(
-      `${catalogRealmURL}fields/date-time`,
-    );
+      const datetimeModule: any = await loader.import(
+        `${catalogRealmURL}fields/date-time`,
+      );
     DatetimeFieldClass = datetimeModule.DatetimeField;
 
-    const datetimeStampModule: any = await loader.import(
-      `${catalogRealmURL}fields/datetime-stamp`,
-    );
+      const datetimeStampModule: any = await loader.import(
+        `${catalogRealmURL}fields/datetime-stamp`,
+      );
     DatetimeStampFieldClass = datetimeStampModule.DatetimeStampField;
 
-    const dayModule: any = await loader.import(
-      `${catalogRealmURL}fields/date/day`,
-    );
+      const dayModule: any = await loader.import(
+        `${catalogRealmURL}fields/date/day`,
+      );
     DayFieldClass = dayModule.DayField;
 
-    const dateRangeModule: any = await loader.import(
-      `${catalogRealmURL}fields/date/date-range`,
-    );
+      const dateRangeModule: any = await loader.import(
+        `${catalogRealmURL}fields/date/date-range`,
+      );
     DateRangeFieldClass = dateRangeModule.DateRangeField;
 
-    const timeRangeModule: any = await loader.import(
-      `${catalogRealmURL}fields/time/time-range`,
-    );
+      const timeRangeModule: any = await loader.import(
+        `${catalogRealmURL}fields/time/time-range`,
+      );
     TimeRangeFieldClass = timeRangeModule.TimeRangeField;
 
-    const durationModule: any = await loader.import(
-      `${catalogRealmURL}fields/time/duration`,
-    );
+      const durationModule: any = await loader.import(
+        `${catalogRealmURL}fields/time/duration`,
+      );
     DurationFieldClass = durationModule.DurationField;
 
-    const relativeModule: any = await loader.import(
-      `${catalogRealmURL}fields/time/relative-time`,
-    );
+      const relativeModule: any = await loader.import(
+        `${catalogRealmURL}fields/time/relative-time`,
+      );
     RelativeTimeFieldClass = relativeModule.RelativeTimeField;
 
-    const timePeriodModule: any = await loader.import(
-      `${catalogRealmURL}fields/time-period`,
-    );
+      const timePeriodModule: any = await loader.import(
+        `${catalogRealmURL}fields/time-period`,
+      );
     TimePeriodFieldClass = timePeriodModule.TimePeriodField;
 
-    const monthDayModule: any = await loader.import(
-      `${catalogRealmURL}fields/date/month-day`,
-    );
+      const monthDayModule: any = await loader.import(
+        `${catalogRealmURL}fields/date/month-day`,
+      );
     MonthDayFieldClass = monthDayModule.MonthDayField;
 
-    const yearModule: any = await loader.import(
-      `${catalogRealmURL}fields/date/year`,
-    );
+      const yearModule: any = await loader.import(
+        `${catalogRealmURL}fields/date/year`,
+      );
     YearFieldClass = yearModule.YearField;
 
-    const monthModule: any = await loader.import(
-      `${catalogRealmURL}fields/date/month`,
-    );
+      const monthModule: any = await loader.import(
+        `${catalogRealmURL}fields/date/month`,
+      );
     MonthFieldClass = monthModule.MonthField;
 
-    const monthYearModule: any = await loader.import(
-      `${catalogRealmURL}fields/date/month-year`,
-    );
+      const monthYearModule: any = await loader.import(
+        `${catalogRealmURL}fields/date/month-year`,
+      );
     MonthYearFieldClass = monthYearModule.MonthYearField;
 
-    const weekModule: any = await loader.import(
-      `${catalogRealmURL}fields/date/week`,
-    );
+      const weekModule: any = await loader.import(
+        `${catalogRealmURL}fields/date/week`,
+      );
     WeekFieldClass = weekModule.WeekField;
 
-    const quarterModule: any = await loader.import(
-      `${catalogRealmURL}fields/date/quarter`,
-    );
+      const quarterModule: any = await loader.import(
+        `${catalogRealmURL}fields/date/quarter`,
+      );
     QuarterFieldClass = quarterModule.QuarterField;
 
-    const recurringModule: any = await loader.import(
-      `${catalogRealmURL}fields/recurring-pattern`,
-    );
+      const recurringModule: any = await loader.import(
+        `${catalogRealmURL}fields/recurring-pattern`,
+      );
     RecurringPatternFieldClass = recurringModule.RecurringPatternField;
-  }
+      return {
+        loader,
+        DateFieldClass,
+        TimeFieldClass,
+        DatetimeFieldClass,
+        DatetimeStampFieldClass,
+        DayFieldClass,
+        DateRangeFieldClass,
+        TimeRangeFieldClass,
+        DurationFieldClass,
+        RelativeTimeFieldClass,
+        TimePeriodFieldClass,
+        MonthDayFieldClass,
+        YearFieldClass,
+        MonthFieldClass,
+        MonthYearFieldClass,
+        WeekFieldClass,
+        QuarterFieldClass,
+        RecurringPatternFieldClass,
+      };
+    },
+  });
+
+  hooks.beforeEach(function () {
+    ({
+      loader,
+      DateFieldClass,
+      TimeFieldClass,
+      DatetimeFieldClass,
+      DatetimeStampFieldClass,
+      DayFieldClass,
+      DateRangeFieldClass,
+      TimeRangeFieldClass,
+      DurationFieldClass,
+      RelativeTimeFieldClass,
+      TimePeriodFieldClass,
+      MonthDayFieldClass,
+      YearFieldClass,
+      MonthFieldClass,
+      MonthYearFieldClass,
+      WeekFieldClass,
+      QuarterFieldClass,
+      RecurringPatternFieldClass,
+    } = snapshot.get());
+  });
 
   async function renderField(
     FieldClass: any,

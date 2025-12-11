@@ -10,10 +10,9 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
   setupAcceptanceTestRealm,
-  setupAuthEndpoints,
   setupLocalIndexing,
   setupOnSave,
-  setupUserSubscription,
+  setupSnapshotRealm,
   testRealmURL,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -42,43 +41,45 @@ export function setupInteractSubmodeTests(
 
   let { createAndJoinRoom, setActiveRealms, setRealmPermissions } =
     mockMatrixUtils;
+  let defaultMatrixRoomId: string;
+  let snapshot = setupSnapshotRealm<{ realm: Realm }>(hooks, {
+    mockMatrixUtils,
+    acceptanceTest: true,
+    async build({ loader, isInitialBuild }) {
+      if (isInitialBuild || !defaultMatrixRoomId) {
+        defaultMatrixRoomId = createAndJoinRoom({
+          sender: '@testuser:localhost',
+          name: 'room-test',
+        });
+      }
 
-  hooks.beforeEach(async function () {
-    createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
-    setupUserSubscription();
-    setupAuthEndpoints();
+      let cardApi: typeof import('https://cardstack.com/base/card-api');
+      let string: typeof import('https://cardstack.com/base/string');
+      let spec: typeof import('https://cardstack.com/base/spec');
+      let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
+      cardApi = await loader.import(`${baseRealm.url}card-api`);
+      string = await loader.import(`${baseRealm.url}string`);
+      spec = await loader.import(`${baseRealm.url}spec`);
+      cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
 
-    let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    let spec: typeof import('https://cardstack.com/base/spec');
-    let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    spec = await loader.import(`${baseRealm.url}spec`);
-    cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
+      let {
+        field,
+        contains,
+        containsMany,
+        linksTo,
+        linksToMany,
+        CardDef,
+        Component,
+        FieldDef,
+      } = cardApi;
+      let { default: StringField } = string;
+      let { Spec } = spec;
+      let { CardsGrid } = cardsGrid;
 
-    let {
-      field,
-      contains,
-      containsMany,
-      linksTo,
-      linksToMany,
-      CardDef,
-      Component,
-      FieldDef,
-    } = cardApi;
-    let { default: StringField } = string;
-    let { Spec } = spec;
-    let { CardsGrid } = cardsGrid;
-
-    class Pet extends CardDef {
-      static displayName = 'Pet';
-      @field name = contains(StringField);
-      @field favoriteTreat = contains(StringField);
+      class Pet extends CardDef {
+        static displayName = 'Pet';
+        @field name = contains(StringField);
+        @field favoriteTreat = contains(StringField);
 
       @field title = contains(StringField, {
         computeVia: function (this: Pet) {
@@ -113,13 +114,13 @@ export function setupInteractSubmodeTests(
       };
     }
 
-    class Puppy extends Pet {
-      static displayName = 'Puppy';
-      @field age = contains(StringField);
-    }
+      class Puppy extends Pet {
+        static displayName = 'Puppy';
+        @field age = contains(StringField);
+      }
 
-    class ShippingInfo extends FieldDef {
-      static displayName = 'Shipping Info';
+      class ShippingInfo extends FieldDef {
+        static displayName = 'Shipping Info';
       @field preferredCarrier = contains(StringField);
       @field remarks = contains(StringField);
       @field title = contains(StringField, {
@@ -135,8 +136,8 @@ export function setupInteractSubmodeTests(
       };
     }
 
-    class Address extends FieldDef {
-      static displayName = 'Address';
+      class Address extends FieldDef {
+        static displayName = 'Address';
       @field city = contains(StringField);
       @field country = contains(StringField);
       @field shippingInfo = contains(ShippingInfo);
@@ -177,8 +178,8 @@ export function setupInteractSubmodeTests(
       };
     }
 
-    class Person extends CardDef {
-      static displayName = 'Person';
+      class Person extends CardDef {
+        static displayName = 'Person';
       @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
       @field friends = linksToMany(Pet);
@@ -239,179 +240,190 @@ export function setupInteractSubmodeTests(
       };
     }
 
-    class Personnel extends Person {
-      static displayName = 'Personnel';
-    }
+      class Personnel extends Person {
+        static displayName = 'Personnel';
+      }
 
-    let generateSpec = (
-      fileName: string,
-      title: string,
-      ref: { module: string; name: string },
-    ) => ({
-      [`${fileName}.json`]: new Spec({
-        title,
-        description: `Spec for ${title}`,
-        specType: 'card',
-        ref,
-      }),
-    });
-    let catalogEntries: Record<string, unknown> = {};
-    for (let i = 0; i < 5; i++) {
-      let entry = generateSpec(`p-${i + 1}`, `Personnel-${i + 1}`, {
-        module: `${testRealmURL}personnel`,
-        name: 'Personnel',
+      let generateSpec = (
+        fileName: string,
+        title: string,
+        ref: { module: string; name: string },
+      ) => ({
+        [`${fileName}.json`]: new Spec({
+          title,
+          description: `Spec for ${title}`,
+          specType: 'card',
+          ref,
+        }),
       });
-      catalogEntries = { ...catalogEntries, ...entry };
-    }
+      let catalogEntries: Record<string, unknown> = {};
+      for (let i = 0; i < 5; i++) {
+        let entry = generateSpec(`p-${i + 1}`, `Personnel-${i + 1}`, {
+          module: `${testRealmURL}personnel`,
+          name: 'Personnel',
+        });
+        catalogEntries = { ...catalogEntries, ...entry };
+      }
 
-    let mangoPet = new Pet({ name: 'Mango' });
+      let mangoPet = new Pet({ name: 'Mango' });
 
-    let realm: Realm;
-    ({ realm } = await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'address.gts': { Address },
-        'person.gts': { Person },
-        'personnel.gts': { Personnel },
-        'pet.gts': { Pet, Puppy },
-        'shipping-info.gts': { ShippingInfo },
-        'README.txt': `Hello World`,
-        'person-entry.json': new Spec({
-          title: 'Person Card',
-          description: 'Spec for Person Card',
-          specType: 'card',
-          ref: {
-            module: `${testRealmURL}person`,
-            name: 'Person',
-          },
-        }),
-        'pet-entry.json': new Spec({
-          title: 'Pet Card',
-          description: 'Spec for Pet Card',
-          specType: 'card',
-          ref: {
-            module: `${testRealmURL}pet`,
-            name: 'Pet',
-          },
-        }),
-        ...catalogEntries,
-        'puppy-entry.json': new Spec({
-          title: 'Puppy Card',
-          description: 'Spec for Puppy Card',
-          specType: 'card',
-          ref: {
-            module: `${testRealmURL}pet`,
-            name: 'Puppy',
-          },
-        }),
-        'Pet/mango.json': mangoPet,
-        'Pet/vangogh.json': new Pet({ name: 'Van Gogh' }),
-        'Person/fadhlan.json': new Person({
-          firstName: 'Fadhlan',
-          address: new Address({
-            city: 'Bandung',
-            country: 'Indonesia',
-            shippingInfo: new ShippingInfo({
-              preferredCarrier: 'DHL',
-              remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
-            }),
+      let realm: Realm;
+      ({ realm } = await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        loader,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'address.gts': { Address },
+          'person.gts': { Person },
+          'personnel.gts': { Personnel },
+          'pet.gts': { Pet, Puppy },
+          'shipping-info.gts': { ShippingInfo },
+          'README.txt': `Hello World`,
+          'person-entry.json': new Spec({
+            title: 'Person Card',
+            description: 'Spec for Person Card',
+            specType: 'card',
+            ref: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
           }),
-          additionalAddresses: [
-            new Address({
-              city: 'Jakarta',
+          'pet-entry.json': new Spec({
+            title: 'Pet Card',
+            description: 'Spec for Pet Card',
+            specType: 'card',
+            ref: {
+              module: `${testRealmURL}pet`,
+              name: 'Pet',
+            },
+          }),
+          ...catalogEntries,
+          'puppy-entry.json': new Spec({
+            title: 'Puppy Card',
+            description: 'Spec for Puppy Card',
+            specType: 'card',
+            ref: {
+              module: `${testRealmURL}pet`,
+              name: 'Puppy',
+            },
+          }),
+          'Pet/mango.json': mangoPet,
+          'Pet/vangogh.json': new Pet({ name: 'Van Gogh' }),
+          'Person/fadhlan.json': new Person({
+            firstName: 'Fadhlan',
+            address: new Address({
+              city: 'Bandung',
               country: 'Indonesia',
-              shippingInfo: new ShippingInfo({
-                preferredCarrier: 'FedEx',
-                remarks: `Make sure to deliver to the back door`,
-              }),
-            }),
-            new Address({
-              city: 'Bali',
-              country: 'Indonesia',
-              shippingInfo: new ShippingInfo({
-                preferredCarrier: 'UPS',
-                remarks: `Call ahead to make sure someone is home`,
-              }),
-            }),
-          ],
-          pet: mangoPet,
-          friends: [mangoPet],
-        }),
-        'Puppy/marco.json': new Puppy({ name: 'Marco', age: '5 months' }),
-        'grid.json': new CardsGrid(),
-        'index.json': new CardsGrid(),
-        '.realm.json': {
-          name: 'Test Workspace B',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
-      },
-    }));
-
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      realmURL: testRealm2URL,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.json': new CardsGrid(),
-        '.realm.json': {
-          name: 'Test Workspace A',
-          backgroundURL:
-            'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
-          iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
-        },
-        'Pet/ringo.json': new Pet({ name: 'Ringo' }),
-        'Person/hassan.json': new Person({
-          firstName: 'Hassan',
-          pet: mangoPet,
-          additionalAddresses: [
-            new Address({
-              city: 'New York',
-              country: 'USA',
               shippingInfo: new ShippingInfo({
                 preferredCarrier: 'DHL',
                 remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
               }),
             }),
-          ],
-          friends: [mangoPet],
-        }),
-      },
-    });
-
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      realmURL: testRealm3URL,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.json': new CardsGrid(),
-        '.realm.json': {
-          name: 'Test Workspace C',
-          backgroundURL:
-            'https://boxel-images.boxel.ai/background-images/4k-powder-puff.jpg',
-          iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+            additionalAddresses: [
+              new Address({
+                city: 'Jakarta',
+                country: 'Indonesia',
+                shippingInfo: new ShippingInfo({
+                  preferredCarrier: 'FedEx',
+                  remarks: `Make sure to deliver to the back door`,
+                }),
+              }),
+              new Address({
+                city: 'Bali',
+                country: 'Indonesia',
+                shippingInfo: new ShippingInfo({
+                  preferredCarrier: 'UPS',
+                  remarks: `Call ahead to make sure someone is home`,
+                }),
+              }),
+            ],
+            pet: mangoPet,
+            friends: [mangoPet],
+          }),
+          'Puppy/marco.json': new Puppy({ name: 'Marco', age: '5 months' }),
+          'grid.json': new CardsGrid(),
+          'index.json': new CardsGrid(),
+          '.realm.json': {
+            name: 'Test Workspace B',
+            backgroundURL:
+              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          },
         },
-      },
-    });
+      }));
 
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      realmURL: personalRealmURL,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.json': new CardsGrid(),
-        '.realm.json': {
-          name: 'Test Personal Workspace',
-          backgroundURL:
-            'https://boxel-images.boxel.ai/background-images/4k-origami-flock.jpg',
-          iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        loader,
+        realmURL: testRealm2URL,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.json': new CardsGrid(),
+          '.realm.json': {
+            name: 'Test Workspace A',
+            backgroundURL:
+              'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
+            iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+          },
+          'Pet/ringo.json': new Pet({ name: 'Ringo' }),
+          'Person/hassan.json': new Person({
+            firstName: 'Hassan',
+            pet: mangoPet,
+            additionalAddresses: [
+              new Address({
+                city: 'New York',
+                country: 'USA',
+                shippingInfo: new ShippingInfo({
+                  preferredCarrier: 'DHL',
+                  remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+                }),
+              }),
+            ],
+            friends: [mangoPet],
+          }),
         },
-      },
-    });
+      });
 
-    setRealm(realm);
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        loader,
+        realmURL: testRealm3URL,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.json': new CardsGrid(),
+          '.realm.json': {
+            name: 'Test Workspace C',
+            backgroundURL:
+              'https://boxel-images.boxel.ai/background-images/4k-powder-puff.jpg',
+            iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+          },
+        },
+      });
+
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        loader,
+        realmURL: personalRealmURL,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.json': new CardsGrid(),
+          '.realm.json': {
+            name: 'Test Personal Workspace',
+            backgroundURL:
+              'https://boxel-images.boxel.ai/background-images/4k-origami-flock.jpg',
+            iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+          },
+        },
+      });
+
+      return { realm };
+    },
+  });
+
+  hooks.beforeEach(function () {
+    let snapshotState = snapshot.get();
+    setRealm(snapshotState.realm);
+    setActiveRealms([testRealmURL, testRealm2URL, testRealm3URL]);
   });
 
   return { setActiveRealms, setRealmPermissions };

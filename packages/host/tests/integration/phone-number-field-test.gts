@@ -1,6 +1,5 @@
 import { fillIn, triggerEvent } from '@ember/test-helpers';
 
-import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -10,9 +9,12 @@ import {
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import { provideConsumeContext, setupCardLogs } from '../helpers';
 import {
-  setupBaseRealm,
+  provideConsumeContext,
+  setupCardLogs,
+  setupSnapshotRealm,
+} from '../helpers';
+import {
   PhoneNumberField,
   field,
   contains,
@@ -21,24 +23,33 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
+import { getService } from '@universal-ember/test-support';
 
 let loader: Loader;
 const phoneSelector = `[data-test-field="phone"] [data-test-boxel-phone-input]`;
 
 module('Integration | PhoneNumberField', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
-  setupMockMatrix(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks);
+
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
 
   hooks.beforeEach(function () {
     let permissions: Permissions = { canWrite: true, canRead: true };
     provideConsumeContext(PermissionsContextName, permissions);
-    loader = getService('loader-service').loader;
+    ({ loader } = snapshot.get());
   });
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
   );
 
   test('edit format persists normalized phone numbers', async function (assert) {

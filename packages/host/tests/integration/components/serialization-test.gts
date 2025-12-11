@@ -1,4 +1,4 @@
-import { fillIn, RenderingTestContext } from '@ember/test-helpers';
+import { fillIn } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import formatISO from 'date-fns/formatISO';
@@ -29,10 +29,10 @@ import {
   setupLocalIndexing,
   testRealmURL,
   cardInfo,
+  setupSnapshotRealm,
 } from '../../helpers';
 
 import {
-  setupBaseRealm,
   contains,
   CardDef,
   Component,
@@ -68,7 +68,16 @@ let loader: Loader;
 
 module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks);
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
+
   hooks.beforeEach(async function () {
     let permissions: Permissions = {
       canWrite: true,
@@ -76,16 +85,14 @@ module('Integration | serialization', function (hooks) {
     };
     provideConsumeContext(PermissionsContextName, permissions);
 
-    loader = getService('loader-service').loader;
+    ({ loader } = snapshot.get());
   });
 
   setupLocalIndexing(hooks);
 
-  let mockMatrixUtils = setupMockMatrix(hooks);
-
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
   );
 
   test('can deserialize field', async function (assert) {

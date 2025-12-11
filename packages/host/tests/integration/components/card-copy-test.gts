@@ -3,7 +3,6 @@ import { waitUntil, waitFor, click, triggerEvent } from '@ember/test-helpers';
 import { buildWaiter } from '@ember/test-waiters';
 import GlimmerComponent from '@glimmer/component';
 
-import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
@@ -33,6 +32,7 @@ import {
   type TestContextWithSave,
   setupIntegrationTestRealm,
   setupOperatorModeStateCleanup,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
@@ -59,14 +59,22 @@ module('Integration | card-copy', function (hooks) {
 
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
   hooks.beforeEach(function () {
-    loader = getService('loader-service').loader;
+    ({ loader } = snapshot.get());
   });
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
   );
 
   let loggedInAs = '@testuser:localhost';

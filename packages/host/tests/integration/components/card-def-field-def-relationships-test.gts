@@ -1,6 +1,5 @@
 import { click, waitFor, triggerEvent } from '@ember/test-helpers';
 
-import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -20,6 +19,7 @@ import {
   setupIntegrationTestRealm,
   provideConsumeContext,
   setupOperatorModeStateCleanup,
+  setupSnapshotRealm,
 } from '../../helpers';
 import {
   CardDef,
@@ -31,7 +31,6 @@ import {
   linksTo,
   linksToMany,
   NumberField,
-  setupBaseRealm,
   StringField,
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -61,10 +60,18 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     autostart: true,
   });
 
-  setupBaseRealm(hooks);
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
+
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
   );
 
   hooks.beforeEach(async function () {
@@ -73,7 +80,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       canRead: true,
     };
     provideConsumeContext(PermissionsContextName, permissions);
-    loader = getService('loader-service').loader;
+    ({ loader } = snapshot.get());
 
     setCardInOperatorModeState = async (
       cardURL?: string,

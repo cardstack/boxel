@@ -18,6 +18,7 @@ import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
   capturePrerenderResult,
   type TestContextWithSave,
+  setupSnapshotRealm,
 } from '../helpers';
 
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -31,6 +32,507 @@ module('Acceptance | prerender | html', function (hooks) {
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
   });
+  let defaultMatrixRoomId: string;
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    acceptanceTest: true,
+    async build({ loader, isInitialBuild }) {
+      if (isInitialBuild || !defaultMatrixRoomId) {
+        defaultMatrixRoomId = mockMatrixUtils.createAndJoinRoom({
+          sender: '@testuser:localhost',
+          name: 'room-test',
+        });
+      }
+
+      let cardApi: typeof import('https://cardstack.com/base/card-api');
+      cardApi = await loader.import(`${baseRealm.url}card-api`);
+
+      let {
+        field,
+        contains,
+        containsMany,
+        linksTo,
+        linksToMany,
+        CardDef,
+        FieldDef,
+        StringField,
+        Component,
+      } = cardApi;
+
+      class PetLicense extends FieldDef {
+        static displayName = 'Pet License';
+        @field city = contains(StringField);
+        @field owner = linksTo(() => Person);
+        static embedded = class Embedded extends Component<typeof PetLicense> {
+          <template>
+            <@fields.city />
+            <@fields.owner />
+          </template>
+        };
+      }
+
+      class EmergencyContacts extends FieldDef {
+        @field notes = contains(StringField);
+        @field contacts = linksToMany(() => Person);
+        static embedded = class Embedded extends Component<
+          typeof EmergencyContacts
+        > {
+          <template>
+            <@fields.notes />
+            <@fields.contacts />
+          </template>
+        };
+      }
+
+      class PetSitter extends FieldDef {
+        @field phone = contains(StringField);
+        @field sitter = linksTo(() => Person);
+        static embedded = class Embedded extends Component<typeof PetSitter> {
+          <template>
+            <@fields.sitter />
+            <@fields.phone />
+          </template>
+        };
+      }
+
+      class PetClique extends FieldDef {
+        @field name = contains(StringField);
+        @field members = linksToMany(() => Pet);
+        static embedded = class Embedded extends Component<typeof PetClique> {
+          <template>
+            <@fields.name />
+            <@fields.members />
+          </template>
+        };
+      }
+
+      class Pet extends CardDef {
+        static displayName = 'Pet';
+        @field name = contains(StringField);
+        @field petFriend = linksTo(() => Pet);
+        @field license = contains(PetLicense);
+        @field emergencyContacts = contains(EmergencyContacts);
+        @field sitters = containsMany(PetSitter);
+        @field cliques = containsMany(PetClique);
+        @field title = contains(StringField, {
+          computeVia(this: Pet) {
+            return `${this.name}`;
+          },
+        });
+        @field friendName = contains(StringField, {
+          computeVia(this: Pet) {
+            return this.petFriend?.name;
+          },
+        });
+        @field friendOfFriend = linksTo(() => Pet, {
+          computeVia(this: Pet) {
+            return this.petFriend?.petFriend;
+          },
+        });
+        static embedded = class Embedded extends Component<typeof Pet> {
+          <template>
+            Pet component
+            <div data-test-card-title>
+              <@fields.name />
+            </div>
+          </template>
+        };
+      }
+
+      class Cat extends Pet {
+        static displayName = 'Cat';
+        @field aliases = containsMany(StringField);
+        static embedded = class Embedded extends Component<typeof Cat> {
+          <template>
+            Cat component
+            <div data-test-card-title>
+              <@fields.name />
+            </div>
+          </template>
+
+          static head = class Head extends Component<typeof Cat> {
+            <template>
+              <title>{{@fields.name}}</title>
+            </template>
+          };
+        };
+      }
+
+      class Person extends CardDef {
+        static displayName = 'Person';
+        @field name = contains(StringField);
+        @field pets = linksToMany(() => Pet);
+        @field friends = linksToMany(() => Person);
+        @field title = contains(StringField, {
+          computeVia(this: Person) {
+            return this.name;
+          },
+        });
+        @field numberOfPets = contains(StringField, {
+          computeVia(this: Person) {
+            return String(this.pets ? this.pets.length : 0);
+          },
+        });
+        @field friendsOfFriend = linksToMany(() => Person, {
+          computeVia(this: Person) {
+            if (Array.isArray(this.friends) && this.friends.length > 0) {
+              return this.friends[0].friends;
+            }
+            return [];
+          },
+        });
+      }
+
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        loader,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'person.gts': { Person },
+          'pet.gts': { Pet },
+          'cat.gts': { Cat },
+          'broken.gts': 'export const Broken = ;',
+          'broken.json': {
+            data: {
+              meta: {
+                adoptsFrom: {
+                  module: './broken',
+                  name: 'Broken',
+                },
+              },
+            },
+          },
+          'Pet/mango.json': {
+            data: {
+              attributes: { name: 'Mango' },
+              relationships: {
+                petFriend: {
+                  links: {
+                    self: './vangogh',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'Pet/vangogh.json': {
+            data: {
+              attributes: { name: 'Van Gogh' },
+              relationships: {
+                petFriend: {
+                  links: {
+                    self: '../Cat/paper',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'Pet/pet-a.json': {
+            data: {
+              attributes: { name: 'Allen' },
+              relationships: {
+                petFriend: {
+                  links: {
+                    self: './pet-b',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'Pet/pet-b.json': {
+            data: {
+              attributes: { name: 'Beatrice' },
+              relationships: {
+                petFriend: {
+                  links: {
+                    self: './pet-a',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'Pet/pet-c.json': {
+            data: {
+              attributes: { name: 'Clive', license: { city: 'Scarsdale' } },
+              relationships: {
+                'license.owner': {
+                  links: {
+                    self: '../Person/hassan',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'Pet/pet-d.json': {
+            data: {
+              attributes: {
+                name: 'Delancy',
+                emergencyContacts: { notes: 'Very timid' },
+              },
+              relationships: {
+                'emergencyContacts.contacts.0': {
+                  links: {
+                    self: '../Person/jade',
+                  },
+                },
+                'emergencyContacts.contacts.1': {
+                  links: {
+                    self: '../Person/germaine',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'Pet/pet-e.json': {
+            data: {
+              attributes: {
+                name: 'Erskine',
+                sitters: [{ phone: '01234' }, { phone: '56789' }],
+              },
+              relationships: {
+                'sitters.0.sitter': {
+                  links: {
+                    self: '../Person/jade',
+                  },
+                },
+                'sitters.1.sitter': {
+                  links: {
+                    self: '../Person/germaine',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'Pet/pet-f.json': {
+            data: {
+              attributes: {
+                name: 'Ferdinand',
+                cliques: [{ name: 'Ball Fetchers' }, { name: 'Power Nappers' }],
+              },
+              relationships: {
+                'cliques.0.members.0': {
+                  links: {
+                    self: './pet-a',
+                  },
+                },
+                'cliques.0.members.1': {
+                  links: {
+                    self: './pet-b',
+                  },
+                },
+                'cliques.1.members.0': {
+                  links: {
+                    self: './pet-c',
+                  },
+                },
+                'cliques.1.members.1': {
+                  links: {
+                    self: './pet-d',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'Pet/pet-g.json': {
+            data: {
+              attributes: {
+                name: 'Gregory',
+                friendId: `${testRealmURL}Pet/mango`,
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'Cat/paper.json': {
+            data: {
+              attributes: {
+                name: 'Paper',
+                aliases: ['Satan', "Satan's Mistress"],
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../cat',
+                  name: 'Cat',
+                },
+              },
+            },
+          },
+          'Cat/molly.json': {
+            data: {
+              attributes: {
+                name: 'Molly',
+              },
+              relationships: {
+                petFriend: {
+                  links: {
+                    self: './missing-link',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../cat',
+                  name: 'Cat',
+                },
+              },
+            },
+          },
+          'Person/hassan.json': {
+            data: {
+              attributes: {
+                name: 'Hassan',
+              },
+              relationships: {
+                'pets.0': {
+                  links: {
+                    self: '../Pet/mango',
+                  },
+                },
+                'pets.1': {
+                  links: {
+                    self: '../Pet/vangogh',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          'Person/jade.json': {
+            data: {
+              attributes: {
+                name: 'Jade',
+              },
+              relationships: {
+                'pets.0': {
+                  links: {
+                    self: '../Pet/mango',
+                  },
+                },
+                'pets.1': {
+                  links: {
+                    self: '../Pet/missing-link',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          'Person/germaine.json': {
+            data: {
+              attributes: {
+                name: 'Germaine',
+              },
+              relationships: {
+                'friends.0': {
+                  links: {
+                    self: './queenzy',
+                  },
+                },
+                'friends.1': {
+                  links: {
+                    self: './hassan',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          'Person/queenzy.json': {
+            data: {
+              attributes: {
+                name: 'Queenzy',
+              },
+              relationships: {
+                'friends.0': {
+                  links: {
+                    self: './germaine',
+                  },
+                },
+                'friends.1': {
+                  links: {
+                    self: './hassan',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
+        },
+      });
+      return {};
+    },
+  });
 
   const DEFAULT_RENDER_OPTIONS_SEGMENT = encodeURIComponent(
     JSON.stringify({ clearCache: true } as RenderRouteOptions),
@@ -40,498 +542,10 @@ module('Acceptance | prerender | html', function (hooks) {
       url,
     )}/${nonce}/${DEFAULT_RENDER_OPTIONS_SEGMENT}${suffix}`;
 
-  hooks.beforeEach(async function () {
-    // these tests result in a really large index definitions object because of all the
-    // circularity, so to speed up the tests we prune the definitions object as we don't
-    // really care about it.
+  hooks.beforeEach(function () {
     (globalThis as any).__boxel_definitions_recursing_depth = 0;
     (globalThis as any).__doNotSuppressRenderRouteError = true;
-    let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-
-    let {
-      field,
-      contains,
-      containsMany,
-      linksTo,
-      linksToMany,
-      CardDef,
-      FieldDef,
-      StringField,
-      Component,
-    } = cardApi;
-
-    class PetLicense extends FieldDef {
-      static displayName = 'Pet License';
-      @field city = contains(StringField);
-      @field owner = linksTo(() => Person);
-      static embedded = class Embedded extends Component<typeof PetLicense> {
-        <template>
-          <@fields.city />
-          <@fields.owner />
-        </template>
-      };
-    }
-
-    class EmergencyContacts extends FieldDef {
-      @field notes = contains(StringField);
-      @field contacts = linksToMany(() => Person);
-      static embedded = class Embedded extends Component<
-        typeof EmergencyContacts
-      > {
-        <template>
-          <@fields.notes />
-          <@fields.contacts />
-        </template>
-      };
-    }
-
-    class PetSitter extends FieldDef {
-      @field phone = contains(StringField);
-      @field sitter = linksTo(() => Person);
-      static embedded = class Embedded extends Component<typeof PetSitter> {
-        <template>
-          <@fields.sitter />
-          <@fields.phone />
-        </template>
-      };
-    }
-
-    class PetClique extends FieldDef {
-      @field name = contains(StringField);
-      @field members = linksToMany(() => Pet);
-      static embedded = class Embedded extends Component<typeof PetClique> {
-        <template>
-          <@fields.name />
-          <@fields.members />
-        </template>
-      };
-    }
-
-    class Pet extends CardDef {
-      static displayName = 'Pet';
-      @field name = contains(StringField);
-      @field petFriend = linksTo(() => Pet);
-      @field license = contains(PetLicense);
-      @field emergencyContacts = contains(EmergencyContacts);
-      @field sitters = containsMany(PetSitter);
-      @field cliques = containsMany(PetClique);
-      @field title = contains(StringField, {
-        computeVia(this: Pet) {
-          return `${this.name}`;
-        },
-      });
-      @field friendName = contains(StringField, {
-        computeVia(this: Pet) {
-          return this.petFriend?.name;
-        },
-      });
-      @field friendOfFriend = linksTo(() => Pet, {
-        computeVia(this: Pet) {
-          return this.petFriend?.petFriend;
-        },
-      });
-      static embedded = class Embedded extends Component<typeof Pet> {
-        <template>
-          Pet component
-          <div data-test-card-title>
-            <@fields.name />
-          </div>
-        </template>
-      };
-    }
-
-    class Cat extends Pet {
-      static displayName = 'Cat';
-      @field aliases = containsMany(StringField);
-      static embedded = class Embedded extends Component<typeof Cat> {
-        <template>
-          Cat component
-          <div data-test-card-title>
-            <@fields.name />
-          </div>
-        </template>
-
-        static head = class Head extends Component<typeof Cat> {
-          <template>
-            <title>{{@fields.name}}</title>
-          </template>
-        };
-      };
-    }
-
-    class Person extends CardDef {
-      static displayName = 'Person';
-      @field name = contains(StringField);
-      @field pets = linksToMany(() => Pet);
-      @field friends = linksToMany(() => Person);
-      @field title = contains(StringField, {
-        computeVia(this: Person) {
-          return this.name;
-        },
-      });
-      @field numberOfPets = contains(StringField, {
-        computeVia(this: Person) {
-          return String(this.pets ? this.pets.length : 0);
-        },
-      });
-      @field friendsOfFriend = linksToMany(() => Person, {
-        computeVia(this: Person) {
-          if (Array.isArray(this.friends) && this.friends.length > 0) {
-            return this.friends[0].friends;
-          }
-          return [];
-        },
-      });
-    }
-
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'person.gts': { Person },
-        'pet.gts': { Pet },
-        'cat.gts': { Cat },
-        'broken.gts': 'export const Broken = ;',
-        'broken.json': {
-          data: {
-            meta: {
-              adoptsFrom: {
-                module: './broken',
-                name: 'Broken',
-              },
-            },
-          },
-        },
-        'Pet/mango.json': {
-          data: {
-            attributes: { name: 'Mango' },
-            relationships: {
-              petFriend: {
-                links: {
-                  self: './vangogh',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Pet/vangogh.json': {
-          data: {
-            attributes: { name: 'Van Gogh' },
-            relationships: {
-              petFriend: {
-                links: {
-                  self: '../Cat/paper',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Pet/pet-a.json': {
-          data: {
-            attributes: { name: 'Allen' },
-            relationships: {
-              petFriend: {
-                links: {
-                  self: './pet-b',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Pet/pet-b.json': {
-          data: {
-            attributes: { name: 'Beatrice' },
-            relationships: {
-              petFriend: {
-                links: {
-                  self: './pet-a',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Pet/pet-c.json': {
-          data: {
-            attributes: { name: 'Clive', license: { city: 'Scarsdale' } },
-            relationships: {
-              'license.owner': {
-                links: {
-                  self: '../Person/hassan',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Pet/pet-d.json': {
-          data: {
-            attributes: {
-              name: 'Delancy',
-              emergencyContacts: { notes: 'Very timid' },
-            },
-            relationships: {
-              'emergencyContacts.contacts.0': {
-                links: {
-                  self: '../Person/jade',
-                },
-              },
-              'emergencyContacts.contacts.1': {
-                links: {
-                  self: '../Person/germaine',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Pet/pet-e.json': {
-          data: {
-            attributes: {
-              name: 'Erskine',
-              sitters: [{ phone: '01234' }, { phone: '56789' }],
-            },
-            relationships: {
-              'sitters.0.sitter': {
-                links: {
-                  self: '../Person/jade',
-                },
-              },
-              'sitters.1.sitter': {
-                links: {
-                  self: '../Person/germaine',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Pet/pet-f.json': {
-          data: {
-            attributes: {
-              name: 'Ferdinand',
-              cliques: [{ name: 'Ball Fetchers' }, { name: 'Power Nappers' }],
-            },
-            relationships: {
-              'cliques.0.members.0': {
-                links: {
-                  self: './pet-a',
-                },
-              },
-              'cliques.0.members.1': {
-                links: {
-                  self: './pet-b',
-                },
-              },
-              'cliques.1.members.0': {
-                links: {
-                  self: './pet-c',
-                },
-              },
-              'cliques.1.members.1': {
-                links: {
-                  self: './pet-d',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Pet/pet-g.json': {
-          data: {
-            attributes: {
-              name: 'Gregory',
-              friendId: `${testRealmURL}Pet/mango`,
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Cat/paper.json': {
-          data: {
-            attributes: {
-              name: 'Paper',
-              aliases: ['Satan', "Satan's Mistress"],
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../cat',
-                name: 'Cat',
-              },
-            },
-          },
-        },
-        'Cat/molly.json': {
-          data: {
-            attributes: {
-              name: 'Molly',
-            },
-            relationships: {
-              petFriend: {
-                links: {
-                  self: './missing-link',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../cat',
-                name: 'Cat',
-              },
-            },
-          },
-        },
-        'Person/hassan.json': {
-          data: {
-            attributes: {
-              name: 'Hassan',
-            },
-            relationships: {
-              'pets.0': {
-                links: {
-                  self: '../Pet/mango',
-                },
-              },
-              'pets.1': {
-                links: {
-                  self: '../Pet/vangogh',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../person',
-                name: 'Person',
-              },
-            },
-          },
-        },
-        'Person/jade.json': {
-          data: {
-            attributes: {
-              name: 'Jade',
-            },
-            relationships: {
-              'pets.0': {
-                links: {
-                  self: '../Pet/mango',
-                },
-              },
-              'pets.1': {
-                links: {
-                  self: '../Pet/missing-link',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../person',
-                name: 'Person',
-              },
-            },
-          },
-        },
-        'Person/germaine.json': {
-          data: {
-            attributes: {
-              name: 'Germaine',
-            },
-            relationships: {
-              'friends.0': {
-                links: {
-                  self: './queenzy',
-                },
-              },
-              'friends.1': {
-                links: {
-                  self: './hassan',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../person',
-                name: 'Person',
-              },
-            },
-          },
-        },
-        'Person/queenzy.json': {
-          data: {
-            attributes: {
-              name: 'Queenzy',
-            },
-            relationships: {
-              'friends.0': {
-                links: {
-                  self: './germaine',
-                },
-              },
-              'friends.1': {
-                links: {
-                  self: './hassan',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../person',
-                name: 'Person',
-              },
-            },
-          },
-        },
-      },
-    });
+    snapshot.get();
   });
 
   hooks.afterEach(function () {

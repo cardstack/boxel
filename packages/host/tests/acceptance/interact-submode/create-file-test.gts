@@ -12,8 +12,7 @@ import {
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
-  setupAuthEndpoints,
-  setupUserSubscription,
+  setupSnapshotRealm,
   type TestContextWithSave,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -213,51 +212,61 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
     activeRealms: [baseRealm.url, testRealmURL, userRealm],
   });
   let { setRealmPermissions, createAndJoinRoom } = mockMatrixUtils;
+  let defaultMatrixRoomId: string;
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    acceptanceTest: true,
+    async build({ loader, isInitialBuild }) {
+      if (isInitialBuild || !defaultMatrixRoomId) {
+        defaultMatrixRoomId = createAndJoinRoom({
+          sender: '@testuser:localhost',
+          name: 'room-test',
+        });
+      }
+
+      let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
+      cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
+      let { CardsGrid } = cardsGrid;
+
+      await Promise.all([
+        setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          loader,
+          realmURL: testRealmURL,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'index.json': new CardsGrid(),
+            ...testRealmFiles,
+          },
+        }),
+        setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          loader,
+          realmURL: userRealm,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'index.json': new CardsGrid(),
+            ...userRealmFiles,
+          },
+        }),
+      ]);
+
+      getService('network').mount(
+        async (req: Request) => {
+          // Some tests need a simulated creation failure
+          if (req.url.includes('fetch-failure')) {
+            throw new Error('A deliberate fetch error');
+          }
+          return null;
+        },
+        { prepend: true },
+      );
+      return {};
+    },
+  });
 
   hooks.beforeEach(async function () {
-    let loader = getService('loader-service').loader;
-    let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-    cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
-    let { CardsGrid } = cardsGrid;
-
-    await Promise.all([
-      setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: testRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'index.json': new CardsGrid(),
-          ...testRealmFiles,
-        },
-      }),
-      setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: userRealm,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'index.json': new CardsGrid(),
-          ...userRealmFiles,
-        },
-      }),
-    ]);
-
-    createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
-    setupUserSubscription();
-    setupAuthEndpoints();
-
-    getService('network').mount(
-      async (req: Request) => {
-        // Some tests need a simulated creation failure
-        if (req.url.includes('fetch-failure')) {
-          throw new Error('A deliberate fetch error');
-        }
-        return null;
-      },
-      { prepend: true },
-    );
+    snapshot.get();
   });
 
   hooks.beforeEach(async function () {

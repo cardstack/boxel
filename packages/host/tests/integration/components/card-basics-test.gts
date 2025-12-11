@@ -74,7 +74,6 @@ import {
   NumberField,
   PhoneNumberField,
   queryableValue,
-  setupBaseRealm,
   StringField,
   subscribeToChanges,
   TextAreaField,
@@ -91,14 +90,21 @@ let loader: Loader;
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
-
-  hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = getService('loader-service').loader;
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils: setupMockMatrix(hooks),
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
   });
 
   setupCardLogs(hooks, async () => {
-    return await loader.import(`${baseRealm.url}card-api`);
+    return await snapshot.get().loader.import(`${baseRealm.url}card-api`);
+  });
+
+  hooks.beforeEach(function () {
+    ({ loader } = snapshot.get());
   });
 
   module('cards are read-only', function (_hooks) {

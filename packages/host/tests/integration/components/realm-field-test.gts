@@ -17,9 +17,12 @@ import {
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import { provideConsumeContext, setupCardLogs } from '../../helpers';
 import {
-  setupBaseRealm,
+  provideConsumeContext,
+  setupCardLogs,
+  setupSnapshotRealm,
+} from '../../helpers';
+import {
   field,
   contains,
   CardDef,
@@ -28,6 +31,7 @@ import {
 } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 
 class StubRealmService extends Service {
   allRealmsInfo = {
@@ -75,19 +79,25 @@ module('Integration | components | realm field', function (hooks) {
     let owner = getOwner(this)!;
     owner.register('service:realm', StubRealmService);
   });
-  setupBaseRealm(hooks);
 
   let loader: Loader;
   let commandContext: CommandContext;
 
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils: setupMockMatrix(hooks),
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
+
   setupCardLogs(hooks, async () => {
-    return await getService('loader-service').loader.import(
-      `${baseRealm.url}card-api`,
-    );
+    return await snapshot.get().loader.import(`${baseRealm.url}card-api`);
   });
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = getService('loader-service').loader;
+    ({ loader } = snapshot.get());
 
     const commandService = getService('command-service');
     commandContext = commandService.commandContext;

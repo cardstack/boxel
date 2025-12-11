@@ -1,5 +1,4 @@
 import {
-  type RenderingTestContext,
   waitUntil,
   waitFor,
   click,
@@ -49,19 +48,9 @@ import {
   type TestContextWithSave,
   withSlowSave,
   setupOperatorModeStateCleanup,
+  setupSnapshotRealm,
 } from '../helpers';
 import { TestRealmAdapter } from '../helpers/adapter';
-import {
-  CardDef,
-  contains,
-  field,
-  linksTo,
-  linksToMany,
-  StringField,
-  BooleanField,
-  Component,
-  setupBaseRealm,
-} from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderComponent } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
@@ -69,7 +58,6 @@ import { setupRenderingTest } from '../helpers/setup';
 module('Integration | Store', function (hooks) {
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
-  setupBaseRealm(hooks);
   let api: typeof CardAPI;
   let loader: Loader;
   let loaderService: LoaderService;
@@ -112,48 +100,69 @@ module('Integration | Store', function (hooks) {
 
   const noop = () => {};
 
-  hooks.beforeEach(async function (this: RenderingTestContext) {
-    class Person extends CardDef {
-      @field name = contains(StringField);
-      @field hasError = contains(BooleanField);
-      @field bestFriend = linksTo(() => Person);
-      @field friends = linksToMany(() => Person);
-      @field boom = contains(StringField, {
-        computeVia: function (this: Person) {
-          if (this.hasError) {
-            throw new Error('intentional error thrown');
-          }
-          return 'boom';
-        },
-      });
-    }
-    PersonDef = Person;
+  let snapshot = setupSnapshotRealm<{
+    adapter: TestRealmAdapter;
+    realm: Realm;
+    loader: Loader;
+    loaderService: LoaderService;
+    storeService: StoreService;
+    operatorModeStateService: OperatorModeStateService;
+    cardStore: CardStore;
+    PersonDef: typeof CardDefType;
+    BoomPersonDef: typeof CardDefType;
+    api: typeof CardAPI;
+    realmService: RealmService;
+  }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service') as LoaderService;
+      loaderService.loader = loader;
+      let storeService = getService('store') as StoreService;
+      let operatorModeStateService = getService(
+        'operator-mode-state-service',
+      ) as OperatorModeStateService;
+      let cardStore = (storeService as any).store as CardStore;
+      let realmService = getService('realm') as RealmService;
 
-    class BoomPerson extends CardDef {
-      static displayName = 'Boom Person';
-      @field name = contains(StringField);
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          Hello
-          <@fields.name />!
-          {{this.boom}}
-        </template>
-        // @ts-ignore intentional error
-        boom = () => intentionallyNotDefined();
-      };
-    }
-    BoomPersonDef = BoomPerson;
-    loaderService = getService('loader-service');
-    loader = loaderService.loader;
-    api = await loader.import(`${baseRealm.url}card-api`);
-    storeService = getService('store');
-    operatorModeStateService = getService('operator-mode-state-service');
-    cardStore = (storeService as any).store as CardStore;
-    realmService = getService('realm');
+      let cardApi = await loader.import(`${baseRealm.url}card-api`);
+      let booleanModule = await loader.import(`${baseRealm.url}boolean`);
+      let stringModule = await loader.import(`${baseRealm.url}string`);
+      let { CardDef, field, contains, linksTo, linksToMany, Component } =
+        cardApi;
+      let { default: BooleanField } = booleanModule;
+      let { default: StringField } = stringModule;
 
-    ({ adapter: testRealmAdapter, realm: testRealm } =
-      await setupIntegrationTestRealm({
+      class Person extends CardDef {
+        @field name = contains(StringField);
+        @field hasError = contains(BooleanField);
+        @field bestFriend = linksTo(() => Person);
+        @field friends = linksToMany(() => Person);
+        @field boom = contains(StringField, {
+          computeVia: function (this: Person) {
+            if (this.hasError) {
+              throw new Error('intentional error thrown');
+            }
+            return 'boom';
+          },
+        });
+      }
+      class BoomPerson extends CardDef {
+        static displayName = 'Boom Person';
+        @field name = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            Hello
+            <@fields.name />!
+            {{this.boom}}
+          </template>
+          // @ts-ignore intentional error
+          boom = () => intentionallyNotDefined();
+        };
+      }
+
+      let { adapter, realm } = await setupIntegrationTestRealm({
         mockMatrixUtils,
+        loader,
         contents: {
           'person.gts': { Person },
           'boom-person.gts': { BoomPerson },
@@ -163,7 +172,38 @@ module('Integration | Store', function (hooks) {
           'Person/germaine.json': new Person({ name: 'Germaine' }),
           'Person/boris.json': new Person({ name: 'Boris' }),
         },
-      }));
+      });
+
+      return {
+        adapter,
+        realm,
+        loader,
+        loaderService,
+        storeService,
+        operatorModeStateService,
+        cardStore,
+        PersonDef: Person,
+        BoomPersonDef: BoomPerson,
+        api: cardApi,
+        realmService,
+      };
+    },
+  });
+
+  hooks.beforeEach(async function () {
+    ({
+      adapter: testRealmAdapter,
+      realm: testRealm,
+      loader,
+      loaderService,
+      storeService,
+      operatorModeStateService,
+      cardStore,
+      PersonDef,
+      BoomPersonDef,
+      api,
+      realmService,
+    } = snapshot.get());
     await realmService.login(testRealmURL);
   });
 

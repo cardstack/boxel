@@ -7,11 +7,18 @@ import { module, test } from 'qunit';
 
 import AddWorkspace from '@cardstack/host/components/operator-mode/workspace-chooser/add-workspace';
 
+import { setupSnapshotRealm } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | add-workspace', function (hooks) {
   setupRenderingTest(hooks);
+  setupSnapshotRealm(hooks, {
+    mockMatrixUtils: undefined as any,
+    async build() {
+      return {};
+    },
+  });
 
   test('it can auto-populate workspace endpoint field', async function (assert) {
     await renderComponent(

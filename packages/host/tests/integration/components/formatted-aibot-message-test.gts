@@ -6,6 +6,7 @@ import {
   settled,
   waitFor,
 } from '@ember/test-helpers';
+import { getService } from '@universal-ember/test-support';
 
 import { waitUntil } from '@ember/test-helpers';
 
@@ -13,7 +14,6 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import percySnapshot from '@percy/ember';
-import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -33,9 +33,14 @@ import MonacoService from '@cardstack/host/services/monaco-service';
 
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+import { setupSnapshotRealm } from '../../helpers';
 
 module('Integration | Component | FormattedAiBotMessage', function (hooks) {
   setupRenderingTest(hooks);
+  setupSnapshotRealm(hooks, {
+    mockMatrixUtils: undefined as any,
+    build: async () => ({}),
+  });
 
   let monacoService: MonacoService;
   let cardService: CardService;

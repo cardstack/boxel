@@ -1,4 +1,3 @@
-import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
@@ -6,13 +5,10 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import ENV from '@cardstack/host/config/environment';
 
-import {
-  setupBaseRealm,
-  field,
-  contains,
-  CardDef,
-  Component,
-} from '../helpers/base-realm';
+import { getService } from '@universal-ember/test-support';
+import { setupSnapshotRealm } from '../helpers';
+import { field, contains, CardDef, Component } from '../helpers/base-realm';
+import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -22,17 +18,33 @@ let loader: Loader;
 
 module('Integration | number field configuration', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
   let CatalogNumberFieldClass: any;
 
-  hooks.beforeEach(async function () {
-    loader = getService('loader-service').loader;
-    const numberModule: any = await loader.import(
-      `${catalogRealmURL}fields/number`,
-    );
-    CatalogNumberFieldClass = numberModule.default;
+  let mockMatrixUtils = setupMockMatrix(hooks);
+
+  let snapshot = setupSnapshotRealm<{
+    loader: Loader;
+    CatalogNumberFieldClass: any;
+  }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      const numberModule: any = await loader.import(
+        `${catalogRealmURL}fields/number`,
+      );
+
+      return {
+        loader,
+        CatalogNumberFieldClass: numberModule.default,
+      };
+    },
+  });
+
+  hooks.beforeEach(function () {
+    ({ loader, CatalogNumberFieldClass } = snapshot.get());
   });
 
   async function renderConfiguredField(

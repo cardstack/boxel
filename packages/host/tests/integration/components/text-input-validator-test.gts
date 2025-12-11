@@ -17,6 +17,7 @@ import {
   setupOnSave,
   type TestContextWithSave,
   setupOperatorModeStateCleanup,
+  setupSnapshotRealm,
 } from '../../helpers';
 import {
   BigIntegerField,
@@ -24,7 +25,6 @@ import {
   field,
   contains,
   CardDef,
-  setupBaseRealm,
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
@@ -34,7 +34,6 @@ module('Integration | text-input-validator', function (hooks) {
   let realm: Realm;
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
 
@@ -44,27 +43,38 @@ module('Integration | text-input-validator', function (hooks) {
     autostart: true,
   });
 
+  let snapshot = setupSnapshotRealm<{ realm: Realm }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      class Sample extends CardDef {
+        static displayName = 'Sample';
+        @field someBigInt = contains(BigIntegerField);
+        @field anotherBigInt = contains(BigIntegerField);
+        @field someNumber = contains(NumberField);
+      }
+
+      let { realm } = await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'sample.gts': { Sample },
+          'Sample/1.json': new Sample({
+            someBigInt: null,
+            anotherBigInt: '123',
+            someNumber: 0,
+          }),
+        },
+        loader,
+      });
+
+      return { realm };
+    },
+  });
+
   hooks.beforeEach(async function () {
+    ({ realm } = snapshot.get());
     let operatorModeStateService = getService('operator-mode-state-service');
-
-    class Sample extends CardDef {
-      static displayName = 'Sample';
-      @field someBigInt = contains(BigIntegerField);
-      @field anotherBigInt = contains(BigIntegerField);
-      @field someNumber = contains(NumberField);
-    }
-
-    ({ realm } = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'sample.gts': { Sample },
-        'Sample/1.json': new Sample({
-          someBigInt: null,
-          anotherBigInt: '123',
-          someNumber: 0,
-        }),
-      },
-    }));
 
     operatorModeStateService.restore({
       stacks: [[{ id: `${testRealmURL}Sample/1`, format: 'edit' }]],

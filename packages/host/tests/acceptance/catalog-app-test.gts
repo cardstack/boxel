@@ -25,8 +25,6 @@ import {
   setupLocalIndexing,
   setupOnSave,
   testRealmURL as mockCatalogURL,
-  setupAuthEndpoints,
-  setupUserSubscription,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
@@ -37,6 +35,7 @@ import {
   verifyFileInFileTree,
   verifyJSONWithUUIDInFolder,
   setupRealmServerEndpoints,
+  setupSnapshotRealm,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -173,252 +172,398 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
   });
 
   let { getRoomIds, createAndJoinRoom } = mockMatrixUtils;
-
-  hooks.beforeEach(async function () {
-    createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
-    setupUserSubscription();
-    setupAuthEndpoints();
-    // this setup test realm is pretending to be a mock catalog
-    await setupAcceptanceTestRealm({
-      realmURL: mockCatalogURL,
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'author/author.gts': authorCardSource,
-        'blog-post/blog-post.gts': blogPostCardSource,
-        'fields/contact-link.gts': contactLinkFieldSource,
-        'app-card.gts': appCardSource,
-        'blog-app/blog-app.gts': blogAppCardSource,
-        'card-with-unrecognised-imports.gts': cardWithUnrecognisedImports,
-        'theme/theme-example.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              cssVariables:
-                ':root { --background: #ffffff; } .dark { --background: #000000; }',
-              cssImports: [],
-              cardInfo: {
-                title: 'Sample Theme',
-                description: 'A sample theme for testing remix.',
-                thumbnailURL: null,
-                notes: null,
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
-                name: 'Theme',
-              },
-            },
-          },
-        },
-        'ThemeListing/cardstack-theme.json': {
-          data: {
-            meta: {
-              adoptsFrom: {
-                name: 'ThemeListing',
-                module: `${catalogRealmURL}catalog-app/listing/listing`,
-              },
-            },
-            type: 'card',
-            attributes: {
-              name: 'Cardstack Theme',
-              images: [],
-              summary: 'Cardstack base theme listing.',
-            },
-            relationships: {
-              specs: {
-                links: {
-                  self: null,
+  let defaultMatrixRoomId: string;
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    acceptanceTest: true,
+    async build({ loader, isInitialBuild }) {
+      if (isInitialBuild || !defaultMatrixRoomId) {
+        defaultMatrixRoomId = createAndJoinRoom({
+          sender: '@testuser:localhost',
+          name: 'room-test',
+        });
+      }
+      await setupAcceptanceTestRealm({
+        realmURL: mockCatalogURL,
+        mockMatrixUtils,
+        loader,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'author/author.gts': authorCardSource,
+          'blog-post/blog-post.gts': blogPostCardSource,
+          'fields/contact-link.gts': contactLinkFieldSource,
+          'app-card.gts': appCardSource,
+          'blog-app/blog-app.gts': blogAppCardSource,
+          'card-with-unrecognised-imports.gts': cardWithUnrecognisedImports,
+          'theme/theme-example.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cssVariables:
+                  ':root { --background: #ffffff; } .dark { --background: #000000; }',
+                cssImports: [],
+                cardInfo: {
+                  title: 'Sample Theme',
+                  description: 'A sample theme for testing remix.',
+                  thumbnailURL: null,
+                  notes: null,
                 },
               },
-              skills: {
-                links: {
-                  self: null,
-                },
-              },
-              tags: {
-                links: {
-                  self: null,
-                },
-              },
-              license: {
-                links: {
-                  self: null,
-                },
-              },
-              publisher: {
-                links: {
-                  self: null,
-                },
-              },
-              'examples.0': {
-                links: {
-                  self: '../theme/theme-example',
-                },
-              },
-              categories: {
-                links: {
-                  self: null,
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'Theme',
                 },
               },
             },
           },
-        },
-        'author/Author/example.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Mike',
-              lastName: 'Dane',
-              summary: 'Author',
+          'ThemeListing/cardstack-theme.json': {
+            data: {
+              meta: {
+                adoptsFrom: {
+                  name: 'ThemeListing',
+                  module: `${catalogRealmURL}catalog-app/listing/listing`,
+                },
+              },
+              type: 'card',
+              attributes: {
+                name: 'Cardstack Theme',
+                images: [],
+                summary: 'Cardstack base theme listing.',
+              },
+              relationships: {
+                specs: {
+                  links: {
+                    self: null,
+                  },
+                },
+                skills: {
+                  links: {
+                    self: null,
+                  },
+                },
+                tags: {
+                  links: {
+                    self: null,
+                  },
+                },
+                license: {
+                  links: {
+                    self: null,
+                  },
+                },
+                publisher: {
+                  links: {
+                    self: null,
+                  },
+                },
+                'examples.0': {
+                  links: {
+                    self: '../theme/theme-example',
+                  },
+                },
+                categories: {
+                  links: {
+                    self: null,
+                  },
+                },
+              },
             },
-            meta: {
-              adoptsFrom: {
-                module: `${mockCatalogURL}author/author`,
+          },
+          'author/Author/example.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Mike',
+                lastName: 'Dane',
+                summary: 'Author',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${mockCatalogURL}author/author`,
+                  name: 'Author',
+                },
+              },
+            },
+          },
+          'UnrecognisedImports/example.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: `${mockCatalogURL}card-with-unrecognised-imports`,
+                  name: 'UnrecognisedImports',
+                },
+              },
+            },
+          },
+          'blog-post/BlogPost/example.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                title: 'Blog Post',
+                content: 'Blog Post Content',
+              },
+              relationships: {
+                author: {
+                  links: {
+                    self: authorExampleId,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${mockCatalogURL}blog-post/blog-post`,
+                  name: 'BlogPost',
+                },
+              },
+            },
+          },
+          'blog-app/BlogApp/example.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                title: 'My Blog App',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${mockCatalogURL}blog-app/blog-app`,
+                  name: 'BlogApp',
+                },
+              },
+            },
+          },
+          'Spec/author.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                readMe: 'This is the author spec readme',
+                ref: {
+                  name: 'Author',
+                  module: `${mockCatalogURL}author/author`,
+                },
+              },
+              specType: 'card',
+              containedExamples: [],
+              title: 'Author',
+              description: 'Spec for Author card',
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/spec',
+                  name: 'Spec',
+                },
+              },
+            },
+          },
+          'Spec/contact-link.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                ref: {
+                  name: 'ContactLink',
+                  module: `${mockCatalogURL}fields/contact-link`,
+                },
+              },
+              specType: 'field',
+              containedExamples: [],
+              title: 'ContactLink',
+              description: 'Spec for ContactLink field',
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/spec',
+                  name: 'Spec',
+                },
+              },
+            },
+          },
+          'Spec/unknown-no-type.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                readMe: 'Spec without specType to trigger unknown grouping',
+                ref: {
+                  name: 'UnknownNoType',
+                  module: `${mockCatalogURL}unknown/unknown-no-type`,
+                },
+              },
+              // intentionally omitting specType so it falls into 'unknown'
+              containedExamples: [],
+              title: 'UnknownNoType',
+              description: 'Spec lacking specType',
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/spec',
+                  name: 'Spec',
+                },
+              },
+            },
+          },
+          'Listing/author.json': {
+            data: {
+              type: 'card',
+              attributes: {
                 name: 'Author',
+                title: 'Author', // hardcoding title otherwise test will be flaky when waiting for a computed
+                summary: 'A card for representing an author.',
               },
-            },
-          },
-        },
-        'UnrecognisedImports/example.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: `${mockCatalogURL}card-with-unrecognised-imports`,
-                name: 'UnrecognisedImports',
+              relationships: {
+                'specs.0': {
+                  links: {
+                    self: authorSpecId,
+                  },
+                },
+                'examples.0': {
+                  links: {
+                    self: authorExampleId,
+                  },
+                },
+                'tags.0': {
+                  links: {
+                    self: calculatorTagId,
+                  },
+                },
+                'categories.0': {
+                  links: {
+                    self: writingCategoryId,
+                  },
+                },
+                license: {
+                  links: {
+                    self: mitLicenseId,
+                  },
+                },
+                publisher: {
+                  links: {
+                    self: publisherId,
+                  },
+                },
               },
-            },
-          },
-        },
-        'blog-post/BlogPost/example.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Blog Post',
-              content: 'Blog Post Content',
-            },
-            relationships: {
-              author: {
-                links: {
-                  self: authorExampleId,
+              meta: {
+                adoptsFrom: {
+                  module: `${catalogRealmURL}catalog-app/listing/listing`,
+                  name: 'CardListing',
                 },
               },
             },
-            meta: {
-              adoptsFrom: {
-                module: `${mockCatalogURL}blog-post/blog-post`,
-                name: 'BlogPost',
-              },
-            },
           },
-        },
-        'blog-app/BlogApp/example.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'My Blog App',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${mockCatalogURL}blog-app/blog-app`,
-                name: 'BlogApp',
+          'Publisher/boxel-publisher.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Boxel Publishing',
               },
-            },
-          },
-        },
-        'Spec/author.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              readMe: 'This is the author spec readme',
-              ref: {
-                name: 'Author',
-                module: `${mockCatalogURL}author/author`,
-              },
-            },
-            specType: 'card',
-            containedExamples: [],
-            title: 'Author',
-            description: 'Spec for Author card',
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
-                name: 'Spec',
-              },
-            },
-          },
-        },
-        'Spec/contact-link.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              ref: {
-                name: 'ContactLink',
-                module: `${mockCatalogURL}fields/contact-link`,
-              },
-            },
-            specType: 'field',
-            containedExamples: [],
-            title: 'ContactLink',
-            description: 'Spec for ContactLink field',
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
-                name: 'Spec',
-              },
-            },
-          },
-        },
-        'Spec/unknown-no-type.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              readMe: 'Spec without specType to trigger unknown grouping',
-              ref: {
-                name: 'UnknownNoType',
-                module: `${mockCatalogURL}unknown/unknown-no-type`,
-              },
-            },
-            // intentionally omitting specType so it falls into 'unknown'
-            containedExamples: [],
-            title: 'UnknownNoType',
-            description: 'Spec lacking specType',
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
-                name: 'Spec',
-              },
-            },
-          },
-        },
-        'Listing/author.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Author',
-              title: 'Author', // hardcoding title otherwise test will be flaky when waiting for a computed
-              summary: 'A card for representing an author.',
-            },
-            relationships: {
-              'specs.0': {
-                links: {
-                  self: authorSpecId,
+              meta: {
+                adoptsFrom: {
+                  module: `${catalogRealmURL}catalog-app/listing/publisher`,
+                  name: 'Publisher',
                 },
               },
-              'examples.0': {
-                links: {
-                  self: authorExampleId,
+            },
+          },
+          'License/mit.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'MIT License',
+                content: 'MIT License',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${catalogRealmURL}catalog-app/listing/license`,
+                  name: 'License',
                 },
               },
-              'tags.0': {
-                links: {
-                  self: calculatorTagId,
+            },
+          },
+          'Listing/person.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Person',
+                title: 'Person', // hardcoding title otherwise test will be flaky when waiting for a computed
+                images: [
+                  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400',
+                  'https://images.unsplash.com/photo-1494790108755-2616b332db29?w=400',
+                  'https://images.unsplash.com/photo-1552374196-c4e7ffc6e126?w=400',
+                ],
+              },
+              relationships: {
+                'tags.0': {
+                  links: {
+                    self: calculatorTagId,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${catalogRealmURL}catalog-app/listing/listing`,
+                  name: 'CardListing',
+                },
+              },
+            },
+          },
+          'Listing/unknown-only.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              relationships: {
+                'specs.0': {
+                  links: {
+                    self: unknownSpecId,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${catalogRealmURL}catalog-app/listing/listing`,
+                  name: 'CardListing',
+                },
+              },
+            },
+          },
+          'AppListing/blog-app.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Blog App',
+                title: 'Blog App', // hardcoding title otherwise test will be flaky when waiting for a computed
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${catalogRealmURL}catalog-app/listing/listing`,
+                  name: 'AppListing',
+                },
+              },
+            },
+          },
+          'Listing/empty.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Empty',
+                title: 'Empty', // hardcoding title otherwise test will be flaky when waiting for a computed
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${catalogRealmURL}catalog-app/listing/listing`,
+                  name: 'CardListing',
+                },
+              },
+            },
+          },
+          'SkillListing/pirate-skill.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Pirate Skill',
+                title: 'Pirate Skill', // hardcoding title otherwise test will be flaky when waiting for a computed
+              },
+              relationships: {
+                'skills.0': {
+                  links: {
+                    self: pirateSkillId,
+                  },
                 },
               },
               'categories.0': {
@@ -426,343 +571,228 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                   self: writingCategoryId,
                 },
               },
-              license: {
-                links: {
-                  self: mitLicenseId,
-                },
-              },
-              publisher: {
-                links: {
-                  self: publisherId,
+              meta: {
+                adoptsFrom: {
+                  module: `${catalogRealmURL}catalog-app/listing/listing`,
+                  name: 'SkillListing',
                 },
               },
             },
-            meta: {
-              adoptsFrom: {
-                module: `${catalogRealmURL}catalog-app/listing/listing`,
-                name: 'CardListing',
-              },
-            },
           },
-        },
-        'Publisher/boxel-publisher.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Boxel Publishing',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${catalogRealmURL}catalog-app/listing/publisher`,
-                name: 'Publisher',
+          'Category/writing.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Writing',
               },
-            },
-          },
-        },
-        'License/mit.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'MIT License',
-              content: 'MIT License',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${catalogRealmURL}catalog-app/listing/license`,
-                name: 'License',
-              },
-            },
-          },
-        },
-        'Listing/person.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Person',
-              title: 'Person', // hardcoding title otherwise test will be flaky when waiting for a computed
-              images: [
-                'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400',
-                'https://images.unsplash.com/photo-1494790108755-2616b332db29?w=400',
-                'https://images.unsplash.com/photo-1552374196-c4e7ffc6e126?w=400',
-              ],
-            },
-            relationships: {
-              'tags.0': {
-                links: {
-                  self: calculatorTagId,
+              meta: {
+                adoptsFrom: {
+                  module: `${catalogRealmURL}catalog-app/listing/category`,
+                  name: 'Category',
                 },
               },
             },
-            meta: {
-              adoptsFrom: {
-                module: `${catalogRealmURL}catalog-app/listing/listing`,
-                name: 'CardListing',
-              },
-            },
           },
-        },
-        'Listing/unknown-only.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            relationships: {
-              'specs.0': {
-                links: {
-                  self: unknownSpecId,
+          'Category/category-with-null-sphere.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'CategoryWithNullSphere',
+              },
+              relationships: {
+                sphere: {
+                  links: {
+                    self: null,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${mockCatalogURL}catalog-app/listing/category`,
+                  name: 'Category',
                 },
               },
             },
-            meta: {
-              adoptsFrom: {
-                module: `${catalogRealmURL}catalog-app/listing/listing`,
-                name: 'CardListing',
-              },
-            },
           },
-        },
-        'AppListing/blog-app.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Blog App',
-              title: 'Blog App', // hardcoding title otherwise test will be flaky when waiting for a computed
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${catalogRealmURL}catalog-app/listing/listing`,
-                name: 'AppListing',
+          'Listing/incomplete-skill.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Incomplete Skill',
+                title: 'Incomplete Skill', // hardcoding title otherwise test will be flaky when waiting for a computed
               },
-            },
-          },
-        },
-        'Listing/empty.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Empty',
-              title: 'Empty', // hardcoding title otherwise test will be flaky when waiting for a computed
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${catalogRealmURL}catalog-app/listing/listing`,
-                name: 'CardListing',
-              },
-            },
-          },
-        },
-        'SkillListing/pirate-skill.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Pirate Skill',
-              title: 'Pirate Skill', // hardcoding title otherwise test will be flaky when waiting for a computed
-            },
-            relationships: {
-              'skills.0': {
-                links: {
-                  self: pirateSkillId,
+              meta: {
+                adoptsFrom: {
+                  module: `${catalogRealmURL}catalog-app/listing/listing`,
+                  name: 'SkillListing',
                 },
               },
             },
-            'categories.0': {
-              links: {
-                self: writingCategoryId,
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${catalogRealmURL}catalog-app/listing/listing`,
-                name: 'SkillListing',
-              },
-            },
           },
-        },
-        'Category/writing.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Writing',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${catalogRealmURL}catalog-app/listing/category`,
-                name: 'Category',
+          'Skill/pirate-speak.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                title: 'Talk Like a Pirate',
+                name: 'Pirate Speak',
               },
-            },
-          },
-        },
-        'Listing/incomplete-skill.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Incomplete Skill',
-              title: 'Incomplete Skill', // hardcoding title otherwise test will be flaky when waiting for a computed
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${catalogRealmURL}catalog-app/listing/listing`,
-                name: 'SkillListing',
-              },
-            },
-          },
-        },
-        'Skill/pirate-speak.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Talk Like a Pirate',
-              name: 'Pirate Speak',
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/skill',
-                name: 'Skill',
-              },
-            },
-          },
-        },
-        'Tag/c1fe433a-b3df-41f4-bdcf-d98686ee42d7.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Calculator',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${catalogRealmURL}catalog-app/listing/tag`,
-                name: 'Tag',
-              },
-            },
-          },
-        },
-        'Tag/51de249c-516a-4c4d-bd88-76e88274c483.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Game',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${catalogRealmURL}catalog-app/listing/tag`,
-                name: 'Tag',
-              },
-            },
-          },
-        },
-        'Tag/stub.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Stub',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${catalogRealmURL}catalog-app/listing/tag`,
-                name: 'Tag',
-              },
-            },
-          },
-        },
-        'Listing/api-documentation-stub.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'API Documentation',
-              title: 'API Documentation', // hardcoding title otherwise test will be flaky when waiting for a computed
-            },
-            relationships: {
-              'tags.0': {
-                links: {
-                  self: stubTagId,
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/skill',
+                  name: 'Skill',
                 },
               },
             },
-            meta: {
-              adoptsFrom: {
-                module: `${catalogRealmURL}catalog-app/listing/listing`,
-                name: 'Listing',
-              },
-            },
           },
-        },
-        'FieldListing/contact-link.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Contact Link',
-              title: 'Contact Link', // hardcoding title otherwise test will be flaky when waiting for a computed
-              summary:
-                'A field for creating and managing contact links such as email, phone, or other web links.',
-            },
-            relationships: {
-              'specs.0': {
-                links: {
-                  self: `${mockCatalogURL}Spec/contact-link`,
+          'Tag/c1fe433a-b3df-41f4-bdcf-d98686ee42d7.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Calculator',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${catalogRealmURL}catalog-app/listing/tag`,
+                  name: 'Tag',
                 },
               },
             },
-            meta: {
-              adoptsFrom: {
-                module: `${catalogRealmURL}catalog-app/listing/listing`,
-                name: 'FieldListing',
-              },
-            },
           },
-        },
-        'index.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            relationships: {
-              'startHere.0': {
-                links: {
-                  self: authorListingId,
+          'Tag/51de249c-516a-4c4d-bd88-76e88274c483.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Game',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${catalogRealmURL}catalog-app/listing/tag`,
+                  name: 'Tag',
                 },
               },
             },
-            meta: {
-              adoptsFrom: {
-                module: `${catalogRealmURL}catalog-app/catalog`,
-                name: 'Catalog',
+          },
+          'Tag/stub.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Stub',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${catalogRealmURL}catalog-app/listing/tag`,
+                  name: 'Tag',
+                },
               },
             },
           },
-        },
-        '.realm.json': {
-          name: 'Cardstack Catalog',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
-      },
-    });
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      realmURL: testDestinationRealmURL,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
+          'Listing/api-documentation-stub.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'API Documentation',
+                title: 'API Documentation', // hardcoding title otherwise test will be flaky when waiting for a computed
+              },
+              relationships: {
+                'tags.0': {
+                  links: {
+                    self: stubTagId,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${catalogRealmURL}catalog-app/listing/listing`,
+                  name: 'Listing',
+                },
               },
             },
           },
+          'FieldListing/contact-link.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Contact Link',
+                title: 'Contact Link', // hardcoding title otherwise test will be flaky when waiting for a computed
+                summary:
+                  'A field for creating and managing contact links such as email, phone, or other web links.',
+              },
+              relationships: {
+                'specs.0': {
+                  links: {
+                    self: `${mockCatalogURL}Spec/contact-link`,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${catalogRealmURL}catalog-app/listing/listing`,
+                  name: 'FieldListing',
+                },
+              },
+            },
+          },
+          'index.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              relationships: {
+                'startHere.0': {
+                  links: {
+                    self: authorListingId,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${catalogRealmURL}catalog-app/catalog`,
+                  name: 'Catalog',
+                },
+              },
+            },
+          },
+          '.realm.json': {
+            name: 'Cardstack Catalog',
+            backgroundURL:
+              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          },
         },
-        '.realm.json': {
-          name: 'Test Workspace B',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+      });
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        loader,
+        realmURL: testDestinationRealmURL,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.json': {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/cards-grid',
+                  name: 'CardsGrid',
+                },
+              },
+            },
+          },
+          '.realm.json': {
+            name: 'Test Workspace B',
+            backgroundURL:
+              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          },
         },
-      },
-    });
+      });
+      return {};
+    },
   });
 
-  /**
+  hooks.beforeEach(function () {
+    snapshot.get();
+  });
+
+/**
    * Selects a tab by name within the catalog app
    */
   async function selectTab(tabName: string) {
@@ -1385,36 +1415,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         });
 
         test('categories with null sphere fields are excluded from filter list', async function (assert) {
-          // Setup: Create a category with null sphere field
-          await setupAcceptanceTestRealm({
-            realmURL: mockCatalogURL,
-            mockMatrixUtils,
-            contents: {
-              ...SYSTEM_CARD_FIXTURE_CONTENTS,
-              'Category/category-with-null-sphere.json': {
-                data: {
-                  type: 'card',
-                  attributes: {
-                    name: 'CategoryWithNullSphere',
-                  },
-                  relationships: {
-                    sphere: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: `${mockCatalogURL}catalog-app/listing/category`,
-                      name: 'Category',
-                    },
-                  },
-                },
-              },
-            },
-          });
-
           await visitOperatorMode({
             stacks: [
               [

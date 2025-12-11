@@ -2,8 +2,6 @@ import Service from '@ember/service';
 import { waitFor, click, findAll } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { getService } from '@universal-ember/test-support';
-
 import { module, skip } from 'qunit';
 
 import { baseRealm, Loader, type Realm } from '@cardstack/runtime-common';
@@ -28,6 +26,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOperatorModeStateCleanup,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
@@ -57,15 +56,24 @@ module('Integration | create app module via ai-assistant', function (hooks) {
 
   let { getRoomEvents, simulateRemoteMessage, getRoomState } = mockMatrixUtils;
 
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
+
   hooks.beforeEach(function () {
-    loader = getService('loader-service').loader;
+    ({ loader } = snapshot.get());
     this.owner.register('service:router', MockRouterService);
   });
 
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
   );
 
   hooks.beforeEach(async function () {

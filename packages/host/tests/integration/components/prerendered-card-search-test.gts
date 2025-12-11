@@ -16,6 +16,7 @@ import {
   type LooseSingleCardDocument,
   CardContextName,
 } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
 
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
 
@@ -24,6 +25,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
+  setupSnapshotRealm,
 } from '../../helpers';
 import {
   CardDef,
@@ -32,7 +34,6 @@ import {
   contains,
   field,
   linksTo,
-  setupBaseRealm,
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -77,8 +78,17 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     autostart: true,
   });
 
-  setupBaseRealm(hooks);
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
+
   hooks.beforeEach(async function (this: RenderingTestContext) {
+    let { loader } = snapshot.get();
     class PersonField extends FieldDef {
       @field firstName = contains(StringField);
       @field lastName = contains(StringField);

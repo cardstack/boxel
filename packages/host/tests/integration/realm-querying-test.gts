@@ -1,5 +1,3 @@
-import { RenderingTestContext } from '@ember/test-helpers';
-
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -16,28 +14,18 @@ import {
   type CardDocFiles,
   setupIntegrationTestRealm,
   testModuleRealm,
+  setupSnapshotRealm,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 const paths = new RealmPaths(new URL(testRealmURL));
 
-let loader: Loader;
-
 module(`Integration | realm querying`, function (hooks) {
   setupRenderingTest(hooks);
 
-  hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = getService('loader-service').loader;
-  });
-
   setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks);
-
-  setupCardLogs(
-    hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
-  );
 
   const sampleCards: CardDocFiles = {
     'card-1.json': {
@@ -574,12 +562,35 @@ module(`Integration | realm querying`, function (hooks) {
 
   let queryEngine: RealmIndexQueryEngine;
 
-  hooks.beforeEach(async function () {
-    let { realm } = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: sampleCards,
-    });
-    queryEngine = realm.realmIndexQueryEngine;
+  let snapshot = setupSnapshotRealm<{
+    queryEngine: RealmIndexQueryEngine;
+    loader: Loader;
+  }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+
+      let { realm } = await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: sampleCards,
+        loader,
+      });
+
+      return {
+        queryEngine: realm.realmIndexQueryEngine,
+        loader,
+      };
+    },
+  });
+
+  setupCardLogs(
+    hooks,
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
+  );
+
+  hooks.beforeEach(function () {
+    ({ queryEngine } = snapshot.get());
   });
 
   test(`can search for cards by using the 'eq' filter`, async function (assert) {

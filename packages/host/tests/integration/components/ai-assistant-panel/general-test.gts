@@ -43,6 +43,8 @@ import {
   setMonacoContent,
   setupRealmServerEndpoints,
   setupOperatorModeStateCleanup,
+  setupRendering,
+  setupSnapshotRealm,
 } from '../../../helpers';
 import {
   CardDef,
@@ -52,7 +54,6 @@ import {
   linksTo,
   linksToMany,
   field,
-  setupBaseRealm,
   StringField,
 } from '../../../helpers/base-realm';
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
@@ -67,18 +68,12 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
-  setupBaseRealm(hooks);
-
-  hooks.beforeEach(function () {
-    loader = getService('loader-service').loader;
-  });
 
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
-  );
+  hooks.beforeEach(async function () {
+    await setupRendering(false);
+  });
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -98,6 +93,24 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     setReadReceipt,
     getRoomEvents,
   } = mockMatrixUtils;
+
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
+
+  setupCardLogs(
+    hooks,
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
+  );
+
+  hooks.beforeEach(function () {
+    ({ loader } = snapshot.get());
+  });
 
   // Setup realm server endpoints for summarization tests
   setupRealmServerEndpoints(hooks, [

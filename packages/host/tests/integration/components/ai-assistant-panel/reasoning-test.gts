@@ -22,13 +22,13 @@ import {
   setupLocalIndexing,
   setupOnSave,
   setupOperatorModeStateCleanup,
+  setupSnapshotRealm,
 } from '../../../helpers';
 import {
   CardDef,
   Component,
   contains,
   field,
-  setupBaseRealm,
   StringField,
 } from '../../../helpers/base-realm';
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
@@ -42,17 +42,21 @@ module('Integration | ai-assistant-panel | reasoning', function (hooks) {
 
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
-  setupBaseRealm(hooks);
 
-  hooks.beforeEach(function () {
-    loader = getService('loader-service').loader;
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
   });
 
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -72,6 +76,7 @@ module('Integration | ai-assistant-panel | reasoning', function (hooks) {
   let noop = () => {};
 
   hooks.beforeEach(async function () {
+    ({ loader } = snapshot.get());
     operatorModeStateService = getService('operator-mode-state-service');
 
     class Person extends CardDef {

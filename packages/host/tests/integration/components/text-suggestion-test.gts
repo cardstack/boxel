@@ -1,9 +1,7 @@
-import { RenderingTestContext } from '@ember/test-helpers';
-
-import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, Loader } from '@cardstack/runtime-common';
+import { getService } from '@universal-ember/test-support';
 
 import {
   suggestCardChooserTitle,
@@ -14,6 +12,7 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -28,53 +27,60 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks);
 
-  hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = getService('loader-service').loader;
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      cardApi = await loader.import(`${baseRealm.url}card-api`);
+      string = await loader.import(`${baseRealm.url}string`);
+
+      let { contains, field, CardDef, linksTo } = cardApi;
+      let { default: StringField } = string;
+
+      class Article extends CardDef {
+        static displayName = 'Article';
+        @field author = contains(StringField);
+      }
+
+      class Post extends CardDef {
+        static displayName = 'Post';
+        @field article = linksTo(Article);
+        @field title = contains(StringField);
+      }
+
+      class BlogPost extends Post {
+        static displayName = 'BlogPost';
+        @field article = linksTo(Article);
+      }
+
+      class Book extends CardDef {
+        static displayName = 'Book';
+        @field author = contains(StringField);
+      }
+
+      class Booking extends CardDef {
+        static displayName = 'Booking';
+        @field booker = contains(StringField);
+      }
+
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'article.gts': { Article },
+          'blog-post.gts': { BlogPost },
+          'book.gts': { Book },
+          'booking.gts': { Booking },
+          'post.gts': { Post },
+        },
+        loader,
+      });
+      return { loader };
+    },
   });
 
-  hooks.beforeEach(async function () {
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-
-    let { contains, field, CardDef, linksTo } = cardApi;
-    let { default: StringField } = string;
-
-    class Article extends CardDef {
-      static displayName = 'Article';
-      @field author = contains(StringField);
-    }
-
-    class Post extends CardDef {
-      static displayName = 'Post';
-      @field article = linksTo(Article);
-      @field title = contains(StringField);
-    }
-
-    class BlogPost extends Post {
-      static displayName = 'BlogPost';
-      @field article = linksTo(Article);
-    }
-
-    class Book extends CardDef {
-      static displayName = 'Book';
-      @field author = contains(StringField);
-    }
-
-    class Booking extends CardDef {
-      static displayName = 'Booking';
-      @field booker = contains(StringField);
-    }
-
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'article.gts': { Article },
-        'blog-post.gts': { BlogPost },
-        'book.gts': { Book },
-        'booking.gts': { Booking },
-        'post.gts': { Post },
-      },
-    });
+  hooks.beforeEach(function () {
+    ({ loader } = snapshot.get());
   });
 
   test('filter on', async function (assert) {

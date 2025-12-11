@@ -1,5 +1,4 @@
-import { RenderingTestContext, settled } from '@ember/test-helpers';
-
+import { settled } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -17,9 +16,9 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
+  setupSnapshotRealm,
 } from '../helpers';
 import {
-  setupBaseRealm,
   createFromSerialized,
   field,
   contains,
@@ -134,22 +133,25 @@ function buildThemeDocument(palette: string): SingleCardDocument {
 
 module('Integration | field configuration', function (hooks) {
   setupRenderingTest(hooks);
-  // Initialize base realm helpers so createFromSerialized/ensureLinksLoaded
-  // use the test loader bound to this environment.
-  setupBaseRealm(hooks);
-
-  hooks.beforeEach(function () {
-    loader = getService('loader-service').loader;
-  });
 
   setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks);
 
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
+
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
   );
-  hooks.beforeEach(async function (this: RenderingTestContext) {
+  hooks.beforeEach(async function () {
+    ({ loader } = snapshot.get());
     class ColorField extends FieldDef {
       static displayName = 'Color';
       // FieldDef-level default configuration (function form)

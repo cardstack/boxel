@@ -41,9 +41,8 @@ import {
   setupLocalIndexing,
   testRealmURL,
   visitOperatorMode,
-  setupAuthEndpoints,
-  setupUserSubscription,
   assertMessages,
+  setupSnapshotRealm,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import {
@@ -429,39 +428,36 @@ module('Acceptance | code submode tests', function (_hooks) {
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
 
-    let mockMatrixUtils = setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:localhost',
-    });
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+  });
 
-    let { setActiveRealms, createAndJoinRoom } = mockMatrixUtils;
-
-    async function openNewFileModal(menuSelection: string) {
-      await waitFor('[data-test-new-file-button]');
-      await click('[data-test-new-file-button]');
-      await click(`[data-test-boxel-menu-item-text="${menuSelection}"]`);
-    }
-
-    hooks.beforeEach(async function () {
-      createAndJoinRoom({
-        sender: '@testuser:localhost',
-        name: 'room-test',
-      });
-      setupUserSubscription();
-      setupAuthEndpoints();
-      removePlaygroundSelections();
-      removeSpecSelection();
-      window.localStorage.removeItem(ModuleInspectorSelections);
-      window.localStorage.removeItem(PlaygroundSelections);
-      window.localStorage.removeItem(SpecSelection);
+  let { setActiveRealms, createAndJoinRoom } = mockMatrixUtils;
+  let defaultMatrixRoomId: string;
+  let snapshot = setupSnapshotRealm<{
+    personalRealmURL: string;
+    additionalRealmURL: string;
+    catalogRealmURL: string;
+  }>(hooks, {
+    mockMatrixUtils,
+    acceptanceTest: true,
+    async build({ loader, isInitialBuild }) {
+      if (isInitialBuild || !defaultMatrixRoomId) {
+        defaultMatrixRoomId = createAndJoinRoom({
+          sender: '@testuser:localhost',
+          name: 'room-test',
+        });
+      }
 
       let realmServerService = getService('realm-server');
       personalRealmURL = `${realmServerService.url}testuser/personal/`;
-      additionalRealmURL = `${realmServerService.url}testuser/aaa/`; // writeable realm that is lexically before the personal realm
+      additionalRealmURL = `${realmServerService.url}testuser/aaa/`;
       catalogRealmURL = `${realmServerService.url}catalog/`;
       setActiveRealms([catalogRealmURL, additionalRealmURL, personalRealmURL]);
 
       await setupAcceptanceTestRealm({
         mockMatrixUtils,
+        loader,
         realmURL: personalRealmURL,
         permissions: {
           '@testuser:localhost': ['read', 'write', 'realm-owner'],
@@ -478,6 +474,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
       await setupAcceptanceTestRealm({
         mockMatrixUtils,
+        loader,
         realmURL: additionalRealmURL,
         permissions: {
           '@testuser:localhost': ['read', 'write', 'realm-owner'],
@@ -494,6 +491,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
       await setupAcceptanceTestRealm({
         mockMatrixUtils,
+        loader,
         realmURL: catalogRealmURL,
         permissions: {
           '*': ['read'],
@@ -508,14 +506,9 @@ module('Acceptance | code submode tests', function (_hooks) {
           },
         },
       });
-
-      setupAuthEndpoints({
-        [catalogRealmURL]: ['read'],
-        [additionalRealmURL]: ['read', 'write', 'realm-owner'],
-        [personalRealmURL]: ['read', 'write', 'realm-owner'],
-      });
       await setupAcceptanceTestRealm({
         mockMatrixUtils,
+        loader,
         realmURL: testRealmURL,
         permissions: {
           '@testuser:localhost': ['read', 'write', 'realm-owner'],
@@ -524,7 +517,28 @@ module('Acceptance | code submode tests', function (_hooks) {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
         },
       });
-    });
+      return { personalRealmURL, additionalRealmURL, catalogRealmURL };
+    },
+  });
+
+  async function openNewFileModal(menuSelection: string) {
+    await waitFor('[data-test-new-file-button]');
+    await click('[data-test-new-file-button]');
+    await click(`[data-test-boxel-menu-item-text="${menuSelection}"]`);
+  }
+
+  hooks.beforeEach(function () {
+    let snapshotState = snapshot.get();
+    personalRealmURL = snapshotState.personalRealmURL;
+    additionalRealmURL = snapshotState.additionalRealmURL;
+    catalogRealmURL = snapshotState.catalogRealmURL;
+    removePlaygroundSelections();
+    removeSpecSelection();
+    window.localStorage.removeItem(ModuleInspectorSelections);
+    window.localStorage.removeItem(PlaygroundSelections);
+    window.localStorage.removeItem(SpecSelection);
+    setActiveRealms([catalogRealmURL, additionalRealmURL, personalRealmURL]);
+  });
 
     test('default realm is the personal realm', async function (assert) {
       await visitOperatorMode({
@@ -570,20 +584,26 @@ module('Acceptance | code submode tests', function (_hooks) {
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
 
-    let mockMatrixUtils = setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:localhost',
-      activeRealms: [testRealmURL],
-    });
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+  });
 
-    let { createAndJoinRoom, setActiveRealms } = mockMatrixUtils;
-
-    hooks.beforeEach(async function () {
-      createAndJoinRoom({
-        sender: '@testuser:localhost',
-        name: 'room-test',
-      });
-      setupUserSubscription();
-      setupAuthEndpoints();
+  let { createAndJoinRoom, setActiveRealms } = mockMatrixUtils;
+  let defaultMatrixRoomId: string;
+  let snapshot = setupSnapshotRealm<{
+    monacoService: MonacoService;
+    realm: Realm;
+  }>(hooks, {
+    mockMatrixUtils,
+    acceptanceTest: true,
+    async build({ loader, isInitialBuild }) {
+      if (isInitialBuild || !defaultMatrixRoomId) {
+        defaultMatrixRoomId = createAndJoinRoom({
+          sender: '@testuser:localhost',
+          name: 'room-test',
+        });
+      }
 
       monacoService = getService('monaco-service');
 
@@ -591,6 +611,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       // from the global loader
       ({ realm } = await setupAcceptanceTestRealm({
         mockMatrixUtils,
+        loader,
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'index.gts': indexCardSource,
@@ -856,7 +877,15 @@ module('Acceptance | code submode tests', function (_hooks) {
           'noop.gts': `export function noop() {};\nclass NoopClass {}`,
         },
       }));
-    });
+
+      return { monacoService, realm };
+    },
+  });
+
+  hooks.beforeEach(function () {
+    ({ monacoService, realm } = snapshot.get());
+    setActiveRealms([testRealmURL]);
+  });
 
     test('defaults to inheritance view and can toggle to file view', async function (assert) {
       await visitOperatorMode({

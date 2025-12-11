@@ -22,6 +22,7 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 import { type RoomResource } from '@cardstack/host/resources/room';
 import { getSearch } from '@cardstack/host/resources/search';
 
+import { setupSnapshotRealm } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -55,6 +56,12 @@ module('Integration | Component | RoomMessage', function (hooks) {
     loggedInAs: '@testuser:localhost',
     activeRealms: [],
     autostart: true,
+  });
+  setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build() {
+      return {};
+    },
   });
 
   let { createAndJoinRoom } = mockMatrixUtils;

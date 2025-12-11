@@ -1,4 +1,3 @@
-import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
@@ -6,15 +5,12 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import ENV from '@cardstack/host/config/environment';
 
-import {
-  setupBaseRealm,
-  field,
-  contains,
-  CardDef,
-  Component,
-} from '../helpers/base-realm';
+import { setupSnapshotRealm } from '../helpers';
+import { field, contains, CardDef, Component } from '../helpers/base-realm';
+import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
+import { getService } from '@universal-ember/test-support';
 
 type FieldFormat = 'embedded' | 'atom' | 'edit';
 
@@ -22,17 +18,33 @@ let loader: Loader;
 
 module('Integration | image field configuration', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks);
 
   let catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
   let CatalogImageFieldClass: any;
 
-  hooks.beforeEach(async function () {
-    loader = getService('loader-service').loader;
-    const imageModule: any = await loader.import(
-      `${catalogRealmURL}fields/image-field`,
-    );
-    CatalogImageFieldClass = imageModule.default;
+  let snapshot = setupSnapshotRealm<{
+    loader: Loader;
+    CatalogImageFieldClass: any;
+  }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      const imageModule: any = await loader.import(
+        `${catalogRealmURL}fields/image-field`,
+      );
+
+      return {
+        loader,
+        CatalogImageFieldClass: imageModule.default,
+      };
+    },
+  });
+
+  hooks.beforeEach(function () {
+    ({ loader, CatalogImageFieldClass } = snapshot.get());
   });
 
   async function renderConfiguredField(

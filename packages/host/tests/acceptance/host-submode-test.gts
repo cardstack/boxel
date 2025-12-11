@@ -21,6 +21,7 @@ import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   testRealmInfo,
+  setupSnapshotRealm,
 } from '../helpers';
 
 import { CardsGrid, setupBaseRealm } from '../helpers/base-realm';
@@ -84,120 +85,131 @@ module('Acceptance | host submode', function (hooks) {
 
   setupBaseRealm(hooks);
 
-  let realmContents: any;
-
-  hooks.beforeEach(function () {
-    realmContents = {
-      ...SYSTEM_CARD_FIXTURE_CONTENTS,
-      'index.json': new CardsGrid(),
-      '.realm.json': {
-        name: 'Test Workspace B',
-        backgroundURL:
-          'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-        iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        publishable: false,
-      },
-      'person.gts': personCardSource,
-      'view-card-demo.gts': viewCardDemoCardSource,
-      'Person/1.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'A',
-            lastName: 'B',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../person',
-              name: 'Person',
-            },
-          },
-        },
-      },
-      'Person/2.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'B',
-            lastName: 'C',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../person',
-              name: 'Person',
-            },
-          },
-        },
-      },
-      'Person/3.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'C',
-            lastName: 'D',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../person',
-              name: 'Person',
-            },
-          },
-        },
-      },
-      'ViewCardDemo/1.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'Primary View Demo',
-            targetCardURL: `${testRealmURL}ViewCardDemo/2.json`,
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../view-card-demo',
-              name: 'ViewCardDemo',
-            },
-          },
-        },
-      },
-      'ViewCardDemo/2.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'Secondary View Demo',
-            targetCardURL: `${testRealmURL}ViewCardDemo/3.json`,
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../view-card-demo',
-              name: 'ViewCardDemo',
-            },
-          },
-        },
-      },
-      'ViewCardDemo/3.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'Tertiary View Demo',
-            targetCardURL: `${testRealmURL}ViewCardDemo/1.json`,
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../view-card-demo',
-              name: 'ViewCardDemo',
-            },
-          },
-        },
-      },
-    };
-  });
-
   module('with a realm that is not publishable', function (hooks) {
-    hooks.beforeEach(async function () {
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        contents: realmContents,
-      });
+    let defaultMatrixRoomId: string;
+    let snapshot = setupSnapshotRealm(hooks, {
+      mockMatrixUtils,
+      acceptanceTest: true,
+      async build({ loader, isInitialBuild }) {
+        if (isInitialBuild || !defaultMatrixRoomId) {
+          defaultMatrixRoomId = mockMatrixUtils.createAndJoinRoom({
+            sender: '@testuser:localhost',
+            name: 'room-test',
+          });
+        }
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          loader,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'index.json': new CardsGrid(),
+            '.realm.json': {
+              name: 'Test Workspace B',
+              backgroundURL:
+                'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+              iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+              publishable: false,
+            },
+            'person.gts': personCardSource,
+            'view-card-demo.gts': viewCardDemoCardSource,
+            'Person/1.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'A',
+                  lastName: 'B',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../person',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'Person/2.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'B',
+                  lastName: 'C',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../person',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'Person/3.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'C',
+                  lastName: 'D',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../person',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'ViewCardDemo/1.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  title: 'Primary View Demo',
+                  targetCardURL: `${testRealmURL}ViewCardDemo/2.json`,
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../view-card-demo',
+                    name: 'ViewCardDemo',
+                  },
+                },
+              },
+            },
+            'ViewCardDemo/2.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  title: 'Secondary View Demo',
+                  targetCardURL: `${testRealmURL}ViewCardDemo/3.json`,
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../view-card-demo',
+                    name: 'ViewCardDemo',
+                  },
+                },
+              },
+            },
+            'ViewCardDemo/3.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  title: 'Tertiary View Demo',
+                  targetCardURL: `${testRealmURL}ViewCardDemo/1.json`,
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../view-card-demo',
+                    name: 'ViewCardDemo',
+                  },
+                },
+              },
+            },
+          },
+        });
+        return {};
+      },
+    });
+
+    hooks.beforeEach(function () {
+      snapshot.get();
     });
 
     test('host submode is not available', async function (assert) {
@@ -223,14 +235,131 @@ module('Acceptance | host submode', function (hooks) {
   });
 
   module('with a realm that is publishable', function (hooks) {
-    hooks.beforeEach(async function () {
-      let publishableRealmContents = { ...realmContents };
-      publishableRealmContents['.realm.json'].publishable = true;
+    let defaultMatrixRoomId: string;
+    let snapshot = setupSnapshotRealm(hooks, {
+      mockMatrixUtils,
+      acceptanceTest: true,
+      async build({ loader, isInitialBuild }) {
+        if (isInitialBuild || !defaultMatrixRoomId) {
+          defaultMatrixRoomId = mockMatrixUtils.createAndJoinRoom({
+            sender: '@testuser:localhost',
+            name: 'room-test',
+          });
+        }
 
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        contents: publishableRealmContents,
-      });
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          loader,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'index.json': new CardsGrid(),
+            '.realm.json': {
+              name: 'Test Workspace B',
+              backgroundURL:
+                'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+              iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+              publishable: true,
+            },
+            'person.gts': personCardSource,
+            'view-card-demo.gts': viewCardDemoCardSource,
+            'Person/1.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'A',
+                  lastName: 'B',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../person',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'Person/2.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'B',
+                  lastName: 'C',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../person',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'Person/3.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'C',
+                  lastName: 'D',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../person',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'ViewCardDemo/1.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  title: 'Primary View Demo',
+                  targetCardURL: `${testRealmURL}ViewCardDemo/2.json`,
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../view-card-demo',
+                    name: 'ViewCardDemo',
+                  },
+                },
+              },
+            },
+            'ViewCardDemo/2.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  title: 'Secondary View Demo',
+                  targetCardURL: `${testRealmURL}ViewCardDemo/3.json`,
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../view-card-demo',
+                    name: 'ViewCardDemo',
+                  },
+                },
+              },
+            },
+            'ViewCardDemo/3.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  title: 'Tertiary View Demo',
+                  targetCardURL: `${testRealmURL}ViewCardDemo/1.json`,
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../view-card-demo',
+                    name: 'ViewCardDemo',
+                  },
+                },
+              },
+            },
+          },
+        });
+        return {};
+      },
+    });
+
+    hooks.beforeEach(function () {
+      snapshot.get();
     });
 
     test('host submode is available', async function (assert) {

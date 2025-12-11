@@ -21,6 +21,7 @@ import {
   setupOnSave,
   setupIntegrationTestRealm,
   setupOperatorModeStateCleanup,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -57,15 +58,23 @@ module('Integration | card-delete', function (hooks) {
   }
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
   hooks.beforeEach(async function () {
-    loader = getService('loader-service').loader;
+    ({ loader } = snapshot.get());
     cardApi = await loader.import(`${baseRealm.url}card-api`);
   });
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

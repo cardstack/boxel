@@ -1,4 +1,3 @@
-import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -12,6 +11,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
@@ -24,16 +24,8 @@ module('Integration | loading', function (hooks) {
   let loader: Loader;
   let cardApi: typeof import('https://cardstack.com/base/card-api');
 
-  hooks.beforeEach(function () {
-    loader = getService('loader-service').loader;
-  });
-
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
-  );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -41,7 +33,22 @@ module('Integration | loading', function (hooks) {
     autostart: true,
   });
 
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
+
+  setupCardLogs(
+    hooks,
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
+  );
+
   hooks.beforeEach(async function () {
+    ({ loader } = snapshot.get());
     let cardWithBrokenIconDefSource = `
       import NonExistentIcon from '@cardstack/boxel-icons/non-existent';
 

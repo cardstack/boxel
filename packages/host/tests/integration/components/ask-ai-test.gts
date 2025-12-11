@@ -20,6 +20,7 @@ import {
   setupOnSave,
   assertMessages,
   setupOperatorModeStateCleanup,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -33,24 +34,28 @@ module('Integration | ask-ai', function (hooks) {
 
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
-  setupBaseRealm(hooks);
-
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils: setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [testRealmURL],
+      autostart: true,
+    }),
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
   hooks.beforeEach(function () {
-    loader = getService('loader-service').loader;
+    ({ loader } = snapshot.get());
   });
 
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
   );
-
-  let mockMatrixUtils = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:localhost',
-    activeRealms: [testRealmURL],
-    autostart: true,
-  });
 
   let noop = () => {};
 

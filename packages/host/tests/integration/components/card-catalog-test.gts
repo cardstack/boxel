@@ -7,8 +7,6 @@ import {
 } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { getService } from '@universal-ember/test-support';
-
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -20,6 +18,7 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
   setupOperatorModeStateCleanup,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
@@ -40,8 +39,17 @@ module('Integration | card-catalog', function (hooks) {
 
   const noop = () => {};
 
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
+
   hooks.beforeEach(async function () {
-    let loader = getService('loader-service').loader;
+    let { loader } = snapshot.get();
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
     let textArea: typeof import('https://cardstack.com/base/text-area');

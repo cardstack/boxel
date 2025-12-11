@@ -12,7 +12,6 @@ import {
 } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
@@ -39,6 +38,7 @@ import {
   type TestContextWithSave,
   withSlowSave,
   setupOperatorModeStateCleanup,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -55,22 +55,31 @@ module('Integration | operator-mode', function (hooks) {
   let testRealmAdapter: TestRealmAdapter;
   let operatorModeStateService: OperatorModeStateService;
 
-  hooks.beforeEach(function () {
-    loader = getService('loader-service').loader;
-    operatorModeStateService = getService('operator-mode-state-service');
-  });
-
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
-  );
-
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
+  });
+
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
+
+  setupCardLogs(
+    hooks,
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
+  );
+
+  hooks.beforeEach(function () {
+    ({ loader } = snapshot.get());
+    operatorModeStateService = getService('operator-mode-state-service');
   });
 
   let noop = () => {};

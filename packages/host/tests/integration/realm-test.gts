@@ -1,5 +1,3 @@
-import { RenderingTestContext } from '@ember/test-helpers';
-
 import { getService } from '@universal-ember/test-support';
 import { stringify } from 'qs';
 import { module, test } from 'qunit';
@@ -28,9 +26,9 @@ import {
   testModuleRealm,
   cardInfo,
   getFileCreatedAt,
+  setupSnapshotRealm,
 } from '../helpers';
 import {
-  setupBaseRealm,
   FieldDef,
   contains,
   containsMany,
@@ -49,19 +47,28 @@ let loader: Loader;
 
 module('Integration | realm', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
-
-  hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = getService('loader-service').loader;
-  });
 
   let mockMatrixUtils = setupMockMatrix(hooks);
+
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+
+      return { loader };
+    },
+  });
 
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
   );
+
+  hooks.beforeEach(function () {
+    ({ loader } = snapshot.get());
+  });
 
   async function handle(realm: Realm, ...args: Parameters<Realm['handle']>) {
     let result = await realm.handle(...args);

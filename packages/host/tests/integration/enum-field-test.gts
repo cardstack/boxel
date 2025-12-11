@@ -1,4 +1,4 @@
-import { RenderingTestContext, click } from '@ember/test-helpers';
+import { click } from '@ember/test-helpers';
 
 import ArrowDownIcon from '@cardstack/boxel-icons/arrow-down';
 import ArrowUpIcon from '@cardstack/boxel-icons/arrow-up';
@@ -19,9 +19,9 @@ import {
   provideConsumeContext,
   setupCardLogs,
   setupIntegrationTestRealm,
+  setupSnapshotRealm,
 } from '../helpers';
 import {
-  setupBaseRealm,
   StringField,
   field,
   contains,
@@ -46,19 +46,27 @@ let loader: Loader;
 
 module('Integration | enumField', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks);
 
-  hooks.beforeEach(function (this: RenderingTestContext) {
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
+
+  hooks.beforeEach(function () {
     let permissions: Permissions = { canWrite: true, canRead: true };
     provideConsumeContext(PermissionsContextName, permissions);
-    loader = getService('loader-service').loader;
+    ({ loader } = snapshot.get());
   });
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
   );
 
   test('edit renders a dropdown with the enum options', async function (assert) {

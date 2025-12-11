@@ -1,6 +1,4 @@
-import { RenderingTestContext, settled } from '@ember/test-helpers';
-
-import { getService } from '@universal-ember/test-support';
+import { settled } from '@ember/test-helpers';
 import { module, test } from 'qunit';
 
 import {
@@ -17,9 +15,9 @@ import {
   provideConsumeContext,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  setupSnapshotRealm,
 } from '../../helpers';
 import {
-  setupBaseRealm,
   StringField,
   NumberField,
   field,
@@ -42,22 +40,29 @@ module('Integration | computeds', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks);
 
-  setupBaseRealm(hooks);
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
 
-  hooks.beforeEach(function (this: RenderingTestContext) {
+  hooks.beforeEach(function () {
     let permissions: Permissions = {
       canWrite: true,
       canRead: true,
     };
     provideConsumeContext(PermissionsContextName, permissions);
 
-    loader = getService('loader-service').loader;
+    ({ loader } = snapshot.get());
   });
   setupLocalIndexing(hooks);
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
   );
 
   test('can render a synchronous computed field', async function (assert) {

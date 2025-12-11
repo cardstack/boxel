@@ -1,4 +1,3 @@
-import { RenderingTestContext } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
@@ -28,6 +27,7 @@ import {
   testModuleRealm,
   cardInfo,
   getFileCreatedAt,
+  setupSnapshotRealm,
 } from '../helpers';
 import {
   CardDef,
@@ -39,7 +39,6 @@ import {
   field,
   FieldDef,
   NumberField,
-  setupBaseRealm,
   StringField,
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -73,10 +72,19 @@ function assertInnerHtmlMatches(
 
 module(`Integration | realm indexing`, function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks);
 
-  hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = getService('loader-service').loader;
+  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
+
+  hooks.beforeEach(function () {
+    ({ loader } = snapshot.get());
     onError = function (event: Event) {
       let localIndexer = getService('local-indexer');
       windowErrorHandler({
@@ -97,11 +105,10 @@ module(`Integration | realm indexing`, function (hooks) {
   });
 
   setupLocalIndexing(hooks);
-  let mockMatrixUtils = setupMockMatrix(hooks);
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
   );
 
   async function getInstance(

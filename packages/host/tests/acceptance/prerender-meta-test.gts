@@ -17,6 +17,7 @@ import {
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   capturePrerenderResult,
+  setupSnapshotRealm,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -29,6 +30,217 @@ module('Acceptance | prerender | meta', function (hooks) {
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
   });
+  let defaultMatrixRoomId: string;
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    acceptanceTest: true,
+    async build({ loader, isInitialBuild }) {
+      if (isInitialBuild || !defaultMatrixRoomId) {
+        defaultMatrixRoomId = mockMatrixUtils.createAndJoinRoom({
+          sender: '@testuser:localhost',
+          name: 'room-test',
+        });
+      }
+
+      let cardApi: typeof import('https://cardstack.com/base/card-api');
+      cardApi = await loader.import(`${baseRealm.url}card-api`);
+
+      let {
+        field,
+        contains,
+        containsMany,
+        linksTo,
+        linksToMany,
+        CardDef,
+        FieldDef,
+        StringField,
+        Component,
+      } = cardApi;
+
+      class EmergencyContact extends FieldDef {
+        @field phone = contains(StringField);
+        @field contact = linksTo(() => Person);
+        static embedded = class Embedded extends Component<
+          typeof EmergencyContact
+        > {
+          <template>
+            <@fields.contact />
+            <@fields.phone />
+          </template>
+        };
+      }
+
+      class Pet extends CardDef {
+        static displayName = 'Pet';
+        @field name = contains(StringField);
+        @field title = contains(StringField, {
+          computeVia(this: Pet) {
+            return `${this.name}`;
+          },
+        });
+      }
+
+      class Cat extends Pet {
+        static displayName = 'Cat';
+        @field aliases = containsMany(StringField);
+        @field emergencyContacts = containsMany(EmergencyContact);
+      }
+
+      class Person extends CardDef {
+        static displayName = 'Person';
+        @field name = contains(StringField);
+        @field pets = linksToMany(() => Pet);
+        @field friend = linksTo(() => Person);
+        @field title = contains(StringField, {
+          computeVia(this: Person) {
+            return this.name;
+          },
+        });
+        @field numOfPets = contains(StringField, {
+          computeVia(this: Person) {
+            return String(Array.isArray(this.pets) ? this.pets.length : 0);
+          },
+        });
+      }
+
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        loader,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'person.gts': { Person },
+          'pet.gts': { Pet },
+          'cat.gts': { Cat },
+          'Pet/mango.json': {
+            data: {
+              attributes: { name: 'Mango' },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'Pet/vangogh.json': {
+            data: {
+              attributes: { name: 'Van Gogh' },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'Pet/paper.json': {
+            data: {
+              attributes: {
+                name: 'Paper',
+                aliases: ['Satan', "Satan's Mistress"],
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../cat',
+                  name: 'Cat',
+                },
+              },
+            },
+          },
+          'Pet/broken.json': {
+            data: {
+              attributes: {
+                name: 'Bad Serialization',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../cat',
+                  // intentionally missing "name" prop
+                },
+              },
+            },
+          },
+          'Pet/molly.json': {
+            data: {
+              attributes: {
+                name: 'Molly',
+                emergencyContacts: [{ phone: '01234' }, { phone: '56789' }],
+              },
+              relationships: {
+                'emergencyContacts.0.contact': {
+                  links: {
+                    self: '../Person/jade',
+                  },
+                },
+                'emergencyContacts.1.contact': {
+                  links: {
+                    self: '../Person/hassan',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../cat',
+                  name: 'Cat',
+                },
+              },
+            },
+          },
+          'Person/hassan.json': {
+            data: {
+              attributes: {
+                name: 'Hassan',
+              },
+              relationships: {
+                'pets.0': {
+                  links: {
+                    self: '../Pet/mango',
+                  },
+                },
+                'pets.1': {
+                  links: {
+                    self: '../Pet/vangogh',
+                  },
+                },
+                'pets.2': {
+                  links: {
+                    self: '../Pet/paper',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          'Person/jade.json': {
+            data: {
+              attributes: {
+                name: 'Jade',
+              },
+              relationships: {
+                friend: {
+                  links: {
+                    self: './hassan',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
+        },
+      });
+      return {};
+    },
+  });
 
   const DEFAULT_RENDER_OPTIONS_SEGMENT = encodeURIComponent(
     JSON.stringify({ clearCache: true } as RenderRouteOptions),
@@ -38,203 +250,8 @@ module('Acceptance | prerender | meta', function (hooks) {
       url,
     )}/${nonce}/${DEFAULT_RENDER_OPTIONS_SEGMENT}${suffix}`;
 
-  hooks.beforeEach(async function () {
-    let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-
-    let {
-      field,
-      contains,
-      containsMany,
-      linksTo,
-      linksToMany,
-      CardDef,
-      FieldDef,
-      StringField,
-      Component,
-    } = cardApi;
-
-    class EmergencyContact extends FieldDef {
-      @field phone = contains(StringField);
-      @field contact = linksTo(() => Person);
-      static embedded = class Embedded extends Component<
-        typeof EmergencyContact
-      > {
-        <template>
-          <@fields.contact />
-          <@fields.phone />
-        </template>
-      };
-    }
-
-    class Pet extends CardDef {
-      static displayName = 'Pet';
-      @field name = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia(this: Pet) {
-          return `${this.name}`;
-        },
-      });
-    }
-
-    class Cat extends Pet {
-      static displayName = 'Cat';
-      @field aliases = containsMany(StringField);
-      @field emergencyContacts = containsMany(EmergencyContact);
-    }
-
-    class Person extends CardDef {
-      static displayName = 'Person';
-      @field name = contains(StringField);
-      @field pets = linksToMany(() => Pet);
-      @field friend = linksTo(() => Person);
-      @field title = contains(StringField, {
-        computeVia(this: Person) {
-          return this.name;
-        },
-      });
-      @field numOfPets = contains(StringField, {
-        computeVia(this: Person) {
-          return String(Array.isArray(this.pets) ? this.pets.length : 0);
-        },
-      });
-    }
-
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'person.gts': { Person },
-        'pet.gts': { Pet },
-        'cat.gts': { Cat },
-        'Pet/mango.json': {
-          data: {
-            attributes: { name: 'Mango' },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Pet/vangogh.json': {
-          data: {
-            attributes: { name: 'Van Gogh' },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Pet/paper.json': {
-          data: {
-            attributes: {
-              name: 'Paper',
-              aliases: ['Satan', "Satan's Mistress"],
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../cat',
-                name: 'Cat',
-              },
-            },
-          },
-        },
-        'Pet/broken.json': {
-          data: {
-            attributes: {
-              name: 'Bad Serialization',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../cat',
-                // intentionally missing "name" prop
-              },
-            },
-          },
-        },
-        'Pet/molly.json': {
-          data: {
-            attributes: {
-              name: 'Molly',
-              emergencyContacts: [{ phone: '01234' }, { phone: '56789' }],
-            },
-            relationships: {
-              'emergencyContacts.0.contact': {
-                links: {
-                  self: '../Person/jade',
-                },
-              },
-              'emergencyContacts.1.contact': {
-                links: {
-                  self: '../Person/hassan',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../cat',
-                name: 'Cat',
-              },
-            },
-          },
-        },
-        'Person/hassan.json': {
-          data: {
-            attributes: {
-              name: 'Hassan',
-            },
-            relationships: {
-              'pets.0': {
-                links: {
-                  self: '../Pet/mango',
-                },
-              },
-              'pets.1': {
-                links: {
-                  self: '../Pet/vangogh',
-                },
-              },
-              'pets.2': {
-                links: {
-                  self: '../Pet/paper',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../person',
-                name: 'Person',
-              },
-            },
-          },
-        },
-        'Person/jade.json': {
-          data: {
-            attributes: {
-              name: 'Jade',
-            },
-            relationships: {
-              friend: {
-                links: {
-                  self: './hassan',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../person',
-                name: 'Person',
-              },
-            },
-          },
-        },
-      },
-    });
+  hooks.beforeEach(function () {
+    snapshot.get();
   });
 
   hooks.afterEach(function () {

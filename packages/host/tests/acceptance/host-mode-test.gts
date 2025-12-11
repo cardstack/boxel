@@ -22,8 +22,7 @@ import {
   testHostModeRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
-  setupAuthEndpoints,
-  setupUserSubscription,
+  setupSnapshotRealm,
 } from '../helpers';
 import { viewCardDemoCardSource } from '../helpers/cards/view-card-demo';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -62,6 +61,160 @@ module('Acceptance | host mode tests', function (hooks) {
   });
 
   let { setActiveRealms, setExpiresInSec, createAndJoinRoom } = mockMatrixUtils;
+  let defaultMatrixRoomId: string;
+  let snapshot = setupSnapshotRealm<{
+    realmLoader: any;
+  }>(hooks, {
+    mockMatrixUtils,
+    acceptanceTest: true,
+    async build({ loader, isInitialBuild }) {
+      if (isInitialBuild || !defaultMatrixRoomId) {
+        defaultMatrixRoomId = createAndJoinRoom({
+          sender: '@testuser:localhost',
+          name: 'room-test',
+        });
+      }
+      setExpiresInSec(60 * 60);
+
+      let cardApi: typeof import('https://cardstack.com/base/card-api');
+      let string: typeof import('https://cardstack.com/base/string');
+      cardApi = await loader.import(`${baseRealm.url}card-api`);
+      string = await loader.import(`${baseRealm.url}string`);
+
+      let { field, contains, CardDef, Component } = cardApi;
+      let { default: StringField } = string;
+
+      class Pet extends CardDef {
+        static displayName = 'Pet';
+        static headerColor = '#355e3b';
+        @field name = contains(StringField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Pet) {
+            return this.name;
+          },
+        });
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <h3 data-test-pet={{@model.name}}>
+              <@fields.name />
+            </h3>
+          </template>
+        };
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <div class='pet-isolated'>
+              <h2 data-test-pet-isolated={{@model.name}}>
+                <@fields.name />
+              </h2>
+            </div>
+            <style scoped>
+              .pet-isolated {
+                height: 100%;
+                background-color: #355e3b;
+              }
+              h2 {
+                margin: 0;
+                padding: 20px;
+                color: white;
+              }
+            </style>
+          </template>
+        };
+      }
+
+      await setupAcceptanceTestRealm({
+        realmURL: testHostModeRealmURL,
+        mockMatrixUtils,
+        loader,
+        permissions: {
+          '*': ['read'],
+        },
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'pet.gts': { Pet },
+          'view-card-demo.gts': viewCardDemoCardSource,
+          'Pet/mango.json': {
+            data: {
+              attributes: {
+                name: 'Mango',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testHostModeRealmURL}pet`,
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'ViewCardDemo/index.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                title: 'Primary View Demo',
+                targetCardURL: `${testHostModeRealmURL}ViewCardDemo/secondary.json`,
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testHostModeRealmURL}view-card-demo`,
+                  name: 'ViewCardDemo',
+                },
+              },
+            },
+          },
+          'ViewCardDemo/secondary.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                title: 'Secondary View Demo',
+                targetCardURL: `${testHostModeRealmURL}ViewCardDemo/tertiary.json`,
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testHostModeRealmURL}view-card-demo`,
+                  name: 'ViewCardDemo',
+                },
+              },
+            },
+          },
+          'ViewCardDemo/tertiary.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                title: 'Tertiary View Demo',
+                targetCardURL: `${testHostModeRealmURL}ViewCardDemo/index.json`,
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testHostModeRealmURL}view-card-demo`,
+                  name: 'ViewCardDemo',
+                },
+              },
+            },
+          },
+          'index.json': {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/cards-grid',
+                  name: 'CardsGrid',
+                },
+              },
+            },
+          },
+          '.realm.json': {
+            name: 'Test Workspace B',
+            backgroundURL:
+              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+            publishable: true,
+          },
+        },
+      });
+      setActiveRealms([testHostModeRealmURL]);
+      return { realmLoader: loader };
+    },
+  });
 
   hooks.beforeEach(function (this) {
     let owner = getOwner(this)!;
@@ -72,153 +225,8 @@ module('Acceptance | host mode tests', function (hooks) {
     owner.register('service:host-mode-service', StubHostModeService);
   });
 
-  hooks.beforeEach(async function () {
-    createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
-    setupUserSubscription();
-    setupAuthEndpoints();
-
-    setExpiresInSec(60 * 60);
-
-    let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-
-    let { field, contains, CardDef, Component } = cardApi;
-    let { default: StringField } = string;
-
-    class Pet extends CardDef {
-      static displayName = 'Pet';
-      static headerColor = '#355e3b';
-      @field name = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia: function (this: Pet) {
-          return this.name;
-        },
-      });
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <h3 data-test-pet={{@model.name}}>
-            <@fields.name />
-          </h3>
-        </template>
-      };
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <div class='pet-isolated'>
-            <h2 data-test-pet-isolated={{@model.name}}>
-              <@fields.name />
-            </h2>
-          </div>
-          <style scoped>
-            .pet-isolated {
-              height: 100%;
-              background-color: #355e3b;
-            }
-            h2 {
-              margin: 0;
-              padding: 20px;
-              color: white;
-            }
-          </style>
-        </template>
-      };
-    }
-
-    await setupAcceptanceTestRealm({
-      realmURL: testHostModeRealmURL,
-      mockMatrixUtils,
-      permissions: {
-        '*': ['read'],
-      },
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'pet.gts': { Pet },
-        'view-card-demo.gts': viewCardDemoCardSource,
-        'Pet/mango.json': {
-          data: {
-            attributes: {
-              name: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testHostModeRealmURL}pet`,
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'ViewCardDemo/index.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Primary View Demo',
-              targetCardURL: `${testHostModeRealmURL}ViewCardDemo/secondary.json`,
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testHostModeRealmURL}view-card-demo`,
-                name: 'ViewCardDemo',
-              },
-            },
-          },
-        },
-        'ViewCardDemo/secondary.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Secondary View Demo',
-              targetCardURL: `${testHostModeRealmURL}ViewCardDemo/tertiary.json`,
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testHostModeRealmURL}view-card-demo`,
-                name: 'ViewCardDemo',
-              },
-            },
-          },
-        },
-        'ViewCardDemo/tertiary.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Tertiary View Demo',
-              targetCardURL: `${testHostModeRealmURL}ViewCardDemo/index.json`,
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testHostModeRealmURL}view-card-demo`,
-                name: 'ViewCardDemo',
-              },
-            },
-          },
-        },
-        'index.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
-              },
-            },
-          },
-        },
-        '.realm.json': {
-          name: 'Test Workspace B',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-          publishable: true,
-        },
-      },
-    });
-
-    setActiveRealms([testHostModeRealmURL]);
+  hooks.beforeEach(function () {
+    snapshot.get();
   });
 
   test('visiting a default width card in host mode', async function (assert) {

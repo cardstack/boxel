@@ -10,9 +10,10 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
-import { testRealmURL } from '../../helpers';
+import { testRealmURL, setupSnapshotRealm } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
@@ -25,10 +26,23 @@ module('Integration | preview', function (hooks) {
   let loader: Loader;
   setupRenderingTest(hooks);
 
-  hooks.beforeEach(async function () {
-    loader = getService('loader-service').loader;
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+  let snapshot = setupSnapshotRealm<{
+    loader: Loader;
+    cardApi: typeof import('https://cardstack.com/base/card-api');
+    string: typeof import('https://cardstack.com/base/string');
+  }>(hooks, {
+    mockMatrixUtils: setupMockMatrix(hooks),
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      let cardApi = await loader.import(`${baseRealm.url}card-api`);
+      let string = await loader.import(`${baseRealm.url}string`);
+      return { loader, cardApi, string };
+    },
+  });
+
+  hooks.beforeEach(function () {
+    ({ loader, cardApi, string } = snapshot.get());
     this.owner.register('service:local-indexer', MockLocalIndexer);
   });
 

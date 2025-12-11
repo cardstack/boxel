@@ -1,6 +1,4 @@
 import { action } from '@ember/object';
-import { RenderingTestContext } from '@ember/test-helpers';
-
 import { fillIn } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
@@ -20,13 +18,13 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
+  setupSnapshotRealm,
 } from '../../helpers';
 import {
   CardDef,
   StringField,
   contains,
   field,
-  setupBaseRealm,
   Component,
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -75,10 +73,18 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks);
 
-  setupBaseRealm(hooks);
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      return { loader };
+    },
+  });
 
   module('getCards', function (hooks) {
-    hooks.beforeEach(async function (this: RenderingTestContext) {
+    hooks.beforeEach(async function () {
+      let { loader } = snapshot.get();
       class Author extends CardDef {
         static displayName = 'Author';
         @field firstName = contains(StringField);
