@@ -269,7 +269,7 @@ module('Integration | realm', function (hooks) {
             realmURL: testRealmURL,
           },
           links: {
-            self: `${testRealmURL}dir/owner`,
+            self: `./owner`,
           },
         },
       ],
@@ -377,7 +377,7 @@ module('Integration | realm', function (hooks) {
           relationships: { 'cardInfo.theme': { links: { self: null } } },
           meta: {
             adoptsFrom: {
-              module: './person',
+              module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
             realmInfo: {
@@ -779,7 +779,7 @@ module('Integration | realm', function (hooks) {
             realmURL: testRealmURL,
           },
           links: {
-            self: `${testRealmURL}dir/owner`,
+            self: `../dir/owner`,
           },
         },
       ],
@@ -1313,7 +1313,7 @@ module('Integration | realm', function (hooks) {
         {
           type: 'card',
           id: `${testRealmURL}dir/friend`,
-          links: { self: `${testRealmURL}dir/friend` },
+          links: { self: `./dir/friend` },
           attributes: {
             description: 'Person',
             email: null,
@@ -1344,7 +1344,7 @@ module('Integration | realm', function (hooks) {
         {
           type: 'card',
           id: `${testRealmURL}dir/van-gogh`,
-          links: { self: `${testRealmURL}dir/van-gogh` },
+          links: { self: `./dir/van-gogh` },
           attributes: {
             firstName: 'Van Gogh',
             title: 'Van Gogh',
@@ -2325,7 +2325,7 @@ module('Integration | realm', function (hooks) {
             realmURL: testRealmURL,
           },
           links: {
-            self: `${testRealmURL}dir/mariko`,
+            self: `./mariko`,
           },
         },
       ],
@@ -3279,7 +3279,7 @@ module('Integration | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: './person',
+              module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
             realmInfo: {

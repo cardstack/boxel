@@ -2118,7 +2118,7 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Chain/1`,
             type: 'card',
             links: {
-              self: `${testRealmURL}Chain/1`,
+              self: `../Chain/1`,
             },
             attributes: {
               name: 'Ethereum Mainnet',
@@ -2148,7 +2148,7 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Chain/2`,
             type: 'card',
             links: {
-              self: `${testRealmURL}Chain/2`,
+              self: `../Chain/2`,
             },
             attributes: {
               name: 'Polygon',
@@ -2634,7 +2634,7 @@ module(`Integration | realm indexing`, function (hooks) {
         {
           id: `${testRealmURL}Pet/mango`,
           type: 'card',
-          links: { self: `${testRealmURL}Pet/mango` },
+          links: { self: `../Pet/mango` },
           attributes: {
             description: null,
             firstName: 'Mango',
@@ -2659,7 +2659,7 @@ module(`Integration | realm indexing`, function (hooks) {
         {
           id: `${testRealmURL}Pet/vanGogh`,
           type: 'card',
-          links: { self: `${testRealmURL}Pet/vanGogh` },
+          links: { self: `../Pet/vanGogh` },
           attributes: {
             description: null,
             firstName: 'Van Gogh',
@@ -3213,7 +3213,7 @@ module(`Integration | realm indexing`, function (hooks) {
           {
             id: `${testRealmURL}Friend/mango`,
             type: 'card',
-            links: { self: `${testRealmURL}Friend/mango` },
+            links: { self: `./mango` },
             attributes: {
               firstName: 'Mango',
               title: 'Mango',
@@ -3339,7 +3339,7 @@ module(`Integration | realm indexing`, function (hooks) {
           {
             id: `${testRealmURL}Friend/hassan`,
             type: 'card',
-            links: { self: `${testRealmURL}Friend/hassan` },
+            links: { self: `./hassan` },
             attributes: {
               firstName: 'Hassan',
               title: 'Hassan',
@@ -3624,7 +3624,7 @@ module(`Integration | realm indexing`, function (hooks) {
           {
             id: mangoID,
             type: 'card',
-            links: { self: mangoID },
+            links: { self: './mango' },
             attributes: {
               firstName: 'Mango',
               title: 'Mango',
@@ -3653,7 +3653,7 @@ module(`Integration | realm indexing`, function (hooks) {
           {
             id: vanGoghID,
             type: 'card',
-            links: { self: vanGoghID },
+            links: { self: './vanGogh' },
             attributes: {
               firstName: 'Van Gogh',
               title: 'Van Gogh',
@@ -3765,7 +3765,7 @@ module(`Integration | realm indexing`, function (hooks) {
           {
             id: hassanID,
             type: 'card',
-            links: { self: hassanID },
+            links: { self: './hassan' },
             attributes: {
               firstName: 'Hassan',
               title: 'Hassan',
@@ -3798,7 +3798,7 @@ module(`Integration | realm indexing`, function (hooks) {
           {
             id: vanGoghID,
             type: 'card',
-            links: { self: vanGoghID },
+            links: { self: './vanGogh' },
             attributes: {
               firstName: 'Van Gogh',
               title: 'Van Gogh',
@@ -3916,7 +3916,7 @@ module(`Integration | realm indexing`, function (hooks) {
           {
             id: hassanID,
             type: 'card',
-            links: { self: hassanID },
+            links: { self: './hassan' },
             attributes: {
               firstName: 'Hassan',
               title: 'Hassan',
@@ -3949,7 +3949,7 @@ module(`Integration | realm indexing`, function (hooks) {
           {
             id: mangoID,
             type: 'card',
-            links: { self: mangoID },
+            links: { self: './mango' },
             attributes: {
               firstName: 'Mango',
               title: 'Mango',
