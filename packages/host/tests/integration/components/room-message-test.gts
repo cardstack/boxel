@@ -21,9 +21,8 @@ import { parseHtmlContent } from '@cardstack/host/lib/formatted-message/utils';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
-import type StoreService from '@cardstack/host/services/store';
-
 import type { RoomResource } from '@cardstack/host/resources/room';
+import type StoreService from '@cardstack/host/services/store';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';

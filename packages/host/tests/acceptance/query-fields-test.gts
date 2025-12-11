@@ -18,7 +18,7 @@ import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-con
 
 import type NetworkService from '@cardstack/host/services/network';
 
-import StoreService from '@cardstack/host/services/store';
+import type StoreService from '@cardstack/host/services/store';
 
 import {
   saveCard,

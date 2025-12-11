@@ -26,10 +26,12 @@ export const THIS_REALM_TOKEN = '$thisRealm';
 export interface NormalizeQueryDefinitionParams {
   fieldDefinition: FieldDefinition;
   queryDefinition: QueryWithInterpolations;
-  resource: LooseCardResource;
   realmURL: URL;
   fieldName: string;
   fieldPath?: string;
+  resolvePathValue: (path: string) => any;
+  resource?: LooseCardResource;
+  relativeTo?: URL;
 }
 
 export interface NormalizedQueryDefinitionResult {
@@ -40,10 +42,12 @@ export interface NormalizedQueryDefinitionResult {
 export function normalizeQueryDefinition({
   fieldDefinition,
   queryDefinition,
-  resource,
   realmURL,
   fieldName,
   fieldPath,
+  resolvePathValue,
+  resource,
+  relativeTo,
 }: NormalizeQueryDefinitionParams): NormalizedQueryDefinitionResult | null {
   let workingQuery: QueryWithInterpolations = JSON.parse(
     JSON.stringify(queryDefinition),
@@ -55,7 +59,7 @@ export function normalizeQueryDefinition({
     (fieldName.includes('.')
       ? fieldName.slice(0, fieldName.lastIndexOf('.'))
       : '');
-  if (!basePath && resource.relationships) {
+  if (!basePath && resource?.relationships) {
     let matchingKey = Object.keys(resource.relationships).find((key) =>
       key.endsWith(`.${fieldName}`),
     );
@@ -77,6 +81,15 @@ export function normalizeQueryDefinition({
     }
   };
 
+  const resolveInterpolatedValue = (path: string, context?: string) => {
+    let value = resolvePathValue(resolveInterpolationPath(path));
+    if (value === undefined) {
+      markEmptyPredicate(context);
+      return undefined;
+    }
+    return value;
+  };
+
   const interpolateNode = (node: any, context?: string): any => {
     if (aborted) {
       return undefined;
@@ -87,15 +100,10 @@ export function normalizeQueryDefinition({
         return realmURL.href;
       }
       if (node.startsWith(THIS_INTERPOLATION_PREFIX)) {
-        let path = resolveInterpolationPath(
+        return resolveInterpolatedValue(
           node.slice(THIS_INTERPOLATION_PREFIX.length),
+          context,
         );
-        let value = getValueForResourcePath(resource, path);
-        if (value === undefined) {
-          markEmptyPredicate(context);
-          return undefined;
-        }
-        return value;
       }
       return node;
     }
@@ -200,8 +208,7 @@ export function normalizeQueryDefinition({
       return realmURL.href;
     }
     if (value.startsWith(THIS_INTERPOLATION_PREFIX)) {
-      let interpolated = getValueForResourcePath(
-        resource,
+      let interpolated = resolvePathValue(
         resolveInterpolationPath(value.slice(THIS_INTERPOLATION_PREFIX.length)),
       );
       if (typeof interpolated === 'string' && interpolated.length > 0) {
@@ -216,10 +223,9 @@ export function normalizeQueryDefinition({
 
   let resolvedRealm = resolveRealm(specifiedRealm);
 
-  let targetRef = codeRefWithAbsoluteURL(
-    fieldDefinition.fieldOrCard,
-    resource.id ? new URL(resource.id) : realmURL,
-  );
+  let relativeToURL =
+    relativeTo ?? (resource?.id ? new URL(resource.id) : realmURL);
+  let targetRef = codeRefWithAbsoluteURL(fieldDefinition.fieldOrCard, relativeToURL);
 
   let filter = queryAny.filter as Record<string, any> | undefined;
   if (!filter || Object.keys(filter).length === 0) {

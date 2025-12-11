@@ -32,6 +32,7 @@ import type { FieldDefinition } from './index-structure';
 import {
   normalizeQueryDefinition,
   buildQuerySearchURL,
+  getValueForResourcePath,
 } from './query-field-utils';
 
 type Options = {
@@ -312,6 +313,8 @@ export class RealmIndexQueryEngine {
       realmURL,
       fieldName,
       fieldPath,
+      resolvePathValue: (path) => getValueForResourcePath(resource, path),
+      relativeTo: resource.id ? new URL(resource.id) : realmURL,
     });
     if (!normalized) {
       return { results: [], errors: [], searchURL: '' };
