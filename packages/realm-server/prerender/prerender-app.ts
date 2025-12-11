@@ -128,9 +128,9 @@ export function buildPrerenderApp(options: {
         }
 
         let attrs = body?.data?.attributes ?? {};
-        let url = attrs.url as string | undefined;
-        let auth = attrs.auth as string | undefined;
-        let realm = attrs.realm as string | undefined;
+        let rawUrl = attrs.url;
+        let rawAuth = attrs.auth;
+        let rawRealm = attrs.realm;
         let renderOptions: RenderRouteOptions =
           attrs.renderOptions &&
           typeof attrs.renderOptions === 'object' &&
@@ -138,27 +138,31 @@ export function buildPrerenderApp(options: {
             ? (attrs.renderOptions as RenderRouteOptions)
             : {};
 
+        let isNonEmptyString = (value: unknown): value is string =>
+          typeof value === 'string' && value.trim().length > 0;
+
+        let missingAttrs = (attrsToCheck: { value: unknown; name: string }[]) =>
+          attrsToCheck
+            .filter(({ value }) => !isNonEmptyString(value))
+            .map(({ name }) => name);
+
+        let missing = missingAttrs([
+          { value: rawUrl, name: 'url' },
+          { value: rawRealm, name: 'realm' },
+          { value: rawAuth, name: 'auth' },
+        ]);
+
         log.debug(
-          `received ${options.requestDescription} ${url}: realm=${realm} options=${JSON.stringify(renderOptions)}`,
+          `received ${options.requestDescription} ${rawUrl}: realm=${rawRealm} options=${JSON.stringify(renderOptions)}`,
         );
-        if (!url || !auth || typeof auth !== 'string' || !realm) {
-          let missing = [];
-          if (!url) {
-            missing.push('url');
-          }
-          if (!realm) {
-            missing.push('realm');
-          }
-          if (!auth || typeof auth !== 'string') {
-            missing.push('auth');
-          }
+        if (missing.length > 0) {
           log.warn(
             'Rejecting %s due to missing attributes (%s); realm=%s url=%s authProvided=%s',
             options.requestDescription,
             missing.join(', '),
-            realm ?? '<missing>',
-            url ?? '<missing>',
-            typeof auth === 'string' && auth.trim().length > 0,
+            (rawRealm as string | undefined) ?? '<missing>',
+            (rawUrl as string | undefined) ?? '<missing>',
+            typeof rawAuth === 'string' && rawAuth.trim().length > 0,
           );
           ctxt.status = 400;
           ctxt.body = {
@@ -172,6 +176,10 @@ export function buildPrerenderApp(options: {
           };
           return;
         }
+
+        let realm = rawRealm as string;
+        let url = rawUrl as string;
+        let auth = rawAuth as string;
 
         let start = Date.now();
         let execPromise = options

@@ -17,6 +17,30 @@ module(basename(__filename), function (hooks) {
   });
 
   module('remote prerenderer payload', function () {
+    async function expectValidationFailure(
+      assert: Assert,
+      attrs: any,
+      message: RegExp,
+    ) {
+      let originalFetch = globalThis.fetch;
+      let fetchCalled = false;
+      (globalThis as any).fetch = () => {
+        fetchCalled = true;
+        throw new Error('fetch should not be called when validation fails');
+      };
+
+      try {
+        let prerenderer = createRemotePrerenderer('http://127.0.0.1:0');
+        await assert.rejects(
+          prerenderer.prerenderModule(attrs as any),
+          message,
+        );
+        assert.false(fetchCalled, 'does not hit network on validation failure');
+      } finally {
+        (globalThis as any).fetch = originalFetch;
+      }
+    }
+
     test('sends JSON:API headers and attributes', async function (assert) {
       let receivedHeaders: any;
       let receivedBody: any;
@@ -71,29 +95,36 @@ module(basename(__filename), function (hooks) {
       }
     });
 
-    test('validates required attributes before sending', async function (assert) {
-      let originalFetch = globalThis.fetch;
-      let fetchCalled = false;
-      (globalThis as any).fetch = () => {
-        fetchCalled = true;
-        throw new Error('fetch should not be called when validation fails');
-      };
+    test('rejects empty realm before sending', async function (assert) {
+      await expectValidationFailure(
+        assert,
+        { realm: '', url: 'https://example.com/module', auth: '{}' },
+        /Missing prerender prerender-module-request attributes: realm/,
+      );
+    });
 
-      try {
-        let prerenderer = createRemotePrerenderer('http://127.0.0.1:0');
-        await assert.rejects(
-          prerenderer.prerenderModule({
-            realm: '',
-            url: 'https://example.com/module',
-            auth: '{}',
-          }),
-          /Missing prerender prerender-module-request attributes: realm/,
-          'throws with helpful message',
-        );
-        assert.false(fetchCalled, 'does not hit network on validation failure');
-      } finally {
-        (globalThis as any).fetch = originalFetch;
-      }
+    test('rejects empty url before sending', async function (assert) {
+      await expectValidationFailure(
+        assert,
+        { realm: 'realm', url: '', auth: '{}' },
+        /Missing prerender prerender-module-request attributes: url/,
+      );
+    });
+
+    test('rejects empty auth before sending', async function (assert) {
+      await expectValidationFailure(
+        assert,
+        { realm: 'realm', url: 'https://example.com/module', auth: '' },
+        /Missing prerender prerender-module-request attributes: auth/,
+      );
+    });
+
+    test('rejects missing auth before sending', async function (assert) {
+      await expectValidationFailure(
+        assert,
+        { realm: 'realm', url: 'https://example.com/module' },
+        /Missing prerender prerender-module-request attributes: auth/,
+      );
     });
   });
 
