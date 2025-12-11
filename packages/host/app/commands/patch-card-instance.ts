@@ -59,7 +59,9 @@ export default class PatchCardInstanceCommand extends HostBaseCommand<
     let clientRequestId = this.commandService.trackAiAssistantCardRequest({
       action: 'patch-instance',
       roomId: input.roomId,
-      fileUrl: input.cardId,
+      fileUrl: input.cardId.endsWith('.json')
+        ? input.cardId
+        : `${input.cardId}.json`,
     });
     await this.store.patch(
       input.cardId,
