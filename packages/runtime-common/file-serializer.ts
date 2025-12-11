@@ -2,7 +2,6 @@ import type { Definition, FieldDefinition } from './index';
 import {
   type LooseSingleCardDocument,
   type CardResource,
-  isUrlLike,
   isCodeRef,
 } from './index';
 import type { CardFields, Meta } from './resource-types';
@@ -76,6 +75,8 @@ export default function serialize({
     const processedRelationships = processRelationships({
       relationships: doc.data.relationships,
       definition,
+      relativeTo,
+      realmURL,
       customFieldDefinitions,
     });
     if (processedRelationships) {
@@ -197,10 +198,14 @@ function processAttributes({
 function processRelationships({
   relationships,
   definition,
+  relativeTo,
+  realmURL,
   customFieldDefinitions,
 }: {
   relationships: NonNullable<CardResource['relationships']>;
   definition: Definition;
+  relativeTo: URL;
+  realmURL?: URL;
   customFieldDefinitions?: Record<string, FieldDefinition>;
 }): NonNullable<CardResource['relationships']> | undefined {
   const result: NonNullable<CardResource['relationships']> = {};
@@ -222,10 +227,20 @@ function processRelationships({
     if (processedValue.links && 'self' in processedValue.links) {
       // Handle both truthy and null values for links.self
       if (processedValue.links.self !== null) {
+        let selfLink = processedValue.links.self;
+        if (realmURL) {
+          try {
+            selfLink = makeRelativeURL(
+              new URL(selfLink, relativeTo),
+              relativeTo,
+              realmURL,
+            );
+          } catch (e) {
+            // ignore malformed URLs and leave as-is
+          }
+        }
         processedValue.links = {
-          self: isRelativeURL(processedValue.links.self)
-            ? processedValue.links.self
-            : processedValue.links.self,
+          self: selfLink,
         };
       } else {
         // Preserve null values
@@ -360,8 +375,4 @@ function processMetaField({
   }
 
   return result;
-}
-
-function isRelativeURL(url: string) {
-  return isUrlLike(url) && !url.startsWith('http');
 }
