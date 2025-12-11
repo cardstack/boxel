@@ -44,7 +44,7 @@ import {
   FourLines,
   IconPlus,
 } from '@cardstack/boxel-ui/icons';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { consume } from 'ember-provide-consume-context';
 import {
   SortableGroupModifier as sortableGroup,
@@ -188,6 +188,10 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
     }));
   }
 
+  get noItems() {
+    return this.args.arrayField.children.length === 0;
+  }
+
   <template>
     <PermissionsConsumer as |permissions|>
       {{#if this.decoratedChildren.length}}
@@ -246,7 +250,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
 
       {{#if permissions.canWrite}}
         <Button
-          class='add-new'
+          class={{cn 'add-new' no-items=this.noItems}}
           @kind='muted'
           @size='tall'
           @rectangular={{true}}
@@ -277,15 +281,18 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         grid-template-columns: 1fr;
       }
       .editor.can-write {
-        grid-template-columns: var(--boxel-icon-lg) 1fr var(--boxel-icon-lg);
+        grid-template-columns: var(--boxel-icon-sm) 1fr var(--boxel-icon-sm);
+        gap: var(--boxel-sp-xs);
       }
       .remove {
         --icon-color: var(--background, var(--boxel-light));
         --icon-border: var(--foreground, var(--boxel-dark));
         --icon-bg: var(--foreground, var(--boxel-dark));
+        --boxel-icon-button-width: var(--boxel-icon-sm);
         align-self: auto;
         outline: 0;
         order: 1;
+        justify-content: end;
       }
       .remove:focus,
       .remove:hover {
@@ -304,12 +311,17 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         gap: var(--boxel-sp-xxxs);
         width: fit-content;
         letter-spacing: var(--boxel-lsp-xs);
-        margin-left: var(--boxel-icon-lg);
+        margin-left: calc(var(--boxel-icon-sm) + var(--boxel-sp-sm));
         /* for alignment due to sort handle */
+      }
+      .add-new.no-items {
+        margin-left: 0;
       }
       .sort {
         cursor: move;
         cursor: grab;
+        --boxel-icon-button-width: var(--boxel-icon-sm);
+        justify-content: start;
       }
       .sort:active {
         cursor: grabbing;

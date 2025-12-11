@@ -29,6 +29,7 @@ import {
   uuidv4,
   isCardInstance,
 } from '@cardstack/runtime-common';
+import { cn } from '@cardstack/boxel-ui/helpers';
 import { IconTrash, FourLines, IconPlus } from '@cardstack/boxel-ui/icons';
 import { task } from 'ember-concurrency';
 import { action } from '@ember/object';
@@ -71,6 +72,10 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
       index,
       key: `${this.reorderNonce}-${index}`,
     }));
+  }
+
+  get noItems() {
+    return this.args.arrayField.children.length === 0;
   }
 
   <template>
@@ -132,7 +137,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
         {{/if}}
         {{#if permissions.canWrite}}
           <Button
-            class='add-new'
+            class={{cn 'add-new' no-items=this.noItems}}
             @kind='muted'
             @size='tall'
             @rectangular={{true}}
@@ -148,7 +153,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
     </PermissionsConsumer>
     <style scoped>
       .contains-many-editor {
-        --remove-icon-size: var(--boxel-icon-lg);
+        --remove-icon-size: var(--boxel-icon-sm);
       }
       .contains-many-editor :deep(.compound-field.edit-format .add-new) {
         border: 1px solid var(--border, var(--boxel-border-color));
@@ -166,7 +171,8 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
         grid-template-columns: 1fr;
       }
       .editor.can-write {
-        grid-template-columns: var(--boxel-icon-lg) 1fr var(--remove-icon-size);
+        grid-template-columns: var(--boxel-icon-sm) 1fr var(--remove-icon-size);
+        gap: var(--boxel-sp-xs);
       }
       .editor + .editor {
         margin-top: var(--boxel-sp-xs);
@@ -180,6 +186,8 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
       .remove {
         --icon-color: currentColor;
         --icon-stroke-width: 1.5px;
+        --boxel-icon-button-width: var(--remove-icon-size);
+        justify-content: end;
         align-self: auto;
         outline: 0;
         order: 1;
@@ -203,12 +211,17 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
         gap: var(--boxel-sp-xxxs);
         width: fit-content;
         letter-spacing: var(--boxel-lsp-xs);
-        margin-left: var(--boxel-icon-lg);
+        margin-left: calc(var(--boxel-icon-sm) + var(--boxel-sp-xs));
         /* for alignment due to sort handle */
+      }
+      .add-new.no-items {
+        margin-left: 0;
       }
       .sort {
         cursor: move;
         cursor: grab;
+        justify-content: start;
+        --boxel-icon-button-width: var(--boxel-icon-sm);
       }
       .sort:active {
         cursor: grabbing;

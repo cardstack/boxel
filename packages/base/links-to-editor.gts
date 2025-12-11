@@ -98,7 +98,8 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
         display: grid;
       }
       .links-to-editor.can-write {
-        grid-template-columns: 1fr var(--boxel-icon-lg);
+        grid-template-columns: 1fr var(--boxel-icon-sm);
+        gap: var(--boxel-sp-sm);
       }
       .links-to-editor > :deep(.boxel-card-container) {
         order: -1;
@@ -110,8 +111,10 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
         --icon-color: var(--background, var(--boxel-light));
         --icon-border: var(--foreground, var(--boxel-dark));
         --icon-bg: var(--foreground, var(--boxel-dark));
+        --boxel-icon-button-width: var(--boxel-icon-sm);
         align-self: center;
         outline: 0;
+        justify-content: end;
       }
       .remove:focus,
       .remove:hover {
