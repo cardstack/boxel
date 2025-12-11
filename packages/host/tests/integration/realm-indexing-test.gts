@@ -159,7 +159,7 @@ module(`Integration | realm indexing`, function (hooks) {
           realmInfo: testRealmInfo,
         },
         links: {
-          self: './empty',
+          self: `${testRealmURL}empty`,
         },
       },
     ]);
@@ -1394,7 +1394,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}person`,
+                module: `./person`,
                 name: 'Person',
               },
             },
@@ -1448,7 +1448,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}person`,
+            module: `./person`,
             name: 'Person',
           },
           lastModified: adapter.lastModifiedMap.get(
