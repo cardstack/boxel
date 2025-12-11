@@ -7,6 +7,7 @@ import {
   createRealm,
   createSubscribedUserAndLogin,
   logout,
+  openRoot,
   postCardSource,
 } from '../helpers';
 
@@ -24,11 +25,7 @@ test.describe('Head tags', () => {
     let serverIndexUrl = new URL(appURL).origin;
     await clearLocalStorage(page, serverIndexUrl);
 
-    user = await createSubscribedUserAndLogin(
-      page,
-      prefix,
-      serverIndexUrl,
-    );
+    user = await createSubscribedUserAndLogin(page, prefix, serverIndexUrl);
 
     await createRealm(page, realmName, displayName);
 
@@ -42,18 +39,24 @@ test.describe('Head tags', () => {
     page: Page,
     workspaceDisplayName: string,
   ) {
-    await page.locator(`[data-test-workspace="${workspaceDisplayName}"]`).click();
+    await openRoot(page, appURL);
+    await page.locator('[data-test-workspace-chooser-toggle]').click();
+    await expect(page.locator('[data-test-workspace-chooser]')).toBeVisible();
+    await page
+      .locator(`[data-test-workspace="${workspaceDisplayName}"]`)
+      .click();
     await page.locator('[data-test-submode-switcher] button').click();
     await page.locator('[data-test-boxel-menu-item-text="Host"]').click();
 
     await page.locator('[data-test-publish-realm-button]').click();
   }
 
-  async function publishDefaultRealm(page: Page, opts?: { realmName?: string; displayName?: string }) {
-    let {
-      realmName = 'new-workspace',
-      displayName = '1New Workspace',
-    } = opts ?? {};
+  async function publishDefaultRealm(
+    page: Page,
+    opts?: { realmName?: string; displayName?: string },
+  ) {
+    let { realmName = 'new-workspace', displayName = '1New Workspace' } =
+      opts ?? {};
     await createUserAndRealm(page, {
       prefix: 'publish-realm',
       realmName,
@@ -281,7 +284,6 @@ test.describe('Head tags', () => {
     let defaultCardURL = `${publishedRealmURL}default-head-card`;
     let customCardURL = `${publishedRealmURL}custom-head-card`;
 
-    await logout(page);
     await page.goto(defaultCardURL);
     await expect(page).toHaveURL(defaultCardURL);
     await expect(
