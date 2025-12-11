@@ -110,6 +110,10 @@ export default class CommandService extends Service {
       action,
       roomId,
     );
+    // We only track invalidations for card instances and card definitions
+    if (!fileUrl.endsWith('.gts') && !fileUrl.endsWith('.json')) {
+      return clientRequestId;
+    }
     let normalizedTarget = fileUrl.endsWith('.json')
       ? fileUrl.replace(/\.json$/, '')
       : fileUrl;
