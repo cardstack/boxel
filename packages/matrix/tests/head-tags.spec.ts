@@ -13,27 +13,53 @@ import {
 test.describe('Head tags', () => {
   let user: { username: string; password: string; credentials: any };
 
-  async function openPublishRealmModal(page: Page) {
+  async function createUserAndRealm(
+    page: Page,
+    {
+      prefix = 'publish-realm',
+      realmName = 'new-workspace',
+      displayName = '1New Workspace',
+    } = {},
+  ) {
     let serverIndexUrl = new URL(appURL).origin;
     await clearLocalStorage(page, serverIndexUrl);
 
     user = await createSubscribedUserAndLogin(
       page,
-      'publish-realm',
+      prefix,
       serverIndexUrl,
     );
 
-    await createRealm(page, 'new-workspace', '1New Workspace');
-    await page.locator('[data-test-workspace="1New Workspace"]').click();
+    await createRealm(page, realmName, displayName);
 
+    let realmURL = new URL(`${user.username}/${realmName}/`, serverIndexUrl)
+      .href;
+
+    return { serverIndexUrl, realmURL, realmName, displayName };
+  }
+
+  async function openPublishRealmModal(
+    page: Page,
+    workspaceDisplayName: string,
+  ) {
+    await page.locator(`[data-test-workspace="${workspaceDisplayName}"]`).click();
     await page.locator('[data-test-submode-switcher] button').click();
     await page.locator('[data-test-boxel-menu-item-text="Host"]').click();
 
     await page.locator('[data-test-publish-realm-button]').click();
   }
 
-  async function publishDefaultRealm(page: Page) {
-    await openPublishRealmModal(page);
+  async function publishDefaultRealm(page: Page, opts?: { realmName?: string; displayName?: string }) {
+    let {
+      realmName = 'new-workspace',
+      displayName = '1New Workspace',
+    } = opts ?? {};
+    await createUserAndRealm(page, {
+      prefix: 'publish-realm',
+      realmName,
+      displayName,
+    });
+    await openPublishRealmModal(page, displayName);
     await page.locator('[data-test-default-domain-checkbox]').click();
     await page.locator('[data-test-publish-button]').click();
 
@@ -69,19 +95,12 @@ test.describe('Head tags', () => {
   test('host mode updates head tags when navigating between cards', async ({
     page,
   }) => {
-    let serverIndexUrl = new URL(appURL).origin;
-    await clearLocalStorage(page, serverIndexUrl);
-
-    user = await createSubscribedUserAndLogin(
-      page,
-      'host-head-tags',
-      serverIndexUrl,
-    );
-
     let realmName = `head-tags-${randomUUID()}`;
-    await createRealm(page, realmName);
-    let realmURL = new URL(`${user.username}/${realmName}/`, serverIndexUrl)
-      .href;
+    let { realmURL, displayName } = await createUserAndRealm(page, {
+      prefix: 'host-head-tags',
+      realmName,
+      displayName: realmName,
+    });
 
     await page.goto(realmURL);
     await page.locator('[data-test-stack-item-content]').first().waitFor();
@@ -253,45 +272,17 @@ test.describe('Head tags', () => {
       ),
     );
 
+    await openPublishRealmModal(page, displayName);
+    await page.locator('[data-test-default-domain-checkbox]').click();
+    await page.locator('[data-test-publish-button]').click();
+    await page.waitForSelector('[data-test-unpublish-button]');
+
     let publishedRealmURL = `http://${user.username}.localhost:4205/${realmName}/`;
-
-    await page.evaluate(
-      async ({ realmURL, publishedRealmURL }) => {
-        let sessions = JSON.parse(
-          window.localStorage.getItem('boxel-session') ?? '{}',
-        );
-        let token = sessions[realmURL];
-        if (!token) {
-          throw new Error(`No session token found for ${realmURL}`);
-        }
-
-        let response = await fetch('http://localhost:4205/_publish-realm', {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            Authorization: token,
-          },
-          body: JSON.stringify({
-            sourceRealmURL: realmURL,
-            publishedRealmURL,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(await response.text());
-        }
-
-        return response.json();
-      },
-      { realmURL, publishedRealmURL },
-    );
-
     let defaultCardURL = `${publishedRealmURL}default-head-card`;
     let customCardURL = `${publishedRealmURL}custom-head-card`;
 
+    await logout(page);
     await page.goto(defaultCardURL);
-    await page.pause();
     await expect(page).toHaveURL(defaultCardURL);
     await expect(
       page.locator('head meta[property="og:title"]'),
