@@ -142,6 +142,24 @@ export function buildPrerenderApp(options: {
           `received ${options.requestDescription} ${url}: realm=${realm} options=${JSON.stringify(renderOptions)}`,
         );
         if (!url || !auth || typeof auth !== 'string' || !realm) {
+          let missing = [];
+          if (!url) {
+            missing.push('url');
+          }
+          if (!realm) {
+            missing.push('realm');
+          }
+          if (!auth || typeof auth !== 'string') {
+            missing.push('auth');
+          }
+          log.warn(
+            'Rejecting %s due to missing attributes (%s); realm=%s url=%s authProvided=%s',
+            options.requestDescription,
+            missing.join(', '),
+            realm ?? '<missing>',
+            url ?? '<missing>',
+            typeof auth === 'string' && auth.trim().length > 0,
+          );
           ctxt.status = 400;
           ctxt.body = {
             errors: [
