@@ -12,6 +12,8 @@ import { jwtMiddleware } from '../middleware';
 import { createJWT } from '../utils/jwt';
 import { closeServer, realmSecretSeed } from './helpers';
 import { buildPrerenderApp } from '../prerender/prerender-app';
+import { buildCreatePrerenderAuth } from '../prerender/auth';
+import { verifyJWT } from '../jwt';
 
 module(basename(__filename), function () {
   module('prerender proxy', function (hooks) {
@@ -21,6 +23,7 @@ module(basename(__filename), function () {
       headers: http.IncomingHttpHeaders;
       body: string;
     }> = [];
+    let createPrerenderAuth = buildCreatePrerenderAuth(realmSecretSeed);
 
     hooks.afterEach(async function () {
       upstreamRequests = [];
@@ -88,7 +91,7 @@ module(basename(__filename), function () {
     async function startPrerenderServer() {
       let port = await getAvailablePort();
       let prerenderURL = `http://127.0.0.1:${port}`;
-      let { app, prerenderer } = buildPrerenderApp(realmSecretSeed, {
+      let { app, prerenderer } = buildPrerenderApp({
         serverURL: prerenderURL,
         silent: true,
       });
@@ -97,25 +100,22 @@ module(basename(__filename), function () {
         args: {
           realm: string;
           url: string;
-          userId: string;
-          permissions: Record<string, ('read' | 'write' | 'realm-owner')[]>;
+          auth: string;
         };
       }> = [];
 
       (prerenderer as any).prerenderCard = async ({
         realm,
         url,
-        userId,
-        permissions,
+        auth,
       }: {
         realm: string;
         url: string;
-        userId: string;
-        permissions: Record<string, ('read' | 'write' | 'realm-owner')[]>;
+        auth: string;
       }) => {
         renderCalls.push({
           kind: 'card',
-          args: { realm, url, userId, permissions },
+          args: { realm, url, auth },
         });
         return {
           response: {
@@ -137,17 +137,15 @@ module(basename(__filename), function () {
       (prerenderer as any).prerenderModule = async ({
         realm,
         url,
-        userId,
-        permissions,
+        auth,
       }: {
         realm: string;
         url: string;
-        userId: string;
-        permissions: Record<string, ('read' | 'write' | 'realm-owner')[]>;
+        auth: string;
       }) => {
         renderCalls.push({
           kind: 'module',
-          args: { realm, url, userId, permissions },
+          args: { realm, url, auth },
         });
         return {
           response: {
@@ -200,6 +198,7 @@ module(basename(__filename), function () {
           path: '/prerender-card',
           prerendererUrl: upstreamURL,
           dbAdapter,
+          createPrerenderAuth,
         }),
       );
       app.use(router.routes());
@@ -230,21 +229,39 @@ module(basename(__filename), function () {
         '/prerender-card',
         'forwards request to prerender path',
       );
+      let forwarded = JSON.parse(upstreamRequests[0]?.body || '{}');
+      assert.strictEqual(
+        forwarded.data.attributes.userId,
+        '@someone:localhost',
+        'forwards request payload with derived userId',
+      );
       assert.deepEqual(
-        JSON.parse(upstreamRequests[0]?.body || '{}'),
+        forwarded.data.attributes.permissions,
         {
-          data: {
-            ...payload.data,
-            attributes: {
-              ...payload.data.attributes,
-              userId: '@someone:localhost',
-              permissions: {
-                'http://example/': ['read', 'write'],
-              },
-            },
-          },
+          'http://example/': ['read', 'write'],
         },
-        'forwards request payload with derived permissions and userId',
+        'forwards request payload with derived permissions',
+      );
+      assert.ok(
+        forwarded.data.attributes.auth,
+        'forwards prerender auth token',
+      );
+      let sessions = JSON.parse(forwarded.data.attributes.auth);
+      let tokenClaims = verifyJWT(sessions['http://example/'], realmSecretSeed);
+      assert.strictEqual(
+        tokenClaims.user,
+        '@someone:localhost',
+        'includes user in prerender auth',
+      );
+      assert.deepEqual(
+        tokenClaims.permissions,
+        ['read', 'write'],
+        'encodes permissions in prerender auth',
+      );
+      assert.strictEqual(
+        tokenClaims.realm,
+        'http://example/',
+        'encodes realm in prerender auth',
       );
     });
 
@@ -258,6 +275,7 @@ module(basename(__filename), function () {
           path: '/prerender-card',
           prerendererUrl: undefined,
           dbAdapter: makeDbAdapter([]),
+          createPrerenderAuth,
         }),
       );
       app.use(router.routes());
@@ -290,6 +308,7 @@ module(basename(__filename), function () {
           path: '/prerender-card',
           prerendererUrl: upstreamURL,
           dbAdapter: makeDbAdapter([]), // no permissions
+          createPrerenderAuth,
         }),
       );
       app.use(router.routes());
@@ -304,7 +323,10 @@ module(basename(__filename), function () {
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
-            attributes: { realm: 'http://localhost:4201/base/' },
+            attributes: {
+              realm: 'http://localhost:4201/base/',
+              url: 'http://localhost:4201/base/some-card',
+            },
           },
         });
 
@@ -336,6 +358,7 @@ module(basename(__filename), function () {
           path: '/prerender-card',
           prerendererUrl: prerenderURL,
           dbAdapter,
+          createPrerenderAuth,
         }),
       );
       router.post(
@@ -345,6 +368,7 @@ module(basename(__filename), function () {
           path: '/prerender-module',
           prerendererUrl: prerenderURL,
           dbAdapter,
+          createPrerenderAuth,
         }),
       );
       app.use(router.routes());
@@ -387,13 +411,17 @@ module(basename(__filename), function () {
         assert.strictEqual(moduleResponse.body.data.attributes.status, 'ready');
 
         assert.deepEqual(
-          renderCalls.map(({ kind, args }) => ({
-            kind,
-            realm: args.realm,
-            url: args.url,
-            permissions: args.permissions,
-            userId: args.userId,
-          })),
+          renderCalls.map(({ kind, args }) => {
+            let sessions = JSON.parse(args.auth);
+            let claims = verifyJWT(sessions[realm], realmSecretSeed);
+            return {
+              kind,
+              realm: args.realm,
+              url: args.url,
+              permissions: { [claims.realm]: claims.permissions },
+              userId: claims.user,
+            };
+          }),
           [
             {
               kind: 'card',

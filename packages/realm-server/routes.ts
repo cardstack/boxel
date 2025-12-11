@@ -36,6 +36,7 @@ import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-clai
 import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain';
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain';
 import handlePrerenderProxy from './handlers/handle-prerender-proxy';
+import { buildCreatePrerenderAuth } from './prerender/auth';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -86,6 +87,7 @@ export type CreateRoutesArgs = {
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
+  let createPrerenderAuth = buildCreatePrerenderAuth(args.realmSecretSeed);
   let router = new Router();
 
   router.head('/', livenessCheck);
@@ -128,6 +130,7 @@ export function createRoutes(args: CreateRoutesArgs) {
       path: '/prerender-card',
       prerendererUrl: args.prerendererUrl,
       dbAdapter: args.dbAdapter,
+      createPrerenderAuth,
     }),
   );
   router.post(
@@ -137,6 +140,7 @@ export function createRoutes(args: CreateRoutesArgs) {
       path: '/prerender-module',
       prerendererUrl: args.prerendererUrl,
       dbAdapter: args.dbAdapter,
+      createPrerenderAuth,
     }),
   );
   router.post(

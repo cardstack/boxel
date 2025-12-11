@@ -3,6 +3,7 @@ import type Koa from 'koa';
 import {
   fetchRealmPermissions,
   type DBAdapter,
+  type RealmPermissions,
 } from '@cardstack/runtime-common';
 
 import {
@@ -18,11 +19,16 @@ export default function handlePrerenderProxy({
   path,
   prerendererUrl,
   dbAdapter,
+  createPrerenderAuth,
 }: {
   path: '/prerender-card' | '/prerender-module';
   prerendererUrl?: string;
   timeoutMs?: number;
   dbAdapter: DBAdapter;
+  createPrerenderAuth: (
+    userId: string,
+    permissions: RealmPermissions,
+  ) => string;
 }) {
   return async (ctxt: Koa.Context) => {
     if (!prerendererUrl) {
@@ -64,6 +70,10 @@ export default function handlePrerenderProxy({
       );
       return;
     }
+    if (!attrs.url) {
+      await sendResponseForBadRequest(ctxt, 'Missing url in attributes');
+      return;
+    }
     if (!attrs.realm) {
       await sendResponseForBadRequest(ctxt, 'Missing realm in attributes');
       return;
@@ -82,15 +92,20 @@ export default function handlePrerenderProxy({
       return;
     }
 
+    let permissions: RealmPermissions = {
+      [attrs.realm]: userPermissions,
+    };
+
+    let auth = createPrerenderAuth(token.user, permissions);
+
     let forwardBody = JSON.stringify({
       data: {
         ...json?.data,
         attributes: {
           ...attrs,
           userId: token.user,
-          permissions: {
-            [attrs.realm]: userPermissions,
-          },
+          permissions,
+          auth,
         },
       },
     });
