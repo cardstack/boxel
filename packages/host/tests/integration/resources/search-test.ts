@@ -308,7 +308,7 @@ module(`Integration | search resource`, function (hooks) {
 
   hooks.beforeEach(async function () {
     getOwner(this)!.register('service:realm', StubRealmService);
-    ({ loader, loaderService, storeService, realm } = snapshot.get());
+    ({ loaderService, storeService, realm } = snapshot.get());
   });
 
   test(`can search for card instances by using the 'eq' filter`, async function (assert) {

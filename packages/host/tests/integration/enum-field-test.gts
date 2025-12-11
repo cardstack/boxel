@@ -54,6 +54,7 @@ module('Integration | enumField', function (hooks) {
     async build({ loader }) {
       let loaderService = getService('loader-service');
       loaderService.loader = loader;
+      await loader.import(`${baseRealm.url}card-api`);
       return { loader };
     },
   });

@@ -42,11 +42,11 @@ module('Integration | number field configuration', function (hooks) {
     },
   });
 
-  hooks.beforeEach(function () {
+  hooks.beforeEach(async function () {
     ({ loader } = snapshot.get());
     const numberModule: any = await loader.import(
-        `${catalogRealmURL}fields/number`,
-      );
+      `${catalogRealmURL}fields/number`,
+    );
     CatalogNumberFieldClass = numberModule.default;
   });
 
