@@ -39,18 +39,18 @@ class AnimatedBeaconExample extends GlimmerComponent {
   }: TransitionContext) {
     for (let sprite of insertedSprites) {
       sprite.startAtSprite(beacons.one);
-      move(sprite);
-      scale(sprite);
+      yield move(sprite);
+      yield scale(sprite);
     }
 
     for (let sprite of keptSprites) {
-      move(sprite);
+      yield move(sprite);
     }
 
     for (let sprite of removedSprites) {
       sprite.endAtSprite(beacons.one);
-      move(sprite);
-      scale(sprite);
+      yield move(sprite);
+      yield scale(sprite);
     }
   }
 
@@ -69,9 +69,13 @@ class AnimatedBeaconExample extends GlimmerComponent {
       </AnimatedBeacon>
 
       {{#animatedIf this.showThing use=this.transition}}
-        <div class='message' {{on 'click' this.dismiss}}>
-          Hello
-        </div>
+        <BoxelContainer
+          class='message'
+          {{on 'click' this.dismiss}}
+          role='button'
+        >
+          Click to Dismiss
+        </BoxelContainer>
       {{/animatedIf}}
     </AnimatedContainer>
   </template>
@@ -84,10 +88,10 @@ class AnimatedEachExample extends GlimmerComponent {
   };
   *transition({ keptSprites, removedSprites }: TransitionContext) {
     for (let sprite of keptSprites) {
-      move(sprite);
+      yield move(sprite);
     }
     for (let sprite of removedSprites) {
-      fadeOut(sprite);
+      yield fadeOut(sprite);
     }
   }
 
@@ -312,7 +316,7 @@ class TransitionMoveOverExample extends GlimmerComponent {
     this.showHello = !this.showHello;
   }
 
-  rules({ newItems }: any) {
+  rules({ newItems }: { newItems: unknown[] }) {
     if (newItems[0]) {
       return toRight;
     } else {
