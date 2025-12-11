@@ -432,7 +432,7 @@ module('Integration | commands | patch-instance', function (hooks) {
 
   test('can patch an unsaved instance', async function (assert) {
     let store = getService('store');
-    let andrea = new Person({ name: 'Andrea' });
+    let andrea = new PersonDef({ name: 'Andrea' });
     await store.add(andrea, { realm: testRealmURL, doNotPersist: true });
 
     let patchInstanceCommand = new PatchCardInstanceCommand(
