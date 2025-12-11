@@ -88,14 +88,18 @@ test.describe('Head tags', () => {
 
     let defaultHeadCardSource = `
       import { action } from '@ember/object';
+      import { consume } from 'ember-provide-consume-context';
       import { on } from '@ember/modifier';
-      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef, Component, type CardCrudFunctions } from "https://cardstack.com/base/card-api";
       import StringField from "https://cardstack.com/base/string";
+      import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
 
       export class DefaultHeadCard extends CardDef {
         @field title = contains(StringField);
 
         static isolated = class Isolated extends Component<typeof this> {
+          @consume(CardCrudFunctionsContextName) cardCrudFunctions: CardCrudFunctions | undefined;
+
           get customTarget() {
             try {
               return new URL('./custom-head-card', new URL(this.args.model?.id));
@@ -104,12 +108,15 @@ test.describe('Head tags', () => {
             }
           }
 
-          @action viewCustom() {
-            let target = this.customTarget;
-            if (target) {
-              window.history.pushState({}, '', target.toString());
-              window.dispatchEvent(new PopStateEvent('popstate'));
+          navigateTo(target: URL | null) {
+            if (!target) {
+              return;
             }
+            this.cardCrudFunctions?.viewCard?.(target);
+          }
+
+          @action viewCustom() {
+            this.navigateTo(this.customTarget);
           }
 
           <template>
@@ -126,9 +133,11 @@ test.describe('Head tags', () => {
 
     let customHeadCardSource = `
       import { action } from '@ember/object';
+      import { consume } from 'ember-provide-consume-context';
       import { on } from '@ember/modifier';
-      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef, Component, type CardCrudFunctions } from "https://cardstack.com/base/card-api";
       import StringField from "https://cardstack.com/base/string";
+      import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
 
       export class CustomHeadCard extends CardDef {
         @field title = contains(StringField);
@@ -148,6 +157,8 @@ test.describe('Head tags', () => {
         };
 
         static isolated = class Isolated extends Component<typeof this> {
+          @consume(CardCrudFunctionsContextName) cardCrudFunctions: CardCrudFunctions | undefined;
+
           get defaultTarget() {
             try {
               return new URL('./default-head-card', new URL(this.args.model?.id));
@@ -156,12 +167,15 @@ test.describe('Head tags', () => {
             }
           }
 
-          @action viewDefault() {
-            let target = this.defaultTarget;
-            if (target) {
-              window.history.pushState({}, '', target.toString());
-              window.dispatchEvent(new PopStateEvent('popstate'));
+          navigateTo(target: URL | null) {
+            if (!target) {
+              return;
             }
+            this.cardCrudFunctions?.viewCard?.(target);
+          }
+
+          @action viewDefault() {
+            this.navigateTo(this.defaultTarget);
           }
 
           <template>
@@ -273,17 +287,14 @@ test.describe('Head tags', () => {
       { realmURL, publishedRealmURL },
     );
 
-    await logout(page);
-
     let defaultCardURL = `${publishedRealmURL}default-head-card`;
     let customCardURL = `${publishedRealmURL}custom-head-card`;
 
     await page.goto(defaultCardURL);
     await expect(page).toHaveURL(defaultCardURL);
-    await expect(page.locator('head meta[property="og:title"]')).toHaveAttribute(
-      'content',
-      'Default Head Card',
-    );
+    await expect(
+      page.locator('head meta[property="og:title"]'),
+    ).toHaveAttribute('content', 'Default Head Card');
     await expect(
       page.locator('head meta[name="custom-head-flag"]'),
     ).toHaveCount(0);
@@ -293,19 +304,17 @@ test.describe('Head tags', () => {
     await expect(
       page.locator('head meta[name="custom-head-flag"]'),
     ).toHaveAttribute('content', 'custom-head');
-    await expect(page.locator('head meta[property="og:title"]')).toHaveAttribute(
-      'content',
-      'Custom Head Title',
-    );
+    await expect(
+      page.locator('head meta[property="og:title"]'),
+    ).toHaveAttribute('content', 'Custom Head Title');
 
     await page.locator('[data-test-head-nav="default"]').click();
     await expect(page).toHaveURL(defaultCardURL);
     await expect(
       page.locator('head meta[name="custom-head-flag"]'),
     ).toHaveCount(0);
-    await expect(page.locator('head meta[property="og:title"]')).toHaveAttribute(
-      'content',
-      'Default Head Card',
-    );
+    await expect(
+      page.locator('head meta[property="og:title"]'),
+    ).toHaveAttribute('content', 'Default Head Card');
   });
 });
