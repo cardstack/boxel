@@ -9,12 +9,11 @@ import ENV from '@cardstack/host/config/environment';
 import {
   assertMessages,
   percySnapshot,
+  setupLocalIndexing,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
-  setupAuthEndpoints,
-  setupLocalIndexing,
-  setupUserSubscription,
   testRealmURL,
+  setupSnapshotRealm,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
@@ -306,198 +305,214 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
       mockMatrixUtils;
 
-    hooks.beforeEach(async function () {
-      createAndJoinRoom({
-        sender: '@testuser:localhost',
-        name: 'room-test',
-      });
-      setupUserSubscription();
-      setupAuthEndpoints();
 
-      ({ realm } = await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: testRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'author.gts': authorCard,
-          'blog-post.gts': blogPostCard,
-          'pet.gts': petCard,
-          'Author/jane-doe.json': {
-            data: {
-              attributes: {
-                firstName: 'Jane',
-                lastName: 'Doe',
-                bio: "Jane Doe is the Senior Managing Editor at <em>Ramped.com</em>, where she leads content strategy, editorial direction, and ensures the highest standards of quality across all publications. With over a decade of experience in digital media and editorial management, Jane has a proven track record of shaping impactful narratives, growing engaged audiences, and collaborating with cross-functional teams to deliver compelling content. When she's not editing, you can find her exploring new books, hiking, or indulging in her love of photography.",
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}author`,
-                  name: 'Author',
+    let defaultMatrixRoomId: string;
+    let snapshot = setupSnapshotRealm<{ realm: Realm }>(hooks, {
+      mockMatrixUtils,
+      acceptanceTest: true,
+      async build({ loader, isInitialBuild }) {
+        setActiveRealms([testRealmURL]);
+        setRealmPermissions({
+          [testRealmURL]: ['read', 'write'],
+        });
+
+        if (isInitialBuild || !defaultMatrixRoomId) {
+          defaultMatrixRoomId = createAndJoinRoom({
+            sender: '@testuser:localhost',
+            name: 'room-test',
+          });
+        }
+
+        ({ realm } = await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          loader,
+          realmURL: testRealmURL,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'author.gts': authorCard,
+            'blog-post.gts': blogPostCard,
+            'pet.gts': petCard,
+            'Author/jane-doe.json': {
+              data: {
+                attributes: {
+                  firstName: 'Jane',
+                  lastName: 'Doe',
+                  bio: "Jane Doe is the Senior Managing Editor at <em>Ramped.com</em>, where she leads content strategy, editorial direction, and ensures the highest standards of quality across all publications. With over a decade of experience in digital media and editorial management, Jane has a proven track record of shaping impactful narratives, growing engaged audiences, and collaborating with cross-functional teams to deliver compelling content. When she's not editing, you can find her exploring new books, hiking, or indulging in her love of photography.",
                 },
-              },
-            },
-          },
-          'BlogPost/remote-work.json': {
-            data: {
-              attributes: {
-                title: 'The Ultimate Guide to Remote Work',
-                description:
-                  'In today’s digital age, remote work has transformed from a luxury to a necessity. This comprehensive guide will help you navigate the world of remote work, offering tips, tools, and best practices for success.',
-              },
-              relationships: {
-                author: {
-                  links: {
-                    self: `${testRealmURL}Author/jane-doe`,
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}author`,
+                    name: 'Author',
                   },
                 },
               },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'BlogPost',
+            },
+            'BlogPost/remote-work.json': {
+              data: {
+                attributes: {
+                  title: 'The Ultimate Guide to Remote Work',
+                  description:
+                    'In today’s digital age, remote work has transformed from a luxury to a necessity. This comprehensive guide will help you navigate the world of remote work, offering tips, tools, and best practices for success.',
+                },
+                relationships: {
+                  author: {
+                    links: {
+                      self: `${testRealmURL}Author/jane-doe`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'BlogPost',
+                  },
                 },
               },
             },
-          },
-          'Spec/comment-alt.json': clone(commentSpec2),
-          'Spec/comment-main.json': clone(commentSpec1),
-          'Spec/full-name.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                ref: {
-                  name: 'FullNameField',
-                  module: '../author',
+            'Spec/comment-alt.json': clone(commentSpec2),
+            'Spec/comment-main.json': clone(commentSpec1),
+            'Spec/full-name.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  ref: {
+                    name: 'FullNameField',
+                    module: '../author',
+                  },
+                  specType: 'field',
+                  containedExamples: [],
+                  title: 'FullNameField spec',
                 },
-                specType: 'field',
-                containedExamples: [],
-                title: 'FullNameField spec',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/spec',
-                  name: 'Spec',
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/spec',
+                    name: 'Spec',
+                  },
                 },
               },
             },
-          },
-          'Spec/contact-info.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                ref: {
-                  name: 'ContactInfo',
-                  module: '../blog-post',
-                },
-                specType: 'field',
-                containedExamples: [
-                  { email: 'marcelius@email.com' },
-                  { email: 'lilian@email.com' },
-                  { email: 'susie@email.com' },
-                ],
-                title: 'Contact Info',
-              },
-              meta: {
-                fields: {
+            'Spec/contact-info.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  ref: {
+                    name: 'ContactInfo',
+                    module: '../blog-post',
+                  },
+                  specType: 'field',
                   containedExamples: [
-                    {
-                      adoptsFrom: {
-                        module: '../blog-post',
-                        name: 'ContactInfo',
-                      },
-                    },
-                    {
-                      adoptsFrom: {
-                        module: '../blog-post',
-                        name: 'ContactInfo',
-                      },
-                    },
-                    {
-                      adoptsFrom: {
-                        module: '../blog-post',
-                        name: 'ContactInfo',
-                      },
-                    },
+                    { email: 'marcelius@email.com' },
+                    { email: 'lilian@email.com' },
+                    { email: 'susie@email.com' },
                   ],
+                  title: 'Contact Info',
                 },
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/spec',
-                  name: 'Spec',
+                meta: {
+                  fields: {
+                    containedExamples: [
+                      {
+                        adoptsFrom: {
+                          module: '../blog-post',
+                          name: 'ContactInfo',
+                        },
+                      },
+                      {
+                        adoptsFrom: {
+                          module: '../blog-post',
+                          name: 'ContactInfo',
+                        },
+                      },
+                      {
+                        adoptsFrom: {
+                          module: '../blog-post',
+                          name: 'ContactInfo',
+                        },
+                      },
+                    ],
+                  },
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/spec',
+                    name: 'Spec',
+                  },
                 },
               },
             },
-          },
-          'Spec/toy.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                ref: {
-                  name: 'ToyField',
-                  module: '../pet',
-                },
-                specType: 'field',
-                containedExamples: [
-                  { title: 'Tug rope' },
-                  { title: 'Lambchop' },
-                ],
-                title: 'Toy',
-              },
-              meta: {
-                fields: {
+            'Spec/toy.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  ref: {
+                    name: 'ToyField',
+                    module: '../pet',
+                  },
+                  specType: 'field',
                   containedExamples: [
-                    {
-                      adoptsFrom: {
-                        module: '../pet',
-                        name: 'ToyField',
-                      },
-                    },
-                    {
-                      adoptsFrom: {
-                        module: '../pet',
-                        name: 'ToyField',
-                      },
-                    },
+                    { title: 'Tug rope' },
+                    { title: 'Lambchop' },
                   ],
+                  title: 'Toy',
                 },
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/spec',
-                  name: 'Spec',
+                meta: {
+                  fields: {
+                    containedExamples: [
+                      {
+                        adoptsFrom: {
+                          module: '../pet',
+                          name: 'ToyField',
+                        },
+                      },
+                      {
+                        adoptsFrom: {
+                          module: '../pet',
+                          name: 'ToyField',
+                        },
+                      },
+                    ],
+                  },
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/spec',
+                    name: 'Spec',
+                  },
+                },
+              },
+            },
+            'Pet/mango.json': {
+              data: {
+                attributes: {
+                  firstName: 'Mango',
+                  title: 'Mango',
+                  favoriteToys: [{ title: 'Tug rope' }, { title: 'Lambchop' }],
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}pet`,
+                    name: 'PetCard',
+                  },
                 },
               },
             },
           },
-          'Pet/mango.json': {
-            data: {
-              attributes: {
-                firstName: 'Mango',
-                title: 'Mango',
-                favoriteToys: [{ title: 'Tug rope' }, { title: 'Lambchop' }],
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}pet`,
-                  name: 'PetCard',
-                },
-              },
-            },
-          },
-        },
-      }));
-      await realm.delete('Spec/comment-main.json');
-      await realm.write('Spec/comment-main.json', JSON.stringify(commentSpec1));
-      setRecentFiles([
-        [testRealmURL, 'blog-post.gts'],
-        [testRealmURL, 'author.gts'],
-        [testRealmURL, 'BlogPost/remote-work.json'],
-        [testRealmURL, 'Author/jane-doe.json'],
-      ]);
-      removePlaygroundSelections();
-      removeSpecSelection();
+        }));
+        await realm.delete('Spec/comment-main.json');
+        await realm.write(
+          'Spec/comment-main.json',
+          JSON.stringify(commentSpec1),
+        );
+        setRecentFiles([
+          [testRealmURL, 'blog-post.gts'],
+          [testRealmURL, 'author.gts'],
+          [testRealmURL, 'BlogPost/remote-work.json'],
+          [testRealmURL, 'Author/jane-doe.json'],
+        ]);
+        removePlaygroundSelections();
+        removeSpecSelection();
 
-      setActiveRealms([testRealmURL]);
-      setRealmPermissions({
-        [testRealmURL]: ['read', 'write'],
-      });
+        return { realm };
+      },
+    });
+
+    hooks.beforeEach(function () {
+      ({ realm } = snapshot.get());
     });
 
     test('can preview compound field instance', async function (assert) {
@@ -1089,97 +1104,111 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     });
     let { setRealmPermissions, createAndJoinRoom } = mockMatrixUtils;
 
-    hooks.beforeEach(async function () {
-      createAndJoinRoom({
-        sender: '@testuser:localhost',
-        name: 'room-test',
-      });
-      setupUserSubscription();
-      setupAuthEndpoints();
 
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: personalRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'author.gts': authorCard,
-          '.realm.json': {
-            name: `Test User's Workspace`,
-            backgroundURL: 'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
-            iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
+    let defaultMatrixRoomId: string;
+    let multiRealmSnapshot = setupSnapshotRealm<{ realm: Realm }>(hooks, {
+      mockMatrixUtils,
+      acceptanceTest: true,
+      async build({ loader, isInitialBuild }) {
+        setRealmPermissions({
+          [additionalRealmURL]: ['read', 'write', 'realm-owner'],
+          [personalRealmURL]: ['read', 'write', 'realm-owner'],
+        });
+
+        if (isInitialBuild || !defaultMatrixRoomId) {
+          defaultMatrixRoomId = createAndJoinRoom({
+            sender: '@testuser:localhost',
+            name: 'room-test',
+          });
+        }
+
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          loader,
+          realmURL: personalRealmURL,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'author.gts': authorCard,
+            '.realm.json': {
+              name: `Test User's Workspace`,
+              backgroundURL: 'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
+              iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
+            },
           },
-        },
-      });
+        });
 
-      ({ realm } = await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: additionalRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'author.gts': authorCard,
-          'pet.gts': petCard,
-          'Spec/toy.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                ref: {
-                  name: 'ToyField',
-                  module: '../pet',
+        ({ realm } = await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          loader,
+          realmURL: additionalRealmURL,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'author.gts': authorCard,
+            'pet.gts': petCard,
+            'Spec/toy.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  ref: {
+                    name: 'ToyField',
+                    module: '../pet',
+                  },
+                  specType: 'field',
+                  containedExamples: [{ title: 'Tug rope' }],
+                  title: 'Toy',
                 },
-                specType: 'field',
-                containedExamples: [{ title: 'Tug rope' }],
-                title: 'Toy',
-              },
-              meta: {
-                fields: {
-                  containedExamples: [
-                    {
-                      adoptsFrom: {
-                        module: '../pet',
-                        name: 'ToyField',
+                meta: {
+                  fields: {
+                    containedExamples: [
+                      {
+                        adoptsFrom: {
+                          module: '../pet',
+                          name: 'ToyField',
+                        },
                       },
-                    },
-                  ],
-                },
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/spec',
-                  name: 'Spec',
-                },
-              },
-            },
-          },
-          'Spec/full-name.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                ref: {
-                  name: 'FullNameField',
-                  module: '../author',
-                },
-                specType: 'field',
-                containedExamples: [],
-                title: 'FullNameField spec',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/spec',
-                  name: 'Spec',
+                    ],
+                  },
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/spec',
+                    name: 'Spec',
+                  },
                 },
               },
             },
+            'Spec/full-name.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  ref: {
+                    name: 'FullNameField',
+                    module: '../author',
+                  },
+                  specType: 'field',
+                  containedExamples: [],
+                  title: 'FullNameField spec',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/spec',
+                    name: 'Spec',
+                  },
+                },
+              },
+            },
+            '.realm.json': {
+              name: `Additional Workspace`,
+              backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
+              iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
+            },
           },
-          '.realm.json': {
-            name: `Additional Workspace`,
-            backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
-            iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
-          },
-        },
-      }));
+        }));
 
-      setRealmPermissions({
-        [additionalRealmURL]: ['read', 'write', 'realm-owner'],
-        [personalRealmURL]: ['read', 'write', 'realm-owner'],
-      });
+        return { realm };
+      },
+    });
+
+    hooks.beforeEach(function () {
+      ({ realm } = multiRealmSnapshot.get());
     });
 
     test('can autogenerate new Spec and field instance (no preexisting Spec)', async function (assert) {
