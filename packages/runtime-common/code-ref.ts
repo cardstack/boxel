@@ -16,7 +16,8 @@ import {
 } from './constants';
 import { CardError } from './error';
 import { meta } from './constants';
-import { isUrlLike, LooseCardResource, trimExecutableExtension } from './index';
+import type { LooseCardResource } from './index';
+import { isUrlLike, trimExecutableExtension } from './index';
 
 export type ResolvedCodeRef = {
   module: string;

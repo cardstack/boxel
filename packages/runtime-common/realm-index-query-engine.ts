@@ -48,6 +48,18 @@ export interface SearchResultError {
   };
 }
 
+function absolutizeInstanceURL(
+  url: string,
+  resourceId: string | undefined,
+  setURL: (newURL: string) => void,
+) {
+  if (!resourceId) {
+    setURL(url);
+    return;
+  }
+  setURL(new URL(url, resourceId).href);
+}
+
 export class RealmIndexQueryEngine {
   #realm: Realm;
   #fetch: typeof globalThis.fetch;
@@ -307,11 +319,12 @@ export class RealmIndexQueryEngine {
               ...includedResource,
               ...{ links: { self: includedResource.id } },
             });
-            function visitURL(url: string, setURL: (newURL: string) => void) {
-              setURL(new URL(url, rewrittenResource.id).href);
-            }
-            visitInstanceURLs(rewrittenResource, visitURL);
-            visitModuleDeps(rewrittenResource, visitURL);
+            visitInstanceURLs(rewrittenResource, (url, setURL) =>
+              absolutizeInstanceURL(url, rewrittenResource.id, setURL),
+            );
+            visitModuleDeps(rewrittenResource, (url, setURL) =>
+              absolutizeInstanceURL(url, rewrittenResource.id, setURL),
+            );
             included.push(rewrittenResource);
           }
         }
