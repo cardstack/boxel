@@ -1,6 +1,9 @@
 import { module, test } from 'qunit';
 
-import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
+import {
+  realmURL as realmURLSymbol,
+  baseRealm,
+} from '@cardstack/runtime-common';
 
 import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card';
 import CopyCardToStackCommand from '@cardstack/host/commands/copy-card-to-stack';
@@ -28,22 +31,17 @@ module('Integration | commands | copy-card', function (hooks) {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL, testRealm2URL],
   });
-
-  hooks.beforeEach(async function () {
-    let snapshot = setupSnapshotRealm(hooks, {
-      mockMatrixUtils,
-      async build({ loader }) {
-        let loaderService = getService('loader-service');
-        loaderService.loader = loader;
-        return {};
-      },
-    });
-    snapshot.get();
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      realmURL: testRealmURL,
-      contents: {
-        'pet.gts': `
+  let snapshot = setupSnapshotRealm(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      let loaderService = getService('loader-service');
+      loaderService.loader = loader;
+      await loader.import(`${baseRealm.url}command`);
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealmURL,
+        contents: {
+          'pet.gts': `
           import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
           export class Pet extends CardDef {
@@ -51,55 +49,61 @@ module('Integration | commands | copy-card', function (hooks) {
             @field firstName = contains(StringField);
           }
         `,
-        'Pet/mango.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
+          'Pet/mango.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Mango',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
               },
             },
           },
         },
-      },
-    });
+        loader,
+      });
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      realmURL: testRealm2URL,
-      contents: {
-        'index.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealm2URL,
+        contents: {
+          'index.json': {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/cards-grid',
+                  name: 'CardsGrid',
+                },
+              },
+            },
+          },
+          'Pet/fluffy.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Fluffy',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
+                },
               },
             },
           },
         },
-        'Pet/fluffy.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Fluffy',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
-              },
-            },
-          },
-        },
-      },
-    });
+        loader,
+      });
+      return {};
+    },
+  });
 
+  hooks.beforeEach(async function () {
     // Ensure realms are logged in with write permissions
     let realmService = getService('realm');
     await realmService.login(testRealmURL);

@@ -34,24 +34,26 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
+class Person extends CardDef {
+  @field name = contains(StringField);
+  @field nickNames = containsMany(StringField);
+  @field bestFriend = linksTo(() => Person);
+  @field friends = linksToMany(() => Person);
+}
+
 module('Integration | commands | patch-instance', function (hooks) {
   setupRenderingTest(hooks);
 
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, { autostart: true });
+  let commandService: CommandService;
   let snapshot = setupSnapshotRealm(hooks, {
     mockMatrixUtils,
     async build({ loader }) {
       let loaderService = getService('loader-service');
       loaderService.loader = loader;
-      let commandService = getService('command-service');
-      class Person extends CardDef {
-        @field name = contains(StringField);
-        @field nickNames = containsMany(StringField);
-        @field bestFriend = linksTo(() => Person);
-        @field friends = linksToMany(() => Person);
-      }
+
       let { realm } = await setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
@@ -63,26 +65,19 @@ module('Integration | commands | patch-instance', function (hooks) {
         },
         loader,
       });
-      return {
-        commandService,
-        PersonDef: Person as typeof CardDefType,
-        indexQuery: realm.realmIndexQueryEngine,
-      };
+      return {};
     },
   });
-  let commandService: CommandService;
-  let PersonDef: typeof CardDefType;
-  let indexQuery: RealmIndexQueryEngine;
 
   hooks.beforeEach(function () {
-    ({ commandService, PersonDef, indexQuery } = snapshot.get());
+    commandService = getService('command-service');
   });
 
   test<TestContextWithSave>('can patch a contains field', async function (assert) {
     let patchInstanceCommand = new PatchCardInstanceCommand(
       commandService.commandContext,
       {
-        cardType: PersonDef,
+        cardType: Person,
       },
     );
     let url = new URL(`${testRealmURL}Person/hassan`);
@@ -149,7 +144,7 @@ module('Integration | commands | patch-instance', function (hooks) {
     let patchInstanceCommand = new PatchCardInstanceCommand(
       commandService.commandContext,
       {
-        cardType: PersonDef,
+        cardType: Person,
       },
     );
     let url = new URL(`${testRealmURL}Person/hassan`);
@@ -216,7 +211,7 @@ module('Integration | commands | patch-instance', function (hooks) {
     let patchInstanceCommand = new PatchCardInstanceCommand(
       commandService.commandContext,
       {
-        cardType: PersonDef,
+        cardType: Person,
       },
     );
     let url = new URL(`${testRealmURL}Person/hassan`);
@@ -283,7 +278,7 @@ module('Integration | commands | patch-instance', function (hooks) {
     let patchInstanceCommand = new PatchCardInstanceCommand(
       commandService.commandContext,
       {
-        cardType: PersonDef,
+        cardType: Person,
       },
     );
     let url = new URL(`${testRealmURL}Person/hassan`);
@@ -352,7 +347,7 @@ module('Integration | commands | patch-instance', function (hooks) {
     let patchInstanceCommand = new PatchCardInstanceCommand(
       commandService.commandContext,
       {
-        cardType: PersonDef,
+        cardType: Person,
       },
     );
 
@@ -431,13 +426,13 @@ module('Integration | commands | patch-instance', function (hooks) {
 
   test('can patch an unsaved instance', async function (assert) {
     let store = getService('store');
-    let andrea = new PersonDef({ name: 'Andrea' });
+    let andrea = new Person({ name: 'Andrea' });
     await store.add(andrea, { realm: testRealmURL, doNotPersist: true });
 
     let patchInstanceCommand = new PatchCardInstanceCommand(
       commandService.commandContext,
       {
-        cardType: PersonDef,
+        cardType: Person,
       },
     );
     await patchInstanceCommand.execute({

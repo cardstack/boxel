@@ -2,7 +2,10 @@ import { settled } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
+import {
+  realmURL as realmURLSymbol,
+  baseRealm,
+} from '@cardstack/runtime-common';
 
 import CopyAndEditCommand from '@cardstack/host/commands/copy-and-edit';
 import { StackItem } from '@cardstack/host/lib/stack-item';
@@ -35,16 +38,12 @@ module('Integration | commands | copy-and-edit', function (hooks) {
     async build({ loader }) {
       let loaderService = getService('loader-service');
       loaderService.loader = loader;
-      return {};
-    },
-  });
-
-  hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      realmURL: testRealmURL,
-      contents: {
-        'content-card.gts': `
+      await loader.import(`${baseRealm.url}command`);
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealmURL,
+        contents: {
+          'content-card.gts': `
           import { CardDef, contains, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
 
@@ -59,45 +58,45 @@ module('Integration | commands | copy-and-edit', function (hooks) {
             @field children = linksToMany(() => Child);
           }
         `,
-        'Child/og.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Original',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../content-card',
-                name: 'Child',
+          'Child/og.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Original',
               },
-            },
-          },
-        },
-        'Parent/root.json': {
-          data: {
-            type: 'card',
-            relationships: {
-              child: {
-                data: {
-                  type: 'card',
-                  id: '../Child/og',
-                },
-              },
-              'children.0': {
-                links: {
-                  self: '../Child/og',
+              meta: {
+                adoptsFrom: {
+                  module: '../content-card',
+                  name: 'Child',
                 },
               },
             },
-            meta: {
-              adoptsFrom: {
-                module: '../content-card',
-                name: 'Parent',
+          },
+          'Parent/root.json': {
+            data: {
+              type: 'card',
+              relationships: {
+                child: {
+                  data: {
+                    type: 'card',
+                    id: '../Child/og',
+                  },
+                },
+                'children.0': {
+                  links: {
+                    self: '../Child/og',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../content-card',
+                  name: 'Parent',
+                },
               },
             },
           },
-        },
-        'simple-card.gts': `
+          'simple-card.gts': `
           import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
 
@@ -105,26 +104,27 @@ module('Integration | commands | copy-and-edit', function (hooks) {
             static displayName = 'SimpleCard';
           }
         `,
-        'simple-card-instance.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: './simple-card',
-                name: 'SimpleCard',
+          'simple-card-instance.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './simple-card',
+                  name: 'SimpleCard',
+                },
               },
             },
           },
         },
-      },
-    });
+        loader,
+      });
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      realmURL: otherRealmURL,
-      contents: {
-        'content-card.gts': `
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: otherRealmURL,
+        contents: {
+          'content-card.gts': `
           import { CardDef, contains, field } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
 
@@ -133,23 +133,28 @@ module('Integration | commands | copy-and-edit', function (hooks) {
             @field name = contains(StringField);
           }
         `,
-        'Child/remote.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'RemoteChild',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}content-card`,
-                name: 'Child',
+          'Child/remote.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'RemoteChild',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}content-card`,
+                  name: 'Child',
+                },
               },
             },
           },
         },
-      },
-    });
+        loader,
+      });
+      return {};
+    },
+  });
 
+  hooks.beforeEach(async function () {
     let realmService = getService('realm');
     await realmService.login(testRealmURL);
     await realmService.login(otherRealmURL);
