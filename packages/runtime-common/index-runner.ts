@@ -586,32 +586,50 @@ export class IndexRunner {
 
       if (!renderResult || ('error' in renderResult && renderResult.error)) {
         let renderError = renderResult?.error;
-        if (!renderError && uncaughtError) {
-          renderError = {
-            type: 'error',
-            error:
-              uncaughtError instanceof CardError
-                ? serializableError(uncaughtError)
-                : { message: `${uncaughtError.message}` },
-          };
-        }
+
+        let ensureErrorEntry = (
+          entry: ErrorEntry | undefined,
+          err: unknown,
+        ): ErrorEntry => {
+          if (entry?.error) {
+            let normalizedError = { ...entry.error };
+            normalizedError.additionalErrors =
+              normalizedError.additionalErrors ?? null;
+            normalizedError.status = normalizedError.status ?? 500;
+            return {
+              ...entry,
+              error: normalizedError,
+            };
+          }
+          if (entry && !entry.error) {
+            return {
+              ...entry,
+              error: serializableError(
+                new CardError('unknown render error', { status: 500 }),
+              ),
+            };
+          }
+          if (isCardError(err)) {
+            return { type: 'error', error: serializableError(err) };
+          }
+          let fallback = new CardError(
+            (err as Error)?.message ?? 'unknown render error',
+            { status: (err as CardError)?.status ?? 500 },
+          );
+          fallback.stack = (err as Error)?.stack;
+          return { type: 'error', error: serializableError(fallback) };
+        };
+
+        renderError = ensureErrorEntry(renderError, uncaughtError);
+
         if (
-          renderError?.error?.id &&
+          renderError.error.id &&
           renderError.error.id.replace(/\.json$/, '') !== instanceURL.href
         ) {
           renderError.error.deps = renderError.error.deps ?? [];
           renderError.error.deps.push(
             canonicalURL(renderError.error.id, instanceURL.href),
           );
-        }
-        if (!renderError) {
-          renderError = {
-            type: 'error',
-            error: { message: 'unknown render error' },
-          };
-        }
-        if (!renderError.error) {
-          renderError.error = { message: 'unknown render error' } as any;
         }
 
         // always include the modules that we see in serialized as deps
