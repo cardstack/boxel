@@ -153,7 +153,6 @@ export default class CommandService extends Service {
       .then(() => {
         let current = this.aiAssistantInvalidations.get(key);
         current?.deferred.fulfill();
-        this.aiAssistantInvalidations.delete(key);
       })
       .catch(() => {
         this.aiAssistantInvalidations.delete(key);
