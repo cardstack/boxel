@@ -150,11 +150,10 @@ module(basename(__filename), function () {
                   constructor(...args) {
                     super(...args);
                     let rsvp = (globalThis as any).RSVP;
-                    if (rsvp?.reject) {
-                      rsvp.reject(new Error('rsvp boom'));
-                    } else {
-                      Promise.reject(new Error('rsvp boom'));
+                    if (!rsvp?.reject) {
+                      throw new Error('RSVP.reject is required for this test');
                     }
+                    rsvp.reject(new Error('rsvp boom'));
                   }
                   <template>oops</template>
                 }

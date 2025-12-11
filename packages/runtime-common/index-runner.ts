@@ -587,6 +587,12 @@ export class IndexRunner {
       if (!renderResult || ('error' in renderResult && renderResult.error)) {
         let renderError = renderResult?.error;
 
+        /**
+         * Normalize any combination of an optional ErrorEntry and thrown value
+         * into a well-formed ErrorEntry. Handles the common case of a provided
+         * entry with an error, rejects malformed entries missing error payloads,
+         * and synthesizes an ErrorEntry from either a CardError or generic Error.
+         */
         let normalizeToErrorEntry = (
           entry: ErrorEntry | undefined,
           err: unknown,
