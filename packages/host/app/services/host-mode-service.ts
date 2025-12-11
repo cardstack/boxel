@@ -13,7 +13,6 @@ interface PublishedRealmMetadata {
 
 export default class HostModeService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;
-  private currentHeadCardURL: string | null = null;
   private headUpdateRequestId = 0;
 
   get isActive() {
@@ -182,7 +181,6 @@ export default class HostModeService extends Service {
     }
 
     this.replaceHeadTemplate(headHTML);
-    this.currentHeadCardURL = normalizedCardURL;
   }
 
   private async fetchPrerenderedHead(
