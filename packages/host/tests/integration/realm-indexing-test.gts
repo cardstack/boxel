@@ -686,7 +686,7 @@ module(`Integration | realm indexing`, function (hooks) {
     }
   });
 
-  test('can index a card with relative code-ref fields', async function (assert) {
+  test('relative code-ref fields are serialized as absolute URLs', async function (assert) {
     class Person extends CardDef {
       @field firstName = contains(StringField);
     }
@@ -702,7 +702,7 @@ module(`Integration | realm indexing`, function (hooks) {
               description: 'Spec for Person card',
               specType: 'card',
               ref: {
-                module: './person',
+                module: `${testRealmURL}person`, // we should never serialize like this, but we should do our best to interpret it
                 name: 'Person',
               },
             },
@@ -738,7 +738,7 @@ module(`Integration | realm indexing`, function (hooks) {
           isField: false,
           thumbnailURL: null,
           ref: {
-            module: `./person`,
+            module: `${testRealmURL}person`,
             name: 'Person',
           },
           containedExamples: [],
@@ -787,7 +787,7 @@ module(`Integration | realm indexing`, function (hooks) {
     }
   });
 
-  test('absolute urls will be serialised into relative into relative code-ref fields', async function (assert) {
+  test('absolute code-ref fields are preserved as absolute', async function (assert) {
     class Person extends CardDef {
       @field firstName = contains(StringField);
     }
@@ -857,7 +857,7 @@ module(`Integration | realm indexing`, function (hooks) {
           isField: false,
           thumbnailURL: null,
           ref: {
-            module: `./person`,
+            module: `${testRealmURL}person`,
             name: 'Person',
           },
           containedExamples: [],
@@ -1011,7 +1011,7 @@ module(`Integration | realm indexing`, function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: './person',
+                  module: `${testRealmURL}person`,
                   name: 'Person',
                 },
               },
@@ -1178,7 +1178,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: './person',
+                module: `${testRealmURL}person`,
                 name: 'Person',
               },
             },
@@ -1307,7 +1307,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: './person',
+                module: `${testRealmURL}person`,
                 name: 'Person',
               },
             },
@@ -1394,7 +1394,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: './person',
+                module: `${testRealmURL}person`,
                 name: 'Person',
               },
             },
@@ -1413,7 +1413,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: './person',
+              module: `${testRealmURL}person`,
               name: 'Person',
             },
           },
@@ -1448,7 +1448,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: './person',
+            module: `${testRealmURL}person`,
             name: 'Person',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -1488,7 +1488,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: './person',
+                module: `${testRealmURL}person`,
                 name: 'Person',
               },
             },
@@ -1538,7 +1538,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: './person',
+                module: `${testRealmURL}person`,
                 name: 'Person',
               },
             },
@@ -1582,7 +1582,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: './person',
+                module: `${testRealmURL}person`,
                 name: 'Person',
               },
             },

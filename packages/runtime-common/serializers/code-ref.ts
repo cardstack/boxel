@@ -20,17 +20,17 @@ export function serialize(
   codeRef: ResolvedCodeRef | {},
   doc: any,
   _visited?: Set<string>,
-  opts?: any,
+  opts?: { trimExecutableExtension?: true; relativeTo?: URL },
 ): ResolvedCodeRef | {} {
+  let baseURL =
+    opts?.relativeTo instanceof URL
+      ? opts.relativeTo
+      : doc?.data?.id && typeof doc.data.id === 'string'
+        ? new URL(doc.data.id)
+        : undefined;
   return {
     ...codeRef,
-    ...codeRefAdjustments(
-      codeRef,
-      (doc.data.id ?? (opts?.relativeTo && opts.relativeTo instanceof URL))
-        ? opts.relativeTo
-        : undefined,
-      opts,
-    ),
+    ...codeRefAdjustments(codeRef, baseURL, opts),
   };
 }
 
@@ -53,13 +53,15 @@ export async function deserializeAbsolute<T extends BaseDefConstructor>(
 ): Promise<BaseInstanceType<T>> {
   return {
     ...codeRef,
-    ...codeRefAdjustments(codeRef, relativeTo, {
-      useAbsoluteURL: true,
-    }),
+    ...codeRefAdjustments(codeRef, relativeTo),
   } as BaseInstanceType<T>;
 }
 
-function codeRefAdjustments(codeRef: any, relativeTo?: URL, opts?: any) {
+function codeRefAdjustments(
+  codeRef: any,
+  relativeTo?: URL,
+  opts?: { trimExecutableExtension?: true },
+) {
   if (!codeRef) {
     return {};
   }
@@ -69,26 +71,15 @@ function codeRefAdjustments(codeRef: any, relativeTo?: URL, opts?: any) {
   if (!isUrlLike(codeRef.module)) {
     return {};
   }
-  if (opts?.useAbsoluteURL && relativeTo) {
-    return { module: new URL(codeRef.module, relativeTo).href };
-  }
-  if (!opts?.maybeRelativeURL) {
-    return {};
-  }
-  if (!codeRef.module.startsWith('http') && opts.maybeRelativeURL) {
-    // it's already relative
+  if (relativeTo) {
+    let module = new URL(codeRef.module, relativeTo).href;
     return {
       module: opts?.trimExecutableExtension
-        ? trimExecutableExtension(codeRef.module)
-        : codeRef.module,
+        ? trimExecutableExtension(module)
+        : module,
     };
   }
-  let module = opts.maybeRelativeURL(codeRef.module);
-  return {
-    module: opts?.trimExecutableExtension
-      ? trimExecutableExtension(module)
-      : module,
-  };
+  return {};
 }
 
 function maybeSerializeCodeRef(
@@ -98,9 +89,11 @@ function maybeSerializeCodeRef(
   if (codeRef && isResolvedCodeRef(codeRef)) {
     if (isUrlLike(codeRef.module)) {
       // if a stack is passed in, use the containing card to resolve relative references
+      let base =
+        stack.length > 0 ? stack.find((i) => (i as any).id)?.id : undefined;
       let moduleHref =
-        stack.length > 0
-          ? new URL(codeRef.module, stack.find((i) => i.id).id).href
+        base && typeof base === 'string'
+          ? new URL(codeRef.module, base).href
           : codeRef.module;
       return `${moduleHref}/${codeRef.name}`;
     } else {

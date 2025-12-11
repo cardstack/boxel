@@ -10,6 +10,7 @@ import {
   loadCardDef,
   visitModuleDeps,
 } from '@cardstack/runtime-common';
+import * as CodeRefSerializer from '@cardstack/runtime-common/serializers/code-ref';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
@@ -174,5 +175,19 @@ module('code-ref', function (hooks) {
         },
       },
     });
+  });
+
+  test('serializes CodeRef modules to absolute URLs', function (assert) {
+    let ref = { module: './person', name: 'Person' };
+    let base = new URL(`${testRealmURL}Listing/author`);
+    let doc = { data: { id: base.href } };
+    let serialized = CodeRefSerializer.serialize(ref, doc, undefined, {
+      relativeTo: base,
+    }) as any;
+    assert.strictEqual(
+      serialized.module,
+      `${testRealmURL}Listing/person`,
+      'module is absolutized using provided base URL',
+    );
   });
 });

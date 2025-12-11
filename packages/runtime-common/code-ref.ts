@@ -15,7 +15,7 @@ import {
   isBaseInstance,
 } from './constants';
 import { CardError } from './error';
-import { meta } from './constants';
+import { meta, relativeTo } from './constants';
 import type { LooseCardResource } from './index';
 import { isUrlLike, trimExecutableExtension } from './index';
 
@@ -149,9 +149,8 @@ export async function loadCardDef(
   let maybeCard: unknown;
   let loader = opts.loader;
   if (!('type' in ref)) {
-    let module = await loader.import<Record<string, any>>(
-      new URL(ref.module, opts?.relativeTo).href,
-    );
+    let resolvedModuleURL = new URL(ref.module, opts?.relativeTo).href;
+    let module = await loader.import<Record<string, any>>(resolvedModuleURL);
     maybeCard = module[ref.name];
   } else if (ref.type === 'ancestorOf') {
     let child = await loadCardDef(ref.card, opts);
@@ -344,7 +343,10 @@ export function resolveAdoptedCodeRef(instance: CardDef) {
   if (!adoptsFrom) {
     throw new Error('Instance missing adoptsFrom');
   }
-  let resolved = codeRefWithAbsoluteURL(adoptsFrom, new URL(instance.id));
+  let resolved = codeRefWithAbsoluteURL(
+    adoptsFrom,
+    instance[relativeTo] || new URL(instance.id),
+  );
   if (!isResolvedCodeRef(resolved)) {
     throw new Error('code ref is not resolved');
   }
