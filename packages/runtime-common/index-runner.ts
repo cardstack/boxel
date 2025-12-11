@@ -15,7 +15,6 @@ import {
   Deferred,
   RealmPaths,
   isIgnored,
-  trimExecutableExtension,
   type IndexWriter,
   type RenderResponse,
   type ModuleRenderResponse,
@@ -72,10 +71,8 @@ export class IndexRunner {
   readonly stats: Stats = {
     instancesIndexed: 0,
     modulesIndexed: 0,
-    definitionsIndexed: 0,
     instanceErrors: 0,
     moduleErrors: 0,
-    definitionErrors: 0,
     totalIndexEntries: 0,
   };
   #shouldClearCacheForNextRender = true;
@@ -460,7 +457,6 @@ export class IndexRunner {
       lastModified,
       createdAt: resourceCreatedAt,
       deps,
-      definitions,
     } = moduleResult;
 
     if (error) {
@@ -477,28 +473,6 @@ export class IndexRunner {
         deps: new Set(deps),
       });
       this.stats.modulesIndexed++;
-    }
-
-    let depsForDefinitions = [
-      ...deps,
-      trimExecutableExtension(new URL(url)).href,
-    ];
-    for (let [codeRefURL, detail] of Object.entries(definitions)) {
-      if (detail.type === 'error') {
-        await this.batch.updateEntry(new URL(codeRefURL), detail);
-        this.stats.definitionErrors++;
-      } else {
-        await this.batch.updateEntry(new URL(codeRefURL), {
-          type: 'definition',
-          fileAlias: detail.moduleURL,
-          definition: detail.definition,
-          lastModified,
-          resourceCreatedAt,
-          deps: new Set(depsForDefinitions),
-          types: detail.types,
-        });
-        this.stats.definitionsIndexed++;
-      }
     }
   }
 
