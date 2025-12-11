@@ -1,5 +1,5 @@
 import { codeRefWithAbsoluteURL } from './code-ref';
-import type { FieldDefinition } from './index-structure';
+import type { FieldDefinition } from './definitions';
 import type {
   LooseCardResource,
   Relationship,
@@ -225,7 +225,10 @@ export function normalizeQueryDefinition({
 
   let relativeToURL =
     relativeTo ?? (resource?.id ? new URL(resource.id) : realmURL);
-  let targetRef = codeRefWithAbsoluteURL(fieldDefinition.fieldOrCard, relativeToURL);
+  let targetRef = codeRefWithAbsoluteURL(
+    fieldDefinition.fieldOrCard,
+    relativeToURL,
+  );
 
   let filter = queryAny.filter as Record<string, any> | undefined;
   if (!filter || Object.keys(filter).length === 0) {

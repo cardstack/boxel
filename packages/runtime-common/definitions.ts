@@ -17,6 +17,7 @@ export interface FieldDefinition {
   isComputed: boolean;
   fieldOrCard: CodeRef;
   serializerName?: SerializerName;
+  query?: Query;
 }
 
 export interface Definition {

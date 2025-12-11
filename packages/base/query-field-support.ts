@@ -6,6 +6,7 @@ import type {
   StoreSearchResource,
 } from './card-api';
 import type {
+  FieldDefinition,
   LooseCardResource,
   Query,
   QueryWithInterpolations,
@@ -22,7 +23,6 @@ import {
   buildQuerySearchURL,
   normalizeQueryDefinition,
 } from '@cardstack/runtime-common';
-import type { FieldDefinition } from '@cardstack/runtime-common/index-structure';
 import { logger as runtimeLogger } from '@cardstack/runtime-common';
 import { initSharedState } from './shared-state';
 

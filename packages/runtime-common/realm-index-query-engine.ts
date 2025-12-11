@@ -26,7 +26,7 @@ import {
   type CardCollectionDocument,
 } from './document-types';
 import type { CardResource, Saved } from './resource-types';
-import type { FieldDefinition } from './index-structure';
+import type { FieldDefinition } from './definitions';
 import {
   normalizeQueryDefinition,
   buildQuerySearchURL,
@@ -65,6 +65,7 @@ export class RealmIndexQueryEngine {
   #realm: Realm;
   #fetch: typeof globalThis.fetch;
   #indexQueryEngine: IndexQueryEngine;
+  #definitionLookup: DefinitionLookup;
   #log = logger('realm:index-query-engine');
 
   constructor({
@@ -84,6 +85,7 @@ export class RealmIndexQueryEngine {
       );
     }
     this.#indexQueryEngine = new IndexQueryEngine(dbAdapter, definitionLookup);
+    this.#definitionLookup = definitionLookup;
     this.#realm = realm;
     this.#fetch = fetch;
   }
@@ -234,15 +236,7 @@ export class RealmIndexQueryEngine {
     if (!isResolvedCodeRef(codeRef)) {
       return;
     }
-    let definitionEntry = await this.#indexQueryEngine.getOwnDefinition(
-      codeRef,
-      opts,
-    );
-    if (!definitionEntry || definitionEntry.type !== 'definition') {
-      return;
-    }
-
-    let definition = definitionEntry.definition;
+    let definition = await this.#definitionLookup.lookupDefinition(codeRef);
     for (let [fieldName, fieldDefinition] of Object.entries(
       definition.fields,
     )) {

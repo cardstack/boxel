@@ -1,10 +1,6 @@
 import type { CardResource } from './resource-types';
 import type { SerializedError } from './error';
 import type { PgPrimitive } from './expression';
-import type { FieldType } from 'https://cardstack.com/base/card-api';
-import type { Query } from './query';
-import type { CodeRef } from './code-ref';
-import type { SerializerName } from './serializers';
 
 export interface BoxelIndexTable {
   url: string;
@@ -52,24 +48,6 @@ export interface RealmMetaTable {
   realm_url: string;
   value: Record<string, string>[];
   indexed_at: string | null;
-}
-
-export interface FieldDefinition {
-  type: FieldType;
-  isPrimitive: boolean;
-  isComputed: boolean;
-  fieldOrCard: CodeRef;
-  serializerName?: SerializerName;
-  query?: Query;
-}
-
-export interface Definition {
-  type: 'card-def' | 'field-def';
-  codeRef: CodeRef;
-  displayName: string | null;
-  fields: {
-    [fieldName: string]: FieldDefinition;
-  };
 }
 
 export const coerceTypes = Object.freeze({
