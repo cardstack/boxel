@@ -51,9 +51,18 @@ export class RenderRunner {
   async #getPageForRealm(realm: string, auth: string) {
     let pageInfo = await this.#pagePool.getPage(realm);
     let lastAuth = this.#lastAuthByRealm.get(realm);
-    if (pageInfo.reused && lastAuth && lastAuth !== auth) {
-      await this.#pagePool.disposeRealm(realm);
-      pageInfo = await this.#pagePool.getPage(realm);
+    if (pageInfo.reused && lastAuth) {
+      let lastKeys = this.#authKeys(lastAuth);
+      let nextKeys = this.#authKeys(auth);
+      let keysChanged =
+        lastKeys && nextKeys
+          ? lastKeys.length !== nextKeys.length ||
+            lastKeys.some((k) => !nextKeys.includes(k))
+          : lastAuth !== auth;
+      if (keysChanged) {
+        await this.#pagePool.disposeRealm(realm);
+        pageInfo = await this.#pagePool.getPage(realm);
+      }
     }
     this.#lastAuthByRealm.set(realm, auth);
     return pageInfo;
@@ -61,6 +70,15 @@ export class RenderRunner {
 
   clearAuthCache(realm: string) {
     this.#lastAuthByRealm.delete(realm);
+  }
+
+  #authKeys(auth: string): string[] | null {
+    try {
+      let parsed = JSON.parse(auth) as Record<string, string>;
+      return Object.keys(parsed).sort();
+    } catch (_e) {
+      return null;
+    }
   }
 
   async prerenderCardAttempt({
