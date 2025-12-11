@@ -587,7 +587,7 @@ export class IndexRunner {
       if (!renderResult || ('error' in renderResult && renderResult.error)) {
         let renderError = renderResult?.error;
 
-        let ensureErrorEntry = (
+        let normalizeToErrorEntry = (
           entry: ErrorEntry | undefined,
           err: unknown,
         ): ErrorEntry => {
@@ -602,12 +602,9 @@ export class IndexRunner {
             };
           }
           if (entry && !entry.error) {
-            return {
-              ...entry,
-              error: serializableError(
-                new CardError('unknown render error', { status: 500 }),
-              ),
-            };
+            throw new CardError('ErrorEntry missing error payload', {
+              status: 500,
+            });
           }
           if (isCardError(err)) {
             return { type: 'error', error: serializableError(err) };
@@ -620,7 +617,7 @@ export class IndexRunner {
           return { type: 'error', error: serializableError(fallback) };
         };
 
-        renderError = ensureErrorEntry(renderError, uncaughtError);
+        renderError = normalizeToErrorEntry(renderError, uncaughtError);
 
         if (
           renderError.error.id &&

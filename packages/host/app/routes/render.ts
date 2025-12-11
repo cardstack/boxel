@@ -103,9 +103,6 @@ export default class RenderRoute extends Route<Model> {
     this.#setAllModelStatuses('unusable');
     this.handleRenderError(error);
   };
-  #rsvpErrorHandler = (reason: any) => {
-    this.#handleUnhandledError(reason);
-  };
 
   errorHandler = (event: Event) => {
     if (this.isDestroying || this.isDestroyed) {
@@ -119,11 +116,8 @@ export default class RenderRoute extends Route<Model> {
           elements.container.dataset.prerenderStatus = 'unusable';
         }
       },
-      setError: (error) => {
-        if (elements.errorElement) {
-          elements.errorElement.textContent = error;
-        }
-      },
+      setError: (error) =>
+        this.#writePrerenderError(elements.errorElement, error),
       currentURL: this.router.currentURL,
     });
     this.#setAllModelStatuses('unusable');
@@ -463,6 +457,18 @@ export default class RenderRoute extends Route<Model> {
     }
   }
 
+  #writePrerenderError(errorElement: HTMLElement | null, error: any) {
+    if (!errorElement) {
+      return;
+    }
+    try {
+      errorElement.textContent =
+        typeof error === 'string' ? error : JSON.stringify(error, null, 2);
+    } catch {
+      // best-effort; avoid throwing while handling an error
+    }
+  }
+
   // Headless prerendering drives Ember via this hook, and it may repeatedly
   // transition between render subroutes while the parent render route is
   // already active. Ember already provides the contexts (id, nonce,
@@ -763,13 +769,8 @@ export default class RenderRoute extends Route<Model> {
     if (container) {
       container.dataset.prerenderStatus = 'unusable';
     }
-    if (errorElement && error) {
-      try {
-        errorElement.textContent =
-          typeof error === 'string' ? error : JSON.stringify(error, null, 2);
-      } catch {
-        // best-effort; avoid throwing while handling an error
-      }
+    if (error) {
+      this.#writePrerenderError(errorElement, error);
     }
   }
 
@@ -779,7 +780,7 @@ export default class RenderRoute extends Route<Model> {
     }
     window.addEventListener('error', this.errorHandler);
     window.addEventListener('unhandledrejection', this.errorHandler);
-    RSVP.on('error', this.#rsvpErrorHandler);
+    RSVP.on('error', this.#handleUnhandledError);
     this.#windowListenersAttached = true;
   }
 
@@ -789,7 +790,7 @@ export default class RenderRoute extends Route<Model> {
     }
     window.removeEventListener('error', this.errorHandler);
     window.removeEventListener('unhandledrejection', this.errorHandler);
-    RSVP.off('error', this.#rsvpErrorHandler);
+    RSVP.off('error', this.#handleUnhandledError);
     this.#windowListenersAttached = false;
   }
 
