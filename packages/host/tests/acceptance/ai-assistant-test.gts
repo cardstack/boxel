@@ -1772,9 +1772,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       contextSent.codeMode!.selectionRange,
       {
         startLine: 3,
-        startColumn: 47,
+        startColumn: 45,
         endLine: 3,
-        endColumn: 47,
+        endColumn: 45,
       },
       'Context sent with message contains correct selectionRange',
     );
