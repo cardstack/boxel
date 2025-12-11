@@ -2165,7 +2165,7 @@ Attached Files (files with newer versions don't show their content):
     assert.false(
       (systemPromptParts as TextContent[])
         .map((c) => c.text)
-        .some(text => text.includes('This is skill 1')),
+        .some((text) => text.includes('This is skill 1')),
     );
     assert.true(
       (systemPromptParts[2] as TextContent).text.includes('This is skill 2'),
@@ -2214,7 +2214,9 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.true(messages!.length > 0);
     assert.true(messages![0].role === 'system');
-    let systemPrompt = (messages![0].content as TextContent[]).map((c) => c.text).join('\n');
+    let systemPrompt = (messages![0].content as TextContent[])
+      .map((c) => c.text)
+      .join('\n');
     assert.false(systemPrompt?.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.false(systemPrompt?.includes('This is skill 1'));
     assert.false(systemPrompt?.includes('This is skill 2'));
@@ -3498,7 +3500,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messages!.length, 10);
     assert.equal(messages![0].role, 'system');
     assert.false(
-      ((messages![0].content as TextContent[]).map(c => c.text).join('')).includes('Business Card V1')
+      (messages![0].content as TextContent[])
+        .map((c) => c.text)
+        .join('')
+        .includes('Business Card V1'),
     );
     assert.equal(messages![2].role, 'assistant');
     assert.equal(
@@ -4462,7 +4467,11 @@ new
 
     // Check that all parts except the last don't have cache_control
     for (let i = 0; i < contentParts.length - 1; i++) {
-      assert.equal(contentParts[i].type, 'text', `Part ${i} should be text type`);
+      assert.equal(
+        contentParts[i].type,
+        'text',
+        `Part ${i} should be text type`,
+      );
       assert.notOk(
         contentParts[i].cache_control,
         `Part ${i} should not have cache_control`,
