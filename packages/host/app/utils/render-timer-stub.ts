@@ -77,21 +77,16 @@ function restoreStubs() {
   if (typeof window === 'undefined') {
     return;
   }
-  if (stubDepth !== 0) {
-    return;
-  }
-  if (restoreSetTimeout) {
+  if (stubDepth === 0 && restoreSetTimeout && restoreSetInterval) {
     window.setTimeout = restoreSetTimeout;
-  }
-  if (restoreSetInterval) {
     window.setInterval = restoreSetInterval;
+    restoreSetTimeout = undefined;
+    restoreSetInterval = undefined;
+    invokeSetTimeout = undefined;
+    invokeSetInterval = undefined;
+    warnedTimeout = false;
+    warnedInterval = false;
   }
-  restoreSetTimeout = undefined;
-  restoreSetInterval = undefined;
-  invokeSetTimeout = undefined;
-  invokeSetInterval = undefined;
-  warnedTimeout = false;
-  warnedInterval = false;
 }
 
 export function enableRenderTimerStub(): () => void {
