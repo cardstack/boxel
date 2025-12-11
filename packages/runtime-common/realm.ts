@@ -1287,9 +1287,9 @@ export class Realm {
           return this.#adapter.createJWT(
             {
               user,
-              realm: this.url,
               sessionRoom,
               permissions: userPermissions,
+              realm: this.url,
             },
             '7d',
             this.#realmSecretSeed,
@@ -2392,8 +2392,7 @@ export class Realm {
             message: maybeError.error.errorDetail.message,
             // note that this is actually available as part of the response
             // header too--it's just easier for clients when it is here
-            realm: this.url,
-            meta: {
+                  meta: {
               lastKnownGoodHtml: maybeError.error.lastKnownGoodHtml,
               cardTitle: maybeError.error.cardTitle,
               scopedCssUrls: maybeError.error.scopedCssUrls,
@@ -3559,7 +3558,6 @@ export class Realm {
     return serialize({
       doc,
       definition,
-      realm: this.url,
       relativeTo,
       customFieldDefinitions,
     });

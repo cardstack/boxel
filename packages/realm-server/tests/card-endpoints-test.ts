@@ -1313,7 +1313,6 @@ module(basename(__filename), function () {
             'realm url header is correct',
           );
           let json = response.body as SingleCardDocument;
-          console.log(json);
           let id = json.data.id!.split('/').pop()!;
           let cardFile = join(
             dir.name,
@@ -1683,9 +1682,6 @@ module(basename(__filename), function () {
           );
 
           let json = response.body;
-          if (response.status !== 200) {
-            console.log(JSON.stringify(json, null, 2));
-          }
           assert.ok(json.data.meta.lastModified, 'lastModified exists');
 
           assert.true(

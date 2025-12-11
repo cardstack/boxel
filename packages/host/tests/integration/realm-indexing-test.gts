@@ -702,7 +702,7 @@ module(`Integration | realm indexing`, function (hooks) {
               description: 'Spec for Person card',
               specType: 'card',
               ref: {
-                module: `${testRealmURL}person`, // we should never serialize like this, but we should do our best to interpret it
+                module: `./person`, // we should never serialize like this, but we should do our best to interpret it
                 name: 'Person',
               },
             },

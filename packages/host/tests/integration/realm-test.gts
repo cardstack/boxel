@@ -3397,7 +3397,6 @@ module('Integration | realm', function (hooks) {
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
-    console.log(JSON.stringify(json, null, 2));
     let included = json.included?.find(
       (resource: any) =>
         resource.id ===

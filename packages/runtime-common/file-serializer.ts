@@ -3,7 +3,6 @@ import {
   type LooseSingleCardDocument,
   type CardResource,
   isUrlLike,
-  maybeRelativeURL,
   isCodeRef,
 } from './index';
 import type { CardFields, Meta } from './resource-types';
@@ -12,22 +11,17 @@ import { serialize as serializeCodeRef } from './serializers/code-ref';
 export default function serialize({
   doc,
   definition,
-  realm,
   relativeTo,
   customFieldDefinitions,
 }: {
   doc: LooseSingleCardDocument;
   definition: Definition;
-  realm: string;
   relativeTo: URL;
   customFieldDefinitions?: Record<string, FieldDefinition>;
 }): LooseSingleCardDocument {
-  const realmURL = new URL(realm);
   const codeRefOpts = {
     relativeTo,
-    trimExecutableExtension: true,
-    maybeRelativeURL: (url: string) =>
-      maybeRelativeURL(new URL(url), relativeTo, realmURL),
+    trimExecutableExtension: true as true,
   };
 
   const result: LooseSingleCardDocument = {
@@ -50,7 +44,6 @@ export default function serialize({
       fields: result.data.meta.fields,
       doc,
       relativeTo,
-      realmURL,
       codeRefOpts,
     });
   }
@@ -61,7 +54,6 @@ export default function serialize({
       definition,
       doc,
       relativeTo,
-      realmURL,
       codeRefOpts,
       customFieldDefinitions,
     });
@@ -71,8 +63,6 @@ export default function serialize({
     const processedRelationships = processRelationships({
       relationships: doc.data.relationships,
       definition,
-      relativeTo,
-      realmURL,
       customFieldDefinitions,
     });
     if (processedRelationships) {
@@ -107,7 +97,6 @@ function processAttributes({
   basePath = '',
   doc,
   relativeTo,
-  realmURL,
   codeRefOpts,
   customFieldDefinitions,
 }: {
@@ -116,8 +105,7 @@ function processAttributes({
   basePath?: string;
   doc: LooseSingleCardDocument;
   relativeTo: URL;
-  realmURL: URL;
-  codeRefOpts: { maybeRelativeURL: (url: string) => string };
+  codeRefOpts: { relativeTo: URL; trimExecutableExtension: true };
   customFieldDefinitions?: Record<string, FieldDefinition>;
 }): Record<string, any> {
   const result: Record<string, any> = {};
@@ -165,7 +153,6 @@ function processAttributes({
             basePath: fieldPath,
             doc,
             relativeTo,
-            realmURL,
             codeRefOpts,
             customFieldDefinitions,
           });
@@ -180,7 +167,6 @@ function processAttributes({
         basePath: fieldPath,
         doc,
         relativeTo,
-        realmURL,
         codeRefOpts,
         customFieldDefinitions,
       });
@@ -193,14 +179,10 @@ function processAttributes({
 function processRelationships({
   relationships,
   definition,
-  relativeTo,
-  realmURL,
   customFieldDefinitions,
 }: {
   relationships: NonNullable<CardResource['relationships']>;
   definition: Definition;
-  relativeTo: URL;
-  realmURL: URL;
   customFieldDefinitions?: Record<string, FieldDefinition>;
 }): NonNullable<CardResource['relationships']> | undefined {
   const result: NonNullable<CardResource['relationships']> = {};
@@ -225,11 +207,7 @@ function processRelationships({
         processedValue.links = {
           self: isRelativeURL(processedValue.links.self)
             ? processedValue.links.self
-            : maybeRelativeURL(
-                new URL(processedValue.links.self),
-                relativeTo,
-                realmURL,
-              ),
+            : processedValue.links.self,
         };
       } else {
         // Preserve null values
@@ -293,14 +271,12 @@ function processMetaFields({
   fields,
   doc,
   relativeTo,
-  realmURL,
   codeRefOpts,
 }: {
   fields: CardFields;
   doc: LooseSingleCardDocument;
   relativeTo: URL;
-  realmURL: URL;
-  codeRefOpts: { maybeRelativeURL: (url: string) => string };
+  codeRefOpts: { relativeTo: URL; trimExecutableExtension: true };
 }): CardFields {
   const result: CardFields = {};
   for (const [fieldName, fieldValue] of Object.entries(fields)) {
@@ -310,7 +286,6 @@ function processMetaFields({
           field: item,
           doc,
           relativeTo,
-          realmURL,
           codeRefOpts,
         }),
       );
@@ -319,7 +294,6 @@ function processMetaFields({
         field: fieldValue,
         doc,
         relativeTo,
-        realmURL,
         codeRefOpts,
       });
     }
@@ -332,14 +306,12 @@ function processMetaField({
   field,
   doc,
   relativeTo,
-  realmURL,
   codeRefOpts,
 }: {
   field: Partial<Meta>;
   doc: LooseSingleCardDocument;
   relativeTo: URL;
-  realmURL: URL;
-  codeRefOpts: { maybeRelativeURL: (url: string) => string };
+  codeRefOpts: { relativeTo: URL; trimExecutableExtension: true };
 }): Partial<Meta> {
   const result = { ...field };
   if (result.adoptsFrom && isCodeRef(result.adoptsFrom)) {
@@ -355,7 +327,6 @@ function processMetaField({
       fields: result.fields,
       doc,
       relativeTo,
-      realmURL,
       codeRefOpts,
     });
   }

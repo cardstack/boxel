@@ -8,6 +8,9 @@ import {
   isResolvedCodeRef,
   executableExtensions,
 } from '../index';
+// We only use a subset of SerializeOpts here; accept any to align with the
+// serializer interface without surfacing unused properties.
+import type { SerializeOpts } from 'https://cardstack.com/base/card-api';
 
 export function queryableValue(
   codeRef: ResolvedCodeRef | {} | undefined,
@@ -20,7 +23,7 @@ export function serialize(
   codeRef: ResolvedCodeRef | {},
   doc: any,
   _visited?: Set<string>,
-  opts?: { trimExecutableExtension?: true; relativeTo?: URL },
+  opts?: SerializeOpts & { relativeTo?: URL; trimExecutableExtension?: true },
 ): ResolvedCodeRef | {} {
   let baseURL =
     opts?.relativeTo instanceof URL
@@ -60,7 +63,7 @@ export async function deserializeAbsolute<T extends BaseDefConstructor>(
 function codeRefAdjustments(
   codeRef: any,
   relativeTo?: URL,
-  opts?: { trimExecutableExtension?: true },
+  opts?: SerializeOpts & { trimExecutableExtension?: true },
 ) {
   if (!codeRef) {
     return {};
