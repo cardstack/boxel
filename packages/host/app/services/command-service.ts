@@ -32,8 +32,8 @@ import type Realm from '@cardstack/host/services/realm';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
-import LimitedSet from '../lib/limited-set';
 import { waitForRealmState } from '../commands/utils';
+import LimitedSet from '../lib/limited-set';
 
 import type LoaderService from './loader-service';
 import type OperatorModeStateService from './operator-mode-state-service';
