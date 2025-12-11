@@ -2478,7 +2478,7 @@ module('Integration | realm', function (hooks) {
           fields: {
             card: {
               adoptsFrom: {
-                module: `${testRealmURL}car`,
+                module: `../car`,
                 name: 'Car',
               },
             },

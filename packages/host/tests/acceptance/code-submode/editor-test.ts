@@ -763,7 +763,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     });
 
     this.onSave((url: URL, json: string | SingleCardDocument) =>
-      onSave(url, json, themeId),
+      onSave(url, json, '../theme-starry-night'),
     );
 
     await click('[data-test-edit-button]');
