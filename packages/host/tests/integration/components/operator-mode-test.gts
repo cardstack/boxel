@@ -3094,10 +3094,11 @@ module('Integration | operator-mode', function (hooks) {
       Math.round(itemRect.top),
       Math.round(overlayButtonRect.top),
     );
+
+    let iconWidth = 20;
+    let gap = 10;
     assert.strictEqual(
-      Math.round(
-        itemRect.left + 40 / 2,
-      ) /* add icon width / 2 for testing scale */,
+      Math.round(itemRect.left + (iconWidth + gap) / 2),
       Math.round(overlayButtonRect.left),
     );
 
