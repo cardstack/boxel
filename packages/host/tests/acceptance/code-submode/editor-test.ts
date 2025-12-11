@@ -24,13 +24,12 @@ import {
   testRealmURL,
   getMonacoContent,
   setMonacoContent,
-  setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
-  setupAuthEndpoints,
-  setupUserSubscription,
   withSlowSave,
   type TestContextWithSave,
+  setupSnapshotRealm,
+  setupAcceptanceTestRealm,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -52,28 +51,26 @@ module('Acceptance | code submode | editor tests', function (hooks) {
 
   let { setRealmPermissions, createAndJoinRoom } = mockMatrixUtils;
 
-  hooks.beforeEach(async function () {
-    setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
+  let defaultMatrixRoomId: string;
+  let snapshot = setupSnapshotRealm<{ adapter: TestRealmAdapter }>(hooks, {
+    mockMatrixUtils,
+    acceptanceTest: true,
+    async build({ loader, isInitialBuild }) {
+      setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
 
-    createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
-    setupUserSubscription();
-    setupAuthEndpoints();
+      if (isInitialBuild || !defaultMatrixRoomId) {
+        defaultMatrixRoomId = createAndJoinRoom({
+          sender: '@testuser:localhost',
+          name: 'room-test',
+        });
+      }
 
-    monacoService = getService('monaco-service');
-
-    window.localStorage.setItem(
-      RecentFiles,
-      JSON.stringify([[testRealmURL, 'Pet/mango.json']]),
-    );
-
-    ({ adapter } = await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'pet.gts': `
+      let result = await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        loader,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'pet.gts': `
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
 
@@ -94,7 +91,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           }
         }
       `,
-        'shipping-info.gts': `
+          'shipping-info.gts': `
         import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
         export class ShippingInfo extends FieldDef {
@@ -114,7 +111,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           }
         }
       `,
-        'address.gts': `
+          'address.gts': `
         import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
         import { ShippingInfo } from "./shipping-info";
@@ -150,7 +147,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           };
         }
       `,
-        'person.gts': `
+          'person.gts': `
         import { contains, linksTo, field, Component, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
         import { Pet } from "./pet";
@@ -187,120 +184,132 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           }
         }
       `,
-        'README.txt': `Hello World`,
-        'Pet/mango.json': {
-          data: {
-            attributes: {
-              name: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
+          'README.txt': `Hello World`,
+          'Pet/mango.json': {
+            data: {
+              attributes: {
+                name: 'Mango',
               },
-            },
-          },
-        },
-        'Pet/vangogh.json': {
-          data: {
-            attributes: {
-              name: 'Van Gogh',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Person/fadhlan.json': {
-          data: {
-            attributes: {
-              firstName: 'Fadhlan',
-              address: {
-                city: 'Bandung',
-                country: 'Indonesia',
-                shippingInfo: {
-                  preferredCarrier: 'DHL',
-                  remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
                 },
               },
             },
-            relationships: {
-              pet: {
-                links: {
-                  self: `${testRealmURL}Pet/mango`,
+          },
+          'Pet/vangogh.json': {
+            data: {
+              attributes: {
+                name: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
                 },
               },
             },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
-              },
-            },
           },
-        },
-        'index.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
+          'Person/fadhlan.json': {
+            data: {
+              attributes: {
+                firstName: 'Fadhlan',
+                address: {
+                  city: 'Bandung',
+                  country: 'Indonesia',
+                  shippingInfo: {
+                    preferredCarrier: 'DHL',
+                    remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+                  },
+                },
               },
-            },
-          },
-        },
-        '.realm.json': {
-          name: 'Test Workspace B',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
-        'Person/john-with-bad-pet-link.json': {
-          data: {
-            attributes: {
-              firstName: 'John',
-              address: {
-                city: 'Ljubljana',
-                country: 'Slovenia',
+              relationships: {
+                pet: {
+                  links: {
+                    self: `${testRealmURL}Pet/mango`,
+                  },
+                },
               },
-            },
-            relationships: {
-              pet: {
-                links: {
-                  self: `http://badlink.com/nonexisting-pet`,
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}person`,
+                  name: 'Person',
                 },
               },
             },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
+          },
+          'index.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/cards-grid',
+                  name: 'CardsGrid',
+                },
+              },
+            },
+          },
+          '.realm.json': {
+            name: 'Test Workspace B',
+            backgroundURL:
+              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          },
+          'Person/john-with-bad-pet-link.json': {
+            data: {
+              attributes: {
+                firstName: 'John',
+                address: {
+                  city: 'Ljubljana',
+                  country: 'Slovenia',
+                },
+              },
+              relationships: {
+                pet: {
+                  links: {
+                    self: `http://localhost:4200/i-do-not-exist`,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}person`,
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          'theme-starry-night.json': {
+            data: {
+              meta: {
+                adoptsFrom: {
+                  name: 'Theme',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+              },
+              attributes: {
+                cardInfo: { title: 'Theme Starry Night' },
+                cssVariables:
+                  ':root {\n  --background: #f5f7fa;\n  --foreground: #1a2238;\n  --card: #e3eaf2;\n  --card-foreground: #1a2238;\n  --popover: #fffbe6;\n  --popover-foreground: #1a2238;\n  --primary: #3a5ba0;\n  --primary-foreground: #fffbe6;\n  --secondary: #f7c873;\n  --secondary-foreground: #1a2238;\n  --muted: #e5e5df;\n  --muted-foreground: #3a5ba0;\n  --accent: #6ea3c1;\n  --accent-foreground: #fffbe6;\n  --destructive: #2d1e2f;\n  --destructive-foreground: #fffbe6;\n  --border: #b0b8c1;\n  --input: #6ea3c1;\n  --ring: #f7c873;\n  --chart-1: #3a5ba0;\n  --chart-2: #f7c873;\n  --chart-3: #6ea3c1;\n  --chart-4: #b0b8c1;\n  --chart-5: #2d1e2f;\n  --sidebar: #e3eaf2;\n  --sidebar-foreground: #1a2238;\n  --sidebar-primary: #3a5ba0;\n  --sidebar-primary-foreground: #fffbe6;\n  --sidebar-accent: #f7c873;\n  --sidebar-accent-foreground: #1a2238;\n  --sidebar-border: #b0b8c1;\n  --sidebar-ring: #f7c873;\n  --font-sans: Libre Baskerville, serif;\n  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;\n  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;\n  --radius: 0.5rem;\n  --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);\n  --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);\n  --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);\n  --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);\n  --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 2px 4px -1px hsl(0 0% 0% / 0.10);\n  --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 4px 6px -1px hsl(0 0% 0% / 0.10);\n  --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 8px 10px -1px hsl(0 0% 0% / 0.10);\n  --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);\n  --tracking-normal: 0em;\n  --spacing: 0.25rem;\n}\n\n.dark {\n  --background: #181a24;\n  --foreground: #e6eaf3;\n  --card: #23243a;\n  --card-foreground: #e6eaf3;\n  --popover: #23243a;\n  --popover-foreground: #ffe066;\n  --primary: #3a5ba0;\n  --primary-foreground: #ffe066;\n  --secondary: #ffe066;\n  --secondary-foreground: #23243a;\n  --muted: #23243a;\n  --muted-foreground: #7a88a1;\n  --accent: #bccdf0;\n  --accent-foreground: #181a24;\n  --destructive: #a04a6c;\n  --destructive-foreground: #ffe066;\n  --border: #2d2e3e;\n  --input: #3a5ba0;\n  --ring: #ffe066;\n  --chart-1: #3a5ba0;\n  --chart-2: #ffe066;\n  --chart-3: #6ea3c1;\n  --chart-4: #7a88a1;\n  --chart-5: #a04a6c;\n  --sidebar: #23243a;\n  --sidebar-foreground: #e6eaf3;\n  --sidebar-primary: #3a5ba0;\n  --sidebar-primary-foreground: #ffe066;\n  --sidebar-accent: #ffe066;\n  --sidebar-accent-foreground: #23243a;\n  --sidebar-border: #2d2e3e;\n  --sidebar-ring: #ffe066;\n  --font-sans: Libre Baskerville, serif;\n  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;\n  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;\n  --radius: 0.5rem;\n  --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);\n  --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);\n  --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);\n  --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);\n  --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 2px 4px -1px hsl(0 0% 0% / 0.10);\n  --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 4px 6px -1px hsl(0 0% 0% / 0.10);\n  --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 8px 10px -1px hsl(0 0% 0% / 0.10);\n  --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);\n  --tracking-normal: 0em;\n  --spacing: 0.25rem;\n}',
               },
             },
           },
         },
-        'theme-starry-night.json': {
-          data: {
-            meta: {
-              adoptsFrom: {
-                name: 'Theme',
-                module: 'https://cardstack.com/base/card-api',
-              },
-            },
-            attributes: {
-              cardInfo: { title: 'Theme Starry Night' },
-              cssVariables:
-                ':root {\n  --background: #f5f7fa;\n  --foreground: #1a2238;\n  --card: #e3eaf2;\n  --card-foreground: #1a2238;\n  --popover: #fffbe6;\n  --popover-foreground: #1a2238;\n  --primary: #3a5ba0;\n  --primary-foreground: #fffbe6;\n  --secondary: #f7c873;\n  --secondary-foreground: #1a2238;\n  --muted: #e5e5df;\n  --muted-foreground: #3a5ba0;\n  --accent: #6ea3c1;\n  --accent-foreground: #fffbe6;\n  --destructive: #2d1e2f;\n  --destructive-foreground: #fffbe6;\n  --border: #b0b8c1;\n  --input: #6ea3c1;\n  --ring: #f7c873;\n  --chart-1: #3a5ba0;\n  --chart-2: #f7c873;\n  --chart-3: #6ea3c1;\n  --chart-4: #b0b8c1;\n  --chart-5: #2d1e2f;\n  --sidebar: #e3eaf2;\n  --sidebar-foreground: #1a2238;\n  --sidebar-primary: #3a5ba0;\n  --sidebar-primary-foreground: #fffbe6;\n  --sidebar-accent: #f7c873;\n  --sidebar-accent-foreground: #1a2238;\n  --sidebar-border: #b0b8c1;\n  --sidebar-ring: #f7c873;\n  --font-sans: Libre Baskerville, serif;\n  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;\n  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;\n  --radius: 0.5rem;\n  --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);\n  --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);\n  --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);\n  --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);\n  --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 2px 4px -1px hsl(0 0% 0% / 0.10);\n  --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 4px 6px -1px hsl(0 0% 0% / 0.10);\n  --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 8px 10px -1px hsl(0 0% 0% / 0.10);\n  --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);\n  --tracking-normal: 0em;\n  --spacing: 0.25rem;\n}\n\n.dark {\n  --background: #181a24;\n  --foreground: #e6eaf3;\n  --card: #23243a;\n  --card-foreground: #e6eaf3;\n  --popover: #23243a;\n  --popover-foreground: #ffe066;\n  --primary: #3a5ba0;\n  --primary-foreground: #ffe066;\n  --secondary: #ffe066;\n  --secondary-foreground: #23243a;\n  --muted: #23243a;\n  --muted-foreground: #7a88a1;\n  --accent: #bccdf0;\n  --accent-foreground: #181a24;\n  --destructive: #a04a6c;\n  --destructive-foreground: #ffe066;\n  --border: #2d2e3e;\n  --input: #3a5ba0;\n  --ring: #ffe066;\n  --chart-1: #3a5ba0;\n  --chart-2: #ffe066;\n  --chart-3: #6ea3c1;\n  --chart-4: #7a88a1;\n  --chart-5: #a04a6c;\n  --sidebar: #23243a;\n  --sidebar-foreground: #e6eaf3;\n  --sidebar-primary: #3a5ba0;\n  --sidebar-primary-foreground: #ffe066;\n  --sidebar-accent: #ffe066;\n  --sidebar-accent-foreground: #23243a;\n  --sidebar-border: #2d2e3e;\n  --sidebar-ring: #ffe066;\n  --font-sans: Libre Baskerville, serif;\n  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;\n  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;\n  --radius: 0.5rem;\n  --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);\n  --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);\n  --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);\n  --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);\n  --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 2px 4px -1px hsl(0 0% 0% / 0.10);\n  --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 4px 6px -1px hsl(0 0% 0% / 0.10);\n  --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 8px 10px -1px hsl(0 0% 0% / 0.10);\n  --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);\n}',
-            },
-          },
-        },
-      },
-    }));
+      });
+
+      return { adapter: result.adapter };
+    },
+  });
+
+  hooks.beforeEach(function () {
+    ({ adapter } = snapshot.get());
+    monacoService = getService('monaco-service');
+    window.localStorage.setItem(
+      RecentFiles,
+      JSON.stringify([[testRealmURL, 'Pet/mango.json']]),
+    );
   });
 
   test('card instance JSON displayed in monaco editor', async function (assert) {

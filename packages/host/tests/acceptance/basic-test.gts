@@ -1,17 +1,15 @@
 import { click, find, visit } from '@ember/test-helpers';
 
-import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
-  setupAcceptanceTestRealm,
   testRealmURL,
-  setupAuthEndpoints,
-  setupUserSubscription,
   SYSTEM_CARD_FIXTURE_CONTENTS,
+  setupSnapshotRealm,
+  setupAcceptanceTestRealm,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -26,84 +24,93 @@ module('Acceptance | basic tests', function (hooks) {
   });
 
   let { createAndJoinRoom } = mockMatrixUtils;
+  let defaultMatrixRoomId: string;
+  let snapshot = setupSnapshotRealm<{ matrixRoomId: string }>(hooks, {
+    mockMatrixUtils,
+    acceptanceTest: true,
+    async build({ loader, isInitialBuild }) {
+      if (isInitialBuild || !defaultMatrixRoomId) {
+        defaultMatrixRoomId = createAndJoinRoom({
+          sender: '@testuser:localhost',
+          name: 'room-test',
+        });
+      }
 
-  hooks.beforeEach(async function () {
-    createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
-    setupUserSubscription();
-    setupAuthEndpoints();
+      let { field, contains, CardDef, Component } = await loader.import<
+        typeof import('https://cardstack.com/base/card-api')
+      >(`${baseRealm.url}card-api`);
+      let { default: StringField } = await loader.import<
+        typeof import('https://cardstack.com/base/string')
+      >(`${baseRealm.url}string`);
+      let { Spec } = await loader.import<
+        typeof import('https://cardstack.com/base/spec')
+      >(`${baseRealm.url}spec`);
 
-    let loaderService = getService('loader-service');
-    let loader = loaderService.loader;
-    let { field, contains, CardDef, Component } = await loader.import<
-      typeof import('https://cardstack.com/base/card-api')
-    >(`${baseRealm.url}card-api`);
-    let { default: StringField } = await loader.import<
-      typeof import('https://cardstack.com/base/string')
-    >(`${baseRealm.url}string`);
-    let { Spec } = await loader.import<
-      typeof import('https://cardstack.com/base/spec')
-    >(`${baseRealm.url}spec`);
+      class Index extends CardDef {
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <div data-test-index-card>
+              Hello, world!
+            </div>
+          </template>
+        };
+      }
 
-    class Index extends CardDef {
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <div data-test-index-card>
-            Hello, world!
-          </div>
-        </template>
-      };
-    }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field lastName = contains(StringField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Person) {
+            return [this.firstName, this.lastName].filter(Boolean).join(' ');
+          },
+        });
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <div data-test-person>
+              <p>First name: <@fields.firstName /></p>
+              <p>Last name: <@fields.lastName /></p>
+              <p>Title: <@fields.title /></p>
+            </div>
+            <style scoped>
+              div {
+                color: green;
+                content: '';
+              }
+            </style>
+          </template>
+        };
+      }
 
-    class Person extends CardDef {
-      @field firstName = contains(StringField);
-      @field lastName = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia: function (this: Person) {
-          return [this.firstName, this.lastName].filter(Boolean).join(' ');
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        loader,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.gts': { Index },
+          'person.gts': { Person },
+          'person-entry.json': new Spec({
+            title: 'Person',
+            description: 'Spec',
+            isField: false,
+            ref: {
+              module: `./person`,
+              name: 'Person',
+            },
+          }),
+          'index.json': new Index(),
+          'Person/1.json': new Person({
+            firstName: 'Hassan',
+            lastName: 'Abdel-Rahman',
+          }),
         },
       });
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <div data-test-person>
-            <p>First name: <@fields.firstName /></p>
-            <p>Last name: <@fields.lastName /></p>
-            <p>Title: <@fields.title /></p>
-          </div>
-          <style scoped>
-            div {
-              color: green;
-              content: '';
-            }
-          </style>
-        </template>
-      };
-    }
 
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.gts': { Index },
-        'person.gts': { Person },
-        'person-entry.json': new Spec({
-          title: 'Person',
-          description: 'Spec',
-          isField: false,
-          ref: {
-            module: `./person`,
-            name: 'Person',
-          },
-        }),
-        'index.json': new Index(),
-        'Person/1.json': new Person({
-          firstName: 'Hassan',
-          lastName: 'Abdel-Rahman',
-        }),
-      },
-    });
+      return { matrixRoomId: defaultMatrixRoomId };
+    },
+  });
+
+  hooks.beforeEach(function () {
+    snapshot.get();
   });
 
   test('visiting realm root', async function (assert) {

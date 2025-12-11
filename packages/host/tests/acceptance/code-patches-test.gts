@@ -24,16 +24,15 @@ import {
   setupLocalIndexing,
   setupOnSave,
   testRealmURL,
-  setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
-  setupAuthEndpoints,
-  setupUserSubscription,
   getMonacoContent,
   TestContextWithSave,
+  setupSnapshotRealm,
+  setupAcceptanceTestRealm,
 } from '../helpers';
 
-import { CardsGrid, setupBaseRealm } from '../helpers/base-realm';
+import { CardsGrid } from '../helpers/base-realm';
 
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -73,79 +72,90 @@ module('Acceptance | Code patches tests', function (hooks) {
 
   let { simulateRemoteMessage, getRoomIds, getRoomEvents, createAndJoinRoom } =
     mockMatrixUtils;
+  let defaultMatrixRoomId: string;
+  let snapshot = setupSnapshotRealm<{ matrixRoomId: string }>(hooks, {
+    mockMatrixUtils,
+    acceptanceTest: true,
+    async build({ loader, isInitialBuild }) {
+      mockedFileContent = 'Hello, world!';
 
-  setupBaseRealm(hooks);
-
-  hooks.beforeEach(async function () {
-    getService('matrix-service').fetchMatrixHostedFile = async (url) => {
-      // Mock different file contents based on the URL
-      if (url.includes('test-card.gts')) {
-        return new Response(testCardContent);
+      if (isInitialBuild || !defaultMatrixRoomId) {
+        defaultMatrixRoomId = await createAndJoinRoom({
+          sender: '@testuser:localhost',
+          name: 'room-test',
+        });
       }
-      return new Response(mockedFileContent);
-    };
 
-    await createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
-    setupUserSubscription();
-    setupAuthEndpoints();
+      getService('matrix-service').fetchMatrixHostedFile = async (url) => {
+        // Mock different file contents based on the URL
+        if (url.includes('test-card.gts')) {
+          return new Response(testCardContent);
+        }
+        return new Response(mockedFileContent);
+      };
 
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.json': new CardsGrid(),
-        '.realm.json': {
-          name: 'Test Workspace B',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
-        'hello.txt': 'Hello, world!',
-        'hi.txt': 'Hi, world!\nHow are you?',
-        'test-card.gts': testCardContent,
-        'Skill/useful-commands.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              instructions:
-                'Here are few commands you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode. * search-cards-by-type-and-title: search for cards by name or description.',
-              commands: [
-                {
-                  codeRef: {
-                    name: 'SearchCardsByTypeAndTitleCommand',
-                    module: '@cardstack/boxel-host/commands/search-cards',
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        loader,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.json': new CardsGrid(),
+          '.realm.json': {
+            name: 'Test Workspace B',
+            backgroundURL:
+              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          },
+          'hello.txt': 'Hello, world!',
+          'hi.txt': 'Hi, world!\nHow are you?',
+          'test-card.gts': testCardContent,
+          'Skill/useful-commands.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                instructions:
+                  'Here are few commands you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode. * search-cards-by-type-and-title: search for cards by name or description.',
+                commands: [
+                  {
+                    codeRef: {
+                      name: 'SearchCardsByTypeAndTitleCommand',
+                      module: '@cardstack/boxel-host/commands/search-cards',
+                    },
+                    requiresApproval: true,
                   },
-                  requiresApproval: true,
-                },
-                {
-                  codeRef: {
-                    name: 'default',
-                    module: '@cardstack/boxel-host/commands/switch-submode',
+                  {
+                    codeRef: {
+                      name: 'default',
+                      module: '@cardstack/boxel-host/commands/switch-submode',
+                    },
+                    requiresApproval: true,
                   },
-                  requiresApproval: true,
-                },
-                {
-                  codeRef: {
-                    name: 'default',
-                    module: '@cardstack/boxel-host/commands/show-card',
+                  {
+                    codeRef: {
+                      name: 'default',
+                      module: '@cardstack/boxel-host/commands/show-card',
+                    },
+                    requiresApproval: true,
                   },
-                  requiresApproval: true,
-                },
-              ],
-              title: 'Useful Commands',
-              description: null,
-              thumbnailURL: null,
-            },
-            meta: {
-              adoptsFrom: skillCardRef,
+                ],
+                title: 'Useful Commands',
+                description: null,
+                thumbnailURL: null,
+              },
+              meta: {
+                adoptsFrom: skillCardRef,
+              },
             },
           },
         },
-      },
-    });
+      });
+
+      return { matrixRoomId: defaultMatrixRoomId };
+    },
+  });
+
+  hooks.beforeEach(function () {
+    snapshot.get();
   });
 
   test('can patch code', async function (assert) {

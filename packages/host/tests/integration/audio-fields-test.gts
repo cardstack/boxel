@@ -1,4 +1,3 @@
-import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
@@ -6,43 +5,47 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import ENV from '@cardstack/host/config/environment';
 
-import {
-  setupBaseRealm,
-  field,
-  contains,
-  CardDef,
-  Component,
-} from '../helpers/base-realm';
+import { field, contains, CardDef, Component } from '../helpers/base-realm';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
+import { setupSnapshotRealm, testRealmURL } from '../helpers';
+import { setupMockMatrix } from '../helpers/mock-matrix';
 
 type FieldFormat = 'embedded' | 'atom' | 'edit' | 'fitted';
 
 module('Integration | audio fields', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
-  let loader: Loader;
   let catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
 
-  let AudioFieldClass: any;
-
-  let catalogFieldsLoaded = false;
-
-  hooks.beforeEach(async function () {
-    loader = getService('loader-service').loader;
-    if (!catalogFieldsLoaded) {
-      await loadCatalogFields();
-      catalogFieldsLoaded = true;
-    }
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
   });
 
-  async function loadCatalogFields() {
-    const audioModule: any = await loader.import(
-      `${catalogRealmURL}fields/audio`,
-    );
-    AudioFieldClass = audioModule.AudioField;
-  }
+  let snapshot = setupSnapshotRealm<{
+    loader: Loader;
+    AudioFieldClass: any;
+  }>(hooks, {
+    mockMatrixUtils,
+    async build({ loader }) {
+      const audioModule: any = await loader.import(
+        `${catalogRealmURL}fields/audio`,
+      );
+
+      return {
+        loader,
+        AudioFieldClass: audioModule.AudioField,
+      };
+    },
+  });
+
+  let loader: Loader;
+  let AudioFieldClass: any;
+
+  hooks.beforeEach(function () {
+    ({ loader, AudioFieldClass } = snapshot.get());
+  });
 
   async function renderField(
     FieldClass: any,
@@ -99,7 +102,7 @@ module('Integration | audio fields', function (hooks) {
 
   // Sample audio data for tests
   const sampleAudioData = {
-    url: 'https://example.com/audio/sample.mp3',
+    url: 'http://localhost:4200/i-do-not-exist/audio/sample.mp3',
     filename: 'sample.mp3',
     mimeType: 'audio/mpeg',
     duration: 180, // 3 minutes
@@ -109,7 +112,7 @@ module('Integration | audio fields', function (hooks) {
   };
 
   const minimalAudioData = {
-    url: 'https://example.com/audio/minimal.mp3',
+    url: 'http://localhost:4200/i-do-not-exist/audio/minimal.mp3',
     filename: 'minimal.mp3',
   };
 
@@ -238,7 +241,7 @@ module('Integration | audio fields', function (hooks) {
     await renderField(
       AudioFieldClass,
       buildField(AudioFieldClass, {
-        url: 'https://example.com/audio.mp3',
+        url: 'http://localhost:4200/i-do-not-exist/audio.mp3',
         filename: 'my-song.mp3',
       }),
     );
@@ -252,7 +255,7 @@ module('Integration | audio fields', function (hooks) {
     await renderField(
       AudioFieldClass,
       buildField(AudioFieldClass, {
-        url: 'https://example.com/audio.mp3',
+        url: 'http://localhost:4200/i-do-not-exist/audio.mp3',
       }),
     );
 
