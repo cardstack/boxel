@@ -596,8 +596,7 @@ export class IndexRunner {
           };
         }
         if (
-          renderError &&
-          renderError.error.id &&
+          renderError?.error?.id &&
           renderError.error.id.replace(/\.json$/, '') !== instanceURL.href
         ) {
           renderError.error.deps = renderError.error.deps ?? [];
@@ -606,10 +605,13 @@ export class IndexRunner {
           );
         }
         if (!renderError) {
-          this.#log.error(
-            `bug: should never get here - handling render error, but renderError is undefined`,
-          );
-          return;
+          renderError = {
+            type: 'error',
+            error: { message: 'unknown render error' },
+          };
+        }
+        if (!renderError.error) {
+          renderError.error = { message: 'unknown render error' } as any;
         }
 
         // always include the modules that we see in serialized as deps
