@@ -41,10 +41,22 @@ export class RenderRunner {
   #evictionMetrics = {
     byRealm: new Map<string, { unusable: number; timeout: number }>(),
   };
+  #lastAuthByRealm = new Map<string, string>();
 
   constructor(options: { pagePool: PagePool; boxelHostURL: string }) {
     this.#pagePool = options.pagePool;
     this.#boxelHostURL = options.boxelHostURL;
+  }
+
+  async #getPageForRealm(realm: string, auth: string) {
+    let pageInfo = await this.#pagePool.getPage(realm);
+    let lastAuth = this.#lastAuthByRealm.get(realm);
+    if (pageInfo.reused && lastAuth && lastAuth !== auth) {
+      await this.#pagePool.disposeRealm(realm);
+      pageInfo = await this.#pagePool.getPage(realm);
+    }
+    this.#lastAuthByRealm.set(realm, auth);
+    return pageInfo;
   }
 
   async prerenderCardAttempt({
@@ -73,8 +85,10 @@ export class RenderRunner {
     this.#nonce++;
     log.info(`prerendering url ${url}, nonce=${this.#nonce} realm=${realm}`);
 
-    const { page, reused, launchMs, pageId } =
-      await this.#pagePool.getPage(realm);
+    const { page, reused, launchMs, pageId } = await this.#getPageForRealm(
+      realm,
+      auth,
+    );
     const poolInfo = {
       pageId: pageId ?? 'unknown',
       realm,
@@ -376,8 +390,10 @@ export class RenderRunner {
       `module prerendering url ${url}, nonce=${this.#nonce} realm=${realm}`,
     );
 
-    const { page, reused, launchMs, pageId } =
-      await this.#pagePool.getPage(realm);
+    const { page, reused, launchMs, pageId } = await this.#getPageForRealm(
+      realm,
+      auth,
+    );
     const poolInfo = {
       pageId: pageId ?? 'unknown',
       realm,

@@ -1587,6 +1587,44 @@ module(basename(__filename), function () {
         assert.false(second.pool.timedOut, 'second call not timed out');
       });
 
+      test('refreshes prerender session when auth changes for the same realm', async function (assert) {
+        const testCardURL = `${realmURL2}1`;
+        let authA = testCreatePrerenderAuth(testUserId, {
+          [realmURL2]: ['read', 'write', 'realm-owner'],
+        });
+        let authB = testCreatePrerenderAuth(testUserId, {
+          [realmURL2]: ['read', 'write', 'realm-owner'],
+          [realmURL1]: ['read'], // introduce a different token set
+        });
+
+        let first = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          auth: authA,
+        });
+        let second = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          auth: authB,
+        });
+
+        assert.false(first.pool.reused, 'first call not reused');
+        assert.false(
+          second.pool.reused,
+          'auth change forces a fresh prerender page',
+        );
+        assert.notStrictEqual(
+          first.pool.pageId,
+          second.pool.pageId,
+          'new page allocated when auth differs',
+        );
+        assert.strictEqual(
+          second.response.serialized?.data.attributes?.name,
+          'Maple',
+          'second render still succeeds with new session',
+        );
+      });
+
       test('does not reuse across different realms', async function (assert) {
         const testCardURL1 = `${realmURL1}1`;
         const testCardURL2 = `${realmURL2}1`;
