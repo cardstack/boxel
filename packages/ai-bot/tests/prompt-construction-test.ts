@@ -2165,7 +2165,7 @@ Attached Files (files with newer versions don't show their content):
     assert.false(
       (systemPromptParts as TextContent[])
         .map((c) => c.text)
-        .some(text => text.includes('This is skill 1')),
+        .some((text) => text.includes('This is skill 1')),
     );
     assert.true(
       (systemPromptParts[2] as TextContent).text.includes('This is skill 2'),
@@ -2214,7 +2214,9 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.true(messages!.length > 0);
     assert.true(messages![0].role === 'system');
-    let systemPrompt = (messages![0].content as TextContent[]).map((c) => c.text).join('\n');
+    let systemPrompt = (messages![0].content as TextContent[])
+      .map((c) => c.text)
+      .join('\n');
     assert.false(systemPrompt?.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.false(systemPrompt?.includes('This is skill 1'));
     assert.false(systemPrompt?.includes('This is skill 2'));
@@ -3498,7 +3500,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messages!.length, 10);
     assert.equal(messages![0].role, 'system');
     assert.false(
-      ((messages![0].content as TextContent[]).map(c => c.text).join('')).includes('Business Card V1')
+      (messages![0].content as TextContent[])
+        .map((c) => c.text)
+        .join('')
+        .includes('Business Card V1'),
     );
     assert.equal(messages![2].role, 'assistant');
     assert.equal(
@@ -4378,6 +4383,111 @@ new
         ),
       ),
       'When enabled the legacy code patch result message should be omitted',
+    );
+  });
+
+  test('system message parts include cache_control directive on last part', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hello',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/experiments',
+              submode: 'interact',
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    // Create some skill cards to ensure we have multiple system message parts
+    const skillCards: LooseCardResource[] = [
+      {
+        id: 'http://localhost:4201/skills/skill-1',
+        type: 'card',
+        attributes: {
+          title: 'Test Skill',
+          instructions: 'Test instructions for skill 1',
+        },
+        meta: {
+          adoptsFrom: skillCardRef,
+        },
+      },
+      {
+        id: 'http://localhost:4201/skills/skill-2',
+        type: 'card',
+        attributes: {
+          title: 'Another Skill',
+          instructions: 'Test instructions for skill 2',
+        },
+        meta: {
+          adoptsFrom: skillCardRef,
+        },
+      },
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      [],
+      skillCards,
+      [],
+      fakeMatrixClient,
+    );
+
+    // Find the system message
+    const systemMessage = result.find((msg) => msg.role === 'system');
+    assert.ok(systemMessage, 'Should have a system message');
+
+    const content = systemMessage.content;
+    assert.ok(
+      Array.isArray(content),
+      'System message content should be an array',
+    );
+
+    const contentParts = content as TextContent[];
+    assert.true(
+      contentParts.length > 1,
+      'Should have multiple system message parts',
+    );
+
+    // Check that all parts except the last don't have cache_control
+    for (let i = 0; i < contentParts.length - 1; i++) {
+      assert.equal(
+        contentParts[i].type,
+        'text',
+        `Part ${i} should be text type`,
+      );
+      assert.notOk(
+        contentParts[i].cache_control,
+        `Part ${i} should not have cache_control`,
+      );
+    }
+
+    // Check that the last part has cache_control
+    const lastPart = contentParts[contentParts.length - 1];
+    assert.equal(lastPart.type, 'text', 'Last part should be text type');
+    assert.ok(lastPart.cache_control, 'Last part should have cache_control');
+    assert.deepEqual(
+      lastPart.cache_control,
+      { type: 'ephemeral' },
+      'cache_control should be set to ephemeral',
     );
   });
 });
