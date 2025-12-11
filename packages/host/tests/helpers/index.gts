@@ -112,12 +112,18 @@ interface TimingLogger {
   finish: (label?: string) => void;
 }
 
-export function createTimingLogger(scope: string): TimingLogger {
+export function createTimingLogger(
+  scope: string,
+  skip: boolean = true,
+): TimingLogger {
   let start = timingNow();
   let last = start;
   return {
     step(label: string) {
       let current = timingNow();
+      if (skip) {
+        return;
+      }
       console.log(
         `[${scope}] ${label} took ${(current - last).toFixed(2)}ms (total ${(
           current - start
@@ -126,6 +132,9 @@ export function createTimingLogger(scope: string): TimingLogger {
       last = current;
     },
     finish(label = 'total') {
+      if (skip) {
+        return;
+      }
       let current = timingNow();
       console.log(`[${scope}] ${label} took ${(current - start).toFixed(2)}ms`);
     },
