@@ -237,9 +237,7 @@ export default class Card extends Route {
 
     let stackItems = this.hostModeStateService.stackItems;
     let headCardId =
-      stackItems.length > 0
-        ? stackItems[stackItems.length - 1]
-        : primaryCardId;
+      stackItems.length > 0 ? stackItems[stackItems.length - 1] : primaryCardId;
 
     await this.hostModeService.updateHeadTemplate(headCardId);
   }
