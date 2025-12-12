@@ -4,11 +4,13 @@ import {
   fetchRealmPermissions,
   type DBAdapter,
   type RealmPermissions,
+  type Prerenderer,
 } from '@cardstack/runtime-common';
 
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
+  sendResponseForUnauthorizedRequest,
   sendResponseForForbiddenRequest,
   sendResponseForSystemError,
   setContextResponse,
@@ -16,14 +18,13 @@ import {
 import type { RealmServerTokenClaim } from '../utils/jwt';
 
 export default function handlePrerenderProxy({
-  path,
-  prerendererUrl,
+  kind,
+  prerenderer,
   dbAdapter,
   createPrerenderAuth,
 }: {
-  path: '/prerender-card' | '/prerender-module';
-  prerendererUrl?: string;
-  timeoutMs?: number;
+  kind: 'card' | 'module';
+  prerenderer?: Prerenderer;
   dbAdapter: DBAdapter;
   createPrerenderAuth: (
     userId: string,
@@ -31,7 +32,7 @@ export default function handlePrerenderProxy({
   ) => string;
 }) {
   return async (ctxt: Koa.Context) => {
-    if (!prerendererUrl) {
+    if (!prerenderer) {
       await sendResponseForSystemError(
         ctxt,
         'Prerender proxy is not configured on this realm server',
@@ -46,7 +47,7 @@ export default function handlePrerenderProxy({
 
     let token = ctxt.state.token as RealmServerTokenClaim | undefined;
     if (!token?.user) {
-      await sendResponseForForbiddenRequest(
+      await sendResponseForUnauthorizedRequest(
         ctxt,
         'Missing or invalid realm token',
       );
@@ -98,35 +99,49 @@ export default function handlePrerenderProxy({
 
     let auth = createPrerenderAuth(token.user, permissions);
 
-    let forwardBody = JSON.stringify({
-      data: {
-        ...json?.data,
-        attributes: {
-          ...attrs,
-          userId: token.user,
-          permissions,
-          auth,
-        },
-      },
-    });
-
-    let upstream = new URL(path, prerendererUrl);
-    let headers = new Headers();
-    headers.set('content-type', 'application/vnd.api+json');
-    headers.set('accept', 'application/vnd.api+json');
+    let prerenderResponse;
 
     try {
-      let response = await fetch(upstream, {
-        method: 'POST',
-        headers,
-        body: forwardBody,
-      });
-      await setContextResponse(ctxt, response);
+      prerenderResponse =
+        kind === 'card'
+          ? await prerenderer.prerenderCard({
+              realm: attrs.realm,
+              url: attrs.url,
+              auth,
+              renderOptions: attrs.renderOptions,
+            })
+          : await prerenderer.prerenderModule({
+              realm: attrs.realm,
+              url: attrs.url,
+              auth,
+              renderOptions: attrs.renderOptions,
+            });
     } catch (err) {
       await sendResponseForSystemError(
         ctxt,
         'Error proxying prerender request',
       );
+      return;
     }
+
+    let type =
+      kind === 'card' ? 'prerender-result' : 'prerender-module-result';
+
+    await setContextResponse(
+      ctxt,
+      new Response(
+        JSON.stringify({
+          data: {
+            type,
+            id: attrs.url,
+            attributes: prerenderResponse,
+          },
+        }),
+        {
+          status: 201,
+          headers: { 'content-type': 'application/vnd.api+json' },
+        },
+      ),
+    );
   };
 }

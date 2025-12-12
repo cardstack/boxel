@@ -50,6 +50,7 @@ import {
 } from '@cardstack/runtime-common/matrix-client';
 import { createRoutes } from './routes';
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+import type { Prerenderer } from '@cardstack/runtime-common';
 
 export class RealmServer {
   private log = logger('realm-server');
@@ -79,7 +80,7 @@ export class RealmServer {
         boxelSite?: string;
       }
     | undefined;
-  private prerendererUrl: URL | undefined;
+  private prerenderer: Prerenderer | undefined;
 
   constructor({
     serverURL,
@@ -99,7 +100,7 @@ export class RealmServer {
     getRegistrationSecret,
     enableFileWatcher,
     domainsForPublishedRealms,
-    prerendererUrl,
+    prerenderer,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -121,7 +122,7 @@ export class RealmServer {
       boxelSpace?: string;
       boxelSite?: string;
     };
-    prerendererUrl?: URL;
+    prerenderer?: Prerenderer;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -149,7 +150,7 @@ export class RealmServer {
     this.enableFileWatcher = enableFileWatcher ?? false;
     this.domainsForPublishedRealms = domainsForPublishedRealms;
     this.realms = [...realms];
-    this.prerendererUrl = prerendererUrl;
+    this.prerenderer = prerenderer;
   }
 
   @Memoize()
@@ -206,7 +207,7 @@ export class RealmServer {
           getMatrixRegistrationSecret: this.getMatrixRegistrationSecret,
           createAndMountRealm: this.createAndMountRealm,
           domainsForPublishedRealms: this.domainsForPublishedRealms,
-          prerendererUrl: this.prerendererUrl?.href,
+          prerenderer: this.prerenderer,
         }),
       )
       .use(this.serveIndex)

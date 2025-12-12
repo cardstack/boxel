@@ -4,6 +4,7 @@ import type {
   QueuePublisher,
   Realm,
   VirtualNetwork,
+  type Prerenderer,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
@@ -83,7 +84,7 @@ export type CreateRoutesArgs = {
     boxelSite?: string;
   };
   assetsURL: URL;
-  prerendererUrl?: string;
+  prerenderer?: Prerenderer;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -127,8 +128,8 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_prerender-card',
     jwtMiddleware(args.realmSecretSeed),
     handlePrerenderProxy({
-      path: '/prerender-card',
-      prerendererUrl: args.prerendererUrl,
+      kind: 'card',
+      prerenderer: args.prerenderer,
       dbAdapter: args.dbAdapter,
       createPrerenderAuth,
     }),
@@ -137,8 +138,8 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_prerender-module',
     jwtMiddleware(args.realmSecretSeed),
     handlePrerenderProxy({
-      path: '/prerender-module',
-      prerendererUrl: args.prerendererUrl,
+      kind: 'module',
+      prerenderer: args.prerenderer,
       dbAdapter: args.dbAdapter,
       createPrerenderAuth,
     }),

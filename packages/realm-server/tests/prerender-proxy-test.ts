@@ -3,65 +3,19 @@ import Koa from 'koa';
 import Router from '@koa/router';
 import supertest from 'supertest';
 import { basename } from 'path';
-import http from 'http';
-import type { AddressInfo } from 'net';
-import type { DBAdapter } from '@cardstack/runtime-common';
+import type { DBAdapter, Prerenderer } from '@cardstack/runtime-common';
+import type { RenderRouteOptions } from '@cardstack/runtime-common';
 
 import handlePrerenderProxy from '../handlers/handle-prerender-proxy';
 import { jwtMiddleware } from '../middleware';
 import { createJWT } from '../utils/jwt';
-import { closeServer, realmSecretSeed } from './helpers';
-import { buildPrerenderApp } from '../prerender/prerender-app';
+import { realmSecretSeed } from './helpers';
 import { buildCreatePrerenderAuth } from '../prerender/auth';
 import { verifyJWT } from '../jwt';
 
 module(basename(__filename), function () {
-  module('prerender proxy', function (hooks) {
-    let upstream: http.Server | undefined;
-    let upstreamRequests: Array<{
-      url: string;
-      headers: http.IncomingHttpHeaders;
-      body: string;
-    }> = [];
+  module('prerender proxy', function () {
     let createPrerenderAuth = buildCreatePrerenderAuth(realmSecretSeed);
-
-    hooks.afterEach(async function () {
-      upstreamRequests = [];
-      if (upstream) {
-        await closeServer(upstream);
-      }
-      upstream = undefined;
-    });
-
-    async function startUpstreamServer(): Promise<string> {
-      upstreamRequests = [];
-      upstream = http.createServer((req, res) => {
-        let body: Buffer[] = [];
-        req.on('data', (chunk) => body.push(chunk));
-        req.on('end', () => {
-          upstreamRequests.push({
-            url: req.url || '',
-            headers: req.headers,
-            body: Buffer.concat(body).toString(),
-          });
-          res.statusCode = 201;
-          res.setHeader('content-type', 'application/vnd.api+json');
-          res.end(
-            JSON.stringify({
-              data: {
-                attributes: { ok: true },
-              },
-            }),
-          );
-        });
-      });
-
-      await new Promise<void>((resolve) =>
-        upstream!.listen(0, '127.0.0.1', () => resolve()),
-      );
-      let address = upstream!.address() as AddressInfo;
-      return `http://127.0.0.1:${address.port}/`;
-    }
 
     function makeDbAdapter(rows: any[]): DBAdapter {
       return {
@@ -77,110 +31,54 @@ module(basename(__filename), function () {
       };
     }
 
-    async function getAvailablePort() {
-      return await new Promise<number>((resolve, reject) => {
-        let server = http.createServer();
-        server.once('error', reject);
-        server.listen(0, '127.0.0.1', () => {
-          let { port } = server.address() as AddressInfo;
-          server.close(() => resolve(port));
-        });
-      });
-    }
-
-    async function startPrerenderServer() {
-      let port = await getAvailablePort();
-      let prerenderURL = `http://127.0.0.1:${port}`;
-      let { app, prerenderer } = buildPrerenderApp({
-        serverURL: prerenderURL,
-        silent: true,
-      });
+    function makePrerenderer() {
       let renderCalls: Array<{
         kind: 'card' | 'module';
         args: {
           realm: string;
           url: string;
           auth: string;
+          renderOptions?: RenderRouteOptions;
         };
       }> = [];
 
-      (prerenderer as any).prerenderCard = async ({
-        realm,
-        url,
-        auth,
-      }: {
-        realm: string;
-        url: string;
-        auth: string;
-      }) => {
-        renderCalls.push({
-          kind: 'card',
-          args: { realm, url, auth },
-        });
-        return {
-          response: {
+      let prerenderer: Prerenderer = {
+        async prerenderCard(args) {
+          renderCalls.push({ kind: 'card', args });
+          return {
+            serialized: null,
+            searchDoc: { url: args.url, title: 'through proxy' },
             displayNames: ['Proxy Card'],
-            searchDoc: { url, title: 'through proxy' },
-            isolatedHTML: `<div>${url}</div>`,
-          },
-          timings: { launchMs: 1, renderMs: 2 },
-          pool: {
-            pageId: 'card-page',
-            realm,
-            reused: false,
-            evicted: false,
-            timedOut: false,
-          },
-        };
-      };
-
-      (prerenderer as any).prerenderModule = async ({
-        realm,
-        url,
-        auth,
-      }: {
-        realm: string;
-        url: string;
-        auth: string;
-      }) => {
-        renderCalls.push({
-          kind: 'module',
-          args: { realm, url, auth },
-        });
-        return {
-          response: {
+            deps: [],
+            types: [],
+            isolatedHTML: `<div>${args.url}</div>`,
+            headHTML: null,
+            atomHTML: null,
+            embeddedHTML: {},
+            fittedHTML: {},
+            iconHTML: null,
+          };
+        },
+        async prerenderModule(args) {
+          renderCalls.push({ kind: 'module', args });
+          return {
+            id: args.url,
             status: 'ready',
-            definitions: { [url]: { name: 'definition' } },
+            nonce: 'nonce',
             isShimmed: false,
-          },
-          timings: { launchMs: 3, renderMs: 4 },
-          pool: {
-            pageId: 'module-page',
-            realm,
-            reused: false,
-            evicted: false,
-            timedOut: false,
-          },
-        };
-      };
-
-      let server = http.createServer(app.callback());
-      await new Promise<void>((resolve) =>
-        server.listen(port, '127.0.0.1', () => resolve()),
-      );
-
-      return {
-        prerenderURL,
-        renderCalls,
-        async stopServer() {
-          await closeServer(server);
-          await prerenderer.stop();
+            lastModified: Date.now(),
+            createdAt: Date.now(),
+            deps: [],
+            definitions: {},
+          };
         },
       };
+
+      return { prerenderer, renderCalls };
     }
 
-    test('proxies prerender requests to the configured upstream server', async function (assert) {
-      let upstreamURL = await startUpstreamServer();
+    test('proxies prerender requests to the configured prerenderer', async function (assert) {
+      let { prerenderer, renderCalls } = makePrerenderer();
       let dbAdapter = makeDbAdapter([
         {
           username: '@someone:localhost',
@@ -195,8 +93,8 @@ module(basename(__filename), function () {
         '/_prerender-card',
         jwtMiddleware(realmSecretSeed),
         handlePrerenderProxy({
-          path: '/prerender-card',
-          prerendererUrl: upstreamURL,
+          kind: 'card',
+          prerenderer,
           dbAdapter,
           createPrerenderAuth,
         }),
@@ -207,9 +105,11 @@ module(basename(__filename), function () {
         { user: '@someone:localhost', sessionRoom: '!room:localhost' },
         realmSecretSeed,
       );
+      let cardURL = 'http://example/card';
+      let realm = 'http://example/';
       let payload = {
         data: {
-          attributes: { realm: 'http://example/', url: 'http://example/card' },
+          attributes: { realm, url: cardURL },
         },
       };
 
@@ -221,33 +121,41 @@ module(basename(__filename), function () {
 
       assert.deepEqual(
         response.body,
-        { data: { attributes: { ok: true } } },
-        'passes through upstream response body',
-      );
-      assert.strictEqual(
-        upstreamRequests[0]?.url,
-        '/prerender-card',
-        'forwards request to prerender path',
-      );
-      let forwarded = JSON.parse(upstreamRequests[0]?.body || '{}');
-      assert.strictEqual(
-        forwarded.data.attributes.userId,
-        '@someone:localhost',
-        'forwards request payload with derived userId',
-      );
-      assert.deepEqual(
-        forwarded.data.attributes.permissions,
         {
-          'http://example/': ['read', 'write'],
+          data: {
+            type: 'prerender-result',
+            id: cardURL,
+            attributes: {
+              serialized: null,
+              searchDoc: { url: cardURL, title: 'through proxy' },
+              displayNames: ['Proxy Card'],
+              deps: [],
+              types: [],
+              isolatedHTML: `<div>${cardURL}</div>`,
+              headHTML: null,
+              atomHTML: null,
+              embeddedHTML: {},
+              fittedHTML: {},
+              iconHTML: null,
+            },
+          },
         },
-        'forwards request payload with derived permissions',
+        'returns prerender response body',
       );
-      assert.ok(
-        forwarded.data.attributes.auth,
-        'forwards prerender auth token',
+      assert.deepEqual(renderCalls.length, 1, 'invokes prerenderer once');
+      assert.strictEqual(renderCalls[0]?.kind, 'card');
+      assert.deepEqual(
+        renderCalls[0]?.args,
+        {
+          realm,
+          url: cardURL,
+          auth: renderCalls[0]?.args.auth,
+          renderOptions: undefined,
+        },
+        'forwards request to prerenderer with derived realm and url',
       );
-      let sessions = JSON.parse(forwarded.data.attributes.auth);
-      let tokenClaims = verifyJWT(sessions['http://example/'], realmSecretSeed);
+      let sessions = JSON.parse(renderCalls[0]!.args.auth);
+      let tokenClaims = verifyJWT(sessions[realm], realmSecretSeed);
       assert.strictEqual(
         tokenClaims.user,
         '@someone:localhost',
@@ -260,7 +168,7 @@ module(basename(__filename), function () {
       );
       assert.strictEqual(
         tokenClaims.realm,
-        'http://example/',
+        realm,
         'encodes realm in prerender auth',
       );
     });
@@ -272,8 +180,8 @@ module(basename(__filename), function () {
         '/_prerender-card',
         jwtMiddleware(realmSecretSeed),
         handlePrerenderProxy({
-          path: '/prerender-card',
-          prerendererUrl: undefined,
+          kind: 'card',
+          prerenderer: undefined,
           dbAdapter: makeDbAdapter([]),
           createPrerenderAuth,
         }),
@@ -297,16 +205,51 @@ module(basename(__filename), function () {
       );
     });
 
-    test('returns forbidden when user has no realm permissions', async function (assert) {
-      let upstreamURL = await startUpstreamServer();
+    test('returns unauthorized when no token is provided', async function (assert) {
+      let { prerenderer } = makePrerenderer();
       let app = new Koa();
       let router = new Router();
       router.post(
         '/_prerender-card',
         jwtMiddleware(realmSecretSeed),
         handlePrerenderProxy({
-          path: '/prerender-card',
-          prerendererUrl: upstreamURL,
+          kind: 'card',
+          prerenderer,
+          dbAdapter: makeDbAdapter([]),
+          createPrerenderAuth,
+        }),
+      );
+      app.use(router.routes());
+
+      let res = await supertest(app.callback())
+        .post('/_prerender-card')
+        .send({
+          data: {
+            attributes: {
+              realm: 'http://localhost:4201/base/',
+              url: 'http://localhost:4201/base/some-card',
+            },
+          },
+        })
+        .expect(401);
+
+      assert.deepEqual(
+        res.body.errors,
+        ['Missing Authorization header'],
+        'responds with unauthorized error when no auth token is present',
+      );
+    });
+
+    test('returns forbidden when user has no realm permissions', async function (assert) {
+      let { prerenderer, renderCalls } = makePrerenderer();
+      let app = new Koa();
+      let router = new Router();
+      router.post(
+        '/_prerender-card',
+        jwtMiddleware(realmSecretSeed),
+        handlePrerenderProxy({
+          kind: 'card',
+          prerenderer,
           dbAdapter: makeDbAdapter([]), // no permissions
           createPrerenderAuth,
         }),
@@ -335,11 +278,11 @@ module(basename(__filename), function () {
         403,
         'forbidden when user lacks permissions',
       );
+      assert.deepEqual(renderCalls, [], 'does not call prerenderer');
     });
 
     test('proxies to prerender server card and module endpoints', async function (assert) {
-      let { prerenderURL, renderCalls, stopServer } =
-        await startPrerenderServer();
+      let { prerenderer, renderCalls } = makePrerenderer();
       let realm = 'http://example.test/';
       let dbAdapter = makeDbAdapter([
         {
@@ -355,8 +298,8 @@ module(basename(__filename), function () {
         '/_prerender-card',
         jwtMiddleware(realmSecretSeed),
         handlePrerenderProxy({
-          path: '/prerender-card',
-          prerendererUrl: prerenderURL,
+          kind: 'card',
+          prerenderer,
           dbAdapter,
           createPrerenderAuth,
         }),
@@ -365,8 +308,8 @@ module(basename(__filename), function () {
         '/_prerender-module',
         jwtMiddleware(realmSecretSeed),
         handlePrerenderProxy({
-          path: '/prerender-module',
-          prerendererUrl: prerenderURL,
+          kind: 'module',
+          prerenderer,
           dbAdapter,
           createPrerenderAuth,
         }),
@@ -378,71 +321,67 @@ module(basename(__filename), function () {
         realmSecretSeed,
       );
 
-      try {
-        let cardUrl = `${realm}card`;
-        let cardResponse = await supertest(app.callback())
-          .post('/_prerender-card')
-          .set('Authorization', `Bearer ${token}`)
-          .send({
-            data: { attributes: { realm, url: cardUrl } },
-          })
-          .expect(201);
+      let cardUrl = `${realm}card`;
+      let cardResponse = await supertest(app.callback())
+        .post('/_prerender-card')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: { attributes: { realm, url: cardUrl } },
+        })
+        .expect(201);
 
-        assert.strictEqual(cardResponse.body.data.type, 'prerender-result');
-        assert.strictEqual(cardResponse.body.data.id, cardUrl);
-        assert.deepEqual(cardResponse.body.data.attributes.displayNames, [
-          'Proxy Card',
-        ]);
+      assert.strictEqual(cardResponse.body.data.type, 'prerender-result');
+      assert.strictEqual(cardResponse.body.data.id, cardUrl);
+      assert.deepEqual(cardResponse.body.data.attributes.displayNames, [
+        'Proxy Card',
+      ]);
 
-        let moduleUrl = `${realm}module.gts`;
-        let moduleResponse = await supertest(app.callback())
-          .post('/_prerender-module')
-          .set('Authorization', `Bearer ${token}`)
-          .send({
-            data: { attributes: { realm, url: moduleUrl } },
-          })
-          .expect(201);
+      let moduleUrl = `${realm}module.gts`;
+      let moduleResponse = await supertest(app.callback())
+        .post('/_prerender-module')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: { attributes: { realm, url: moduleUrl } },
+        })
+        .expect(201);
 
-        assert.strictEqual(
-          moduleResponse.body.data.type,
-          'prerender-module-result',
-        );
-        assert.strictEqual(moduleResponse.body.data.id, moduleUrl);
-        assert.strictEqual(moduleResponse.body.data.attributes.status, 'ready');
+      assert.strictEqual(
+        moduleResponse.body.data.type,
+        'prerender-module-result',
+      );
+      assert.strictEqual(moduleResponse.body.data.id, moduleUrl);
+      assert.strictEqual(moduleResponse.body.data.attributes.status, 'ready');
 
-        assert.deepEqual(
-          renderCalls.map(({ kind, args }) => {
-            let sessions = JSON.parse(args.auth);
-            let claims = verifyJWT(sessions[realm], realmSecretSeed);
-            return {
-              kind,
-              realm: args.realm,
-              url: args.url,
-              permissions: { [claims.realm]: claims.permissions },
-              userId: claims.user,
-            };
-          }),
-          [
-            {
-              kind: 'card',
-              realm,
-              url: cardUrl,
-              permissions: { [realm]: ['read', 'write'] },
-              userId: '@someone:localhost',
-            },
-            {
-              kind: 'module',
-              realm,
-              url: moduleUrl,
-              permissions: { [realm]: ['read', 'write'] },
-              userId: '@someone:localhost',
-            },
-          ],
-          'forwards requests to prerender server with derived auth info',
-        );
-      } finally {
-        await stopServer();
-      }
+      assert.deepEqual(
+        renderCalls.map(({ kind, args }) => {
+          let sessions = JSON.parse(args.auth);
+          let claims = verifyJWT(sessions[realm], realmSecretSeed);
+          return {
+            kind,
+            realm: args.realm,
+            url: args.url,
+            permissions: { [claims.realm]: claims.permissions },
+            userId: claims.user,
+          };
+        }),
+        [
+          {
+            kind: 'card',
+            realm,
+            url: cardUrl,
+            permissions: { [realm]: ['read', 'write'] },
+            userId: '@someone:localhost',
+          },
+          {
+            kind: 'module',
+            realm,
+            url: moduleUrl,
+            permissions: { [realm]: ['read', 'write'] },
+            userId: '@someone:localhost',
+          },
+        ],
+        'forwards requests to prerenderer with derived auth info',
+      );
     });
   });
 });
