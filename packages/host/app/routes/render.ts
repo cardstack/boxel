@@ -154,6 +154,7 @@ export default class RenderRoute extends Route<Model> {
     if (!isTesting()) {
       // tests have their own way of dealing with window level errors in card-prerender.gts
       this.#attachWindowErrorListeners();
+      this.realm.restoreSessionsFromStorage();
     }
 
     // activate() doesn't run early enough for this to be set before the model()

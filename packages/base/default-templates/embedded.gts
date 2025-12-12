@@ -78,12 +78,19 @@ export default class DefaultEmbeddedTemplate extends GlimmerComponent<{
         aspect-ratio: 1 / 1;
         align-items: center;
         justify-content: center;
-        background-color: var(--boxel-teal);
+        background-color: var(--boxel-light);
         background-position: center;
         background-size: cover;
         background-repeat: no-repeat;
         color: var(--boxel-light);
-        border-radius: 6px;
+        border-radius: var(--boxel-border-radius-sm);
+        overflow: hidden;
+      }
+      .card-thumbnail-placeholder {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        background-color: var(--boxel-highlight);
       }
       .card-description {
         margin: var(--boxel-sp-xxs) 0 0 0;

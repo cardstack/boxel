@@ -4,14 +4,12 @@ import {
 } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import { setOwner, getOwner } from '@ember/owner';
-import Service from '@ember/service';
-
-import { service } from '@ember/service';
-
+import Service, { service } from '@ember/service';
 import { waitForPromise } from '@ember/test-waiters';
-import { tracked } from '@glimmer/tracking';
 
-import { cached } from '@glimmer/tracking';
+import { isTesting } from '@embroider/macros';
+
+import { tracked, cached } from '@glimmer/tracking';
 
 import { dropTask, task, restartableTask, rawTimeout } from 'ember-concurrency';
 import window from 'ember-window-mock';
@@ -628,6 +626,19 @@ export default class RealmService extends Service {
     await resource.login();
   }
 
+  restoreSessionsFromStorage(): void {
+    let tokens = SessionStorage.getAll();
+    if (!tokens) {
+      return;
+    }
+    for (let [realmURL, token] of Object.entries(tokens)) {
+      let resource = this.getOrCreateRealmResource(realmURL, token);
+      if (token && resource.token !== token) {
+        resource.token = token;
+      }
+    }
+  }
+
   info = (url: string): EnhancedRealmInfo => {
     let resource = this.knownRealm(url, false);
     if (!resource) {
@@ -810,7 +821,13 @@ export default class RealmService extends Service {
   }
 
   token = (url: string): string | undefined => {
-    return this.knownRealm(url, false)?.token;
+    let resource = this.knownRealm(url, false);
+    if (!resource && (globalThis as any).__boxelRenderContext && !isTesting()) {
+      // prerender contexts should always reflect localStorage session state
+      this.restoreSessionsFromStorage();
+      resource = this.knownRealm(url, false);
+    }
+    return resource?.token;
   };
 
   logout() {

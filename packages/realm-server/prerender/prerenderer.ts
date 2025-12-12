@@ -86,6 +86,7 @@ export class Prerenderer {
   }
 
   async disposeRealm(realm: string): Promise<void> {
+    this.#renderRunner.clearAuthCache(realm);
     await this.#pagePool.disposeRealm(realm);
   }
 
