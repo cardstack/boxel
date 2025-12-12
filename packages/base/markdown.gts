@@ -135,7 +135,10 @@ class View extends Component<typeof MarkdownField> {
       /* Code Block */
       .markdown-content :deep(pre) {
         white-space: var(--boxel-markdown-field-pre-wrap, pre-wrap);
-        background-color: #efefef;
+        background-color: var(
+          --muted,
+          color-mix(in oklab, currentColor 10%, transparent)
+        );
         border-radius: var(--boxel-border-radius-xl);
         padding: var(--boxel-sp-lg);
       }
