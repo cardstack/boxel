@@ -31,6 +31,20 @@ import ThemeVarField, {
   ThemeTypographyField,
 } from './structured-theme-variables';
 
+export const CSS_PLACEHOLDER = `:root {
+  --background: hsl(0 0% 100%);
+  --foreground: oklch(0.52 0.13 144.17);
+  --primary: #3e2723;
+  /* ... */
+}
+
+.dark {
+  --background: hsl(222.2 84% 4.9%);
+  --foreground: hsl(37.50 36.36% 95.69%);
+  --primary: rgb(46, 125, 50);
+  /* ... */
+}`;
+
 interface SectionToggleSignature {
   Args: {
     expanded: boolean;
@@ -171,14 +185,6 @@ class Isolated extends Component<typeof StructuredTheme> {
     );
   }
 
-  private cssPlaceholder = `:root {
-  /* ... */
-}
-
-.dark {
-  /* ... */
-}`;
-
   <template>
     <GridContainer @tag='article' class='structured-theme-card'>
       <BoxelContainer @tag='header' @display='flex' class='theme-header'>
@@ -204,7 +210,7 @@ class Isolated extends Component<typeof StructuredTheme> {
               id='css-textarea'
               @type='textarea'
               @onInput={{this.parseCss}}
-              @placeholder={{this.cssPlaceholder}}
+              @placeholder={{CSS_PLACEHOLDER}}
               class='css-textarea'
               data-test-custom-css-variables
             />

@@ -1,7 +1,6 @@
 import { CopyButton } from '@cardstack/boxel-ui/components';
 import {
   buildCssVariableName,
-  dasherize,
   entriesToCssRuleMap,
   type CssVariableEntry,
   type CssRuleMap,
@@ -75,10 +74,6 @@ export function calculateTypographyVariables(
       let cssVariableName = buildCssVariableName(combinedFieldName, {
         prefix,
       });
-      console.log(
-        cssVariableName,
-        `--${prefix}-${dasherize(`${fieldName}-${name}`)}`,
-      );
 
       cssVariableFields.push({
         fieldName: combinedFieldName,
