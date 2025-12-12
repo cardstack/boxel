@@ -495,13 +495,19 @@ export default class CommandService extends Service {
         }
         let cardId = payload.attributes.cardId;
 
+        let clientRequestId = this.trackAiAssistantCardRequest({
+          action: 'patch-instance',
+          roomId: command.message.roomId,
+          fileUrl: `${cardId}.json`,
+        });
+
         await this.store.patch(
           cardId,
           {
             attributes: payload?.attributes?.patch?.attributes,
             relationships: payload?.attributes?.patch?.relationships,
           },
-          { doNotWaitForPersist: true },
+          { doNotWaitForPersist: true, clientRequestId },
         );
       } else {
         // Unrecognized command. This can happen if a programmatically-provided command is no longer available due to a browser refresh.
