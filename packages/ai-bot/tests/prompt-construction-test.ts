@@ -4455,7 +4455,7 @@ new
     const systemMessage = result.find((msg) => msg.role === 'system');
     assert.ok(systemMessage, 'Should have a system message');
 
-    const content = systemMessage.content;
+    const content = systemMessage!.content;
     assert.ok(
       Array.isArray(content),
       'System message content should be an array',
