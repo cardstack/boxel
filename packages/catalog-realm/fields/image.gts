@@ -461,10 +461,6 @@ class ImageFieldEmbedded extends Component<typeof ImageField> {
     return this.args.model?.imageCard?.url ?? '';
   }
 
-  get imageUrl() {
-    return this.args.model?.imageCard?.url ?? '';
-  }
-
   get presentation(): ImagePresentationType {
     const presentation =
       (this.args.configuration as ImageFieldConfiguration)?.presentation ||
