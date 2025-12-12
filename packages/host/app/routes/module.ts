@@ -105,7 +105,6 @@ export default class ModuleRoute extends Route<Model> {
   }
 
   async beforeModel(transition: Transition) {
-    this.realm.restoreSessionsFromStorage();
     await super.beforeModel?.(transition);
     // activate() doesn't run early enough for this to be set before the model()
     // hook is run
