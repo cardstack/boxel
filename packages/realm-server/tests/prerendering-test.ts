@@ -143,6 +143,29 @@ module(basename(__filename), function () {
                 },
               },
             },
+            'rsvp-rejects.gts': `
+              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import * as RSVP from 'rsvp';
+              export class RsvpRejects extends CardDef {
+                static isolated = class extends Component<typeof this> {
+                  constructor(...args) {
+                    super(...args);
+                    RSVP.reject(new Error('rsvp boom'));
+                  }
+                  <template>oops</template>
+                }
+              }
+            `,
+            'rsvp-rejects.json': {
+              data: {
+                meta: {
+                  adoptsFrom: {
+                    module: './rsvp-rejects',
+                    name: 'RsvpRejects',
+                  },
+                },
+              },
+            },
             'throws.gts': `
               import { CardDef, Component } from 'https://cardstack.com/base/card-api';
               export class Throws extends CardDef {
@@ -467,6 +490,35 @@ module(basename(__filename), function () {
       assert.true(
         result.pool.evicted,
         'unhandled rejection evicts prerender page to recover clean state',
+      );
+    });
+
+    test('card prerender surfaces RSVP rejection without timing out', async function (assert) {
+      let cardURL = `${realmURL}rsvp-rejects.json`;
+
+      let result = await prerenderer.prerenderCard({
+        realm: realmURL,
+        url: cardURL,
+        auth: auth(),
+      });
+
+      assert.ok(result.response.error, 'prerender reports RSVP rejection');
+      assert.strictEqual(
+        result.response.error?.error.status,
+        500,
+        'RSVP rejection surfaces as 500',
+      );
+      assert.ok(
+        result.response.error?.error.message?.includes('rsvp boom'),
+        `RSVP rejection message includes thrown message, got: ${result.response.error?.error.message}`,
+      );
+      assert.false(
+        result.pool.timedOut,
+        'RSVP rejection should not be mistaken for timeout',
+      );
+      assert.true(
+        result.pool.evicted,
+        'RSVP rejection evicts prerender page to recover clean state',
       );
     });
 
