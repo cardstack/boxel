@@ -24,12 +24,12 @@ import {
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 
-import MatrixService from '@cardstack/host/services/matrix-service';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type RealmService from '@cardstack/host/services/realm';
 
-import { type FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import FileTree from '../editor/file-tree';
 

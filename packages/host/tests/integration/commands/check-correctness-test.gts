@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { type CommandContext } from '@cardstack/runtime-common';
+import type { CommandContext } from '@cardstack/runtime-common';
 
 import CheckCorrectnessCommand from '@cardstack/host/commands/check-correctness';
 import PatchCardInstanceCommand from '@cardstack/host/commands/patch-card-instance';

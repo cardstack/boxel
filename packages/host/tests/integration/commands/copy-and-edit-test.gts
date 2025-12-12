@@ -8,7 +8,7 @@ import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
 import CopyAndEditCommand from '@cardstack/host/commands/copy-and-edit';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   setupIntegrationTestRealm,

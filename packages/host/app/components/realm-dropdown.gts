@@ -14,9 +14,9 @@ import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
 import { RealmPaths } from '@cardstack/runtime-common';
 
-import { type EnhancedRealmInfo } from '@cardstack/host/services/realm';
+import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
-import RealmService from '../services/realm';
+import type RealmService from '../services/realm';
 
 export interface RealmDropdownItem extends EnhancedRealmInfo {
   path: string;

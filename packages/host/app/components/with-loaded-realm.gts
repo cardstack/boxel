@@ -3,9 +3,9 @@ import Component from '@glimmer/component';
 
 import { task } from 'ember-concurrency';
 
-import { type EnhancedRealmInfo } from '@cardstack/host/services/realm';
+import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
-import RealmService from '../services/realm';
+import type RealmService from '../services/realm';
 
 interface Signature {
   Args: {

@@ -56,6 +56,7 @@ import {
   isCardDocumentString,
   isBrowserTestEnv,
 } from './index';
+import { visitModuleDeps } from './code-ref';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
@@ -1286,9 +1287,9 @@ export class Realm {
           return this.#adapter.createJWT(
             {
               user,
-              realm: this.url,
               sessionRoom,
               permissions: userPermissions,
+              realm: this.url,
             },
             '7d',
             this.#realmSecretSeed,
@@ -2156,24 +2157,12 @@ export class Realm {
 
     let url = this.paths.fileURL(localPath);
     let instanceURL = url.href.replace(/\.json$/, '');
-    let originalMaybeError =
-      await this.#realmIndexQueryEngine.cardDocument(url);
-    if (!originalMaybeError) {
+    let indexEntry = await this.#realmIndexQueryEngine.instance(url, {
+      includeErrors: true,
+    });
+    if (!indexEntry) {
       return notFound(request, requestContext);
     }
-    if (originalMaybeError.type === 'error') {
-      return systemError({
-        requestContext,
-        message: `unable to patch card, cannot load original from index`,
-        additionalError: CardError.fromSerializableError(
-          originalMaybeError.error,
-        ),
-        id: instanceURL,
-      });
-    }
-    let { doc: original } = originalMaybeError;
-    let originalClone = cloneDeep(original.data);
-    delete originalClone.meta.lastModified;
 
     let { data: patch, included: maybeIncluded } = await request.json();
     if (!isCardResource(patch)) {
@@ -2198,9 +2187,21 @@ export class Realm {
         }
       }
     }
+    let originalClone = cloneDeep(
+      indexEntry.instance ?? {
+        type: 'card',
+        meta: { adoptsFrom: patch.meta.adoptsFrom },
+      },
+    ) as CardResource;
+    originalClone.meta ??= { adoptsFrom: patch.meta.adoptsFrom };
+    originalClone.meta.adoptsFrom =
+      originalClone.meta.adoptsFrom ?? patch.meta.adoptsFrom;
+    delete originalClone.meta.lastModified;
+
     if (
+      originalClone.meta?.adoptsFrom &&
       internalKeyFor(patch.meta.adoptsFrom, url) !==
-      internalKeyFor(originalClone.meta.adoptsFrom, url)
+        internalKeyFor(originalClone.meta.adoptsFrom, url)
     ) {
       return badRequest({
         message: `Cannot change card instance type to ${JSON.stringify(
@@ -2267,6 +2268,9 @@ export class Realm {
           resource,
           included,
           realmURL: new URL(this.url),
+        });
+        visitModuleDeps(resource, (moduleURL, setModuleURL) => {
+          setModuleURL(new URL(moduleURL, instanceURL).href);
         });
       }
       let fileSerialization: LooseSingleCardDocument | undefined;
@@ -2388,7 +2392,6 @@ export class Realm {
             message: maybeError.error.errorDetail.message,
             // note that this is actually available as part of the response
             // header too--it's just easier for clients when it is here
-            realm: this.url,
             meta: {
               lastKnownGoodHtml: maybeError.error.lastKnownGoodHtml,
               cardTitle: maybeError.error.cardTitle,
@@ -3555,7 +3558,6 @@ export class Realm {
     return serialize({
       doc,
       definition,
-      realm: this.url,
       relativeTo,
       customFieldDefinitions,
     });

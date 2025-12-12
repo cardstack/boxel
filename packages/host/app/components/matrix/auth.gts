@@ -7,12 +7,15 @@ import { tracked } from '@glimmer/tracking';
 
 import { bool, eq, or } from '@cardstack/boxel-ui/helpers';
 
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import AuthContainer from './auth-container';
-import ForgotPassword, { ResetPasswordParams } from './forgot-password';
+
+import ForgotPassword from './forgot-password';
 import Login from './login';
 import RegisterUser from './register-user';
+
+import type { ResetPasswordParams } from './forgot-password';
 
 export type AuthMode = 'login' | 'register' | 'forgot-password';
 

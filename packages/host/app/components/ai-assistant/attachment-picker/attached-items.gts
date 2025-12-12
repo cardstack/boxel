@@ -5,15 +5,13 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { TrackedSet } from 'tracked-built-ins';
-
 import { Tooltip, Pill } from '@cardstack/boxel-ui/components';
 import { and, gt, not } from '@cardstack/boxel-ui/helpers';
 
+import type { CardErrorJSONAPI } from '@cardstack/runtime-common';
 import {
   localId,
   isCardInstance,
-  CardErrorJSONAPI,
   isCardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
@@ -21,10 +19,12 @@ import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
+
+import type { TrackedSet } from 'tracked-built-ins';
 
 const MAX_ITEMS_TO_DISPLAY = 4;
 

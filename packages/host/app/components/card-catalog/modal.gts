@@ -16,14 +16,16 @@ import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 import { Button, BoxelInput } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 
+import type {
+  Loader,
+  RealmInfo,
+  CardCatalogQuery,
+} from '@cardstack/runtime-common';
 import {
   type CodeRef,
   type CreateNewCard,
   baseRealm,
   Deferred,
-  Loader,
-  RealmInfo,
-  CardCatalogQuery,
   isCardInstance,
 } from '@cardstack/runtime-common';
 

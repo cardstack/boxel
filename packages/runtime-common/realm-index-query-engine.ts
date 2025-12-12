@@ -1,5 +1,6 @@
 import { Memoize } from 'typescript-memoize';
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
+import cloneDeep from 'lodash/cloneDeep';
 import {
   SupportedMimeType,
   maxLinkDepth,
@@ -9,15 +10,16 @@ import {
   type DBAdapter,
   type QueryOptions,
   type IndexedModuleOrError,
-  type IndexedDefinitionOrError,
   type InstanceOrError,
-  type ResolvedCodeRef,
   type DefinitionLookup,
+  visitInstanceURLs,
+  maybeRelativeURL,
 } from '.';
 import type { Realm } from './realm';
 import { RealmPaths } from './paths';
 import type { Query } from './query';
 import { CardError, type SerializedError } from './error';
+import { visitModuleDeps } from './code-ref';
 import {
   isSingleCardDocument,
   type SingleCardDocument,
@@ -42,6 +44,18 @@ export interface SearchResultError {
     errorDetail: SerializedError;
     cardTitle: string | null;
   };
+}
+
+function absolutizeInstanceURL(
+  url: string,
+  resourceId: string | undefined,
+  setURL: (newURL: string) => void,
+) {
+  if (!resourceId) {
+    setURL(url);
+    return;
+  }
+  setURL(new URL(url, resourceId).href);
 }
 
 export class RealmIndexQueryEngine {
@@ -185,6 +199,7 @@ export class RealmIndexQueryEngine {
         doc.included = included;
       }
     }
+    relativizeDocument(doc, this.realmURL);
     return { type: 'doc', doc };
   }
 
@@ -193,13 +208,6 @@ export class RealmIndexQueryEngine {
     opts?: Options,
   ): Promise<IndexedModuleOrError | undefined> {
     return await this.#indexQueryEngine.getModule(url, opts);
-  }
-
-  async getOwnDefinition(
-    codeRef: ResolvedCodeRef,
-    opts?: Options,
-  ): Promise<IndexedDefinitionOrError | undefined> {
-    return await this.#indexQueryEngine.getOwnDefinition(codeRef, opts);
   }
 
   async instance(
@@ -298,10 +306,17 @@ export class RealmIndexQueryEngine {
             !omit.includes(includedResource.id) &&
             !included.find((r) => r.id === includedResource.id)
           ) {
-            included.push({
+            let rewrittenResource = cloneDeep({
               ...includedResource,
               ...{ links: { self: includedResource.id } },
             });
+            visitInstanceURLs(rewrittenResource, (url, setURL) =>
+              absolutizeInstanceURL(url, rewrittenResource.id, setURL),
+            );
+            visitModuleDeps(rewrittenResource, (url, setURL) =>
+              absolutizeInstanceURL(url, rewrittenResource.id, setURL),
+            );
+            included.push(rewrittenResource);
           }
         }
       }
@@ -324,4 +339,41 @@ export class RealmIndexQueryEngine {
     }
     return included;
   }
+}
+
+function relativizeDocument(doc: SingleCardDocument, realmURL: URL): void {
+  let primarySelf = doc.data.links?.self ?? doc.data.id;
+  if (!primarySelf) {
+    return;
+  }
+  let primaryURL = new URL(primarySelf);
+  relativizeResource(
+    doc.data as unknown as LooseCardResource,
+    primaryURL,
+    realmURL,
+  );
+  if (doc.included) {
+    for (let resource of doc.included) {
+      relativizeResource(
+        resource as unknown as LooseCardResource,
+        primaryURL,
+        realmURL,
+      );
+    }
+  }
+}
+
+function relativizeResource(
+  resource: LooseCardResource,
+  primaryURL: URL,
+  realmURL: URL,
+) {
+  visitInstanceURLs(resource, (url, setURL) => {
+    let urlObj = new URL(url, resource.id ?? primaryURL);
+    setURL(maybeRelativeURL(urlObj, primaryURL, realmURL));
+  });
+  visitModuleDeps(resource, (moduleURL, setModuleURL) => {
+    let absoluteModuleURL = new URL(moduleURL, resource.id ?? primaryURL);
+    setModuleURL(maybeRelativeURL(absoluteModuleURL, primaryURL, realmURL));
+  });
 }

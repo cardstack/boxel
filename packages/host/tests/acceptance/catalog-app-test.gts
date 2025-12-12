@@ -19,7 +19,7 @@ import ListingUseCommand from '@cardstack/host/commands/listing-use';
 
 import ENV from '@cardstack/host/config/environment';
 
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   setupLocalIndexing,

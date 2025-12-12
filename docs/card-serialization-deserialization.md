@@ -175,3 +175,7 @@ The process is facilitated by the `createFromSerialized` function. This function
 - `containsMany` Field: The values within this field consist of an array, which can encompass either an array of primitive values or an array of card instances.
 - `linksTo` Field: The values associated with the `linksTo` field are exclusively card instances. This is because linked fields refer to other card instances. A crucial distinction between card instances in linked fields and those in contained fields lies in their identity – card instance values within linked fields possess identity.
 - `linksToMany` Field: This field's value takes the form of an array of card instances.
+
+## URLs in Boxel JSON-API
+
+The JSON-API spec is not clear about how relative URLs in links (e.g. `links.self`) should be interpreted. The Boxel API and runtime interpret them as relative to the links.self of the primary resource of the document.

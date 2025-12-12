@@ -27,12 +27,12 @@ import {
 import { not, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
+import type { CodeRef } from '@cardstack/runtime-common';
 import {
   isCardDocumentString,
   RealmPaths,
   PermissionsContextName,
   GetCardContextName,
-  CodeRef,
   type ResolvedCodeRef,
   type getCard,
   CardContextName,
@@ -44,10 +44,10 @@ import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode
 import ModuleInspector from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
-import { type FileResource } from '@cardstack/host/resources/file';
-import {
-  type ModuleDeclaration,
-  type State as ModuleState,
+import type { FileResource } from '@cardstack/host/resources/file';
+import type {
+  ModuleDeclaration,
+  State as ModuleState,
 } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
 import type CodeSemanticsService from '@cardstack/host/services/code-semantics-service';
@@ -63,7 +63,7 @@ import type {
   Format,
   CardContext,
 } from 'https://cardstack.com/base/card-api';
-import { type SpecType } from 'https://cardstack.com/base/spec';
+import type { SpecType } from 'https://cardstack.com/base/spec';
 
 import {
   CodeModePanelWidths,
