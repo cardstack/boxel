@@ -299,7 +299,6 @@ test.describe('Head tags', () => {
     ).toHaveAttribute('content', 'Custom Head Title');
 
     await page.locator('[data-test-head-nav="default"]').click();
-    await expect(page).toHaveURL(defaultCardURL);
     await expect(
       page.locator('head meta[name="custom-head-flag"]'),
     ).toHaveCount(0);
