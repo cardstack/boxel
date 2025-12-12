@@ -2,32 +2,38 @@ import type { Definition, FieldDefinition } from './index';
 import {
   type LooseSingleCardDocument,
   type CardResource,
-  isUrlLike,
-  maybeRelativeURL,
   isCodeRef,
 } from './index';
 import type { CardFields, Meta } from './resource-types';
 import { serialize as serializeCodeRef } from './serializers/code-ref';
+import { maybeRelativeURL as makeRelativeURL } from './url';
 
 export default function serialize({
   doc,
   definition,
-  realm,
   relativeTo,
   customFieldDefinitions,
 }: {
   doc: LooseSingleCardDocument;
   definition: Definition;
-  realm: string;
   relativeTo: URL;
   customFieldDefinitions?: Record<string, FieldDefinition>;
 }): LooseSingleCardDocument {
-  const realmURL = new URL(realm);
+  const realmURL = doc.data.meta?.realmURL
+    ? new URL(doc.data.meta.realmURL)
+    : undefined;
+
   const codeRefOpts = {
     relativeTo,
-    trimExecutableExtension: true,
-    maybeRelativeURL: (url: string) =>
-      maybeRelativeURL(new URL(url), relativeTo, realmURL),
+    trimExecutableExtension: true as true,
+  };
+  const metaCodeRefOpts = {
+    ...codeRefOpts,
+    allowRelative: true as true,
+    ...(realmURL && {
+      maybeRelativeURL: (url: string) =>
+        makeRelativeURL(new URL(url, relativeTo), relativeTo, realmURL),
+    }),
   };
 
   const result: LooseSingleCardDocument = {
@@ -41,7 +47,7 @@ export default function serialize({
       result.data.meta.adoptsFrom,
       doc,
       undefined,
-      codeRefOpts,
+      metaCodeRefOpts,
     ) as any;
   }
 
@@ -50,8 +56,7 @@ export default function serialize({
       fields: result.data.meta.fields,
       doc,
       relativeTo,
-      realmURL,
-      codeRefOpts,
+      codeRefOpts: metaCodeRefOpts,
     });
   }
 
@@ -61,7 +66,6 @@ export default function serialize({
       definition,
       doc,
       relativeTo,
-      realmURL,
       codeRefOpts,
       customFieldDefinitions,
     });
@@ -107,7 +111,6 @@ function processAttributes({
   basePath = '',
   doc,
   relativeTo,
-  realmURL,
   codeRefOpts,
   customFieldDefinitions,
 }: {
@@ -116,8 +119,12 @@ function processAttributes({
   basePath?: string;
   doc: LooseSingleCardDocument;
   relativeTo: URL;
-  realmURL: URL;
-  codeRefOpts: { maybeRelativeURL: (url: string) => string };
+  codeRefOpts: {
+    relativeTo: URL;
+    trimExecutableExtension: true;
+    allowRelative?: true;
+    maybeRelativeURL?: (url: string) => string;
+  };
   customFieldDefinitions?: Record<string, FieldDefinition>;
 }): Record<string, any> {
   const result: Record<string, any> = {};
@@ -165,7 +172,6 @@ function processAttributes({
             basePath: fieldPath,
             doc,
             relativeTo,
-            realmURL,
             codeRefOpts,
             customFieldDefinitions,
           });
@@ -180,7 +186,6 @@ function processAttributes({
         basePath: fieldPath,
         doc,
         relativeTo,
-        realmURL,
         codeRefOpts,
         customFieldDefinitions,
       });
@@ -200,7 +205,7 @@ function processRelationships({
   relationships: NonNullable<CardResource['relationships']>;
   definition: Definition;
   relativeTo: URL;
-  realmURL: URL;
+  realmURL?: URL;
   customFieldDefinitions?: Record<string, FieldDefinition>;
 }): NonNullable<CardResource['relationships']> | undefined {
   const result: NonNullable<CardResource['relationships']> = {};
@@ -221,18 +226,21 @@ function processRelationships({
 
     if (processedValue.links && 'self' in processedValue.links) {
       // Handle both truthy and null values for links.self
-      if (
-        processedValue.links.self !== null &&
-        processedValue.links.self !== undefined
-      ) {
+      if (processedValue.links.self !== null) {
+        let selfLink = processedValue.links.self;
+        if (realmURL) {
+          try {
+            selfLink = makeRelativeURL(
+              new URL(selfLink, relativeTo),
+              relativeTo,
+              realmURL,
+            );
+          } catch (e) {
+            // ignore malformed URLs and leave as-is
+          }
+        }
         processedValue.links = {
-          self: isRelativeURL(processedValue.links.self)
-            ? processedValue.links.self
-            : maybeRelativeURL(
-                new URL(processedValue.links.self),
-                relativeTo,
-                realmURL,
-              ),
+          self: selfLink,
         };
       } else {
         // Preserve null values
@@ -296,14 +304,17 @@ function processMetaFields({
   fields,
   doc,
   relativeTo,
-  realmURL,
   codeRefOpts,
 }: {
   fields: CardFields;
   doc: LooseSingleCardDocument;
   relativeTo: URL;
-  realmURL: URL;
-  codeRefOpts: { maybeRelativeURL: (url: string) => string };
+  codeRefOpts: {
+    relativeTo: URL;
+    trimExecutableExtension: true;
+    allowRelative?: true;
+    maybeRelativeURL?: (url: string) => string;
+  };
 }): CardFields {
   const result: CardFields = {};
   for (const [fieldName, fieldValue] of Object.entries(fields)) {
@@ -313,7 +324,6 @@ function processMetaFields({
           field: item,
           doc,
           relativeTo,
-          realmURL,
           codeRefOpts,
         }),
       );
@@ -322,7 +332,6 @@ function processMetaFields({
         field: fieldValue,
         doc,
         relativeTo,
-        realmURL,
         codeRefOpts,
       });
     }
@@ -335,14 +344,17 @@ function processMetaField({
   field,
   doc,
   relativeTo,
-  realmURL,
   codeRefOpts,
 }: {
   field: Partial<Meta>;
   doc: LooseSingleCardDocument;
   relativeTo: URL;
-  realmURL: URL;
-  codeRefOpts: { maybeRelativeURL: (url: string) => string };
+  codeRefOpts: {
+    relativeTo: URL;
+    trimExecutableExtension: true;
+    allowRelative?: true;
+    maybeRelativeURL?: (url: string) => string;
+  };
 }): Partial<Meta> {
   const result = { ...field };
   if (result.adoptsFrom && isCodeRef(result.adoptsFrom)) {
@@ -358,14 +370,9 @@ function processMetaField({
       fields: result.fields,
       doc,
       relativeTo,
-      realmURL,
       codeRefOpts,
     });
   }
 
   return result;
-}
-
-function isRelativeURL(url: string) {
-  return isUrlLike(url) && !url.startsWith('http');
 }

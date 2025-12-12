@@ -1,3 +1,4 @@
+import type { LooseCardResource } from './index';
 import { RealmPaths } from './paths';
 
 export function maybeURL(
@@ -31,14 +32,6 @@ export function relativeURL(
   }
   let ourParts = url.pathname.split('/');
   let theirParts = relativeTo.pathname.split('/');
-
-  // element zero for both is "/" because they always start with a slash check
-  // element 1, if those differ, our nears common ancestor is the root of the
-  // origin. In the case where the relativeTo is a entry in the origin, favor
-  // using "./" to express the relative path.
-  if (ourParts[1] !== theirParts[1] && theirParts.length > 2) {
-    return url.pathname;
-  }
 
   let lastPart: string | undefined;
   while (
@@ -78,4 +71,34 @@ export function trimJsonExtension(str: string) {
 
 export function removeFileExtension(fileURL: string | undefined) {
   return fileURL?.replace(/\.[^/.]+$/, '');
+}
+
+type VisitInstanceURL = (
+  instanceURL: string,
+  setInstanceURL: (newURL: string) => void,
+) => void;
+
+export function visitInstanceURLs(
+  resourceJson: LooseCardResource,
+  visit: VisitInstanceURL,
+): void {
+  if (resourceJson.links) {
+    let links = resourceJson.links;
+    if (links.self) {
+      visit(links.self, (newURL) => {
+        links.self = newURL;
+      });
+    }
+  }
+  let relationships = resourceJson.relationships;
+  if (relationships) {
+    for (let relationship of Object.values(relationships)) {
+      let links = relationship.links;
+      if (links && links.self) {
+        visit(links.self, (newURL) => {
+          links.self = newURL;
+        });
+      }
+    }
+  }
 }

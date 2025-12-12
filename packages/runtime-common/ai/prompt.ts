@@ -6,6 +6,7 @@ import type {
   CodePatchCorrectnessCard,
   CodePatchCorrectnessFile,
   PromptParts,
+  TextContent,
 } from './types';
 import { constructHistory } from './history';
 import {
@@ -1163,25 +1164,40 @@ export async function buildPromptForModel(
         'The automated correctness checks have finished. Summarize their results for me based on the tool output above.',
     });
   }
-  let systemMessage = `${SYSTEM_MESSAGE}\n`;
+  let systemMessageParts = [SYSTEM_MESSAGE];
 
   if (autoCorrectnessChecksEnabled) {
-    systemMessage +=
-      'Never call the checkCorrectness tool on your own; correctness checks are handled automatically by the system.\n';
+    systemMessageParts.push(
+      'Never call the checkCorrectness tool on your own; correctness checks are handled automatically by the system.',
+    );
   }
   if (skillCards.length) {
-    systemMessage += SKILL_INSTRUCTIONS_MESSAGE;
-    systemMessage += skillCardsToMessage(skillCards);
-    systemMessage += '\n';
+    systemMessageParts.push(SKILL_INSTRUCTIONS_MESSAGE);
+    systemMessageParts = systemMessageParts.concat(
+      skillCardsToMessages(skillCards),
+    );
   }
 
   let messages: OpenAIPromptMessage[] = [
     {
       role: 'system',
-      content: systemMessage,
+      content: systemMessageParts.map((part, i) => {
+        let result: TextContent = {
+          type: 'text',
+          text: part,
+        };
+        if (i === systemMessageParts.length - 1) {
+          result = {
+            ...result,
+            cache_control: {
+              type: 'ephemeral',
+            },
+          };
+        }
+        return result;
+      }),
     },
   ];
-
   messages = messages.concat(historicalMessages);
   let contextContent = await buildContextMessage(
     client,
@@ -1708,23 +1724,21 @@ export const attachedCardsToMessage = (
   return a + b;
 };
 
-export const skillCardsToMessage = (
+export const skillCardsToMessages = (
   cards: Omit<LooseCardResource, 'meta'>[],
 ) => {
-  return cards
-    .map((card) => {
-      let headerParts = [`id: ${card.id}`];
-      if (card.attributes?.title) {
-        headerParts.push(`title: ${card.attributes.title}`);
-      }
+  return cards.map((card) => {
+    let headerParts = [`id: ${card.id}`];
+    if (card.attributes?.title) {
+      headerParts.push(`title: ${card.attributes.title}`);
+    }
 
-      let header = `Skill (${headerParts.join(', ')}):`;
-      let instructions =
-        card.attributes?.instructions?.trim() ?? 'No instructions provided.';
+    let header = `Skill (${headerParts.join(', ')}):`;
+    let instructions =
+      card.attributes?.instructions?.trim() ?? 'No instructions provided.';
 
-      return `${header}\n${instructions}`;
-    })
-    .join('\n\n');
+    return `${header}\n${instructions}`;
+  });
 };
 
 export function cleanContent(content: string) {

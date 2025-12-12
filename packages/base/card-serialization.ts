@@ -101,7 +101,8 @@ export async function cardClassFromResource<CardT extends BaseDefConstructor>(
       resource.meta.adoptsFrom,
       {
         loader: myLoader(),
-        relativeTo: resource.id ? new URL(resource.id) : relativeTo,
+        relativeTo:
+          relativeTo ?? (resource.id ? new URL(resource.id) : undefined),
       },
     );
     if (!card) {

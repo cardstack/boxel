@@ -1,5 +1,6 @@
 import { Memoize } from 'typescript-memoize';
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
+import cloneDeep from 'lodash/cloneDeep';
 import {
   SupportedMimeType,
   maxLinkDepth,
@@ -13,12 +14,14 @@ import {
   type IndexedModuleOrError,
   type InstanceOrError,
   type DefinitionLookup,
+  visitInstanceURLs,
+  maybeRelativeURL,
 } from '.';
 import type { Realm } from './realm';
 import { RealmPaths } from './paths';
 import { buildQueryString, type Query } from './query';
 import { CardError, type SerializedError } from './error';
-import { isResolvedCodeRef } from './code-ref';
+import { isResolvedCodeRef, visitModuleDeps } from './code-ref';
 import {
   isCardCollectionDocument,
   isSingleCardDocument,
@@ -38,10 +41,12 @@ type Options = {
 } & QueryOptions;
 
 type SearchResult = SearchResultDoc | SearchResultError;
+
 interface SearchResultDoc {
   type: 'doc';
   doc: SingleCardDocument;
 }
+
 export interface SearchResultError {
   type: 'error';
   error: {
@@ -60,6 +65,18 @@ type QueryFieldErrorDetail = {
   message: string;
   status?: number;
 };
+
+function absolutizeInstanceURL(
+  url: string,
+  resourceId: string | undefined,
+  setURL: (newURL: string) => void,
+) {
+  if (!resourceId) {
+    setURL(url);
+    return;
+  }
+  setURL(new URL(url, resourceId).href);
+}
 
 export class RealmIndexQueryEngine {
   #realm: Realm;
@@ -205,6 +222,7 @@ export class RealmIndexQueryEngine {
         doc.included = included;
       }
     }
+    relativizeDocument(doc, this.realmURL);
     return { type: 'doc', doc };
   }
 
@@ -597,33 +615,41 @@ export class RealmIndexQueryEngine {
           }
           linkResource = { ...json.data, ...{ links: { self: json.data.id } } };
         }
-        let foundLinks = false;
-        // TODO stop using maxLinkDepth. we should save the JSON-API doc in the
-        // index based on keeping track of the rendered fields and invalidate the
-        // index as consumed cards change
-        if (linkResource && stack.length <= maxLinkDepth) {
-          for (let includedResource of await this.loadLinks(
-            {
-              realmURL,
-              resource: linkResource,
-              omit,
-              included: [...included, linkResource],
-              visited,
-              stack: [...(resource.id != null ? [resource.id] : []), ...stack],
-            },
-            opts,
-          )) {
-            foundLinks = true;
-            if (
-              includedResource.id &&
-              !omit.includes(includedResource.id) &&
-              !included.find((r) => r.id === includedResource.id)
-            ) {
-              included.push({
-                ...includedResource,
-                ...{ links: { self: includedResource.id } },
-              });
-            }
+      }
+      let foundLinks = false;
+      // TODO stop using maxLinkDepth. we should save the JSON-API doc in the
+      // index based on keeping track of the rendered fields and invalidate the
+      // index as consumed cards change
+      if (linkResource && stack.length <= maxLinkDepth) {
+        for (let includedResource of await this.loadLinks(
+          {
+            realmURL,
+            resource: linkResource,
+            omit,
+            included: [...included, linkResource],
+            visited,
+            stack: [...(resource.id != null ? [resource.id] : []), ...stack],
+          },
+          opts,
+        )) {
+          foundLinks = true;
+          if (
+            includedResource.id &&
+            !omit.includes(includedResource.id) &&
+            !included.find((r) => r.id === includedResource.id)
+          ) {
+            let rewrittenResource = cloneDeep({
+              ...includedResource,
+              ...{ links: { self: includedResource.id } },
+            });
+            visitInstanceURLs(rewrittenResource, (url, setURL) =>
+              absolutizeInstanceURL(url, rewrittenResource.id, setURL),
+            );
+            visitModuleDeps(rewrittenResource, (url, setURL) =>
+              absolutizeInstanceURL(url, rewrittenResource.id, setURL),
+            );
+            included.push(rewrittenResource);
+>>>>>>> main
           }
         }
         let relationshipId = maybeURL(relationship.links.self, resource.id);
@@ -650,4 +676,41 @@ export class RealmIndexQueryEngine {
     await processRelationships();
     return included;
   }
+}
+
+function relativizeDocument(doc: SingleCardDocument, realmURL: URL): void {
+  let primarySelf = doc.data.links?.self ?? doc.data.id;
+  if (!primarySelf) {
+    return;
+  }
+  let primaryURL = new URL(primarySelf);
+  relativizeResource(
+    doc.data as unknown as LooseCardResource,
+    primaryURL,
+    realmURL,
+  );
+  if (doc.included) {
+    for (let resource of doc.included) {
+      relativizeResource(
+        resource as unknown as LooseCardResource,
+        primaryURL,
+        realmURL,
+      );
+    }
+  }
+}
+
+function relativizeResource(
+  resource: LooseCardResource,
+  primaryURL: URL,
+  realmURL: URL,
+) {
+  visitInstanceURLs(resource, (url, setURL) => {
+    let urlObj = new URL(url, resource.id ?? primaryURL);
+    setURL(maybeRelativeURL(urlObj, primaryURL, realmURL));
+  });
+  visitModuleDeps(resource, (moduleURL, setModuleURL) => {
+    let absoluteModuleURL = new URL(moduleURL, resource.id ?? primaryURL);
+    setModuleURL(maybeRelativeURL(absoluteModuleURL, primaryURL, realmURL));
+  });
 }
