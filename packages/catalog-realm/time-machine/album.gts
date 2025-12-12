@@ -23,7 +23,7 @@ export class AlbumIsolated extends Component<typeof Album> {
 
   get lightboxItems(): LightboxItem[] {
     return this.polaroidImages
-      .filter((image) => Boolean(image?.data?.base64))
+      .filter((image) => Boolean(image?.image?.imageCard?.url))
       .map((image) => ({
         card: image,
         component: image.constructor.getComponent(image),
@@ -32,7 +32,7 @@ export class AlbumIsolated extends Component<typeof Album> {
 
   @action
   handlePolaroidSelect(image: PolaroidImage) {
-    if (!image?.data?.base64) {
+    if (!image?.image?.imageCard?.url) {
       return;
     }
     let items = this.lightboxItems;

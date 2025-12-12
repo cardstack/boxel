@@ -1,17 +1,22 @@
 import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
+import UrlField from 'https://cardstack.com/base/url';
 import { Command } from '@cardstack/runtime-common';
 import SendRequestViaProxyCommand from '@cardstack/boxel-host/commands/send-request-via-proxy';
 import Base64ImageField from 'https://cardstack.com/base/base64-image';
+import UploadImageCommand from './upload-image';
 
 class GenerateImageInput extends CardDef {
   @field prompt = contains(StringField);
   @field uploadedImage = contains(Base64ImageField);
   @field sourceImageUrl = contains(StringField);
+  @field targetRealmUrl = contains(StringField);
+  @field imageUrl = contains(StringField);
 }
 
 class GenerateImageOutput extends CardDef {
-  @field imageBase64 = contains(StringField);
+  @field url = contains(UrlField);
+  @field cardId = contains(StringField);
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -49,25 +54,22 @@ export class GenerateImageCommand extends Command<
     return GenerateImageOutput;
   }
 
-  protected async run(
-    input: GenerateImageInput,
-  ): Promise<GenerateImageOutput> {
-    const { prompt, uploadedImage, sourceImageUrl } = input;
+  protected async run(input: GenerateImageInput): Promise<GenerateImageOutput> {
+    const { prompt, uploadedImage, sourceImageUrl, targetRealmUrl, imageUrl } =
+      input;
     const uploadedImageData = uploadedImage?.base64?.trim();
+    const sourceUrlTrimmed = sourceImageUrl?.trim();
+    const explicitImageUrl = imageUrl?.trim();
 
-    if (!uploadedImageData && !sourceImageUrl) {
-      throw new Error('Please upload an image or provide a source image URL');
-    }
+    let imageUrlForMessage = explicitImageUrl;
 
-    let imageBase64 = '';
-
-    if (uploadedImageData) {
-      imageBase64 = uploadedImageData;
-    } else if (sourceImageUrl) {
-      if (sourceImageUrl.startsWith('data:image/')) {
-        imageBase64 = sourceImageUrl;
+    if (!imageUrlForMessage && uploadedImageData) {
+      imageUrlForMessage = uploadedImageData;
+    } else if (!imageUrlForMessage && sourceUrlTrimmed) {
+      if (sourceUrlTrimmed.startsWith('data:image/')) {
+        imageUrlForMessage = sourceUrlTrimmed;
       } else {
-        const imageResponse = await fetch(sourceImageUrl);
+        const imageResponse = await fetch(sourceUrlTrimmed);
 
         if (!imageResponse.ok) {
           throw new Error(
@@ -79,7 +81,7 @@ export class GenerateImageCommand extends Command<
           imageResponse.headers.get('content-type') ?? 'image/png';
         const arrayBuffer = await imageResponse.arrayBuffer();
         const base64 = arrayBufferToBase64(arrayBuffer);
-        imageBase64 = `data:${contentType};base64,${base64}`;
+        imageUrlForMessage = `data:${contentType};base64,${base64}`;
       }
     }
 
@@ -96,12 +98,16 @@ export class GenerateImageCommand extends Command<
             type: 'text',
             text: promptText,
           },
-          {
-            type: 'image_url',
-            image_url: {
-              url: imageBase64,
-            },
-          },
+          ...(imageUrlForMessage
+            ? [
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: imageUrlForMessage,
+                  },
+                },
+              ]
+            : []),
         ],
       },
     ];
@@ -143,8 +149,34 @@ export class GenerateImageCommand extends Command<
       throw new Error(`Image generation failed: ${errorMessage}`);
     }
 
+    let uploadedImageUrl: string | undefined;
+    let uploadedCardId: string | undefined;
+    if (targetRealmUrl) {
+      try {
+        let uploadCommand = new UploadImageCommand(this.commandContext);
+        let uploadResult = await uploadCommand.execute({
+          sourceImageUrl: generatedImageUrl,
+          targetRealmUrl,
+        });
+
+        uploadedCardId = uploadResult?.cardId;
+
+        let store = (this.commandContext as any)?.store;
+        if (uploadResult?.cardId && store?.get) {
+          let savedCard = await store.get(uploadResult.cardId);
+          uploadedImageUrl = (savedCard as any)?.url;
+        }
+      } catch (error) {
+        console.error(
+          'UploadImageCommand failed, falling back to data URL:',
+          error,
+        );
+      }
+    }
+
     return new GenerateImageOutput({
-      imageBase64: generatedImageUrl,
+      url: uploadedImageUrl ?? generatedImageUrl,
+      cardId: uploadedCardId ?? '',
     });
   }
 }
