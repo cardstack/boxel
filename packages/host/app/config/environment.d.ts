@@ -28,6 +28,7 @@ declare const config: {
   serverEchoDebounceMs: number;
   loginMessageTimeoutMs: number;
   minSaveTaskDurationMs: number;
+  aiAssistantToastTimeoutMs: number;
   cardRenderTimeout: number;
   sqlSchema: string;
   assetsURL: string;

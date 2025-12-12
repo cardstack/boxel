@@ -16,6 +16,8 @@ import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
 
+import config from '@cardstack/host/config/environment';
+
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type LocalPersistenceService from '@cardstack/host/services/local-persistence-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -159,6 +161,7 @@ export default class AiAssistantToast extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare localPersistenceService: LocalPersistenceService;
   _pollToken: ReturnType<typeof pollTask> | null = null;
+  private toastResetTimeoutMs = config.aiAssistantToastTimeoutMs;
 
   private get state() {
     const state: {
@@ -209,10 +212,11 @@ export default class AiAssistantToast extends Component<Signature> {
       };
 
       // Only create a new poll task if we don't have one
-      if (!this._pollToken) {
+      if (!this._pollToken && this.toastResetTimeoutMs > 0) {
+        // Don't spin up the auto-dismiss loop when the timeout is disabled (tests)
         // eslint-disable-next-line ember/no-side-effects
         this._pollToken = pollTask(this, (next: () => void) => {
-          const resetStateValue = (timeout = 3000) => {
+          const resetStateValue = (timeout = this.toastResetTimeoutMs) => {
             runTask(
               this,
               () => {
