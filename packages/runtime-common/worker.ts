@@ -28,10 +28,8 @@ import type { WorkerArgs, TaskArgs } from './tasks';
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
   modulesIndexed: number;
-  definitionsIndexed: number;
   instanceErrors: number;
   moduleErrors: number;
-  definitionErrors: number;
   totalIndexEntries: number;
 }
 

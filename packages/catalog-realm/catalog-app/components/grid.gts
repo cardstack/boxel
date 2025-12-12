@@ -73,7 +73,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
       .cards {
         --default-grid-view-min-width: 224px;
         --default-grid-view-max-width: 1fr;
-        --default-grid-view-height: 380px;
+        --default-grid-view-height: 400px;
         --default-strip-view-min-width: 49%;
         --default-strip-view-max-width: 1fr;
         --default-strip-view-height: 180px;

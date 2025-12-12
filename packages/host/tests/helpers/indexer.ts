@@ -19,8 +19,6 @@ import {
   type RealmVersionsTable,
   trimExecutableExtension,
   query,
-  isDefinitionId,
-  trimExportNameFromDefinitionId,
   coerceTypes,
 } from '@cardstack/runtime-common';
 
@@ -252,9 +250,10 @@ async function indexedCardsExpressions({
             ? `${row.url}.json`
             : row.url
           : row.url;
-      row.file_alias = isDefinitionId(row.url)
-        ? trimExportNameFromDefinitionId(row.url)
-        : trimExecutableExtension(new URL(row.url)).href.replace(/\.json$/, '');
+      row.file_alias = trimExecutableExtension(new URL(row.url)).href.replace(
+        /\.json$/,
+        '',
+      );
       row.type = row.type ?? 'instance';
       row.last_modified = String(row.last_modified ?? now);
 
