@@ -1,7 +1,7 @@
 import type { CardResource, Meta } from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
-import type { Definition } from './index-structure';
+import type { Definition } from './definitions.js';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import type { ErrorEntry } from './index-writer';
