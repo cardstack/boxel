@@ -13,6 +13,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import type { Command, CommandContext } from '@cardstack/runtime-common';
 import {
+  Deferred,
   CommandContextStamp,
   delay,
   getClass,
@@ -31,6 +32,7 @@ import type Realm from '@cardstack/host/services/realm';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
+import { waitForRealmState } from '../commands/utils';
 import LimitedSet from '../lib/limited-set';
 
 import type LoaderService from './loader-service';
@@ -64,15 +66,15 @@ export default class CommandService extends Service {
     string,
     LimitedSet<string>
   >();
-  private aiAssistantCardRequests = new Map<
+  private aiAssistantInvalidations = new Map<
     string,
     {
       clientRequestId: string;
-      invalidationReceived: boolean;
-      roomId?: string;
+      roomId: string;
+      targetHref: string;
+      deferred: Deferred<void>;
     }
   >();
-
   private commandProcessingEventQueue: string[] = [];
   private codePatchProcessingEventQueue: string[] = [];
   private flushCommandProcessingQueue: Promise<void> | undefined;
@@ -92,61 +94,98 @@ export default class CommandService extends Service {
     return clientRequestId;
   }
 
-  private aiAssistantCardRequestKey(cardId: string, roomId: string) {
-    let normalizedCardId = cardId.replace(/\.json$/, '');
-    return `${roomId}::${normalizedCardId}`;
-  }
-
-  trackAiAssistantCardPatchRequest(
-    cardId: string,
-    clientRequestId: string,
-    roomId: string,
-  ) {
-    if (!cardId || !clientRequestId) {
+  trackAiAssistantCardRequest({
+    action,
+    roomId,
+    fileUrl,
+  }: {
+    action: string;
+    roomId: string;
+    fileUrl: string;
+  }): string | undefined {
+    if (!action || !roomId || !fileUrl) {
       return;
     }
-    this.aiAssistantCardRequests.set(
-      this.aiAssistantCardRequestKey(cardId, roomId),
-      {
-        clientRequestId,
-        invalidationReceived: false,
-        roomId,
+    let clientRequestId = this.registerAiAssistantClientRequestId(
+      action,
+      roomId,
+    );
+    // We only track invalidations for card instances and card definitions
+    if (!fileUrl.endsWith('.gts') && !fileUrl.endsWith('.json')) {
+      return clientRequestId;
+    }
+    let normalizedTarget = fileUrl.endsWith('.json')
+      ? fileUrl.replace(/\.json$/, '')
+      : fileUrl;
+    let key = `${roomId}::${normalizedTarget}`;
+
+    let realmURL: URL | undefined;
+    try {
+      realmURL = this.realm.realmOfURL(new URL(fileUrl)) ?? undefined;
+    } catch (_e) {
+      return clientRequestId;
+    }
+    if (!realmURL) {
+      return clientRequestId;
+    }
+
+    let deferred = new Deferred<void>();
+    this.aiAssistantInvalidations.set(key, {
+      clientRequestId,
+      roomId,
+      targetHref: normalizedTarget,
+      deferred,
+    });
+
+    waitForRealmState(
+      this.commandContext,
+      realmURL.href,
+      (event) => {
+        return Boolean(
+          event &&
+            event.eventName === 'index' &&
+            event.indexType === 'incremental' &&
+            event.clientRequestId === clientRequestId,
+        );
       },
-    );
+      { timeoutMs: 5 * 60 * 1000, keepRealmSubscription: true }, // we don't wanna close the realm subscription since other places could be subscribed, like the store service
+    )
+      .then(() => {
+        let current = this.aiAssistantInvalidations.get(key);
+        current?.deferred.fulfill();
+      })
+      .catch(() => {
+        this.aiAssistantInvalidations.delete(key);
+      });
+    return clientRequestId;
   }
 
-  markAiAssistantClientRequestReceivedInvalidation(clientRequestId?: string) {
-    if (!clientRequestId) {
+  async waitForInvalidationAfterAIAssistantRequest(
+    roomId: string,
+    targetHref: string,
+    timeoutMs?: number,
+  ): Promise<void> {
+    if (!roomId || !targetHref) {
       return;
     }
-    for (let [cardId, data] of this.aiAssistantCardRequests) {
-      if (data.clientRequestId === clientRequestId) {
-        this.aiAssistantCardRequests.set(cardId, {
-          ...data,
-          invalidationReceived: true,
-        });
-      }
+    let normalizedTarget = targetHref.endsWith('.json')
+      ? targetHref.replace(/\.json$/, '')
+      : targetHref;
+    let key = `${roomId}::${normalizedTarget}`;
+    let existing = this.aiAssistantInvalidations.get(key);
+    if (!existing) {
+      return;
     }
-  }
 
-  invalidationAfterCardPatchDidArrive(cardId: string, roomId: string): boolean {
-    return Boolean(
-      this.aiAssistantCardRequests.get(
-        this.aiAssistantCardRequestKey(cardId, roomId),
-      )?.invalidationReceived,
-    );
-  }
-
-  clearAiAssistantRequestForCard(cardId: string, roomId: string) {
-    this.aiAssistantCardRequests.delete(
-      this.aiAssistantCardRequestKey(cardId, roomId),
-    );
-  }
-
-  hasPendingAiAssistantCardRequest(cardId: string, roomId: string): boolean {
-    return this.aiAssistantCardRequests.has(
-      this.aiAssistantCardRequestKey(cardId, roomId),
-    );
+    let waitPromise: Promise<void> = existing.deferred.promise;
+    if (timeoutMs) {
+      waitPromise = Promise.race([
+        waitPromise,
+        delay(timeoutMs).then(() => {}),
+      ]);
+    }
+    await waitPromise;
+    this.aiAssistantInvalidations.delete(key);
   }
 
   public queueEventForCommandProcessing(event: Partial<IEvent>) {
@@ -455,15 +494,13 @@ export default class CommandService extends Service {
           );
         }
         let cardId = payload.attributes.cardId;
-        let clientRequestId = this.registerAiAssistantClientRequestId(
-          'patch-instance',
-          command.message.roomId,
-        );
-        this.trackAiAssistantCardPatchRequest(
-          cardId,
-          clientRequestId,
-          command.message.roomId,
-        );
+
+        let clientRequestId = this.trackAiAssistantCardRequest({
+          action: 'patch-instance',
+          roomId: command.message.roomId,
+          fileUrl: `${cardId}.json`,
+        });
+
         await this.store.patch(
           cardId,
           {

@@ -140,9 +140,10 @@ export async function waitForRealmState(
   commandContext: CommandContext,
   realmId: string,
   predicate: (ev: RealmEventContent | undefined) => boolean,
-  options: { timeoutMs?: number } = {},
+  options: { timeoutMs?: number; keepRealmSubscription?: boolean } = {},
 ): Promise<void> {
   let timeoutMs = options.timeoutMs ?? 1000 * 60 * 20; // default to 20 minutes
+  let keepRealmSubscription = options.keepRealmSubscription ?? false;
   if (predicate(undefined)) {
     return;
   }
@@ -162,7 +163,9 @@ export async function waitForRealmState(
   const predicateSucceededPromise = new Promise<void>((resolve) => {
     unsubscribe = messageService.subscribe(realmId, (ev) => {
       if (predicate(ev)) {
-        unsubscribe?.();
+        if (!keepRealmSubscription) {
+          unsubscribe?.();
+        }
         resolve();
       }
     });
