@@ -274,24 +274,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   ): Promise<ModuleRenderResponse> {
     let permissions = await fetchUserPermissions(this.#dbAdapter, { userId });
     let auth = this.#createPrerenderAuth(userId, permissions);
-    let result = await this.#prerenderer.prerenderModule({
+    return await this.#prerenderer.prerenderModule({
       realm: realmURL,
       url: moduleUrl,
       auth,
-      renderOptions: { clearCache: true },
     });
-
-    if (Number(result.error?.error?.status) === 401) {
-      await this.#prerenderer.disposeRealm?.(realmURL);
-      result = await this.#prerenderer.prerenderModule({
-        realm: realmURL,
-        url: moduleUrl,
-        auth,
-        renderOptions: { clearCache: true },
-      });
-    }
-
-    return result;
   }
 
   private async readFromDatabaseCache(

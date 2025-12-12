@@ -323,6 +323,7 @@ module(basename(__filename), function () {
         setupPermissionedRealm(hooks, {
           permissions: {
             john: ['read'],
+            '@node-test_realm:localhost': ['read'],
           },
           onRealmSetup,
         });
@@ -1402,6 +1403,7 @@ module(basename(__filename), function () {
         setupPermissionedRealm(hooks, {
           permissions: {
             john: ['read', 'write'],
+            '@node-test_realm:localhost': ['read'],
           },
           onRealmSetup,
         });
@@ -2842,6 +2844,7 @@ module(basename(__filename), function () {
         setupPermissionedRealm(hooks, {
           permissions: {
             john: ['read', 'write'],
+            '@node-test_realm:localhost': ['read'],
           },
           onRealmSetup,
         });
@@ -3022,6 +3025,7 @@ module(basename(__filename), function () {
         setupPermissionedRealm(hooks, {
           permissions: {
             john: ['read', 'write'],
+            '@node-test_realm:localhost': ['read'],
           },
           onRealmSetup,
         });

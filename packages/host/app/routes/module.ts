@@ -49,6 +49,7 @@ import {
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
+import type RealmService from '../services/realm';
 import type RenderStoreService from '../services/render-store';
 
 export type Model = {
@@ -85,6 +86,7 @@ export default class ModuleRoute extends Route<Model> {
   @service('render-store') declare store: RenderStoreService;
   @service declare loaderService: LoaderService;
   @service declare private network: NetworkService;
+  @service declare private realm: RealmService;
 
   private typesCache = new WeakMap<typeof BaseDef, Promise<TypesWithErrors>>();
   private lastStoreResetKey: string | undefined;
@@ -103,6 +105,7 @@ export default class ModuleRoute extends Route<Model> {
   }
 
   async beforeModel(transition: Transition) {
+    this.realm.restoreSessionsFromStorage();
     await super.beforeModel?.(transition);
     // activate() doesn't run early enough for this to be set before the model()
     // hook is run
@@ -110,6 +113,7 @@ export default class ModuleRoute extends Route<Model> {
     this.#authGuard.register();
     if (!isTesting()) {
       await this.store.ensureSetupComplete();
+      this.realm.restoreSessionsFromStorage();
       this.#restoreRenderTimers = enableRenderTimerStub();
       this.#releaseTimerBlock = beginTimerBlock();
     }

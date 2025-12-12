@@ -1,7 +1,7 @@
 import type { CardResource, Meta } from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
-import type { Definition } from './definitions';
+import type { Definition } from './index-structure';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import type { ErrorEntry } from './index-writer';
@@ -82,7 +82,6 @@ export type PrerenderCardArgs = ModulePrerenderArgs;
 export interface Prerenderer {
   prerenderCard(args: PrerenderCardArgs): Promise<RenderResponse>;
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
-  disposeRealm?(realm: string): Promise<void>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
@@ -160,7 +159,6 @@ export * from './queue';
 export * from './expression';
 export * from './index-query-engine';
 export * from './index-writer';
-export * from './definitions';
 export * from './index-structure';
 export * from './db';
 export * from './tasks';
