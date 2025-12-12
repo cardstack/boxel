@@ -3096,7 +3096,7 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     let iconWidth = 20;
-    let gap = 10;
+    let gap = 9; // matches var(--boxel-sp-xs) used in the component
     assert.strictEqual(
       Math.round(itemRect.left + (iconWidth + gap) / 2),
       Math.round(overlayButtonRect.left),
