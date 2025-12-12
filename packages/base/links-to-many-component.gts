@@ -311,7 +311,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         gap: var(--boxel-sp-xxxs);
         width: fit-content;
         letter-spacing: var(--boxel-lsp-xs);
-        margin-left: calc(var(--boxel-icon-sm) + var(--boxel-sp-sm));
+        margin-left: calc(var(--boxel-icon-sm) + var(--boxel-sp-xs));
         /* for alignment due to sort handle */
       }
       .add-new.no-items {
