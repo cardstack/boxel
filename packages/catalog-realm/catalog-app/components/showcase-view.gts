@@ -1,7 +1,4 @@
-import {
-  CardDef,
-  CardContext,
-} from 'https://cardstack.com/base/card-api';
+import { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';
 
 import CardsDisplaySection, {
@@ -127,11 +124,9 @@ export default class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
       }
       .showcase-cards-display :deep(.cards.grid-view),
       .featured-cards-display :deep(.cards.grid-view) {
-        --grid-view-height: 380px;
         grid-template-columns: repeat(2, 1fr);
       }
       .new-this-week-cards-display :deep(.cards.grid-view) {
-        --grid-view-height: 380px;
         grid-template-columns: repeat(4, 1fr);
       }
 

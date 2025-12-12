@@ -1314,7 +1314,6 @@ module(basename(__filename), function () {
             'realm url header is correct',
           );
           let json = response.body as SingleCardDocument;
-          console.log(json);
           let id = json.data.id!.split('/').pop()!;
           let cardFile = join(
             dir.name,
@@ -1735,7 +1734,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './friend.gts',
+                    module: './friend',
                     name: 'Friend',
                   },
                 },
@@ -1763,7 +1762,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: './friend',
                       name: 'Friend',
                     },
                   },
@@ -1776,7 +1775,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: './friend',
                       name: 'Friend',
                     },
                   },
@@ -1789,7 +1788,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: './friend',
                       name: 'Friend',
                     },
                   },
@@ -1899,7 +1898,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: '../friend',
                       name: 'Friend',
                     },
                   },
@@ -1928,7 +1927,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: '../friend',
                       name: 'Friend',
                     },
                   },
@@ -1957,7 +1956,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: '../friend',
                       name: 'Friend',
                     },
                   },
@@ -2046,7 +2045,7 @@ module(basename(__filename), function () {
                   relationships: {
                     'friends.0': {
                       links: {
-                        self: './local-id-2',
+                        self: './Friend/local-id-2',
                       },
                       data: {
                         id: `${testRealmHref}Friend/local-id-2`,
@@ -2055,7 +2054,7 @@ module(basename(__filename), function () {
                     },
                     'friends.1': {
                       links: {
-                        self: './local-id-3',
+                        self: './Friend/local-id-3',
                       },
                       data: {
                         id: `${testRealmHref}Friend/local-id-3`,
@@ -2075,7 +2074,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: './friend',
                       name: 'Friend',
                     },
                   },
@@ -2104,7 +2103,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: './friend',
                       name: 'Friend',
                     },
                   },
@@ -2133,7 +2132,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: './friend',
                       name: 'Friend',
                     },
                   },
@@ -2200,7 +2199,7 @@ module(basename(__filename), function () {
               meta: {
                 adoptsFrom: {
                   name: 'Friend',
-                  module: 'http://localhost:4202/node-test/friend',
+                  module: '../friend',
                 },
                 realmInfo: {
                   ...testRealmInfo,
@@ -2247,7 +2246,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: '../friend',
                       name: 'Friend',
                     },
                   },
@@ -2276,7 +2275,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: '../friend',
                       name: 'Friend',
                     },
                   },
@@ -2326,7 +2325,7 @@ module(basename(__filename), function () {
                 meta: {
                   adoptsFrom: {
                     name: 'Friend',
-                    module: 'http://localhost:4202/node-test/friend',
+                    module: '../friend',
                   },
                   realmInfo: {
                     ...testRealmInfo,
@@ -2381,7 +2380,7 @@ module(basename(__filename), function () {
                 meta: {
                   adoptsFrom: {
                     name: 'Friend',
-                    module: 'http://localhost:4202/node-test/friend',
+                    module: '../friend',
                   },
                   realmInfo: {
                     ...testRealmInfo,

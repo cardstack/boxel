@@ -348,8 +348,13 @@ export function responseWithError(
       `Could not fashion error response, requestContext is missing`,
     );
   }
+  let realmURL = requestContext.realm?.url;
+  let responseBody = body ? { ...body } : serializableError(error);
+  if (realmURL && responseBody.realm === undefined) {
+    responseBody.realm = realmURL;
+  }
   return createResponse({
-    body: JSON.stringify({ errors: [body ? body : serializableError(error)] }),
+    body: JSON.stringify({ errors: [responseBody] }),
     init: {
       status: error.status,
       statusText: error.title,
