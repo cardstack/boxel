@@ -4,6 +4,7 @@ import window from 'ember-window-mock';
 
 import config from '@cardstack/host/config/environment';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type RealmService from '@cardstack/host/services/realm';
 
 interface PublishedRealmMetadata {
   urlString: string;
@@ -13,6 +14,7 @@ interface PublishedRealmMetadata {
 
 export default class HostModeService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;
+  @service declare realm: RealmService;
 
   // increasing token to ignore stale async head fetches
   private headUpdateRequestId = 0;
@@ -189,10 +191,12 @@ export default class HostModeService extends Service {
     cardURL: string,
   ): Promise<string | null | undefined> {
     let card = new URL(cardURL);
-    let realmRoot = new URL(
-      card.pathname.replace(/[^/]+$/, ''),
-      `${card.protocol}//${card.host}`,
-    );
+    let realmRoot =
+      this.realm.realmOfURL(card)?.href ??
+      new URL(
+        card.pathname.replace(/[^/]+$/, ''),
+        `${card.protocol}//${card.host}`,
+      ).href;
     let searchURL = new URL('_search-prerendered', realmRoot);
     let cardJsonURL = cardURL.endsWith('.json') ? cardURL : `${cardURL}.json`;
 
