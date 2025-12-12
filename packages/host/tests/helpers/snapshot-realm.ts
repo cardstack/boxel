@@ -37,6 +37,7 @@ export interface SnapshotRealmHandle<T> {
 interface SetupSnapshotRealmOptions<T> {
   build: (context: SnapshotBuildContext) => Promise<T>;
   mockMatrixUtils: MockUtils;
+  setupBaseRealm?: boolean; // TODO: default to false, allow opt-in
   realmPermissions?: Record<string, RealmAction[]>;
   acceptanceTest?: boolean;
 }
@@ -59,7 +60,9 @@ export function setupSnapshotRealm<T>(
       });
     }
   });
-  setupBaseRealm(hooks);
+  if (options.setupBaseRealm !== false) {
+    setupBaseRealm(hooks);
+  }
 
   hooks.beforeEach(async function () {
     setupUserSubscription();
