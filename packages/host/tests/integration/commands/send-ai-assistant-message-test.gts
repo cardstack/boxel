@@ -37,12 +37,11 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
+    autostart: true,
   });
   let snapshot = setupSnapshotRealm(hooks, {
     mockMatrixUtils,
     async build({ loader }) {
-      let loaderService = getService('loader-service');
-      loaderService.loader = loader;
       await setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {},
@@ -56,10 +55,6 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
-  });
-
-  hooks.beforeEach(function () {
-    snapshot.get();
   });
 
   test('send an ai assistant message', async function (assert) {
