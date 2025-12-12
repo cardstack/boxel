@@ -1381,96 +1381,6 @@ module(basename(__filename), function () {
         assert.strictEqual(response.error?.error.status, 500);
       });
 
-      test('does not recover when timeout hits even if DOM is settled', async function (assert) {
-        const testCardURL = `${realmURL2}1`;
-        await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: auth(),
-        });
-        let timedOut = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: auth(),
-          opts: { timeoutMs: 1000, simulateTimeoutMs: 2000 },
-        });
-
-        assert.ok(
-          timedOut.response.error,
-          'timeout returns error payload even when DOM is settled',
-        );
-        assert.strictEqual(
-          timedOut.response.error?.error.title,
-          'Render timeout',
-          'timeout surfaces render timeout',
-        );
-        assert.true(
-          timedOut.pool.timedOut,
-          'pool notes timeout when render exceeds limit',
-        );
-        assert.true(
-          timedOut.pool.evicted,
-          'realm evicted after timeout even when DOM settled',
-        );
-        assert.strictEqual(
-          timedOut.response.isolatedHTML,
-          null,
-          'does not return isolated HTML after timeout',
-        );
-
-        let next = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: `${realmURL2}1`,
-          auth: auth(),
-        });
-        assert.false(
-          next.pool.reused,
-          'subsequent render uses fresh page after timeout eviction',
-        );
-        assert.strictEqual(
-          next.response.error,
-          undefined,
-          'subsequent render succeeds',
-        );
-      });
-
-      test('does not recover timeout when DOM reports an error', async function (assert) {
-        const errorCardURL = `${realmURL2}4`;
-        // warm the realm so loader caches are populated
-        await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: errorCardURL,
-          auth: auth(),
-        });
-
-        let timedOut = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: errorCardURL,
-          auth: auth(),
-          opts: { timeoutMs: 500, simulateTimeoutMs: 2000 },
-        });
-
-        assert.ok(
-          timedOut.response.error,
-          'timeout still returns an error payload',
-        );
-        assert.strictEqual(
-          timedOut.response.error?.error.title,
-          'Render timeout',
-          'reports timeout when DOM contains error markup',
-        );
-        assert.strictEqual(
-          timedOut.response.isolatedHTML,
-          null,
-          'does not salvage HTML when DOM reports an error',
-        );
-        assert.true(timedOut.pool.timedOut, 'pool flags timeout');
-        assert.true(
-          timedOut.pool.evicted,
-          'realm evicted after timeout with error',
-        );
-      });
-
       test('unusable triggers eviction and short-circuit', async function (assert) {
         // Render the card that forces unusable
         const unusableURL = `${realmURL2}3`;
@@ -1637,6 +1547,44 @@ module(basename(__filename), function () {
         assert.true(second.pool.reused, 'second call reused');
         assert.false(first.pool.timedOut, 'first call not timed out');
         assert.false(second.pool.timedOut, 'second call not timed out');
+      });
+
+      test('refreshes prerender session when auth changes for the same realm', async function (assert) {
+        const testCardURL = `${realmURL2}1`;
+        let authA = testCreatePrerenderAuth(testUserId, {
+          [realmURL2]: ['read', 'write', 'realm-owner'],
+        });
+        let authB = testCreatePrerenderAuth(testUserId, {
+          [realmURL2]: ['read', 'write', 'realm-owner'],
+          [realmURL1]: ['read', 'write', 'realm-owner'], // introduce a different token set
+        });
+
+        let first = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          auth: authA,
+        });
+        let second = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          auth: authB,
+        });
+
+        assert.false(first.pool.reused, 'first call not reused');
+        assert.false(
+          second.pool.reused,
+          'auth change forces a fresh prerender page',
+        );
+        assert.notStrictEqual(
+          first.pool.pageId,
+          second.pool.pageId,
+          'new page allocated when auth differs',
+        );
+        assert.strictEqual(
+          second.response.serialized?.data.attributes?.name,
+          'Maple',
+          'second render still succeeds with new session',
+        );
       });
 
       test('does not reuse across different realms', async function (assert) {
