@@ -8,6 +8,8 @@ catalog:
   "@actions/core": ^1.2.6
   "@actions/github": ^4.0.0
   "@aws-crypto/sha256-js": ^5.2.0
+  "@aws-sdk/client-s3": ^3.948.0
+  "@aws-sdk/s3-request-presigner": ^3.948.0
   "@babel/core": ^7.26.10
   "@babel/generator": ^7.17.8
   "@babel/helper-module-imports": ^7.18.2

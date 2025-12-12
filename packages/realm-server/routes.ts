@@ -38,6 +38,7 @@ import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain'
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain';
 import handlePrerenderProxy from './handlers/handle-prerender-proxy';
 import { buildCreatePrerenderAuth } from './prerender/auth';
+import handleR2Presign from './handlers/handle-r2-presign';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -201,6 +202,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_boxel-claimed-domains/:claimedDomainId',
     jwtMiddleware(args.realmSecretSeed),
     handleDeleteBoxelClaimedDomainRequest(args),
+  );
+  router.post(
+    '/_r2-presign',
+    jwtMiddleware(args.realmSecretSeed),
+    handleR2Presign({ dbAdapter: args.dbAdapter }),
   );
 
   return router.routes();
