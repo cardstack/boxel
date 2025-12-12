@@ -12,11 +12,10 @@ import {
   captureDbSnapshot,
   restoreDbSnapshot,
   deleteSnapshot,
-  createTimingLogger,
   setupRendering,
 } from '.';
 
-import { setupBaseRealm } from '../helpers/base-realm';
+import { setupBaseRealm } from './base-realm';
 
 export interface SnapshotBuildContext {
   isInitialBuild: boolean;
@@ -49,16 +48,22 @@ export function setupSnapshotRealm<T>(
   let cache: SnapshotCache | undefined;
   let latestState: T | undefined;
 
-  setupBaseRealm(hooks);
   hooks.beforeEach(async function () {
     setupRendering(options.acceptanceTest!!);
   });
+  hooks.beforeEach(async function () {
+    let loaderService = getService('loader-service');
+    if (cache) {
+      loaderService.loader = Loader.cloneLoader(cache.loaderSnapshot, {
+        includeEvaluatedModules: true,
+      });
+    }
+  });
+  setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
-    let timer = createTimingLogger('setupSnapshotRealm');
     setupUserSubscription();
     setupAuthEndpoints(options.realmPermissions);
-    timer.step('setupAuthEndpoints');
 
     let loaderService = getService('loader-service');
 
@@ -67,31 +72,25 @@ export function setupSnapshotRealm<T>(
       if (options.mockMatrixUtils) {
         options.mockMatrixUtils.restoreServerState(cache.matrixState);
       }
-      loaderService.loader = Loader.cloneLoader(cache.loaderSnapshot, {
-        includeEvaluatedModules: true,
-      });
-      timer.step('restored from snapshot');
     }
     latestState = await options.build({
       isInitialBuild: !cache,
       loader: loaderService.loader,
       mockMatrixUtils: options.mockMatrixUtils,
     });
-    timer.step('built latest state');
 
     if (!cache) {
+      let clonedLoader = Loader.cloneLoader(loaderService.loader, {
+        includeEvaluatedModules: true,
+      });
       cache = {
-        loaderSnapshot: Loader.cloneLoader(loaderService.loader, {
-          includeEvaluatedModules: true,
-        }),
+        loaderSnapshot: clonedLoader,
         dbSnapshot: await captureDbSnapshot(),
         matrixState: options.mockMatrixUtils
           ? options.mockMatrixUtils.captureServerState()
           : undefined,
       };
-      timer.step('captured snapshot');
     }
-    timer.finish();
   });
 
   hooks.after(async function () {

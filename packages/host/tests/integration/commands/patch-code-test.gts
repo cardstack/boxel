@@ -26,6 +26,10 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | commands | patch-code', function (hooks) {
+  const testFileName = 'task.gts';
+  const fileUrl = `${testRealmURL}${testFileName}`;
+  let adapter: any;
+
   setupRenderingTest(hooks);
 
   setupLocalIndexing(hooks);
@@ -60,10 +64,6 @@ export class Task extends CardDef {
       return { adapter: realmSetup.adapter };
     },
   });
-
-  const testFileName = 'task.gts';
-  const fileUrl = `${testRealmURL}${testFileName}`;
-  let adapter: any;
 
   hooks.beforeEach(function () {
     ({ adapter } = snapshot.get());
