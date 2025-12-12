@@ -53,6 +53,23 @@ export type EnhancedRealmInfo = RealmInfo & {
   isPublic: boolean;
 };
 
+export interface PrivateDependencyReference {
+  dependency: string;
+  realmURL: string;
+  via?: string[];
+}
+
+export interface PrivateDependencyViolation {
+  resource: string;
+  externalDependencies: PrivateDependencyReference[];
+}
+
+export interface RealmPrivateDependencyReport {
+  publishable: boolean;
+  realmURL: string;
+  violations: PrivateDependencyViolation[];
+}
+
 type RealmInfoProperty =
   | 'backgroundURL'
   | 'iconURL'
@@ -352,6 +369,44 @@ class RealmResource {
     this.realmPermissions = json.data.attributes.permissions;
     return this.realmPermissions;
   });
+
+  async fetchPrivateDependencyReport(): Promise<RealmPrivateDependencyReport> {
+    await this.loginTask.perform();
+    let headers: Record<string, string> = {
+      Accept: SupportedMimeType.JSONAPI,
+      Authorization: `Bearer ${this.token}`,
+    };
+    let response = await this.network.authedFetch(
+      `${this.realmURL}_publishability`,
+      {
+        headers,
+      },
+    );
+
+    if (response.status !== 200) {
+      throw new Error(
+        `Failed to check private dependencies for ${this.realmURL}: ${response.status}`,
+      );
+    }
+
+    let json = (await waitForPromise(response.json())) as {
+      data: {
+        attributes: {
+          publishable: boolean;
+          realmURL: string;
+          violations: PrivateDependencyViolation[];
+        };
+      };
+    };
+
+    let attributes = json.data.attributes;
+
+    return {
+      publishable: attributes.publishable,
+      realmURL: attributes.realmURL,
+      violations: attributes.violations ?? [],
+    };
+  }
 
   async setRealmPermission(
     userId: string,
@@ -784,6 +839,13 @@ export default class RealmService extends Service {
   async publish(realmURL: string, publishedRealmURLs: string[]) {
     let resource = this.getOrCreateRealmResource(realmURL);
     return await resource.publish(publishedRealmURLs);
+  }
+
+  async fetchPrivateDependencyReport(
+    realmURL: string,
+  ): Promise<RealmPrivateDependencyReport> {
+    let resource = this.getOrCreateRealmResource(realmURL);
+    return await resource.fetchPrivateDependencyReport();
   }
 
   async unpublish(realmURL: string, publishedRealmURL: string) {

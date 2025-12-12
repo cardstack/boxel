@@ -219,7 +219,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     });
 
     module(
-      'detects private dependencies referenced through local modules',
+      'for a realm with private dependencies referenced through local modules',
       function (hooks) {
         let sourceRealm: Realm;
         let request: SuperTest<Test>;
@@ -308,7 +308,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           },
         });
 
-        test('detects private dependencies referenced through local modules', async function (assert) {
+        test('reports them', async function (assert) {
           let response = await request
             .get(`${new URL(sourceRealm.url).pathname}_publishability`)
             .set('Accept', SupportedMimeType.JSONAPI)
@@ -350,7 +350,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     );
 
     module(
-      'detects private dependencies served by another realm server',
+      'for a realm with private dependencies served by another realm server',
       function (hooks) {
         let sourceRealm: Realm;
         let request: SuperTest<Test>;
@@ -424,7 +424,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           },
         });
 
-        test('detects private dependencies served by another realm server', async function (assert) {
+        test('reports them', async function (assert) {
           let response = await request
             .get(`${new URL(sourceRealm.url).pathname}_publishability`)
             .set('Accept', SupportedMimeType.JSONAPI)
@@ -463,7 +463,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
       },
     );
 
-    module('handles circular dependencies', function (hooks) {
+    module('for a realm with circular dependencies', function (hooks) {
       let sourceRealm: Realm;
       let privateRealm: Realm;
       let request: SuperTest<Test>;
@@ -540,7 +540,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
         },
       });
 
-      test('handles circular dependencies', async function (assert) {
+      test('publishability can be determined', async function (assert) {
         await privateRealm.write(
           'secret-card.gts',
           `
