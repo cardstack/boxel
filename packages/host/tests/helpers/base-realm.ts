@@ -105,12 +105,8 @@ let enumField: (typeof EnumModule)['default'];
 let enumOptions: (typeof EnumModule)['enumOptions'];
 let enumValues: (typeof EnumModule)['enumValues'];
 let enumConfig: (typeof EnumModule)['enumConfig'];
-let initialised = false;
 
 async function initialize() {
-  if (initialised) {
-    return;
-  }
   let loader = getService('loader-service').loader;
 
   StringField = (
@@ -230,8 +226,6 @@ async function initialize() {
   enumOptions = enumModule.enumOptions;
   enumValues = enumModule.enumValues;
   enumConfig = enumModule.enumConfig;
-
-  initialised = true;
 }
 
 export async function setupBaseRealm(hooks: NestedHooks) {
