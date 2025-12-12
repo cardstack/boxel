@@ -11,6 +11,7 @@ import {
   setupAuthEndpoints,
   captureDbSnapshot,
   restoreDbSnapshot,
+  deleteSnapshot,
   createTimingLogger,
   setupRendering,
 } from '.';
@@ -91,6 +92,12 @@ export function setupSnapshotRealm<T>(
       timer.step('captured snapshot');
     }
     timer.finish();
+  });
+
+  hooks.after(async function () {
+    if (cache) {
+      await deleteSnapshot(cache.dbSnapshot);
+    }
   });
 
   return {

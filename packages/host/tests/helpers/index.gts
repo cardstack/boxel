@@ -206,6 +206,12 @@ export async function restoreDbSnapshot(snapshot: DbSnapshot) {
   await adapter.importSnapshot(snapshot);
 }
 
+export async function deleteSnapshot(snapshot: DbSnapshot) {
+  // no-op for SQLiteAdapter since it doesn't track multiple snapshots
+  let adapter = await getDbAdapter();
+  await adapter.deleteSnapshot(snapshot);
+}
+
 export async function withSlowSave(
   delayMs: number,
   cb: () => Promise<void>,
