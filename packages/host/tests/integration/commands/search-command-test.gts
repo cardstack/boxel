@@ -133,6 +133,9 @@ module('Integration | commands | search', function (hooks) {
       },
     });
     assert.strictEqual(result.cardIds.length, 1);
-    assert.strictEqual(result.cardIds[0], 'http://test-realm/test/Author/r2');
+    assert.strictEqual(
+      result.cardIds[0],
+      'http://test-realm/test/CustomAuthor/r2',
+    );
   });
 });
