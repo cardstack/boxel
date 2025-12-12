@@ -88,18 +88,8 @@ export default class ChooseRealmAction extends GlimmerComponent<ChooseRealmActio
         --boxel-button-font: 600 var(--boxel-font-sm);
         margin-left: auto;
         flex: 0 0 auto;
-      }
-
-      @container (aspect-ratio <= 1.0) {
-        .card-action-button {
-          --boxel-button-padding: var(--boxel-sp-4xs) var(--boxel-sp);
-        }
-      }
-
-      @container (aspect-ratio <= 1.0) and (150px < width < 250px) and (170px < height < 275px) {
-        .card-action-button {
-          --boxel-button-padding: var(--boxel-sp-4xs) var(--boxel-sp);
-        }
+        line-height: 1;
+        --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp);
       }
     </style>
   </template>

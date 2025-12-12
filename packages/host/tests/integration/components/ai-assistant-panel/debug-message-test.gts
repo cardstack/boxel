@@ -8,7 +8,7 @@ import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,

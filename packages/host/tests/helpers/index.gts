@@ -16,11 +16,14 @@ import ms from 'ms';
 
 import { validate as uuidValidate } from 'uuid';
 
-import {
+import type {
   RealmAdapter,
   LooseSingleCardDocument,
-  baseRealm,
   RealmPermissions,
+  RealmAction,
+} from '@cardstack/runtime-common';
+import {
+  baseRealm,
   Worker,
   IndexWriter,
   type RealmInfo,
@@ -28,7 +31,6 @@ import {
   type Prerenderer,
   insertPermissions,
   unixTime,
-  RealmAction,
   type RenderError,
   type DefinitionLookup,
   CachingDefinitionLookup,
@@ -49,7 +51,7 @@ import ENV from '@cardstack/host/config/environment';
 import { render as renderIntoElement } from '@cardstack/host/lib/isolated-render';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 import type NetworkService from '@cardstack/host/services/network';
-import { RealmServerTokenClaims } from '@cardstack/host/services/realm-server';
+import type { RealmServerTokenClaims } from '@cardstack/host/services/realm-server';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
 
 import {
@@ -57,10 +59,10 @@ import {
   normalizeRenderError,
 } from '@cardstack/host/utils/render-error';
 
-import {
-  type CardStore,
-  type CardDef,
-  type FieldDef,
+import type {
+  CardStore,
+  CardDef,
+  FieldDef,
 } from 'https://cardstack.com/base/card-api';
 
 import { TestRealmAdapter } from './adapter';

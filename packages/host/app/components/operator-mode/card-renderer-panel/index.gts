@@ -36,7 +36,7 @@ import ElementTracker, {
   type RenderedCardForOverlayActions,
 } from '@cardstack/host/resources/element-tracker';
 import type CommandService from '@cardstack/host/services/command-service';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type RealmService from '@cardstack/host/services/realm';
 

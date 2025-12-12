@@ -15,7 +15,7 @@ import {
   PermissionsContextName,
   type CommandContext,
 } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import { provideConsumeContext, setupCardLogs } from '../../helpers';
 import {

@@ -15,7 +15,6 @@ import {
   Deferred,
   RealmPaths,
   isIgnored,
-  trimExecutableExtension,
   type IndexWriter,
   type RenderResponse,
   type ModuleRenderResponse,
@@ -72,10 +71,8 @@ export class IndexRunner {
   readonly stats: Stats = {
     instancesIndexed: 0,
     modulesIndexed: 0,
-    definitionsIndexed: 0,
     instanceErrors: 0,
     moduleErrors: 0,
-    definitionErrors: 0,
     totalIndexEntries: 0,
   };
   #shouldClearCacheForNextRender = true;
@@ -460,7 +457,6 @@ export class IndexRunner {
       lastModified,
       createdAt: resourceCreatedAt,
       deps,
-      definitions,
     } = moduleResult;
 
     if (error) {
@@ -477,28 +473,6 @@ export class IndexRunner {
         deps: new Set(deps),
       });
       this.stats.modulesIndexed++;
-    }
-
-    let depsForDefinitions = [
-      ...deps,
-      trimExecutableExtension(new URL(url)).href,
-    ];
-    for (let [codeRefURL, detail] of Object.entries(definitions)) {
-      if (detail.type === 'error') {
-        await this.batch.updateEntry(new URL(codeRefURL), detail);
-        this.stats.definitionErrors++;
-      } else {
-        await this.batch.updateEntry(new URL(codeRefURL), {
-          type: 'definition',
-          fileAlias: detail.moduleURL,
-          definition: detail.definition,
-          lastModified,
-          resourceCreatedAt,
-          deps: new Set(depsForDefinitions),
-          types: detail.types,
-        });
-        this.stats.definitionsIndexed++;
-      }
     }
   }
 
@@ -586,17 +560,46 @@ export class IndexRunner {
 
       if (!renderResult || ('error' in renderResult && renderResult.error)) {
         let renderError = renderResult?.error;
-        if (!renderError && uncaughtError) {
-          renderError = {
-            type: 'error',
-            error:
-              uncaughtError instanceof CardError
-                ? serializableError(uncaughtError)
-                : { message: `${uncaughtError.message}` },
-          };
-        }
+
+        /**
+         * Normalize any combination of an optional ErrorEntry and thrown value
+         * into a well-formed ErrorEntry. Handles the common case of a provided
+         * entry with an error, rejects malformed entries missing error payloads,
+         * and synthesizes an ErrorEntry from either a CardError or generic Error.
+         */
+        let normalizeToErrorEntry = (
+          entry: ErrorEntry | undefined,
+          err: unknown,
+        ): ErrorEntry => {
+          if (entry?.error) {
+            let normalizedError = { ...entry.error };
+            normalizedError.additionalErrors =
+              normalizedError.additionalErrors ?? null;
+            normalizedError.status = normalizedError.status ?? 500;
+            return {
+              ...entry,
+              error: normalizedError,
+            };
+          }
+          if (entry && !entry.error) {
+            throw new CardError('ErrorEntry missing error payload', {
+              status: 500,
+            });
+          }
+          if (isCardError(err)) {
+            return { type: 'error', error: serializableError(err) };
+          }
+          let fallback = new CardError(
+            (err as Error)?.message ?? 'unknown render error',
+            { status: 500 },
+          );
+          fallback.stack = (err as Error)?.stack;
+          return { type: 'error', error: serializableError(fallback) };
+        };
+
+        renderError = normalizeToErrorEntry(renderError, uncaughtError);
+
         if (
-          renderError &&
           renderError.error.id &&
           renderError.error.id.replace(/\.json$/, '') !== instanceURL.href
         ) {
@@ -604,12 +607,6 @@ export class IndexRunner {
           renderError.error.deps.push(
             canonicalURL(renderError.error.id, instanceURL.href),
           );
-        }
-        if (!renderError) {
-          this.#log.error(
-            `bug: should never get here - handling render error, but renderError is undefined`,
-          );
-          return;
         }
 
         // always include the modules that we see in serialized as deps

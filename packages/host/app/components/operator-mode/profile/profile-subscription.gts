@@ -11,9 +11,9 @@ import { IconHexagon } from '@cardstack/boxel-ui/icons';
 import WithSubscriptionData from '@cardstack/host/components/with-subscription-data';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import NetworkService from '@cardstack/host/services/network';
+import type NetworkService from '@cardstack/host/services/network';
 
-import RealmServerService from '@cardstack/host/services/realm-server';
+import type RealmServerService from '@cardstack/host/services/realm-server';
 
 interface Signature {
   Args: {};

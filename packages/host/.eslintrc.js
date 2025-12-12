@@ -2,6 +2,58 @@
 
 const MISSING_INVOKABLES_CONFIG = require('../runtime-common/etc/eslint/missing-invokables-config');
 
+// Applies to all of JS, TS, GJS, and GTS in the browser context.
+const sharedBrowserConfig = {
+  plugins: [
+    'ember',
+    '@typescript-eslint',
+    'cardstack-host',
+    '@cardstack/boxel',
+  ],
+  extends: [
+    'eslint:recommended',
+    'plugin:ember/recommended',
+    'plugin:@typescript-eslint/recommended',
+    'plugin:ember/recommended-gts',
+    'plugin:prettier/recommended',
+    'plugin:qunit-dom/recommended',
+    'plugin:@cardstack/boxel/recommended',
+  ],
+  rules: {
+    '@typescript-eslint/consistent-type-imports': [
+      'error',
+      {
+        disallowTypeAnnotations: false,
+      },
+    ],
+    '@typescript-eslint/no-import-type-side-effects': 'error',
+    '@typescript-eslint/no-empty-function': 'off',
+    '@typescript-eslint/no-unused-vars': [
+      'error',
+      { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+    ],
+    'prefer-const': 'off',
+    '@typescript-eslint/no-explicit-any': 'off',
+    '@typescript-eslint/ban-types': 'off',
+    '@typescript-eslint/ban-ts-comment': 'off',
+    '@typescript-eslint/explicit-module-boundary-types': 'off',
+    '@typescript-eslint/no-this-alias': 'off',
+    '@typescript-eslint/no-non-null-assertion': 'off',
+    'no-undef': 'off',
+    'ember/no-runloop': 'off',
+    'cardstack-host/mock-window-only': 'error',
+    'cardstack-host/wrapped-setup-helpers-only': 'error',
+    'cardstack-host/host-commands-registered': 'error',
+    'ember/template-no-let-reference': 'off',
+    'ember/no-tracked-properties-from-args': 'off',
+    'node/no-deprecated-api': 'off',
+    '@cardstack/boxel/template-missing-invokable': [
+      'error',
+      { invokables: MISSING_INVOKABLES_CONFIG.invokables },
+    ],
+  },
+};
+
 module.exports = {
   root: true,
   env: {
@@ -23,41 +75,9 @@ module.exports = {
             ],
           ],
         },
+        warnOnUnsupportedTypeScriptVersion: false,
       },
-      plugins: ['ember', '@typescript-eslint', 'cardstack-host'],
-      extends: [
-        'eslint:recommended',
-        'plugin:ember/recommended',
-        'plugin:@typescript-eslint/recommended',
-        'plugin:prettier/recommended',
-        'plugin:qunit-dom/recommended',
-      ],
-      rules: {
-        '@typescript-eslint/consistent-type-imports': [
-          'error',
-          {
-            disallowTypeAnnotations: false,
-          },
-        ],
-        '@typescript-eslint/no-import-type-side-effects': 'error',
-        '@typescript-eslint/no-empty-function': 'off',
-        '@typescript-eslint/no-unused-vars': [
-          'error',
-          { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
-        ],
-        'prefer-const': 'off',
-        '@typescript-eslint/no-explicit-any': 'off',
-        '@typescript-eslint/ban-types': 'off',
-        '@typescript-eslint/ban-ts-comment': 'off',
-        '@typescript-eslint/explicit-module-boundary-types': 'off',
-        '@typescript-eslint/no-this-alias': 'off',
-        '@typescript-eslint/no-non-null-assertion': 'off',
-        'no-undef': 'off',
-        'ember/no-runloop': 'off',
-        'cardstack-host/mock-window-only': 'error',
-        'cardstack-host/wrapped-setup-helpers-only': 'error',
-        'cardstack-host/host-commands-registered': 'error',
-      },
+      ...sharedBrowserConfig,
     },
     {
       files: ['**/*.gts'],
@@ -76,41 +96,7 @@ module.exports = {
         },
         warnOnUnsupportedTypeScriptVersion: false,
       },
-      plugins: ['ember', 'cardstack-host', '@cardstack/boxel'],
-      extends: [
-        'eslint:recommended',
-        'plugin:@typescript-eslint/recommended',
-        'plugin:ember/recommended',
-        'plugin:ember/recommended-gts',
-        'plugin:prettier/recommended',
-        'plugin:qunit-dom/recommended',
-        'plugin:@cardstack/boxel/recommended',
-      ],
-      rules: {
-        '@typescript-eslint/no-empty-function': 'off',
-        '@typescript-eslint/no-unused-vars': [
-          'error',
-          { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
-        ],
-        'prefer-const': 'off',
-        '@typescript-eslint/no-explicit-any': 'off',
-        '@typescript-eslint/ban-types': 'off',
-        '@typescript-eslint/ban-ts-comment': 'off',
-        '@typescript-eslint/explicit-module-boundary-types': 'off',
-        '@typescript-eslint/no-this-alias': 'off',
-        '@typescript-eslint/no-non-null-assertion': 'off',
-        'no-undef': 'off',
-        'ember/template-no-let-reference': 'off',
-        'ember/no-tracked-properties-from-args': 'off',
-        'ember/no-runloop': 'off',
-        'node/no-deprecated-api': 'off',
-        'cardstack-host/mock-window-only': 'error',
-        'cardstack-host/wrapped-setup-helpers-only': 'error',
-        '@cardstack/boxel/template-missing-invokable': [
-          'error',
-          { invokables: MISSING_INVOKABLES_CONFIG.invokables },
-        ],
-      },
+      ...sharedBrowserConfig,
     },
     // node files
     {

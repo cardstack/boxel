@@ -1,4 +1,4 @@
-import { TemplateOnlyComponent } from '@ember/component/template-only';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import SquareDashedMousePointer from '@cardstack/boxel-icons/square-dashed-mouse-pointer';
 

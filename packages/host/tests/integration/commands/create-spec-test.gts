@@ -2,11 +2,11 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import CreateSpecCommand from '@cardstack/host/commands/create-specs';
 
-import { Spec } from 'https://cardstack.com/base/spec';
+import type { Spec } from 'https://cardstack.com/base/spec';
 
 import {
   testRealmURL,
