@@ -186,8 +186,12 @@ export default class HostModeService extends Service {
   private async fetchPrerenderedHead(
     cardURL: string,
   ): Promise<string | null | undefined> {
-    let realmURL = this.realmURL;
-    let searchURL = new URL(`${realmURL}_search-prerendered`);
+    let card = new URL(cardURL);
+    let realmRoot = new URL(
+      card.pathname.replace(/[^/]+$/, ''),
+      `${card.protocol}//${card.host}`,
+    );
+    let searchURL = new URL('_search-prerendered', realmRoot);
     let cardJsonURL = cardURL.endsWith('.json') ? cardURL : `${cardURL}.json`;
 
     searchURL.searchParams.set('prerenderedHtmlFormat', 'head');
