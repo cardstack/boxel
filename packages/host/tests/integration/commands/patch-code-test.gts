@@ -32,7 +32,6 @@ module('Integration | commands | patch-code', function (hooks) {
 
   setupRenderingTest(hooks);
 
-  setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, { autostart: true });
   let snapshot = setupSnapshotRealm(hooks, {
     mockMatrixUtils,

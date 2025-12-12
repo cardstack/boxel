@@ -19,7 +19,7 @@ import { setupApplicationTest } from '../helpers/setup';
 
 module('Acceptance | workspace-delete-multiple', function (hooks) {
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+
   setupBaseRealm(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

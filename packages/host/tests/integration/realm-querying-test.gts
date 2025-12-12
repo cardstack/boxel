@@ -24,7 +24,6 @@ const paths = new RealmPaths(new URL(testRealmURL));
 module(`Integration | realm querying`, function (hooks) {
   setupRenderingTest(hooks);
 
-  setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks);
 
   const sampleCards: CardDocFiles = {

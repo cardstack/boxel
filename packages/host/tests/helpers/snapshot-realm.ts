@@ -2,6 +2,7 @@ import { getService } from '@universal-ember/test-support';
 
 import type { RealmAction } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
+import { baseRealm } from '@cardstack/runtime-common';
 
 import type { SerializedServerState } from './mock-matrix/_server-state';
 import type { MockUtils } from './mock-matrix/_utils';
@@ -9,6 +10,9 @@ import {
   type DbSnapshot,
   setupUserSubscription,
   setupAuthEndpoints,
+  setupLocalIndexing,
+  setupCardLogs,
+  type NestedHooks,
   captureDbSnapshot,
   restoreDbSnapshot,
   deleteSnapshot,
@@ -16,6 +20,7 @@ import {
 } from '.';
 
 import { setupBaseRealm } from './base-realm';
+import { setup } from 'qunit-dom';
 
 export interface SnapshotBuildContext {
   isInitialBuild: boolean;
@@ -49,6 +54,13 @@ export function setupSnapshotRealm<T>(
   let cache: SnapshotCache | undefined;
   let latestState: T | undefined;
 
+  setupCardLogs(
+    hooks,
+    async () =>
+      await getService('loader-service').loader.import(
+        `${baseRealm.url}card-api`,
+      ),
+  );
   hooks.beforeEach(async function () {
     setupRendering(options.acceptanceTest!!);
   });
@@ -60,6 +72,7 @@ export function setupSnapshotRealm<T>(
       });
     }
   });
+  setupLocalIndexing(hooks);
   if (options.setupBaseRealm !== false) {
     setupBaseRealm(hooks);
   }

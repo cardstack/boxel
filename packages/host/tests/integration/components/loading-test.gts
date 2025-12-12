@@ -25,7 +25,6 @@ module('Integration | loading', function (hooks) {
   let loader: Loader;
   let cardApi: typeof import('https://cardstack.com/base/card-api');
 
-  setupLocalIndexing(hooks);
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

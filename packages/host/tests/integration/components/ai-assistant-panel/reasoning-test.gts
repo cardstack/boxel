@@ -66,7 +66,6 @@ module('Integration | ai-assistant-panel | reasoning', function (hooks) {
     },
   });
 
-  setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,

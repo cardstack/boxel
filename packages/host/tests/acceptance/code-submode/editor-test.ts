@@ -42,7 +42,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   let adapter: TestRealmAdapter;
 
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+
   setupOnSave(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

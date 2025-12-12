@@ -426,119 +426,124 @@ module('Acceptance | code submode tests', function (_hooks) {
     let catalogRealmURL: string;
 
     setupApplicationTest(hooks);
-    setupLocalIndexing(hooks);
 
-  let mockMatrixUtils = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:localhost',
-  });
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+    });
 
-  let { setActiveRealms, createAndJoinRoom } = mockMatrixUtils;
-  let defaultMatrixRoomId: string;
-  let snapshot = setupSnapshotRealm<{
-    personalRealmURL: string;
-    additionalRealmURL: string;
-    catalogRealmURL: string;
-  }>(hooks, {
-    mockMatrixUtils,
-    acceptanceTest: true,
-    async build({ loader, isInitialBuild }) {
-      if (isInitialBuild || !defaultMatrixRoomId) {
-        defaultMatrixRoomId = createAndJoinRoom({
-          sender: '@testuser:localhost',
-          name: 'room-test',
+    let { setActiveRealms, createAndJoinRoom } = mockMatrixUtils;
+    let defaultMatrixRoomId: string;
+    let snapshot = setupSnapshotRealm<{
+      personalRealmURL: string;
+      additionalRealmURL: string;
+      catalogRealmURL: string;
+    }>(hooks, {
+      mockMatrixUtils,
+      acceptanceTest: true,
+      async build({ loader, isInitialBuild }) {
+        if (isInitialBuild || !defaultMatrixRoomId) {
+          defaultMatrixRoomId = createAndJoinRoom({
+            sender: '@testuser:localhost',
+            name: 'room-test',
+          });
+        }
+
+        let realmServerService = getService('realm-server');
+        personalRealmURL = `${realmServerService.url}testuser/personal/`;
+        additionalRealmURL = `${realmServerService.url}testuser/aaa/`;
+        catalogRealmURL = `${realmServerService.url}catalog/`;
+        setActiveRealms([
+          catalogRealmURL,
+          additionalRealmURL,
+          personalRealmURL,
+        ]);
+
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          loader,
+          realmURL: personalRealmURL,
+          permissions: {
+            '@testuser:localhost': ['read', 'write', 'realm-owner'],
+          },
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'hello.txt': txtSource,
+            '.realm.json': {
+              name: `Test User's Workspace`,
+              backgroundURL:
+                'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
+              iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
+            },
+          },
         });
-      }
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          loader,
+          realmURL: additionalRealmURL,
+          permissions: {
+            '@testuser:localhost': ['read', 'write', 'realm-owner'],
+          },
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'hello.txt': txtSource,
+            '.realm.json': {
+              name: `Additional Workspace`,
+              backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
+              iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
+            },
+          },
+        });
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          loader,
+          realmURL: catalogRealmURL,
+          permissions: {
+            '*': ['read'],
+          },
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'hello.txt': txtSource,
+            '.realm.json': {
+              name: `Catalog Realm`,
+              backgroundURL: 'https://i.postimg.cc/zXsXLmqb/C.png',
+              iconURL:
+                'https://i.postimg.cc/qv4pyPM0/4k-watercolor-splashes.jpg',
+            },
+          },
+        });
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          loader,
+          realmURL: testRealmURL,
+          permissions: {
+            '@testuser:localhost': ['read', 'write', 'realm-owner'],
+          },
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          },
+        });
+        return { personalRealmURL, additionalRealmURL, catalogRealmURL };
+      },
+    });
 
-      let realmServerService = getService('realm-server');
-      personalRealmURL = `${realmServerService.url}testuser/personal/`;
-      additionalRealmURL = `${realmServerService.url}testuser/aaa/`;
-      catalogRealmURL = `${realmServerService.url}catalog/`;
+    async function openNewFileModal(menuSelection: string) {
+      await waitFor('[data-test-new-file-button]');
+      await click('[data-test-new-file-button]');
+      await click(`[data-test-boxel-menu-item-text="${menuSelection}"]`);
+    }
+
+    hooks.beforeEach(function () {
+      let snapshotState = snapshot.get();
+      personalRealmURL = snapshotState.personalRealmURL;
+      additionalRealmURL = snapshotState.additionalRealmURL;
+      catalogRealmURL = snapshotState.catalogRealmURL;
+      removePlaygroundSelections();
+      removeSpecSelection();
+      window.localStorage.removeItem(ModuleInspectorSelections);
+      window.localStorage.removeItem(PlaygroundSelections);
+      window.localStorage.removeItem(SpecSelection);
       setActiveRealms([catalogRealmURL, additionalRealmURL, personalRealmURL]);
-
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        loader,
-        realmURL: personalRealmURL,
-        permissions: {
-          '@testuser:localhost': ['read', 'write', 'realm-owner'],
-        },
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'hello.txt': txtSource,
-          '.realm.json': {
-            name: `Test User's Workspace`,
-            backgroundURL: 'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
-            iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
-          },
-        },
-      });
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        loader,
-        realmURL: additionalRealmURL,
-        permissions: {
-          '@testuser:localhost': ['read', 'write', 'realm-owner'],
-        },
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'hello.txt': txtSource,
-          '.realm.json': {
-            name: `Additional Workspace`,
-            backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
-            iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
-          },
-        },
-      });
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        loader,
-        realmURL: catalogRealmURL,
-        permissions: {
-          '*': ['read'],
-        },
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'hello.txt': txtSource,
-          '.realm.json': {
-            name: `Catalog Realm`,
-            backgroundURL: 'https://i.postimg.cc/zXsXLmqb/C.png',
-            iconURL: 'https://i.postimg.cc/qv4pyPM0/4k-watercolor-splashes.jpg',
-          },
-        },
-      });
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        loader,
-        realmURL: testRealmURL,
-        permissions: {
-          '@testuser:localhost': ['read', 'write', 'realm-owner'],
-        },
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        },
-      });
-      return { personalRealmURL, additionalRealmURL, catalogRealmURL };
-    },
-  });
-
-  async function openNewFileModal(menuSelection: string) {
-    await waitFor('[data-test-new-file-button]');
-    await click('[data-test-new-file-button]');
-    await click(`[data-test-boxel-menu-item-text="${menuSelection}"]`);
-  }
-
-  hooks.beforeEach(function () {
-    let snapshotState = snapshot.get();
-    personalRealmURL = snapshotState.personalRealmURL;
-    additionalRealmURL = snapshotState.additionalRealmURL;
-    catalogRealmURL = snapshotState.catalogRealmURL;
-    removePlaygroundSelections();
-    removeSpecSelection();
-    window.localStorage.removeItem(ModuleInspectorSelections);
-    window.localStorage.removeItem(PlaygroundSelections);
-    window.localStorage.removeItem(SpecSelection);
-    setActiveRealms([catalogRealmURL, additionalRealmURL, personalRealmURL]);
-  });
+    });
 
     test('default realm is the personal realm', async function (assert) {
       await visitOperatorMode({
@@ -582,310 +587,309 @@ module('Acceptance | code submode tests', function (_hooks) {
     let monacoService: MonacoService;
 
     setupApplicationTest(hooks);
-    setupLocalIndexing(hooks);
 
-  let mockMatrixUtils = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:localhost',
-    activeRealms: [testRealmURL],
-  });
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [testRealmURL],
+    });
 
-  let { createAndJoinRoom, setActiveRealms } = mockMatrixUtils;
-  let defaultMatrixRoomId: string;
-  let snapshot = setupSnapshotRealm<{
-    monacoService: MonacoService;
-    realm: Realm;
-  }>(hooks, {
-    mockMatrixUtils,
-    acceptanceTest: true,
-    async build({ loader, isInitialBuild }) {
-      if (isInitialBuild || !defaultMatrixRoomId) {
-        defaultMatrixRoomId = createAndJoinRoom({
-          sender: '@testuser:localhost',
-          name: 'room-test',
-        });
-      }
+    let { createAndJoinRoom, setActiveRealms } = mockMatrixUtils;
+    let defaultMatrixRoomId: string;
+    let snapshot = setupSnapshotRealm<{
+      monacoService: MonacoService;
+      realm: Realm;
+    }>(hooks, {
+      mockMatrixUtils,
+      acceptanceTest: true,
+      async build({ loader, isInitialBuild }) {
+        if (isInitialBuild || !defaultMatrixRoomId) {
+          defaultMatrixRoomId = createAndJoinRoom({
+            sender: '@testuser:localhost',
+            name: 'room-test',
+          });
+        }
 
-      monacoService = getService('monaco-service');
+        monacoService = getService('monaco-service');
 
-      // this seeds the loader used during index which obtains url mappings
-      // from the global loader
-      ({ realm } = await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        loader,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'index.gts': indexCardSource,
-          'pet-person.gts': personCardSource,
-          'person.gts': personCardSource,
-          'pet.gts': petCardSource,
-          'friend.gts': friendCardSource,
-          'employee.gts': employeeCardSource,
-          'in-this-file.gts': inThisFileSource,
-          'postal-code.gts': postalCodeFieldSource,
-          'address.gts': addressFieldSource,
-          'country.gts': countryCardSource,
-          'trips.gts': tripsFieldSource,
-          'broken.gts': brokenSource,
-          'broken-country.gts': brokenCountryCardSource,
-          'broken-adoption-instance.json': brokenAdoptionInstance,
-          'not-found-adoption-instance.json': notFoundAdoptionInstance,
-          'person-entry.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                title: 'Person',
-                description: 'Spec',
-                specType: 'card',
-                ref: {
-                  module: `./person`,
-                  name: 'Person',
+        // this seeds the loader used during index which obtains url mappings
+        // from the global loader
+        ({ realm } = await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          loader,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'index.gts': indexCardSource,
+            'pet-person.gts': personCardSource,
+            'person.gts': personCardSource,
+            'pet.gts': petCardSource,
+            'friend.gts': friendCardSource,
+            'employee.gts': employeeCardSource,
+            'in-this-file.gts': inThisFileSource,
+            'postal-code.gts': postalCodeFieldSource,
+            'address.gts': addressFieldSource,
+            'country.gts': countryCardSource,
+            'trips.gts': tripsFieldSource,
+            'broken.gts': brokenSource,
+            'broken-country.gts': brokenCountryCardSource,
+            'broken-adoption-instance.json': brokenAdoptionInstance,
+            'not-found-adoption-instance.json': notFoundAdoptionInstance,
+            'person-entry.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  title: 'Person',
+                  description: 'Spec',
+                  specType: 'card',
+                  ref: {
+                    module: `./person`,
+                    name: 'Person',
+                  },
                 },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
-                  name: 'Spec',
+                meta: {
+                  adoptsFrom: {
+                    module: `${baseRealm.url}spec`,
+                    name: 'Spec',
+                  },
                 },
               },
             },
-          },
-          'pet-entry.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                specType: 'card',
-                ref: {
-                  module: `./pet`,
-                  name: 'Pet',
+            'pet-entry.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  specType: 'card',
+                  ref: {
+                    module: `./pet`,
+                    name: 'Pet',
+                  },
                 },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
-                  name: 'Spec',
-                },
-              },
-            },
-          },
-          'pet-entry-2.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                specType: 'card',
-                ref: {
-                  module: `./pet`,
-                  name: 'Pet',
-                },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
-                  name: 'Spec',
+                meta: {
+                  adoptsFrom: {
+                    module: `${baseRealm.url}spec`,
+                    name: 'Spec',
+                  },
                 },
               },
             },
-          },
-          'index.json': {
-            data: {
-              type: 'card',
-              attributes: {},
-              meta: {
-                adoptsFrom: {
-                  module: './index',
-                  name: 'Index',
+            'pet-entry-2.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  specType: 'card',
+                  ref: {
+                    module: `./pet`,
+                    name: 'Pet',
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${baseRealm.url}spec`,
+                    name: 'Spec',
+                  },
                 },
               },
             },
-          },
-          'not-json.json': 'I am not JSON.',
-          'Person/fadhlan.json': {
-            data: {
-              attributes: {
-                firstName: 'Fadhlan',
-                address: [
-                  {
-                    city: 'Bandung',
-                    country: 'Indonesia',
-                    shippingInfo: {
-                      preferredCarrier: 'DHL',
-                      remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+            'index.json': {
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: './index',
+                    name: 'Index',
+                  },
+                },
+              },
+            },
+            'not-json.json': 'I am not JSON.',
+            'Person/fadhlan.json': {
+              data: {
+                attributes: {
+                  firstName: 'Fadhlan',
+                  address: [
+                    {
+                      city: 'Bandung',
+                      country: 'Indonesia',
+                      shippingInfo: {
+                        preferredCarrier: 'DHL',
+                        remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+                      },
+                    },
+                  ],
+                },
+                relationships: {
+                  pet: {
+                    links: {
+                      self: `${testRealmURL}Pet/mango`,
                     },
                   },
-                ],
-              },
-              relationships: {
-                pet: {
-                  links: {
-                    self: `${testRealmURL}Pet/mango`,
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}person`,
+                    name: 'Person',
                   },
                 },
               },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}person`,
-                  name: 'Person',
-                },
-              },
             },
-          },
-          'Person/1.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                firstName: 'Hassan',
-                lastName: 'Abdel-Rahman',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: '../person',
-                  name: 'Person',
+            'Person/1.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Hassan',
+                  lastName: 'Abdel-Rahman',
                 },
-              },
-            },
-          },
-          'Pet/mango.json': {
-            data: {
-              attributes: {
-                name: 'Mango',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}pet`,
-                  name: 'Pet',
-                },
-              },
-            },
-          },
-          'Friend/amy.json': {
-            data: {
-              attributes: {
-                name: 'Amy',
-              },
-              relationships: {
-                friend: {
-                  links: {
-                    self: `${testRealmURL}Friend/bob`,
+                meta: {
+                  adoptsFrom: {
+                    module: '../person',
+                    name: 'Person',
                   },
                 },
               },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}friend`,
-                  name: 'Friend',
-                },
-              },
             },
-          },
-          'Friend/bob.json': {
-            data: {
-              attributes: {
-                name: 'Bob',
-              },
-              relationships: {},
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}friend`,
-                  name: 'Friend',
+            'Pet/mango.json': {
+              data: {
+                attributes: {
+                  name: 'Mango',
                 },
-              },
-            },
-          },
-          'Person/with-friends.json': {
-            data: {
-              attributes: {
-                firstName: 'With',
-                lastName: 'Friends',
-              },
-              relationships: {
-                'friends.0': {
-                  links: {
-                    self: `${testRealmURL}Friend/amy`,
-                  },
-                },
-                'friends.1': {
-                  links: {
-                    self: `${testRealmURL}Friend/bob`,
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}pet`,
+                    name: 'Pet',
                   },
                 },
               },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}person`,
-                  name: 'Person',
+            },
+            'Friend/amy.json': {
+              data: {
+                attributes: {
+                  name: 'Amy',
+                },
+                relationships: {
+                  friend: {
+                    links: {
+                      self: `${testRealmURL}Friend/bob`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}friend`,
+                    name: 'Friend',
+                  },
                 },
               },
             },
-          },
-          'Country/united-states.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                name: 'United States',
-                description: null,
-                thumbnailURL: null,
-              },
-              meta: {
-                adoptsFrom: {
-                  module: '../country',
-                  name: 'Country',
+            'Friend/bob.json': {
+              data: {
+                attributes: {
+                  name: 'Bob',
+                },
+                relationships: {},
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}friend`,
+                    name: 'Friend',
+                  },
                 },
               },
             },
-          },
-          'BrokenCountry/broken-country.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                name: 'Broken Country',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: '../broken-country',
-                  name: 'Country',
+            'Person/with-friends.json': {
+              data: {
+                attributes: {
+                  firstName: 'With',
+                  lastName: 'Friends',
+                },
+                relationships: {
+                  'friends.0': {
+                    links: {
+                      self: `${testRealmURL}Friend/amy`,
+                    },
+                  },
+                  'friends.1': {
+                    links: {
+                      self: `${testRealmURL}Friend/bob`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}person`,
+                    name: 'Person',
+                  },
                 },
               },
             },
+            'Country/united-states.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  name: 'United States',
+                  description: null,
+                  thumbnailURL: null,
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../country',
+                    name: 'Country',
+                  },
+                },
+              },
+            },
+            'BrokenCountry/broken-country.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  name: 'Broken Country',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../broken-country',
+                    name: 'Country',
+                  },
+                },
+              },
+            },
+            'hello.txt': txtSource,
+            'z00.json': '{}',
+            'z01.json': '{}',
+            'z02.json': '{}',
+            'z03.json': '{}',
+            'z04.json': '{}',
+            'z05.json': '{}',
+            'z06.json': '{}',
+            'z07.json': '{}',
+            'z08.json': '{}',
+            'z09.json': '{}',
+            'z10.json': '{}',
+            'z11.json': '{}',
+            'z12.json': '{}',
+            'z13.json': '{}',
+            'z14.json': '{}',
+            'z15.json': '{}',
+            'z16.json': '{}',
+            'z17.json': '{}',
+            'z18.json': '{}',
+            'z19.json': '{}',
+            'zzz/zzz/file.json': '{}',
+            '.realm.json': {
+              name: 'Test Workspace B',
+              backgroundURL:
+                'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+              iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+            },
+            'noop.gts': `export function noop() {};\nclass NoopClass {}`,
           },
-          'hello.txt': txtSource,
-          'z00.json': '{}',
-          'z01.json': '{}',
-          'z02.json': '{}',
-          'z03.json': '{}',
-          'z04.json': '{}',
-          'z05.json': '{}',
-          'z06.json': '{}',
-          'z07.json': '{}',
-          'z08.json': '{}',
-          'z09.json': '{}',
-          'z10.json': '{}',
-          'z11.json': '{}',
-          'z12.json': '{}',
-          'z13.json': '{}',
-          'z14.json': '{}',
-          'z15.json': '{}',
-          'z16.json': '{}',
-          'z17.json': '{}',
-          'z18.json': '{}',
-          'z19.json': '{}',
-          'zzz/zzz/file.json': '{}',
-          '.realm.json': {
-            name: 'Test Workspace B',
-            backgroundURL:
-              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-          },
-          'noop.gts': `export function noop() {};\nclass NoopClass {}`,
-        },
-      }));
+        }));
 
-      return { monacoService, realm };
-    },
-  });
+        return { monacoService, realm };
+      },
+    });
 
-  hooks.beforeEach(function () {
-    ({ monacoService, realm } = snapshot.get());
-    setActiveRealms([testRealmURL]);
-  });
+    hooks.beforeEach(function () {
+      ({ monacoService, realm } = snapshot.get());
+      setActiveRealms([testRealmURL]);
+    });
 
     test('defaults to inheritance view and can toggle to file view', async function (assert) {
       await visitOperatorMode({

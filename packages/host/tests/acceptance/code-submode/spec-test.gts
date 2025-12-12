@@ -268,7 +268,7 @@ const polymorphicFieldCardSource = `
 
 module('Acceptance | Spec preview', function (hooks) {
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

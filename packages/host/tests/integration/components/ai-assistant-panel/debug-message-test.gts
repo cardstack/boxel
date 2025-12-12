@@ -65,7 +65,6 @@ module('Integration | ai-assistant-panel | debug-message', function (hooks) {
     },
   });
 
-  setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,

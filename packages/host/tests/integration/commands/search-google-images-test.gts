@@ -15,7 +15,6 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | commands | search-google-images', function (hooks) {
   setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

@@ -18,7 +18,7 @@ import { getService } from '@universal-ember/test-support';
 
 module('Integration | commands | check-correctness', function (hooks) {
   setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
+
   let mockMatrixUtils = setupMockMatrix(hooks, {
     autostart: true,
     loggedInAs: '@testuser:localhost',

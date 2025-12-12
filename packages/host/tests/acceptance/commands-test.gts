@@ -81,7 +81,7 @@ let maybeBoomShouldBoom = true;
 
 module('Acceptance | Commands tests', function (hooks) {
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

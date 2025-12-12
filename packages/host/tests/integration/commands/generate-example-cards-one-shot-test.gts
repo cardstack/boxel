@@ -17,7 +17,6 @@ module(
   'Integration | Command | generate-example-cards (one-shot)',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',

@@ -40,7 +40,6 @@ class StubRealmService extends RealmService {
 
 module('Integration | commands | write-text-file', function (hooks) {
   setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks);
   let snapshot = setupSnapshotRealm(hooks, {

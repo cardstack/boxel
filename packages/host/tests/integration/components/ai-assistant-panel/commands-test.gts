@@ -79,7 +79,6 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     },
   });
 
-  setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,

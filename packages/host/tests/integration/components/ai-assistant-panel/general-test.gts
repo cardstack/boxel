@@ -69,7 +69,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
 
-  setupLocalIndexing(hooks);
   setupOnSave(hooks);
   hooks.beforeEach(async function () {
     await setupRendering(false);

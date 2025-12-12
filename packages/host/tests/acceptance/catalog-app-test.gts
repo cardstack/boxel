@@ -163,7 +163,7 @@ const cardWithUnrecognisedImports = `
 
 module('Acceptance | Catalog | catalog app tests', function (hooks) {
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -792,7 +792,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     snapshot.get();
   });
 
-/**
+  /**
    * Selects a tab by name within the catalog app
    */
   async function selectTab(tabName: string) {

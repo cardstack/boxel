@@ -79,8 +79,6 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
     },
   });
 
-  setupLocalIndexing(hooks);
-  setupOnSave(hooks);
   setupCardLogs(
     hooks,
     async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),

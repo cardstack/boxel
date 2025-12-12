@@ -52,9 +52,9 @@ module('Integration | commands | transform-cards', function (hooks) {
       loaderService.loader = loader;
       let cardApi: typeof import('https://cardstack.com/base/card-api');
       let string: typeof import('https://cardstack.com/base/string');
-      let CommandModule = await loader.import<typeof import('https://cardstack.com/base/command')>(
-        `${baseRealm.url}command`,
-      );
+      let CommandModule = await loader.import<
+        typeof import('https://cardstack.com/base/command')
+      >(`${baseRealm.url}command`);
 
       cardApi = await loader.import(`${baseRealm.url}card-api`);
       string = await loader.import(`${baseRealm.url}string`);
@@ -85,7 +85,10 @@ module('Integration | commands | transform-cards', function (hooks) {
         });
       }
 
-      class PrefixNameCommand extends Command<typeof JsonCard, typeof JsonCard> {
+      class PrefixNameCommand extends Command<
+        typeof JsonCard,
+        typeof JsonCard
+      > {
         async getInputType() {
           return JsonCard;
         }
@@ -235,12 +238,7 @@ module('Integration | commands | transform-cards', function (hooks) {
     ({ loader } = snapshot.get());
   });
 
-  setupLocalIndexing(hooks);
   setupOnSave(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
-  );
 
   hooks.beforeEach(function () {
     snapshot.get();

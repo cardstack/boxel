@@ -24,7 +24,7 @@ import { setupApplicationTest } from '../helpers/setup';
 
 module('Acceptance | prerender | meta', function (hooks) {
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

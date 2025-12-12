@@ -83,7 +83,6 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     },
   });
 
-  setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,

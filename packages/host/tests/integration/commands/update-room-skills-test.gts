@@ -146,8 +146,6 @@ module('Integration | Command | update-room-skills', function (hooks) {
     matrixService.reset();
   });
 
-  setupLocalIndexing(hooks);
-  setupOnSave(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),

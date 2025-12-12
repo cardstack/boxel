@@ -71,7 +71,6 @@ module('Integration | create app module via ai-assistant', function (hooks) {
     this.owner.register('service:router', MockRouterService);
   });
 
-  setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
     async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),

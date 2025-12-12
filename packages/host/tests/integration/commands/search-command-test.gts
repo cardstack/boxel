@@ -39,7 +39,6 @@ module('Integration | commands | search', function (hooks) {
   const realmName = 'Operator Mode Workspace';
   let loader: Loader;
 
-  setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,

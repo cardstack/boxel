@@ -47,7 +47,7 @@ function removeTrailingSlash(url: string): string {
 
 module('Acceptance | site config home page', function (hooks) {
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

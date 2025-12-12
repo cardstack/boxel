@@ -88,8 +88,6 @@ module('Integration | serialization', function (hooks) {
     ({ loader } = snapshot.get());
   });
 
-  setupLocalIndexing(hooks);
-
   setupCardLogs(
     hooks,
     async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),

@@ -60,7 +60,6 @@ module('Integration | realm', function (hooks) {
     },
   });
 
-  setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
     async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),

@@ -245,7 +245,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   let monacoService: MonacoService;
 
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

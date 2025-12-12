@@ -29,7 +29,6 @@ class StubRealmService extends RealmService {
 
 module('Integration | commands | send-request-via-proxy', function (hooks) {
   setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

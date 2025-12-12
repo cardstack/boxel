@@ -73,8 +73,6 @@ module('Integration | operator-mode', function (hooks) {
   let testRealmAdapter: TestRealmAdapter;
   let operatorModeStateService: OperatorModeStateService;
 
-  setupLocalIndexing(hooks);
-  setupOnSave(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],

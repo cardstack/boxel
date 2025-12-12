@@ -50,7 +50,6 @@ function getSearchResourceForTest(
 
 module(`Integration | search resource`, function (hooks) {
   setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

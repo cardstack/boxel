@@ -120,6 +120,15 @@ module('Integration | Command | show-card', function (hooks) {
   setupRenderingTest(hooks);
   setupWindowMock(hooks);
 
+  setupOnSave(hooks);
+  setupCardLogs(
+    hooks,
+    async () =>
+      await getService('loader-service').loader.import(
+        `${baseRealm.url}card-api`,
+      ),
+  );
+
   const realmName = 'Show Card Test Realm';
   let loader: Loader;
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -130,8 +139,6 @@ module('Integration | Command | show-card', function (hooks) {
   let snapshot = setupSnapshotRealm(hooks, {
     mockMatrixUtils,
     async build({ loader }) {
-      let loaderService = getService('loader-service');
-      loaderService.loader = loader;
       await setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
@@ -220,23 +227,13 @@ module('Integration | Command | show-card', function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
-    ({ loader } = snapshot.get());
   });
-
-  setupLocalIndexing(hooks);
-  setupOnSave(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
-  );
 
   let command: ShowCardCommand;
   let mockOperatorModeStateService: MockOperatorModeStateService;
   let mockPlaygroundPanelService: MockPlaygroundPanelService;
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    snapshot.get();
-
     mockOperatorModeStateService = new MockOperatorModeStateService();
     mockPlaygroundPanelService = new MockPlaygroundPanelService();
 

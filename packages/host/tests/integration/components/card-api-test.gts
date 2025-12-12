@@ -70,7 +70,6 @@ class CardContextConsumer extends GlimmerComponent<CardContextConsumerSignature>
 
 module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
   setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks);
 

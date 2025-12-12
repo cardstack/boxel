@@ -68,7 +68,6 @@ module('Integration | ai-assistant-panel | past sessions', function (hooks) {
     },
   });
 
-  setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,

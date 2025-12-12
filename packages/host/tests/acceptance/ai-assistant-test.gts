@@ -119,7 +119,7 @@ function modelNameFor(llmId: string): string {
 
 module('Acceptance | AI Assistant tests', function (hooks) {
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

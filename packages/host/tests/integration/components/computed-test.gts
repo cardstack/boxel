@@ -59,7 +59,6 @@ module('Integration | computeds', function (hooks) {
 
     ({ loader } = snapshot.get());
   });
-  setupLocalIndexing(hooks);
 
   setupCardLogs(
     hooks,

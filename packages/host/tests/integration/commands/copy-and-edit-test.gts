@@ -26,7 +26,6 @@ const otherRealmURL = 'http://other-realm/test2/';
 
 module('Integration | commands | copy-and-edit', function (hooks) {
   setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

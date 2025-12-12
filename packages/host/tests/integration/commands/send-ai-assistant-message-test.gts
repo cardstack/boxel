@@ -32,7 +32,6 @@ class StubRealmService extends RealmService {
 
 module('Integration | commands | send-ai-assistant-message', function (hooks) {
   setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

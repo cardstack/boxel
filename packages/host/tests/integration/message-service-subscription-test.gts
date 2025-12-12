@@ -34,7 +34,6 @@ let loader: Loader;
 module('Integration | message service subscription', function (hooks) {
   setupRenderingTest(hooks);
 
-  setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],

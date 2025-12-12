@@ -36,7 +36,6 @@ class StubRealmService extends RealmService {
 module('Integration | Command | preview-format', function (hooks) {
   setupRenderingTest(hooks);
   setupWindowMock(hooks);
-  setupLocalIndexing(hooks);
 
   const realmName = 'Preview Format Test Realm';
   let loader: Loader;

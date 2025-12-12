@@ -177,7 +177,6 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     let realm: Realm;
 
     setupApplicationTest(hooks);
-    setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
@@ -1469,7 +1468,6 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     let additionalRealmURL: string;
 
     setupApplicationTest(hooks);
-    setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
@@ -1633,7 +1631,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
   module('error handling', function (hooks) {
     let realm: Realm;
     setupApplicationTest(hooks);
-    setupLocalIndexing(hooks);
+
     setupOnSave(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
