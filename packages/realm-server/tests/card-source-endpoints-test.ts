@@ -845,7 +845,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: '/test-card',
+                      module: '../test-card',
                       name: 'TestCard',
                     },
                   },

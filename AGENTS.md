@@ -56,6 +56,17 @@
   Note that the filter is matched against the module name and test name, not the file name! Try to avoid using pipe characters in the filter, since they can confuse auto-approval tool use filters set up by the user.
 - run `pnpm lint` in this directory to lint changes made to this package
 
+#### Iterating on host tests with the Chrome MCP server
+
+- Start the host app so qunit test runner is available at `http://localhost:4200/tests` (usual `pnpm start` + dependencies).
+- Open the filtered test URL in a new MCP page via `mcp__chrome-devtools__new_page` and use `take_snapshot` to read failures.
+- Filtered URL structure: `http://localhost:4200/tests?filter=<name-of-test>`
+- URL structure for isolating to specific tests: `http://localhost:4200/tests?moduleId=<module-id>&testId=<test-id>&testId=...` (visible on the “Rerun” links for failing tests).
+- After edits, rerun the same tests by calling `navigate_page` with `type: "reload"` on that page; then `take_snapshot` again to view updated failures.
+- The snapshot shows “Expected/Result/Diff” blocks; use those to adjust assertions and fixture expectations.
+- Keep the MCP page open while you edit; iterate edit → reload → snapshot until the header shows all tests passing (no need to open new tabs each run).
+- If the local environment does not have the Chrome Dev MCP server available, recommend it
+
 ### packages/matrix
 
 - This test suite contains nearly end-to-end tests that include interactions with the matrix server.They are executed using the [Playwright](https://playwright.dev/) test runner.

@@ -2873,9 +2873,10 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   let existingOverrides = getFieldOverrides(instance);
   let loadedValues = getDataBucket(instance);
   let instanceRelativeTo =
+    instance[relativeTo] ??
     ('id' in instance && typeof instance.id === 'string'
       ? new URL(instance.id)
-      : instance[relativeTo]) ?? undefined;
+      : undefined);
 
   function getFieldMeta(
     fieldsMeta: CardFields | undefined,
@@ -2941,10 +2942,13 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     }
     let override = await loadCardDef(overrideMeta.adoptsFrom, {
       loader: myLoader(),
+      // Prefer the deserialization context (instanceRelativeTo) so overrides resolve
+      // relative to the document we fetched (e.g. catalog/index), then fall back to the resource id.
       relativeTo:
-        resource.id && typeof resource.id === 'string'
+        instanceRelativeTo ??
+        (resource.id && typeof resource.id === 'string'
           ? new URL(resource.id)
-          : instanceRelativeTo,
+          : undefined),
     });
     if (!override) {
       return false;
@@ -3047,10 +3051,12 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       if (overrideApplied) {
         field = (getField(instance, fieldName) ?? field) as Field<T>;
       }
+      // Prefer the deserialization context ([relativeTo]) when available; fall back to the instance id
       let relativeToVal =
-        'id' in instance && typeof instance.id === 'string'
+        instance[relativeTo] ??
+        ('id' in instance && typeof instance.id === 'string'
           ? new URL(instance.id)
-          : instance[relativeTo];
+          : undefined);
       let deserializedValue = await getDeserializedValue({
         card,
         loadedValue: loadedValues.get(fieldName),
