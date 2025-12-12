@@ -238,7 +238,7 @@ module(basename(__filename), function () {
           );
           assert.strictEqual(
             favorite.links.self,
-            `${testRealmHref}person-1`,
+            `./person-1`,
             'linksTo relationship self link set to resolved card',
           );
 
@@ -371,7 +371,7 @@ module(basename(__filename), function () {
           );
           assert.strictEqual(
             doc.data.relationships['info.queries.favorite']?.links?.self,
-            `${testRealmHref}person-1`,
+            `./person-1`,
             'nested linksTo relationship self link set',
           );
           assert.deepEqual(

@@ -4192,7 +4192,7 @@ module('Integration | serialization', function (hooks) {
     let firstChild = doc.data.relationships!['matches.0'];
     assert.strictEqual(
       firstChild?.links?.self,
-      `${testRealmURL}Person/target`,
+      `./Person/target`,
       'matches indexed relationship retains links to result resource',
     );
 
