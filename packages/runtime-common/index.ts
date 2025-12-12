@@ -82,6 +82,7 @@ export type PrerenderCardArgs = ModulePrerenderArgs;
 export interface Prerenderer {
   prerenderCard(args: PrerenderCardArgs): Promise<RenderResponse>;
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
+  disposeRealm?(realm: string): Promise<void>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';

@@ -10,6 +10,22 @@ export function authorizationMiddleware(
 ): FetcherMiddlewareHandler {
   return async function (req, next) {
     let token = tokenSource.token(req.url);
+    if (!token && typeof globalThis !== 'undefined') {
+      try {
+        let sessions = globalThis.localStorage?.getItem('boxel-session');
+        if (sessions) {
+          let parsed = JSON.parse(sessions) as Record<string, string>;
+          for (let [realmURL, sessionToken] of Object.entries(parsed)) {
+            if (req.url.startsWith(realmURL)) {
+              token = sessionToken;
+              break;
+            }
+          }
+        }
+      } catch (_e) {
+        // best effort fallback; ignore parse errors
+      }
+    }
     if (token) {
       req.headers.set('Authorization', token);
     }

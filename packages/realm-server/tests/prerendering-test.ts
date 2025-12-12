@@ -1594,7 +1594,7 @@ module(basename(__filename), function () {
         });
         let authB = testCreatePrerenderAuth(testUserId, {
           [realmURL2]: ['read', 'write', 'realm-owner'],
-          [realmURL1]: ['read'], // introduce a different token set
+          [realmURL1]: ['read', 'write', 'realm-owner'], // introduce a different token set without downgrading permissions
         });
 
         let first = await prerenderer.prerenderCard({
@@ -1618,10 +1618,12 @@ module(basename(__filename), function () {
           second.pool.pageId,
           'new page allocated when auth differs',
         );
+        let secondName = second.response.serialized?.data.attributes?.name;
+        let secondError = second.response.error?.error?.message;
         assert.strictEqual(
-          second.response.serialized?.data.attributes?.name,
+          secondName,
           'Maple',
-          'second render still succeeds with new session',
+          `second render still succeeds with new session (got name=${secondName} error=${secondError})`,
         );
       });
 

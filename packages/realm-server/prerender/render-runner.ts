@@ -42,6 +42,7 @@ export class RenderRunner {
     byRealm: new Map<string, { unusable: number; timeout: number }>(),
   };
   #lastAuthByRealm = new Map<string, string>();
+  #pageAuthTokens = new WeakMap<object, Map<string, string>>();
 
   constructor(options: { pagePool: PagePool; boxelHostURL: string }) {
     this.#pagePool = options.pagePool;
@@ -54,16 +55,17 @@ export class RenderRunner {
     if (pageInfo.reused && lastAuth) {
       let lastKeys = this.#authKeys(lastAuth);
       let nextKeys = this.#authKeys(auth);
-      let keysChanged =
+      let authChanged =
         lastKeys && nextKeys
           ? lastKeys.length !== nextKeys.length ||
             lastKeys.some((k) => !nextKeys.includes(k))
           : lastAuth !== auth;
-      if (keysChanged) {
+      if (authChanged) {
         await this.#pagePool.disposeRealm(realm);
         pageInfo = await this.#pagePool.getPage(realm);
       }
     }
+    await this.#ensureAuthInterception(pageInfo.page, realm, auth);
     this.#lastAuthByRealm.set(realm, auth);
     return pageInfo;
   }
@@ -79,6 +81,84 @@ export class RenderRunner {
     } catch (_e) {
       return null;
     }
+  }
+
+  #sessionForRealm(auth: string, realm: string): string | undefined {
+    try {
+      let parsed = JSON.parse(auth) as Record<string, string>;
+      return parsed[realm];
+    } catch (_e) {
+      return undefined;
+    }
+  }
+
+  async #ensureAuthInterception(
+    page: any,
+    realm: string,
+    auth: string,
+  ): Promise<void> {
+    let realmToken =
+      this.#sessionForRealm(auth, realm) ??
+      (this.#lastAuthByRealm.has(realm)
+        ? this.#sessionForRealm(this.#lastAuthByRealm.get(realm)!, realm)
+        : undefined);
+    let tokenMap = this.#pageAuthTokens.get(page);
+    if (!realmToken) {
+      if (!tokenMap) {
+        return;
+      }
+      return;
+    }
+    if (!tokenMap) {
+      tokenMap = new Map();
+      this.#pageAuthTokens.set(page, tokenMap);
+      await page.setRequestInterception(true);
+      page.on('request', async (req: any) => {
+        try {
+          let headers = req.headers();
+          let token = this.#tokenForRequest(tokenMap!, req.url());
+          if (token && !headers.Authorization && !headers.authorization) {
+            headers.Authorization = `Bearer ${token}`;
+          }
+          await req.continue({ headers });
+        } catch (_e) {
+          try {
+            await req.continue();
+          } catch (_e2) {
+            // swallow
+          }
+        }
+      });
+    }
+    tokenMap.set(realm, realmToken);
+  }
+
+  #tokenForRequest(
+    tokenMap: Map<string, string>,
+    requestURL: string,
+  ): string | undefined {
+    let matches: Array<[string, string]> = [];
+    for (let [realm, token] of tokenMap) {
+      if (requestURL.startsWith(realm)) {
+        matches.push([realm, token]);
+      }
+    }
+    if (!matches.length) {
+      for (let [realm, auth] of this.#lastAuthByRealm) {
+        if (!requestURL.startsWith(realm)) {
+          continue;
+        }
+        let token = this.#sessionForRealm(auth, realm);
+        if (token) {
+          matches.push([realm, token]);
+        }
+      }
+    }
+    if (!matches.length) {
+      return undefined;
+    }
+    matches.sort((a, b) => b[0].length - a[0].length);
+    return matches[0][1];
   }
 
   async prerenderCardAttempt({
