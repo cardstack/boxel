@@ -615,41 +615,40 @@ export class RealmIndexQueryEngine {
           }
           linkResource = { ...json.data, ...{ links: { self: json.data.id } } };
         }
-      }
-      let foundLinks = false;
-      // TODO stop using maxLinkDepth. we should save the JSON-API doc in the
-      // index based on keeping track of the rendered fields and invalidate the
-      // index as consumed cards change
-      if (linkResource && stack.length <= maxLinkDepth) {
-        for (let includedResource of await this.loadLinks(
-          {
-            realmURL,
-            resource: linkResource,
-            omit,
-            included: [...included, linkResource],
-            visited,
-            stack: [...(resource.id != null ? [resource.id] : []), ...stack],
-          },
-          opts,
-        )) {
-          foundLinks = true;
-          if (
-            includedResource.id &&
-            !omit.includes(includedResource.id) &&
-            !included.find((r) => r.id === includedResource.id)
-          ) {
-            let rewrittenResource = cloneDeep({
-              ...includedResource,
-              ...{ links: { self: includedResource.id } },
-            });
-            visitInstanceURLs(rewrittenResource, (url, setURL) =>
-              absolutizeInstanceURL(url, rewrittenResource.id, setURL),
-            );
-            visitModuleDeps(rewrittenResource, (url, setURL) =>
-              absolutizeInstanceURL(url, rewrittenResource.id, setURL),
-            );
-            included.push(rewrittenResource);
->>>>>>> main
+        let foundLinks = false;
+        // TODO stop using maxLinkDepth. we should save the JSON-API doc in the
+        // index based on keeping track of the rendered fields and invalidate the
+        // index as consumed cards change
+        if (linkResource && stack.length <= maxLinkDepth) {
+          for (let includedResource of await this.loadLinks(
+            {
+              realmURL,
+              resource: linkResource,
+              omit,
+              included: [...included, linkResource],
+              visited,
+              stack: [...(resource.id != null ? [resource.id] : []), ...stack],
+            },
+            opts,
+          )) {
+            foundLinks = true;
+            if (
+              includedResource.id &&
+              !omit.includes(includedResource.id) &&
+              !included.find((r) => r.id === includedResource.id)
+            ) {
+              let rewrittenResource = cloneDeep({
+                ...includedResource,
+                ...{ links: { self: includedResource.id } },
+              });
+              visitInstanceURLs(rewrittenResource, (url, setURL) =>
+                absolutizeInstanceURL(url, rewrittenResource.id, setURL),
+              );
+              visitModuleDeps(rewrittenResource, (url, setURL) =>
+                absolutizeInstanceURL(url, rewrittenResource.id, setURL),
+              );
+              included.push(rewrittenResource);
+            }
           }
         }
         let relationshipId = maybeURL(relationship.links.self, resource.id);
