@@ -2,7 +2,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import ModuleTemplate from 'ember-route-template';
 
-import { Model } from '../routes/module';
+import type { Model } from '../routes/module';
 
 const { stringify } = JSON;
 

@@ -22,8 +22,6 @@ import {
 
 import ENV from '@cardstack/host/config/environment';
 
-import config from '@cardstack/host/config/environment';
-
 import type { ExtendedClient } from './matrix-sdk-loader';
 import type NetworkService from './network';
 import type RealmService from './realm';
@@ -218,7 +216,7 @@ export default class RealmServerService extends Service {
       let responseText = await response.text();
 
       // Temporary development instruction to help with user setup
-      let isDevelopment = config.environment === 'development';
+      let isDevelopment = ENV.environment === 'development';
       if (isDevelopment && responseText.includes('User in JWT not found')) {
         console.error(
           '\x1b[1m\x1b[31m%s\x1b[0m',

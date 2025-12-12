@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { FieldContainer, GridContainer } from '@cardstack/boxel-ui/components';
 
 import { baseRealm } from '@cardstack/runtime-common';
-import { Realm } from '@cardstack/runtime-common/realm';
+import type { Realm } from '@cardstack/runtime-common/realm';
 
 import {
   SYSTEM_CARD_FIXTURE_CONTENTS,

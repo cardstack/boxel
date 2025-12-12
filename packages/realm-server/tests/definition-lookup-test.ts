@@ -11,6 +11,7 @@ import {
   setupBaseRealmServer,
   setupPermissionedRealms,
   createVirtualNetwork,
+  testCreatePrerenderAuth,
 } from './helpers';
 import type { PgAdapter } from '@cardstack/postgres/pg-adapter';
 
@@ -80,6 +81,7 @@ module(basename(__filename), function () {
         dbAdapter,
         mockRemotePrerenderer,
         virtualNetwork,
+        testCreatePrerenderAuth,
       );
       definitionLookup.registerRealm({
         url: realmURL,
@@ -134,6 +136,7 @@ module(basename(__filename), function () {
           dbAdapter,
           mockRemotePrerenderer,
           virtualNetwork,
+          testCreatePrerenderAuth,
         );
         definitionLookup.registerRealm({
           url: realmURL,
@@ -223,6 +226,7 @@ module(basename(__filename), function () {
         dbAdapter,
         mockRemotePrerenderer,
         virtualNetwork,
+        testCreatePrerenderAuth,
       );
       definitionLookup.registerRealm({
         url: realmURL,

@@ -5,7 +5,7 @@ import ExternalLink from '@cardstack/boxel-icons/external-link';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 
-import HostModeService from '@cardstack/host/services/host-mode-service';
+import type HostModeService from '@cardstack/host/services/host-mode-service';
 
 interface OpenSitePopoverArgs {
   isOpen: boolean;

@@ -17,7 +17,7 @@ import { chooseCard } from '@cardstack/runtime-common';
 import SkillToggle from '@cardstack/host/components/ai-assistant/skill-menu/skill-toggle';
 import PillMenu from '@cardstack/host/components/pill-menu';
 
-import { RoomSkill } from '@cardstack/host/resources/room';
+import type { RoomSkill } from '@cardstack/host/resources/room';
 
 interface Signature {
   Element: HTMLDivElement | HTMLButtonElement;

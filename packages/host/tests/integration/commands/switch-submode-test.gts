@@ -1,5 +1,5 @@
 import { getOwner } from '@ember/owner';
-import { RenderingTestContext } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -10,7 +10,7 @@ import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
 import RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
-import { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
+import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
 import {
   setupIntegrationTestRealm,

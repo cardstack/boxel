@@ -1,7 +1,11 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import { BaseDefinitionContainer, BaseArgs, Active, ActiveArgs } from './base';
-import { Clickable, ClickableArgs } from './clickable';
+import { BaseDefinitionContainer, Active } from './base';
+
+import { Clickable } from './clickable';
+
+import type { BaseArgs, ActiveArgs } from './base';
+import type { ClickableArgs } from './clickable';
 
 interface FileArgs
   extends Omit<BaseArgs, 'title' | 'name' | 'isActive'>,

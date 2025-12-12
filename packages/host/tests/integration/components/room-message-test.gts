@@ -19,7 +19,7 @@ import RoomMessage, {
 import { parseHtmlContent } from '@cardstack/host/lib/formatted-message/utils';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
-import { type RoomResource } from '@cardstack/host/resources/room';
+import type { RoomResource } from '@cardstack/host/resources/room';
 import { getSearch } from '@cardstack/host/resources/search';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';

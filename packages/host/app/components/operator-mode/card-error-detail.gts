@@ -2,9 +2,9 @@ import Component from '@glimmer/component';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
-import { type CardErrorJSONAPI } from '../../services/store';
-
 import ErrorDisplay from './error-display';
+
+import type { CardErrorJSONAPI } from '../../services/store';
 
 interface Signature {
   Args: {

@@ -13,6 +13,7 @@ import {
   PRERENDER_SERVER_STATUS_HEADER,
 } from '../prerender/prerender-constants';
 import { Deferred } from '@cardstack/runtime-common';
+import { testCreatePrerenderAuth } from './helpers';
 
 module(basename(__filename), function () {
   module('Prerender manager', function (hooks) {
@@ -1440,13 +1441,13 @@ function makeMockPrerender(): {
 }
 
 function makeBody(realm: string, url: string) {
+  let auth = makeAuth(realm);
   return {
     data: {
       type: 'prerender-request',
       attributes: {
         url,
-        userId: '@user:localhost',
-        permissions: { [realm]: ['read', 'write', 'realm-owner'] },
+        auth,
         realm,
       },
     },
@@ -1454,15 +1455,21 @@ function makeBody(realm: string, url: string) {
 }
 
 function makeModuleBody(realm: string, url: string) {
+  let auth = makeAuth(realm);
   return {
     data: {
       type: 'prerender-module-request',
       attributes: {
         url,
-        userId: '@user:localhost',
-        permissions: { [realm]: ['read', 'write', 'realm-owner'] },
+        auth,
         realm,
       },
     },
   };
+}
+
+function makeAuth(realm: string) {
+  return testCreatePrerenderAuth('@user:localhost', {
+    [realm]: ['read', 'write', 'realm-owner'],
+  });
 }
