@@ -4,7 +4,7 @@ import type {
   QueuePublisher,
   Realm,
   VirtualNetwork,
-  type Prerenderer,
+  Prerenderer,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';

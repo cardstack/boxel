@@ -124,8 +124,7 @@ export default function handlePrerenderProxy({
       return;
     }
 
-    let type =
-      kind === 'card' ? 'prerender-result' : 'prerender-module-result';
+    let type = kind === 'card' ? 'prerender-result' : 'prerender-module-result';
 
     await setContextResponse(
       ctxt,
