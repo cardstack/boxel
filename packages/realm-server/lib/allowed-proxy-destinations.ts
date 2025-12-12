@@ -9,6 +9,7 @@ export type AuthMethod = 'header' | 'url-parameter';
 export interface AllowedProxyDestination {
   url: string;
   apiKey: string;
+  credentials?: Record<string, unknown> | null;
   creditStrategy: CreditStrategy;
   supportsStreaming: boolean;
   authMethod: AuthMethod;
@@ -19,6 +20,7 @@ interface ProxyEndpointRow {
   id: string;
   url: string;
   api_key: string;
+  credentials?: any;
   credit_strategy: string;
   supports_streaming: boolean;
   auth_method?: string;
@@ -66,6 +68,7 @@ export class AllowedProxyDestinations {
       this.destinations[endpoint.url] = {
         url: endpoint.url,
         apiKey: endpoint.api_key,
+        credentials: endpoint.credentials ?? null,
         creditStrategy: CreditStrategyFactory.create(
           endpoint.credit_strategy as 'openrouter' | 'no-credit',
           endpoint.api_key,
