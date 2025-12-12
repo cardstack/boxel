@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "caption": "1980s",
+      "image": {},
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "image.imageCard": {
+        "links": {
+          "self": "../CloudflareImage/79f8d173-62af-494d-9ded-65b3d3421345"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../time-machine/polaroid-image",
+        "name": "PolaroidImage"
+      }
+    }
+  }
+}

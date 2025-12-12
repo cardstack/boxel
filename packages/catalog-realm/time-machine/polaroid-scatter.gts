@@ -21,12 +21,12 @@ export class PolaroidScatter extends Component<PolaroidScatterSignature> {
     return this.args.images ?? [];
   }
 
-  hasBase64(image?: PolaroidImage) {
-    return Boolean(image?.data?.base64);
+  hasImage(image?: PolaroidImage) {
+    return Boolean(image?.image?.imageCard?.url);
   }
 
-  base64For(image: PolaroidImage) {
-    return image.data?.base64 ?? '';
+  imageUrlFor(image: PolaroidImage) {
+    return image.image?.imageCard?.url ?? '';
   }
 
   get loadingSet() {
@@ -53,13 +53,13 @@ export class PolaroidScatter extends Component<PolaroidScatterSignature> {
         {{#each this.images as |image|}}
           <article
             class='polaroid
-              {{if (this.hasBase64 image) "polaroid-clickable"}}
+              {{if (this.hasImage image) "polaroid-clickable"}}
               {{if (this.isLoading image) "is-loading"}}'
             {{on 'click' (fn this.handleClick image)}}
             tabindex='0'
           >
             <Polaroid
-              @base64={{this.base64For image}}
+              @url={{this.imageUrlFor image}}
               @caption={{image.caption}}
             >
               <:loading>
