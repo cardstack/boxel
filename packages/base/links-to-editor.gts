@@ -99,7 +99,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
       }
       .links-to-editor.can-write {
         grid-template-columns: 1fr var(--boxel-icon-sm);
-        gap: var(--boxel-sp-sm);
+        gap: var(--boxel-sp-xs);
       }
       .links-to-editor > :deep(.boxel-card-container) {
         order: -1;
