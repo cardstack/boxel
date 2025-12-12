@@ -234,6 +234,12 @@ export default class Card extends Route {
       routePath,
       serializedStack: stackParam,
     });
+
+    let stackItems = this.hostModeStateService.stackItems;
+    let headCardId =
+      stackItems.length > 0 ? stackItems[stackItems.length - 1] : primaryCardId;
+
+    await this.hostModeService.updateHeadTemplate(headCardId);
   }
 
   private async getCardUrl(cardPath: string): Promise<string | undefined> {

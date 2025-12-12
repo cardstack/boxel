@@ -4,6 +4,7 @@ import window from 'ember-window-mock';
 
 import config from '@cardstack/host/config/environment';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type RealmService from '@cardstack/host/services/realm';
 
 interface PublishedRealmMetadata {
   urlString: string;
@@ -13,6 +14,10 @@ interface PublishedRealmMetadata {
 
 export default class HostModeService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;
+  @service declare realm: RealmService;
+
+  // increasing token to ignore stale async head fetches
+  private headUpdateRequestId = 0;
 
   get isActive() {
     if (this.simulatingHostMode) {
@@ -69,6 +74,11 @@ export default class HostModeService extends Service {
   }
 
   get currentCardId() {
+    let stack = this.operatorModeStateService.hostModeStack;
+    if (stack.length > 0) {
+      return stack[stack.length - 1];
+    }
+
     return this.operatorModeStateService.hostModePrimaryCard ?? undefined;
   }
 
@@ -137,6 +147,132 @@ export default class HostModeService extends Service {
 
   isPublished(url: string) {
     return this.lastPublishedTimestamp(url) !== null;
+  }
+
+  async updateHeadTemplate(cardURL?: string | null) {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    let normalizedCardURL =
+      (cardURL ?? this.currentCardId)?.replace(/\.json$/, '') ?? null;
+    let requestId = ++this.headUpdateRequestId;
+    let headHTML: string | null = null;
+    let shouldReplace = normalizedCardURL === null;
+
+    if (normalizedCardURL) {
+      try {
+        let prerenderedHead =
+          await this.fetchPrerenderedHead(normalizedCardURL);
+
+        if (requestId !== this.headUpdateRequestId) {
+          return;
+        }
+
+        if (prerenderedHead !== undefined) {
+          headHTML = prerenderedHead;
+          shouldReplace = true;
+        } else {
+          return;
+        }
+      } catch (_error) {
+        return;
+      }
+    }
+
+    if (requestId !== this.headUpdateRequestId || !shouldReplace) {
+      return;
+    }
+
+    this.replaceHeadTemplate(headHTML);
+  }
+
+  private async fetchPrerenderedHead(
+    cardURL: string,
+  ): Promise<string | null | undefined> {
+    let card = new URL(cardURL);
+    let realmRoot =
+      this.realm.realmOfURL(card)?.href ??
+      new URL(
+        card.pathname.replace(/[^/]+$/, ''),
+        `${card.protocol}//${card.host}`,
+      ).href;
+    let searchURL = new URL('_search-prerendered', realmRoot);
+    let cardJsonURL = cardURL.endsWith('.json') ? cardURL : `${cardURL}.json`;
+
+    searchURL.searchParams.set('prerenderedHtmlFormat', 'head');
+    searchURL.searchParams.append('cardUrls[]', cardJsonURL);
+
+    let response = await fetch(searchURL.toString(), {
+      headers: { Accept: 'application/vnd.card+json' },
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      return undefined;
+    }
+
+    let json = await response.json();
+    let headHTML: unknown = json?.data?.[0]?.attributes?.html;
+    return typeof headHTML === 'string' ? headHTML : null;
+  }
+
+  private replaceHeadTemplate(headHTML: string | null) {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    let markers = this.findHeadMarkers();
+    if (!markers) {
+      return;
+    }
+
+    let [start, end] = markers;
+    let parent = start.parentNode;
+
+    if (!parent) {
+      return;
+    }
+
+    for (let node = start.nextSibling; node && node !== end; ) {
+      let next = node.nextSibling;
+      parent.removeChild(node);
+      node = next;
+    }
+
+    if (!headHTML || headHTML.trim().length === 0) {
+      return;
+    }
+
+    let fragment = document.createRange().createContextualFragment(headHTML);
+    parent.insertBefore(fragment, end);
+  }
+
+  private findHeadMarkers(): [Comment, Comment] | null {
+    let head = document.head;
+    if (!head) {
+      return null;
+    }
+
+    let start: Comment | null = null;
+    let end: Comment | null = null;
+
+    head.childNodes.forEach((node) => {
+      if (node.nodeType === Node.COMMENT_NODE) {
+        let content = (node as Comment).data.trim();
+        if (content === 'HEADSTART') {
+          start = node as Comment;
+        } else if (content === 'HEADEND') {
+          end = node as Comment;
+        }
+      }
+    });
+
+    if (start && end) {
+      return [start, end];
+    }
+
+    return null;
   }
 
   private parsePublishedAt(value: unknown) {
