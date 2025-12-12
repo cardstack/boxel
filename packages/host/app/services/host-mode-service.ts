@@ -13,6 +13,8 @@ interface PublishedRealmMetadata {
 
 export default class HostModeService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;
+
+  // increasing token to ignore stale async head fetches
   private headUpdateRequestId = 0;
 
   get isActive() {
