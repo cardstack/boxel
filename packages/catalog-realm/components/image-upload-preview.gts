@@ -7,7 +7,8 @@ import { fn } from '@ember/helper';
 import { BoxelButton, FieldContainer } from '@cardstack/boxel-ui/components';
 
 export interface ImagePreviewFrame {
-  url: string;
+  url?: string;
+  imageCardUrl?: string;
   label: string;
 }
 
@@ -46,6 +47,10 @@ export class ImageUploadPreview extends Component<ImageUploadPreviewSignature> {
       return 'Selected 1 image';
     }
     return `Selected ${count} images`;
+  }
+
+  imageSrc(preview: ImagePreviewFrame) {
+    return preview.imageCardUrl ?? preview.url ?? '';
   }
 
   @action
@@ -120,7 +125,7 @@ export class ImageUploadPreview extends Component<ImageUploadPreviewSignature> {
             {{#each this.previews as |preview index|}}
               <div class='product-upload__item'>
                 <div class='product-upload__image-wrapper'>
-                  <img src={{preview.url}} alt={{preview.label}} />
+                  <img src={{this.imageSrc preview}} alt={{preview.label}} />
                   <button
                     type='button'
                     class='product-upload__remove'
