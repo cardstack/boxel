@@ -9,6 +9,7 @@
     "@cardstack/local-types": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "@types/lodash": "catalog:",
+    "ember-animated": "catalog:",
     "chess.js": "catalog:",
     "concurrently": "catalog:",
     "ember-concurrency": "catalog:",

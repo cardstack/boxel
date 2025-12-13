@@ -94,6 +94,7 @@
     "crypto-browserify": "catalog:",
     "date-fns": "catalog:",
     "decorator-transforms": "catalog:",
+    "ember-animated": "catalog:",
     "ember-async-data": "^1.0.3",
     "ember-auto-import": "^2.7.2",
     "ember-basic-dropdown": "8.0.4",
