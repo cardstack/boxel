@@ -508,6 +508,40 @@ export default class RealmServerService extends Service {
     return response;
   }
 
+  async presignR2Upload(args: {
+    url?: string;
+    objectKey?: string;
+    method?: string;
+    expiresInSeconds?: number;
+    contentType?: string;
+  }) {
+    await this.login();
+
+    const response = await this.network.fetch(`${this.url.href}_r2-presign`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.token}`,
+      },
+      body: JSON.stringify(args),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Presign request failed: ${response.status} - ${errorText}`,
+      );
+    }
+
+    const json = await response.json();
+    const signedUrl = json?.url;
+    if (!signedUrl || typeof signedUrl !== 'string') {
+      throw new Error('Presign response did not include a url');
+    }
+    return signedUrl;
+  }
+
   async publishRealm(sourceRealmURL: string, publishedRealmURL: string) {
     await this.login();
 

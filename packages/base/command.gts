@@ -545,3 +545,18 @@ export class SearchAndChooseResult extends CardDef {
   @field selectedIds = containsMany(StringField);
   @field selectedCards = linksToMany(CardDef);
 }
+
+export class UploadFileInput extends CardDef {
+  @field baseUrl = contains(StringField); // e.g. https://account.r2.cloudflarestorage.com/bucket
+  @field fileName = contains(StringField);
+  @field contentType = contains(StringField);
+  @field fileDataUri = contains(StringField); // base64 data URI of the file
+  @field keyPrefix = contains(StringField); // optional folder prefix in bucket (default: 'uploads')
+  @field fileForAttachment = contains(JsonField); // alternative: { url, sourceUrl, name, contentType }
+  @field realmUrl = contains(StringField); // the realm URL this upload is for (used in path organization)
+}
+
+export class UploadFileResult extends CardDef {
+  @field uploadedUrl = contains(StringField);
+  @field etag = contains(StringField);
+}

@@ -55,6 +55,7 @@ import * as TransformCardsCommandModule from './transform-cards';
 import * as UpdateCodePathWithSelectionCommandModule from './update-code-path-with-selection';
 import * as UpdatePlaygroundSelectionCommandModule from './update-playground-selection';
 import * as UpdateRoomSkillsCommandModule from './update-room-skills';
+import * as UploadFileCommandModule from './upload-file';
 import * as CommandUtilsModule from './utils';
 import * as WriteTextFileCommandModule from './write-text-file';
 
@@ -293,6 +294,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     '@cardstack/boxel-host/commands/set-site-config',
     SetSiteConfigCommandModule,
   );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/upload-file',
+    UploadFileCommandModule,
+  );
 }
 
 // Note - this is used for the tests
@@ -351,6 +356,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   UpdateCodePathWithSelectionCommandModule.default,
   UpdatePlaygroundSelectionCommandModule.default,
   UpdateRoomSkillsCommandModule.default,
+  UploadFileCommandModule.default,
   UseAiAssistantCommandModule.default,
   WriteTextFileCommandModule.default,
 ];
