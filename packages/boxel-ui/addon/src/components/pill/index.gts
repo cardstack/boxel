@@ -8,6 +8,23 @@ import cssVar from '../../helpers/css-var.ts';
 
 export type BoxelPillKind = 'button' | 'default';
 
+export type BoxelPillVariant =
+  | 'primary'
+  | 'secondary'
+  | 'muted'
+  | 'accent'
+  | 'destructive'
+  | 'default';
+
+export const boxelPillVariants = [
+  'default',
+  'primary',
+  'secondary',
+  'muted',
+  'accent',
+  'destructive',
+];
+
 export interface PillSignature {
   Args: {
     kind?: BoxelPillKind;
@@ -15,7 +32,7 @@ export interface PillSignature {
     pillBorderColor?: string;
     pillFontColor?: string;
     tag?: keyof HTMLElementTagNameMap;
-    variant?: 'primary' | 'secondary' | 'muted' | 'destructive' | 'default';
+    variant?: BoxelPillVariant;
   };
   Blocks: {
     default: [];
@@ -122,6 +139,12 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
         --pill-background-color: var(--muted, var(--boxel-200));
         --pill-font-color: var(--muted-foreground, var(--boxel-dark));
         --pill-border-color: var(--muted, var(--boxel-400));
+      }
+
+      .variant-accent {
+        --pill-background-color: var(--accent, var(--boxel-100));
+        --pill-font-color: var(--accent-foreground, var(--boxel-dark));
+        --pill-border-color: var(--border, var(--boxel-400));
       }
 
       .variant-destructive {

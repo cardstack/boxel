@@ -36,7 +36,10 @@ export function slugifyHeading(text: string): string {
 type TocItem = { level: number; text: string; id: string };
 
 // Parse headers from markdown text with deterministic ID generation
-function parseMarkdownHeaders(markdown: string): Array<TocItem> {
+export function parseMarkdownHeaders(markdown?: string): Array<TocItem> {
+  if (!markdown) {
+    return [];
+  }
   const headers: Array<TocItem> = [];
   const usedIds = new Set<string>();
 
@@ -110,36 +113,54 @@ export const addHeaderIds = modifier((element: HTMLElement) => {
 });
 
 export class TocSection extends GlimmerComponent<{
-  sectionTitle: string;
-  navItems?: TocItem[];
+  Args: {
+    sectionTitle: string;
+    navItems?: TocItem[];
+  };
+  Element: HTMLElement;
+  Blocks: { default: [] };
 }> {
   <template>
-    <div class='toc-section'>
+    <div class='toc-section' ...attributes>
       <div class='toc-section-title'>{{@sectionTitle}}</div>
-      <ul>
-        {{#each @navItems as |item|}}
-          <li
-            class={{if (gt item.level 2) 'toc-subsection' 'toc-section-item'}}
-          >
-            <a
-              href='#{{item.id}}'
-              {{on 'click' (fn this.scrollToItem item.id)}}
-            >{{item.text}}</a>
-          </li>
-        {{/each}}
-      </ul>
+      {{#if @navItems.length}}
+        <ul>
+          {{#each @navItems as |item|}}
+            <li
+              class={{if (gt item.level 2) 'toc-subsection' 'toc-section-item'}}
+            >
+              <a
+                href='#{{item.id}}'
+                {{on 'click' (fn this.scrollToItem item.id)}}
+              >{{item.text}}</a>
+            </li>
+          {{/each}}
+        </ul>
+      {{else}}
+        {{yield}}
+      {{/if}}
     </div>
     <style scoped>
-      ul {
+      :deep(ul) {
         list-style: none;
         padding: 0;
         margin: 0;
       }
-      li {
-        margin-bottom: var(--boxel-sp-xs);
+      :deep(li) {
+        margin-bottom: var(--sp-2);
         color: var(--db-foreground);
       }
-      a:hover {
+      :deep(ul ul) {
+        margin-top: var(--sp-1);
+        padding-left: var(--sp-3);
+      }
+      :deep(ul ul li) {
+        padding-left: var(--sp-3);
+      }
+      :deep(a) {
+        text-decoration: none;
+      }
+      :deep(a:hover) {
         color: inherit;
         text-decoration: underline;
       }
@@ -157,7 +178,7 @@ export class TocSection extends GlimmerComponent<{
       }
       .toc-subsection {
         padding-left: var(--boxel-sp);
-        font-size: var(--boxel-font-size-2xs);
+        font-size: var(--boxel-font-size-xs);
       }
     </style>
   </template>
@@ -189,7 +210,6 @@ export class EmptyStateContainer extends GlimmerComponent<{
       .empty-icon {
         width: 4rem;
         height: 4rem;
-        opacity: 0.5;
       }
       :deep(h3) {
         margin-block: var(--boxel-sp-sm);
@@ -233,16 +253,20 @@ export class AppendixSection extends GlimmerComponent<{
   Blocks: { default: [] };
 }> {
   <template>
-    <section id='appendix-section'>
+    <section class='appendix' id='appendix-section'>
       <header class='appendix-header'>
         <h2>Appendix</h2>
       </header>
       {{yield}}
     </section>
     <style scoped>
+      .appendix > :deep(* + *) {
+        margin-top: var(--boxel-sp-2xl);
+      }
       .appendix-header {
-        margin-block: var(--boxel-sp-xl);
-        padding-block: var(--boxel-sp);
+        margin-top: var(--boxel-sp-4xl);
+        margin-bottom: var(--boxel-sp-xl);
+        padding-block: var(--boxel-sp-xl);
         border-top: 1px solid var(--db-border);
         border-bottom: 1px solid var(--db-border);
       }
@@ -327,20 +351,26 @@ export class DocLayout extends GlimmerComponent<{
     <style scoped>
       @layer {
         .doc-layout {
+          --sp-1: var(--spacing, 0.25rem);
+          --sp-2: calc(var(--sp-1) * 2);
+          --sp-3: calc(var(--sp-1) * 3);
+          --sp-4: calc(var(--sp-1) * 4);
+          --sp-5: calc(var(--sp-1) * 5);
+          --sp-6: calc(var(--sp-1) * 6);
           --db-background: var(--background, var(--boxel-light));
           --db-foreground: var(--foreground, var(--boxel-700));
           --db-primary: var(--primary, var(--boxel-highlight-hover));
           --db-muted-foreground: var(
             --muted-foreground,
-            color-mix(in oklab, var(--db-foreground) 60%, transparent)
+            color-mix(in oklab, var(--db-foreground) 60%, var(--db-background))
           );
           --db-muted: var(
             --muted,
-            color-mix(in oklab, var(--db-foreground) 10%, transparent)
+            color-mix(in oklab, var(--db-foreground) 10%, var(--db-background))
           );
           --db-border: var(
             --border,
-            color-mix(in oklab, var(--db-foreground) 20%, transparent)
+            color-mix(in oklab, var(--db-foreground) 20%, var(--db-background))
           );
 
           width: 100%;
@@ -393,6 +423,7 @@ export class DocLayout extends GlimmerComponent<{
         .doc-main {
           overflow-y: auto;
           padding-right: var(--boxel-sp);
+          padding-bottom: var(--boxel-sp-2xl);
         }
         .doc-header {
           border-bottom: 2px solid var(--db-border);
@@ -471,20 +502,6 @@ export class SkillPlus extends Skill {
   static isolated: BaseDefComponent = class Isolated extends Component<
     typeof this
   > {
-    private tocAppendixItems = [
-      {
-        id: 'available-commands',
-        text: 'Available Commands',
-        level: 1,
-      },
-    ];
-
-    // Extract headers from markdown for TOC using shared parser
-    private get markdownHeaders() {
-      if (!this.args.model?.instructions) return [];
-      return parseMarkdownHeaders(this.args.model.instructions);
-    }
-
     private get isTocEmpty() {
       return (
         !this.args.model?.instructions && !this.args.model?.commands?.length
@@ -502,14 +519,15 @@ export class SkillPlus extends Skill {
           {{#if @model.instructions}}
             <TocSection
               @sectionTitle='Content'
-              @navItems={{this.markdownHeaders}}
+              @navItems={{parseMarkdownHeaders @model.instructions}}
             />
           {{/if}}
           {{#if @model.commands.length}}
-            <TocSection
-              @sectionTitle='Appendix'
-              @navItems={{this.tocAppendixItems}}
-            />
+            <TocSection @sectionTitle='Appendix'>
+              <ul>
+                <li><a href='#available-commands'>Available Commands</a></li>
+              </ul>
+            </TocSection>
           {{/if}}
         </:navbar>
         <:default>
