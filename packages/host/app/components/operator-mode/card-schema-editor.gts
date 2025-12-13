@@ -137,6 +137,19 @@ export default class CardSchemaEditor extends Component<Signature> {
         height: 100%;
       }
 
+      .query-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font: 600 var(--boxel-font);
+        line-height: 20px;
+        padding: 0 var(--boxel-sp-xxs);
+        background-color: var(--boxel-200);
+        margin-right: var(--boxel-sp-5xs);
+        border-radius: var(--boxel-border-radius-sm);
+        height: 20px;
+      }
+
       .linked-icon {
         align-self: center;
         margin-right: var(--boxel-sp-5xs);
@@ -367,6 +380,11 @@ export default class CardSchemaEditor extends Component<Signature> {
                                   =
                                 </span>
                               {{/if}}
+                              {{#if field.isQueryField}}
+                                <span class='query-icon' data-test-query-icon>
+                                  Q
+                                </span>
+                              {{/if}}
                               {{#if (this.isLinkedField field)}}
                                 <IconLink
                                   class='linked-icon'
@@ -527,6 +545,10 @@ export default class CardSchemaEditor extends Component<Signature> {
 
     if (field.isComputed) {
       types.push('Computed');
+    }
+
+    if (field.isQueryField) {
+      types.push('Query');
     }
 
     return types.join(', ');

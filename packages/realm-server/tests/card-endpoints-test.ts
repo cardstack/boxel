@@ -1,5 +1,6 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
+import supertest from 'supertest';
 import { join, basename } from 'path';
 import type { Server } from 'http';
 import type { DirResult } from 'tmp';
@@ -10,11 +11,12 @@ import {
   type LooseSingleCardDocument,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
-import { stringify } from 'qs';
+import { stringify, parse } from 'qs';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
   setupBaseRealmServer,
   setupPermissionedRealm,
+  setupPermissionedRealms,
   setupMatrixRoom,
   matrixURL,
   closeServer,
@@ -171,6 +173,233 @@ module(basename(__filename), function () {
               cardTitle: null,
             },
           });
+        });
+        test('card-level query-backed relationships resolve via search at read time', async function (assert) {
+          let { testRealm: realm, request } = getRealmSetup();
+
+          let writes = new Map<string, string>([
+            [
+              'query-person-finder.gts',
+              `
+                import { CardDef, field, contains, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+                import StringField from "https://cardstack.com/base/string";
+                import { Person } from "./person";
+
+                export class QueryPersonFinder extends CardDef {
+                  @field title = contains(StringField);
+                  @field favorite = linksTo(Person, {
+                    query: {
+                      filter: {
+                        eq: { firstName: '$this.title' },
+                      },
+                    },
+                  });
+                  @field matches = linksToMany(Person, {
+                    query: {
+                      filter: {
+                        eq: { firstName: '$this.title' },
+                      },
+                    },
+                  });
+                }
+              `,
+            ],
+            [
+              'query-person-finder.json',
+              JSON.stringify({
+                data: {
+                  attributes: {
+                    title: 'Mango',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './query-person-finder.gts',
+                      name: 'QueryPersonFinder',
+                    },
+                  },
+                },
+              }),
+            ],
+          ]);
+
+          await realm.writeMany(writes);
+
+          let response = await request
+            .get('/query-person-finder')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let doc = response.body;
+          let favorite = doc.data.relationships.favorite;
+          assert.deepEqual(
+            favorite.data,
+            { type: 'card', id: `${testRealmHref}person-1` },
+            'linksTo query resolves to the matching person',
+          );
+          assert.strictEqual(
+            favorite.links.self,
+            `./person-1`,
+            'linksTo relationship self link set to resolved card',
+          );
+
+          let matchesRelationship = doc.data.relationships['matches.0'];
+          assert.ok(matchesRelationship, 'linksToMany relationship populated');
+          assert.deepEqual(
+            matchesRelationship.data,
+            { type: 'card', id: `${testRealmHref}person-1` },
+            'linksToMany query returns matching person in first slot',
+          );
+
+          assert.ok(
+            Array.isArray(doc.included),
+            'included resources present for query results',
+          );
+          assert.ok(
+            doc.included.some(
+              (resource: any) => resource.id === `${testRealmHref}person-1`,
+            ),
+            'included contains resolved person card',
+          );
+        });
+
+        test('field-level query-backed relationships resolve at read time (nested contains)', async function (assert) {
+          let { testRealm: realm, request } = getRealmSetup();
+
+          let writes = new Map<string, string>([
+            [
+              'query-person-finder-nested.gts',
+              `
+                import { CardDef, FieldDef, field, contains, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+                import StringField from "https://cardstack.com/base/string";
+                import { Person } from "./person";
+
+                export class QueryLinksField extends FieldDef {
+                  @field title = contains(StringField);
+                  @field favorite = linksTo(Person, {
+                    query: {
+                      filter: {
+                        eq: { firstName: '$this.title' },
+                      },
+                    },
+                  });
+                  @field matches = linksToMany(Person, {
+                    query: {
+                      filter: {
+                        eq: { firstName: '$this.title' },
+                      },
+                    },
+                  });
+                }
+
+                export class WrapperField extends FieldDef {
+                  @field queries = contains(QueryLinksField);
+                }
+
+                export class OuterQueryCard extends CardDef {
+                  @field info = contains(WrapperField);
+                }
+
+                export class DeepWrapperField extends FieldDef {
+                  @field inner = contains(WrapperField);
+                }
+
+                export class DeepOuterQueryCard extends CardDef {
+                  @field details = contains(DeepWrapperField);
+                }
+              `,
+            ],
+            [
+              'query-person-finder-nested.json',
+              JSON.stringify({
+                data: {
+                  attributes: {
+                    info: {
+                      queries: {
+                        title: 'Mango',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './query-person-finder-nested.gts',
+                      name: 'OuterQueryCard',
+                    },
+                  },
+                },
+              }),
+            ],
+            [
+              'query-person-finder-deep.json',
+              JSON.stringify({
+                data: {
+                  attributes: {
+                    details: {
+                      inner: {
+                        queries: {
+                          title: 'Mango',
+                        },
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './query-person-finder-nested.gts',
+                      name: 'DeepOuterQueryCard',
+                    },
+                  },
+                },
+              }),
+            ],
+          ]);
+
+          await realm.writeMany(writes);
+
+          let response = await request
+            .get('/query-person-finder-nested')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            'HTTP 200 status for nested',
+          );
+          let doc = response.body;
+          assert.deepEqual(
+            doc.data.relationships['info.queries.favorite']?.data,
+            { type: 'card', id: `${testRealmHref}person-1` },
+            'nested linksTo query resolves to matching person',
+          );
+          assert.strictEqual(
+            doc.data.relationships['info.queries.favorite']?.links?.self,
+            `./person-1`,
+            'nested linksTo relationship self link set',
+          );
+          assert.deepEqual(
+            doc.data.relationships['info.queries.matches.0']?.data,
+            { type: 'card', id: `${testRealmHref}person-1` },
+            'nested linksToMany returns first match',
+          );
+
+          let deepResponse = await request
+            .get('/query-person-finder-deep')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            deepResponse.status,
+            200,
+            'HTTP 200 status for deep nested',
+          );
+          let deepDoc = deepResponse.body;
+          assert.deepEqual(
+            deepDoc.data.relationships['details.inner.queries.favorite']?.data,
+            { type: 'card', id: `${testRealmHref}person-1` },
+            'deeply nested linksTo query resolves to matching person',
+          );
+          assert.deepEqual(
+            deepDoc.data.relationships['details.inner.queries.matches.0']?.data,
+            { type: 'card', id: `${testRealmHref}person-1` },
+            'deeply nested linksToMany returns first match',
+          );
         });
       });
 
@@ -3060,6 +3289,311 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
         });
       });
+    });
+  });
+
+  module('Query-backed relationships runtime resolver', function (hooks) {
+    const providerRealmURL = 'http://127.0.0.1:5521/';
+    const consumerRealmURL = 'http://127.0.0.1:5522/';
+    const UNREACHABLE_REALM_URL = 'https://example.invalid/offline/';
+    let consumerRequest: SuperTest<Test>;
+
+    setupBaseRealmServer(hooks, matrixURL);
+
+    setupPermissionedRealms(hooks, {
+      realms: [
+        {
+          realmURL: providerRealmURL,
+          permissions: {
+            '*': ['read', 'write', 'realm-owner'],
+          },
+          fileSystem: {
+            'person.gts': `
+              import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
+              import StringField from "https://cardstack.com/base/string";
+
+              export class Person extends CardDef {
+                @field name = contains(StringField);
+              }
+            `,
+            'person-remote.json': {
+              data: {
+                attributes: {
+                  name: 'Zed',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+          },
+        },
+        {
+          realmURL: consumerRealmURL,
+          permissions: {
+            '*': ['read', 'write', 'realm-owner'],
+          },
+          fileSystem: {
+            'favorite-finder.gts': `
+              import { CardDef, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+              import { Person } from "${providerRealmURL}person";
+
+              export class FavoriteLookup extends CardDef {
+                @field favorite = linksTo(Person, {
+                  query: {
+                    realm: '$thisRealm',
+                    page: { size: 1 },
+                  },
+                });
+                @field matches = linksToMany(Person, {
+                  query: {
+                    realm: '${providerRealmURL}',
+                    sort: [
+                      { by: 'name', direction: 'desc' },
+                    ],
+                    page: { size: 1 },
+                  },
+                });
+                @field failingMatches = linksToMany(Person, {
+                  query: {
+                    realm: '${UNREACHABLE_REALM_URL}',
+                    page: { size: 1 },
+                  },
+                });
+              }
+            `,
+            'favorite.json': {
+              data: {
+                meta: {
+                  adoptsFrom: {
+                    module: './favorite-finder',
+                    name: 'FavoriteLookup',
+                  },
+                },
+              },
+            },
+            'local-person.json': {
+              data: {
+                attributes: {
+                  name: 'Abe',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${providerRealmURL}person`,
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+      onRealmSetup({ realms }) {
+        let latestRealms = realms.slice(-2);
+        consumerRequest = supertest(latestRealms[1].realmHttpServer);
+      },
+    });
+
+    hooks.afterEach(() => {
+      resetCatalogRealms();
+    });
+
+    test('linksTo query resolves the first aggregated result and includes it', async function (assert) {
+      let response = await consumerRequest
+        .get('/favorite')
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+      let doc = response.body;
+      let favoriteRelationship = doc.data.relationships.favorite;
+
+      assert.deepEqual(
+        favoriteRelationship?.data,
+        { type: 'card', id: `${consumerRealmURL}local-person` },
+        'linksTo picks the first (local realm) match',
+      );
+      let favoriteSearchLink = favoriteRelationship?.links?.search;
+      assert.ok(
+        favoriteSearchLink,
+        'linksTo relationship exposes canonical search link',
+      );
+      let favoriteSearchURL = new URL(favoriteSearchLink);
+      assert.strictEqual(
+        favoriteSearchURL.href.split('?')[0],
+        new URL('_search', consumerRealmURL).href,
+        'favorite relationship search link targets consumer realm',
+      );
+      let favoriteQueryParams = parse(
+        favoriteSearchURL.searchParams.toString(),
+      ) as Record<string, any>;
+      assert.deepEqual(
+        favoriteQueryParams.page,
+        { size: '1', number: '0' },
+        'favorite relationship search link encodes pagination',
+      );
+      assert.strictEqual(
+        favoriteQueryParams.filter?.type?.module,
+        `${providerRealmURL}person`,
+        'favorite relationship search link encodes implicit type filter module',
+      );
+      assert.strictEqual(
+        favoriteQueryParams.filter?.type?.name,
+        'Person',
+        'favorite relationship search link encodes implicit type filter name',
+      );
+      assert.ok(
+        Array.isArray(doc.included),
+        '`included` array exists for linksTo query',
+      );
+      assert.ok(
+        doc.included.some(
+          (resource: any) => resource.id === `${consumerRealmURL}local-person`,
+        ),
+        '`included` contains the resolved favorite card',
+      );
+      assert.deepEqual(
+        favoriteRelationship?.data,
+        { type: 'card', id: `${consumerRealmURL}local-person` },
+        'favorite relationship data references the resolved card',
+      );
+      assert.ok(
+        doc.included.find(
+          (resource: any) => resource.id === `${consumerRealmURL}local-person`,
+        ),
+        'local person is present in included array',
+      );
+    });
+
+    test('linksToMany query returns remote results and records errors for failing realm', async function (assert) {
+      let response = await consumerRequest
+        .get('/favorite')
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+      let doc = response.body;
+      let relationships = doc.data.relationships as Record<string, any>;
+      let remoteRelationship = relationships['matches.0'];
+      let matchesRelationship = relationships.matches;
+
+      assert.ok(remoteRelationship, 'remote match is present');
+      assert.deepEqual(
+        remoteRelationship?.data,
+        { type: 'card', id: `${providerRealmURL}person-remote` },
+        'remote realm result is returned',
+      );
+
+      assert.notOk(
+        matchesRelationship?.meta?.errors,
+        'successful remote query does not include errors metadata',
+      );
+      assert.deepEqual(
+        matchesRelationship?.data,
+        [{ type: 'card', id: `${providerRealmURL}person-remote` }],
+        'linksToMany base relationship provides data array for remote results',
+      );
+      let matchesSearchLink = matchesRelationship?.links?.search;
+      assert.ok(
+        matchesSearchLink,
+        'linksToMany relationship exposes canonical search link',
+      );
+      let matchesSearchURL = new URL(matchesSearchLink);
+      assert.strictEqual(
+        matchesSearchURL.href.split('?')[0],
+        new URL('_search', providerRealmURL).href,
+        'matches relationship search link targets provider realm',
+      );
+      let matchesQueryParams = parse(
+        matchesSearchURL.searchParams.toString(),
+      ) as Record<string, any>;
+      assert.deepEqual(
+        matchesQueryParams.page,
+        { size: '1', number: '0' },
+        'matches relationship search link encodes pagination',
+      );
+      assert.strictEqual(
+        matchesQueryParams.sort?.[0]?.by,
+        'name',
+        'matches relationship search link preserves sort by',
+      );
+      assert.strictEqual(
+        matchesQueryParams.sort?.[0]?.direction,
+        'desc',
+        'matches relationship search link preserves sort direction',
+      );
+      assert.strictEqual(
+        matchesQueryParams.sort?.[0]?.on?.module,
+        `${providerRealmURL}person`,
+        'matches relationship search link encodes sort module',
+      );
+      assert.strictEqual(
+        matchesQueryParams.sort?.[0]?.on?.name,
+        'Person',
+        'matches relationship search link encodes sort card name',
+      );
+
+      let failingRelationship = relationships.failingMatches;
+      assert.ok(
+        failingRelationship?.meta?.errors,
+        'failingMatches relationship meta includes errors array',
+      );
+      assert.ok(
+        failingRelationship.meta.errors.some(
+          (error: any) => error.realm === UNREACHABLE_REALM_URL,
+        ),
+        'meta includes unreachable realm entry for failing query',
+      );
+      let failingSearchLink = failingRelationship.links?.search;
+      assert.ok(
+        failingSearchLink,
+        'failingMatches relationship exposes canonical search link despite error',
+      );
+      let failingSearchURL = new URL(failingSearchLink);
+      assert.strictEqual(
+        failingSearchURL.href.split('?')[0],
+        new URL('_search', UNREACHABLE_REALM_URL).href,
+        'failingMatches search link targets unreachable realm',
+      );
+      let failingQueryParams = parse(
+        failingSearchURL.searchParams.toString(),
+      ) as Record<string, any>;
+      assert.deepEqual(
+        failingQueryParams.page,
+        { size: '1', number: '0' },
+        'failingMatches search link encodes pagination',
+      );
+      assert.strictEqual(
+        failingQueryParams.filter?.type?.module,
+        `${providerRealmURL}person`,
+        'failingMatches search link encodes implicit type filter module',
+      );
+      assert.strictEqual(
+        failingQueryParams.filter?.type?.name,
+        'Person',
+        'failingMatches search link encodes implicit type filter name',
+      );
+      assert.deepEqual(
+        failingRelationship.data,
+        [],
+        'failingMatches relationship provides empty data array when query fails',
+      );
+
+      assert.ok(Array.isArray(doc.included), '`included` array is present');
+      let includedIds = (doc.included ?? []).map(
+        (resource: any) => resource.id,
+      );
+      assert.ok(
+        includedIds.includes(`${consumerRealmURL}local-person`),
+        '`included` contains the local person result',
+      );
+      assert.ok(
+        includedIds.includes(`${providerRealmURL}person-remote`),
+        '`included` contains the remote person result',
+      );
     });
   });
 });

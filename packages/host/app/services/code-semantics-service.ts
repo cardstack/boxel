@@ -257,7 +257,11 @@ export default class CodeSemanticsService extends Service {
         // Check if this is actually a field by trying to get it
         try {
           let maybeField = getField(card, fieldName);
-          if (maybeField && !maybeField.computeVia) {
+          if (
+            maybeField &&
+            !maybeField.computeVia &&
+            !maybeField.queryDefinition
+          ) {
             fields.push(fieldName);
           }
         } catch {

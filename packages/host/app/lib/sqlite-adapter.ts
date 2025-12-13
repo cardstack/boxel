@@ -227,12 +227,16 @@ export default class SQLiteAdapter implements DBAdapter {
       .replace(/ILIKE/g, 'LIKE') // sqlite LIKE is case insensitive
       .replace(/jsonb_array_elements_text\(/g, 'json_each(')
       .replace(/jsonb_tree\(/g, 'json_tree(')
-      .replace(/([^\s]+\s[^\s]+)_array_element/g, (match, group) => {
-        if (group.startsWith('as ')) {
-          return match;
-        }
-        return `${match}.value`;
-      })
+      .replace(
+        /\b([A-Za-z0-9_]+)_array_element\b/g,
+        (match, _alias, offset, sql) => {
+          let preceding = sql.slice(0, offset);
+          if (/as\s+$/i.test(preceding)) {
+            return match;
+          }
+          return `${match}.value`;
+        },
+      )
       .replace(/\.text_value/g, '.value')
       .replace(/\.jsonb_value/g, '.value')
       .replace(/= 'null'::jsonb/g, 'IS NULL')

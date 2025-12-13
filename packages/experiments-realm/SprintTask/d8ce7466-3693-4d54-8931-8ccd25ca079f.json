@@ -1,6 +1,12 @@
 {
   "data": {
     "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sprint-task",
+        "name": "SprintTask"
+      }
+    },
     "attributes": {
       "status": {
         "index": 0,
@@ -18,8 +24,12 @@
       },
       "name": "Build Date Range Card",
       "details": "",
-      "description": null,
-      "thumbnailURL": null
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
     },
     "relationships": {
       "project": {
@@ -51,12 +61,11 @@
         "links": {
           "self": "../Tag/f00a2177-df10-4ad7-8eac-2fbf8448de98"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../sprint-task",
-        "name": "SprintTask"
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

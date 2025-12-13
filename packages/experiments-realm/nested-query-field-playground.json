@@ -1,0 +1,29 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "NestedQueryFieldPlayground",
+        "module": "./nested-query-field-playground"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "queries": {
+        "title": "Do"
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -342,6 +342,7 @@ export function getBoxComponent(
                             @editCard={{cardCrudFunctions.editCard}}
                             @canEdit={{and
                               (not field.computeVia)
+                              (not field.queryDefinition)
                               permissions.canWrite
                             }}
                             @typeConstraint={{@typeConstraint}}
@@ -375,6 +376,7 @@ export function getBoxComponent(
                           @editCard={{cardCrudFunctions.editCard}}
                           @canEdit={{and
                             (not field.computeVia)
+                            (not field.queryDefinition)
                             permissions.canWrite
                           }}
                           @typeConstraint={{@typeConstraint}}
@@ -400,6 +402,7 @@ export function getBoxComponent(
                         @editCard={{cardCrudFunctions.editCard}}
                         @canEdit={{and
                           (not field.computeVia)
+                          (not field.queryDefinition)
                           permissions.canWrite
                         }}
                         @typeConstraint={{@typeConstraint}}

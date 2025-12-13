@@ -33,7 +33,6 @@ import type IndexController from '@cardstack/host/controllers/index';
 
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
-import { getSearch } from '@cardstack/host/resources/search';
 
 import type CommandService from '@cardstack/host/services/command-service';
 
@@ -72,7 +71,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
 
   @provide(GetCardsContextName)
   private get getCards() {
-    return getSearch;
+    return this.store.getSearchResource.bind(this.store);
   }
 
   @provide(GetCardCollectionContextName)

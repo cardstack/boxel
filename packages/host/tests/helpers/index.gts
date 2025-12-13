@@ -91,6 +91,26 @@ const { sqlSchema } = ENV;
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
+type TestRealmRecord = {
+  realm: Realm;
+  adapter: TestRealmAdapter;
+};
+
+const TEST_REALM_REGISTRY = '__cardstack_testRealmRegistry';
+
+function getTestRealmRegistry(): Map<string, TestRealmRecord> {
+  // We track test realms globally so helpers like persistDocumentToTestRealm can
+  // locate the correct realm/adapter for a card URL during test runs.
+  let registry = (globalThis as any)[TEST_REALM_REGISTRY] as
+    | Map<string, TestRealmRecord>
+    | undefined;
+  if (!registry) {
+    registry = new Map();
+    (globalThis as any)[TEST_REALM_REGISTRY] = registry;
+  }
+  return registry;
+}
+
 const baseTestMatrix = {
   url: new URL(`http://localhost:8008`),
   username: 'test_realm',
@@ -633,13 +653,18 @@ export async function setupAcceptanceTestRealm({
   setupAuthEndpoints({
     [resolvedRealmURL]: deriveTestUserPermissions(permissions),
   });
-  return await setupTestRealm({
+  let result = await setupTestRealm({
     contents,
     realmURL: resolvedRealmURL,
     isAcceptanceTest: true,
     permissions,
     mockMatrixUtils,
   });
+  getTestRealmRegistry().set(result.realm.url, {
+    realm: result.realm,
+    adapter: result.adapter,
+  });
+  return result;
 }
 
 export async function setupIntegrationTestRealm({
@@ -657,13 +682,18 @@ export async function setupIntegrationTestRealm({
   setupAuthEndpoints({
     [resolvedRealmURL]: deriveTestUserPermissions(permissions),
   });
-  return await setupTestRealm({
+  let result = await setupTestRealm({
     contents,
     realmURL: resolvedRealmURL,
     isAcceptanceTest: false,
     permissions: permissions as RealmPermissions,
     mockMatrixUtils,
   });
+  getTestRealmRegistry().set(result.realm.url, {
+    realm: result.realm,
+    adapter: result.adapter,
+  });
+  return result;
 }
 
 export async function withoutLoaderMonitoring<T>(cb: () => Promise<T>) {
@@ -989,7 +1019,48 @@ export async function saveCard(
     };
   }
   await api.updateFromSerialized(instance, doc, store);
+  await persistDocumentToTestRealm(id, doc);
   return doc;
+}
+
+async function persistDocumentToTestRealm(
+  id: string,
+  doc: LooseSingleCardDocument,
+) {
+  if (!id) {
+    return;
+  }
+  let url = new URL(id);
+  let registry = getTestRealmRegistry();
+  let matching = [...registry.values()].find(({ realm }) =>
+    realm.paths.inRealm(url),
+  );
+  if (!matching) {
+    return;
+  }
+  let owner = matching.adapter.owner as
+    | (Owner & { isDestroying?: boolean; isDestroyed?: boolean })
+    | undefined;
+  if (owner?.isDestroying || owner?.isDestroyed) {
+    getTestRealmRegistry().delete(matching.realm.url);
+    return;
+  }
+  let localPath: string;
+  try {
+    localPath = matching.realm.paths.local(url);
+  } catch {
+    return;
+  }
+  if (!localPath.endsWith('.json')) {
+    localPath = `${localPath}.json`;
+  }
+  await matching.adapter.write(localPath, JSON.stringify(doc, null, 2));
+  await matching.realm.realmIndexUpdater.update(
+    [matching.realm.paths.fileURL(localPath)],
+    {
+      async onInvalidation() {},
+    },
+  );
 }
 
 export function setupCardLogs(
