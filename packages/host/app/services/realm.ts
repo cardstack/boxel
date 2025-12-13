@@ -336,6 +336,10 @@ class RealmResource {
     return await this.setRealmInfoProperty('hostHome', hostHome);
   }
 
+  async setInteractHome(interactHome: string | null): Promise<void> {
+    return await this.setRealmInfoProperty('interactHome', interactHome);
+  }
+
   async fetchRealmPermissions() {
     return await this.fetchRealmPermissionsTask.perform();
   }
@@ -699,6 +703,13 @@ export default class RealmService extends Service {
 
   async setHostHome(url: string, hostHome: string | null): Promise<void> {
     await this.knownRealm(url)?.setHostHome(hostHome);
+  }
+
+  async setInteractHome(
+    url: string,
+    interactHome: string | null,
+  ): Promise<void> {
+    await this.knownRealm(url)?.setInteractHome(interactHome);
   }
 
   isPublic = (url: string): boolean => {

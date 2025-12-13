@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Index Configuration",
+      "description": "Interact mode index configuration card; set its home field to choose the card shown as the interact home page",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/index-config",
+        "name": "IndexConfig"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
