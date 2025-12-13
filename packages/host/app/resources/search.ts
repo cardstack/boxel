@@ -79,7 +79,6 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
 
   constructor(owner: object) {
     super(owner);
-    console.log('SearchResource: constructor called');
     registerDestructor(this, () => {
       for (let instance of this._instances) {
         this.store.dropReference(instance.id);
@@ -124,10 +123,6 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
       this.#log.info(
         `apply seed for search resource (one-time); count=${seed.cards.length}; searchURL=${seed.searchURL}`,
       );
-    } else {
-      console.log(
-        `SearchResource: not applying seed (seed=${JSON.stringify(seed)}, already applied=${this.#seedApplied})`,
-      );
     }
 
     if (
@@ -149,9 +144,6 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
           unsubscribe: subscribeToRealm(realm, (event: RealmEventContent) => {
             this.#log.info(
               `search-resource received realm event on ${realm}: ${JSON.stringify(event)}`,
-            );
-            this.#log.info(
-              `received realm event for ${realm}: ${event.eventName} / ${'indexType' in event ? event.indexType : 'n/a'}`,
             );
             if (this.#previousQuery === undefined) {
               return;

@@ -340,9 +340,6 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       let localId = instance[localIdSymbol];
       if (!reachable.has(localId)) {
         if (this.#gcCandidates.has(localId)) {
-          console.log(
-            `garbage collecting instance ${localId} (remote id: ${instance.id}) from store`,
-          );
           destroy(instance);
           // brand the instance to make it easier for debugging
           (instance as unknown as any)[
@@ -353,9 +350,6 @@ export default class CardStoreWithGarbageCollection implements CardStore {
             this.delete(instance.id);
           }
         } else {
-          console.debug(
-            `instance [local id:${localId} remote id: ${instance.id}] is now eligible for garbage collection`,
-          );
           this.#gcCandidates.add(localId);
         }
       } else {

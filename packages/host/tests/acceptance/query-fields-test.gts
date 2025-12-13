@@ -355,7 +355,6 @@ module(
         );
         await settled();
 
-        console.log('interceptedSearchRequests:', interceptedSearchRequests);
         assert.strictEqual(
           interceptedSearchRequests.length,
           2,
@@ -471,7 +470,6 @@ module(
         );
         await settled();
 
-        console.log('interceptedSearchRequests:', interceptedSearchRequests);
         assert.strictEqual(
           interceptedSearchRequests.length,
           2,
@@ -525,7 +523,6 @@ module(
         if (request.method === 'PATCH' && request.url.endsWith('/query-card')) {
           interceptedBody = await request.clone().json();
         }
-        console.log(interceptedBody);
         return null;
       };
       network.virtualNetwork.mount(handler, { prepend: true });
@@ -540,7 +537,6 @@ module(
 
         await waitUntil(
           () => {
-            console.log(find('[data-test-last-saved]')?.textContent);
             return (
               find('[data-test-last-saved]')
                 ?.textContent?.trim()
