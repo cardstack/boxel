@@ -80,7 +80,10 @@ export type TypesWithErrors =
       type: 'error';
       error: SerializedError;
     };
-export type ModuleTypesCache = WeakMap<typeof BaseDef, Promise<TypesWithErrors>>;
+export type ModuleTypesCache = WeakMap<
+  typeof BaseDef,
+  Promise<TypesWithErrors>
+>;
 export interface ModuleModelState {
   getTypesCache(): ModuleTypesCache;
   setTypesCache(cache: ModuleTypesCache): void;
@@ -107,8 +110,10 @@ export default class ModuleRoute extends Route<Model> {
   @service declare loaderService: LoaderService;
   @service declare private network: NetworkService;
 
-  private typesCache: ModuleTypesCache =
-    new WeakMap<typeof BaseDef, Promise<TypesWithErrors>>();
+  private typesCache: ModuleTypesCache = new WeakMap<
+    typeof BaseDef,
+    Promise<TypesWithErrors>
+  >();
   private lastStoreResetKey: string | undefined;
   #authGuard = createAuthErrorGuard();
   #restoreRenderTimers: (() => void) | undefined;
@@ -174,7 +179,6 @@ export default class ModuleRoute extends Route<Model> {
       },
     };
   }
-
 }
 
 export async function buildModuleModel(
@@ -412,7 +416,8 @@ async function getTypes(
   let result: TypesWithErrors | undefined;
   try {
     for (;;) {
-      let loadedCard: typeof CardAPI.CardDef, loadedCardRef: CodeRef | undefined;
+      let loadedCard: typeof CardAPI.CardDef,
+        loadedCardRef: CodeRef | undefined;
       try {
         let maybeCard = await loadCardDef(fullRef, {
           loader: context.loaderService.loader,

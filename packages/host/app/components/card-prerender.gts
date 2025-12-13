@@ -28,14 +28,17 @@ import {
   serializeRenderRouteOptions,
   cleanCapturedHTML,
 } from '@cardstack/runtime-common';
+
+import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
+
 import {
   buildModuleModel,
   type ModuleModelContext,
   type ModuleModelState,
   type ModuleTypesCache,
 } from '../routes/module';
-import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 
+import { createAuthErrorGuard } from '../utils/auth-error-guard';
 import {
   RenderCardTypeTracker,
   type CardRenderContext,
@@ -44,7 +47,6 @@ import {
   coerceRenderError,
   normalizeRenderError,
 } from '../utils/render-error';
-import { createAuthErrorGuard } from '../utils/auth-error-guard';
 import {
   enableRenderTimerStub,
   withTimersBlocked,
