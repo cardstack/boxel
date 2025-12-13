@@ -1,6 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
-import { getOwner } from '@ember/owner';
 import type {
   RouteInfo,
   RouteInfoWithAttributes,
@@ -29,6 +28,12 @@ import {
   serializeRenderRouteOptions,
   cleanCapturedHTML,
 } from '@cardstack/runtime-common';
+import {
+  buildModuleModel,
+  type ModuleModelContext,
+  type ModuleModelState,
+  type ModuleTypesCache,
+} from '../routes/module';
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 
 import {
@@ -39,6 +44,7 @@ import {
   coerceRenderError,
   normalizeRenderError,
 } from '../utils/render-error';
+import { createAuthErrorGuard } from '../utils/auth-error-guard';
 import {
   enableRenderTimerStub,
   withTimersBlocked,
@@ -64,6 +70,9 @@ export default class CardPrerender extends Component {
   #renderErrorPayload: string | undefined;
   #cardTypeTracker = new RenderCardTypeTracker();
   #currentContext: CardRenderContext | undefined;
+  #moduleTypesCache: ModuleTypesCache = new WeakMap() as ModuleTypesCache;
+  #moduleLastStoreResetKey: string | undefined;
+  #moduleAuthGuard = createAuthErrorGuard();
 
   #renderBasePath(url: string, renderOptions?: RenderRouteOptions) {
     let optionsSegment = encodeURIComponent(
@@ -76,6 +85,7 @@ export default class CardPrerender extends Component {
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
+    this.#moduleAuthGuard.register();
     this.#prerendererDelegate = {
       prerenderCard: this.prerender.bind(this),
       prerenderModule: this.prerenderModule.bind(this),
@@ -88,6 +98,7 @@ export default class CardPrerender extends Component {
         this.#handleRenderErrorEvent,
       );
       this.#cardTypeTracker.clear();
+      this.#moduleAuthGuard.unregister();
     });
   }
 
@@ -306,29 +317,43 @@ export default class CardPrerender extends Component {
       };
       if (shouldClearCache) {
         initialRenderOptions.clearCache = true;
-        this.loaderService.resetLoader({
-          clearFetchCache: true,
-          reason: 'module-prerender clearCache',
-        });
-        this.store.resetCache();
       } else {
         delete initialRenderOptions.clearCache;
       }
 
-      // TODO: extract beforeModel/model hook contents from the route
-      let moduleRoute = getOwner(this)!.lookup('route:module') as any;
-      let result = await moduleRoute!.model({
-        id: url,
-        nonce: String(this.#nonce),
-        renderOptions: initialRenderOptions,
-      });
+      let result = await buildModuleModel(
+        {
+          id: url,
+          nonce: String(this.#nonce),
+          renderOptions: initialRenderOptions,
+        },
+        this.#moduleModelContext(),
+      );
       return result as ModuleRenderResponse;
-      // let routeInfo = await this.router.recognizeAndLoad(
-      //   this.#moduleBasePath(url, initialRenderOptions),
-      // );
-      // return routeInfo.attributes as ModuleRenderResponse;
     },
   );
+
+  #moduleModelContext(): ModuleModelContext {
+    return {
+      router: this.router,
+      store: this.store,
+      loaderService: this.loaderService,
+      network: this.network,
+      authGuard: this.#moduleAuthGuard,
+      state: this.#moduleModelState(),
+    };
+  }
+
+  #moduleModelState(): ModuleModelState {
+    return {
+      getTypesCache: () => this.#moduleTypesCache,
+      setTypesCache: (cache) => (this.#moduleTypesCache = cache),
+      getLastStoreResetKey: () => this.#moduleLastStoreResetKey,
+      setLastStoreResetKey: (key) => {
+        this.#moduleLastStoreResetKey = key;
+      },
+    };
+  }
 
   private renderHTML = enqueueTask(
     async (

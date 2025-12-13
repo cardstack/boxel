@@ -30,6 +30,7 @@ import {
   getFieldDefinitions,
   CardError,
   unixTime,
+  type RenderRouteOptions,
 } from '@cardstack/runtime-common';
 import {
   serializableError,
@@ -70,7 +71,7 @@ interface CardType {
   codeRef: CodeRef;
   displayName: string;
 }
-type TypesWithErrors =
+export type TypesWithErrors =
   | {
       type: 'types';
       types: CardType[];
@@ -79,6 +80,26 @@ type TypesWithErrors =
       type: 'error';
       error: SerializedError;
     };
+export type ModuleTypesCache = WeakMap<typeof BaseDef, Promise<TypesWithErrors>>;
+export interface ModuleModelState {
+  getTypesCache(): ModuleTypesCache;
+  setTypesCache(cache: ModuleTypesCache): void;
+  getLastStoreResetKey(): string | undefined;
+  setLastStoreResetKey(key: string | undefined): void;
+}
+export interface ModuleModelContext {
+  router: RouterService;
+  store: RenderStoreService;
+  loaderService: LoaderService;
+  network: NetworkService;
+  authGuard: ReturnType<typeof createAuthErrorGuard>;
+  state: ModuleModelState;
+}
+export interface ModuleModelParams {
+  id: string;
+  nonce: string;
+  renderOptions?: RenderRouteOptions;
+}
 
 export default class ModuleRoute extends Route<Model> {
   @service declare router: RouterService;
@@ -86,7 +107,8 @@ export default class ModuleRoute extends Route<Model> {
   @service declare loaderService: LoaderService;
   @service declare private network: NetworkService;
 
-  private typesCache = new WeakMap<typeof BaseDef, Promise<TypesWithErrors>>();
+  private typesCache: ModuleTypesCache =
+    new WeakMap<typeof BaseDef, Promise<TypesWithErrors>>();
   private lastStoreResetKey: string | undefined;
   #authGuard = createAuthErrorGuard();
   #restoreRenderTimers: (() => void) | undefined;
@@ -125,150 +147,192 @@ export default class ModuleRoute extends Route<Model> {
     options?: string;
   }) {
     let parsedOptions = parseRenderRouteOptions(options);
-    // Make it easy for Puppeteer to do regular Ember transitions
-    (globalThis as any).boxelTransitionTo = (
-      ...args: Parameters<RouterService['transitionTo']>
-    ) => {
-      this.router.transitionTo(...args);
-    };
-
-    if (parsedOptions.clearCache) {
-      this.typesCache = new WeakMap();
-      this.loaderService.resetLoader({
-        clearFetchCache: true,
-        reason: 'module-route clearCache',
-      });
-      let resetKey = `${id}:${nonce}`;
-      if (this.lastStoreResetKey !== resetKey) {
-        this.store.resetCache();
-        this.lastStoreResetKey = resetKey;
-      }
-    }
-
-    let module: Record<string, any> | undefined;
-    try {
-      module = await this.#authGuard.race(() =>
-        this.loaderService.loader.import(id),
-      );
-    } catch (err: any) {
-      if (this.#authGuard.isAuthError(err)) {
-        return modelWithError({
-          id,
-          nonce,
-          message: err.message ?? 'Authorization error logging into realm',
-          err,
-          status: err.status ?? (isCardError(err) ? err.status : 401),
-        });
-      }
-      console.warn(`encountered error loading module "${id}": ${err.message}`);
-      let depsSet = new Set(
-        await (
-          await this.loaderService.loader.getConsumedModules(id)
-        ).filter((u) => u !== id),
-      );
-      if (isCardError(err) && err.deps) {
-        for (let dep of err.deps) {
-          depsSet.add(dep);
-        }
-      }
-      return modelWithError({
+    return await buildModuleModel(
+      {
         id,
         nonce,
-        deps: [...depsSet],
-        message: `encountered error loading module "${id}": ${err.message}`,
-        err,
-      });
-    }
+        renderOptions: parsedOptions,
+      },
+      this.#moduleModelContext(),
+    );
+  }
 
-    let response: Response;
-    try {
-      response = await this.network.authedFetch(id, {
-        method: 'HEAD',
-        headers: {
-          Accept: SupportedMimeType.CardSource,
-        },
-      });
-    } catch (err: any) {
-      console.warn(
-        `Encountered error HTTP HEAD (accept: card-source) ${id}: ${err.message}`,
-      );
-      return modelWithError({
-        id,
-        nonce,
-        message: `Encountered error HTTP HEAD (accept: card-source) ${id}: ${err.message}`,
-        err,
-      });
-    }
-    let maybeShimmed = response.status === 404;
-    if (!maybeShimmed && !response.ok) {
-      return modelWithError({
-        id,
-        nonce,
-        status: response.status,
-        message: `Could not HTTP HEAD (accept: card-source) ${id}: ${response.status} - ${response.statusText}`,
-      });
-    }
-
-    let lastModified: number;
-    let createdAt: number;
-    let deps: string[];
-
-    let isShimmed = maybeShimmed;
-    if (maybeShimmed) {
-      // for testing purposes we'll still generate meta for shimmed cards,
-      // however the deps will only be the shimmed file
-      lastModified = 0;
-      createdAt = 0;
-      deps = [trimExecutableExtension(new URL(id)).href];
-    } else {
-      let consumes = (
-        await this.loaderService.loader.getConsumedModules(id)
-      ).filter((u) => u !== id);
-      deps = consumes.map((d) => trimExecutableExtension(new URL(d)).href);
-      let lastModifiedRFC7321 = response.headers.get('last-modified');
-      let createdAtRFC7321 = response.headers.get('x-created');
-      if (!lastModifiedRFC7321) {
-        return modelWithError({
-          id,
-          nonce,
-          deps,
-          message: `HTTP HEAD (accept: card-source) ${id} has no last-modified time header`,
-        });
-      }
-      lastModified = parseRfc7321Time(lastModifiedRFC7321);
-      createdAt = createdAtRFC7321
-        ? parseRfc7321Time(createdAtRFC7321)
-        : lastModified;
-    }
-
-    let definitions: {
-      [name: string]: ModuleDefinitionResult | ErrorEntry;
-    } = {};
-    for (let [name, maybeBaseDef] of Object.entries(module)) {
-      if (isBaseDef(maybeBaseDef)) {
-        let definition = await this.#makeDefinition({
-          name,
-          url: trimExecutableExtension(new URL(id)),
-          cardOrFieldDef: maybeBaseDef,
-        });
-        let codeRef = internalKeyFor({ module: id, name }, undefined);
-        definitions[codeRef] = definition;
-      }
-    }
-
+  #moduleModelContext(): ModuleModelContext {
     return {
-      id,
-      nonce,
-      status: 'ready' as const,
-      deps,
-      lastModified,
-      createdAt,
-      isShimmed,
-      definitions,
+      router: this.router,
+      store: this.store,
+      loaderService: this.loaderService,
+      network: this.network,
+      authGuard: this.#authGuard,
+      state: {
+        getTypesCache: () => this.typesCache,
+        setTypesCache: (cache) => (this.typesCache = cache),
+        getLastStoreResetKey: () => this.lastStoreResetKey,
+        setLastStoreResetKey: (key) => {
+          this.lastStoreResetKey = key;
+        },
+      },
     };
   }
 
-  async #makeDefinition({
+}
+
+export async function buildModuleModel(
+  { id, nonce, renderOptions }: ModuleModelParams,
+  context: ModuleModelContext,
+): Promise<Model> {
+  let parsedOptions = renderOptions ?? {};
+  let moduleURL = trimExecutableExtension(new URL(id));
+  // Make it easy for Puppeteer to do regular Ember transitions
+  (globalThis as any).boxelTransitionTo = (
+    ...args: Parameters<RouterService['transitionTo']>
+  ) => {
+    context.router.transitionTo(...args);
+  };
+
+  if (parsedOptions.clearCache) {
+    context.state.setTypesCache(
+      new WeakMap<typeof BaseDef, Promise<TypesWithErrors>>(),
+    );
+    context.loaderService.resetLoader({
+      clearFetchCache: true,
+      reason: 'module-route clearCache',
+    });
+    let resetKey = `${id}:${nonce}`;
+    if (context.state.getLastStoreResetKey() !== resetKey) {
+      context.store.resetCache();
+      context.state.setLastStoreResetKey(resetKey);
+    }
+  }
+
+  let module: Record<string, any> | undefined;
+  try {
+    module = await context.authGuard.race(() =>
+      context.loaderService.loader.import(id),
+    );
+  } catch (err: any) {
+    if (context.authGuard.isAuthError(err)) {
+      return modelWithError({
+        id,
+        nonce,
+        message: err.message ?? 'Authorization error logging into realm',
+        err,
+        status: err.status ?? (isCardError(err) ? err.status : 401),
+      });
+    }
+    console.warn(`encountered error loading module "${id}": ${err.message}`);
+    let depsSet = new Set(
+      await (
+        await context.loaderService.loader.getConsumedModules(id)
+      ).filter((u) => u !== id),
+    );
+    if (isCardError(err) && err.deps) {
+      for (let dep of err.deps) {
+        depsSet.add(dep);
+      }
+    }
+    return modelWithError({
+      id,
+      nonce,
+      deps: [...depsSet],
+      message: `encountered error loading module "${id}": ${err.message}`,
+      err,
+    });
+  }
+
+  let response: Response;
+  try {
+    response = await context.network.authedFetch(id, {
+      method: 'HEAD',
+      headers: {
+        Accept: SupportedMimeType.CardSource,
+      },
+    });
+  } catch (err: any) {
+    console.warn(
+      `Encountered error HTTP HEAD (accept: card-source) ${id}: ${err.message}`,
+    );
+    return modelWithError({
+      id,
+      nonce,
+      message: `Encountered error HTTP HEAD (accept: card-source) ${id}: ${err.message}`,
+      err,
+    });
+  }
+  let maybeShimmed = response.status === 404;
+  if (!maybeShimmed && !response.ok) {
+    return modelWithError({
+      id,
+      nonce,
+      status: response.status,
+      message: `Could not HTTP HEAD (accept: card-source) ${id}: ${response.status} - ${response.statusText}`,
+    });
+  }
+
+  let lastModified: number;
+  let createdAt: number;
+  let deps: string[];
+
+  let isShimmed = maybeShimmed;
+  if (maybeShimmed) {
+    // for testing purposes we'll still generate meta for shimmed cards,
+    // however the deps will only be the shimmed file
+    lastModified = 0;
+    createdAt = 0;
+    deps = [moduleURL.href];
+  } else {
+    let consumes = (
+      await context.loaderService.loader.getConsumedModules(id)
+    ).filter((u) => u !== id);
+    deps = consumes.map((d) => trimExecutableExtension(new URL(d)).href);
+    let lastModifiedRFC7321 = response.headers.get('last-modified');
+    let createdAtRFC7321 = response.headers.get('x-created');
+    if (!lastModifiedRFC7321) {
+      return modelWithError({
+        id,
+        nonce,
+        deps,
+        message: `HTTP HEAD (accept: card-source) ${id} has no last-modified time header`,
+      });
+    }
+    lastModified = parseRfc7321Time(lastModifiedRFC7321);
+    createdAt = createdAtRFC7321
+      ? parseRfc7321Time(createdAtRFC7321)
+      : lastModified;
+  }
+
+  let definitions: {
+    [name: string]: ModuleDefinitionResult | ErrorEntry;
+  } = {};
+  for (let [name, maybeBaseDef] of Object.entries(module)) {
+    if (isBaseDef(maybeBaseDef)) {
+      let definition = await makeDefinition(
+        {
+          name,
+          url: moduleURL,
+          cardOrFieldDef: maybeBaseDef,
+        },
+        context,
+      );
+      let codeRef = internalKeyFor({ module: id, name }, undefined);
+      definitions[codeRef] = definition;
+    }
+  }
+
+  return {
+    id,
+    nonce,
+    status: 'ready' as const,
+    deps,
+    lastModified,
+    createdAt,
+    isShimmed,
+    definitions,
+  };
+}
+
+async function makeDefinition(
+  {
     url,
     name,
     cardOrFieldDef,
@@ -276,142 +340,144 @@ export default class ModuleRoute extends Route<Model> {
     url: URL;
     name: string;
     cardOrFieldDef: typeof BaseDef;
-  }): Promise<ModuleDefinitionResult | ErrorEntry> {
-    try {
-      let api = await this.loaderService.loader.import<typeof CardAPI>(
-        `${baseRealm.url}card-api`,
-      );
-      let fields = getFieldDefinitions(api, cardOrFieldDef);
-      let codeRef = identifyCard(cardOrFieldDef) as ResolvedCodeRef;
-      let definition: Definition = {
-        codeRef,
-        fields,
-        type: isCardDef(cardOrFieldDef) ? 'card-def' : 'field-def',
-        displayName: isCardDef(cardOrFieldDef)
-          ? cardOrFieldDef.displayName
-          : null,
-      };
-      let typesMaybeError = isCardDef(cardOrFieldDef)
-        ? await this.#getTypes(cardOrFieldDef)
-        : { type: 'types' as const, types: [] };
-      if (typesMaybeError.type === 'error') {
-        console.warn(
-          `encountered error indexing definition  "${url.href}/${name}": ${typesMaybeError.error.message}`,
-        );
-        return {
-          type: 'error',
-          error:
-            typesMaybeError.error.status == null
-              ? { ...typesMaybeError.error, status: 500 }
-              : typesMaybeError.error,
-        } as ErrorEntry;
-      }
-      return {
-        type: 'definition',
-        definition,
-        moduleURL: trimExecutableExtension(new URL(url)).href,
-        types: typesMaybeError.types.map(({ refURL }) => refURL),
-      };
-    } catch (err: any) {
+  },
+  context: ModuleModelContext,
+): Promise<ModuleDefinitionResult | ErrorEntry> {
+  try {
+    let api = await context.loaderService.loader.import<typeof CardAPI>(
+      `${baseRealm.url}card-api`,
+    );
+    let fields = getFieldDefinitions(api, cardOrFieldDef);
+    let codeRef = identifyCard(cardOrFieldDef) as ResolvedCodeRef;
+    let definition: Definition = {
+      codeRef,
+      fields,
+      type: isCardDef(cardOrFieldDef) ? 'card-def' : 'field-def',
+      displayName: isCardDef(cardOrFieldDef)
+        ? cardOrFieldDef.displayName
+        : null,
+    };
+    let typesMaybeError = isCardDef(cardOrFieldDef)
+      ? await getTypes(cardOrFieldDef, context)
+      : { type: 'types' as const, types: [] };
+    if (typesMaybeError.type === 'error') {
       console.warn(
-        `encountered error indexing definition "${url.href}/${name}": ${err.message}`,
+        `encountered error indexing definition  "${url.href}/${name}": ${typesMaybeError.error.message}`,
       );
       return {
         type: 'error',
-        error: toSerializedError(
-          err,
-          `encountered error indexing definition "${url.href}/${name}": ${describeError(err)}`,
-        ),
+        error:
+          typesMaybeError.error.status == null
+            ? { ...typesMaybeError.error, status: 500 }
+            : typesMaybeError.error,
       } as ErrorEntry;
     }
+    return {
+      type: 'definition',
+      definition,
+      moduleURL: trimExecutableExtension(new URL(url)).href,
+      types: typesMaybeError.types.map(({ refURL }) => refURL),
+    };
+  } catch (err: any) {
+    console.warn(
+      `encountered error indexing definition "${url.href}/${name}": ${err.message}`,
+    );
+    return {
+      type: 'error',
+      error: toSerializedError(
+        err,
+        `encountered error indexing definition "${url.href}/${name}": ${describeError(err)}`,
+      ),
+    } as ErrorEntry;
   }
+}
 
-  async #getTypes(card: typeof CardDef): Promise<TypesWithErrors> {
-    let cached = this.typesCache.get(card);
-    if (cached) {
-      return await cached;
-    }
-    let ref = identifyCard(card);
-    if (!ref) {
-      throw new Error(`could not identify card ${card.name}`);
-    }
-    let deferred = new Deferred<TypesWithErrors>();
-    this.typesCache.set(card, deferred.promise);
-    let types: CardType[] = [];
-    let fullRef: CodeRef = ref;
-    let result: TypesWithErrors | undefined;
-    try {
-      for (;;) {
-        let loadedCard: typeof CardAPI.CardDef,
-          loadedCardRef: CodeRef | undefined;
-        try {
-          let maybeCard = await loadCardDef(fullRef, {
-            loader: this.loaderService.loader,
-          });
-          if (!isCardDef(maybeCard)) {
-            result = {
-              type: 'error' as const,
-              error: toSerializedError(
-                undefined,
-                `The definition at ${JSON.stringify(fullRef)} is not a CardDef`,
-              ),
-            };
-            return result;
-          }
-          loadedCard = maybeCard;
-          loadedCardRef = identifyCard(loadedCard);
-          if (!loadedCardRef) {
-            result = {
-              type: 'error' as const,
-              error: toSerializedError(
-                undefined,
-                `could not identify card ${loadedCard.name}`,
-              ),
-            };
-            return result;
-          }
-        } catch (error) {
+async function getTypes(
+  card: typeof CardDef,
+  context: ModuleModelContext,
+): Promise<TypesWithErrors> {
+  let cache = context.state.getTypesCache();
+  let cached = cache.get(card);
+  if (cached) {
+    return await cached;
+  }
+  let ref = identifyCard(card);
+  if (!ref) {
+    throw new Error(`could not identify card ${card.name}`);
+  }
+  let deferred = new Deferred<TypesWithErrors>();
+  cache.set(card, deferred.promise);
+  let types: CardType[] = [];
+  let fullRef: CodeRef = ref;
+  let result: TypesWithErrors | undefined;
+  try {
+    for (;;) {
+      let loadedCard: typeof CardAPI.CardDef, loadedCardRef: CodeRef | undefined;
+      try {
+        let maybeCard = await loadCardDef(fullRef, {
+          loader: context.loaderService.loader,
+        });
+        if (!isCardDef(maybeCard)) {
           result = {
             type: 'error' as const,
-            error: isCardError(error)
-              ? serializableError(error)
-              : toSerializedError(
-                  error,
-                  `encountered error loading card type ${JSON.stringify(
-                    fullRef,
-                  )}`,
-                ),
+            error: toSerializedError(
+              undefined,
+              `The definition at ${JSON.stringify(fullRef)} is not a CardDef`,
+            ),
           };
           return result;
         }
-
-        types.push({
-          refURL: internalKeyFor(loadedCardRef, undefined),
-          codeRef: loadedCardRef,
-          displayName: getDisplayName(loadedCard),
-        });
-        if (!isEqual(loadedCardRef, baseCardRef)) {
-          fullRef = {
-            type: 'ancestorOf',
-            card: loadedCardRef,
+        loadedCard = maybeCard;
+        loadedCardRef = identifyCard(loadedCard);
+        if (!loadedCardRef) {
+          result = {
+            type: 'error' as const,
+            error: toSerializedError(
+              undefined,
+              `could not identify card ${loadedCard.name}`,
+            ),
           };
-        } else {
-          break;
+          return result;
         }
+      } catch (error) {
+        result = {
+          type: 'error' as const,
+          error: isCardError(error)
+            ? serializableError(error)
+            : toSerializedError(
+                error,
+                `encountered error loading card type ${JSON.stringify(fullRef)}`,
+              ),
+        };
+        return result;
       }
-      result = { type: 'types', types };
-      return result;
-    } finally {
-      if (result) {
-        deferred.fulfill(result);
+
+      types.push({
+        refURL: internalKeyFor(loadedCardRef, undefined),
+        codeRef: loadedCardRef,
+        displayName: getDisplayName(loadedCard),
+      });
+      if (!isEqual(loadedCardRef, baseCardRef)) {
+        fullRef = {
+          type: 'ancestorOf',
+          card: loadedCardRef,
+        };
       } else {
-        deferred.fulfill({
-          type: 'error',
-          error: serializableError(
-            new Error(`unable to determine result for card type ${card.name}`),
-          ),
-        });
+        break;
       }
+    }
+    result = { type: 'types', types };
+    return result;
+  } finally {
+    if (result) {
+      deferred.fulfill(result);
+    } else {
+      deferred.fulfill({
+        type: 'error',
+        error: serializableError(
+          new Error(`unable to determine result for card type ${card.name}`),
+        ),
+      });
     }
   }
 }
