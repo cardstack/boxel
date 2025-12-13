@@ -1,4 +1,13 @@
-import { SkillPlus, slugifyHeading, addHeaderIds } from './skill-plus';
+import {
+  SkillPlus,
+  slugifyHeading,
+  addHeaderIds,
+  DocLayout,
+  TocSection,
+  EmptyStateContainer,
+  AppendixSection,
+  parseMarkdownHeaders,
+} from './skill-plus';
 import { SkillReference } from './skill-reference';
 import {
   Component,
@@ -9,9 +18,13 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 
-import { on } from '@ember/modifier'; // Event modifier for TOC clicks
-import { bool, gt, eq, or } from '@cardstack/boxel-ui/helpers';
+import { gt } from '@cardstack/boxel-ui/helpers';
 import { modifier } from 'ember-modifier'; // Replacing class-based modifiers with function modifiers
+
+import SkillIcon from '@cardstack/boxel-icons/book-open';
+import ActivityIcon from '@cardstack/boxel-icons/activity';
+import EditIcon from '@cardstack/boxel-icons/edit';
+import FileTextIcon from '@cardstack/boxel-icons/file-text';
 
 // Compute table of contents markdown for a Skill Set's related skills
 // Updated to handle frontMatter, backMatter, and different indentation styles
@@ -47,6 +60,7 @@ function computeTableOfContents(
     // Strip explicit ID, HTML tags, and link markdown
     raw = raw
       .replace(/\s*\{#[a-z0-9-]+\}\s*/g, '')
+      .replace(/^[\d.]+\s+/, '')
       .replace(/<[^>]*>/g, '')
       .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
       .trim();
@@ -360,560 +374,198 @@ export class SkillSet extends SkillPlus {
       }
     };
 
-    // Extract TOC entries from markdown (unified parser)
-    private parseHeadersFromMarkdown(
-      markdown: string | undefined,
-      headerLevel: 2 | 3,
-    ): { id: string; text: string; level: number }[] {
-      // ¹⁷⁹ Unified header parser
-      if (!markdown) return [];
-
-      const headers: { id: string; text: string; level: number }[] = [];
-      const lines = markdown.split('\n');
-      const usedIds = new Set<string>(); // ¹⁹² Track duplicate IDs like the DOM modifier
-
-      for (const line of lines) {
-        // Match H2: "## Text {#id}" or "## Text"
-        const h2Match = line.match(/^##\s+(.+)/);
-        // Match H3: "### Text {#id}" or "### Text"
-        const h3Match = line.match(/^###\s+(.+)/);
-
-        if (h2Match && headerLevel === 2) {
-          let fullText = h2Match[1].trim();
-          // Extract explicit ID if present
-          const idMatch = fullText.match(/\{#([a-z0-9-]+)\}/);
-          const explicitId = idMatch ? idMatch[1] : null;
-          // Remove {#id} from display text
-          const rawText = fullText.replace(/\s*\{#[a-z0-9-]+\}/, '').trim();
-          let baseId = explicitId || slugifyHeading(rawText);
-
-          // ¹⁹³ Handle duplicates same as DOM modifier
-          let finalId = baseId;
-          let suffix = 2;
-          while (usedIds.has(finalId)) {
-            finalId = `${baseId}-${suffix}`;
-            suffix++;
-          }
-          usedIds.add(finalId);
-
-          headers.push({ id: finalId, text: rawText, level: 2 });
-        } else if (h3Match) {
-          let fullText = h3Match[1].trim();
-          // Extract explicit ID if present
-          const idMatch = fullText.match(/\{#([a-z0-9-]+)\}/);
-          const explicitId = idMatch ? idMatch[1] : null;
-          // Remove {#id} from display text
-          const rawText = fullText.replace(/\s*\{#[a-z0-9-]+\}/, '').trim();
-          let baseId = explicitId || slugifyHeading(rawText);
-
-          // ¹⁹³ Handle duplicates same as DOM modifier
-          let finalId = baseId;
-          let suffix = 2;
-          while (usedIds.has(finalId)) {
-            finalId = `${baseId}-${suffix}`;
-            suffix++;
-          }
-          usedIds.add(finalId);
-
-          headers.push({ id: finalId, text: rawText, level: 3 });
-        }
-      }
-
-      return headers;
+    private get isTocEmpty() {
+      return (
+        !this.args.model?.tableOfContents &&
+        !this.args.model?.frontMatter &&
+        !this.args.model?.backMatter &&
+        !this.hasAppendix
+      );
     }
 
-    // ¹⁸⁰ Extract TOC entries from frontMatter markdown (H3s BEFORE first H2 only)
-    get introToc() {
-      const frontMatter = this.args.model?.frontMatter;
-      if (!frontMatter) return [];
-
-      // Find the position of the first H2 header
-      const lines = frontMatter.split('\n');
-      let firstH2Index = -1;
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].match(/^##\s+/)) {
-          firstH2Index = i;
-          break;
-        }
-      }
-
-      // If no H2 found, parse all H3s; otherwise only parse content before first H2
-      const contentToParse =
-        firstH2Index === -1
-          ? frontMatter
-          : lines.slice(0, firstH2Index).join('\n');
-
-      return this.parseHeadersFromMarkdown(contentToParse, 3);
+    private get hasAppendix() {
+      return (
+        this.args.model?.relatedSkills?.length ||
+        this.args.model?.commands?.length
+      );
     }
-
-    // ¹⁸¹ Extract TOC entries from backMatter markdown (H2 and H3)
-    get summaryToc() {
-      return this.parseHeadersFromMarkdown(this.args.model?.backMatter, 2);
-    }
-
-    // ⁸⁰ Scroll handlers inherited from Skill
-    // handleTocClick and scrollToTop are available via parent class
 
     <template>
-      <div class='skill-set-documentation'>
-        {{! Two-column layout: TOC sidebar + main content }}
-        <div class='doc-layout'>
-          {{! Sticky TOC sidebar }}
-          <aside class='toc-sidebar'>
-            <div class='toc-header'>
-              {{! ¹⁵⁶ Header with title and TOP button }}
-              <h2 class='toc-title'>Table of Contents</h2>
-              <button class='top-button'>
-                {{! ¹⁵⁷ TOP button }}
-                ↑ TOP
-              </button>
-            </div>
-
-            {{! template-lint-disable no-invalid-interactive}}
-            <nav class='toc-navigation'>
-              {{! ⁸² Use @on modifier with handler }}
-
-              {{! Only show TOC if there's any content }}
-              {{#if
-                (or
-                  (gt this.introToc.length 0)
-                  (bool @model.tableOfContents)
-                  (gt this.summaryToc.length 0)
-                  (gt @model.relatedSkills.length 0)
-                  (gt @model.commands.length 0)
-                )
-              }}
-
-                {{! ¹⁷⁰ INTRO section - dynamic from frontMatter }}
-                {{#if (gt this.introToc.length 0)}}
-                  <div class='toc-section'>
-                    <div class='toc-section-title'>INTRO</div>
-                    <ul>
-                      {{#each this.introToc as |item|}}
-                        <li><a href='#{{item.id}}'>{{item.text}}</a></li>
-                      {{/each}}
-                    </ul>
-                  </div>
+      <DocLayout
+        class='skill-set-documentation'
+        @titleMeta='Skill Set Documentation'
+        @title={{@model.title}}
+        @description={{@model.description}}
+        @hideToc={{this.isTocEmpty}}
+      >
+        <:navbar>
+          {{#if @model.frontMatter}}
+            <TocSection
+              @sectionTitle='Intro'
+              @navItems={{parseMarkdownHeaders @model.frontMatter}}
+            />
+          {{/if}}
+          {{#if @model.tableOfContents}}
+            <TocSection @sectionTitle='Content'>
+              <@fields.tableOfContents />
+            </TocSection>
+          {{/if}}
+          {{#if @model.backMatter}}
+            <TocSection
+              @sectionTitle='Summary'
+              @navItems={{parseMarkdownHeaders @model.backMatter}}
+            />
+          {{/if}}
+          {{#if this.hasAppendix}}
+            <TocSection @sectionTitle='Appendix'>
+              <ul>
+                {{#if @model.relatedSkills.length}}
+                  <li><a href='#skills-footer'>Related Skills</a></li>
                 {{/if}}
-
-                {{! ¹¹⁵ CONTENT section - computed from skills }}
-                {{#if @model.tableOfContents}}
-                  <div class='toc-section'>
-                    <div class='toc-section-title'>CONTENT</div>
-                    <@fields.tableOfContents />
-                  </div>
+                {{#if @model.commands.length}}
+                  <li><a href='#available-commands'>Available Commands</a></li>
                 {{/if}}
-
-                {{! ¹⁷¹ SUMMARY section - dynamic from backMatter }}
-                {{#if (gt this.summaryToc.length 0)}}
-                  <div class='toc-section'>
-                    <div class='toc-section-title'>SUMMARY</div>
-                    <ul>
-                      {{#each this.summaryToc as |item|}}
-                        {{#if (eq item.level 2)}}
-                          {{! ¹⁷⁵ H2 headers - top level }}
-                          <li><a href='#{{item.id}}'>{{item.text}}</a></li>
-                        {{else}}
-                          {{! ¹⁷⁶ H3 headers - nested }}
-                          <li class='toc-nested'><a
-                              href='#{{item.id}}'
-                            >{{item.text}}</a></li>
-                        {{/if}}
-                      {{/each}}
-                    </ul>
-                  </div>
-                {{/if}}
-
-                {{! ¹¹⁷ APPENDIX section - only show if there's content }}
-                {{#if
-                  (or
-                    (gt @model.relatedSkills.length 0)
-                    (gt @model.commands.length 0)
-                  )
-                }}
-                  <div class='toc-section'>
-                    <div class='toc-section-title'>APPENDIX</div>
-                    <ul>
-                      {{#if (gt @model.relatedSkills.length 0)}}
-                        <li><a href='#skills-footer'>Related Skills</a></li>
-                      {{/if}}
-                      {{#if (gt @model.commands.length 0)}}
-                        <li><a href='#available-commands'>Available Commands</a></li>
-                      {{/if}}
-                    </ul>
-                  </div>
-                {{/if}}
-
-              {{else}}
-                {{! Empty state for TOC when no content }}
-                <div class='toc-empty'>
-                  <p>No content yet</p>
-                </div>
-              {{/if}}
-            </nav>
-          </aside>
-
-          {{! Main content area }}
-          <main class='doc-main'>
-            {{! ¹³⁶ Header - metadata-style presentation }}
-            <header class='doc-header'>
-              <div class='metadata-label'>SKILL SET DOCUMENTATION</div>
-              <h1 class='doc-heading'>{{if
-                  @model.title
-                  @model.title
-                  'Untitled Skill Set'
-                }}</h1>
-              {{#if @model.description}}
-                <p class='doc-subtitle'>{{@model.description}}</p>
-              {{/if}}
-              <div class='doc-stats'>
-                <span class='stat-item'>
-                  <svg
-                    class='stat-icon'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    stroke-width='2'
-                  >
-                    <path d='M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z' />
-                    <path d='M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z' />
-                  </svg>
-                  {{@model.relatedSkills.length}}
-                  Skills
-                </span>
-                <span class='stat-item'>
-                  <svg
-                    class='stat-icon'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    stroke-width='2'
-                  >
-                    <polyline points='22 12 18 12 15 21 9 3 6 12 2 12' />
-                  </svg>
-                  Composite Guide
-                </span>
-              </div>
-            </header>
-
-            {{! Instructions }}
-            {{#if @model.instructions}}
-              {{! ²⁴⁹ Apply click handler to instructions article for divider clicks }}
-              <article
-                class='instructions-article'
-                {{wrapTables}}
-                {{addHeaderIds}}
-                {{on 'click' this.handleDividerClick}}
-              >
-                {{! ⁿ Apply both function modifiers }}
-                <@fields.instructions />
-              </article>
-            {{else}}
-              <div class='empty-state'>
-                <svg
-                  class='empty-icon'
-                  viewBox='0 0 24 24'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-width='2'
-                >
-                  <path
-                    d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'
-                  />
-                  <polyline points='14 2 14 8 20 8' />
-                </svg>
-                <h3 class='empty-heading'>Welcome to Your Skill Set</h3>
-                <p class='empty-description'>This skill set is currently empty.
-                  Get started by:</p>
-                <ul class='empty-actions'>
-                  <li>
-                    <svg
-                      class='action-icon'
-                      viewBox='0 0 24 24'
-                      fill='none'
-                      stroke='currentColor'
-                      stroke-width='2'
-                    >
-                      <path
-                        d='M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'
-                      />
-                      <path
-                        d='M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'
-                      />
-                    </svg>
+              </ul>
+            </TocSection>
+          {{/if}}
+        </:navbar>
+        <:headerRow>
+          <div class='skillset-header-stats'>
+            <span class='skillset-header-stat-item'>
+              <SkillIcon
+                class='skillset-header-stat-icon'
+                width='16'
+                height='16'
+              />
+              {{@model.relatedSkills.length}}
+              Skills
+            </span>
+            <span class='skillset-header-stat-item'>
+              <ActivityIcon
+                class='skillset-header-stat-icon'
+                width='16'
+                height='16'
+              />
+              Composite Guide
+            </span>
+          </div>
+        </:headerRow>
+        <:default>
+          {{#if @model.instructions}}
+            <article
+              class='instructions-article'
+              id='instructions'
+              {{addHeaderIds}}
+            >
+              <@fields.instructions />
+            </article>
+          {{else}}
+            <EmptyStateContainer>
+              <h3>Welcome to Your Skill Set</h3>
+              <p>
+                This skill set is currently empty. Get started by:
+              </p>
+              <ul class='skillset-empty-actions'>
+                <li>
+                  <EditIcon width='24' height='24' />
+                  <span>
                     <strong>Add Front Matter</strong>
-                    – Write an introduction or overview section
-                  </li>
-                  <li>
-                    <svg
-                      class='action-icon'
-                      viewBox='0 0 24 24'
-                      fill='none'
-                      stroke='currentColor'
-                      stroke-width='2'
-                    >
-                      <path d='M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z' />
-                      <path d='M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z' />
-                    </svg>
+                    <p>Write an introduction or overview section</p>
+                  </span>
+                </li>
+                <li>
+                  <SkillIcon width='24' height='24' />
+                  <span>
                     <strong>Add Related Skills</strong>
-                    – Link existing skills to create a comprehensive guide
-                  </li>
-                  <li>
-                    <svg
-                      class='action-icon'
-                      viewBox='0 0 24 24'
-                      fill='none'
-                      stroke='currentColor'
-                      stroke-width='2'
-                    >
-                      <path
-                        d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'
-                      />
-                      <polyline points='14 2 14 8 20 8' />
-                      <line x1='16' y1='13' x2='8' y2='13' />
-                      <line x1='16' y1='17' x2='8' y2='17' />
-                      <polyline points='10 9 9 9 8 9' />
-                    </svg>
+                    <p>Link existing skills to create a comprehensive guide</p>
+                  </span>
+                </li>
+                <li>
+                  <FileTextIcon width='24' height='24' />
+                  <span>
                     <strong>Add Back Matter</strong>
-                    – Include summary notes or reinforce key points
-                  </li>
-                </ul>
-              </div>
-            {{/if}}
+                    <p>Include summary notes or reinforce key points</p>
+                  </span>
+                </li>
+              </ul>
+            </EmptyStateContainer>
+          {{/if}}
 
-            {{! ¹¹⁸ APPENDIX divider - show with content or blank slate }}
-            <div class='appendix-divider' id='appendix-section'>
-              <h2>APPENDIX</h2>
-            </div>
-
-            {{#if
-              (or
-                (gt @model.relatedSkills.length 0) (gt @model.commands.length 0)
-              )
-            }}
-              {{! Referenced Skills footer }}
-              {{#if (gt @model.relatedSkills.length 0)}}
-                <footer class='skills-footer' id='skills-footer'>
-                  <h3 class='footer-heading'>Related Skills</h3>
-                  <div class='skills-cards'>
-                    <@fields.relatedSkills @format='embedded' />
-                  </div>
-                </footer>
-              {{/if}}
-
-              {{! ¹¹⁹ Available Commands section }}
-              {{#if (gt @model.commands.length 0)}}
+          {{#if this.hasAppendix}}
+            <AppendixSection>
+              {{#if @model.relatedSkills.length}}
                 <section class='commands-section' id='available-commands'>
-                  <h3 class='section-heading'>Available Commands</h3>
-                  <div class='commands-container'>
-                    <@fields.commands @format='embedded' />
-                  </div>
+                  <h3 class='section-heading'>Related Skills</h3>
+                  <@fields.relatedSkills
+                    @format='embedded'
+                    class='skills-cards'
+                  />
                 </section>
               {{/if}}
-            {{else}}
-              {{! Appendix blank slate }}
-              <div class='appendix-empty-state'>
-                <p class='appendix-empty-text'>
-                  The appendix will contain related skills and available
-                  commands once configured.
-                </p>
-              </div>
-            {{/if}}
-          </main>
-        </div>
-      </div>
+              {{#if @model.commands.length}}
+                <section class='commands-section' id='available-commands'>
+                  <h3 class='section-heading'>Available Commands</h3>
+                  <@fields.commands
+                    @format='embedded'
+                    class='commands-container'
+                  />
+                </section>
+              {{/if}}
+            </AppendixSection>
+          {{/if}}
+        </:default>
+      </DocLayout>
 
       <style scoped>
-        /* ⁴² Professional documentation styling with reliable spacing */
-
-        /* ⁴⁷ Root container */
-        .skill-set-documentation {
-          width: 100%;
-          height: 100%;
-          overflow: hidden;
-          background: var(--background);
-          color: var(--foreground);
-          font-family: var(--font-sans);
-        }
-
-        /* ⁴⁸ Two-column layout with compact spacing (0.25rem base unit) */
-        .doc-layout {
-          display: grid;
-          grid-template-columns: 240px 1fr;
-          gap: 1.5rem; /* 6 × 0.25rem */
-          height: 100%;
-          max-width: 1600px;
-          margin: 0 auto;
-          padding: 1rem 1.5rem; /* 4 × 0.25rem, 6 × 0.25rem */
-        }
-
-        /* ⁴⁹ TOC Sidebar - full height scrollable navigation */
-        .toc-sidebar {
-          height: 100%;
-          overflow-y: auto;
-          overflow-x: hidden;
-          background: var(--muted);
-          border: 1px solid var(--border);
-          border-radius: var(--radius-lg);
-          padding: 0.75rem;
-          padding-bottom: 2rem; /* ⁸⁵ Extra bottom padding */
+        .skillset-header-stats {
           display: flex;
-          flex-direction: column;
+          gap: var(--sp-4);
+          margin-block: var(--sp-3);
+          padding-top: var(--sp-3);
+          border-top: 1px solid var(--db-border);
         }
-
-        .toc-header {
-          /* ¹⁵⁹ Header container with title and button */
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 0.75rem;
-        }
-
-        .toc-title {
-          font-size: 0.6875rem;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          color: var(--muted-foreground);
-          margin: 0; /* ¹⁶⁰ Remove bottom margin, handled by header */
-        }
-
-        .top-button {
-          /* ¹⁶¹ TOP button styling */
-          background: var(--primary);
-          color: var(--primary-foreground);
-          border: none;
-          border-radius: var(--radius-sm);
-          padding: 0.25rem 0.5rem;
-          font-size: 0.625rem;
-          font-weight: 700;
-          letter-spacing: 0.05em;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-
-        .top-button:hover {
-          background: color-mix(in lab, var(--primary) 85%, black);
-          transform: translateY(-1px);
-        }
-
-        .top-button:active {
-          transform: translateY(0);
-        }
-
-        .toc-navigation {
-          font-size: 0.75rem;
-        }
-
-        .toc-navigation :deep(ul) {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-        }
-
-        .toc-navigation :deep(li) {
-          margin-bottom: 0.5rem; /* 2 × 0.25rem */
-          padding-left: 0.75rem; /* 3 × 0.25rem */
-        }
-
-        .toc-navigation :deep(ul ul) {
-          margin-top: 0.25rem; /* 1 × 0.25rem */
-          padding-left: 0.75rem; /* 3 × 0.25rem */
-        }
-
-        .toc-nested {
-          /* ¹⁷⁷ Nested H3 items in summary TOC */
-          padding-left: 0.75rem;
-        }
-
-        .toc-empty {
-          padding: 1.5rem 0.75rem;
-          text-align: center;
-        }
-
-        .toc-empty p {
-          margin: 0;
-          font-size: 0.75rem;
-          color: var(--muted-foreground);
-          font-style: italic;
-        }
-
-        .toc-navigation :deep(a) {
-          color: var(--foreground);
-          text-decoration: none;
-          line-height: 1.5;
-          transition: color 0.15s ease;
-          display: inline-block;
-        }
-
-        .toc-navigation :deep(a:hover) {
-          color: var(--primary);
-        }
-
-        /* ⁵⁰ Main content area - compact scrollable */
-        .doc-main {
-          overflow-y: auto;
-          padding-right: 0.5rem; /* 2 × 0.25rem */
-          padding-bottom: 3rem; /* ⁸⁶ Extra bottom padding so last section is reachable */
-        }
-
-        /* ¹³⁷ Header section - compact metadata-style presentation */
-        .doc-header {
-          margin-bottom: 2rem; /* ¹³⁸ Reduced from 3rem */
-          padding: 0 0 1.25rem 0; /* ¹³⁸ Tighter bottom padding */
-          background: transparent;
-          border: none;
-          border-bottom: 2px solid var(--border); /* ¹³⁸ Thinner border */
-          border-radius: var(--radius-lg); /* ¹⁶⁴ Theme radius */
-        }
-
-        .metadata-label {
-          font-size: 0.625rem;
-          font-weight: 800;
-          text-transform: uppercase;
-          letter-spacing: 0.15em;
-          color: var(--primary);
-          margin-bottom: 0.5rem; /* ¹³⁸ Reduced from 0.75rem */
-        }
-
-        .doc-heading {
-          font-size: 1.5rem; /* ¹³⁸ Reduced from 2.25rem - much more compact */
-          font-weight: 700; /* ¹³⁸ Reduced from 800 */
-          line-height: 1.2;
-          margin: 0 0 0.5rem 0; /* ¹³⁸ Tighter spacing */
-          color: var(--foreground);
-          letter-spacing: -0.01em;
-        }
-
-        .doc-subtitle {
-          font-size: 0.875rem; /* ¹³⁸ Reduced from 1rem */
-          line-height: 1.5;
-          color: var(--muted-foreground);
-          margin: 0 0 1rem 0; /* ¹³⁸ Tighter spacing */
-          max-width: 48rem;
-        }
-
-        .doc-stats {
-          display: flex;
-          gap: 1rem; /* ¹³⁸ Reduced from 1.5rem */
-          margin-top: 0.75rem; /* ¹³⁸ Reduced from 1rem */
-          padding-top: 0.75rem; /* ¹³⁸ Reduced from 1rem */
-          border-top: 1px solid var(--border);
-        }
-
-        .stat-item {
+        .skillset-header-stat-item {
           display: inline-flex;
           align-items: center;
-          gap: 0.375rem; /* ¹³⁸ Reduced from 0.5rem */
-          font-size: 0.75rem; /* ¹³⁸ Reduced from 0.8125rem */
+          gap: calc(1.5 * var(--sp-1));
+          font-size: var(--boxel-font-size-xs);
           font-weight: 600;
-          color: var(--muted-foreground);
+          color: var(--db-muted-foreground);
+        }
+        .skillset-header-stat-icon {
+          width: 1rem;
+          height: 1rem;
         }
 
-        .stat-icon {
-          width: 1rem; /* ¹³⁸ Reduced from 1.125rem */
-          height: 1rem;
-          opacity: 0.7;
+        .skillset-empty-actions {
+          list-style: none;
+          padding: 0;
+          margin-block: var(--sp-6);
+          margin-inline: 0;
+          text-align: start;
+          display: inline-block;
+          font-size: var(--boxel-font-size-sm);
+        }
+        .skillset-empty-actions :deep(p) {
+          font-size: inherit;
+        }
+        .skillset-empty-actions :deep(li) {
+          display: flex;
+          align-items: flex-start;
+          gap: var(--sp-3);
+        }
+        .skillset-empty-actions :deep(li + li) {
+          margin-top: var(--sp-6);
+        }
+        .skillset-empty-actions :deep(li svg) {
+          width: 1.5rem;
+          height: 1.5rem;
+          flex-shrink: 0;
+          margin-top: calc(0.5 * var(--sp-1));
+        }
+        .skillset-empty-actions :deep(strong) {
+          color: var(--db-foreground);
+          font-weight: 600;
         }
 
         /* Instructions article */
@@ -922,7 +574,6 @@ export class SkillSet extends SkillPlus {
           line-height: 1.7;
           color: var(--foreground);
         }
-
         /* ⁵² Typography hierarchy - compact spacing */
         .instructions-article :deep(h2) {
           font-size: 1.375rem;
@@ -933,11 +584,9 @@ export class SkillSet extends SkillPlus {
           scroll-margin-top: 6rem; /* ⁶³ Increased for sticky TOC offset */
           padding-top: 0.5rem; /* 2 × 0.25rem */
         }
-
         .instructions-article :deep(h2:first-child) {
           margin-top: 0;
         }
-
         .instructions-article :deep(h3) {
           font-size: 1.125rem;
           font-weight: 600;
@@ -946,7 +595,6 @@ export class SkillSet extends SkillPlus {
           color: var(--foreground);
           scroll-margin-top: 6rem; /* ⁶⁴ Increased for sticky TOC offset */
         }
-
         .instructions-article :deep(h4) {
           font-size: 1rem;
           font-weight: 600;
@@ -954,23 +602,19 @@ export class SkillSet extends SkillPlus {
           margin: 1rem 0 0.5rem 0; /* 4 × 0.25rem, 2 × 0.25rem */
           color: var(--foreground);
         }
-
         .instructions-article :deep(p) {
           margin: 0.75rem 0; /* 3 × 0.25rem */
           line-height: 1.6;
         }
-
         .instructions-article :deep(ul),
         .instructions-article :deep(ol) {
           margin: 0.75rem 0; /* 3 × 0.25rem */
           padding-left: 1.5rem; /* 6 × 0.25rem */
         }
-
         .instructions-article :deep(li) {
           margin: 0.5rem 0; /* 2 × 0.25rem */
           line-height: 1.5;
         }
-
         .instructions-article :deep(code) {
           font-family: var(--font-mono);
           font-size: 0.875em;
@@ -984,7 +628,6 @@ export class SkillSet extends SkillPlus {
           border-radius: var(--radius-sm);
           color: var(--foreground);
         }
-
         .instructions-article :deep(pre) {
           margin: 1rem 0; /* 4 × 0.25rem */
           padding: 0.75rem; /* 3 × 0.25rem */
@@ -1001,12 +644,10 @@ export class SkillSet extends SkillPlus {
           font-size: 0.8125rem;
           line-height: 1.5;
         }
-
         .instructions-article :deep(pre code) {
           background: transparent;
           padding: 0;
         }
-
         .instructions-article :deep(blockquote) {
           margin: 1rem 0; /* 4 × 0.25rem */
           padding: 0.75rem 1rem; /* 3 × 0.25rem, 4 × 0.25rem */
@@ -1015,22 +656,18 @@ export class SkillSet extends SkillPlus {
           border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
           font-style: italic;
         }
-
         .instructions-article :deep(a) {
           color: var(--primary);
           text-decoration: none;
           transition: color 0.15s ease;
         }
-
         .instructions-article :deep(a:hover) {
           text-decoration: underline;
         }
-
         .instructions-article :deep(strong) {
           font-weight: 600;
           color: var(--foreground);
         }
-
         /* ¹⁴³ Table styling - clean professional tables with horizontal scroll */
         .instructions-article :deep(table) {
           width: 100%;
@@ -1042,7 +679,6 @@ export class SkillSet extends SkillPlus {
           border: 1px solid var(--border);
           border-radius: var(--radius-md);
         }
-
         /* ¹⁴⁵ Scrollable table wrapper */
         .instructions-article :deep(.table-wrapper) {
           width: 100%;
@@ -1052,12 +688,10 @@ export class SkillSet extends SkillPlus {
           border-radius: var(--radius-md);
           box-shadow: var(--shadow-sm);
         }
-
         .instructions-article :deep(thead) {
           background: var(--muted);
           border-bottom: 2px solid var(--border);
         }
-
         .instructions-article :deep(th) {
           padding: 0.75rem 1rem;
           text-align: left;
@@ -1065,36 +699,29 @@ export class SkillSet extends SkillPlus {
           color: var(--foreground);
           border-right: 1px solid var(--border);
         }
-
         .instructions-article :deep(th:last-child) {
           border-right: none;
         }
-
         .instructions-article :deep(td) {
           padding: 0.625rem 1rem;
           border-right: 1px solid var(--border);
           border-bottom: 1px solid var(--border);
           vertical-align: top;
         }
-
         .instructions-article :deep(td:last-child) {
           border-right: none;
         }
-
         .instructions-article :deep(tbody tr:last-child td) {
           border-bottom: none;
         }
-
         .instructions-article :deep(tbody tr:hover) {
           background: color-mix(in lab, var(--primary) 5%, var(--card));
         }
-
         /* Code in tables */
         .instructions-article :deep(table code) {
           font-size: 0.75rem;
           white-space: nowrap;
         }
-
         /* ¹⁰⁷ Highlighted section - clean callout box */
         .instructions-article :deep(.highlighted-section) {
           padding: 2rem;
@@ -1133,7 +760,6 @@ export class SkillSet extends SkillPlus {
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
           transition: all 0.3s ease; /* ²³⁸ Smooth hover transitions */
         }
-
         .instructions-article :deep(.divider-number) {
           flex-shrink: 0;
           width: 3rem;
@@ -1152,15 +778,14 @@ export class SkillSet extends SkillPlus {
           ); /* ¹⁶⁶ Theme radius with fallback */
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
-
         .instructions-article :deep(.divider-content) {
           flex: 1;
           display: flex;
-          flex-direction: column;
+          align-items: center;
+          justify-content: space-between;
           gap: 0.5rem;
           min-width: 0;
         }
-
         .instructions-article :deep(.divider-topic) {
           font-size: 1.75rem;
           font-weight: 800;
@@ -1168,7 +793,6 @@ export class SkillSet extends SkillPlus {
           letter-spacing: -0.03em;
           line-height: 1.1;
         }
-
         .instructions-article :deep(.divider-link) {
           font-size: 0.6875rem;
           color: var(--secondary-foreground);
@@ -1179,11 +803,9 @@ export class SkillSet extends SkillPlus {
           word-break: break-all;
           line-height: 1.4;
         }
-
         .instructions-article :deep(.divider-link:hover) {
           opacity: 1;
         }
-
         /* ¹¹³ Divider context text - activation conditions */
         .instructions-article :deep(.divider-context) {
           font-size: 0.6875rem; /* ¹²⁵ Smaller, aligned with link */
@@ -1194,7 +816,6 @@ export class SkillSet extends SkillPlus {
           line-height: 1.5;
           padding-left: 0; /* ¹²⁸ Align with link text */
         }
-
         /* ²²⁸ Divider inclusion mode badge - pill style */
         .instructions-article :deep(.divider-mode) {
           display: inline-block;
@@ -1207,19 +828,16 @@ export class SkillSet extends SkillPlus {
           margin-top: 0.5rem;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); /* ²⁴² Subtle shadow */
         }
-
         .instructions-article :deep(.divider-mode-full) {
           /* ²²⁹ Full mode styling - pill */
           background: var(--primary);
           color: var(--primary-foreground);
         }
-
         .instructions-article :deep(.divider-mode-essential) {
           /* ²³⁰ Essential mode styling - pill */
           background: var(--accent);
           color: var(--accent-foreground);
         }
-
         .instructions-article :deep(.divider-mode-link-only) {
           /* ²³¹ Link only mode styling - pill */
           background: var(--muted); /* ²⁴³ Better contrast */
@@ -1227,192 +845,13 @@ export class SkillSet extends SkillPlus {
           border: 1px solid var(--border);
         }
 
-        /* ⁵⁵ Empty state - user-friendly blank slate */
-        .empty-state {
-          text-align: center;
-          padding: 4rem 2rem;
-          max-width: 42rem;
-          margin: 0 auto;
-          color: var(--muted-foreground);
-        }
-
-        .empty-icon {
-          width: 4rem;
-          height: 4rem;
-          margin: 0 auto 1.5rem;
-          color: var(--primary);
-          opacity: 0.6;
-        }
-
-        .empty-heading {
-          font-size: 1.5rem;
-          font-weight: 700;
-          color: var(--foreground);
-          margin: 0 0 0.75rem 0;
-        }
-
-        .empty-description {
-          margin: 0 0 2rem 0;
-          font-size: 1rem;
-          color: var(--muted-foreground);
-        }
-
-        .empty-actions {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-          text-align: left;
-          display: inline-block;
-        }
-
-        .empty-actions li {
-          display: flex;
-          align-items: flex-start;
-          gap: 0.75rem;
-          margin-bottom: 1.5rem;
-          font-size: 0.9375rem;
-          line-height: 1.6;
-        }
-
-        .empty-actions li:last-child {
-          margin-bottom: 0;
-        }
-
-        .action-icon {
-          width: 1.5rem;
-          height: 1.5rem;
-          flex-shrink: 0;
-          color: var(--primary);
-          margin-top: 0.125rem;
-        }
-
-        .empty-actions strong {
-          color: var(--foreground);
-          font-weight: 600;
-        }
-
-        /* ⁵⁶ Footer with skill references - compact */
-        .skills-footer {
-          margin-top: 2rem; /* 8 × 0.25rem */
-          padding-top: 1.5rem; /* 6 × 0.25rem */
-          border-top: 2px solid var(--border);
-        }
-
-        .footer-heading {
-          font-size: 1rem;
-          font-weight: 700;
-          margin: 0 0 1rem 0; /* 4 × 0.25rem */
-          color: var(--foreground);
-        }
-
         .skills-cards {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-          gap: 1rem; /* 4 × 0.25rem */
-        }
-
-        /* ¹²⁰ TOC section titles - uppercase labels */
-        .toc-section {
-          margin-bottom: 1.5rem;
-        }
-
-        .toc-section-title {
-          font-size: 0.625rem;
-          font-weight: 800;
-          text-transform: uppercase;
-          letter-spacing: 0.1em;
-          color: var(--muted-foreground);
-          margin-bottom: 0.75rem;
-          padding-bottom: 0.5rem;
-          border-bottom: 1px solid var(--border);
-        }
-
-        /* ¹²¹ Appendix divider - clean section break */
-        .appendix-divider {
-          margin: 6rem 0 3rem 0;
-          padding: 2rem 0;
-          border-top: 1px solid var(--border); /* ¹⁷⁸ Removed thick border for consistency */
-          border-bottom: 1px solid var(--border);
-        }
-
-        .appendix-divider h2 {
-          font-size: 1.5rem;
-          font-weight: 800;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          color: var(--muted-foreground);
-          margin: 0;
-          text-align: center;
-        }
-
-        /* Appendix empty state */
-        .appendix-empty-state {
-          text-align: center;
-          padding: 3rem 2rem;
-          color: var(--muted-foreground);
-        }
-
-        .appendix-empty-text {
-          margin: 0;
-          font-size: 0.9375rem;
-          font-style: italic;
-          line-height: 1.6;
-        }
-
-        /* ¹²² Commands section */
-        .commands-section {
-          margin-top: 3rem;
-          padding: 2rem;
-          background: var(--muted);
-          border: 1px solid var(--border);
-          border-radius: var(--radius-lg); /* ¹⁶⁴ Theme radius */
-        }
-
-        .section-heading {
-          font-size: 1.125rem;
-          font-weight: 700;
-          margin: 0 0 1rem 0;
-          color: var(--foreground);
-        }
-
-        .commands-container > .containsMany-field {
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-        }
-
-        /* ⁵⁷ Responsive: Stack on smaller screens with compact spacing */
-        @media (max-width: 1024px) {
-          .doc-layout {
-            grid-template-columns: 1fr;
-            padding: 1rem; /* 4 × 0.25rem */
-            gap: 1rem; /* 4 × 0.25rem */
-          }
-
-          .toc-sidebar {
-            position: static;
-            max-height: none;
-            margin-bottom: 1rem; /* 4 × 0.25rem */
-          }
-
-          .doc-main {
-            padding-right: 0;
-          }
+          gap: var(--sp-4);
         }
 
         @media (max-width: 640px) {
-          .doc-layout {
-            padding: 0.75rem; /* 3 × 0.25rem */
-          }
-
-          .doc-heading {
-            font-size: 1.5rem;
-          }
-
-          .doc-subtitle {
-            font-size: 0.9375rem;
-          }
-
           .skills-cards {
             grid-template-columns: 1fr;
           }

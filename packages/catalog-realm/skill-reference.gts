@@ -15,7 +15,8 @@ import TextAreaField from 'https://cardstack.com/base/text-area';
 
 import ExternalLink from '@cardstack/boxel-icons/external-link';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { Button, Pill } from '@cardstack/boxel-ui/components';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 export class SkillReference extends FieldDef {
   static displayName = 'Skill Reference';
@@ -87,164 +88,114 @@ export class SkillReference extends FieldDef {
         <div class='skill-ref-header'>
           <div class='skill-ref-title-row'>
             <h4 class='skill-ref-topic'>
-              {{if
-                @model.topicName
-                @model.topicName
-                (if @model.skill.title @model.skill.title 'Skill')
-              }}
+              <@fields.topicName />
             </h4>
-            <span
-              class='skill-ref-mode skill-ref-mode-{{if
-                  @model.inclusionMode
-                  @model.inclusionMode
-                  "link-only"
-                }}'
+            <Pill
+              class='skill-ref-mode boxel-ellipsize'
+              @variant={{cn
+                primary=(eq @model.inclusionMode 'full')
+                accent=(eq @model.inclusionMode 'essential')
+                muted=(eq @model.inclusionMode 'link-only')
+              }}
             >
-              {{#if (eq @model.inclusionMode 'full')}}
-                Full
-              {{else if (eq @model.inclusionMode 'essential')}}
-                Essential
-              {{else}}
-                Link Only
-              {{/if}}
-            </span>
+              {{if
+                (eq @model.inclusionMode 'link-only')
+                'Link Only'
+                @model.inclusionMode
+              }}
+            </Pill>
           </div>
 
           {{#if @model.skill}}
-            {{! Button to open skill }}
-            <button
-              class='skill-view-button'
-              type='button'
-              {{on 'click' this.openSkill}}
-            >
-              <ExternalLink class='button-icon' width='14' height='14' />
-              Open Skill
-            </button>
+            <div>
+              <Button
+                @size='extra-small'
+                class='skill-view-button'
+                {{on 'click' this.openSkill}}
+              >
+                <ExternalLink class='button-icon' width='14' height='14' />
+                Open Skill
+              </Button>
+            </div>
           {{/if}}
         </div>
 
         {{#if @model.contentSummary}}
           <div class='content-summary'>
-            <strong>Contains:</strong>
-            {{@model.contentSummary}}
+            <p>
+              <strong>Contains:</strong>
+              {{@model.contentSummary}}
+            </p>
           </div>
         {{/if}}
       </div>
 
       <style scoped>
-        /* Enhanced skill reference card styles */
         .skill-reference-card {
-          padding: 1rem;
-          border: 1px solid var(--border);
-          border-radius: var(--radius-lg);
-          background: var(--card);
+          --skillref-background: var(--card, var(--boxel-light));
+          --skillref-foreground: var(--card-foreground, var(--boxel-dark));
+          --skillref-border: var(--border, var(--boxel-border-color));
+          --skillref-muted: var(--muted, var(--boxel-100));
+          --skillref-muted-foreground: var(
+            --muted-foreground,
+            var(--boxel-700)
+          );
+
+          padding: var(--boxel-sp);
+          border: 1px solid var(--skillref-border);
+          border-radius: var(--boxel-border-radius-lg);
+          background-color: var(--skillref-background);
+          color: var(--skillref-foreground);
           box-shadow: var(--shadow-sm);
-          transition: all 0.2s ease;
         }
-
-        .skill-reference-card:hover {
-          box-shadow: var(--shadow-md);
-          border-color: var(--primary);
-        }
-
         .skill-ref-header {
           display: flex;
           flex-direction: column; /* Stack title row and button */
-          gap: 0.75rem;
-          margin-bottom: 0.75rem;
-          padding-bottom: 0.75rem;
-          border-bottom: 1px solid var(--border);
+          gap: var(--boxel-sp-xs);
         }
-
         .skill-ref-title-row {
-          /* Row for title and mode badge */
           display: flex;
           justify-content: space-between;
           align-items: baseline;
-          gap: 0.5rem;
+          gap: var(--boxel-sp-xs);
         }
-
         .skill-ref-topic {
-          font-size: 0.9375rem;
-          font-weight: 700;
-          margin: 0;
-          color: var(--foreground);
           flex: 1;
           min-width: 0;
         }
-
         .skill-ref-mode {
-          /* Mode badge with color coding */
-          font-size: 0.6875rem;
-          font-weight: 600;
+          font-weight: 700;
           text-transform: uppercase;
-          letter-spacing: 0.05em;
-          padding: 0.125rem 0.5rem;
-          border-radius: var(--radius-sm);
+          letter-spacing: var(--boxel-lsp-xl);
+          padding: var(--boxel-sp-6xs) var(--boxel-sp-sm);
           flex-shrink: 0;
-          white-space: nowrap;
         }
-
-        .skill-ref-mode-full {
-          /* Full mode - primary color */
-          background: var(--primary);
-          color: var(--primary-foreground);
+        :deep(.skill-ref-mode.variant-muted) {
+          --pill-border-color: var(--skillref-border);
         }
-
-        .skill-ref-mode-essential {
-          /* Essential mode - accent color */
-          background: var(--accent);
-          color: var(--accent-foreground);
-        }
-
-        .skill-ref-mode-link-only {
-          /* Link only mode - muted color */
-          background: var(--muted);
-          color: var(--muted-foreground);
-          border: 1px solid var(--border);
-        }
-
         .skill-view-button {
-          /* Button to open skill */
-          display: inline-flex;
-          align-items: center;
-          gap: 0.375rem;
-          padding: 0.375rem 0.75rem;
-          font-size: 0.75rem;
-          font-weight: 600;
-          color: var(--primary);
-          background: transparent;
-          border: 1px solid var(--primary);
-          border-radius: var(--radius-sm);
-          cursor: pointer;
-          transition: all 0.2s ease;
+          gap: var(--boxel-sp-2xs);
         }
-
-        .skill-view-button:hover {
-          /* Button hover state */
-          background: var(--primary);
-          color: var(--primary-foreground);
-        }
-
         .button-icon {
-          /* Icon in button */
           width: 0.875rem;
           height: 0.875rem;
         }
-
         .content-summary {
-          font-size: 0.75rem;
-          color: var(--muted-foreground);
-          margin-top: 0.5rem;
-          padding: 0.5rem;
-          background: var(--muted);
-          border-radius: var(--radius-sm);
-          border-left: 2px solid var(--primary);
+          margin-top: var(--boxel-sp-sm);
+          padding-top: var(--boxel-sp-sm);
+          border-top: 1px solid var(--skillref-border);
         }
-
+        .content-summary p {
+          font-size: var(--boxel-font-size-xs);
+          color: var(--skillref-muted-foreground);
+          background-color: var(--skillref-muted);
+          padding: var(--boxel-sp-xs);
+          border: 1px solid var(--skillref-border);
+          border-left: 2px solid var(--primary, var(--boxel-highlight));
+        }
         .content-summary strong {
-          color: var(--foreground);
-          font-weight: 600;
+          color: var(--foreground, var(--boxel-dark));
+          font-weight: 700;
         }
       </style>
     </template>
