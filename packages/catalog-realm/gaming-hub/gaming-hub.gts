@@ -1,31 +1,17 @@
 import {
   CardDef,
-  FieldDef,
   field,
   contains,
-  containsMany,
-  linksToMany,
+  linksTo,
   Component,
+  getComponent,
 } from 'https://cardstack.com/base/card-api';
 
 import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import DateField from 'https://cardstack.com/base/date';
-import UrlField from 'https://cardstack.com/base/url';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import EmailField from 'https://cardstack.com/base/email';
 
-import { Button } from '@cardstack/boxel-ui/components';
+import { Button, CardContainer } from '@cardstack/boxel-ui/components';
 
-import {
-  eq,
-  gt,
-  lt,
-  subtract,
-  formatDateTime,
-  formatNumber,
-} from '@cardstack/boxel-ui/helpers';
+import { eq, gt, formatDateTime } from '@cardstack/boxel-ui/helpers';
 
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
@@ -33,226 +19,75 @@ import { tracked } from '@glimmer/tracking';
 import { realmURL, type Query } from '@cardstack/runtime-common';
 
 import GamepadIcon from '@cardstack/boxel-icons/gamepad-2';
-import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
 
-import { VideoGame } from '../video-game/video-game';
-import { GamingPlatform } from '../gaming-platform/gaming-platform';
-import { Tournament } from '../tournament/tournament';
-import { PlayerProgress } from '../player-progress/player-progress';
-
-export class GamingStatsField extends FieldDef {
-  static displayName = 'Gaming Statistics';
-  static icon = TrendingUpIcon;
-
-  @field totalGames = contains(NumberField);
-  @field totalHours = contains(NumberField);
-  @field completionRate = contains(NumberField);
-  @field averageRating = contains(NumberField);
-  @field achievementsUnlocked = contains(NumberField);
-  @field favoriteGenre = contains(StringField);
-  @field currentStreak = contains(NumberField);
-
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <div class='gaming-stats'>
-        <h4 class='stats-title'>Gaming Statistics</h4>
-
-        <div class='stats-grid'>
-          {{#if @model.totalGames}}
-            <div class='stat-item'>
-              <div class='stat-value'>{{@model.totalGames}}</div>
-              <div class='stat-label'>Total Games</div>
-            </div>
-          {{/if}}
-
-          {{#if @model.totalHours}}
-            <div class='stat-item'>
-              <div class='stat-value'>{{formatNumber @model.totalHours}}</div>
-              <div class='stat-label'>Hours Played</div>
-            </div>
-          {{/if}}
-
-          {{#if @model.completionRate}}
-            <div class='stat-item'>
-              <div class='stat-value'>{{@model.completionRate}}%</div>
-              <div class='stat-label'>Completion Rate</div>
-            </div>
-          {{/if}}
-
-          {{#if @model.averageRating}}
-            <div class='stat-item'>
-              <div class='stat-value'>{{@model.averageRating}}/10</div>
-              <div class='stat-label'>Avg Rating</div>
-            </div>
-          {{/if}}
-
-          {{#if @model.achievementsUnlocked}}
-            <div class='stat-item'>
-              <div class='stat-value'>{{@model.achievementsUnlocked}}</div>
-              <div class='stat-label'>Achievements</div>
-            </div>
-          {{/if}}
-
-          {{#if @model.currentStreak}}
-            <div class='stat-item'>
-              <div class='stat-value'>{{@model.currentStreak}}</div>
-              <div class='stat-label'>Day Streak</div>
-            </div>
-          {{/if}}
-        </div>
-
-        {{#if @model.favoriteGenre}}
-          <div class='favorite-genre'>
-            <strong>Favorite Genre:</strong>
-            {{@model.favoriteGenre}}
-          </div>
-        {{/if}}
-      </div>
-
-      <style scoped>
-        /* ⁴⁴ Statistics styling - gaming theme */
-        .gaming-stats {
-          padding: 1.5rem;
-          border: 1px solid rgba(99, 102, 241, 0.2);
-          border-radius: 16px;
-          background: rgba(30, 41, 59, 0.4);
-          backdrop-filter: blur(10px);
-          box-shadow:
-            0 8px 32px rgba(0, 0, 0, 0.2),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1);
-        }
-
-        .stats-title {
-          font-size: 1.125rem;
-          font-weight: 700;
-          margin: 0 0 1rem 0;
-          color: #e2e8f0;
-          font-family: 'Orbitron', monospace;
-        }
-
-        .stats-title::before {
-          content: '📊';
-          font-size: 1rem;
-        }
-
-        .stats-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-          gap: 1rem;
-          margin-bottom: 1rem;
-        }
-
-        .stat-item {
-          text-align: center;
-          padding: 1rem;
-          background: rgba(30, 41, 59, 0.8);
-          backdrop-filter: blur(10px);
-          border: 1px solid rgba(99, 102, 241, 0.3);
-          border-radius: 12px;
-          transition: all 0.3s ease;
-          position: relative;
-          overflow: hidden;
-        }
-
-        .stat-item:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 25px rgba(99, 102, 241, 0.3);
-          border-color: #6366f1;
-        }
-
-        .stat-item::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: -100%;
-          width: 100%;
-          height: 100%;
-          background: linear-gradient(
-            90deg,
-            transparent,
-            rgba(99, 102, 241, 0.2),
-            transparent
-          );
-          transition: left 0.5s ease;
-        }
-
-        .stat-item:hover::before {
-          left: 100%;
-        }
-
-        .stat-value {
-          font-size: 1.5rem;
-          font-weight: 800;
-          background: linear-gradient(135deg, #6366f1, #a855f7);
-          background-clip: text;
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          line-height: 1;
-        }
-
-        .stat-label {
-          font-size: 0.75rem;
-          color: #cbd5e1;
-          margin-top: 0.375rem;
-          font-weight: 500;
-          opacity: 0.9;
-        }
-
-        .favorite-genre {
-          text-align: center;
-          padding: 1rem;
-          background: linear-gradient(
-            135deg,
-            rgba(99, 102, 241, 0.2),
-            rgba(168, 85, 247, 0.2)
-          );
-          border: 1px solid rgba(99, 102, 241, 0.3);
-          border-radius: 12px;
-          font-size: 0.875rem;
-          color: #e2e8f0;
-          font-weight: 600;
-          box-shadow: 0 0 20px rgba(99, 102, 241, 0.1);
-        }
-      </style>
-    </template>
-  };
-}
+import { GamingPlayer } from '../gaming-player/gaming-player';
 
 class Isolated extends Component<typeof GamingHub> {
   @tracked activeTab = 'overview';
   @tracked showStreamingTools = false;
   @tracked gameSearchQuery = '';
 
-  get gameProgressQuery(): Query {
+  get playerId() {
+    return this.args.model?.player?.id;
+  }
+
+  get gameRecordQuery(): Query {
+    const moduleRef = {
+      module: new URL('../game-record/game-record', import.meta.url).href,
+      name: 'GameRecord',
+    };
+
+    const filters: any[] = [
+      { type: moduleRef },
+      {
+        on: moduleRef,
+        eq: { 'player.id': this.playerId ?? '' },
+      },
+    ];
+
+    // Only add search filter when there's actual search text
+    if (this.gameSearchQuery) {
+      filters.push({
+        on: moduleRef,
+        contains: { 'game.title': this.gameSearchQuery },
+      });
+    }
+
     return {
       filter: {
-        on: {
-          module: new URL('../player-progress/player-progress', import.meta.url)
-            .href,
-          name: 'PlayerProgress',
-        },
-        every: [
-          {
-            contains: { 'game.title': this.gameSearchQuery ?? null },
-          },
-          {
-            eq: { 'player.id': this.args.model.id ?? '' },
-          },
-        ],
+        every: filters,
       },
       sort: [
         {
           by: 'lastPlayedDate',
-          on: {
-            module: new URL(
-              '../player-progress/player-progress',
-              import.meta.url,
-            ).href,
-            name: 'PlayerProgress',
-          },
+          on: moduleRef,
           direction: 'desc',
         },
       ],
+    };
+  }
+
+  // Query for currently playing games
+  get playingGamesQuery(): Query {
+    const moduleRef = {
+      module: new URL('../game-record/game-record', import.meta.url).href,
+      name: 'GameRecord',
+    };
+
+    return {
+      filter: {
+        every: [
+          { type: moduleRef },
+          {
+            on: moduleRef,
+            eq: { 'player.id': this.playerId ?? '' },
+          },
+          {
+            on: moduleRef,
+            eq: { status: 'playing' },
+          },
+        ],
+      },
     };
   }
 
@@ -264,47 +99,37 @@ class Isolated extends Component<typeof GamingHub> {
     return this.args.model[realmURL]!;
   }
 
-  get safeTitle() {
-    try {
-      return this.args?.model?.title ?? 'Gaming Hub Profile';
-    } catch (e) {
-      console.error('GamingHub: Error accessing title', e);
-      return 'Gaming Hub Profile';
-    }
-  }
-
-  get onlineStatusText() {
-    return this.args?.model?.isOnline ? 'Online' : 'Offline';
+  get player() {
+    return this.args?.model?.player;
   }
 
   get totalGamesCount() {
     try {
-      const gameProgress = this.args?.model?.gameProgress;
-      return gameProgress?.length ?? 0;
+      return this.player?.statistics?.totalGames ?? 0;
     } catch (e) {
       console.error('GamingHub: Error counting games', e);
       return 0;
     }
   }
 
-  get activeGamesCount() {
+  get wishlistCount() {
     try {
-      const gameProgress = this.args?.model?.gameProgress;
-      if (!gameProgress?.length) return 0;
-      return gameProgress.filter((progress) => progress?.status === 'playing')
-        .length;
+      return this.player?.wishlistGames?.length ?? 0;
     } catch (e) {
       return 0;
     }
   }
 
-  get wishlistCount() {
-    try {
-      const wishlist = this.args?.model?.wishlistGames;
-      return wishlist?.length ?? 0;
-    } catch (e) {
-      return 0;
-    }
+  // Get currently playing games count using getCards
+  playingGamesResult = this.args.context?.getCards(
+    this,
+    () => this.playingGamesQuery,
+    () => this.realms,
+    { isLive: true },
+  );
+
+  get playingCount() {
+    return this.playingGamesResult?.instances?.length ?? 0;
   }
 
   setActiveTab = (tab: string) => {
@@ -329,90 +154,99 @@ class Isolated extends Component<typeof GamingHub> {
       <div class='gaming-hub-mat'>
         <header class='hub-header'>
           <div class='header-content'>
-            {{! Profile Avatar }}
-            <div class='profile-avatar'>
-              {{#if @model.profileImageUrl}}
-                <img
-                  src={{@model.profileImageUrl}}
-                  alt='{{@model.gamerTag}} profile'
-                  class='avatar-image'
-                />
-              {{else}}
-                <div class='avatar-placeholder'>
-                  <svg
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    stroke-width='2'
-                  >
-                    <path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' />
-                    <circle cx='12' cy='7' r='4' />
-                  </svg>
-                </div>
-              {{/if}}
-              <div
-                class='status-indicator
-                  {{if @model.isOnline "online" "offline"}}'
-              >
-                {{if @model.isOnline '●' '○'}}
-              </div>
-            </div>
-
-            {{! Profile Info }}
-            <div class='profile-info'>
-              <h1 class='gamer-tag'>{{if
-                  @model.gamerTag
-                  @model.gamerTag
-                  'Anonymous Gamer'
-                }}</h1>
-
-              <div class='status-line'>
-                <span
-                  class='online-status {{unless @model.isOnline "offline"}}'
+            {{#if @model.player}}
+              {{! Profile Avatar }}
+              <div class='profile-avatar'>
+                {{#if @model.player.profileImageUrl}}
+                  <img
+                    src={{@model.player.profileImageUrl}}
+                    alt='{{@model.player.gamerTag}} profile'
+                    class='avatar-image'
+                  />
+                {{else}}
+                  <div class='avatar-placeholder'>
+                    <svg
+                      viewBox='0 0 24 24'
+                      fill='none'
+                      stroke='currentColor'
+                      stroke-width='2'
+                    >
+                      <path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' />
+                      <circle cx='12' cy='7' r='4' />
+                    </svg>
+                  </div>
+                {{/if}}
+                <div
+                  class='status-indicator
+                    {{if @model.player.isOnline "online" "offline"}}'
                 >
-                  {{if @model.isOnline '🟢 Online' '⚫ Offline'}}
-                </span>
-                {{#if @model.location}}
-                  <span class='location'>📍 {{@model.location}}</span>
-                {{/if}}
-                {{#if @model.joinDate}}
-                  <span class='join-date'>
-                    Member since
-                    {{formatDateTime @model.joinDate size='short'}}
+                  {{if @model.player.isOnline '●' '○'}}
+                </div>
+              </div>
+
+              {{! Profile Info }}
+              <div class='profile-info'>
+                <h1 class='gamer-tag'>{{if
+                    @model.player.gamerTag
+                    @model.player.gamerTag
+                    'Anonymous Gamer'
+                  }}</h1>
+
+                <div class='status-line'>
+                  <span
+                    class='online-status
+                      {{unless @model.player.isOnline "offline"}}'
+                  >
+                    {{if @model.player.isOnline '🟢 Online' '⚫ Offline'}}
                   </span>
+                  {{#if @model.player.location}}
+                    <span class='location'>📍 {{@model.player.location}}</span>
+                  {{/if}}
+                  {{#if @model.player.joinDate}}
+                    <span class='join-date'>
+                      Member since
+                      {{formatDateTime @model.player.joinDate size='short'}}
+                    </span>
+                  {{/if}}
+                </div>
+
+                {{#if @model.player.bio}}
+                  <div class='bio-section'>
+                    {{@model.player.bio}}
+                  </div>
                 {{/if}}
               </div>
 
-              {{#if @model.bio}}
-                <div class='bio-section'>
-                  <@fields.bio />
-                </div>
-              {{/if}}
-            </div>
-
-            {{! Quick Stats }}
-            <div class='quick-stats'>
-              <div class='stat-card'>
-                <div class='stat-number'>{{this.totalGamesCount}}</div>
-                <div class='stat-label'>Games</div>
-              </div>
-              <div class='stat-card'>
-                <div class='stat-number'>{{this.activeGamesCount}}</div>
-                <div class='stat-label'>Playing</div>
-              </div>
-              <div class='stat-card'>
-                <div class='stat-number'>{{this.wishlistCount}}</div>
-                <div class='stat-label'>Wishlist</div>
-              </div>
-              {{#if @model.statistics.achievementsUnlocked}}
+              {{! Quick Stats }}
+              <div class='quick-stats'>
                 <div class='stat-card'>
-                  <div
-                    class='stat-number'
-                  >{{@model.statistics.achievementsUnlocked}}</div>
-                  <div class='stat-label'>Achievements</div>
+                  <div class='stat-number'>{{this.totalGamesCount}}</div>
+                  <div class='stat-label'>Games</div>
                 </div>
-              {{/if}}
-            </div>
+                <div class='stat-card playing-stat'>
+                  <div class='stat-number'>{{this.playingCount}}</div>
+                  <div class='stat-label'>Playing</div>
+                </div>
+                <div class='stat-card'>
+                  <div class='stat-number'>{{this.wishlistCount}}</div>
+                  <div class='stat-label'>Wishlist</div>
+                </div>
+                {{#if @model.player.statistics.achievementsUnlocked}}
+                  <div class='stat-card'>
+                    <div
+                      class='stat-number'
+                    >{{@model.player.statistics.achievementsUnlocked}}</div>
+                    <div class='stat-label'>Achievements</div>
+                  </div>
+                {{/if}}
+              </div>
+            {{else}}
+              <div class='empty-state'>
+                <h3>No Player Linked</h3>
+                <p>Link a Gaming Player to this hub to see their profile and
+                  stats.</p>
+              </div>
+            {{/if}}
           </div>
         </header>
 
@@ -455,9 +289,9 @@ class Isolated extends Component<typeof GamingHub> {
           {{#if (eq this.activeTab 'overview')}}
             <div class='overview-grid'>
               {{! Statistics panel }}
-              {{#if @fields.statistics}}
+              {{#if @model.player.statistics}}
                 <div class='stats-panel'>
-                  <@fields.statistics />
+                  <@fields.player.statistics @format='embedded' />
                 </div>
               {{else}}
                 <div class='stats-panel'>
@@ -472,9 +306,23 @@ class Isolated extends Component<typeof GamingHub> {
               {{! Connected platforms }}
               <div class='platforms-panel'>
                 <h3 class='section-header'>Connected Platforms</h3>
-                {{#if (gt @model.connectedPlatforms.length 0)}}
-                  <div class='platforms-container'>
-                    <@fields.connectedPlatforms @format='embedded' />
+                {{#if (gt @model.player.connectedPlatforms.length 0)}}
+                  <div class='platforms-list'>
+                    {{#each @model.player.connectedPlatforms as |platform|}}
+                      {{#let (getComponent platform) as |PlatformComponent|}}
+                        <CardContainer
+                          {{@context.cardComponentModifier
+                            cardId=platform.id
+                            format='data'
+                            fieldType=undefined
+                            fieldName=undefined
+                          }}
+                          @displayBoundaries={{true}}
+                        >
+                          <PlatformComponent @format='embedded' />
+                        </CardContainer>
+                      {{/let}}
+                    {{/each}}
                   </div>
                 {{else}}
                   <div class='empty-state'>
@@ -484,19 +332,49 @@ class Isolated extends Component<typeof GamingHub> {
                 {{/if}}
               </div>
 
-              {{! Currently playing }}
               <div class='current-games-panel'>
-                <h3 class='section-header'>Currently Playing</h3>
-                {{#if (gt @model.gameProgress.length 0)}}
-                  <div class='current-games-container'>
-                    <@fields.gameProgress @format='embedded' />
-                  </div>
-                {{else}}
-                  <div class='empty-state'>
-                    <p>No games currently being played. Start a game and mark
-                      your progress!</p>
-                  </div>
-                {{/if}}
+                <h3 class='section-header'>Recent Activity</h3>
+                {{#let
+                  (component @context.prerenderedCardSearchComponent)
+                  as |PrerenderedCardSearch|
+                }}
+                  <PrerenderedCardSearch
+                    @query={{this.gameRecordQuery}}
+                    @format='embedded'
+                    @realms={{this.realms}}
+                    @isLive={{true}}
+                  >
+                    <:loading>
+                      <div class='loading-state'>Loading recent activity...</div>
+                    </:loading>
+                    <:response as |records|>
+                      {{#if (gt records.length 0)}}
+                        <div class='current-games-container'>
+                          {{#each records key='url' as |record|}}
+                            {{#unless record.isError}}
+                              <CardContainer
+                                {{@context.cardComponentModifier
+                                  cardId=record.url
+                                  format='data'
+                                  fieldType=undefined
+                                  fieldName=undefined
+                                }}
+                                @displayBoundaries={{true}}
+                              >
+                                <record.component />
+                              </CardContainer>
+                            {{/unless}}
+                          {{/each}}
+                        </div>
+                      {{else}}
+                        <div class='empty-state'>
+                          <p>No recent game activity. Start playing to track
+                            your progress!</p>
+                        </div>
+                      {{/if}}
+                    </:response>
+                  </PrerenderedCardSearch>
+                {{/let}}
               </div>
             </div>
           {{/if}}
@@ -506,9 +384,15 @@ class Isolated extends Component<typeof GamingHub> {
               <div class='games-header'>
                 <h2>Game Library</h2>
                 <div class='library-stats'>
-                  <span>{{@model.totalGames}} total games</span>
-                  {{#if @model.statistics}}
-                    <span>{{@model.statistics.completionRate}}% completion rate</span>
+                  <span>{{if
+                      @model.player.statistics.totalGames
+                      @model.player.statistics.totalGames
+                      0
+                    }}
+                    total games</span>
+                  {{#if @model.player.statistics}}
+                    <span>{{@model.player.statistics.completionRate}}%
+                      completion rate</span>
                   {{/if}}
                 </div>
               </div>
@@ -560,7 +444,7 @@ class Isolated extends Component<typeof GamingHub> {
                 as |PrerenderedCardSearch|
               }}
                 <PrerenderedCardSearch
-                  @query={{this.gameProgressQuery}}
+                  @query={{this.gameRecordQuery}}
                   @format='embedded'
                   @realms={{this.realms}}
                   @isLive={{true}}
@@ -585,7 +469,17 @@ class Isolated extends Component<typeof GamingHub> {
                         {{#each games key='url' as |game|}}
                           {{#unless game.isError}}
                             <div class='game-progress-wrapper'>
-                              <game.component />
+                              <CardContainer
+                                {{@context.cardComponentModifier
+                                  cardId=game.url
+                                  format='data'
+                                  fieldType=undefined
+                                  fieldName=undefined
+                                }}
+                                @displayBoundaries={{true}}
+                              >
+                                <game.component />
+                              </CardContainer>
                             </div>
                           {{/unless}}
                         {{/each}}
@@ -630,14 +524,28 @@ class Isolated extends Component<typeof GamingHub> {
               <div class='wishlist-section'>
                 <div class='wishlist-header'>
                   <h3>🎯 Wishlist</h3>
-                  <div class='wishlist-count-badge'>{{@model.wishlistCount}}
+                  <div class='wishlist-count-badge'>{{this.wishlistCount}}
                     items</div>
                 </div>
 
-                {{! Default wishlist display - no search here }}
-                {{#if (gt @model.wishlistGames.length 0)}}
+                {{! Display from player's wishlist }}
+                {{#if (gt @model.player.wishlistGames.length 0)}}
                   <div class='wishlist-grid'>
-                    <@fields.wishlistGames @format='embedded' />
+                    {{#each @model.player.wishlistGames as |game|}}
+                      {{#let (getComponent game) as |GameComponent|}}
+                        <CardContainer
+                          {{@context.cardComponentModifier
+                            cardId=game.id
+                            format='data'
+                            fieldType=undefined
+                            fieldName=undefined
+                          }}
+                          @displayBoundaries={{true}}
+                        >
+                          <GameComponent @format='embedded' />
+                        </CardContainer>
+                      {{/let}}
+                    {{/each}}
                   </div>
                 {{else}}
                   <div class='wishlist-empty-state'>
@@ -665,9 +573,23 @@ class Isolated extends Component<typeof GamingHub> {
           {{#if (eq this.activeTab 'tournaments')}}
             <div class='tournaments-section'>
               <h2 class='section-header'>Tournaments & Competitions</h2>
-              {{#if (gt @model.tournaments.length 0)}}
-                <div class='tournaments-container'>
-                  <@fields.tournaments @format='embedded' />
+              {{#if (gt @model.player.tournaments.length 0)}}
+                <div class='tournaments-grid'>
+                  {{#each @model.player.tournaments as |tournament|}}
+                    {{#let (getComponent tournament) as |TournamentComponent|}}
+                      <CardContainer
+                        {{@context.cardComponentModifier
+                          cardId=tournament.id
+                          format='data'
+                          fieldType=undefined
+                          fieldName=undefined
+                        }}
+                        @displayBoundaries={{true}}
+                      >
+                        <TournamentComponent @format='embedded' />
+                      </CardContainer>
+                    {{/let}}
+                  {{/each}}
                 </div>
               {{else}}
                 <div class='empty-state'>
@@ -685,19 +607,25 @@ class Isolated extends Component<typeof GamingHub> {
                 <h2 class='section-header'>🌐 Gaming Network</h2>
                 <div class='network-stats'>
                   <div class='network-stat'>
-                    <span class='stat-number'>{{@model.friends.length}}</span>
+                    <span class='stat-number'>{{if
+                        @model.player.friends.length
+                        @model.player.friends.length
+                        0
+                      }}</span>
                     <span class='stat-text'>Friends</span>
                   </div>
                   <div class='network-stat'>
-                    <span
-                      class='stat-number'
-                    >{{@model.gamingGroups.length}}</span>
+                    <span class='stat-number'>{{if
+                        @model.player.gamingGroups.length
+                        @model.player.gamingGroups.length
+                        0
+                      }}</span>
                     <span class='stat-text'>Groups</span>
                   </div>
                 </div>
               </div>
 
-              {{#if (gt @model.friends.length 0)}}
+              {{#if (gt @model.player.friends.length 0)}}
                 <div class='friends-grid-container'>
                   <h3 class='subsection-title'>
                     <svg
@@ -711,10 +639,24 @@ class Isolated extends Component<typeof GamingHub> {
                       <path d='M23 21v-2a4 4 0 0 0-3-3.87' />
                       <path d='M16 3.13a4 4 0 0 1 0 7.75' />
                     </svg>
-                    Gaming Friends
+                    Gaming Friends ({{@model.player.friends.length}})
                   </h3>
                   <div class='friends-grid'>
-                    <@fields.friends @format='embedded' />
+                    {{#each @model.player.friends as |friend|}}
+                      {{#let (getComponent friend) as |FriendComponent|}}
+                        <CardContainer
+                          {{@context.cardComponentModifier
+                            cardId=friend.id
+                            format='data'
+                            fieldType=undefined
+                            fieldName=undefined
+                          }}
+                          @displayBoundaries={{true}}
+                        >
+                          <FriendComponent @format='embedded' />
+                        </CardContainer>
+                      {{/let}}
+                    {{/each}}
                   </div>
                 </div>
               {{else}}
@@ -739,7 +681,7 @@ class Isolated extends Component<typeof GamingHub> {
                 </div>
               {{/if}}
 
-              {{#if (gt @model.gamingGroups.length 0)}}
+              {{#if (gt @model.player.gamingGroups.length 0)}}
                 <div class='groups-section'>
                   <h3 class='subsection-title'>
                     <svg
@@ -756,7 +698,7 @@ class Isolated extends Component<typeof GamingHub> {
                     Community Groups
                   </h3>
                   <div class='groups-grid'>
-                    {{#each @model.gamingGroups as |group|}}
+                    {{#each @model.player.gamingGroups as |group|}}
                       <div class='group-card'>
                         <div class='group-icon'>
                           <svg
@@ -787,21 +729,21 @@ class Isolated extends Component<typeof GamingHub> {
             <div class='streaming-section'>
               <h2 class='section-header'>Streaming & Content Creation</h2>
 
-              {{#if @model.contentCreatorStatus}}
+              {{#if @model.player.contentCreatorStatus}}
                 <div class='creator-status'>
                   <span class='creator-badge'>✨ Content Creator</span>
-                  {{#if @model.streamSchedule}}
+                  {{#if @model.player.streamSchedule}}
                     <span class='schedule'>Schedule:
-                      {{@model.streamSchedule}}</span>
+                      {{@model.player.streamSchedule}}</span>
                   {{/if}}
                 </div>
               {{/if}}
 
-              {{#if (gt @model.streamingPlatforms.length 0)}}
+              {{#if (gt @model.player.streamingPlatforms.length 0)}}
                 <div class='streaming-platforms'>
                   <h3>Streaming Platforms</h3>
                   <div class='platforms-list'>
-                    {{#each @model.streamingPlatforms as |platform|}}
+                    {{#each @model.player.streamingPlatforms as |platform|}}
                       <div class='platform-pill'>{{platform}}</div>
                     {{/each}}
                   </div>
@@ -1156,6 +1098,27 @@ class Isolated extends Component<typeof GamingHub> {
         transform: translateY(-2px);
         box-shadow: 0 8px 25px rgba(99, 102, 241, 0.3);
         border-color: #6366f1;
+      }
+
+      .stat-card.playing-stat {
+        border-color: rgba(34, 197, 94, 0.4);
+        background: linear-gradient(
+          135deg,
+          rgba(34, 197, 94, 0.1) 0%,
+          rgba(34, 197, 94, 0.05) 100%
+        );
+      }
+
+      .stat-card.playing-stat:hover {
+        box-shadow: 0 8px 25px rgba(34, 197, 94, 0.3);
+        border-color: #22c55e;
+      }
+
+      .stat-card.playing-stat .stat-number {
+        background: linear-gradient(135deg, #22c55e, #16a34a);
+        background-clip: text;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
       }
 
       .stat-number {
@@ -2635,6 +2598,250 @@ class Isolated extends Component<typeof GamingHub> {
           -moz-osx-font-smoothing: grayscale;
         }
       }
+
+      /* Platform cards for manual iteration */
+      .platforms-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .platform-card {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 1rem;
+        background: rgba(30, 41, 59, 0.6);
+        border: 1px solid rgba(99, 102, 241, 0.3);
+        border-radius: 12px;
+        transition: all 0.3s ease;
+      }
+
+      .platform-card:hover {
+        border-color: #6366f1;
+        transform: translateX(4px);
+      }
+
+      .platform-icon {
+        font-size: 1.5rem;
+      }
+
+      .platform-info {
+        flex: 1;
+      }
+
+      .platform-name {
+        font-weight: 600;
+        color: #e2e8f0;
+        font-size: 0.9375rem;
+      }
+
+      .platform-type {
+        font-size: 0.75rem;
+        color: #94a3b8;
+        margin-top: 0.25rem;
+      }
+
+      /* Wishlist game cards */
+      .wishlist-game-card {
+        padding: 1rem;
+        background: rgba(168, 85, 247, 0.1);
+        border: 1px solid rgba(168, 85, 247, 0.3);
+        border-radius: 12px;
+        transition: all 0.3s ease;
+      }
+
+      .wishlist-game-card:hover {
+        border-color: #a855f7;
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(168, 85, 247, 0.2);
+      }
+
+      .wishlist-game-card .game-title {
+        font-weight: 700;
+        color: #e2e8f0;
+        font-size: 1rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .wishlist-game-card .game-genre {
+        font-size: 0.75rem;
+        color: #c084fc;
+        background: rgba(168, 85, 247, 0.2);
+        padding: 0.25rem 0.5rem;
+        border-radius: 8px;
+        display: inline-block;
+        margin-right: 0.5rem;
+      }
+
+      .wishlist-game-card .game-year {
+        font-size: 0.75rem;
+        color: #94a3b8;
+        display: inline-block;
+      }
+
+      /* Tournament cards */
+      .tournaments-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1rem;
+      }
+
+      .tournament-card {
+        padding: 1.25rem;
+        background: rgba(245, 158, 11, 0.1);
+        border: 1px solid rgba(245, 158, 11, 0.3);
+        border-radius: 12px;
+        transition: all 0.3s ease;
+      }
+
+      .tournament-card:hover {
+        border-color: #f59e0b;
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(245, 158, 11, 0.2);
+      }
+
+      .tournament-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .tournament-icon {
+        font-size: 1.5rem;
+      }
+
+      .tournament-title {
+        font-weight: 700;
+        color: #e2e8f0;
+        font-size: 1rem;
+      }
+
+      .tournament-game {
+        font-size: 0.8125rem;
+        color: #fbbf24;
+        margin-bottom: 0.5rem;
+      }
+
+      .tournament-status {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: capitalize;
+      }
+
+      .tournament-status.status-upcoming {
+        background: rgba(6, 182, 212, 0.2);
+        color: #06b6d4;
+      }
+
+      .tournament-status.status-active {
+        background: rgba(34, 197, 94, 0.2);
+        color: #22c55e;
+      }
+
+      .tournament-status.status-completed {
+        background: rgba(99, 102, 241, 0.2);
+        color: #6366f1;
+      }
+
+      /* Friend cards */
+      .friend-card {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem;
+        background: rgba(6, 182, 212, 0.1);
+        border: 1px solid rgba(6, 182, 212, 0.3);
+        border-radius: 12px;
+        transition: all 0.3s ease;
+      }
+
+      .friend-card:hover {
+        border-color: #06b6d4;
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(6, 182, 212, 0.2);
+      }
+
+      .friend-avatar {
+        position: relative;
+        width: 48px;
+        height: 48px;
+        flex-shrink: 0;
+      }
+
+      .friend-avatar .avatar-img {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 2px solid rgba(6, 182, 212, 0.4);
+      }
+
+      .friend-avatar .avatar-placeholder {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        background: rgba(30, 41, 59, 0.8);
+        border: 2px solid rgba(6, 182, 212, 0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #06b6d4;
+      }
+
+      .friend-avatar .avatar-placeholder svg {
+        width: 24px;
+        height: 24px;
+      }
+
+      .friend-avatar .online-indicator {
+        position: absolute;
+        bottom: 2px;
+        right: 2px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid rgba(15, 23, 42, 0.9);
+      }
+
+      .friend-avatar .online-indicator.online {
+        background: #00ff88;
+        box-shadow: 0 0 8px rgba(0, 255, 136, 0.5);
+      }
+
+      .friend-avatar .online-indicator.offline {
+        background: #64748b;
+      }
+
+      .friend-info {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .friend-name {
+        font-weight: 700;
+        color: #e2e8f0;
+        font-size: 0.9375rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .friend-status {
+        font-size: 0.75rem;
+        color: #94a3b8;
+        margin-top: 0.25rem;
+      }
+
+      .friend-location {
+        font-size: 0.6875rem;
+        color: #06b6d4;
+        margin-top: 0.25rem;
+      }
     </style>
   </template>
 }
@@ -2644,957 +2851,82 @@ export class GamingHub extends CardDef {
   static icon = GamepadIcon;
   static prefersWideFormat = true;
 
-  @field gamerTag = contains(StringField);
-  @field email = contains(EmailField);
-  @field bio = contains(MarkdownField);
-  @field joinDate = contains(DateField);
-  @field isOnline = contains(BooleanField);
-  @field profileImageUrl = contains(UrlField);
-  @field location = contains(StringField);
-  @field preferredGenres = containsMany(StringField);
+  // Link to the player - all profile data comes from here
+  @field player = linksTo(() => GamingPlayer);
 
-  @field connectedPlatforms = linksToMany(() => GamingPlatform);
-  @field gameProgress = linksToMany(() => PlayerProgress);
-  @field tournaments = linksToMany(() => Tournament);
-  @field friends = linksToMany(() => GamingHub);
-  @field favoriteGames = linksToMany(() => VideoGame);
-  @field wishlistGames = linksToMany(() => VideoGame);
-
-  @field gamingGroups = containsMany(StringField);
-  @field streamingPlatforms = containsMany(StringField);
-  @field contentCreatorStatus = contains(BooleanField);
-  @field streamSchedule = contains(StringField);
-
-  @field statistics = contains(GamingStatsField);
-
+  // Computed title from player
   @field title = contains(StringField, {
     computeVia: function (this: GamingHub) {
       try {
-        const gamerTag = this.gamerTag ?? 'Anonymous Gamer';
-        const onlineStatus = this.isOnline ? ' 🟢' : '';
+        const gamerTag = this.player?.gamerTag ?? 'Gaming Hub';
+        const onlineStatus = this.player?.isOnline ? ' 🟢' : '';
         return `${gamerTag}${onlineStatus}`;
       } catch (e) {
         console.error('GamingHub: Error computing title', e);
-        return 'Gaming Hub Profile';
-      }
-    },
-  });
-
-  @field totalGames = contains(NumberField, {
-    computeVia: function (this: GamingHub) {
-      try {
-        const gameProgress = this.gameProgress;
-        return gameProgress?.length ?? 0;
-      } catch (e) {
-        return 0;
-      }
-    },
-  });
-
-  @field currentlyPlayingCount = contains(NumberField, {
-    computeVia: function (this: GamingHub) {
-      try {
-        const gameProgress = this.gameProgress;
-        if (!gameProgress?.length) return 0;
-        return gameProgress.filter((progress) => progress?.status === 'playing')
-          .length;
-      } catch (e) {
-        return 0;
-      }
-    },
-  });
-
-  @field wishlistCount = contains(NumberField, {
-    computeVia: function (this: GamingHub) {
-      try {
-        const wishlistGames = this.wishlistGames;
-        return wishlistGames?.length ?? 0;
-      } catch (e) {
-        return 0;
-      }
-    },
-  });
-
-  @field completedGamesCount = contains(NumberField, {
-    computeVia: function (this: GamingHub) {
-      try {
-        const gameProgress = this.gameProgress;
-        if (!gameProgress?.length) return 0;
-        return gameProgress.filter(
-          (progress) => progress?.status === 'completed',
-        ).length;
-      } catch (e) {
-        return 0;
+        return 'Gaming Hub';
       }
     },
   });
 
   static isolated = Isolated;
 
+  // Embedded format - delegates to GamingPlayer
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class='gaming-profile-compact'>
-        <div class='profile-main'>
-          <div class='profile-avatar-compact'>
-            {{#if @model.profileImageUrl}}
-              <img
-                src={{@model.profileImageUrl}}
-                alt='{{@model.gamerTag}} profile'
-                class='avatar-image'
-              />
-            {{else}}
-              <div class='avatar-placeholder'>
-                <svg
-                  viewBox='0 0 24 24'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-width='2'
-                >
-                  <path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' />
-                  <circle cx='12' cy='7' r='4' />
-                </svg>
-              </div>
-            {{/if}}
-            <div
-              class='status-dot {{if @model.isOnline "online" "offline"}}'
-            ></div>
-          </div>
-
-          <div class='profile-content'>
-            <h3 class='gamer-name'>{{if
-                @model.gamerTag
-                @model.gamerTag
-                'Anonymous Gamer'
-              }}</h3>
-
-            <div class='gamer-meta'>
-              <span class='online-text'>{{if
-                  @model.isOnline
-                  'Online'
-                  'Offline'
-                }}</span>
-              {{#if @model.location}}
-                <span class='location-text'>• {{@model.location}}</span>
-              {{/if}}
-            </div>
-
-            {{#if @model.bio}}
-              <p class='bio-excerpt'>{{@model.bio}}</p>
-            {{/if}}
-          </div>
-
-          <div class='profile-stats-compact'>
-            <div class='stat-item'>
-              <div class='stat-value'>{{if
-                  @model.totalGames
-                  @model.totalGames
-                  0
-                }}</div>
-              <div class='stat-label'>Games</div>
-            </div>
-
-            {{#if @model.statistics.totalHours}}
-              <div class='stat-item'>
-                <div class='stat-value'>{{formatNumber
-                    @model.statistics.totalHours
-                    size='tiny'
-                  }}</div>
-                <div class='stat-label'>Hours</div>
-              </div>
-            {{/if}}
-
-            {{#if @model.statistics.currentStreak}}
-              <div class='stat-item streak'>
-                <div
-                  class='stat-value'
-                >{{@model.statistics.currentStreak}}</div>
-                <div class='stat-label'>🔥 Streak</div>
-              </div>
-            {{/if}}
-          </div>
+      {{#if @model.player}}
+        <@fields.player @format='embedded' />
+      {{else}}
+        <div class='empty-hub'>
+          <span class='empty-icon'>🎮</span>
+          <span class='empty-text'>No player linked</span>
         </div>
-
-        {{#if (gt @model.preferredGenres.length 0)}}
-          <div class='genres-row'>
-            {{#each @model.preferredGenres as |genre index|}}
-              {{#if (lt index 3)}}
-                <span class='genre-pill'>{{genre}}</span>
-              {{/if}}
-            {{/each}}
-            {{#if (gt @model.preferredGenres.length 3)}}
-              <span class='genre-pill more'>+{{subtract
-                  (Number @model.preferredGenres.length)
-                  3
-                }}
-                more</span>
-            {{/if}}
-          </div>
-        {{/if}}
-      </div>
+      {{/if}}
 
       <style scoped>
-        .gaming-profile-compact {
-          background: linear-gradient(
-            135deg,
-            rgba(15, 23, 42, 0.95),
-            rgba(30, 41, 59, 0.9)
-          );
-          border: 1px solid rgba(99, 102, 241, 0.25);
-          border-radius: 12px;
-          overflow: hidden;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          position: relative;
-          backdrop-filter: blur(10px);
-          box-shadow:
-            0 4px 16px rgba(0, 0, 0, 0.2),
-            0 0 0 1px rgba(99, 102, 241, 0.05);
-        }
-
-        .gaming-profile-compact:hover {
-          transform: translateY(-1px);
-          border-color: rgba(99, 102, 241, 0.4);
-          box-shadow:
-            0 8px 25px rgba(0, 0, 0, 0.15),
-            0 0 20px rgba(99, 102, 241, 0.15);
-        }
-
-        .gaming-profile-compact::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          height: 2px;
-          background: linear-gradient(
-            90deg,
-            transparent,
-            #6366f1,
-            #a855f7,
-            transparent
-          );
-          opacity: 0.6;
-        }
-
-        .profile-main {
-          display: flex;
-          align-items: flex-start;
-          gap: 0.875rem;
-          padding: 1rem;
-        }
-
-        .profile-avatar-compact {
-          position: relative;
-          flex-shrink: 0;
-          width: 48px;
-          height: 48px;
-        }
-
-        .avatar-image {
-          width: 100%;
-          height: 100%;
-          border-radius: 50%;
-          object-fit: cover;
-          border: 2px solid rgba(99, 102, 241, 0.3);
-          box-shadow: 0 0 12px rgba(99, 102, 241, 0.2);
-        }
-
-        .avatar-placeholder {
-          width: 100%;
-          height: 100%;
-          border-radius: 50%;
-          background: linear-gradient(
-            135deg,
-            rgba(30, 41, 59, 0.8),
-            rgba(99, 102, 241, 0.2)
-          );
-          border: 2px solid rgba(99, 102, 241, 0.3);
+        .empty-hub {
           display: flex;
           align-items: center;
           justify-content: center;
-          color: #a5b4fc;
-        }
-
-        .avatar-placeholder svg {
-          width: 24px;
-          height: 24px;
-        }
-
-        .status-dot {
-          position: absolute;
-          bottom: 2px;
-          right: 2px;
-          width: 12px;
-          height: 12px;
-          border-radius: 50%;
-          border: 2px solid rgba(15, 23, 42, 0.9);
-        }
-
-        .status-dot.online {
-          background: #00ff88;
-          box-shadow: 0 0 8px rgba(0, 255, 136, 0.6);
-        }
-
-        .status-dot.offline {
-          background: #64748b;
-        }
-
-        .profile-content {
-          flex: 1;
-          min-width: 0;
-        }
-
-        .gamer-name {
-          font-size: 1rem;
-          font-weight: 700;
-          margin: 0 0 0.25rem 0;
-          color: #e2e8f0;
-          line-height: 1.2;
-          font-family: 'Orbitron', monospace;
-          letter-spacing: 0.015em;
-        }
-
-        .gamer-meta {
-          font-size: 0.75rem;
-          color: #94a3b8;
-          margin-bottom: 0.5rem;
-          font-weight: 500;
-          line-height: 1.3;
-        }
-
-        .online-text {
-          color: #00ff88;
-          font-weight: 600;
-        }
-
-        .location-text {
-          color: #06b6d4;
-        }
-
-        .bio-excerpt {
-          font-size: 0.75rem;
-          color: #cbd5e1;
-          line-height: 1.4;
-          margin: 0;
-          display: -webkit-box;
-          -webkit-box-orient: vertical;
-          -webkit-line-clamp: 2;
-          overflow: hidden;
-          opacity: 0.9;
-        }
-
-        .profile-stats-compact {
-          display: flex;
-          gap: 0.75rem;
-          margin-left: auto;
-          flex-shrink: 0;
-        }
-
-        .stat-item {
-          text-align: center;
-          min-width: 45px;
-          padding: 0.5rem 0.375rem;
-          background: rgba(30, 41, 59, 0.7);
-          border-radius: 6px;
+          gap: 0.5rem;
+          padding: 1rem;
+          background: rgba(30, 41, 59, 0.6);
           border: 1px solid rgba(99, 102, 241, 0.2);
-          transition: all 0.2s ease;
-        }
-
-        .stat-item:hover {
-          border-color: rgba(99, 102, 241, 0.4);
-          background: rgba(30, 41, 59, 0.9);
-        }
-
-        .stat-item.streak {
-          border-color: rgba(245, 158, 11, 0.3);
-          background: rgba(245, 158, 11, 0.1);
-        }
-
-        .stat-value {
-          font-size: 0.9375rem;
-          font-weight: 700;
-          color: #e2e8f0;
-          line-height: 1;
-          font-family: 'Orbitron', monospace;
-        }
-
-        .streak .stat-value {
-          color: #f59e0b;
-        }
-
-        .stat-label {
-          font-size: 0.625rem;
-          color: #94a3b8;
-          margin-top: 0.125rem;
-          font-weight: 500;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-
-        .genres-row {
-          display: flex;
-          gap: 0.25rem;
-          flex-wrap: wrap;
-          padding: 0.75rem 1rem 1rem;
-          border-top: 1px solid rgba(99, 102, 241, 0.1);
-          background: rgba(30, 41, 59, 0.3);
-        }
-
-        .genre-pill {
-          padding: 0.25rem 0.5rem;
-          background: rgba(99, 102, 241, 0.2);
-          color: #a5b4fc;
-          border: 1px solid rgba(99, 102, 241, 0.3);
           border-radius: 12px;
-          font-size: 0.6875rem;
-          font-weight: 600;
-          transition: all 0.2s ease;
-          white-space: nowrap;
+          color: #94a3b8;
         }
 
-        .genre-pill:hover {
-          background: rgba(99, 102, 241, 0.3);
-          transform: scale(1.05);
+        .empty-icon {
+          font-size: 1.25rem;
         }
 
-        .genre-pill.more {
-          background: rgba(168, 85, 247, 0.2);
-          color: #c084fc;
-          border-color: rgba(168, 85, 247, 0.3);
-        }
-
-        @keyframes shimmer {
-          0% {
-            transform: translateX(-100%);
-          }
-          100% {
-            transform: translateX(100%);
-          }
-        }
-
-        /* Mobile optimizations */
-        @media (max-width: 480px) {
-          .profile-main {
-            flex-direction: column;
-            text-align: center;
-            gap: 0.75rem;
-          }
-
-          .profile-stats-compact {
-            margin-left: 0;
-            justify-content: center;
-          }
-
-          .genres-row {
-            justify-content: center;
-          }
+        .empty-text {
+          font-size: 0.875rem;
+          font-weight: 500;
         }
       </style>
     </template>
   };
 
-  // ⁷³ Fitted format - optimized for all sizes
+  // Fitted format - delegates to GamingPlayer
   static fitted = class Fitted extends Component<typeof this> {
     <template>
-      <div class='fitted-container'>
-        {{! Badge format: Ultra-compact }}
-        <div class='badge-format'>
-          <div class='badge-info'>
-            <div class='badge-title'>{{if
-                @model.gamerTag
-                @model.gamerTag
-                'Gamer'
-              }}</div>
-            <div class='badge-status'>{{if @model.isOnline '🟢' '⚫'}}
-              {{if @model.totalGames @model.totalGames 0}}
-              games</div>
-          </div>
-        </div>
-
-        {{! Strip format: Horizontal compact }}
-        <div class='strip-format'>
-          <div class='strip-avatar'>
-            {{#if @model.profileImageUrl}}
-              <img
-                src={{@model.profileImageUrl}}
-                alt='Profile'
-                class='avatar-img'
-              />
-            {{else}}
-              <div class='avatar-placeholder'>
-                <svg
-                  viewBox='0 0 24 24'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-width='2'
-                >
-                  <circle cx='12' cy='7' r='4' />
-                  <path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' />
-                </svg>
-              </div>
-            {{/if}}
-          </div>
-          <div class='strip-info'>
-            <div class='strip-title'>{{if
-                @model.gamerTag
-                @model.gamerTag
-                'Anonymous Gamer'
-              }}</div>
-            <div class='strip-meta'>{{if @model.isOnline 'Online' 'Offline'}}
-              •
-              {{if @model.totalGames @model.totalGames 0}}
-              games</div>
-          </div>
-        </div>
-
-        {{! Tile format: Square/vertical }}
-        <div class='tile-format'>
-          <div class='tile-header'>
-            <div class='tile-avatar'>
-              {{#if @model.profileImageUrl}}
-                <img
-                  src={{@model.profileImageUrl}}
-                  alt='Profile'
-                  class='avatar-img'
-                />
-              {{else}}
-                <div class='avatar-placeholder'>
-                  <svg
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    stroke-width='2'
-                  >
-                    <circle cx='12' cy='7' r='4' />
-                    <path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' />
-                  </svg>
-                </div>
-              {{/if}}
-              <div
-                class='online-dot {{if @model.isOnline "online" "offline"}}'
-              ></div>
-            </div>
-          </div>
-
-          <div class='tile-content'>
-            <div class='tile-title'>{{if
-                @model.gamerTag
-                @model.gamerTag
-                'Anonymous Gamer'
-              }}</div>
-            <div class='tile-status'>{{if
-                @model.isOnline
-                'Online'
-                'Offline'
-              }}</div>
-
-            <div class='tile-stats'>
-              <div class='tile-stat'>
-                <span class='stat-num'>{{if
-                    @model.totalGames
-                    @model.totalGames
-                    0
-                  }}</span>
-                <span class='stat-label'>Games</span>
-              </div>
-              <div class='tile-stat'>
-                <span class='stat-num'>{{if
-                    @model.currentlyPlayingCount
-                    @model.currentlyPlayingCount
-                    0
-                  }}</span>
-                <span class='stat-label'>Playing</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {{! Card format: Full horizontal }}
-        <div class='card-format'>
-          <div class='card-main'>
-            <div class='card-avatar'>
-              {{#if @model.profileImageUrl}}
-                <img
-                  src={{@model.profileImageUrl}}
-                  alt='Profile'
-                  class='avatar-img'
-                />
-              {{else}}
-                <div class='avatar-placeholder'>
-                  <svg
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    stroke-width='2'
-                  >
-                    <circle cx='12' cy='7' r='4' />
-                    <path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' />
-                  </svg>
-                </div>
-              {{/if}}
-              <div
-                class='online-dot {{if @model.isOnline "online" "offline"}}'
-              ></div>
-            </div>
-
-            <div class='card-info'>
-              <div class='card-title'>{{if
-                  @model.gamerTag
-                  @model.gamerTag
-                  'Anonymous Gamer'
-                }}</div>
-              <div class='card-status'>{{if
-                  @model.isOnline
-                  '🟢 Online'
-                  '⚫ Offline'
-                }}
-                {{#if @model.location}}• {{@model.location}}{{/if}}</div>
-              {{#if @model.bio}}
-                <div class='card-bio'>{{@model.bio}}</div>
-              {{/if}}
-            </div>
-          </div>
-
-          <div class='card-stats'>
-            <div class='card-stat'>
-              <div class='stat-value'>{{if
-                  @model.totalGames
-                  @model.totalGames
-                  0
-                }}</div>
-              <div class='stat-name'>Total Games</div>
-            </div>
-            <div class='card-stat'>
-              <div class='stat-value'>{{if
-                  @model.currentlyPlayingCount
-                  @model.currentlyPlayingCount
-                  0
-                }}</div>
-              <div class='stat-name'>Playing</div>
-            </div>
-            <div class='card-stat'>
-              <div class='stat-value'>{{if
-                  @model.tournaments.length
-                  @model.tournaments.length
-                  0
-                }}</div>
-              <div class='stat-name'>Tournaments</div>
-            </div>
-          </div>
-        </div>
-      </div>
+      {{#if @model.player}}
+        <@fields.player @format='fitted' />
+      {{else}}
+        <div class='empty-fitted'>🎮</div>
+      {{/if}}
 
       <style scoped>
-        /* ⁷⁴ Fitted responsive styling */
-        .fitted-container {
-          container-type: size;
+        .empty-fitted {
           width: 100%;
           height: 100%;
-          font-family: 'Inter', sans-serif;
-          color: #111827;
-        }
-
-        /* Hide all formats by default */
-        .badge-format,
-        .strip-format,
-        .tile-format,
-        .card-format {
-          display: none;
-          width: 100%;
-          height: 100%;
-          padding: clamp(0.1875rem, 2%, 0.625rem);
-          box-sizing: border-box;
-        }
-
-        /* Badge format: <= 150px width, <= 169px height */
-        @container (max-width: 150px) and (max-height: 169px) {
-          .badge-format {
-            display: flex;
-            align-items: center;
-            justify-content: flex-start;
-          }
-        }
-
-        /* Strip format: > 150px width, <= 169px height */
-        @container (min-width: 151px) and (max-height: 169px) {
-          .strip-format {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-          }
-        }
-
-        /* Tile format: <= 399px width, >= 170px height */
-        @container (max-width: 399px) and (min-height: 170px) {
-          .tile-format {
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-          }
-        }
-
-        /* Card format: >= 400px width, >= 170px height */
-        @container (min-width: 400px) and (min-height: 170px) {
-          .card-format {
-            display: flex;
-            gap: 1rem;
-          }
-        }
-
-        /* Badge styling */
-        .badge-info {
-          flex: 1;
-        }
-
-        .badge-title {
-          font-size: clamp(0.75rem, 3vw, 0.875rem);
-          font-weight: 600;
-          line-height: 1.2;
-          color: #111827;
-          margin-bottom: 0.25rem;
-        }
-
-        .badge-status {
-          font-size: clamp(0.625rem, 2.5vw, 0.75rem);
-          color: #6b7280;
-          line-height: 1.2;
-        }
-
-        /* Strip styling */
-        .strip-avatar {
-          flex-shrink: 0;
-          width: clamp(32px, 8vw, 40px);
-          height: clamp(32px, 8vw, 40px);
-        }
-
-        .avatar-img {
-          width: 100%;
-          height: 100%;
-          border-radius: 50%;
-          object-fit: cover;
-          border: 2px solid #4f46e5;
-        }
-
-        .avatar-placeholder {
-          width: 100%;
-          height: 100%;
-          border-radius: 50%;
-          background: linear-gradient(
-            135deg,
-            rgba(30, 41, 59, 0.9),
-            rgba(99, 102, 241, 0.2)
-          );
-          border: 2px solid rgba(99, 102, 241, 0.3);
           display: flex;
           align-items: center;
           justify-content: center;
-          color: #a5b4fc;
-          position: relative;
-          overflow: hidden;
-        }
-
-        .avatar-placeholder::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: linear-gradient(
-            45deg,
-            transparent 25%,
-            rgba(99, 102, 241, 0.2) 50%,
-            transparent 75%
-          );
-          animation: shimmer 2.5s infinite;
-        }
-
-        .avatar-placeholder svg {
-          width: 60%;
-          height: 60%;
-        }
-
-        .strip-info {
-          flex: 1;
-          min-width: 0;
-        }
-
-        .strip-title {
-          font-size: clamp(0.8125rem, 3.5vw, 1rem);
-          font-weight: 600;
-          color: #111827;
-          line-height: 1.2;
-          margin-bottom: 0.125rem;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .strip-meta {
-          font-size: clamp(0.6875rem, 3vw, 0.8125rem);
-          color: #6b7280;
-          line-height: 1.2;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        /* Tile styling */
-        .tile-header {
-          text-align: center;
-          margin-bottom: 0.75rem;
-        }
-
-        .tile-avatar {
-          position: relative;
-          width: clamp(48px, 12vw, 64px);
-          height: clamp(48px, 12vw, 64px);
-          margin: 0 auto;
-        }
-
-        .online-dot {
-          position: absolute;
-          bottom: 2px;
-          right: 2px;
-          width: clamp(8px, 2vw, 12px);
-          height: clamp(8px, 2vw, 12px);
-          border-radius: 50%;
-          border: 2px solid white;
-        }
-
-        .online-dot.online {
-          background: #10b981;
-        }
-
-        .online-dot.offline {
-          background: #6b7280;
-        }
-
-        .tile-content {
-          text-align: center;
-        }
-
-        .tile-title {
-          font-size: clamp(0.875rem, 3.5vw, 1rem);
-          font-weight: 600;
-          color: #111827;
-          line-height: 1.2;
-          margin-bottom: 0.25rem;
-        }
-
-        .tile-status {
-          font-size: clamp(0.75rem, 3vw, 0.8125rem);
-          color: #6b7280;
-          margin-bottom: 0.75rem;
-        }
-
-        .tile-stats {
-          display: flex;
-          justify-content: center;
-          gap: 1rem;
-        }
-
-        .tile-stat {
-          text-align: center;
-        }
-
-        .stat-num {
-          display: block;
-          font-size: clamp(1rem, 4vw, 1.25rem);
-          font-weight: 700;
-          color: #4f46e5;
-          line-height: 1;
-        }
-
-        .stat-label {
-          font-size: clamp(0.625rem, 2.5vw, 0.75rem);
-          color: #6b7280;
-          font-weight: 500;
-        }
-
-        /* Card styling */
-        .card-main {
-          flex: 1.618;
-          display: flex;
-          gap: 0.75rem;
-          align-items: center;
-        }
-
-        .card-avatar {
-          position: relative;
-          flex-shrink: 0;
-          width: clamp(48px, 8vw, 64px);
-          height: clamp(48px, 8vw, 64px);
-        }
-
-        .card-info {
-          flex: 1;
-          min-width: 0;
-        }
-
-        .card-title {
-          font-size: clamp(1rem, 3vw, 1.125rem);
-          font-weight: 600;
-          color: #111827;
-          line-height: 1.2;
-          margin-bottom: 0.25rem;
-        }
-
-        .card-status {
-          font-size: clamp(0.75rem, 2.5vw, 0.8125rem);
-          color: #6b7280;
-          margin-bottom: 0.5rem;
-        }
-
-        .card-bio {
-          font-size: clamp(0.75rem, 2.5vw, 0.8125rem);
-          color: #374151;
-          line-height: 1.3;
-          display: -webkit-box;
-          -webkit-box-orient: vertical;
-          -webkit-line-clamp: 2;
-          overflow: hidden;
-        }
-
-        .card-stats {
-          flex: 1;
-          display: flex;
-          justify-content: space-around;
-          align-items: center;
-          text-align: center;
-        }
-
-        .card-stat {
-          flex: 1;
-        }
-
-        .stat-value {
-          font-size: clamp(1.125rem, 4vw, 1.5rem);
-          font-weight: 700;
-          color: #4f46e5;
-          line-height: 1;
-          margin-bottom: 0.25rem;
-        }
-
-        .stat-name {
-          font-size: clamp(0.6875rem, 2.5vw, 0.75rem);
-          color: #6b7280;
-          font-weight: 500;
-        }
-
-        /* Responsive typography hierarchy */
-        @container (max-width: 120px) {
-          .badge-title {
-            font-size: 0.6875rem;
-          }
-          .badge-status {
-            font-size: 0.6rem;
-          }
-        }
-
-        @container (min-height: 350px) {
-          .tile-stats {
-            margin-top: auto;
-          }
+          background: rgba(30, 41, 59, 0.6);
+          border-radius: 8px;
+          font-size: 1.5rem;
+          color: #94a3b8;
         }
       </style>
     </template>

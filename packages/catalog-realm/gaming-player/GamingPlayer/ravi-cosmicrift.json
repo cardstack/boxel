@@ -1,0 +1,54 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "gamerTag": "CosmicRift_Ravi",
+      "email": "ravi.patel@protonmail.com",
+      "bio": "VR pioneer and space simulation enthusiast. Exploring virtual worlds and pushing the boundaries of immersive gaming. Building the future of gaming one headset at a time.",
+      "isOnline": true,
+      "joinDate": "2020-01-08",
+      "location": "Mumbai, India",
+      "profileImageUrl": "https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=400&h=400&fit=crop&crop=face",
+      "preferredGenres": ["VR", "Simulation", "Space", "Sci-Fi"],
+      "gamingGroups": ["VR Innovators", "Space Sim Society", "Future Gaming Collective"],
+      "streamingPlatforms": ["Twitch", "YouTube Gaming"],
+      "contentCreatorStatus": true,
+      "streamSchedule": "Monday/Wednesday/Saturday 2PM-6PM IST",
+      "statistics": {
+        "totalGames": 94,
+        "totalHours": 1876,
+        "averageRating": 8.8,
+        "currentStreak": 14,
+        "favoriteGenre": "VR",
+        "completionRate": 81,
+        "achievementsUnlocked": 1567
+      }
+    },
+    "relationships": {
+      "friends.0": {
+        "links": { "self": "./diego-stratmaxx" }
+      },
+      "friends.1": {
+        "links": { "self": "./zlata-voidwalker" }
+      },
+      "favoriteGames.0": {
+        "links": { "self": "../../video-game/VideoGame/cyberpunk-2077" }
+      },
+      "wishlistGames.0": {
+        "links": { "self": "../../video-game/VideoGame/hollow-knight" }
+      },
+      "connectedPlatforms": {
+        "links": { "self": null }
+      },
+      "tournaments": {
+        "links": { "self": null }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../gaming-player",
+        "name": "GamingPlayer"
+      }
+    }
+  }
+}

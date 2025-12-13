@@ -1,0 +1,51 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "gamerTag": "StratMaxx_Diego",
+      "email": "diego.santos@gmail.com",
+      "bio": "Strategy game tactician and city builder architect. I love games that make me think 10 steps ahead. Currently building epic civilizations and managing complex economies.",
+      "isOnline": true,
+      "joinDate": "2019-06-14",
+      "location": "São Paulo, Brazil",
+      "profileImageUrl": "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&h=400&fit=crop&crop=face",
+      "preferredGenres": ["Strategy", "4X", "City Builder", "Management"],
+      "gamingGroups": ["Strategy Masters BR", "City Planners United", "Empire Builders"],
+      "streamingPlatforms": ["YouTube Gaming", "Facebook Gaming"],
+      "contentCreatorStatus": false,
+      "streamSchedule": "",
+      "statistics": {
+        "totalGames": 78,
+        "totalHours": 2567,
+        "averageRating": 8.5,
+        "currentStreak": 5,
+        "favoriteGenre": "Strategy",
+        "completionRate": 73,
+        "achievementsUnlocked": 1234
+      }
+    },
+    "relationships": {
+      "friends.0": {
+        "links": { "self": "./ravi-cosmicrift" }
+      },
+      "wishlistGames.0": {
+        "links": { "self": "../../video-game/VideoGame/valorant" }
+      },
+      "favoriteGames": {
+        "links": { "self": null }
+      },
+      "connectedPlatforms": {
+        "links": { "self": null }
+      },
+      "tournaments": {
+        "links": { "self": null }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../gaming-player",
+        "name": "GamingPlayer"
+      }
+    }
+  }
+}

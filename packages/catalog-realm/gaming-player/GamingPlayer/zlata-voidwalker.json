@@ -1,0 +1,54 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "gamerTag": "VoidWalker_Zlata",
+      "email": "zlata.petrov@protonmail.com",
+      "bio": "Horror game connoisseur and puzzle solver. I thrive in atmospheric games that challenge both mind and nerves. Currently speedrunning classic survival horror titles.",
+      "isOnline": true,
+      "joinDate": "2021-10-31",
+      "location": "Prague, Czech Republic",
+      "profileImageUrl": "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=face",
+      "preferredGenres": ["Horror", "Puzzle", "Survival", "Atmospheric"],
+      "gamingGroups": ["Horror Game Society", "Speedrun Central EU", "Puzzle Masters"],
+      "streamingPlatforms": ["Twitch"],
+      "contentCreatorStatus": true,
+      "streamSchedule": "Wednesday/Friday 8PM-12AM CET",
+      "statistics": {
+        "totalGames": 156,
+        "totalHours": 2134,
+        "averageRating": 8.9,
+        "currentStreak": 18,
+        "favoriteGenre": "Horror",
+        "completionRate": 87,
+        "achievementsUnlocked": 1823
+      }
+    },
+    "relationships": {
+      "friends.0": {
+        "links": { "self": "./ravi-cosmicrift" }
+      },
+      "friends.1": {
+        "links": { "self": "./maya-phoenixrise" }
+      },
+      "connectedPlatforms.0": {
+        "links": { "self": "../../gaming-platform/GamingPlatform/steam-platform" }
+      },
+      "tournaments.0": {
+        "links": { "self": "../../tournament/Tournament/street-fighter-evo" }
+      },
+      "favoriteGames.0": {
+        "links": { "self": "../../video-game/VideoGame/hollow-knight" }
+      },
+      "wishlistGames.0": {
+        "links": { "self": "../../video-game/VideoGame/valorant" }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../gaming-player",
+        "name": "GamingPlayer"
+      }
+    }
+  }
+}

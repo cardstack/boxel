@@ -1,0 +1,46 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "GameRecord",
+        "module": "../game-record"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "notes": "**Loving this game!**\n\nThe storyline is incredible and Night City feels so alive. Currently working on all the side quests before finishing the main story. The combat system took some getting used to, but now I'm unstoppable with my netrunner build.\n\n**Highlights:**\n- Panam's questline was amazing\n- Love the cyberpunk aesthetic\n- Photo mode is addictive\n\n**Todo:**\n- Finish Phantom Liberty DLC\n- Max out Street Cred\n- Get the secret ending",
+      "rating": 9,
+      "status": "playing",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "startDate": "2024-11-01",
+      "hoursPlayed": 87,
+      "completedDate": null,
+      "lastPlayedDate": "2024-12-07T22:30:00.000Z",
+      "screenshotUrls": [],
+      "achievementsUnlocked": 42,
+      "completionPercentage": 68
+    },
+    "relationships": {
+      "game": {
+        "links": {
+          "self": "../../video-game/VideoGame/cyberpunk-2077"
+        }
+      },
+      "player": {
+        "links": {
+          "self": "../../gaming-player/GamingPlayer/zlata-voidwalker"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

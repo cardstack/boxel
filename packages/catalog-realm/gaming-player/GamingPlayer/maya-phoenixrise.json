@@ -1,0 +1,94 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "GamingPlayer",
+        "module": "../gaming-player"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "bio": "RPG enthusiast and indie game curator. I love discovering hidden gems and supporting small developers. Currently obsessed with narrative-driven adventures and cozy simulation games.",
+      "email": "maya.chen@gmail.com",
+      "avatar": {
+        "eyeType": null,
+        "topType": null,
+        "hairColor": null,
+        "mouthType": null,
+        "skinColor": null,
+        "clotheType": null,
+        "eyebrowType": null,
+        "facialHairType": null,
+        "accessoriesType": null
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "gamerTag": "PhoenixRise_Maya",
+      "isOnline": false,
+      "joinDate": "2020-08-22",
+      "location": "Vancouver, BC",
+      "statistics": {
+        "totalGames": 203,
+        "totalHours": 1976,
+        "averageRating": 9.1,
+        "currentStreak": 7,
+        "favoriteGenre": "RPG",
+        "completionRate": 92,
+        "achievementsUnlocked": 2834
+      },
+      "gamingGroups": [
+        "Indie Game Spotlight",
+        "RPG Storytellers",
+        "Cozy Gaming Society"
+      ],
+      "streamSchedule": "",
+      "preferredGenres": [
+        "RPG",
+        "Indie",
+        "Simulation",
+        "Adventure"
+      ],
+      "profileImageUrl": "",
+      "streamingPlatforms": [
+        "Twitch"
+      ],
+      "contentCreatorStatus": false
+    },
+    "relationships": {
+      "friends.0": {
+        "links": {
+          "self": "./alex-shadowblade"
+        }
+      },
+      "tournaments": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "favoriteGames.0": {
+        "links": {
+          "self": "../../video-game/VideoGame/hollow-knight"
+        }
+      },
+      "wishlistGames.0": {
+        "links": {
+          "self": "../../video-game/VideoGame/cyberpunk-2077"
+        }
+      },
+      "connectedPlatforms": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
