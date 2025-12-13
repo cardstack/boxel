@@ -55,10 +55,9 @@ export default class PatchCodeCommand extends HostBaseCommand<
     let fileInfo = await this.getFileInfo(fileUrl);
     let hasEmptySearchPortion = this.hasEmptySearchPortion(codeBlocks);
     let sourceContent = hasEmptySearchPortion ? '' : fileInfo.content;
-    let { patchedCode, results } = await this.applyCodeBlocks(
-      sourceContent,
-      codeBlocks,
-    );
+    let { patchedCode, results } = hasEmptySearchPortion
+      ? this.applyEmptySearchReplaceBlock(codeBlocks[0])
+      : await this.applyCodeBlocks(sourceContent, codeBlocks);
     let finalFileUrl = fileUrl;
     if (results.some((r) => r.status === 'applied')) {
       let lintResult = await this.lintAndFix(fileUrl, patchedCode);
@@ -168,6 +167,21 @@ export default class PatchCodeCommand extends HostBaseCommand<
     let searchReplaceBlock = codeBlocks[0];
     let { searchContent } = parseSearchReplace(searchReplaceBlock);
     return searchContent.trim() === '';
+  }
+
+  private applyEmptySearchReplaceBlock(codeBlock: string): {
+    patchedCode: string;
+    results: { status: 'applied' | 'failed'; failureReason?: string }[];
+  } {
+    return {
+      patchedCode: this.getReplaceContent(codeBlock) ?? '',
+      results: [{ status: 'applied' }],
+    };
+  }
+
+  private getReplaceContent(codeBlock: string): string | null {
+    let { replaceContent } = parseSearchReplace(codeBlock);
+    return replaceContent;
   }
 
   private async applyCodeBlocks(
