@@ -9,7 +9,7 @@ listeners:
     x_forwarded: true
 
     resources:
-      - names: [client]
+      - names: [client, federation]
         compress: false
 
 database:

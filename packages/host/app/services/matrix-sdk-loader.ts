@@ -117,6 +117,7 @@ export type ExtendedClient = Pick<
   | 'leave'
   | 'loginWithPassword'
   | 'logout'
+  | 'getOpenIdToken'
   | 'off'
   | 'on'
   | 'registerRequest'
