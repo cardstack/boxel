@@ -1,40 +1,38 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
-import { Skill } from 'https://cardstack.com/base/skill'; // ¹ Core imports
+import {
+  SkillPlus,
+  slugifyHeading,
+  addHeaderIds,
+  DocLayout,
+  TocSection,
+  EmptyStateContainer,
+  AppendixSection,
+  parseMarkdownHeaders,
+} from './skill-plus';
+import { SkillReference } from './skill-reference';
 import {
   Component,
-  FieldDef,
   field,
-  linksTo,
   contains,
   containsMany,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import MarkdownField from 'https://cardstack.com/base/markdown';
-import TextAreaField from 'https://cardstack.com/base/text-area'; // ¹³⁰ TextArea import for content summary
-import enumField from 'https://cardstack.com/base/enum'; // ³ Enum field import
-import { on } from '@ember/modifier'; // ⁸⁰ Event modifier for TOC clicks
-import { gt, eq } from '@cardstack/boxel-ui/helpers';
-import { modifier } from 'ember-modifier'; // ⁿ Replacing class-based modifiers with function modifiers
 
-// ⁿ Shared slugify used by DOM header ID assignment & TOC generation
-function slugifyHeading(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
-    .replace(/[\u{2600}-\u{26FF}]/gu, '')
-    .replace(/[\u{2700}-\u{27BF}]/gu, '')
-    .replace(/[^\w\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
+import { gt } from '@cardstack/boxel-ui/helpers';
+import { modifier } from 'ember-modifier'; // Replacing class-based modifiers with function modifiers
 
-// ⁿ Compute table of contents markdown for a SkillSet's related skills
+import SkillIcon from '@cardstack/boxel-icons/book-open';
+import ActivityIcon from '@cardstack/boxel-icons/activity';
+import EditIcon from '@cardstack/boxel-icons/edit';
+import FileTextIcon from '@cardstack/boxel-icons/file-text';
+
+// Compute table of contents markdown for a Skill Set's related skills
+// Updated to handle frontMatter, backMatter, and different indentation styles
 function computeTableOfContents(
   relatedSkills: SkillReference[] = [],
+  frontMatter?: string,
+  backMatter?: string,
 ): string | undefined {
-  if (relatedSkills.length === 0) return undefined;
-
   const tocLines: string[] = [];
   let sectionNumber = 0;
 
@@ -44,11 +42,13 @@ function computeTableOfContents(
     return (c === '`' || c === '~') && line.startsWith(c.repeat(3));
   };
 
-  // Parse markdown heading (## or ###) into structured data
+  // ²⁵⁵ Parse markdown heading (## or ###) into structured data
+  // Handles headers with or without leading whitespace
   const parseHeading = (
     line: string,
   ): { level: number; text: string; id: string } | null => {
-    const match = line.match(/^(#{2,3})\s+(.+)$/);
+    // ²⁵⁶ Match headers with optional leading whitespace (for indented content)
+    const match = line.match(/^\s*(#{2,3})\s+(.+)$/);
     if (!match) return null;
 
     const level = match[1].length;
@@ -60,6 +60,7 @@ function computeTableOfContents(
     // Strip explicit ID, HTML tags, and link markdown
     raw = raw
       .replace(/\s*\{#[a-z0-9-]+\}\s*/g, '')
+      .replace(/^[\d.]+\s+/, '')
       .replace(/<[^>]*>/g, '')
       .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
       .trim();
@@ -68,6 +69,40 @@ function computeTableOfContents(
     return { level, text: raw, id };
   };
 
+  // Helper to extract headers from markdown content
+  const extractHeadersFromMarkdown = (
+    content: string,
+    baseIndent: number = 1,
+  ): void => {
+    if (!content) return;
+
+    let inFence = false;
+
+    for (const rawLine of content.split('\n')) {
+      const line = rawLine;
+
+      // Check for fence markers (trimmed for detection)
+      if (isFence(line.trim())) {
+        inFence = !inFence;
+        continue;
+      }
+      if (inFence) continue;
+
+      const heading = parseHeading(line);
+      if (!heading) continue;
+
+      // Calculate indent based on header level relative to base
+      const indent = '  '.repeat(heading.level - 2 + baseIndent);
+      tocLines.push(`${indent}- [${heading.text}](#${heading.id})`);
+    }
+  };
+
+  // Process frontMatter headers (if any)
+  if (frontMatter) {
+    extractHeadersFromMarkdown(frontMatter, 0);
+  }
+
+  // Process related skills
   for (let i = 0; i < relatedSkills.length; i++) {
     const skillRef = relatedSkills[i];
     if (!skillRef) continue;
@@ -80,6 +115,7 @@ function computeTableOfContents(
 
     const mode = skillRef.inclusionMode || 'link-only';
 
+    // ²⁶² Get skill content based on inclusion mode
     const skillContent =
       skillRef.skill?.instructions && mode === 'full'
         ? skillRef.skill.instructions
@@ -89,12 +125,13 @@ function computeTableOfContents(
 
     if (!skillContent) continue;
 
+    // Extract headers with indent level 1 (nested under skill divider)
     let inFence = false;
 
     for (const rawLine of skillContent.split('\n')) {
-      const line = rawLine.trim();
+      const line = rawLine;
 
-      if (isFence(line)) {
+      if (isFence(line.trim())) {
         inFence = !inFence;
         continue;
       }
@@ -103,17 +140,22 @@ function computeTableOfContents(
       const heading = parseHeading(line);
       if (!heading) continue;
 
-      // indent: 2 spaces per level starting from level 2
+      // ²⁶⁴ Indent nested headers: 2 spaces for H2, 4 spaces for H3
       const indent = '  '.repeat(heading.level - 1);
       tocLines.push(`${indent}- [${heading.text}](#${heading.id})`);
     }
+  }
+
+  // Process backMatter headers (if any)
+  if (backMatter) {
+    extractHeadersFromMarkdown(backMatter, 0);
   }
 
   const toc = tocLines.join('\n');
   return toc.length > 0 ? toc : undefined;
 }
 
-// ⁿ Function modifier to wrap tables in scrollable containers
+// Function modifier to wrap tables in scrollable containers
 const wrapTables = modifier((element: HTMLElement) => {
   const tables = element.querySelectorAll('table:not(.table-wrapper table)');
   tables.forEach((table) => {
@@ -124,225 +166,38 @@ const wrapTables = modifier((element: HTMLElement) => {
   });
 });
 
-// ⁿ Function modifier to add IDs to headers for TOC anchor links
-const addHeaderIds = modifier((element: HTMLElement) => {
-  const headers = element.querySelectorAll('h2, h3, h4, h5');
-  const usedIds = new Set<string>();
-  headers.forEach((header) => {
-    if (header.getAttribute('id')) return;
-    const text = header.textContent || '';
-    const idMatch = text.match(/\{#([a-z0-9-]+)\}/);
-    let baseId: string;
-    if (idMatch) {
-      baseId = idMatch[1];
-      header.textContent = text.replace(/\s*\{#[a-z0-9-]+\}\s*/, '').trim();
-    } else {
-      baseId = slugifyHeading(text);
-    }
-    let finalId = baseId;
-    let suffix = 2;
-    while (usedIds.has(finalId)) {
-      finalId = `${baseId}-${suffix}`;
-      suffix++;
-    }
-    if (finalId) {
-      header.setAttribute('id', finalId);
-      usedIds.add(finalId);
-    }
-  });
-});
-
-// ¹³ Inline SkillReference definition
-export class SkillReference extends FieldDef {
-  static displayName = 'Skill Reference';
-
-  @field skill = linksTo(() => Skill); // ¹⁴ Link to actual skill card
-
-  // ¹⁵ Enumerated inclusion mode with three valid options
-  @field inclusionMode = contains(
-    enumField(StringField, {
-      options: [
-        { value: 'full', label: 'Full Instructions' },
-        { value: 'essential', label: 'Essential Only' },
-        { value: 'link-only', label: 'Link Only' },
-      ],
-    }),
-  );
-
-  @field contentSummary = contains(TextAreaField, {
-    // ¹³¹ Content summary (renamed from readFullWhen, using TextArea for multi-line)
-    description:
-      'Brief summary of what content this skill contains (helps LLM decide whether to load full instructions)',
-  });
-
-  @field alternateTitle = contains(StringField, {
-    // ¹⁷ Optional override title
-    description:
-      "Optional: Override the linked skill's title for this reference context",
-  });
-
-  @field topicName = contains(StringField, {
-    // ¹⁸ Computed topic from skill or override
-    computeVia: function (this: SkillReference) {
-      // return this.alternateTitle || this.skill?.title || 'Untitled Skill';
-      return this.alternateTitle || 'Untitled Skill';
-    },
-  });
-
-  @field essentials = contains(MarkdownField, {
-    // ¹⁹ Computed essentials from skill instructions
-    computeVia: function (this: SkillReference) {
-      const instructions = this.skill?.instructions;
-      if (!instructions) return undefined;
-
-      // Extract content before <!--more--> marker
-      const moreMarkerIndex = instructions.indexOf('<!--more-->');
-      if (moreMarkerIndex === -1) {
-        // No marker found, return first paragraph or section
-        return instructions;
-      }
-
-      return instructions.substring(0, moreMarkerIndex).trim();
-    },
-  });
-
-  static embedded = class Embedded extends Component<typeof this> {
-    // ²⁰ Embedded format
-    <template>
-      <div class='skill-reference-card'>
-        <div class='skill-ref-header'>
-          <h4 class='skill-ref-topic'>
-            {{if
-              @model.topicName
-              @model.topicName
-              (if @model.skill.title @model.skill.title 'Skill')
-            }}
-
-          </h4>
-          <span class='skill-ref-mode'>{{if
-              @model.inclusionMode
-              @model.inclusionMode
-              'link-only'
-            }}</span>
-        </div>
-
-        {{#if @model.skill}}
-          <div class='skill-link'>
-            <@fields.skill @format='atom' />
-          </div>
-        {{/if}}
-
-        {{#if @model.contentSummary}}
-          <div class='content-summary'>
-            <strong>Contains:</strong>
-            {{@model.contentSummary}}
-          </div>
-        {{/if}}
-      </div>
-
-      <style scoped>
-        /* ⁶² Enhanced skill reference card styles */
-        .skill-reference-card {
-          padding: 1rem;
-          border: 1px solid var(--border);
-          border-radius: var(--radius-lg);
-          background: var(--card);
-          box-shadow: var(--shadow-sm);
-          transition: all 0.2s ease;
-        }
-
-        .skill-reference-card:hover {
-          box-shadow: var(--shadow-md);
-          border-color: var(--primary);
-        }
-
-        .skill-ref-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: baseline;
-          margin-bottom: 0.75rem;
-          padding-bottom: 0.5rem;
-          border-bottom: 1px solid var(--border);
-        }
-
-        .skill-ref-topic {
-          font-size: 0.9375rem;
-          font-weight: 700;
-          margin: 0;
-          color: var(--foreground);
-        }
-
-        .skill-ref-mode {
-          font-size: 0.6875rem;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          padding: 0.125rem 0.5rem;
-          border-radius: var(--radius-sm);
-          background: var(--primary);
-          color: var(--primary-foreground);
-        }
-
-        .skill-link {
-          margin-bottom: 0.5rem;
-          font-size: 0.75rem;
-        }
-
-        .content-summary {
-          font-size: 0.75rem;
-          color: var(--muted-foreground);
-          margin-top: 0.5rem;
-          padding: 0.5rem;
-          background: var(--muted);
-          border-radius: var(--radius-sm);
-          border-left: 2px solid var(--primary);
-        }
-
-        .content-summary strong {
-          color: var(--foreground);
-          font-weight: 600;
-        }
-      </style>
-    </template>
-  };
-}
-
-// @ts-ignore
-export class SkillSet extends Skill {
-  // ² SkillSet definition
+export class SkillSet extends SkillPlus {
   static displayName = 'Skill Set';
   static prefersWideFormat = true; // ⁴⁰ Enable wide format for documentation
 
-  @field relatedSkills = containsMany(SkillReference); // ²² Related skills with individual inclusion modes
+  @field title = contains(StringField, {
+    computeVia: function (this: SkillSet) {
+      return this.cardInfo?.title || `Untitled ${SkillSet.displayName}`;
+    },
+  });
+
+  @field relatedSkills = containsMany(SkillReference); // Related skills with individual inclusion modes
 
   @field frontMatter = contains(MarkdownField, {
-    // ²³ Editable front matter
+    // Editable front matter
     description:
       'Front matter content - appears at the beginning of instructions',
   });
 
   @field backMatter = contains(MarkdownField, {
-    // ²⁴ Editable back matter
+    // Editable back matter
     description: 'Back matter content - appears at the end of instructions',
   });
 
-  @field title = contains(StringField, {
-    // ²⁸ Computed title from cardInfo or fallback
-    computeVia: function (this: SkillSet) {
-      return this.cardInfo?.title || 'Untitled Skill Set';
-    },
-  });
-
   @field tableOfContents = contains(MarkdownField, {
-    // ²⁵ Computed TOC from skill sections and their headers
+    // Computed TOC from skill sections and their headers
     computeVia: function (this: SkillSet) {
-      // ⁿ Delegate to extracted function for clarity & formatter stability
       return computeTableOfContents(this.relatedSkills);
     },
   });
 
   @field instructions = contains(MarkdownField, {
-    // ²⁶ Computed instructions with table-based skill dividers (NO TOC embedded)
+    // Computed instructions with table-based skill dividers (NO TOC embedded)
     computeVia: function (this: SkillSet) {
       let result = '';
 
@@ -357,7 +212,7 @@ export class SkillSet extends Skill {
         return c === '`' && line.startsWith(c.repeat(3));
       };
 
-      // ³⁹ REMOVED: Do NOT add tableOfContents here - breaks circular dependency
+      // REMOVED: Do NOT add tableOfContents here - breaks circular dependency
       // TOC is extracted FROM instructions and displayed separately in template
 
       // Helper function to normalize markdown header levels
@@ -390,7 +245,7 @@ export class SkillSet extends Skill {
 
         if (minLevel === undefined) return markdown; // no headers to normalize
 
-        const levelShift = 2 - minLevel; // ¹⁶² make top level ## (H2) for external skills
+        const levelShift = 2 - minLevel; // make top level ## (H2) for external skills
 
         if (levelShift === 0) return markdown;
 
@@ -428,43 +283,63 @@ export class SkillSet extends Skill {
         return out.join('\n');
       };
 
-      // ⁹⁰ Add related skills with numbered dividers
+      // Add related skills with numbered dividers
       if (this.relatedSkills && this.relatedSkills.length > 0) {
         for (let i = 0; i < this.relatedSkills.length; i++) {
           const skillRef = this.relatedSkills[i];
           if (!skillRef) continue;
 
-          const sectionNumber = i + 1; // ¹⁰⁹ Number the dividers 1, 2, 3...
+          const sectionNumber = i + 1; // Number the dividers 1, 2, 3...
           const mode = skillRef.inclusionMode || 'link-only';
-          const topicName =
-            //  skillRef.topicName || skillRef.skill?.title || 'Untitled';
-            skillRef.topicName || 'Untitled';
+          const topicName = skillRef.topicName || 'Untitled';
           const dividerAnchorId = `skill-divider-${i}`;
 
-          const skillURL = ''; // skillRef.skill?.id ||
+          const skillURL = skillRef.skill?.id || ''; // ²³² Get skill URL
 
-          // ¹¹⁰ Premium numbered divider with activation context for link-only/essential modes
-          const dividerLines: string[] = [
-            `<div class="skill-divider" id="${dividerAnchorId}">`,
-            `  <div class="divider-number">${sectionNumber}</div>`,
-            '  <div class="divider-content">',
-            `    <div class="divider-topic">${topicName}</div>`,
-          ];
+          // Premium numbered divider - NO <a href>, clickable via CSS cursor
+          const dividerLines: string[] = [];
+
+          // Add data attribute for click handler, no href wrapper
           if (skillURL) {
             dividerLines.push(
-              `    <a href="${skillURL}" class="divider-link">${skillURL}</a>`,
+              `<div class="skill-divider skill-divider-clickable" id="${dividerAnchorId}" data-card-url="${skillURL}">`,
+              `  <div class="divider-number">${sectionNumber}</div>`,
+              '  <div class="divider-content">',
+              `    <div class="divider-topic">${topicName}</div>`,
             );
-          }
-          if (skillRef.contentSummary) {
+          } else {
             dividerLines.push(
-              `    <div class="divider-context">📖 Contains: ${skillRef.contentSummary}</div>`,
+              `<div class="skill-divider" id="${dividerAnchorId}">`,
+              `  <div class="divider-number">${sectionNumber}</div>`,
+              '  <div class="divider-content">',
+              `    <div class="divider-topic">${topicName}</div>`,
             );
           }
-          dividerLines.push('  </div>', '</div>', ''); // extra "" gives a blank line
 
-          result += dividerLines.join('\n');
+          if (skillRef.contentSummary) {
+            const indent = '    ';
+            dividerLines.push(
+              `${indent}<div class="divider-context">📖 Contains: ${skillRef.contentSummary}</div>`,
+            );
+          }
+          // Add inclusion mode badge to divider (pill-style)
+          const indent = '    ';
+          dividerLines.push(
+            `${indent}<div class="divider-mode divider-mode-${mode}">${
+              mode === 'full'
+                ? 'Full'
+                : mode === 'essential'
+                ? 'Essential'
+                : 'Link Only'
+            }</div>`,
+          );
 
-          // ¹⁶³ Add skill content with header normalization
+          // Close divider tags (no closing </a>)
+          dividerLines.push('  </div>', '</div>');
+
+          result += '\n' + dividerLines.join('\n') + '\n\n'; // ²¹³ Blank line before HTML, two newlines after to ensure markdown parsing resumes
+
+          // Add skill content with header normalization
           if (mode === 'full' && skillRef.skill?.instructions) {
             result += normalizeHeaders(skillRef.skill.instructions) + '\n\n';
           } else if (mode === 'essential' && skillRef.essentials) {
@@ -484,505 +359,213 @@ export class SkillSet extends Skill {
   });
 
   static isolated = class Isolated extends Component<typeof this> {
-    // ⁴¹ Professional documentation layout with responsive TOC
+    // Click handler for skill dividers using viewCard API
+    handleDividerClick = (event: Event) => {
+      const target = event.target as HTMLElement;
+      const divider = target.closest('.skill-divider-clickable') as HTMLElement;
 
-    // ¹⁶⁸ Extract TOC entries from markdown (unified parser)
-    private parseHeadersFromMarkdown(
-      markdown: string | undefined,
-      headerLevel: 2 | 3,
-    ): { id: string; text: string; level: number }[] {
-      // ¹⁷⁹ Unified header parser
-      if (!markdown) return [];
-
-      const headers: { id: string; text: string; level: number }[] = [];
-      const lines = markdown.split('\n');
-      const usedIds = new Set<string>(); // ¹⁹² Track duplicate IDs like the DOM modifier
-
-      // ¹⁸⁹ Simplified slugify function (remove emoji and special chars)
-      const slugify = (text: string): string => {
-        return (
-          text
-            .toLowerCase()
-            .trim()
-            // Remove emoji and special unicode characters first
-            .replace(/[\u{1F300}-\u{1F9FF}]/gu, '') // Emoji ranges
-            .replace(/[\u{2600}-\u{26FF}]/gu, '') // Misc symbols
-            .replace(/[\u{2700}-\u{27BF}]/gu, '') // Dingbats
-            .replace(/[^\w\s-]/g, '') // Non-word chars
-            .replace(/\s+/g, '-') // Spaces to hyphens
-            .replace(/^-+|-+$/g, '')
-        ); // Trim hyphens
-      };
-
-      for (const line of lines) {
-        // Match H2: "## Text {#id}" or "## Text"
-        const h2Match = line.match(/^##\s+(.+)/);
-        // Match H3: "### Text {#id}" or "### Text"
-        const h3Match = line.match(/^###\s+(.+)/);
-
-        if (h2Match && headerLevel === 2) {
-          let fullText = h2Match[1].trim();
-          // Extract explicit ID if present
-          const idMatch = fullText.match(/\{#([a-z0-9-]+)\}/);
-          const explicitId = idMatch ? idMatch[1] : null;
-          // Remove {#id} from display text
-          const rawText = fullText.replace(/\s*\{#[a-z0-9-]+\}/, '').trim();
-          let baseId = explicitId || slugify(rawText);
-
-          // ¹⁹³ Handle duplicates same as DOM modifier
-          let finalId = baseId;
-          let suffix = 2;
-          while (usedIds.has(finalId)) {
-            finalId = `${baseId}-${suffix}`;
-            suffix++;
-          }
-          usedIds.add(finalId);
-
-          headers.push({ id: finalId, text: rawText, level: 2 });
-        } else if (h3Match) {
-          let fullText = h3Match[1].trim();
-          // Extract explicit ID if present
-          const idMatch = fullText.match(/\{#([a-z0-9-]+)\}/);
-          const explicitId = idMatch ? idMatch[1] : null;
-          // Remove {#id} from display text
-          const rawText = fullText.replace(/\s*\{#[a-z0-9-]+\}/, '').trim();
-          let baseId = explicitId || slugify(rawText);
-
-          // ¹⁹³ Handle duplicates same as DOM modifier
-          let finalId = baseId;
-          let suffix = 2;
-          while (usedIds.has(finalId)) {
-            finalId = `${baseId}-${suffix}`;
-            suffix++;
-          }
-          usedIds.add(finalId);
-
-          headers.push({ id: finalId, text: rawText, level: 3 });
-        }
-      }
-
-      return headers;
-    }
-
-    // ¹⁸⁰ Extract TOC entries from frontMatter markdown (H3 only)
-    get introToc() {
-      return this.parseHeadersFromMarkdown(this.args.model?.frontMatter, 3);
-    }
-
-    // ¹⁸¹ Extract TOC entries from backMatter markdown (H2 and H3)
-    get summaryToc() {
-      return this.parseHeadersFromMarkdown(this.args.model?.backMatter, 2);
-    }
-
-    // ⁸⁰ TOC click handler - use @on modifier in template
-    handleTocClick = (event: MouseEvent) => {
-      // ⁸¹ Click handler method
-      const target = event.target as HTMLElement | null;
-      const anchor = target?.closest?.('a') as HTMLAnchorElement | null;
-      if (!anchor) return;
-      const href = anchor.getAttribute('href') || '';
-      if (!href.startsWith('#')) return;
-
-      event.preventDefault();
-      const id = decodeURIComponent(href.slice(1));
-
-      // Find target element by ID (escape if necessary)
-      const esc = (window as any).CSS?.escape
-        ? (window as any).CSS.escape(id)
-        : id;
-      let targetElement = document.getElementById(id) as HTMLElement | null;
-      if (!targetElement) {
-        targetElement = document.querySelector(
-          `[id="${esc}"]`,
-        ) as HTMLElement | null;
-      }
-
-      if (targetElement) {
-        const scrollContainer = document.querySelector(
-          '.doc-main',
-        ) as HTMLElement | null;
-        if (scrollContainer) {
-          const containerRect = scrollContainer.getBoundingClientRect();
-          const targetRect = targetElement.getBoundingClientRect();
-          const offset =
-            targetRect.top - containerRect.top + scrollContainer.scrollTop - 32; // 32px offset
-          scrollContainer.scrollTo({
-            top: Math.max(0, offset),
-            behavior: 'smooth',
-          });
-        } else {
-          targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (divider && this.args.viewCard) {
+        const cardUrl = divider.getAttribute('data-card-url');
+        if (cardUrl) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.args.viewCard(new URL(cardUrl), 'isolated');
         }
       }
     };
 
-    scrollToTop = () => {
-      // ¹⁵⁸ Scroll to top handler
-      const scrollContainer = document.querySelector(
-        '.doc-main',
-      ) as HTMLElement | null;
-      if (scrollContainer) {
-        scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-    };
+    private get isTocEmpty() {
+      return (
+        !this.args.model?.tableOfContents &&
+        !this.args.model?.frontMatter &&
+        !this.args.model?.backMatter &&
+        !this.hasAppendix
+      );
+    }
+
+    private get hasAppendix() {
+      return (
+        this.args.model?.relatedSkills?.length ||
+        this.args.model?.commands?.length
+      );
+    }
 
     <template>
-      <div class='skill-set-documentation'>
-        {{! Two-column layout: TOC sidebar + main content }}
-        <div class='doc-layout'>
-          {{! Sticky TOC sidebar }}
-          <aside class='toc-sidebar'>
-            <div class='toc-header'>
-              {{! ¹⁵⁶ Header with title and TOP button }}
-              <h2 class='toc-title'>Table of Contents</h2>
-              <button class='top-button' {{on 'click' this.scrollToTop}}>
-                {{! ¹⁵⁷ TOP button }}
-                ↑ TOP
-              </button>
-            </div>
-
-            {{! template-lint-disable no-invalid-interactive}}
-            <nav class='toc-navigation' {{on 'click' this.handleTocClick}}>
-              {{! ⁸² Use @on modifier with handler }}
-              {{! ¹⁷⁰ INTRO section - dynamic from frontMatter }}
-              {{#if (gt this.introToc.length 0)}}
-                <div class='toc-section'>
-                  <div class='toc-section-title'>INTRO</div>
-                  <ul>
-                    {{#each this.introToc as |item|}}
-                      <li><a href='#{{item.id}}'>{{item.text}}</a></li>
-                    {{/each}}
-                  </ul>
-                </div>
-              {{/if}}
-
-              {{! ¹¹⁵ CONTENT section - computed from skills }}
-              {{#if @model.tableOfContents}}
-                <div class='toc-section'>
-                  <div class='toc-section-title'>CONTENT</div>
-                  <@fields.tableOfContents />
-                </div>
-              {{/if}}
-
-              {{! ¹⁷¹ SUMMARY section - dynamic from backMatter }}
-              {{#if (gt this.summaryToc.length 0)}}
-                <div class='toc-section'>
-                  <div class='toc-section-title'>SUMMARY</div>
-                  <ul>
-                    {{#each this.summaryToc as |item|}}
-                      {{#if (eq item.level 2)}}
-                        {{! ¹⁷⁵ H2 headers - top level }}
-                        <li><a href='#{{item.id}}'>{{item.text}}</a></li>
-                      {{else}}
-                        {{! ¹⁷⁶ H3 headers - nested }}
-                        <li class='toc-nested'><a
-                            href='#{{item.id}}'
-                          >{{item.text}}</a></li>
-                      {{/if}}
-                    {{/each}}
-                  </ul>
-                </div>
-              {{/if}}
-
-              {{! ¹¹⁷ APPENDIX section }}
-              <div class='toc-section'>
-                <div class='toc-section-title'>APPENDIX</div>
-                <ul>
+      <DocLayout
+        class='skill-set-documentation'
+        @titleMeta='Skill Set Documentation'
+        @title={{@model.title}}
+        @description={{@model.description}}
+        @hideToc={{this.isTocEmpty}}
+      >
+        <:navbar>
+          {{#if @model.frontMatter}}
+            <TocSection
+              @sectionTitle='Intro'
+              @navItems={{parseMarkdownHeaders @model.frontMatter}}
+            />
+          {{/if}}
+          {{#if @model.tableOfContents}}
+            <TocSection @sectionTitle='Content'>
+              <@fields.tableOfContents />
+            </TocSection>
+          {{/if}}
+          {{#if @model.backMatter}}
+            <TocSection
+              @sectionTitle='Summary'
+              @navItems={{parseMarkdownHeaders @model.backMatter}}
+            />
+          {{/if}}
+          {{#if this.hasAppendix}}
+            <TocSection @sectionTitle='Appendix'>
+              <ul>
+                {{#if @model.relatedSkills.length}}
                   <li><a href='#skills-footer'>Related Skills</a></li>
-                  {{#if (gt @model.commands.length 0)}}
-                    <li><a href='#available-commands'>Available Commands</a></li>
-                  {{/if}}
-                </ul>
-              </div>
-            </nav>
-          </aside>
+                {{/if}}
+                {{#if @model.commands.length}}
+                  <li><a href='#available-commands'>Available Commands</a></li>
+                {{/if}}
+              </ul>
+            </TocSection>
+          {{/if}}
+        </:navbar>
+        <:headerRow>
+          <div class='skillset-header-stats'>
+            <span class='skillset-header-stat-item'>
+              <SkillIcon
+                class='skillset-header-stat-icon'
+                width='16'
+                height='16'
+              />
+              {{@model.relatedSkills.length}}
+              Skills
+            </span>
+            <span class='skillset-header-stat-item'>
+              <ActivityIcon
+                class='skillset-header-stat-icon'
+                width='16'
+                height='16'
+              />
+              Composite Guide
+            </span>
+          </div>
+        </:headerRow>
+        <:default>
+          {{#if @model.instructions}}
+            <article
+              class='instructions-article'
+              id='instructions'
+              {{addHeaderIds}}
+            >
+              <@fields.instructions />
+            </article>
+          {{else}}
+            <EmptyStateContainer>
+              <h3>Welcome to Your Skill Set</h3>
+              <p>
+                This skill set is currently empty. Get started by:
+              </p>
+              <ul class='skillset-empty-actions'>
+                <li>
+                  <EditIcon width='24' height='24' />
+                  <span>
+                    <strong>Add Front Matter</strong>
+                    <p>Write an introduction or overview section</p>
+                  </span>
+                </li>
+                <li>
+                  <SkillIcon width='24' height='24' />
+                  <span>
+                    <strong>Add Related Skills</strong>
+                    <p>Link existing skills to create a comprehensive guide</p>
+                  </span>
+                </li>
+                <li>
+                  <FileTextIcon width='24' height='24' />
+                  <span>
+                    <strong>Add Back Matter</strong>
+                    <p>Include summary notes or reinforce key points</p>
+                  </span>
+                </li>
+              </ul>
+            </EmptyStateContainer>
+          {{/if}}
 
-          {{! Main content area }}
-          <main class='doc-main'>
-            {{! ¹³⁶ Header - metadata-style presentation }}
-            <header class='doc-header'>
-              <div class='metadata-label'>SKILL SET DOCUMENTATION</div>
-              <h1 class='doc-heading'>{{if
-                  @model.title
-                  @model.title
-                  'Untitled Skill Set'
-                }}</h1>
-              {{#if @model.description}}
-                <p class='doc-subtitle'>{{@model.description}}</p>
-              {{/if}}
-              <div class='doc-stats'>
-                <span class='stat-item'>
-                  <svg
-                    class='stat-icon'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    stroke-width='2'
-                  >
-                    <path d='M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z' />
-                    <path d='M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z' />
-                  </svg>
-                  {{@model.relatedSkills.length}}
-                  Skills
-                </span>
-                <span class='stat-item'>
-                  <svg
-                    class='stat-icon'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    stroke-width='2'
-                  >
-                    <polyline points='22 12 18 12 15 21 9 3 6 12 2 12' />
-                  </svg>
-                  Composite Guide
-                </span>
-              </div>
-            </header>
-
-            {{! Instructions }}
-            {{#if @model.instructions}}
-              <article
-                class='instructions-article'
-                {{wrapTables}}
-                {{addHeaderIds}}
-              >
-                {{! ⁿ Apply both function modifiers }}
-                <@fields.instructions />
-              </article>
-            {{else}}
-              <div class='empty-state'>
-                <svg
-                  class='empty-icon'
-                  viewBox='0 0 24 24'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-width='2'
-                >
-                  <path
-                    d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'
+          {{#if this.hasAppendix}}
+            <AppendixSection>
+              {{#if @model.relatedSkills.length}}
+                <section class='commands-section' id='available-commands'>
+                  <h3 class='section-heading'>Related Skills</h3>
+                  <@fields.relatedSkills
+                    @format='embedded'
+                    class='skills-cards'
                   />
-                  <polyline points='14 2 14 8 20 8' />
-                </svg>
-                <p>No instructions available. Add related skills or edit
-                  front/back matter to get started.</p>
-              </div>
-            {{/if}}
-
-            {{! ¹¹⁸ APPENDIX divider }}
-            <div class='appendix-divider' id='appendix-section'>
-              <h2>APPENDIX</h2>
-            </div>
-
-            {{! Referenced Skills footer }}
-            {{#if (gt @model.relatedSkills.length 0)}}
-              <footer class='skills-footer' id='skills-footer'>
-                <h3 class='footer-heading'>Related Skills</h3>
-                <div class='skills-cards'>
-                  <@fields.relatedSkills @format='embedded' />
-                </div>
-              </footer>
-            {{/if}}
-
-            {{! ¹¹⁹ Available Commands section }}
-            {{#if (gt @model.commands.length 0)}}
-              <section class='commands-section' id='available-commands'>
-                <h3 class='section-heading'>Available Commands</h3>
-                <ul class='commands-list'>
-                  {{#each @model.commands as |cmd|}}
-                    <li class='command-item'>
-                      <code>{{cmd.codeRef.module}}</code>
-                      {{#if cmd.requiresApproval}}
-                        <span class='approval-badge'>Requires Approval</span>
-                      {{/if}}
-                    </li>
-                  {{/each}}
-                </ul>
-              </section>
-            {{/if}}
-          </main>
-        </div>
-      </div>
+                </section>
+              {{/if}}
+              {{#if @model.commands.length}}
+                <section class='commands-section' id='available-commands'>
+                  <h3 class='section-heading'>Available Commands</h3>
+                  <@fields.commands
+                    @format='embedded'
+                    class='commands-container'
+                  />
+                </section>
+              {{/if}}
+            </AppendixSection>
+          {{/if}}
+        </:default>
+      </DocLayout>
 
       <style scoped>
-        /* ⁴² Professional documentation styling with reliable spacing */
-
-        /* ⁴⁷ Root container */
-        .skill-set-documentation {
-          width: 100%;
-          height: 100%;
-          overflow: hidden;
-          background: var(--background);
-          color: var(--foreground);
-          font-family: var(--font-sans);
-        }
-
-        /* ⁴⁸ Two-column layout with compact spacing (0.25rem base unit) */
-        .doc-layout {
-          display: grid;
-          grid-template-columns: 240px 1fr;
-          gap: 1.5rem; /* 6 × 0.25rem */
-          height: 100%;
-          max-width: 1600px;
-          margin: 0 auto;
-          padding: 1rem 1.5rem; /* 4 × 0.25rem, 6 × 0.25rem */
-        }
-
-        /* ⁴⁹ TOC Sidebar - full height scrollable navigation */
-        .toc-sidebar {
-          height: 100%;
-          overflow-y: auto;
-          overflow-x: hidden;
-          background: var(--muted);
-          border: 1px solid var(--border);
-          border-radius: var(--radius-lg);
-          padding: 0.75rem;
-          padding-bottom: 2rem; /* ⁸⁵ Extra bottom padding */
+        .skillset-header-stats {
           display: flex;
-          flex-direction: column;
+          gap: var(--sp-4);
+          margin-block: var(--sp-3);
+          padding-top: var(--sp-3);
+          border-top: 1px solid var(--db-border);
         }
-
-        .toc-header {
-          /* ¹⁵⁹ Header container with title and button */
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 0.75rem;
-        }
-
-        .toc-title {
-          font-size: 0.6875rem;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          color: var(--muted-foreground);
-          margin: 0; /* ¹⁶⁰ Remove bottom margin, handled by header */
-        }
-
-        .top-button {
-          /* ¹⁶¹ TOP button styling */
-          background: var(--primary);
-          color: var(--primary-foreground);
-          border: none;
-          border-radius: var(--radius-sm);
-          padding: 0.25rem 0.5rem;
-          font-size: 0.625rem;
-          font-weight: 700;
-          letter-spacing: 0.05em;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-
-        .top-button:hover {
-          background: color-mix(in lab, var(--primary) 85%, black);
-          transform: translateY(-1px);
-        }
-
-        .top-button:active {
-          transform: translateY(0);
-        }
-
-        .toc-navigation {
-          font-size: 0.75rem;
-        }
-
-        .toc-navigation :deep(ul) {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-        }
-
-        .toc-navigation :deep(li) {
-          margin-bottom: 0.5rem; /* 2 × 0.25rem */
-          padding-left: 0.75rem; /* 3 × 0.25rem */
-        }
-
-        .toc-navigation :deep(ul ul) {
-          margin-top: 0.25rem; /* 1 × 0.25rem */
-          padding-left: 0.75rem; /* 3 × 0.25rem */
-        }
-
-        .toc-nested {
-          /* ¹⁷⁷ Nested H3 items in summary TOC */
-          padding-left: 0.75rem;
-        }
-
-        .toc-navigation :deep(a) {
-          color: var(--foreground);
-          text-decoration: none;
-          line-height: 1.5;
-          transition: color 0.15s ease;
-          display: inline-block;
-        }
-
-        .toc-navigation :deep(a:hover) {
-          color: var(--primary);
-        }
-
-        /* ⁵⁰ Main content area - compact scrollable */
-        .doc-main {
-          overflow-y: auto;
-          padding-right: 0.5rem; /* 2 × 0.25rem */
-          padding-bottom: 3rem; /* ⁸⁶ Extra bottom padding so last section is reachable */
-        }
-
-        /* ¹³⁷ Header section - compact metadata-style presentation */
-        .doc-header {
-          margin-bottom: 2rem; /* ¹³⁸ Reduced from 3rem */
-          padding: 0 0 1.25rem 0; /* ¹³⁸ Tighter bottom padding */
-          background: transparent;
-          border: none;
-          border-bottom: 2px solid var(--border); /* ¹³⁸ Thinner border */
-          border-radius: var(--radius-lg); /* ¹⁶⁴ Theme radius */
-        }
-
-        .metadata-label {
-          font-size: 0.625rem;
-          font-weight: 800;
-          text-transform: uppercase;
-          letter-spacing: 0.15em;
-          color: var(--primary);
-          margin-bottom: 0.5rem; /* ¹³⁸ Reduced from 0.75rem */
-        }
-
-        .doc-heading {
-          font-size: 1.5rem; /* ¹³⁸ Reduced from 2.25rem - much more compact */
-          font-weight: 700; /* ¹³⁸ Reduced from 800 */
-          line-height: 1.2;
-          margin: 0 0 0.5rem 0; /* ¹³⁸ Tighter spacing */
-          color: var(--foreground);
-          letter-spacing: -0.01em;
-        }
-
-        .doc-subtitle {
-          font-size: 0.875rem; /* ¹³⁸ Reduced from 1rem */
-          line-height: 1.5;
-          color: var(--muted-foreground);
-          margin: 0 0 1rem 0; /* ¹³⁸ Tighter spacing */
-          max-width: 48rem;
-        }
-
-        .doc-stats {
-          display: flex;
-          gap: 1rem; /* ¹³⁸ Reduced from 1.5rem */
-          margin-top: 0.75rem; /* ¹³⁸ Reduced from 1rem */
-          padding-top: 0.75rem; /* ¹³⁸ Reduced from 1rem */
-          border-top: 1px solid var(--border);
-        }
-
-        .stat-item {
+        .skillset-header-stat-item {
           display: inline-flex;
           align-items: center;
-          gap: 0.375rem; /* ¹³⁸ Reduced from 0.5rem */
-          font-size: 0.75rem; /* ¹³⁸ Reduced from 0.8125rem */
+          gap: calc(1.5 * var(--sp-1));
+          font-size: var(--boxel-font-size-xs);
           font-weight: 600;
-          color: var(--muted-foreground);
+          color: var(--db-muted-foreground);
+        }
+        .skillset-header-stat-icon {
+          width: 1rem;
+          height: 1rem;
         }
 
-        .stat-icon {
-          width: 1rem; /* ¹³⁸ Reduced from 1.125rem */
-          height: 1rem;
-          opacity: 0.7;
+        .skillset-empty-actions {
+          list-style: none;
+          padding: 0;
+          margin-block: var(--sp-6);
+          margin-inline: 0;
+          text-align: start;
+          display: inline-block;
+          font-size: var(--boxel-font-size-sm);
+        }
+        .skillset-empty-actions :deep(p) {
+          font-size: inherit;
+        }
+        .skillset-empty-actions :deep(li) {
+          display: flex;
+          align-items: flex-start;
+          gap: var(--sp-3);
+        }
+        .skillset-empty-actions :deep(li + li) {
+          margin-top: var(--sp-6);
+        }
+        .skillset-empty-actions :deep(li svg) {
+          width: 1.5rem;
+          height: 1.5rem;
+          flex-shrink: 0;
+          margin-top: calc(0.5 * var(--sp-1));
+        }
+        .skillset-empty-actions :deep(strong) {
+          color: var(--db-foreground);
+          font-weight: 600;
         }
 
         /* Instructions article */
@@ -991,7 +574,6 @@ export class SkillSet extends Skill {
           line-height: 1.7;
           color: var(--foreground);
         }
-
         /* ⁵² Typography hierarchy - compact spacing */
         .instructions-article :deep(h2) {
           font-size: 1.375rem;
@@ -1002,11 +584,9 @@ export class SkillSet extends Skill {
           scroll-margin-top: 6rem; /* ⁶³ Increased for sticky TOC offset */
           padding-top: 0.5rem; /* 2 × 0.25rem */
         }
-
         .instructions-article :deep(h2:first-child) {
           margin-top: 0;
         }
-
         .instructions-article :deep(h3) {
           font-size: 1.125rem;
           font-weight: 600;
@@ -1015,7 +595,6 @@ export class SkillSet extends Skill {
           color: var(--foreground);
           scroll-margin-top: 6rem; /* ⁶⁴ Increased for sticky TOC offset */
         }
-
         .instructions-article :deep(h4) {
           font-size: 1rem;
           font-weight: 600;
@@ -1023,23 +602,19 @@ export class SkillSet extends Skill {
           margin: 1rem 0 0.5rem 0; /* 4 × 0.25rem, 2 × 0.25rem */
           color: var(--foreground);
         }
-
         .instructions-article :deep(p) {
           margin: 0.75rem 0; /* 3 × 0.25rem */
           line-height: 1.6;
         }
-
         .instructions-article :deep(ul),
         .instructions-article :deep(ol) {
           margin: 0.75rem 0; /* 3 × 0.25rem */
           padding-left: 1.5rem; /* 6 × 0.25rem */
         }
-
         .instructions-article :deep(li) {
           margin: 0.5rem 0; /* 2 × 0.25rem */
           line-height: 1.5;
         }
-
         .instructions-article :deep(code) {
           font-family: var(--font-mono);
           font-size: 0.875em;
@@ -1053,7 +628,6 @@ export class SkillSet extends Skill {
           border-radius: var(--radius-sm);
           color: var(--foreground);
         }
-
         .instructions-article :deep(pre) {
           margin: 1rem 0; /* 4 × 0.25rem */
           padding: 0.75rem; /* 3 × 0.25rem */
@@ -1070,12 +644,10 @@ export class SkillSet extends Skill {
           font-size: 0.8125rem;
           line-height: 1.5;
         }
-
         .instructions-article :deep(pre code) {
           background: transparent;
           padding: 0;
         }
-
         .instructions-article :deep(blockquote) {
           margin: 1rem 0; /* 4 × 0.25rem */
           padding: 0.75rem 1rem; /* 3 × 0.25rem, 4 × 0.25rem */
@@ -1084,22 +656,18 @@ export class SkillSet extends Skill {
           border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
           font-style: italic;
         }
-
         .instructions-article :deep(a) {
           color: var(--primary);
           text-decoration: none;
           transition: color 0.15s ease;
         }
-
         .instructions-article :deep(a:hover) {
           text-decoration: underline;
         }
-
         .instructions-article :deep(strong) {
           font-weight: 600;
           color: var(--foreground);
         }
-
         /* ¹⁴³ Table styling - clean professional tables with horizontal scroll */
         .instructions-article :deep(table) {
           width: 100%;
@@ -1111,7 +679,6 @@ export class SkillSet extends Skill {
           border: 1px solid var(--border);
           border-radius: var(--radius-md);
         }
-
         /* ¹⁴⁵ Scrollable table wrapper */
         .instructions-article :deep(.table-wrapper) {
           width: 100%;
@@ -1121,12 +688,10 @@ export class SkillSet extends Skill {
           border-radius: var(--radius-md);
           box-shadow: var(--shadow-sm);
         }
-
         .instructions-article :deep(thead) {
           background: var(--muted);
           border-bottom: 2px solid var(--border);
         }
-
         .instructions-article :deep(th) {
           padding: 0.75rem 1rem;
           text-align: left;
@@ -1134,36 +699,29 @@ export class SkillSet extends Skill {
           color: var(--foreground);
           border-right: 1px solid var(--border);
         }
-
         .instructions-article :deep(th:last-child) {
           border-right: none;
         }
-
         .instructions-article :deep(td) {
           padding: 0.625rem 1rem;
           border-right: 1px solid var(--border);
           border-bottom: 1px solid var(--border);
           vertical-align: top;
         }
-
         .instructions-article :deep(td:last-child) {
           border-right: none;
         }
-
         .instructions-article :deep(tbody tr:last-child td) {
           border-bottom: none;
         }
-
         .instructions-article :deep(tbody tr:hover) {
           background: color-mix(in lab, var(--primary) 5%, var(--card));
         }
-
         /* Code in tables */
         .instructions-article :deep(table code) {
           font-size: 0.75rem;
           white-space: nowrap;
         }
-
         /* ¹⁰⁷ Highlighted section - clean callout box */
         .instructions-article :deep(.highlighted-section) {
           padding: 2rem;
@@ -1173,9 +731,20 @@ export class SkillSet extends Skill {
           border-radius: 12px;
         }
 
+        /* ²⁵⁰ Clickable skill divider styling */
+        .instructions-article :deep(.skill-divider-clickable) {
+          cursor: pointer; /* ²⁵¹ Show clickable cursor */
+        }
+
+        .instructions-article :deep(.skill-divider-clickable:hover) {
+          /* ²⁵² Hover state for clickable dividers */
+          transform: translateY(-2px);
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        }
+
         /* ¹¹¹ Premium numbered skill divider - distinct from code blocks */
         .instructions-article :deep(.skill-divider) {
-          margin: 4rem 0 2.5rem 0;
+          margin: 4rem 0 2.5rem 0; /* ²⁵³ Margin on divider itself */
           padding: 2rem;
           background: var(--secondary); /* Different color than code blocks */
           color: var(--secondary-foreground);
@@ -1189,8 +758,8 @@ export class SkillSet extends Skill {
           align-items: flex-start;
           gap: 1.5rem;
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+          transition: all 0.3s ease; /* ²³⁸ Smooth hover transitions */
         }
-
         .instructions-article :deep(.divider-number) {
           flex-shrink: 0;
           width: 3rem;
@@ -1209,15 +778,14 @@ export class SkillSet extends Skill {
           ); /* ¹⁶⁶ Theme radius with fallback */
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
-
         .instructions-article :deep(.divider-content) {
           flex: 1;
           display: flex;
-          flex-direction: column;
+          align-items: center;
+          justify-content: space-between;
           gap: 0.5rem;
           min-width: 0;
         }
-
         .instructions-article :deep(.divider-topic) {
           font-size: 1.75rem;
           font-weight: 800;
@@ -1225,7 +793,6 @@ export class SkillSet extends Skill {
           letter-spacing: -0.03em;
           line-height: 1.1;
         }
-
         .instructions-article :deep(.divider-link) {
           font-size: 0.6875rem;
           color: var(--secondary-foreground);
@@ -1236,11 +803,9 @@ export class SkillSet extends Skill {
           word-break: break-all;
           line-height: 1.4;
         }
-
         .instructions-article :deep(.divider-link:hover) {
           opacity: 1;
         }
-
         /* ¹¹³ Divider context text - activation conditions */
         .instructions-article :deep(.divider-context) {
           font-size: 0.6875rem; /* ¹²⁵ Smaller, aligned with link */
@@ -1251,164 +816,42 @@ export class SkillSet extends Skill {
           line-height: 1.5;
           padding-left: 0; /* ¹²⁸ Align with link text */
         }
-
-        /* ⁵⁵ Empty state - compact */
-        .empty-state {
-          text-align: center;
-          padding: 3rem 1rem; /* 12 × 0.25rem, 4 × 0.25rem */
-          color: var(--muted-foreground);
-        }
-
-        .empty-icon {
-          width: 2rem;
-          height: 2rem;
-          margin: 0 auto 0.75rem; /* 3 × 0.25rem */
-          opacity: 0.5;
-        }
-
-        .empty-state p {
-          margin: 0;
-          font-size: 0.875rem;
-        }
-
-        /* ⁵⁶ Footer with skill references - compact */
-        .skills-footer {
-          margin-top: 2rem; /* 8 × 0.25rem */
-          padding-top: 1.5rem; /* 6 × 0.25rem */
-          border-top: 2px solid var(--border);
-        }
-
-        .footer-heading {
-          font-size: 1rem;
+        /* ²²⁸ Divider inclusion mode badge - pill style */
+        .instructions-article :deep(.divider-mode) {
+          display: inline-block;
+          font-size: 0.625rem;
           font-weight: 700;
-          margin: 0 0 1rem 0; /* 4 × 0.25rem */
-          color: var(--foreground);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          padding: 0.375rem 0.75rem; /* ²⁴⁰ More padding for pill shape */
+          border-radius: 999px; /* ²⁴¹ Full rounded pill */
+          margin-top: 0.5rem;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); /* ²⁴² Subtle shadow */
+        }
+        .instructions-article :deep(.divider-mode-full) {
+          /* ²²⁹ Full mode styling - pill */
+          background: var(--primary);
+          color: var(--primary-foreground);
+        }
+        .instructions-article :deep(.divider-mode-essential) {
+          /* ²³⁰ Essential mode styling - pill */
+          background: var(--accent);
+          color: var(--accent-foreground);
+        }
+        .instructions-article :deep(.divider-mode-link-only) {
+          /* ²³¹ Link only mode styling - pill */
+          background: var(--muted); /* ²⁴³ Better contrast */
+          color: var(--muted-foreground);
+          border: 1px solid var(--border);
         }
 
         .skills-cards {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-          gap: 1rem; /* 4 × 0.25rem */
-        }
-
-        /* ¹²⁰ TOC section titles - uppercase labels */
-        .toc-section {
-          margin-bottom: 1.5rem;
-        }
-
-        .toc-section-title {
-          font-size: 0.625rem;
-          font-weight: 800;
-          text-transform: uppercase;
-          letter-spacing: 0.1em;
-          color: var(--muted-foreground);
-          margin-bottom: 0.75rem;
-          padding-bottom: 0.5rem;
-          border-bottom: 1px solid var(--border);
-        }
-
-        /* ¹²¹ Appendix divider - clean section break */
-        .appendix-divider {
-          margin: 6rem 0 3rem 0;
-          padding: 2rem 0;
-          border-top: 1px solid var(--border); /* ¹⁷⁸ Removed thick border for consistency */
-          border-bottom: 1px solid var(--border);
-        }
-
-        .appendix-divider h2 {
-          font-size: 1.5rem;
-          font-weight: 800;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          color: var(--muted-foreground);
-          margin: 0;
-          text-align: center;
-        }
-
-        /* ¹²² Commands section */
-        .commands-section {
-          margin-top: 3rem;
-          padding: 2rem;
-          background: var(--muted);
-          border: 1px solid var(--border);
-          border-radius: var(--radius-lg); /* ¹⁶⁴ Theme radius */
-        }
-
-        .section-heading {
-          font-size: 1.125rem;
-          font-weight: 700;
-          margin: 0 0 1rem 0;
-          color: var(--foreground);
-        }
-
-        .commands-list {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-        }
-
-        .command-item {
-          padding: 0.75rem;
-          background: var(--background);
-          border: 1px solid var(--border);
-          border-radius: var(--radius-md); /* ¹⁶⁴ Theme radius */
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          font-size: 0.8125rem;
-        }
-
-        .command-item code {
-          font-family: var(--font-mono);
-          font-size: 0.75rem;
-        }
-
-        .approval-badge {
-          font-size: 0.625rem;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          padding: 0.25rem 0.5rem;
-          background: var(--destructive);
-          color: var(--destructive-foreground);
-          border-radius: var(--radius-sm); /* ¹⁶⁴ Theme radius */
-        }
-
-        /* ⁵⁷ Responsive: Stack on smaller screens with compact spacing */
-        @media (max-width: 1024px) {
-          .doc-layout {
-            grid-template-columns: 1fr;
-            padding: 1rem; /* 4 × 0.25rem */
-            gap: 1rem; /* 4 × 0.25rem */
-          }
-
-          .toc-sidebar {
-            position: static;
-            max-height: none;
-            margin-bottom: 1rem; /* 4 × 0.25rem */
-          }
-
-          .doc-main {
-            padding-right: 0;
-          }
+          gap: var(--sp-4);
         }
 
         @media (max-width: 640px) {
-          .doc-layout {
-            padding: 0.75rem; /* 3 × 0.25rem */
-          }
-
-          .doc-heading {
-            font-size: 1.5rem;
-          }
-
-          .doc-subtitle {
-            font-size: 0.9375rem;
-          }
-
           .skills-cards {
             grid-template-columns: 1fr;
           }
@@ -1719,8 +1162,6 @@ export class SkillSet extends Skill {
           width: 100%;
           height: 100%;
           background: var(--card);
-          border: 1px solid var(--border);
-          border-radius: var(--radius-md);
           overflow: hidden;
         }
 

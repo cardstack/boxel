@@ -1,137 +1,201 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
+import { on } from '@ember/modifier';
+
 import {
   FieldDef,
   field,
   contains,
   linksTo,
   Component,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import StringField from 'https://cardstack.com/base/string'; // ²⁶ Import StringField for inclusion parameters
-import MarkdownField from 'https://cardstack.com/base/markdown'; // ²² Changed from StringField to MarkdownField
-import { Skill } from 'https://cardstack.com/base/skill'; // ²⁴ Import base Skill
+} from 'https://cardstack.com/base/card-api';
+import enumField from 'https://cardstack.com/base/enum';
+import { Skill } from 'https://cardstack.com/base/skill';
+import StringField from 'https://cardstack.com/base/string';
+import MarkdownField from 'https://cardstack.com/base/markdown';
+import TextAreaField from 'https://cardstack.com/base/text-area';
+
+import ExternalLink from '@cardstack/boxel-icons/external-link';
+
+import { Button, Pill } from '@cardstack/boxel-ui/components';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 export class SkillReference extends FieldDef {
-  // ² Skill reference field
   static displayName = 'Skill Reference';
 
-  @field skill = linksTo(Skill); // ²⁵ Link to base Skill
+  @field skill = linksTo(Skill); // Link to actual skill card
 
-  @field inclusionMode = contains(StringField, {
-    // ²⁷ How skill content should be included in skill set
+  // Enumerated inclusion mode with three valid options
+  @field inclusionMode = contains(
+    enumField(StringField, {
+      options: [
+        { value: 'full', label: 'Full Instructions' },
+        { value: 'essential', label: 'Essential Only' },
+        { value: 'link-only', label: 'Link Only' },
+      ],
+    }),
+  );
+
+  @field contentSummary = contains(TextAreaField, {
+    // Content summary (renamed from readFullWhen, using TextArea for multi-line)
     description:
-      'How to include this skill: "full" (entire instructions), "essential" (content before <!--more-->), or "link-only" (reference only, no content)',
+      'Brief summary of what content this skill contains (helps LLM decide whether to load full instructions)',
   });
 
-  @field readFullWhen = contains(StringField, {
-    // ²⁸ Condition for when to read the complete skill file
+  @field alternateTitle = contains(StringField, {
+    // Optional override title
     description:
-      'Optional: Specify when the full skill content should be read (e.g., "user requests code generation", "debugging needed")',
+      "Optional: Override the linked skill's title for this reference context",
   });
 
   @field topicName = contains(StringField, {
-    // ³⁰ Computed topic name from linked skill
+    // Computed topic from skill or override
     computeVia: function (this: SkillReference) {
-      try {
-        const skillCard = this.skill as any;
-        // First try topic field, then title field, then id-based fallback
-        if (skillCard?.topic) return skillCard.topic;
-        if (skillCard?.title) return skillCard.title;
-
-        // Extract name from ID as last resort
-        if (skillCard?.id) {
-          const parts = skillCard.id.split('/');
-          const lastPart = parts[parts.length - 1];
-          // Convert kebab-case or camelCase to Title Case
-          return lastPart
-            .replace(/-/g, ' ')
-            .replace(/([A-Z])/g, ' $1')
-            .split(' ')
-            .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(' ')
-            .trim();
-        }
-
-        return 'Untitled';
-      } catch (e) {
-        console.error('SkillReference: Error accessing topic name', e);
-        return 'Untitled';
-      }
+      return (
+        this.alternateTitle || this.skill?.cardInfo?.title || 'Untitled Skill'
+      );
     },
-    description:
-      'Topic name extracted from the linked skill (topic → title → id-based name)',
   });
 
   @field essentials = contains(MarkdownField, {
-    // ²³ Changed to MarkdownField for rich formatting
+    // Computed essentials from skill instructions
     computeVia: function (this: SkillReference) {
-      try {
-        // Access essentials field directly from the skill object
-        const skillCard = this.skill as any;
-        const essentials = skillCard?.essentials;
+      const instructions = this.skill?.instructions;
+      if (!instructions) return undefined;
 
-        // If essentials is blank/empty, use the full instructions instead
-        if (!essentials || essentials.trim() === '') {
-          return skillCard?.instructions ?? '';
-        }
-
-        return essentials;
-      } catch (e) {
-        console.error('SkillReference: Error accessing essentials', e);
-        return '';
+      // Extract content before <!--more--> marker
+      const moreMarkerIndex = instructions.indexOf('<!--more-->');
+      if (moreMarkerIndex === -1) {
+        // No marker found, return first paragraph or section
+        return instructions;
       }
+
+      return instructions.substring(0, moreMarkerIndex).trim();
     },
-    description:
-      'Essential content from the linked skill - uses instructions if essentials is blank',
   });
 
   static embedded = class Embedded extends Component<typeof this> {
-    // ⁵ Embedded template
+    // Embedded format
+
+    // Click handler to open linked skill card using viewCard API
+    openSkill = () => {
+      const skill = this.args.model?.skill;
+      if (skill && this.args.viewCard) {
+        this.args.viewCard(skill, 'isolated');
+      }
+    };
+
     <template>
-      {{#if @model.skill}}
-        <div class='skill-reference'>
-          <@fields.skill @format='embedded' />
-          {{#if @model.inclusionMode}}
-            <div class='inclusion-info'>
-              <span class='label'>Inclusion:</span>
-              {{@model.inclusionMode}}
-            </div>
-          {{/if}}
-          {{#if @model.readFullWhen}}
-            <div class='read-full-info'>
-              <span class='label'>Read full when:</span>
-              {{@model.readFullWhen}}
+      <div class='skill-reference-card'>
+        <div class='skill-ref-header'>
+          <div class='skill-ref-title-row'>
+            <h4 class='skill-ref-topic'>
+              <@fields.topicName />
+            </h4>
+            <Pill
+              class='skill-ref-mode boxel-ellipsize'
+              @variant={{cn
+                primary=(eq @model.inclusionMode 'full')
+                accent=(eq @model.inclusionMode 'essential')
+                muted=(eq @model.inclusionMode 'link-only')
+              }}
+            >
+              {{if
+                (eq @model.inclusionMode 'link-only')
+                'Link Only'
+                @model.inclusionMode
+              }}
+            </Pill>
+          </div>
+
+          {{#if @model.skill}}
+            <div>
+              <Button
+                @size='extra-small'
+                class='skill-view-button'
+                {{on 'click' this.openSkill}}
+              >
+                <ExternalLink class='button-icon' width='14' height='14' />
+                Open Skill
+              </Button>
             </div>
           {{/if}}
         </div>
-      {{else}}
-        <div class='no-skill'>No skill linked</div>
-      {{/if}}
+
+        {{#if @model.contentSummary}}
+          <div class='content-summary'>
+            <p>
+              <strong>Contains:</strong>
+              {{@model.contentSummary}}
+            </p>
+          </div>
+        {{/if}}
+      </div>
 
       <style scoped>
-        /* ²⁹ Styling for skill reference display */
-        .skill-reference {
+        .skill-reference-card {
+          --skillref-background: var(--card, var(--boxel-light));
+          --skillref-foreground: var(--card-foreground, var(--boxel-dark));
+          --skillref-border: var(--border, var(--boxel-border-color));
+          --skillref-muted: var(--muted, var(--boxel-100));
+          --skillref-muted-foreground: var(
+            --muted-foreground,
+            var(--boxel-700)
+          );
+
+          padding: var(--boxel-sp);
+          border: 1px solid var(--skillref-border);
+          border-radius: var(--boxel-border-radius-lg);
+          background-color: var(--skillref-background);
+          color: var(--skillref-foreground);
+          box-shadow: var(--shadow-sm);
+        }
+        .skill-ref-header {
           display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
+          flex-direction: column; /* Stack title row and button */
+          gap: var(--boxel-sp-xs);
         }
-
-        .inclusion-info,
-        .read-full-info {
-          font-size: 0.875rem;
-          color: var(--boxel-600);
-          padding: 0.25rem 0.5rem;
-          background: var(--boxel-100);
-          border-radius: 0.25rem;
+        .skill-ref-title-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: baseline;
+          gap: var(--boxel-sp-xs);
         }
-
-        .label {
-          font-weight: 600;
-          margin-right: 0.25rem;
+        .skill-ref-topic {
+          flex: 1;
+          min-width: 0;
         }
-
-        .no-skill {
-          font-style: italic;
-          color: var(--boxel-500);
+        .skill-ref-mode {
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: var(--boxel-lsp-xl);
+          padding: var(--boxel-sp-6xs) var(--boxel-sp-sm);
+          flex-shrink: 0;
+        }
+        :deep(.skill-ref-mode.variant-muted) {
+          --pill-border-color: var(--skillref-border);
+        }
+        .skill-view-button {
+          gap: var(--boxel-sp-2xs);
+        }
+        .button-icon {
+          width: 0.875rem;
+          height: 0.875rem;
+        }
+        .content-summary {
+          margin-top: var(--boxel-sp-sm);
+          padding-top: var(--boxel-sp-sm);
+          border-top: 1px solid var(--skillref-border);
+        }
+        .content-summary p {
+          font-size: var(--boxel-font-size-xs);
+          color: var(--skillref-muted-foreground);
+          background-color: var(--skillref-muted);
+          padding: var(--boxel-sp-xs);
+          border: 1px solid var(--skillref-border);
+          border-left: 2px solid var(--primary, var(--boxel-highlight));
+        }
+        .content-summary strong {
+          color: var(--foreground, var(--boxel-dark));
+          font-weight: 700;
         }
       </style>
     </template>

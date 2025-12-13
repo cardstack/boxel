@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Command Field",
+      "description": "A field that represents an executable command within a skill",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/skill",
+        "name": "CommandField"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

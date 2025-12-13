@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SkillPlus",
+        "module": "../skill-plus"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Technical Rules",
+        "description": "Critical technical requirements and validation rules",
+        "thumbnailURL": null
+      },
+      "commands": [],
+      "instructions": "### The Cardinal Rule\n\n**MOST CRITICAL RULE:**\n```gts\n// ✅ CORRECT\n@field author = linksTo(Author);          // CardDef\n@field address = contains(AddressField);  // FieldDef\n\n// ❌ WRONG - Will break everything\n@field author = contains(Author);         // NEVER!\n@field address = linksTo(AddressField);   // NEVER!\n```\n\n**Must export ALL classes:**\n```gts\nexport class MyCard extends CardDef { }  // ✅\nclass MyCard extends CardDef { }         // ❌ Missing export\n```\n\n**Computed fields:**\n- Keep simple and unidirectional\n- No self-reference or cycles\n- Wrap cross-card access in try-catch\n\n## Technical Rules\n\n### THE CARDINAL RULE: contains vs linksTo\n\n**THIS IS THE #1 MOST CRITICAL RULE IN BOXEL:**\n\n| Type | MUST Use | NEVER Use | Why |\n|------|----------|-----------|-----|\n| **Extends CardDef** | `linksTo` / `linksToMany` | ❌ `contains` / `containsMany` | CardDef = independent entity with own JSON file |\n| **Extends FieldDef** | `contains` / `containsMany` | ❌ `linksTo` / `linksToMany` | FieldDef = embedded data, no separate identity |\n\n```gts\n// ✅ CORRECT\n@field author = linksTo(Author);              // Author extends CardDef\n@field address = contains(AddressField);      // AddressField extends FieldDef\n\n// ❌ WRONG\n@field author = contains(Author);             // NEVER!\n@field address = linksTo(AddressField);       // NEVER!\n```\n\n### MANDATORY TECHNICAL REQUIREMENTS\n\n1. **Always use SEARCH/REPLACE with tracking for .gts files**\n2. **Export ALL CardDef and FieldDef classes inline**\n3. **Never use reserved words as field names**\n4. **Keep computed fields simple and unidirectional**\n5. **No JavaScript in templates**\n6. **Wrap delegated collections with spacing containers**\n\n### TECHNICAL VALIDATION CHECKLIST\n\nBefore generating ANY code:\n- [ ] SEARCH/REPLACE blocks with tracking markers\n- [ ] Every CardDef field uses `linksTo`/`linksToMany`\n- [ ] Every FieldDef field uses `contains`/`containsMany`\n- [ ] All classes have `export` keyword inline\n- [ ] No reserved words as field names\n- [ ] No duplicate field definitions\n- [ ] Computed fields are simple (no cycles!)\n- [ ] Try-catch blocks wrap cross-card data access\n- [ ] No JavaScript operations in templates\n- [ ] ALL THREE FORMATS: isolated, embedded, fitted\n\n### Common Mistakes\n\n#### Using contains with CardDef\n```gts\n// ❌ WRONG\n@field items = containsMany(Item); // Item is CardDef\n\n// ✅ CORRECT\n@field items = linksToMany(Item);\n```\n\n#### Missing Exports\n```gts\n// ❌ WRONG\nclass BlogPost extends CardDef { }\n\n// ✅ CORRECT\nexport class BlogPost extends CardDef { }\n```"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/cardstack"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SkillPlus",
+        "module": "../skill-plus"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Workflows and Orchestration Patterns",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "commands": [],
+      "instructions": "## Orchestration Patterns\n\n### 1. Smart Code Refactoring\n```json\n`set-active-llm_1887` with `attributes.roomId` set to the current room ID and `attributes.llmId` set to \"anthropic/claude-sonnet-4.5\"\n→ `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to e.g. \"https://[domain]/user/card.gts\"\n→ Prompt \"improve code structure\"\n→ Emit a code patch search/replace block\n```\n**Note:** Always verify/switch to code-approved LLM first\n\n### 2. Data-Driven Schema Generation\n```json\n`read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to e.g. \"data.csv\"\n→ Prompt \"generate CardDef from CSV\"\n→ Emit a code patch search/replace block\n```\n\n### 3. Live Preview Development\n```json\n`show-card_566f` with `attributes.cardId` set to e.g. \"https://[domain]/user/Card/instance\"\n→ Prompt \"enhance UX for this card\"\n→ Emit a code patch search/replace block\n→ `show-card_566f` with `attributes.cardId` set to e.g. \"https://[domain]/user/Card/instance\"\n```\n\n### 4. Bulk Relationship Mapping\n```json\n`SearchCardsByQueryCommand_847d` with `attributes.query` set to valid query JSON that includes a filter\n→ Prompt \"detect relationship patterns\"\n→ Emit a code patch search/replace block to create a transformation command\n→ `transform-cards_33d7` with `attributes.query` and `attributes.commandRef` set to perform a bulk update\n```\n\n### 5. Context-Aware Migration\n```json\n`read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to e.g. \"https://[domain]/user/schema.gts\"\n→ `SearchCardsByQueryCommand_847d` with `attributes.query` set to valid query json with a filter specified\n→ Emit a code patch search/replace block creating a migration command\n→ `transform-cards_33d7` with `attributes.query` and `attributes.commandRef` set to perform bulk migration\n```\n\n### 6. Dependency Surfing\n```json\n`read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to \"https://[domain]/user/card.gts\"\n→ `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to \"https://[domain]/user/Card/instance.json\"\n→ `SearchCardsByQueryCommand_847d` with `attributes.query` set to e.g. '{\"filter\": {\"contains\": {\"imports\": \"card\"}}}'\n→ Emit a code patch search/replace block\n```\n\n### 7. Intelligent Debug Escalation\n```json\nPrompt \"debug this error: ...\"\n→ [if stuck] → `set-active-llm_1887` with `attributes.roomId` set to the current room and `attributes.llmId` set to \"google/gemini-2.5-pro\"\n→ Prompt \"debug this error: ...\"\n\n### Code Generation\n```json\n`switch-submode_dd88` with `attributes.submode` set to \"code\"\n→ `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to \"https://[domain]/user/card.gts\"\n→ Emit a code patch search/replace block\n→ (offer refresh)\n```\n\n### Card Creation\n```json\n`switch-submode_dd88` with `attributes.submode` set to \"code\"\n→ Emit a code patch search/replace block to create the new file\n→ `show-card_566f` with `attributes.cardId` set to the url of the new file\n```\n\n### Search & Modify\n```json\n`SearchCardsByQueryCommand_847d` with `attriibutes.query` set\n→ `patchCardInstance` with `attributes.cardId` set to the card URL, and `attributes.patch` set to schema-conforming patch JSON\n```\n\n### Schema Migration\n1. Update schema with breaking changes:\n```json\n→ Emit a code patch search/replace block\n```\n2. Add migration command to same file:\n```typescript\nexport class MigrateNameFields extends Command<typeof JsonCard, typeof JsonCard> {\n  async getInputType() { return JsonCard; }\n  protected async run(input: JsonCard): Promise<JsonCard> {\n    // Transform logic here\n  }\n}\n```\n3. Run transform using `transform-cards_33d7`\n4. Remove migration command after success\n\n### Multi-Realm Operations\n```json\n`copy-source_5d09` with `attributes.fromRealmUrl` and `attributes.toRealmUrl` set\n→ `copy-card_eefc` with `attributes.sourceCard` and `attributes.realm` set\n→ `transform-cards_33d7` with `attributes.query` and `attributes.commandRef` set to perform a bulk modification\n```"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/cardstack"
+        }
+      }
+    }
+  }
+}

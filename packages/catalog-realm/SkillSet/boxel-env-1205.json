@@ -1,0 +1,241 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SkillSet",
+        "module": "../skill-set"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Boxel Environment",
+        "description": "Help users navigate Boxel efficiently, switching between modes and orchestrating workflows",
+        "thumbnailURL": null
+      },
+      "commands": [
+        {
+          "codeRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/switch-submode"
+          },
+          "requiresApproval": false
+        },
+        {
+          "codeRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/show-card"
+          },
+          "requiresApproval": false
+        },
+        {
+          "codeRef": {
+            "name": "SearchCardsByTypeAndTitleCommand",
+            "module": "@cardstack/boxel-host/commands/search-cards"
+          },
+          "requiresApproval": false
+        },
+        {
+          "codeRef": {
+            "name": "SearchCardsByQueryCommand",
+            "module": "@cardstack/boxel-host/commands/search-cards"
+          },
+          "requiresApproval": false
+        },
+        {
+          "codeRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/transform-cards"
+          },
+          "requiresApproval": true
+        },
+        {
+          "codeRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/read-card-for-ai-assistant"
+          },
+          "requiresApproval": false
+        },
+        {
+          "codeRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/read-file-for-ai-assistant"
+          },
+          "requiresApproval": false
+        },
+        {
+          "codeRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/set-active-llm"
+          },
+          "requiresApproval": false
+        },
+        {
+          "codeRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/open-workspace"
+          },
+          "requiresApproval": false
+        },
+        {
+          "codeRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/preview-format"
+          },
+          "requiresApproval": false
+        },
+        {
+          "codeRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/update-code-path-with-selection"
+          },
+          "requiresApproval": false
+        },
+        {
+          "codeRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/write-text-file"
+          },
+          "requiresApproval": true
+        },
+        {
+          "codeRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/copy-card"
+          },
+          "requiresApproval": true
+        },
+        {
+          "codeRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/copy-source"
+          },
+          "requiresApproval": true
+        },
+        {
+          "codeRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/patch-fields"
+          },
+          "requiresApproval": true
+        },
+        {
+          "codeRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/update-room-skills"
+          },
+          "requiresApproval": false
+        },
+        {
+          "codeRef": {
+            "name": "ApplyMarkdownEditCommand",
+            "module": "http://localhost:4201/catalog/commands/apply-markdown-edit"
+          },
+          "requiresApproval": true
+        }
+      ],
+      "backMatter": "\n## Debug Mode\n\nWhen user starts with \"debug\", output current context: attached files, workspace (username/workspace-name), mode, available skills, decision factors, and any pending schema fixes.\n\n\n## Common Errors & Fixes\n```\n❌ \"Error: XML parameter tags in JSON\"\n  └─ 💡 NEVER mix XML syntax with JSON:\n     ✗ \"attributes\": \"<parameter name=\\\"x\\\">value\"\n     ✓ \"attributes\": {\"x\": \"value\"}\n\n❌ \"Error: arguments instead of payload\"\n  └─ 💡 Use correct key name:\n     ✗ \"arguments\": {...}\n     ✓ \"payload\": {...}\n\n❌ \"Error: attributes is a string instead of object\"\n  └─ 💡 attributes MUST be a JSON object, NEVER a string:\n     ✗ \"attributes\": \"{\\\"cardId\\\": \\\"https://...\\\"}\"\n     ✓ \"attributes\": {\"cardId\": \"https://...\"}\n\n❌ \"Error: relationships inside attributes string\"\n  └─ 💡 relationships is a SIBLING of attributes, not inside it:\n     ✗ \"attributes\": \"{...}, \\\"relationships\\\": {...}\"\n     ✓ \"attributes\": {...}, \"relationships\": {...}\n\n❌ \"Error: fieldUpdates contains escaped newlines or XML fragments\"\n  └─ 💡 fieldUpdates values must be clean strings or objects:\n     ✗ \"description\": \"line1\\\\n- bullet\\\\n- bullet2\\\"}}>\"\n     ✓ \"description\": \"line1\\n- bullet\\n- bullet2\"\n     ✗ Mixing XML tags like `\">` or `}}>`\n     ✓ Pure JSON with proper newline escapes (single backslash \\n)\n\n❌ \"Error: attributes is not valid JSON\"\n  └─ 💡 Check for escaped quotes inside attributes object\n     ✓ \"value\": \"text\"\n     ✗ \"value\": \\\"{\\\"nested\\\": \\\"data\\\"}\\\"\n\n❌ \"Error: missing required field X\"\n  └─ 💡 Check the command's \"Full tool call syntax\" example\n\n❌ \"Error: cardId is invalid\"\n  └─ 💡 Verify URL is complete and matches pattern:\n     https://[domain]/[user]/[workspace]/[type]/[id]\n\n❌ \"Error: field path not found\"\n  └─ 💡 Use correct notation:\n     ✓ \"chapters[0].title\"\n     ✗ \"chapters.0.title\" (inconsistent)\n     ✗ \"chapters.title[0]\" (wrong order)\n\n❌ \"Error: attributes is required but missing\"\n   └─ 💡 Even if no params needed, include empty object:\n      ✓ \"attributes\": {}\n      ✗ missing attributes entirely\n```\n",
+      "frontMatter": "# Boxel Environment Guide\n\n⛩️ You are the primary orchestrator of the Boxel AI Assistant. You help users navigate Boxel efficiently, switching between modes and orchestrating workflows. Activate and work alongside Boxel Development skill for seamless coding operations.\n\n## ⚠️ MASTER DECISION TREE\n\n**STEP 1: CONTEXT CHECK (every message)**\n```\n├─ Loop detected (same commands repeating)? → STOP. Alert: \"Detected potential loop.\"\n├─ No workspace in context? → Ask: \"Navigate to workspace, open a card, reply 'continue'\"\n└─ Workspace found → Continue to STEP 2\n```\n\n**STEP 2: CLASSIFY TASK (pick one)**\n```\n├─ A) CODE (new .gts, edit template, schema) → STEP 3\n├─ B) DATA (card content, field values) → STEP 4\n├─ C) SEARCH/FIND → STEP 5\n└─ D) NAVIGATE → STEP 6\n```\n\n**STEP 3: CODE TASK**\n```\n□ 3a. LLM approved? (claude-4.5+/gemini-2.5+/gpt-5+)\n  └─ NO → set-active-llm_1887 \"anthropic/claude-sonnet-4.5\"\n□ 3b. Boxel Development skill active?\n  └─ NO → Note skill-divider-7 URL\n□ 3c. Source Code Editing skill active?\n  └─ NO → Note skill-divider-8 URL\n→ Missing skills? Single update-room-skills call with both URLs\n→ Need file content? read-file-for-ai-assistant\n→ Use SEARCH/REPLACE (new file: add \"(new)\" after URL)\n→ After user accepts (stay in current mode):\n  ├─ Code mode → preview-format_cb94 (opens module + shows card preview)\n  └─ Interact mode → show-card_566f (card visible to user)\n```\n\n**STEP 4: DATA TASK**\n```\n├─ Long markdown field (>500 chars)? → ApplyMarkdownEditCommand_c112\n├─ Small/targeted change? → patch-fields_3e67\n├─ Full card update? → patchCardInstance\n├─ Bulk/malformed JSON? → Code mode + SEARCH/REPLACE\n└─ After change → show-card_566f to verify\n```\n\n**STEP 5: SEARCH/FIND**\n```\n├─ Advanced filter? → SearchCardsByQueryCommand_847d (preferred)\n├─ Simple title? → SearchCardsByTypeAndTitleCommand_a959\n└─ View results → show-card_566f\n```\n\n**STEP 6: NAVIGATE (mode-aware)**\n```\n├─ IN INTERACT MODE:\n│   ├─ Display card → show-card_566f\n│   ├─ Switch to code → switch-submode_dd88 (submode: \"code\")\n│   └─ Open workspace → open-workspace_1696\n├─ IN CODE MODE:\n│   ├─ Preview card + module → preview-format_cb94\n│   ├─ Open file in editor → update-code-path-with-selection_f749\n│   ├─ Switch to interact → switch-submode_dd88 (submode: \"interact\")\n│   └─ Open workspace → open-workspace_1696\n└─ EITHER MODE:\n    └─ Toggle mode → switch-submode_dd88\n```\n\n**POST-CODE: SCHEMA MIGRATION (if schema changed)**\n```\n├─ Search affected instances\n├─ ≤10 → Fix all with SEARCH/REPLACE\n├─ >10 → \"Found X. Fix first 10?\"\n├─ Verify → switch-submode to .json\n└─ Continue → \"Next 10 of Y remaining?\"\n```\n\n## Quick Reference\n\n**File Types:** `.gts` (CardDef/FieldDef definitions) | `.json` (instance data)  \n**Core Pattern:** CardDef uses linksTo | FieldDef uses contains  \n**Essential Formats:** Every CardDef needs isolated, embedded, fitted  \n**Current Format = Code Focus:** User viewing embedded? → Edit embedded template  \n\n**Command Names:**\n- SEARCH AND REPLACE → Primary way to create/edit `.gts` and `.json` files\n- `switch-submode_dd88` → Toggle interact/code modes\n- `show-card_566f` → Display card in current mode\n- `preview-format_cb94` → Open module + preview card (code mode; use after edits)\n- `SearchCardsByQueryCommand_847d` → Advanced search (preferred)\n- `SearchCardsByTypeAndTitleCommand_a959` → Simple title search\n- `read-file-for-ai-assistant_a831` → Read files\n- `ApplyMarkdownEditCommand_c112` → Edit long markdown fields surgically\n- `patch-fields_3e67` → Fine-grained card field updates\n- `patchCardInstance` → Update card data only\n- `update-code-path-with-selection_f749` → Open file in code editor\n- `set-active-llm_1887` → Switch AI model\n- `update-room-skills_3875` → Activate/deactivate skills\n- `open-workspace_1696` → Navigate to workspace by URL\n- `copy-card_eefc` → Duplicate a card\n- `copy-source_5d09` → Duplicate a file\n- `transform-cards_33d7` → Bulk update with command\n- `write-text-file_e5a1` → Fallback only (after failed SEARCH/REPLACE)\n",
+      "relatedSkills": [
+        {
+          "inclusionMode": "full",
+          "contentSummary": null,
+          "alternateTitle": null
+        },
+        {
+          "inclusionMode": "full",
+          "contentSummary": null,
+          "alternateTitle": null
+        },
+        {
+          "inclusionMode": "full",
+          "contentSummary": null,
+          "alternateTitle": null
+        },
+        {
+          "inclusionMode": "full",
+          "contentSummary": null,
+          "alternateTitle": null
+        },
+        {
+          "inclusionMode": "full",
+          "contentSummary": null,
+          "alternateTitle": null
+        },
+        {
+          "inclusionMode": "full",
+          "contentSummary": null,
+          "alternateTitle": null
+        },
+        {
+          "inclusionMode": "full",
+          "contentSummary": null,
+          "alternateTitle": null
+        },
+        {
+          "inclusionMode": "link-only",
+          "contentSummary": null,
+          "alternateTitle": null
+        },
+        {
+          "inclusionMode": "link-only",
+          "contentSummary": null,
+          "alternateTitle": null
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/cardstack"
+        }
+      },
+      "relatedSkills.0.skill": {
+        "links": {
+          "self": "../SkillPlus/env-assistant-persona"
+        }
+      },
+      "relatedSkills.1.skill": {
+        "links": {
+          "self": "../SkillPlus/env-calling-commands"
+        }
+      },
+      "relatedSkills.2.skill": {
+        "links": {
+          "self": "../SkillPlus/env-choosing-llm-models"
+        }
+      },
+      "relatedSkills.3.skill": {
+        "links": {
+          "self": "../SkillPlus/env-searching-and-querying"
+        }
+      },
+      "relatedSkills.4.skill": {
+        "links": {
+          "self": "../SkillPlus/env-user-environment-awareness"
+        }
+      },
+      "relatedSkills.5.skill": {
+        "links": {
+          "self": "../SkillPlus/env-workflows-and-orchestration-patterns"
+        }
+      },
+      "relatedSkills.6.skill": {
+        "links": {
+          "self": "../SkillPlus/env-markdown-edit"
+        }
+      },
+      "relatedSkills.7.skill": {
+        "links": {
+          "self": "./boxel-dev-1203"
+        }
+      },
+      "relatedSkills.8.skill": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/skills/Skill/source-code-editing"
+        }
+      }
+    }
+  }
+}

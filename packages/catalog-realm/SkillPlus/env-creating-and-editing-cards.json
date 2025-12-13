@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SkillPlus",
+        "module": "../skill-plus"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Creating and Editing Cards",
+        "description": "Quick reference for choosing the right combination of commands to create new cards or update existing ones",
+        "thumbnailURL": null
+      },
+      "commands": [],
+      "instructions": "## 🔧 Card Tools: Create, Edit, Update\n\n### Creating Cards\n| Tool | Use When |\n|------|----------|\n| **write-text-file** | New card from scratch (provide full JSON structure) |\n| **copy-card + patch-fields** | Clone existing card as template, then modify |\n| **SEARCH/REPLACE** | New .gts definitions or JSON via code mode |\n\n### Editing Cards\n| Tool | Use When | Don't Use When |\n|------|----------|----------------|\n| **patch-fields_3e67** ⭐ | Field updates (nested paths, arrays, linksTo) — **preferred** | Card doesn't exist yet |\n| **patchCardInstance** | Full card replacement (use sparingly — replaces entire card) | Surgical edits |\n| **SEARCH/REPLACE** | Code (.gts), JSON structure, schema changes, new files | Small markdown edits in large docs |\n| **ApplyMarkdownEdit** | Targeted edits in large markdown fields | Short fields, code files, non-markdown |\n\n**Quick Decision:**\n```\nCard doesn't exist yet?\n├─ From scratch → write-text-file\n├─ Clone + modify → copy-card → patch-fields\n└─ Code mode → SEARCH/REPLACE\n\nCard already exists?\n├─ Update fields → patch-fields (preferred)\n├─ Full replacement → patchCardInstance (sparingly)\n├─ Edit .gts or JSON structure → SEARCH/REPLACE\n└─ Small change in big markdown → ApplyMarkdownEdit\n```\n\n**File Naming:** Definitions: `kebab-case.gts` | Instances: `PascalCase/slug.json` | Links: `BlogPost/my-post` (no `.json`)\n\n**Path Rules:** Use `./`, `../` relative paths for same-realm `adoptsFrom`. Use absolute URLs for cross-realm. After copy/move, verify linkage!\n"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/cardstack"
+        }
+      }
+    }
+  }
+}
