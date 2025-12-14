@@ -1249,7 +1249,7 @@ module(basename(__filename), function () {
           `SELECT url, is_deleted, type FROM boxel_index WHERE url = '${testRealm}post.gts'`,
         )) as { url: string; is_deleted: boolean; type: string }[];
         assert.ok(postIndexEntry, 'post module row exists in index');
-        assert.strictEqual(postIndexEntry?.is_deleted, false);
+        assert.false(postIndexEntry?.is_deleted);
         assert.strictEqual(
           postIndexEntry?.type,
           'module',
