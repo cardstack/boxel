@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "name": "Time Machine Image Maker",
+      "name": "Time Machine Image Generator",
       "images": [],
       "summary": "This listing defines a module for generating historical-style photographs based on user-input images, time periods, and creative notes, enabling users to create, view, and export collections of era-specific images through an interactive UI.",
       "cardInfo": {
@@ -226,32 +226,37 @@
       },
       "examples.7": {
         "links": {
-          "self": "../CloudflareImage/98d92487-7da1-4fd0-979a-eb7143d65577"
+          "self": "../Image/0c28db0a-3535-4cba-a22a-f278cee887f3"
         }
       },
       "examples.8": {
         "links": {
-          "self": "../CloudflareImage/23a34659-6ea7-4ed8-b865-d4f84e194f87"
+          "self": "../CloudflareImage/a2dbef5d-bd66-4d8f-ba15-f646fa1dd073"
         }
       },
       "examples.9": {
         "links": {
-          "self": "../CloudflareImage/ef5dbd66-fd8f-4a15-b646-fa1dd073914d"
+          "self": "../CloudflareImage/1805babe-f85f-49b8-9c51-183596fca2db"
         }
       },
       "examples.10": {
         "links": {
-          "self": "../CloudflareImage/46596ea7-0ed8-4865-94f8-4e194f874624"
+          "self": "../CloudflareImage/1c511835-96fc-42db-af5d-bd66fd8ffa15"
         }
       },
       "examples.11": {
         "links": {
-          "self": "../CloudflareImage/24877da1-efd0-479a-ab71-43d655778d64"
+          "self": "../CloudflareImage/e0272271-efb1-4218-85ba-bef85fc9b81c"
         }
       },
       "examples.12": {
         "links": {
-          "self": "../CloudflareImage/8d6423a3-4659-4ea7-8ed8-b865d4f84e19"
+          "self": "../CloudflareImage/bd66fd8f-fa15-4646-ba1d-d073914de3ac"
+        }
+      },
+      "examples.13": {
+        "links": {
+          "self": "../CloudflareImage/ef5dbd66-fd8f-4a15-b646-fa1dd073914d"
         }
       },
       "categories.0": {
