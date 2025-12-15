@@ -212,7 +212,12 @@ export default class HostModeService extends Service {
       return undefined;
     }
 
-    let json = await response.json();
+    let json;
+    try {
+      json = await response.json();
+    } catch (_error) {
+      return undefined;
+    }
     let headHTML: unknown = json?.data?.[0]?.attributes?.html;
     return typeof headHTML === 'string' ? headHTML : null;
   }
