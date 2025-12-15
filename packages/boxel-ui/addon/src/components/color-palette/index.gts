@@ -19,28 +19,23 @@ interface Signature {
 }
 
 export const DEFAULT_PALETTE_COLORS = [
-  // Grays
+  // Row 1
   '#000000',
   '#777777',
+  '#FA2200',
+  '#FA7F01',
+  '#FBEB06',
+  '#1EDF67',
+  '#39B1FF',
+  '#9D00FF',
+  // Row 2
   '#A6A6A6',
   '#CFCFCF',
-  // Reds
-  '#FA2200',
   '#FCA6A7',
-  // Oranges
-  '#FA7F01',
   '#FCD2A7',
-  // Yellows
-  '#FBEB06',
   '#FCF8A6',
-  // Greens
-  '#1EDF67',
   '#A6F4CA',
-  // Blues
-  '#39B1FF',
   '#A7E4FF',
-  // Purples
-  '#9D00FF',
   '#DEA6FF',
 ];
 
@@ -86,13 +81,13 @@ export default class ColorPalette extends Component<Signature> {
         .color-palette-group {
           max-width: var(--boxel-palette-max-width, 18.75rem);
           display: grid;
-          gap: var(--boxel-sp-xs);
+          gap: var(--boxel-sp);
         }
         .color-palette {
           --swatch-size: 1.8rem;
           display: grid;
           grid-template-columns: repeat(auto-fill, var(--swatch-size));
-          gap: var(--boxel-sp-3xs);
+          gap: var(--boxel-sp-xs);
         }
         .swatch-button {
           --_swatch-border: color-mix(
