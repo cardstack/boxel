@@ -323,6 +323,7 @@ const getIndexHTML = async () => {
     getRegistrationSecret: useRegistrationSecretFunction
       ? getRegistrationSecret
       : undefined,
+    prerenderer,
   });
 
   let httpServer = server.listen(port);

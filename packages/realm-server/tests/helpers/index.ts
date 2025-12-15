@@ -463,6 +463,7 @@ export async function runBaseRealmServer(
     serverURL: new URL(localBaseRealmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
     definitionLookup,
+    prerenderer,
   });
   return testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
 }
@@ -561,6 +562,7 @@ export async function runTestRealmServer({
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
     domainsForPublishedRealms,
     definitionLookup,
+    prerenderer,
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   await testRealmServer.start();

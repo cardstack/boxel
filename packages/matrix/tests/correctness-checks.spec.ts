@@ -7,6 +7,7 @@ import {
   showAllCards,
   createRealm,
   postNewCard,
+  postCardSource,
 } from '../helpers';
 import { getMatrixTestContext } from '../helpers';
 import { registerUser, loginUser } from '../docker/synapse';
@@ -317,7 +318,7 @@ ${brokenContent}
     await failingCommandContainer.waitFor();
 
     await failingCommandContainer
-      .locator('[data-test-apply-state="applied"]')
+      .locator('[data-test-apply-state="applied-with-error"]')
       .waitFor();
 
     let failingCommandResultEvent: any;
@@ -500,5 +501,241 @@ ${originalContent}
     expect(finalCardJson.data.attributes.correct).toBe(true);
     expect(Array.isArray(finalCardJson.data.attributes.errors)).toBe(true);
     expect(finalCardJson.data.attributes.errors).toHaveLength(0);
+  });
+
+  test.skip('checkCorrectness surfaces module errors and verifies fix for gts files', async ({
+    page,
+  }) => {
+    const { username, password, credentials } =
+      await createSubscribedUserAndLogin(
+        page,
+        'correctness-gts',
+        serverIndexUrl,
+      );
+    const realmName = uniqueRealmName('correctness-gts');
+    await createRealm(page, realmName);
+    const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
+
+    const modulePath = 'import-check.gts';
+    const moduleUrl = `${realmURL}${modulePath}`;
+    const originalModuleSource = `
+import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+import { Component } from 'https://cardstack.com/base/card-api';
+export class ImportCheck extends CardDef {
+  @field title = contains(StringField);
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      Hello <@fields.title />
+    </template>
+  };
+}
+`.trim();
+    const originalModuleContent = `${originalModuleSource}\n`;
+    const brokenModuleContent = originalModuleContent.replace(
+      `https://cardstack.com/base/card-api'`,
+      `https://cardstack.com/base/card-api-broken'`,
+    );
+
+    await postCardSource(page, realmURL, modulePath, originalModuleContent);
+
+    await page.goto(realmURL);
+    let roomId = await getRoomId(page);
+
+    let agentId = await page.evaluate(() => {
+      let existing = window.sessionStorage.getItem('agentId');
+      if (existing) {
+        return existing;
+      }
+      let generated =
+        (window.crypto as Crypto | undefined)?.randomUUID?.() ||
+        Math.random().toString(36).slice(2, 10);
+      window.sessionStorage.setItem('agentId', generated);
+      return generated;
+    });
+
+    const { synapse } = getMatrixTestContext();
+    const botPassword = 'bot-password';
+    try {
+      await registerUser(synapse, 'aibot', botPassword);
+    } catch {
+      // user may already exist
+    }
+    let botCredentials = await loginUser('aibot', botPassword);
+    await fetch(
+      `http://localhost:${synapse.port}/_matrix/client/v3/rooms/${roomId}/join`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${botCredentials.accessToken}` },
+      },
+    );
+
+    let operatorModeState = encodeURIComponent(
+      JSON.stringify({
+        aiAssistantOpen: true,
+        cardPreviewFormat: 'isolated',
+        codePath: moduleUrl,
+        fileView: 'inspector',
+        moduleInspector: 'schema',
+        openDirs: {},
+        stacks: [[{ format: 'isolated', id: `${realmURL}index` }]],
+        submode: 'code',
+        trail: [],
+      }),
+    );
+    await page.goto(`${realmURL}?operatorModeState=${operatorModeState}`);
+    await expect(page.locator(`[data-test-editor]`)).toContainText(
+      'import { CardDef',
+    );
+    await expect(page.locator(`[data-test-card-url-bar] input`)).toHaveValue(
+      moduleUrl,
+    );
+
+    let appliedLocator = page.locator('[data-test-apply-state="applied"]');
+    async function applyPatchMessage(messageBody: string) {
+      let appliedCountBefore = await appliedLocator.count();
+      await putEvent(
+        botCredentials.accessToken,
+        roomId,
+        'm.room.message',
+        `patch-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        {
+          body: messageBody,
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: JSON.stringify({
+            context: {
+              agentId,
+            },
+          }),
+        },
+      );
+
+      let acceptAllButton = page.locator('[data-test-accept-all]');
+      await acceptAllButton.waitFor();
+      await acceptAllButton.click();
+      await expect(appliedLocator).toHaveCount(appliedCountBefore + 1);
+    }
+
+    const breakMessageBody = `\`\`\`
+${moduleUrl}
+╔═══ SEARCH ════╗
+${originalModuleContent}
+╠═══════════════╣
+${brokenModuleContent}
+╚═══ REPLACE ═══╝
+\`\`\``;
+    await applyPatchMessage(breakMessageBody);
+
+    async function runCorrectnessCommand(
+      commandRequestId: string,
+      description: string,
+    ) {
+      let commandRequests = [
+        {
+          id: commandRequestId,
+          name: 'checkCorrectness',
+          arguments: {
+            description,
+            attributes: {
+              targetType: 'file',
+              targetRef: moduleUrl,
+              fileUrl: moduleUrl,
+              roomId,
+            },
+          },
+        },
+      ];
+
+      await putEvent(
+        credentials.accessToken,
+        roomId,
+        'm.room.message',
+        commandRequestId,
+        {
+          body: '',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              agentId,
+            },
+          },
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: commandRequests,
+        },
+      );
+
+      let commandContainer = page.locator(
+        `[data-test-command-id="${commandRequestId}"]`,
+      );
+      await commandContainer.waitFor();
+      await commandContainer
+        .locator('[data-test-apply-state="applied"]')
+        .waitFor();
+
+      let commandResultEvent: any;
+      await expect(async () => {
+        let events = await getRoomEvents(username, password, roomId);
+        commandResultEvent = events.find(
+          (e: any) =>
+            e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+            e.content.commandRequestId === commandRequestId,
+        );
+        expect(commandResultEvent).toBeDefined();
+      }).toPass();
+
+      let commandResultData =
+        typeof commandResultEvent!.content.data === 'string'
+          ? JSON.parse(commandResultEvent!.content.data)
+          : commandResultEvent!.content.data;
+      expect(commandResultData.card).toBeDefined();
+      expect(commandResultData.card.url).toBeDefined();
+
+      let cardUrl = commandResultData.card.url;
+      let response: Response | undefined;
+      await expect(async () => {
+        response = await fetch(cardUrl, {
+          headers: {
+            Authorization: `Bearer ${credentials.accessToken}`,
+          },
+        });
+        expect(response.ok).toBe(true);
+      }).toPass();
+
+      return await response!.json();
+    }
+
+    let failingResult = await runCorrectnessCommand(
+      `check-module-${Date.now()}`,
+      'Check correctness of broken module',
+    );
+
+    expect(failingResult.data.attributes.correct).toBe(false);
+    expect(
+      failingResult.data.attributes.errors.some(
+        (err: string) =>
+          err.includes(moduleUrl.replace('.gts', '')) &&
+          err.includes('https://cardstack.com/base/card-api-broken not found'),
+      ),
+    ).toBe(true);
+
+    const fixMessageBody = `\`\`\`
+${moduleUrl}
+╔═══ SEARCH ════╗
+} from 'https://cardstack.com/base/card-api-broken';
+╠═══════════════╣
+} from 'https://cardstack.com/base/card-api';
+╚═══ REPLACE ═══╝
+\`\`\``;
+    await applyPatchMessage(fixMessageBody);
+
+    let fixedResult = await runCorrectnessCommand(
+      `check-module-${Date.now()}`,
+      'Check correctness after fixing module import',
+    );
+
+    expect(fixedResult.data.attributes.correct).toBe(true);
+    expect(fixedResult.data.attributes.errors).toHaveLength(0);
   });
 });
