@@ -30,13 +30,14 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   getMonacoContent,
-  TestContextWithSave,
 } from '../helpers';
 
 import { CardsGrid, setupBaseRealm } from '../helpers/base-realm';
 
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+
+import type { TestContextWithSave } from '../helpers';
 
 let mockedFileContent = 'Hello, world!';
 

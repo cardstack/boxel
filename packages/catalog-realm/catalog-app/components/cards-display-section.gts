@@ -50,7 +50,7 @@ export class CardsIntancesGrid extends GlimmerComponent<CardsIntancesGridArgs> {
       .cards {
         --default-grid-view-min-width: 224px;
         --default-grid-view-max-width: 1fr;
-        --default-grid-view-height: 360px;
+        --default-grid-view-height: 400px;
         --default-strip-view-min-width: 49%;
         --default-strip-view-max-width: 1fr;
         --default-strip-view-height: 180px;
@@ -109,7 +109,8 @@ export class CardsIntancesGrid extends GlimmerComponent<CardsIntancesGridArgs> {
 function getComponent(cardOrField: BaseDef) {
   if (
     !cardOrField ||
-    typeof (cardOrField.constructor as { getComponent?: unknown })?.getComponent !== 'function'
+    typeof (cardOrField.constructor as { getComponent?: unknown })
+      ?.getComponent !== 'function'
   ) {
     return;
   }

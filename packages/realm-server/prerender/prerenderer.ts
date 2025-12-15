@@ -1,12 +1,10 @@
 import {
-  type RealmPermissions,
   type RenderRouteOptions,
   type RenderResponse,
   type ModuleRenderResponse,
   Deferred,
   logger,
 } from '@cardstack/runtime-common';
-import { createJWT } from '../jwt';
 import { BrowserManager } from './browser-manager';
 import { PagePool } from './page-pool';
 import { RenderRunner } from './render-runner';
@@ -44,7 +42,6 @@ class AsyncSemaphore {
 
 export class Prerenderer {
   #pendingByRealm = new Map<string, Promise<void>>();
-  #secretSeed: string;
   #stopped = false;
   #browserManager: BrowserManager;
   #pagePool: PagePool;
@@ -53,12 +50,10 @@ export class Prerenderer {
   #semaphore: AsyncSemaphore;
 
   constructor(options: {
-    secretSeed: string;
     serverURL: string;
     maxPages?: number;
     silent?: boolean;
   }) {
-    this.#secretSeed = options.secretSeed;
     let maxPages = options.maxPages ?? 4;
     let silent = options.silent || process.env.PRERENDER_SILENT === 'true';
     this.#semaphore = new AsyncSemaphore(maxPages);
@@ -91,21 +86,20 @@ export class Prerenderer {
   }
 
   async disposeRealm(realm: string): Promise<void> {
+    this.#renderRunner.clearAuthCache(realm);
     await this.#pagePool.disposeRealm(realm);
   }
 
   async prerenderCard({
     realm,
     url,
-    userId,
-    permissions,
+    auth,
     opts,
     renderOptions,
   }: {
     realm: string;
     url: string;
-    userId: string;
-    permissions: RealmPermissions;
+    auth: string;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
   }): Promise<{
@@ -137,23 +131,6 @@ export class Prerenderer {
       }); // ensure chain continues even after errors
       releaseGlobal = await this.#semaphore.acquire();
 
-      let sessions: { [realm: string]: string } = {};
-      for (let [realmURL, realmPermissions] of Object.entries(
-        permissions ?? {},
-      )) {
-        sessions[realmURL] = createJWT(
-          {
-            user: userId,
-            realm: realmURL,
-            permissions: realmPermissions,
-            sessionRoom: '',
-          },
-          '1d',
-          this.#secretSeed,
-        );
-      }
-      let auth = JSON.stringify(sessions);
-
       let attemptOptions = renderOptions;
       let lastResult:
         | {
@@ -184,8 +161,6 @@ export class Prerenderer {
           result = await this.#renderRunner.prerenderCardAttempt({
             realm,
             url,
-            userId,
-            permissions,
             auth,
             opts,
             renderOptions: attemptOptions,
@@ -200,8 +175,6 @@ export class Prerenderer {
             result = await this.#renderRunner.prerenderCardAttempt({
               realm,
               url,
-              userId,
-              permissions,
               auth,
               opts,
               renderOptions: attemptOptions,
@@ -266,15 +239,13 @@ export class Prerenderer {
   async prerenderModule({
     realm,
     url,
-    userId,
-    permissions,
+    auth,
     opts,
     renderOptions,
   }: {
     realm: string;
     url: string;
-    userId: string;
-    permissions: RealmPermissions;
+    auth: string;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
   }): Promise<{
@@ -305,29 +276,10 @@ export class Prerenderer {
       });
       releaseGlobal = await this.#semaphore.acquire();
 
-      let sessions: { [realm: string]: string } = {};
-      for (let [realmURL, realmPermissions] of Object.entries(
-        permissions ?? {},
-      )) {
-        sessions[realmURL] = createJWT(
-          {
-            user: userId,
-            realm: realmURL,
-            permissions: realmPermissions,
-            sessionRoom: '',
-          },
-          '1d',
-          this.#secretSeed,
-        );
-      }
-      let auth = JSON.stringify(sessions);
-
       try {
         return await this.#renderRunner.prerenderModuleAttempt({
           realm,
           url,
-          userId,
-          permissions,
           auth,
           opts,
           renderOptions,
@@ -341,8 +293,6 @@ export class Prerenderer {
         return await this.#renderRunner.prerenderModuleAttempt({
           realm,
           url,
-          userId,
-          permissions,
           auth,
           opts,
           renderOptions,

@@ -8,7 +8,7 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
 import { Avatar } from '@cardstack/boxel-ui/components';
 
-import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import AiAssistantMessage, { AiAssistantConversation } from './index';
 export default class AiAssistantMessageUsage extends Component {

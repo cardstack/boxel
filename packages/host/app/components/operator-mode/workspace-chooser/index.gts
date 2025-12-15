@@ -1,8 +1,8 @@
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import MatrixService from '@cardstack/host/services/matrix-service';
-import RealmServerService from '@cardstack/host/services/realm-server';
+import type MatrixService from '@cardstack/host/services/matrix-service';
+import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import AddWorkspace from './add-workspace';
 import Workspace from './workspace';

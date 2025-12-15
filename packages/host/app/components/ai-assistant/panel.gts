@@ -10,20 +10,20 @@ import HistoryIcon from '@cardstack/boxel-icons/history';
 import { restartableTask } from 'ember-concurrency';
 import { Velcro } from 'ember-velcro';
 
+import type { ResizeHandle } from '@cardstack/boxel-ui/components';
 import {
   ContextButton,
   LoadingIndicator,
-  ResizeHandle,
 } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 
-import { ResolvedCodeRef, aiBotUsername } from '@cardstack/runtime-common';
+import type { ResolvedCodeRef } from '@cardstack/runtime-common';
+import { aiBotUsername } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 
-import AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
+import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 
-import { type MonacoSDK } from '../../services/monaco-service';
 import NewSession from '../ai-assistant/new-session';
 
 import AiAssistantPastSessionsList from '../ai-assistant/past-sessions';
@@ -35,6 +35,7 @@ import assistantIcon from './ai-assist-icon.webp';
 import NewSessionButton from './new-session-button';
 
 import type MatrixService from '../../services/matrix-service';
+import type { MonacoSDK } from '../../services/monaco-service';
 import type MonacoService from '../../services/monaco-service';
 
 const { matrixServerName } = ENV;

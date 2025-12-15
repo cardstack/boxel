@@ -9,7 +9,7 @@ import type { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { FileAlert, ExclamationCircle } from '@cardstack/boxel-ui/icons';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
-import { type CardErrorJSONAPI } from '@cardstack/host/services/store';
+import type { CardErrorJSONAPI } from '@cardstack/host/services/store';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 

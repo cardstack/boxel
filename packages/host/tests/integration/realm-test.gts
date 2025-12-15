@@ -1,4 +1,4 @@
-import { RenderingTestContext } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { stringify } from 'qs';
@@ -6,7 +6,8 @@ import { module, test } from 'qunit';
 
 import { validate as uuidValidate } from 'uuid';
 
-import { baseRealm, Realm } from '@cardstack/runtime-common';
+import type { Realm } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 import { isSingleCardDocument } from '@cardstack/runtime-common/document-types';
 import {
   cardSrc,
@@ -14,7 +15,7 @@ import {
 } from '@cardstack/runtime-common/etc/test-fixtures';
 
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as StringFieldMod from 'https://cardstack.com/base/string';
@@ -35,6 +36,7 @@ import {
   contains,
   containsMany,
   linksTo,
+  linksToMany,
   Component,
   CardDef,
   StringField,
@@ -268,7 +270,7 @@ module('Integration | realm', function (hooks) {
             realmURL: testRealmURL,
           },
           links: {
-            self: `${testRealmURL}dir/owner`,
+            self: `./owner`,
           },
         },
       ],
@@ -376,7 +378,7 @@ module('Integration | realm', function (hooks) {
           relationships: { 'cardInfo.theme': { links: { self: null } } },
           meta: {
             adoptsFrom: {
-              module: './person',
+              module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
             realmInfo: {
@@ -778,7 +780,7 @@ module('Integration | realm', function (hooks) {
             realmURL: testRealmURL,
           },
           links: {
-            self: `${testRealmURL}dir/owner`,
+            self: `../dir/owner`,
           },
         },
       ],
@@ -1312,7 +1314,7 @@ module('Integration | realm', function (hooks) {
         {
           type: 'card',
           id: `${testRealmURL}dir/friend`,
-          links: { self: `${testRealmURL}dir/friend` },
+          links: { self: `./dir/friend` },
           attributes: {
             description: 'Person',
             email: null,
@@ -1343,7 +1345,7 @@ module('Integration | realm', function (hooks) {
         {
           type: 'card',
           id: `${testRealmURL}dir/van-gogh`,
-          links: { self: `${testRealmURL}dir/van-gogh` },
+          links: { self: `./dir/van-gogh` },
           attributes: {
             firstName: 'Van Gogh',
             title: 'Van Gogh',
@@ -2324,7 +2326,7 @@ module('Integration | realm', function (hooks) {
             realmURL: testRealmURL,
           },
           links: {
-            self: `${testRealmURL}dir/mariko`,
+            self: `./mariko`,
           },
         },
       ],
@@ -2476,7 +2478,7 @@ module('Integration | realm', function (hooks) {
           fields: {
             card: {
               adoptsFrom: {
-                module: `${testRealmURL}car`,
+                module: `../car`,
                 name: 'Car',
               },
             },
@@ -3278,7 +3280,7 @@ module('Integration | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: './person',
+              module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
             realmInfo: {
@@ -3307,6 +3309,105 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
+  });
+
+  test('included card uses correct module path when realm is mounted', async function (assert) {
+    let catalogRealmURL = 'http://localhost:4201/catalog/';
+    let spreadsheet1Id = 'spreadsheet-1';
+    let spreadsheet2Id = 'spreadsheet-2';
+
+    class Spreadsheet extends CardDef {
+      static displayName = 'Spreadsheet';
+      @field name = contains(StringField);
+    }
+
+    class CatalogIndex extends CardDef {
+      static displayName = 'CatalogIndex';
+      @field spreadsheets = linksToMany(Spreadsheet);
+    }
+
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      realmURL: catalogRealmURL,
+      contents: {
+        'spreadsheet/spreadsheet.gts': {
+          Spreadsheet,
+        },
+        'index.gts': {
+          CatalogIndex,
+        },
+        [`spreadsheet/Spreadsheet/${spreadsheet1Id}.json`]: {
+          data: {
+            attributes: {
+              name: 'Sheet 1',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../spreadsheet',
+                name: 'Spreadsheet',
+              },
+            },
+          },
+        },
+        [`spreadsheet/Spreadsheet/${spreadsheet2Id}.json`]: {
+          data: {
+            attributes: {
+              name: 'Sheet 2',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../spreadsheet',
+                name: 'Spreadsheet',
+              },
+            },
+          },
+        },
+        'index.json': {
+          data: {
+            relationships: {
+              'spreadsheets.0': {
+                links: {
+                  self: `./spreadsheet/Spreadsheet/${spreadsheet1Id}`,
+                },
+              },
+              'spreadsheets.1': {
+                links: {
+                  self: `./spreadsheet/Spreadsheet/${spreadsheet2Id}`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './index',
+                name: 'CatalogIndex',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let response = await handle(
+      realm,
+      new Request(`${catalogRealmURL}index`, {
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+      }),
+    );
+    assert.strictEqual(response.status, 200, 'successful http status');
+    let json = await response.json();
+    let included = json.included?.find(
+      (resource: any) =>
+        resource.id ===
+        `${catalogRealmURL}spreadsheet/Spreadsheet/${spreadsheet1Id}`,
+    );
+    assert.ok(included, 'linked spreadsheet card is included');
+    assert.strictEqual(
+      included?.meta?.adoptsFrom?.module,
+      './spreadsheet/spreadsheet',
+      'adoptsFrom.module has the correct path',
+    );
   });
 
   test('realm can serve directory requests', async function (assert) {

@@ -4,7 +4,7 @@ import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
-import { RealmInfo } from '@cardstack/runtime-common';
+import type { RealmInfo } from '@cardstack/runtime-common';
 
 interface Signature {
   availableRealms: Record<string, RealmInfo> | undefined;

@@ -323,6 +323,7 @@ module(basename(__filename), function () {
         setupPermissionedRealm(hooks, {
           permissions: {
             john: ['read'],
+            '@node-test_realm:localhost': ['read'],
           },
           onRealmSetup,
         });
@@ -1313,7 +1314,6 @@ module(basename(__filename), function () {
             'realm url header is correct',
           );
           let json = response.body as SingleCardDocument;
-          console.log(json);
           let id = json.data.id!.split('/').pop()!;
           let cardFile = join(
             dir.name,
@@ -1402,6 +1402,7 @@ module(basename(__filename), function () {
         setupPermissionedRealm(hooks, {
           permissions: {
             john: ['read', 'write'],
+            '@node-test_realm:localhost': ['read'],
           },
           onRealmSetup,
         });
@@ -1588,6 +1589,132 @@ module(basename(__filename), function () {
           assert.strictEqual(response.body.data.length, 1, 'found one card');
         });
 
+        test('patches card when index entry is an error using pristine doc', async function (assert) {
+          let cardURL = `${testRealmHref}person-1`;
+          let errorDoc = {
+            message: 'render failed',
+            status: 500,
+            additionalErrors: null,
+          };
+
+          for (let table of ['boxel_index', 'boxel_index_working']) {
+            await dbAdapter.execute(
+              `UPDATE ${table}
+               SET type = 'error', error_doc = $1::jsonb
+               WHERE url = $2`,
+              {
+                bind: [JSON.stringify(errorDoc), cardURL],
+              },
+            );
+          }
+
+          let response = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Recovered',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person.gts',
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.body.data.attributes?.firstName,
+            'Recovered',
+            'patched response uses last known good doc',
+          );
+
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'person-1.json',
+          );
+          let card = readJSONSync(cardFile);
+          assert.strictEqual(
+            card.data.attributes?.firstName,
+            'Recovered',
+            'card file updated from error state',
+          );
+          assert.deepEqual(
+            card.data.relationships?.['cardInfo.theme'],
+            { links: { self: null } },
+            'relationships from pristine doc are preserved',
+          );
+        });
+
+        test('patches card when index entry is an error without pristine doc', async function (assert) {
+          let cardURL = `${testRealmHref}person-1`;
+          let errorDoc = {
+            message: 'render failed',
+            status: 500,
+            additionalErrors: null,
+          };
+
+          for (let table of ['boxel_index', 'boxel_index_working']) {
+            await dbAdapter.execute(
+              `UPDATE ${table}
+               SET type = 'error', error_doc = $1::jsonb, pristine_doc = NULL
+               WHERE url = $2`,
+              {
+                bind: [JSON.stringify(errorDoc), cardURL],
+              },
+            );
+          }
+
+          let response = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Fresh Start',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person.gts',
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.body.data.attributes?.firstName,
+            'Fresh Start',
+            'patched response uses empty base when pristine doc missing',
+          );
+
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'person-1.json',
+          );
+          let card = readJSONSync(cardFile);
+          assert.strictEqual(
+            card.data.attributes?.firstName,
+            'Fresh Start',
+            'card file updated even without pristine doc',
+          );
+          assert.deepEqual(card.data.meta.adoptsFrom, {
+            module: './person',
+            name: 'Person',
+          });
+          assert.strictEqual(card.data.type, 'card');
+        });
+
         test('creates card instances when it encounters "lid" in the request', async function (assert) {
           let response = await request
             .patch('/hassan')
@@ -1607,7 +1734,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './friend.gts',
+                    module: './friend',
                     name: 'Friend',
                   },
                 },
@@ -1635,7 +1762,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: './friend',
                       name: 'Friend',
                     },
                   },
@@ -1648,7 +1775,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: './friend',
                       name: 'Friend',
                     },
                   },
@@ -1661,7 +1788,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: './friend',
                       name: 'Friend',
                     },
                   },
@@ -1771,7 +1898,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: '../friend',
                       name: 'Friend',
                     },
                   },
@@ -1800,7 +1927,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: '../friend',
                       name: 'Friend',
                     },
                   },
@@ -1829,7 +1956,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: '../friend',
                       name: 'Friend',
                     },
                   },
@@ -1918,7 +2045,7 @@ module(basename(__filename), function () {
                   relationships: {
                     'friends.0': {
                       links: {
-                        self: './local-id-2',
+                        self: './Friend/local-id-2',
                       },
                       data: {
                         id: `${testRealmHref}Friend/local-id-2`,
@@ -1927,7 +2054,7 @@ module(basename(__filename), function () {
                     },
                     'friends.1': {
                       links: {
-                        self: './local-id-3',
+                        self: './Friend/local-id-3',
                       },
                       data: {
                         id: `${testRealmHref}Friend/local-id-3`,
@@ -1947,7 +2074,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: './friend',
                       name: 'Friend',
                     },
                   },
@@ -1976,7 +2103,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: './friend',
                       name: 'Friend',
                     },
                   },
@@ -2005,7 +2132,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: './friend',
                       name: 'Friend',
                     },
                   },
@@ -2072,7 +2199,7 @@ module(basename(__filename), function () {
               meta: {
                 adoptsFrom: {
                   name: 'Friend',
-                  module: 'http://localhost:4202/node-test/friend',
+                  module: '../friend',
                 },
                 realmInfo: {
                   ...testRealmInfo,
@@ -2119,7 +2246,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: '../friend',
                       name: 'Friend',
                     },
                   },
@@ -2148,7 +2275,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: '../friend',
                       name: 'Friend',
                     },
                   },
@@ -2198,7 +2325,7 @@ module(basename(__filename), function () {
                 meta: {
                   adoptsFrom: {
                     name: 'Friend',
-                    module: 'http://localhost:4202/node-test/friend',
+                    module: '../friend',
                   },
                   realmInfo: {
                     ...testRealmInfo,
@@ -2253,7 +2380,7 @@ module(basename(__filename), function () {
                 meta: {
                   adoptsFrom: {
                     name: 'Friend',
-                    module: 'http://localhost:4202/node-test/friend',
+                    module: '../friend',
                   },
                   realmInfo: {
                     ...testRealmInfo,
@@ -2716,6 +2843,7 @@ module(basename(__filename), function () {
         setupPermissionedRealm(hooks, {
           permissions: {
             john: ['read', 'write'],
+            '@node-test_realm:localhost': ['read'],
           },
           onRealmSetup,
         });
@@ -2896,6 +3024,7 @@ module(basename(__filename), function () {
         setupPermissionedRealm(hooks, {
           permissions: {
             john: ['read', 'write'],
+            '@node-test_realm:localhost': ['read'],
           },
           onRealmSetup,
         });

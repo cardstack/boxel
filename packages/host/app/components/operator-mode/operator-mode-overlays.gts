@@ -4,12 +4,12 @@ import { action } from '@ember/object';
 
 import { velcro } from 'ember-velcro';
 
+import type { BoxelDropdownAPI } from '@cardstack/boxel-ui/components';
 import {
   BoxelDropdown,
   IconButton,
   Menu,
   Tooltip,
-  BoxelDropdownAPI,
 } from '@cardstack/boxel-ui/components';
 
 import { compact, cn, menuItem, or } from '@cardstack/boxel-ui/helpers';
@@ -31,7 +31,8 @@ import type { Format } from 'https://cardstack.com/base/card-api';
 import { removeFileExtension } from '../search-sheet/utils';
 
 import Overlays from './overlays';
-import { StackItemRenderedCardForOverlayActions } from './stack-item';
+
+import type { StackItemRenderedCardForOverlayActions } from './stack-item';
 
 import type { CardDefOrId } from './stack-item';
 

@@ -53,6 +53,7 @@ import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/
 
 export class RealmServer {
   private log = logger('realm-server');
+  private headLog = logger('realm-server:head');
   private realms: Realm[];
   private virtualNetwork: VirtualNetwork;
   private matrixClient: MatrixClient;
@@ -298,12 +299,26 @@ export class RealmServer {
 
       ctxt.type = 'html';
 
+      let cardURL = new URL(
+        `${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`,
+      );
+
+      this.headLog.debug(`Fetching head HTML for ${cardURL.href}`);
+
       let [indexHTML, headHTML] = await Promise.all([
         this.retrieveIndexHTML(),
-        this.retrieveHeadHTML(
-          new URL(`${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`),
-        ),
+        this.retrieveHeadHTML(cardURL),
       ]);
+
+      if (headHTML != null) {
+        this.headLog.debug(
+          `Injecting head HTML for ${cardURL.href} (length ${headHTML.length})`,
+        );
+      } else {
+        this.headLog.debug(
+          `No head HTML found for ${cardURL.href}, serving base index.html`,
+        );
+      }
 
       ctxt.body =
         headHTML != null ? this.injectHeadHTML(indexHTML, headHTML) : indexHTML;
@@ -365,7 +380,13 @@ export class RealmServer {
 
   private async retrieveHeadHTML(cardURL: URL): Promise<string | null> {
     let candidates = this.headURLCandidates(cardURL);
+
+    this.headLog.debug(
+      `Head URL candidates for ${cardURL.href}: ${candidates.join(', ')}`,
+    );
+
     if (candidates.length === 0) {
+      this.headLog.debug(`No head candidates for ${cardURL.href}`);
       return null;
     }
 
@@ -394,7 +415,21 @@ export class RealmServer {
        LIMIT 1`,
     ]);
 
-    let headRow = rows[0] as { head_html?: string | null } | undefined;
+    this.headLog.debug('Head query result for %s', cardURL.href, rows);
+
+    let headRow = rows[0] as
+      | { head_html?: string | null; realm_version?: string | number }
+      | undefined;
+
+    if (headRow?.head_html != null) {
+      this.headLog.debug(
+        `Using head HTML from realm version ${headRow.realm_version} for ${cardURL.href}`,
+      );
+    } else {
+      this.headLog.debug(
+        `No head HTML returned from database for ${cardURL.href}`,
+      );
+    }
     return headRow?.head_html ?? null;
   }
 

@@ -1,12 +1,12 @@
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
+import type { RenderingTestContext } from '@ember/test-helpers';
 import {
   waitUntil,
   waitFor,
   fillIn,
   click,
   render,
-  RenderingTestContext,
   triggerEvent,
 } from '@ember/test-helpers';
 
@@ -24,6 +24,7 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 import { dayjsFormat } from '@cardstack/boxel-ui/helpers';
 
+import type { Loader } from '@cardstack/runtime-common';
 import {
   baseRealm,
   primitive,
@@ -31,7 +32,6 @@ import {
   PermissionsContextName,
   fields,
   cardTypeDisplayName,
-  Loader,
   type CodeRef,
 } from '@cardstack/runtime-common';
 

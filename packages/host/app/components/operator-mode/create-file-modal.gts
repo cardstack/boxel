@@ -52,7 +52,8 @@ import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card';
 import type RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
+import type { Spec } from 'https://cardstack.com/base/spec';
+import type { SpecType } from 'https://cardstack.com/base/spec';
 
 import { cleanseString } from '../../lib/utils';
 

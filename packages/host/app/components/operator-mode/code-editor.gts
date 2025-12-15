@@ -35,12 +35,12 @@ import {
   type FileResource,
   type Ready,
 } from '@cardstack/host/resources/file';
-import {
-  type ModuleAnalysis,
-  type ModuleDeclaration,
+import type {
+  ModuleAnalysis,
+  ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
 import type { SaveType } from '@cardstack/host/services/card-service';
-import CommandService from '@cardstack/host/services/command-service';
+import type CommandService from '@cardstack/host/services/command-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import { findDeclarationByName } from '@cardstack/host/services/module-contents-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';

@@ -1,7 +1,8 @@
 import { array } from '@ember/helper';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
-import { htmlSafe, SafeString } from '@ember/template';
+import type { SafeString } from '@ember/template';
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -12,7 +13,7 @@ import { isEqual, omit } from 'lodash';
 import { localId as localIdSymbol } from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
-import RealmService from '@cardstack/host/services/realm';
+import type RealmService from '@cardstack/host/services/realm';
 
 import type {
   CardDef,
@@ -20,7 +21,7 @@ import type {
   ViewCardFn,
 } from 'https://cardstack.com/base/card-api';
 
-import { CardDefOrId } from './stack-item';
+import type { CardDefOrId } from './stack-item';
 
 import type { RenderedCardForOverlayActions } from '../../resources/element-tracker';
 import type { MiddlewareState } from '@floating-ui/dom';

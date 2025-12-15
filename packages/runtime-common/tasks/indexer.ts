@@ -4,6 +4,7 @@ import {
   jobIdentity,
   userIdFromUsername,
   fetchUserPermissions,
+  type RealmPermissions,
 } from '../index';
 import { IndexRunner } from '../index-runner';
 import type { Stats } from '../worker';
@@ -40,6 +41,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
   getReader,
   getAuthedFetch,
   prerenderer,
+  createPrerenderAuth,
 }) =>
   async function (args) {
     let { jobInfo, realmUsername, realmURL } = args;
@@ -48,9 +50,12 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
     );
     reportStatus(jobInfo, 'start');
     let userId = userIdFromUsername(realmUsername, matrixURL);
-    let permissions = await fetchUserPermissions(dbAdapter, {
-      userId,
-    });
+    let permissions = await fetchUserPermissions(dbAdapter, { userId });
+    let prerenderPermissions = ensureRealmOwnerPermissions(
+      permissions,
+      realmURL,
+    );
+    let auth = createPrerenderAuth(userId, prerenderPermissions);
 
     let _fetch = await getAuthedFetch(args);
     let reader = getReader(_fetch, realmURL);
@@ -60,8 +65,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       indexWriter,
       jobInfo,
       reportStatus,
-      userId,
-      permissions,
+      auth,
       fetch: _fetch,
       prerenderer,
     });
@@ -88,6 +92,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
   getReader,
   getAuthedFetch,
   prerenderer,
+  createPrerenderAuth,
 }) =>
   async function (args) {
     let { jobInfo, realmUsername, urls, realmURL, operation } = args;
@@ -97,9 +102,12 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
     );
     reportStatus(jobInfo, 'start');
     let userId = userIdFromUsername(realmUsername, matrixURL);
-    let permissions = await fetchUserPermissions(dbAdapter, {
-      userId,
-    });
+    let permissions = await fetchUserPermissions(dbAdapter, { userId });
+    let prerenderPermissions = ensureRealmOwnerPermissions(
+      permissions,
+      realmURL,
+    );
+    let auth = createPrerenderAuth(userId, prerenderPermissions);
 
     let _fetch = await getAuthedFetch(args);
     let reader = getReader(_fetch, realmURL);
@@ -109,8 +117,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       indexWriter,
       jobInfo,
       reportStatus,
-      userId,
-      permissions,
+      auth,
       fetch: _fetch,
       prerenderer,
       ignoreData: args.ignoreData,
@@ -137,3 +144,15 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       stats,
     };
   };
+
+function ensureRealmOwnerPermissions(
+  permissions: RealmPermissions,
+  realmURL: string,
+): RealmPermissions {
+  let next: RealmPermissions = { ...permissions };
+  let existing = new Set(next[realmURL] ?? []);
+  existing.add('read');
+  existing.add('realm-owner');
+  next[realmURL] = [...existing];
+  return next;
+}
