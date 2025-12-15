@@ -4,15 +4,19 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../gaming-hub/gaming-hub",
+        "module": "../gaming-player/gaming-player",
         "name": "GamingStatsField"
       },
       "specType": "field",
       "containedExamples": [],
       "title": "GamingStatsField",
       "description": null,
-      "cardInfo": {},
-      "thumbnailURL": null
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
     },
     "relationships": {
       "linkedExamples": {

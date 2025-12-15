@@ -1,0 +1,46 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "GameRecord",
+        "module": "../game-record"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "notes": "**In the backlog for now**\n\nStarted playing with friends but the competitive scene is pretty intense. Need to dedicate more time to learning all the agents and map callouts.\n\n**First impressions:**\n- Gunplay feels crisp\n- Agent abilities are interesting\n- Need to work on crosshair placement\n- Ranked anxiety is real\n\n**Goals:**\n- Learn 3 agents well\n- Understand all map layouts\n- Get to Gold rank\n- Stop panic-buying every round",
+      "rating": 7,
+      "status": "backlog",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "startDate": "2024-11-20",
+      "hoursPlayed": 12,
+      "completedDate": null,
+      "lastPlayedDate": "2024-11-25T18:15:00.000Z",
+      "screenshotUrls": [],
+      "achievementsUnlocked": 3,
+      "completionPercentage": 5
+    },
+    "relationships": {
+      "game": {
+        "links": {
+          "self": "../../video-game/VideoGame/valorant"
+        }
+      },
+      "player": {
+        "links": {
+          "self": "../../gaming-player/GamingPlayer/zlata-voidwalker"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

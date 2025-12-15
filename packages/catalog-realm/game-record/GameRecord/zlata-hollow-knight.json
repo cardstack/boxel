@@ -1,0 +1,46 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "GameRecord",
+        "module": "../game-record"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "notes": "**Masterpiece! 10/10**\n\nOne of the best metroidvanias I've ever played. The atmosphere, music, art style, and challenging combat all come together perfectly.\n\n**What made it special:**\n- Every boss fight felt rewarding\n- The lore is deep and mysterious\n- Platforming mechanics are tight and responsive\n- Grimm Troupe DLC was incredible\n\n**Achievements:**\n- Beat Radiance on first try (okay, maybe 50th try)\n- 112% completion\n- All charms collected\n- Defeated Nightmare King Grimm\n\nDefinitely going back for the Godmaster DLC soon!",
+      "rating": 10,
+      "status": "completed",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "startDate": "2024-06-15",
+      "hoursPlayed": 156,
+      "completedDate": "2024-10-28",
+      "lastPlayedDate": "2024-10-28T19:45:00.000Z",
+      "screenshotUrls": [],
+      "achievementsUnlocked": 112,
+      "completionPercentage": 100
+    },
+    "relationships": {
+      "game": {
+        "links": {
+          "self": "../../video-game/VideoGame/hollow-knight"
+        }
+      },
+      "player": {
+        "links": {
+          "self": "../../gaming-player/GamingPlayer/zlata-voidwalker"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

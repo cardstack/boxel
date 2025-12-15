@@ -1,0 +1,54 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "gamerTag": "ThunderStrike_Kai",
+      "email": "kai.nakamura@outlook.com",
+      "bio": "Fighting game champion and tournament organizer. Representing the FGC worldwide with 8+ major tournament wins. Teaching newcomers and building the community one match at a time.",
+      "isOnline": true,
+      "joinDate": "2018-11-03",
+      "location": "Tokyo, Japan",
+      "profileImageUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&crop=face",
+      "preferredGenres": ["Fighting", "Action", "Arcade", "Competitive"],
+      "gamingGroups": ["FGC Tokyo", "EVO Champions", "Arcade Legends"],
+      "streamingPlatforms": ["Twitch", "YouTube Gaming", "Niconico"],
+      "contentCreatorStatus": true,
+      "streamSchedule": "Tuesday/Thursday 7PM-11PM JST, Weekends 2PM-6PM JST",
+      "statistics": {
+        "totalGames": 89,
+        "totalHours": 3421,
+        "averageRating": 8.7,
+        "currentStreak": 23,
+        "favoriteGenre": "Fighting",
+        "completionRate": 65,
+        "achievementsUnlocked": 987
+      }
+    },
+    "relationships": {
+      "friends.0": {
+        "links": { "self": "./alex-shadowblade" }
+      },
+      "friends.1": {
+        "links": { "self": "./maya-phoenixrise" }
+      },
+      "connectedPlatforms.0": {
+        "links": { "self": "../../gaming-platform/GamingPlatform/xbox-live" }
+      },
+      "tournaments.0": {
+        "links": { "self": "../../tournament/Tournament/street-fighter-evo" }
+      },
+      "favoriteGames": {
+        "links": { "self": null }
+      },
+      "wishlistGames": {
+        "links": { "self": null }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../gaming-player",
+        "name": "GamingPlayer"
+      }
+    }
+  }
+}
