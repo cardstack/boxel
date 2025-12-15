@@ -218,7 +218,6 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
           commandContext,
           realmHref,
           context: this.args.context,
-          productDescription: this.productDescription,
         }).catch((error) => {
           console.error(`Failed to persist rotation ${angle}°`, error);
           return existing;

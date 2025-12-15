@@ -53,6 +53,11 @@
         "links": {
           "self": "../ProductRotationImage/217c520e-babc-4e1b-b475-afec58a21f94"
         }
+      },
+      "referenceImage.imageCard": {
+        "links": {
+          "self": null
+        }
       }
     }
   }
