@@ -1,27 +1,32 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "PolaroidImage",
+        "module": "../time-machine/polaroid-image"
+      }
+    },
     "type": "card",
     "attributes": {
-      "caption": "1980s",
       "image": {},
+      "caption": "1980s",
       "cardInfo": {
+        "notes": null,
         "title": null,
         "description": null,
-        "thumbnailURL": null,
-        "notes": null
+        "thumbnailURL": null
       }
     },
     "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
       "image.imageCard": {
         "links": {
-          "self": "../CloudflareImage/79f8d173-62af-494d-9ded-65b3d3421345"
+          "self": "../CloudflareImage/1c511835-96fc-42db-af5d-bd66fd8ffa15"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../time-machine/polaroid-image",
-        "name": "PolaroidImage"
       }
     }
   }
