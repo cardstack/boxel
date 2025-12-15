@@ -63,6 +63,7 @@ import {
   loadDocument,
   LocalPath,
   getCardMenuItems,
+  isFieldInstance,
 } from '@cardstack/runtime-common';
 
 import type { ComponentLike } from '@glint/template';
@@ -105,6 +106,7 @@ import {
   getCardMeta,
 } from './card-serialization';
 import {
+  assertScalar,
   entangleWithCardTracking,
   getDataBucket,
   getFieldDescription,
@@ -117,8 +119,11 @@ import {
   isNotLoadedValue,
   notifyCardTracking,
   peekAtField,
+  propagateRealmContext,
+  realmContext,
   relationshipMeta,
   setFieldDescription,
+  setRealmContextOnField,
   type NotLoadedValue,
 } from './field-support';
 import {
@@ -753,7 +758,9 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
       lazilyLoadLink(instance as CardDef, this, maybeNotLoaded.reference);
       return undefined;
     }
-    return getter(instance, this);
+    let value = getter(instance, this);
+    propagateRealmContext(value, instance);
+    return value;
   }
 
   queryableValue(instance: any, stack: BaseDef[]): any {
@@ -1825,6 +1832,10 @@ export class BaseDef {
     return instance.constructor.icon;
   }
 
+  get [realmURL](): URL | undefined {
+    return undefined; // override in CardDef, FieldDef
+  }
+
   static [emptyValue]: object | string | number | null | boolean | undefined;
 
   static [serialize](
@@ -2011,6 +2022,12 @@ export class FieldDef extends BaseDef {
   static isFieldDef = true;
   static displayName = 'Field';
   static icon = RectangleEllipsisIcon;
+  [realmContext]?: string;
+
+  get [realmURL](): URL | undefined {
+    let realmURLString = this[realmContext];
+    return realmURLString ? new URL(realmURLString) : undefined;
+  }
 
   // Optional provider for default configuration, merged with per-usage configuration
   static configuration?: ConfigurationInput<any>;
@@ -2260,8 +2277,8 @@ export class CardDef extends BaseDef {
     return getCardMeta(this, 'realmInfo');
   }
 
-  get [realmURL]() {
-    let realmURLString = getCardMeta(this, 'realmURL');
+  get [realmURL](): URL | undefined {
+    let realmURLString: string | undefined = getCardMeta(this, 'realmURL');
     return realmURLString ? new URL(realmURLString) : undefined;
   }
 
@@ -2601,46 +2618,6 @@ function lazilyLoadLink(
   })();
 }
 
-type Scalar =
-  | string
-  | number
-  | boolean
-  | null
-  | undefined
-  | (string | null | undefined)[]
-  | (number | null | undefined)[]
-  | (boolean | null | undefined)[];
-
-function assertScalar(
-  scalar: any,
-  fieldCard: typeof BaseDef,
-): asserts scalar is Scalar {
-  if (Array.isArray(scalar)) {
-    if (
-      scalar.find(
-        (i) =>
-          !['undefined', 'string', 'number', 'boolean'].includes(typeof i) &&
-          i !== null,
-      )
-    ) {
-      throw new Error(
-        `expected queryableValue for field type ${
-          fieldCard.name
-        } to be scalar but was ${typeof scalar}`,
-      );
-    }
-  } else if (
-    !['undefined', 'string', 'number', 'boolean'].includes(typeof scalar) &&
-    scalar !== null
-  ) {
-    throw new Error(
-      `expected queryableValue for field type ${
-        fieldCard.name
-      } to be scalar but was ${typeof scalar}`,
-    );
-  }
-}
-
 export function setId(instance: CardDef, id: string) {
   let field = getField(instance, 'id');
   if (field) {
@@ -2896,9 +2873,10 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   let existingOverrides = getFieldOverrides(instance);
   let loadedValues = getDataBucket(instance);
   let instanceRelativeTo =
+    instance[relativeTo] ??
     ('id' in instance && typeof instance.id === 'string'
       ? new URL(instance.id)
-      : instance[relativeTo]) ?? undefined;
+      : undefined);
 
   function getFieldMeta(
     fieldsMeta: CardFields | undefined,
@@ -2964,10 +2942,13 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     }
     let override = await loadCardDef(overrideMeta.adoptsFrom, {
       loader: myLoader(),
+      // Prefer the deserialization context (instanceRelativeTo) so overrides resolve
+      // relative to the document we fetched (e.g. catalog/index), then fall back to the resource id.
       relativeTo:
-        resource.id && typeof resource.id === 'string'
+        instanceRelativeTo ??
+        (resource.id && typeof resource.id === 'string'
           ? new URL(resource.id)
-          : instanceRelativeTo,
+          : undefined),
     });
     if (!override) {
       return false;
@@ -3070,10 +3051,12 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       if (overrideApplied) {
         field = (getField(instance, fieldName) ?? field) as Field<T>;
       }
+      // Prefer the deserialization context ([relativeTo]) when available; fall back to the instance id
       let relativeToVal =
-        'id' in instance && typeof instance.id === 'string'
+        instance[relativeTo] ??
+        ('id' in instance && typeof instance.id === 'string'
           ? new URL(instance.id)
-          : instance[relativeTo];
+          : undefined);
       let deserializedValue = await getDeserializedValue({
         card,
         loadedValue: loadedValues.get(fieldName),
@@ -3096,6 +3079,9 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     }),
   )) as [Field<T>, any][];
 
+  let realmURLString =
+    getCardMeta(instance as CardDef, 'realmURL') ?? resource.meta?.realmURL;
+
   // this block needs to be synchronous
   {
     let wasSaved = false;
@@ -3116,6 +3102,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
           `cannot change the id for saved instance ${originalId}`,
         );
       }
+      propagateRealmContext(value, realmURLString);
       field.validate(instance, value);
 
       // Before updating field's value, we also have to make sure
@@ -3135,6 +3122,9 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     // assign the realm meta before we compute as computeds may be relying on this
     if (isCardInstance(instance) && resource.id != null) {
       (instance as any)[meta] = resource.meta;
+    }
+    if (realmURLString && isFieldInstance(instance)) {
+      setRealmContextOnField(instance, realmURLString);
     }
     notifyCardTracking(instance);
     if (isCardInstance(instance) && resource.id != null) {
@@ -3208,6 +3198,7 @@ function makeDescriptor<
 }
 
 function setField(instance: BaseDef, field: Field, value: any) {
+  propagateRealmContext(value, instance);
   // TODO: refactor validate to not have a return value and accomplish this normalization another way
   value = field.validate(instance, value);
   let deserialized = getDataBucket(instance);

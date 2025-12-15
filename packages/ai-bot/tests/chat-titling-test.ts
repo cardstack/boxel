@@ -606,7 +606,9 @@ module('getLatestResultMessage', (hooks) => {
     assert.equal(result.length, 1, 'Should return one message');
     assert.equal(result[0].role, 'user', 'Should have user role');
     assert.ok(
-      result[0].content!.includes('Applying tool call testCommand with args'),
+      (result[0].content as string).includes(
+        'Applying tool call testCommand with args',
+      ),
       `Should include command args info, was ${result[0].content}`,
     );
   });
@@ -743,11 +745,11 @@ module('getLatestResultMessage', (hooks) => {
     // Verify the function returns the expected message based on the correct command
     assert.equal(result.length, 1, 'Should return one message');
     assert.ok(
-      result[0].content!.includes('"second":"data"'),
+      (result[0].content as string).includes('"second":"data"'),
       'Should include args from the second command request',
     );
     assert.notOk(
-      result[0].content!.includes('"first":"data"'),
+      (result[0].content as string).includes('"first":"data"'),
       'Should not include args from the first command request',
     );
   });

@@ -17,13 +17,9 @@ import { module, test } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
-import {
-  baseRealm,
-  Deferred,
-  LooseSingleCardDocument,
-  Realm,
-} from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';
+import { baseRealm, Deferred } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
@@ -40,10 +36,12 @@ import {
   withSlowSave,
   setupOperatorModeStateCleanup,
 } from '../../helpers';
-import { TestRealmAdapter } from '../../helpers/adapter';
+
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { TestRealmAdapter } from '../../helpers/adapter';
 
 module('Integration | operator-mode', function (hooks) {
   setupRenderingTest(hooks);

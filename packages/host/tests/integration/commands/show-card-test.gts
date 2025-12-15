@@ -1,6 +1,6 @@
 import { getOwner } from '@ember/owner';
 import Service from '@ember/service';
-import { RenderingTestContext } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { tracked } from '@glimmer/tracking';
 
@@ -11,7 +11,7 @@ import { module, test, skip } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import ShowCardCommand from '@cardstack/host/commands/show-card';
 import { StackItem } from '@cardstack/host/lib/stack-item';
@@ -19,7 +19,7 @@ import { StackItem } from '@cardstack/host/lib/stack-item';
 import type { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
 import RealmService from '@cardstack/host/services/realm';
 
-import * as CardAPI from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import {
   setupCardLogs,

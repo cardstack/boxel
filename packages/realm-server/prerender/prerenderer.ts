@@ -1,12 +1,10 @@
 import {
-  type RealmPermissions,
   type RenderRouteOptions,
   type RenderResponse,
   type ModuleRenderResponse,
   Deferred,
   logger,
 } from '@cardstack/runtime-common';
-import { createJWT } from '../jwt';
 import { BrowserManager } from './browser-manager';
 import { PagePool } from './page-pool';
 import { RenderRunner } from './render-runner';
@@ -14,24 +12,51 @@ import { RenderRunner } from './render-runner';
 const log = logger('prerenderer');
 const boxelHostURL = process.env.BOXEL_HOST_URL ?? 'http://localhost:4200';
 
+class AsyncSemaphore {
+  #available: number;
+  #queue: Array<(release: () => void) => void> = [];
+
+  constructor(max: number) {
+    this.#available = Math.max(1, max);
+  }
+
+  async acquire(): Promise<() => void> {
+    if (this.#available > 0) {
+      this.#available--;
+      return this.#release;
+    }
+    return await new Promise<() => void>((resolve) => {
+      this.#queue.push(resolve);
+    });
+  }
+
+  #release = () => {
+    let next = this.#queue.shift();
+    if (next) {
+      next(this.#release);
+      return;
+    }
+    this.#available++;
+  };
+}
+
 export class Prerenderer {
   #pendingByRealm = new Map<string, Promise<void>>();
-  #secretSeed: string;
   #stopped = false;
   #browserManager: BrowserManager;
   #pagePool: PagePool;
   #renderRunner: RenderRunner;
   #cleanupInterval: NodeJS.Timeout | undefined;
+  #semaphore: AsyncSemaphore;
 
   constructor(options: {
-    secretSeed: string;
     serverURL: string;
     maxPages?: number;
     silent?: boolean;
   }) {
-    this.#secretSeed = options.secretSeed;
     let maxPages = options.maxPages ?? 4;
     let silent = options.silent || process.env.PRERENDER_SILENT === 'true';
+    this.#semaphore = new AsyncSemaphore(maxPages);
     this.#browserManager = new BrowserManager();
     this.#pagePool = new PagePool({
       maxPages,
@@ -61,21 +86,20 @@ export class Prerenderer {
   }
 
   async disposeRealm(realm: string): Promise<void> {
+    this.#renderRunner.clearAuthCache(realm);
     await this.#pagePool.disposeRealm(realm);
   }
 
   async prerenderCard({
     realm,
     url,
-    userId,
-    permissions,
+    auth,
     opts,
     renderOptions,
   }: {
     realm: string;
     url: string;
-    userId: string;
-    permissions: RealmPermissions;
+    auth: string;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
   }): Promise<{
@@ -100,27 +124,12 @@ export class Prerenderer {
       prev.then(() => deferred.promise),
     );
 
+    let releaseGlobal: (() => void) | undefined;
     try {
       await prev.catch((e) => {
         log.debug('Previous prerender in chain failed (continuing):', e);
       }); // ensure chain continues even after errors
-
-      let sessions: { [realm: string]: string } = {};
-      for (let [realmURL, realmPermissions] of Object.entries(
-        permissions ?? {},
-      )) {
-        sessions[realmURL] = createJWT(
-          {
-            user: userId,
-            realm: realmURL,
-            permissions: realmPermissions,
-            sessionRoom: '',
-          },
-          '1d',
-          this.#secretSeed,
-        );
-      }
-      let auth = JSON.stringify(sessions);
+      releaseGlobal = await this.#semaphore.acquire();
 
       let attemptOptions = renderOptions;
       let lastResult:
@@ -152,8 +161,6 @@ export class Prerenderer {
           result = await this.#renderRunner.prerenderCardAttempt({
             realm,
             url,
-            userId,
-            permissions,
             auth,
             opts,
             renderOptions: attemptOptions,
@@ -168,8 +175,6 @@ export class Prerenderer {
             result = await this.#renderRunner.prerenderCardAttempt({
               realm,
               url,
-              userId,
-              permissions,
               auth,
               opts,
               renderOptions: attemptOptions,
@@ -222,6 +227,11 @@ export class Prerenderer {
       }
       throw new Error(`prerender attempts exhausted for ${url}`);
     } finally {
+      try {
+        releaseGlobal?.();
+      } catch (_e) {
+        // best-effort release; avoids blocking future renders
+      }
       deferred.fulfill();
     }
   }
@@ -229,15 +239,13 @@ export class Prerenderer {
   async prerenderModule({
     realm,
     url,
-    userId,
-    permissions,
+    auth,
     opts,
     renderOptions,
   }: {
     realm: string;
     url: string;
-    userId: string;
-    permissions: RealmPermissions;
+    auth: string;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
   }): Promise<{
@@ -261,34 +269,17 @@ export class Prerenderer {
       prev.then(() => deferred.promise),
     );
 
+    let releaseGlobal: (() => void) | undefined;
     try {
       await prev.catch((e) => {
         log.debug('Previous prerender in chain failed (continuing):', e);
       });
-
-      let sessions: { [realm: string]: string } = {};
-      for (let [realmURL, realmPermissions] of Object.entries(
-        permissions ?? {},
-      )) {
-        sessions[realmURL] = createJWT(
-          {
-            user: userId,
-            realm: realmURL,
-            permissions: realmPermissions,
-            sessionRoom: '',
-          },
-          '1d',
-          this.#secretSeed,
-        );
-      }
-      let auth = JSON.stringify(sessions);
+      releaseGlobal = await this.#semaphore.acquire();
 
       try {
         return await this.#renderRunner.prerenderModuleAttempt({
           realm,
           url,
-          userId,
-          permissions,
           auth,
           opts,
           renderOptions,
@@ -302,14 +293,17 @@ export class Prerenderer {
         return await this.#renderRunner.prerenderModuleAttempt({
           realm,
           url,
-          userId,
-          permissions,
           auth,
           opts,
           renderOptions,
         });
       }
     } finally {
+      try {
+        releaseGlobal?.();
+      } catch (_e) {
+        // best-effort release; avoids blocking future renders
+      }
       deferred.fulfill();
     }
   }

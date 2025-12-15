@@ -13,7 +13,7 @@ import {
   baseRealm,
   skillCardRef,
 } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
@@ -25,7 +25,7 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import {
   testRealmURL,

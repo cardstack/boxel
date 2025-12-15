@@ -22,7 +22,7 @@ import type ErrorDisplayService from '@cardstack/host/services/error-display';
 import type { DisplayedErrorProvider } from '@cardstack/host/services/error-display';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
-import { BoxelErrorForContext } from 'https://cardstack.com/base/matrix-event';
+import type { BoxelErrorForContext } from 'https://cardstack.com/base/matrix-event';
 
 import SendErrorToAIAssistant from './send-error-to-ai-assistant';
 

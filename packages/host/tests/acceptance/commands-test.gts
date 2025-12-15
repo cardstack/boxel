@@ -45,7 +45,7 @@ import {
 
 import type { SearchCardsByTypeAndTitleInput } from 'https://cardstack.com/base/command';
 
-import { Skill } from 'https://cardstack.com/base/skill';
+import type { Skill } from 'https://cardstack.com/base/skill';
 
 import {
   setupLocalIndexing,

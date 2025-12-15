@@ -1,11 +1,12 @@
-import { RenderingTestContext, settled } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
+import { settled } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
 import type { SingleCardDocument } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type {
   CardStore,

@@ -1,4 +1,4 @@
-import { TemplateOnlyComponent } from '@ember/component/template-only';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -32,7 +32,7 @@ import {
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
-import { type ModuleDeclaration } from '@cardstack/host/resources/module-contents';
+import type { ModuleDeclaration } from '@cardstack/host/resources/module-contents';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { ModuleInspectorView } from '@cardstack/host/services/operator-mode-state-service';
@@ -42,7 +42,7 @@ import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
 import type { CardContext } from 'https://cardstack.com/base/card-api';
-import { Spec } from 'https://cardstack.com/base/spec';
+import type { Spec } from 'https://cardstack.com/base/spec';
 
 import ElementTracker, {
   type RenderedCardForOverlayActions,

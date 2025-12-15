@@ -16,7 +16,7 @@ import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
-import RealmService from '@cardstack/host/services/realm';
+import type RealmService from '@cardstack/host/services/realm';
 
 interface SkillToggleSignature {
   Element: HTMLDivElement | HTMLButtonElement;

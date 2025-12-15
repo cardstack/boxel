@@ -2,6 +2,7 @@ import {
   type Prerenderer,
   type RenderResponse,
   type ModuleRenderResponse,
+  type RenderRouteOptions,
   logger,
 } from '@cardstack/runtime-common';
 import {
@@ -12,6 +13,10 @@ import {
 import { renderTimeoutMs } from './utils';
 
 const log = logger('remote-prerenderer');
+const jsonApiHeaders = {
+  'Content-Type': 'application/vnd.api+json',
+  Accept: 'application/vnd.api+json',
+} as const;
 
 class RetryablePrerenderError extends Error {
   status?: number;
@@ -49,8 +54,15 @@ export function createRemotePrerenderer(
   async function requestWithRetry<T>(
     path: string,
     type: string,
-    attributes: Record<string, unknown>,
+    attributes: {
+      realm: string;
+      url: string;
+      auth: string;
+      renderOptions?: RenderRouteOptions;
+    },
   ): Promise<T> {
+    validatePrerenderAttributes(type, attributes);
+
     let endpoint = new URL(path, prerenderURL);
     let body = {
       data: {
@@ -68,6 +80,7 @@ export function createRemotePrerenderer(
         const timer = setTimeout(() => ac.abort(), requestTimeoutMs);
         let response = await fetch(endpoint, {
           method: 'POST',
+          headers: jsonApiHeaders,
           body: JSON.stringify(body),
           signal: ac.signal,
         }).finally(() => {
@@ -138,31 +151,56 @@ export function createRemotePrerenderer(
   }
 
   return {
-    async prerenderCard({ realm, url, userId, permissions, renderOptions }) {
+    async prerenderCard({ realm, url, auth, renderOptions }) {
       return await requestWithRetry<RenderResponse>(
         'prerender-card',
         'prerender-request',
         {
           realm,
           url,
-          userId,
-          permissions,
+          auth,
           renderOptions: renderOptions ?? {},
         },
       );
     },
-    async prerenderModule({ realm, url, userId, permissions, renderOptions }) {
+    async prerenderModule({ realm, url, auth, renderOptions }) {
       return await requestWithRetry<ModuleRenderResponse>(
         'prerender-module',
         'prerender-module-request',
         {
           realm,
           url,
-          userId,
-          permissions,
+          auth,
           renderOptions: renderOptions ?? {},
         },
       );
     },
   };
+}
+
+function validatePrerenderAttributes(
+  requestType: string,
+  attrs: {
+    realm?: string;
+    url?: string;
+    auth?: string;
+  },
+) {
+  let missing: string[] = [];
+
+  if (typeof attrs.realm !== 'string' || attrs.realm.trim().length === 0) {
+    missing.push('realm');
+  }
+  if (typeof attrs.url !== 'string' || attrs.url.trim().length === 0) {
+    missing.push('url');
+  }
+  if (typeof attrs.auth !== 'string' || attrs.auth.trim().length === 0) {
+    missing.push('auth');
+  }
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing prerender ${requestType} attributes: ${missing.join(', ')}`,
+    );
+  }
 }

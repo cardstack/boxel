@@ -11,7 +11,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
-import { type LocalPath } from '@cardstack/runtime-common/paths';
+import type { LocalPath } from '@cardstack/runtime-common/paths';
 
 import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 import { directory } from '@cardstack/host/resources/directory';

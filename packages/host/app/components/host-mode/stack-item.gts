@@ -1,6 +1,7 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { htmlSafe, SafeString } from '@ember/template';
+import type { SafeString } from '@ember/template';
+import { htmlSafe } from '@ember/template';
 
 import { isTesting } from '@embroider/macros';
 

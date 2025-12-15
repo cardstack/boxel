@@ -142,7 +142,6 @@ export async function startPrerenderServer(
     ...process.env,
     NODE_ENV: process.env.NODE_ENV ?? 'development',
     NODE_NO_WARNINGS: '1',
-    REALM_SECRET_SEED: process.env.REALM_SECRET_SEED ?? "shhh! it's a secret",
     BOXEL_HOST_URL: process.env.HOST_URL ?? 'http://localhost:4200',
   };
   let prerenderArgs = [
@@ -286,6 +285,8 @@ export async function startServer({
     `--fromUrl='https://cardstack.com/base/'`,
     `--toUrl='http://localhost:4205/base/'`,
   ]);
+
+  console.log(`realm server database: ${testDBName}`);
 
   let realmServer = spawn('ts-node', serverArgs, {
     cwd: realmServerDir,

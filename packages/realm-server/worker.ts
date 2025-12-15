@@ -15,6 +15,7 @@ import {
   PgQueueRunner,
 } from '@cardstack/postgres';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer';
+import { buildCreatePrerenderAuth } from './prerender/auth';
 
 let log = logger('worker');
 
@@ -88,6 +89,7 @@ let {
 log.info(`starting worker with pid ${process.pid} and priority ${priority}`);
 
 let prerenderer = createRemotePrerenderer(prerendererUrl);
+let createPrerenderAuth = buildCreatePrerenderAuth(REALM_SECRET_SEED);
 if (fromUrls.length !== toUrls.length) {
   log.error(
     `Mismatched number of URLs, the --fromUrl params must be matched to the --toUrl params`,
@@ -127,6 +129,7 @@ let autoMigrate = migrateDB || undefined;
     dbAdapter,
     queuePublisher: new PgQueuePublisher(dbAdapter),
     prerenderer,
+    createPrerenderAuth,
   });
 
   await worker.run();

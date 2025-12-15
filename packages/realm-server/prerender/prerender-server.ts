@@ -23,17 +23,8 @@ let { port, silent } = yargs(process.argv.slice(2))
   })
   .parseSync();
 
-const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
-if (!REALM_SECRET_SEED) {
-  console.error(
-    `The REALM_SECRET_SEED environment variable is not set. Please make sure this env var has a value`,
-  );
-  process.exit(-1);
-}
-
 let webServerInstance: Server | undefined;
 webServerInstance = createPrerenderHttpServer({
-  secretSeed: REALM_SECRET_SEED,
   silent,
   port,
 }).listen(port);

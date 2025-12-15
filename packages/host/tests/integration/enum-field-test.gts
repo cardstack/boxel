@@ -1,4 +1,5 @@
-import { RenderingTestContext, click } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
+import { click } from '@ember/test-helpers';
 
 import ArrowDownIcon from '@cardstack/boxel-icons/arrow-down';
 import ArrowUpIcon from '@cardstack/boxel-icons/arrow-up';
@@ -13,7 +14,7 @@ import {
   baseRealm,
   getField,
 } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
   provideConsumeContext,

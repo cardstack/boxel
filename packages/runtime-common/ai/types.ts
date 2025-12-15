@@ -28,9 +28,28 @@ export interface PromptParts {
   pendingCodePatchCorrectnessChecks?: PendingCodePatchCorrectnessCheck;
 }
 
+export type TextContent = {
+  type: 'text';
+  text: string;
+  cache_control?: {
+    type: 'ephemeral';
+  };
+};
+type ImageContentPart = {
+  type: 'image_url';
+  image_url: {
+    url: string; // URL or base64 encoded image data
+    detail?: string; // Optional, defaults to "auto"
+  };
+  cache_control?: {
+    type: 'ephemeral';
+  };
+};
+type ContentPart = TextContent | ImageContentPart;
+
 export interface OpenAIPromptMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
+  content: string | ContentPart[];
   name?: string;
   tool_calls?: ChatCompletionMessageToolCall[];
   tool_call_id?: string;

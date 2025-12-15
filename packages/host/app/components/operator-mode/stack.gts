@@ -22,8 +22,9 @@ import type {
 
 import OperatorModeStackItem, {
   type StackItemComponentAPI,
-  CardDefOrId,
 } from './stack-item';
+
+import type { CardDefOrId } from './stack-item';
 
 interface Signature {
   Element: HTMLElement;

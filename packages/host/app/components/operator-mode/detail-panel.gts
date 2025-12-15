@@ -35,7 +35,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import { getCardType } from '@cardstack/host/resources/card-type';
-import { type Ready } from '@cardstack/host/resources/file';
+import type { Ready } from '@cardstack/host/resources/file';
 
 import {
   type ModuleDeclaration,
@@ -45,14 +45,14 @@ import {
 } from '@cardstack/host/resources/module-contents';
 
 import { getResolvedCodeRefFromType } from '@cardstack/host/services/card-type-service';
-import RealmService from '@cardstack/host/services/realm';
+import type RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 
 import { lastModifiedDate } from '../../resources/last-modified-date';
 
 import { PanelSection } from './code-submode/inner-container';
-import { type FileType, type NewFileType } from './create-file-modal';
+
 import {
   Divider,
   BaseContainer,
@@ -64,7 +64,10 @@ import {
 
 import Selector from './detail-panel-selector';
 
-import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
+import { selectorItemFunc } from './detail-panel-selector';
+
+import type { FileType, NewFileType } from './create-file-modal';
+import type { SelectorItem } from './detail-panel-selector';
 
 import type { ModuleAnalysis } from '../../resources/module-contents';
 

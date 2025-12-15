@@ -8,7 +8,7 @@ import Component from '@glimmer/component';
 
 import { IconHexagon } from '@cardstack/boxel-ui/icons';
 
-import BillingService from '@cardstack/host/services/billing-service';
+import type BillingService from '@cardstack/host/services/billing-service';
 
 import ModalContainer from '../modal-container';
 

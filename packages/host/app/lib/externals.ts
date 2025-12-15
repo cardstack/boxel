@@ -24,6 +24,7 @@ import * as emberResources from 'ember-resources';
 import * as flat from 'flat';
 import * as lodash from 'lodash';
 import * as matrixJsSDK from 'matrix-js-sdk';
+import * as rsvp from 'rsvp';
 import * as superFastMD5 from 'super-fast-md5';
 import * as tracked from 'tracked-built-ins';
 
@@ -89,6 +90,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('tracked-built-ins', tracked);
   virtualNetwork.shimModule('date-fns', dateFns);
   virtualNetwork.shimModule('@ember/destroyable', emberDestroyable);
+  virtualNetwork.shimModule('rsvp', rsvp);
   virtualNetwork.shimAsyncModule({
     id: 'ethers',
     resolve: () => import('ethers'),

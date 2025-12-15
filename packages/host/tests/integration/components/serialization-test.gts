@@ -1,4 +1,5 @@
-import { fillIn, RenderingTestContext } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
+import { fillIn } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import formatISO from 'date-fns/formatISO';
@@ -7,15 +8,18 @@ import parseISO from 'date-fns/parseISO';
 import { isAddress } from 'ethers';
 import { module, test } from 'qunit';
 
+import type { LooseCardResource } from '@cardstack/runtime-common';
 import {
   baseRealm,
   PermissionsContextName,
   localId,
   fields,
+  meta,
   type LooseSingleCardDocument,
   type Permissions,
 } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
+import { realmURL } from '@cardstack/runtime-common/constants';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
@@ -139,6 +143,63 @@ module('Integration | serialization', function (hooks) {
     );
   });
 
+  test('deserializing card JSON sets realm URL on contained FieldDef instances', async function (assert) {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+    }
+
+    class Post extends CardDef {
+      @field author = contains(Person);
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person, Post },
+      },
+    });
+
+    let cardJSON = {
+      data: {
+        id: `${testRealmURL}Post/1`,
+        type: 'card',
+        attributes: {
+          author: {
+            firstName: 'Mango',
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Post',
+          },
+          realmURL: testRealmURL,
+          fields: {
+            author: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'Person',
+              },
+              realmURL: testRealmURL,
+            },
+          },
+        },
+      } as LooseCardResource,
+    };
+
+    let instance = (await createFromSerialized(
+      cardJSON.data,
+      cardJSON,
+      new URL(cardJSON.data.id!),
+    )) as InstanceType<typeof Post>;
+
+    assert.strictEqual(
+      instance.author[realmURL]?.href,
+      testRealmURL,
+      'FieldDef instances nested inside card data keep track of their realm when metadata is available',
+    );
+  });
+
   test('can deserialize a card where the card instance has fields that are not found in the definition', async function (assert) {
     class Item extends CardDef {
       @field priceRenamed = contains(NumberField); // Simulating the scenario where someone renamed the price field to priceRenamed and did not also update the field in the instance data
@@ -177,6 +238,287 @@ module('Integration | serialization', function (hooks) {
     let root = await renderCard(loader, post, 'isolated');
 
     assert.strictEqual(cleanWhiteSpace(root.textContent!), '');
+  });
+
+  test('serializing a card does not duplicate realm URL into contained field meta', async function (assert) {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+    }
+
+    class Post extends CardDef {
+      @field author = contains(Person);
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person, Post },
+      },
+    });
+
+    let post = new Post({
+      author: new Person({ firstName: 'Mango' }),
+    });
+    (post as any)[meta] = {
+      adoptsFrom: {
+        module: `${testRealmURL}test-cards`,
+        name: 'Post',
+      },
+      realmURL: testRealmURL,
+    };
+
+    let serialized = serializeCard(post, {
+      includeUnrenderedFields: true,
+    });
+
+    assert.strictEqual(
+      serialized.data.meta?.fields?.author,
+      undefined,
+      'contained field meta is not redundantly annotated with realm URL',
+    );
+  });
+
+  test('saving a card assigns realm URL to contained field instances', async function (assert) {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+    }
+
+    class Post extends CardDef {
+      @field author = contains(Person);
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person, Post },
+      },
+    });
+
+    let post = new Post({
+      author: new Person({ firstName: 'Joe' }),
+    });
+
+    await saveCard(
+      post,
+      `${testRealmURL}Post/1.json`,
+      loader,
+      undefined,
+      testRealmURL,
+    );
+
+    assert.strictEqual(
+      post.author[realmURL]?.href,
+      testRealmURL,
+      'contained FieldDef instance receives the realm URL after saving',
+    );
+  });
+
+  test('saving a card assigns realm URL to contained containsMany field instances', async function (assert) {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+    }
+
+    class Post extends CardDef {
+      @field authors = containsMany(Person);
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person, Post },
+      },
+    });
+
+    let post = new Post({
+      authors: [
+        new Person({ firstName: 'Joe' }),
+        new Person({ firstName: 'Pat' }),
+      ],
+    });
+
+    await saveCard(
+      post,
+      `${testRealmURL}Post/2.json`,
+      loader,
+      undefined,
+      testRealmURL,
+    );
+
+    assert.deepEqual(
+      post.authors.map((author) => author[realmURL]?.href),
+      [testRealmURL, testRealmURL],
+      'all contained FieldDef instances receive the realm URL after saving',
+    );
+  });
+
+  test('polymorphic override keeps realm URL on deserialized field instance', async function (assert) {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+    }
+
+    class Employee extends Person {
+      @field department = contains(StringField);
+    }
+
+    class Post extends CardDef {
+      @field author = contains(Person);
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person, Employee, Post },
+      },
+    });
+
+    let resource: LooseCardResource = {
+      attributes: {
+        title: 'Serialized Post',
+        author: {
+          firstName: 'Riley',
+          department: 'Engineering',
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${testRealmURL}test-cards`,
+          name: 'Post',
+        },
+        realmURL: testRealmURL,
+        fields: {
+          author: {
+            adoptsFrom: {
+              module: `${testRealmURL}test-cards`,
+              name: 'Employee',
+            },
+          },
+        },
+      },
+    };
+
+    let post = (await createFromSerialized(
+      resource,
+      { data: resource },
+      undefined,
+    )) as InstanceType<typeof Post>;
+
+    assert.strictEqual(
+      post.author[realmURL]?.href,
+      testRealmURL,
+      'overridden field instance retains realm URL after deserialization',
+    );
+    assert.true(
+      post.author instanceof Employee,
+      'polymorphic override still applies',
+    );
+  });
+
+  test('computed contains assigns realm URL to generated field instance', async function (assert) {
+    class Person extends FieldDef {
+      @field name = contains(StringField);
+    }
+
+    class Post extends CardDef {
+      @field author = contains(Person, {
+        computeVia: function (this: Post) {
+          return new Person({ name: 'Computed Author' });
+        },
+      });
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person, Post },
+      },
+    });
+
+    let post = new Post();
+
+    await saveCard(
+      post,
+      `${testRealmURL}Post/3.json`,
+      loader,
+      undefined,
+      testRealmURL,
+    );
+
+    assert.strictEqual(
+      post.author[realmURL]?.href,
+      testRealmURL,
+      'computed field instance knows the realm URL',
+    );
+  });
+
+  test('manually constructed field assigned after instantiation receives realm URL on save', async function (assert) {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+    }
+
+    class Post extends CardDef {
+      @field author = contains(Person);
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person, Post },
+      },
+    });
+
+    let post = new Post();
+    post.author = new Person({ firstName: 'Late Assign' });
+
+    await saveCard(
+      post,
+      `${testRealmURL}Post/4.json`,
+      loader,
+      undefined,
+      testRealmURL,
+    );
+
+    assert.strictEqual(
+      post.author[realmURL]?.href,
+      testRealmURL,
+      'late-assigned contained field instance receives realm URL after save',
+    );
+  });
+
+  test('assigning a new field instance to a saved card sets realm URL immediately', async function (assert) {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+    }
+
+    class Post extends CardDef {
+      @field author = contains(Person);
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person, Post },
+      },
+    });
+
+    let post = new Post({
+      author: new Person({ firstName: 'Original' }),
+    });
+
+    await saveCard(
+      post,
+      `${testRealmURL}Post/5.json`,
+      loader,
+      undefined,
+      testRealmURL,
+    );
+
+    post.author = new Person({ firstName: 'Replacement' });
+
+    assert.strictEqual(
+      post.author[realmURL]?.href,
+      testRealmURL,
+      'newly assigned field instance on a saved card immediately receives the realm URL',
+    );
   });
 
   test('can deserialize a card that has an ID', async function (assert) {

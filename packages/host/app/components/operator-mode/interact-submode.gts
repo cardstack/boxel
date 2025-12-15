@@ -73,10 +73,11 @@ import NeighborStackTriggerButton, {
   type SearchSheetTrigger,
 } from './interact-submode/neighbor-stack-trigger';
 import OperatorModeStack from './stack';
-import { CardDefOrId } from './stack-item';
+
 import SubmodeLayout from './submode-layout';
 
 import type { NewFileOptions } from './new-file-button';
+import type { CardDefOrId } from './stack-item';
 
 import type { StackItemComponentAPI } from './stack-item';
 

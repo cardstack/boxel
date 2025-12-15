@@ -15,7 +15,7 @@ import {
   type CopyArgs,
   type CopyResult,
 } from '.';
-import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from './reindex-config';
+import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from './tasks/indexer';
 import type { Realm } from './realm';
 import { RealmPaths } from './paths';
 import ignore, { type Ignore } from 'ignore';
@@ -30,8 +30,6 @@ export class RealmIndexUpdater {
     modulesIndexed: 0,
     instanceErrors: 0,
     moduleErrors: 0,
-    definitionErrors: 0,
-    definitionsIndexed: 0,
     totalIndexEntries: 0,
   };
   #indexWriter: IndexWriter;
