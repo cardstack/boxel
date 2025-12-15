@@ -2,12 +2,13 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { BoxelButton, CircleSpinner } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { CheckMark, Exclamation } from '@cardstack/boxel-ui/icons';
+import { CheckMark, Exclamation, Warning } from '@cardstack/boxel-ui/icons';
 
 export type ApplyButtonState =
   | 'ready'
   | 'applying'
   | 'applied'
+  | 'applied-with-error'
   | 'failed'
   | 'invalid'
   | 'preparing';
@@ -43,6 +44,8 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       <CircleSpinner width='18' height='18' />
     {{else if (eq @state 'applied')}}
       <CheckMark width='16' height='16' />
+    {{else if (eq @state 'applied-with-error')}}
+      <Warning width='16' height='16' />
     {{else if (eq @state 'failed')}}
       <Exclamation width='16' height='16' />
     {{else if (eq @state 'invalid')}}
@@ -168,7 +171,8 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       background-color: var(--boxel-error-400);
       border-color: var(--boxel-error-400);
     }
-    .state-indicator.invalid {
+    .state-indicator.invalid,
+    .state-indicator.applied-with-error {
       --icon-color: var(--boxel-light);
       background-color: var(--boxel-warning-200);
       border-color: var(--boxel-warning-200);

@@ -67,8 +67,11 @@ export default class RoomMessageCommand extends Component<Signature> {
 
   @cached
   private get applyButtonState(): ApplyButtonState {
-    if (this.failedCommandState || this.correctnessFailure) {
+    if (this.failedCommandState) {
       return 'failed';
+    }
+    if (this.didFailCorrectnessCheck) {
+      return 'applied-with-error';
     }
     return this.args.messageCommand?.status ?? 'ready';
   }
@@ -134,7 +137,7 @@ export default class RoomMessageCommand extends Component<Signature> {
     );
   }
 
-  private get correctnessFailure() {
+  private get didFailCorrectnessCheck() {
     if (this.args.messageCommand.name !== 'checkCorrectness') {
       return false;
     }
@@ -190,7 +193,7 @@ export default class RoomMessageCommand extends Component<Signature> {
   }
 
   private get hasFailedState() {
-    return !!(this.failedCommandState || this.correctnessFailure);
+    return !!(this.failedCommandState || this.didFailCorrectnessCheck);
   }
 
   <template>
