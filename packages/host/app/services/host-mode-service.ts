@@ -157,30 +157,32 @@ export default class HostModeService extends Service {
     let normalizedCardURL =
       (cardURL ?? this.currentCardId)?.replace(/\.json$/, '') ?? null;
     let requestId = ++this.headUpdateRequestId;
-    let headHTML: string | null = null;
-    let shouldReplace = normalizedCardURL === null;
 
-    if (normalizedCardURL) {
-      try {
-        let prerenderedHead =
-          await this.fetchPrerenderedHead(normalizedCardURL);
-
-        if (requestId !== this.headUpdateRequestId) {
-          return;
-        }
-
-        if (prerenderedHead !== undefined) {
-          headHTML = prerenderedHead;
-          shouldReplace = true;
-        } else {
-          return;
-        }
-      } catch (_error) {
-        return;
-      }
+    if (normalizedCardURL === null) {
+      // If there is no card, clear the head content
+      this.replaceHeadTemplate(null);
+      return;
     }
 
-    if (requestId !== this.headUpdateRequestId || !shouldReplace) {
+    let headHTML: string | null = null;
+    try {
+      let prerenderedHead =
+        await this.fetchPrerenderedHead(normalizedCardURL);
+
+      if (requestId !== this.headUpdateRequestId) {
+        return;
+      }
+
+      if (prerenderedHead !== undefined) {
+        headHTML = prerenderedHead;
+      } else {
+        return;
+      }
+    } catch (_error) {
+      return;
+    }
+
+    if (requestId !== this.headUpdateRequestId) {
       return;
     }
 
