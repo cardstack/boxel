@@ -583,7 +583,6 @@ async function persistRotationImage({
   realmHref,
   context,
   existing,
-  productDescription,
 }: {
   base64: string;
   angle: number;
@@ -591,7 +590,6 @@ async function persistRotationImage({
   realmHref: string;
   context?: CardContext;
   existing?: ProductRotationImage;
-  productDescription?: string;
 }): Promise<ProductRotationImage> {
   let safeAngle = Math.round(angle);
   let label = buildAngleLabel(safeAngle);
