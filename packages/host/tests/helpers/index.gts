@@ -84,6 +84,8 @@ export { setupSnapshotRealm } from './snapshot-realm';
 export * from '@cardstack/runtime-common/helpers';
 export * from './indexer';
 
+import { flushLogs } from './base-realm';
+
 export const testModuleRealm = 'http://localhost:4202/test/';
 
 const { sqlSchema } = ENV;
@@ -121,9 +123,6 @@ export function createTimingLogger(
   return {
     step(label: string) {
       let current = timingNow();
-      if (skip) {
-        return;
-      }
       console.log(
         `[${scope}] ${label} took ${(current - last).toFixed(2)}ms (total ${(
           current - start
@@ -132,9 +131,6 @@ export function createTimingLogger(
       last = current;
     },
     finish(label = 'total') {
-      if (skip) {
-        return;
-      }
       let current = timingNow();
       console.log(`[${scope}] ${label} took ${(current - start).toFixed(2)}ms`);
     },
@@ -525,16 +521,20 @@ export function setupLocalIndexing(hooks: NestedHooks) {
     // "Cannot call .factoryFor('template:index-card_error') after the owner has been destroyed"
     await settled();
     let store = getService('store');
+    let loaderService = getService('loader-service');
+    let renderStore = getService('render-store');
+
+    await flushLogs();
+
     await store.flushSaves();
     await store.loaded();
+
     let context = this as RenderingContextWithPrerender;
     context.__cardPrerenderElement?.remove();
     context.__cardPrerenderElement = undefined;
     // reference counts should balance out automatically as components are destroyed
     store.resetCache({ preserveReferences: true });
-    let renderStore = getService('render-store');
     renderStore.resetCache({ preserveReferences: true });
-    let loaderService = getService('loader-service');
     loaderService.resetLoader({
       clearFetchCache: true,
       reason: 'test teardown',
@@ -1058,10 +1058,7 @@ export function setupCardLogs(
   hooks: NestedHooks,
   apiThunk: () => Promise<CardAPI>,
 ) {
-  hooks.afterEach(async function () {
-    let api = await apiThunk();
-    await api.flushLogs();
-  });
+  // nop
 }
 
 export function createJWT(

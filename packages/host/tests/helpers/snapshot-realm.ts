@@ -11,16 +11,15 @@ import {
   setupUserSubscription,
   setupAuthEndpoints,
   setupLocalIndexing,
-  setupCardLogs,
   type NestedHooks,
   captureDbSnapshot,
   restoreDbSnapshot,
   deleteSnapshot,
   setupRendering,
+  createTimingLogger,
 } from '.';
 
-import { setupBaseRealm } from './base-realm';
-import { setup } from 'qunit-dom';
+import { initialize } from './base-realm';
 
 export interface SnapshotBuildContext {
   isInitialBuild: boolean;
@@ -42,7 +41,7 @@ export interface SnapshotRealmHandle<T> {
 interface SetupSnapshotRealmOptions<T> {
   build: (context: SnapshotBuildContext) => Promise<T>;
   mockMatrixUtils: MockUtils;
-  setupBaseRealm?: boolean; // TODO: default to false, allow opt-in
+  reInitialiseBaseRealm?: boolean; // TODO: default to true
   realmPermissions?: Record<string, RealmAction[]>;
   acceptanceTest?: boolean;
 }
@@ -54,28 +53,21 @@ export function setupSnapshotRealm<T>(
   let cache: SnapshotCache | undefined;
   let latestState: T | undefined;
 
-  setupCardLogs(
-    hooks,
-    async () =>
-      await getService('loader-service').loader.import(
-        `${baseRealm.url}card-api`,
-      ),
-  );
-  hooks.beforeEach(async function () {
-    setupRendering(options.acceptanceTest!!);
-  });
   hooks.beforeEach(async function () {
     let loaderService = getService('loader-service');
     if (cache) {
+      console.log('Restoring loader from snapshot');
       loaderService.loader = Loader.cloneLoader(cache.loaderSnapshot, {
         includeEvaluatedModules: true,
       });
     }
   });
+  hooks.beforeEach(async function () {
+    setupRendering(options.acceptanceTest!!);
+  });
+
   setupLocalIndexing(hooks);
-  if (options.setupBaseRealm !== false) {
-    setupBaseRealm(hooks);
-  }
+  hooks.beforeEach(initialize);
 
   hooks.beforeEach(async function () {
     setupUserSubscription();

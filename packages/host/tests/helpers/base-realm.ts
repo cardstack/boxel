@@ -106,7 +106,7 @@ let enumOptions: (typeof EnumModule)['enumOptions'];
 let enumValues: (typeof EnumModule)['enumValues'];
 let enumConfig: (typeof EnumModule)['enumConfig'];
 
-async function initialize() {
+export async function initialize() {
   let loader = getService('loader-service').loader;
 
   StringField = (
