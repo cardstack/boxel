@@ -83,7 +83,7 @@ export function ensureQueryFieldSearchResource(
       isLive: true,
       seed: seedRecords
         ? {
-            cards: seedRecords ?? undefined,
+            cards: seedRecords,
             searchURL: seedSearchURL ?? undefined,
             realms: fieldState?.seedRealms,
           }
