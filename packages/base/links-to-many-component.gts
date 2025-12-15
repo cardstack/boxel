@@ -281,18 +281,21 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         grid-template-columns: 1fr;
       }
       .editor.can-write {
-        grid-template-columns: var(--boxel-icon-sm) 1fr var(--boxel-icon-sm);
+        grid-template-columns: auto 1fr auto;
         gap: var(--boxel-sp-xs);
+        align-items: center;
       }
       .remove {
         --icon-color: var(--background, var(--boxel-light));
         --icon-border: var(--foreground, var(--boxel-dark));
         --icon-bg: var(--foreground, var(--boxel-dark));
-        --boxel-icon-button-width: var(--boxel-icon-sm);
-        align-self: auto;
+        --boxel-icon-button-width: var(--boxel-icon-med);
+        --boxel-icon-button-height: var(--boxel-icon-med);
         outline: 0;
         order: 1;
-        justify-content: end;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
       }
       .remove:focus,
       .remove:hover {
@@ -311,7 +314,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         gap: var(--boxel-sp-xxxs);
         width: fit-content;
         letter-spacing: var(--boxel-lsp-xs);
-        margin-left: calc(var(--boxel-icon-sm) + var(--boxel-sp-xs));
+        margin-left: calc(var(--boxel-icon-med) + var(--boxel-sp-xs));
         /* for alignment due to sort handle */
       }
       .add-new.no-items {
@@ -320,8 +323,12 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       .sort {
         cursor: move;
         cursor: grab;
-        --boxel-icon-button-width: var(--boxel-icon-sm);
-        justify-content: start;
+        --boxel-icon-button-width: var(--boxel-icon-med);
+        --boxel-icon-button-height: var(--boxel-icon-med);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 5px;
       }
       .sort:active {
         cursor: grabbing;

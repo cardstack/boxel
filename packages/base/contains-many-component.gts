@@ -153,7 +153,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
     </PermissionsConsumer>
     <style scoped>
       .contains-many-editor {
-        --remove-icon-size: var(--boxel-icon-sm);
+        --remove-icon-size: var(--boxel-icon-med);
       }
       .contains-many-editor :deep(.compound-field.edit-format .add-new) {
         border: 1px solid var(--border, var(--boxel-border-color));
@@ -171,7 +171,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
         grid-template-columns: 1fr;
       }
       .editor.can-write {
-        grid-template-columns: var(--boxel-icon-sm) 1fr var(--remove-icon-size);
+        grid-template-columns: auto 1fr auto;
         gap: var(--boxel-sp-xs);
       }
       .editor + .editor {
@@ -187,8 +187,10 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
         --icon-color: currentColor;
         --icon-stroke-width: 1.5px;
         --boxel-icon-button-width: var(--remove-icon-size);
-        justify-content: end;
-        align-self: auto;
+        --boxel-icon-button-height: var(--remove-icon-size);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         outline: 0;
         order: 1;
       }
@@ -211,7 +213,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
         gap: var(--boxel-sp-xxxs);
         width: fit-content;
         letter-spacing: var(--boxel-lsp-xs);
-        margin-left: calc(var(--boxel-icon-sm) + var(--boxel-sp-xs));
+        margin-left: calc(var(--boxel-icon-med) + var(--boxel-sp-xs));
         /* for alignment due to sort handle */
       }
       .add-new.no-items {
@@ -220,8 +222,12 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
       .sort {
         cursor: move;
         cursor: grab;
-        justify-content: start;
-        --boxel-icon-button-width: var(--boxel-icon-sm);
+        --boxel-icon-button-width: var(--boxel-icon-med);
+        --boxel-icon-button-height: var(--boxel-icon-med);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 5px;
       }
       .sort:active {
         cursor: grabbing;
