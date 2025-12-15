@@ -22,6 +22,7 @@
    display_names BLOB,
    resource_created_at,
    icon_html TEXT,
+   definition BLOB,
    head_html TEXT,
    PRIMARY KEY ( url, realm_url ) 
 );
@@ -47,6 +48,7 @@
    fitted_html BLOB,
    display_names BLOB,
    resource_created_at,
+   definition BLOB,
    head_html TEXT,
    PRIMARY KEY ( url, realm_url ) 
 );
