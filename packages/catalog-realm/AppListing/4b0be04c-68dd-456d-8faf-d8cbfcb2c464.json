@@ -50,27 +50,62 @@
       },
       "specs.2": {
         "links": {
-          "self": "../Spec/90768812-e710-4b0b-a04c-68dd256dcfaf"
+          "self": "../Spec/12e7104b-0be0-4c68-9d25-6dcfafd8cbfc"
         }
       },
       "specs.3": {
         "links": {
-          "self": "../Spec/12e7104b-0be0-4c68-9d25-6dcfafd8cbfc"
+          "self": "../Spec/e7104b0b-e04c-48dd-a56d-cfafd8cbfcb2"
         }
       },
       "specs.4": {
         "links": {
-          "self": "../Spec/e7104b0b-e04c-48dd-a56d-cfafd8cbfcb2"
+          "self": "../Spec/63fbcce0-08ff-4047-82bc-8199ff4cd586"
         }
       },
       "specs.5": {
         "links": {
-          "self": "../Spec/104b0be0-4c68-4d25-adcf-afd8cbfcb2c4"
+          "self": "../Spec/3af3b410-91cb-4e34-8f3f-bc3fbed58910"
         }
       },
       "specs.6": {
         "links": {
-          "self": "../Spec/63fbcce0-08ff-4047-82bc-8199ff4cd586"
+          "self": "../Spec/c53af3b4-1091-4b3e-b48f-3fbc3fbed589"
+        }
+      },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/ea108ed8-0114-4294-a690-d4000f7706d9"
+        }
+      },
+      "specs.8": {
+        "links": {
+          "self": "../Spec/158fa01e-5c46-4d10-b88e-6dc6e42ce53c"
+        }
+      },
+      "specs.9": {
+        "links": {
+          "self": "../Spec/27a5b8bd-d76e-446a-9bed-f909f1803234"
+        }
+      },
+      "specs.10": {
+        "links": {
+          "self": "../Spec/94c53473-bfca-493d-b1f6-f70967d4714d"
+        }
+      },
+      "specs.11": {
+        "links": {
+          "self": "../Spec/73bfca09-3db1-46f7-8967-d4714d86bdb9"
+        }
+      },
+      "specs.12": {
+        "links": {
+          "self": "../Spec/67d4714d-86bd-490e-9a95-eb3e97e8960c"
+        }
+      },
+      "specs.13": {
+        "links": {
+          "self": "../Spec/4d86bdb9-0e9a-45eb-be97-e8960cfb907e"
         }
       },
       "publisher": {
@@ -125,37 +160,72 @@
       },
       "examples.9": {
         "links": {
-          "self": "../player-progress/PlayerProgress/alex-cyberpunk"
+          "self": "../game-record/GameRecord/zlata-cyberpunk"
         }
       },
       "examples.10": {
         "links": {
-          "self": "../player-progress/PlayerProgress/maya-hollow-knight"
+          "self": "../game-record/GameRecord/zlata-hollow-knight"
         }
       },
       "examples.11": {
         "links": {
-          "self": "../tournament/Tournament/street-fighter-evo"
+          "self": "../game-record/GameRecord/zlata-valorant"
         }
       },
       "examples.12": {
         "links": {
-          "self": "../tournament/Tournament/valorant-championship"
+          "self": "../tournament/Tournament/street-fighter-evo"
         }
       },
       "examples.13": {
         "links": {
-          "self": "../video-game/VideoGame/cyberpunk-2077"
+          "self": "../tournament/Tournament/valorant-championship"
         }
       },
       "examples.14": {
         "links": {
-          "self": "../video-game/VideoGame/hollow-knight"
+          "self": "../video-game/VideoGame/cyberpunk-2077"
         }
       },
       "examples.15": {
         "links": {
+          "self": "../video-game/VideoGame/hollow-knight"
+        }
+      },
+      "examples.16": {
+        "links": {
           "self": "../video-game/VideoGame/valorant"
+        }
+      },
+      "examples.17": {
+        "links": {
+          "self": "../gaming-player/GamingPlayer/alex-shadowblade"
+        }
+      },
+      "examples.18": {
+        "links": {
+          "self": "../gaming-player/GamingPlayer/diego-stratmaxx"
+        }
+      },
+      "examples.19": {
+        "links": {
+          "self": "../gaming-player/GamingPlayer/kai-thunderstrike"
+        }
+      },
+      "examples.20": {
+        "links": {
+          "self": "../gaming-player/GamingPlayer/maya-phoenixrise"
+        }
+      },
+      "examples.21": {
+        "links": {
+          "self": "../gaming-player/GamingPlayer/ravi-cosmicrift"
+        }
+      },
+      "examples.22": {
+        "links": {
+          "self": "../gaming-player/GamingPlayer/zlata-voidwalker"
         }
       },
       "categories.0": {

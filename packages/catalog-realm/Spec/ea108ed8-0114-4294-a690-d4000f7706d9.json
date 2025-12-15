@@ -4,15 +4,19 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../player-progress/player-progress",
-        "name": "PlayerProgress"
+        "name": "GameRecord",
+        "module": "../game-record/game-record"
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "PlayerProgress",
+      "title": "GameRecord",
       "description": null,
-      "cardInfo": {},
-      "thumbnailURL": null
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
     },
     "relationships": {
       "linkedExamples": {
