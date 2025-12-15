@@ -1,5 +1,4 @@
 import { getOwner } from '@ember/owner';
-import Service from '@ember/service';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
@@ -7,7 +6,10 @@ import { setupWindowMock } from 'ember-window-mock/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import {
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  baseRealm,
+} from '@cardstack/runtime-common';
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -16,18 +18,21 @@ import { skillCardURL } from '@cardstack/host/lib/utils';
 import RealmService from '@cardstack/host/services/realm';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { SerializedFile } from 'https://cardstack.com/base/file-api';
-import type * as SkillModule from 'https://cardstack.com/base/skill';
 
 import {
   setupCardLogs,
+  setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
   testRealmInfo,
   testRealmURL,
 } from '../../helpers';
+import { setupBaseRealm, CommandField, Skill } from '../../helpers/base-realm';
 import { setupRenderingTest } from '../../helpers/setup';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
+
+type CommandFieldInstance = InstanceType<typeof CommandField>;
 
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {
@@ -38,106 +43,22 @@ class StubRealmService extends RealmService {
   }
 }
 
-class StubFileDef {
-  constructor(private sourceUrl: string) {}
-
-  serialize(): SerializedFile {
-    return {
-      sourceUrl: this.sourceUrl,
-    } as SerializedFile;
-  }
-}
-
-class StubMatrixService extends Service {
-  currentState: {
-    enabledSkillCards: SerializedFile[];
-    disabledSkillCards: SerializedFile[];
-    commandDefinitions: SerializedFile[];
-  } = {
-    enabledSkillCards: [],
-    disabledSkillCards: [],
-    commandDefinitions: [],
-  };
-  uploadCardsCalls: CardDef[][] = [];
-  uploadCommandDefinitionsCalls: SkillModule.CommandField[][] = [];
-  updateStateEventArgs: {
-    roomId: string;
-    eventType: string;
-    stateKey: string;
-  }[] = [];
-
-  reset() {
-    this.currentState = {
-      enabledSkillCards: [],
-      disabledSkillCards: [],
-      commandDefinitions: [],
-    };
-    this.uploadCardsCalls = [];
-    this.uploadCommandDefinitionsCalls = [];
-    this.updateStateEventArgs = [];
-  }
-
-  async updateStateEvent(
-    roomId: string,
-    eventType: string,
-    stateKey: string,
-    updater: (
-      currentSkillsConfig: Record<string, any>,
-    ) => Promise<Record<string, any>>,
-  ) {
-    this.updateStateEventArgs.push({ roomId, eventType, stateKey });
-    let nextState = await updater(this.currentState);
-    this.currentState = nextState as typeof this.currentState;
-  }
-
-  async uploadCards(cards: CardDef[]) {
-    this.uploadCardsCalls.push(cards);
-    return cards.map((card) => new StubFileDef(card.id!));
-  }
-
-  getUniqueCommandDefinitions(
-    commandDefinitions: SkillModule.CommandField[],
-  ): SkillModule.CommandField[] {
-    let seen = new Set<string>();
-    let result: SkillModule.CommandField[] = [];
-    for (let commandDefinition of commandDefinitions) {
-      let key = commandDefinition.functionName;
-      if (!seen.has(key)) {
-        seen.add(key);
-        result.push(commandDefinition);
-      }
-    }
-    return result;
-  }
-
-  async uploadCommandDefinitions(
-    commandDefinitions: SkillModule.CommandField[],
-  ) {
-    this.uploadCommandDefinitionsCalls.push(commandDefinitions);
-    return commandDefinitions.map(
-      (commandDefinition) => new StubFileDef(commandDefinition.functionName),
-    );
-  }
-}
-
 module('Integration | Command | update-room-skills', function (hooks) {
   setupRenderingTest(hooks);
   setupWindowMock(hooks);
 
   let loader: Loader;
-  let matrixService: StubMatrixService;
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
-    getOwner(this)!.register('service:matrix-service', StubMatrixService);
     loader = getService('loader-service').loader;
-    matrixService = getService(
-      'matrix-service',
-    ) as unknown as StubMatrixService;
-    matrixService.reset();
   });
 
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+  });
   setupLocalIndexing(hooks);
+  setupBaseRealm(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
@@ -203,47 +124,89 @@ module('Integration | Command | update-room-skills', function (hooks) {
     });
   });
 
+  let matrixRoomId: string;
   module('run', function (hooks) {
-    hooks.beforeEach(function () {
-      matrixService.reset();
-    });
+    hooks.beforeEach(async function () {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealmURL,
+        contents: {
+          'test-command.gts': `import { Command } from '@cardstack/runtime-common';
 
+export class DoThing extends Command {
+  static displayName = 'Test Command';
+    async getInputType() {
+    return undefined;
+  }
+}`,
+          'skill-with-commands.json': new Skill({
+            title: 'Skill with invalid command',
+            description: 'test',
+            instructions: 'test',
+            commands: [
+              new CommandField({
+                codeRef: { module: '', name: '' },
+                requiresApproval: false,
+              }),
+              new CommandField({
+                codeRef: {
+                  module: `${testRealmURL}test-command.gts`,
+                  name: 'DoThing',
+                },
+                requiresApproval: false,
+              }),
+            ],
+          }),
+        },
+      });
+      let matrixService = getService('matrix-service') as any;
+      await matrixService.ready;
+      matrixRoomId = mockMatrixUtils.createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'room-test',
+      });
+    });
     test('activates new skills and uploads command definitions', async function (assert) {
       let command = new UpdateRoomSkillsCommand(
         getService('command-service').commandContext,
       );
       let skillCardId = skillCardURL('boxel-environment');
       await command.execute({
-        roomId: 'room-1',
+        roomId: matrixRoomId,
         skillCardIdsToActivate: [skillCardId],
         skillCardIdsToDeactivate: [],
       });
 
+      let skillsRoomState = mockMatrixUtils.getRoomState(
+        matrixRoomId,
+        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      );
       assert.deepEqual(
-        matrixService.currentState.enabledSkillCards.map(
-          (card) => card.sourceUrl,
-        ),
+        skillsRoomState.enabledSkillCards.map((card: any) => card.sourceUrl),
         [skillCardId],
         'skill added to enabled list',
       );
       assert.strictEqual(
-        matrixService.currentState.disabledSkillCards.length,
+        skillsRoomState.disabledSkillCards.length,
         0,
         'no skills are disabled',
       );
       assert.ok(
-        matrixService.currentState.commandDefinitions.length > 0,
+        skillsRoomState.commandDefinitions.length > 0,
         'command definitions populated',
       );
+      let uploadedContents = mockMatrixUtils.getUploadedContents();
       assert.strictEqual(
-        matrixService.uploadCardsCalls.length,
-        1,
-        'card upload performed for new skill',
+        [...uploadedContents.entries()].length,
+        15,
+        'skill and 14 command defs uploaded',
       );
       assert.strictEqual(
-        matrixService.uploadCommandDefinitionsCalls.length,
+        [...uploadedContents.values()]
+          .map((s) => JSON.parse(s as any))
+          .filter((json) => json.data?.type === 'card').length,
         1,
-        'command definitions uploaded for enabled skill',
+        'one skill card uploaded',
       );
     });
 
@@ -252,46 +215,46 @@ module('Integration | Command | update-room-skills', function (hooks) {
         getService('command-service').commandContext,
       );
       let skillCardId = skillCardURL('boxel-environment');
-      matrixService.currentState = {
-        enabledSkillCards: [{ sourceUrl: skillCardId } as SerializedFile],
-        disabledSkillCards: [],
-        commandDefinitions: [{ sourceUrl: 'command-def' } as SerializedFile],
-      };
-      matrixService.uploadCardsCalls = [];
-      matrixService.uploadCommandDefinitionsCalls = [];
+      mockMatrixUtils.setRoomState(
+        matrixRoomId,
+        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+        {
+          enabledSkillCards: [{ sourceUrl: skillCardId } as SerializedFile],
+          disabledSkillCards: [],
+          commandDefinitions: [{ sourceUrl: 'command-def' } as SerializedFile],
+        },
+      );
 
       await command.execute({
-        roomId: 'room-1',
+        roomId: matrixRoomId,
         skillCardIdsToActivate: [],
         skillCardIdsToDeactivate: [skillCardId],
       });
 
+      let skillsRoomState = mockMatrixUtils.getRoomState(
+        matrixRoomId,
+        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      );
       assert.strictEqual(
-        matrixService.currentState.enabledSkillCards.length,
+        skillsRoomState.enabledSkillCards.length,
         0,
         'skill removed from enabled list',
       );
       assert.deepEqual(
-        matrixService.currentState.disabledSkillCards.map(
-          (card) => card.sourceUrl,
-        ),
+        skillsRoomState.disabledSkillCards.map((card: any) => card.sourceUrl),
         [skillCardId],
         'skill added to disabled list',
       );
       assert.strictEqual(
-        matrixService.currentState.commandDefinitions.length,
+        skillsRoomState.commandDefinitions.length,
         0,
         'command definitions cleared when no skills enabled',
       );
+      let uploadedContents = mockMatrixUtils.getUploadedContents();
       assert.strictEqual(
-        matrixService.uploadCardsCalls.length,
+        [...uploadedContents.entries()].length,
         0,
-        'cards not reuploaded during deactivation',
-      );
-      assert.strictEqual(
-        matrixService.uploadCommandDefinitionsCalls.length,
-        0,
-        'command definitions not reuploaded when none remain',
+        'no reuploads during deactivation',
       );
     });
 
@@ -300,45 +263,77 @@ module('Integration | Command | update-room-skills', function (hooks) {
         getService('command-service').commandContext,
       );
       let skillCardId = skillCardURL('boxel-environment');
-      matrixService.currentState = {
-        enabledSkillCards: [],
-        disabledSkillCards: [{ sourceUrl: skillCardId } as SerializedFile],
-        commandDefinitions: [],
-      };
-      matrixService.uploadCardsCalls = [];
-      matrixService.uploadCommandDefinitionsCalls = [];
-
       await command.execute({
-        roomId: 'room-1',
+        roomId: matrixRoomId,
         skillCardIdsToActivate: [skillCardId],
         skillCardIdsToDeactivate: [],
       });
 
+      await command.execute({
+        roomId: matrixRoomId,
+        skillCardIdsToActivate: [],
+        skillCardIdsToDeactivate: [skillCardId],
+      });
+
+      let initiallyUploadedContents = [
+        ...mockMatrixUtils.getUploadedContents().values(),
+      ];
+      await command.execute({
+        roomId: matrixRoomId,
+        skillCardIdsToActivate: [skillCardId],
+        skillCardIdsToDeactivate: [],
+      });
+
+      let skillsRoomState = mockMatrixUtils.getRoomState(
+        matrixRoomId,
+        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      );
       assert.deepEqual(
-        matrixService.currentState.enabledSkillCards.map(
-          (card) => card.sourceUrl,
-        ),
+        skillsRoomState.enabledSkillCards.map((card: any) => card.sourceUrl),
         [skillCardId],
         'skill moved from disabled to enabled',
       );
       assert.strictEqual(
-        matrixService.currentState.disabledSkillCards.length,
+        skillsRoomState.disabledSkillCards.length,
         0,
         'skill removed from disabled list',
       );
-      assert.strictEqual(
-        matrixService.uploadCardsCalls.length,
-        0,
-        'card upload skipped when skill already in room',
-      );
-      assert.strictEqual(
-        matrixService.uploadCommandDefinitionsCalls.length,
-        1,
-        'command definitions reuploaded based on enabled skill set',
-      );
       assert.ok(
-        matrixService.currentState.commandDefinitions.length > 0,
+        skillsRoomState.commandDefinitions.length > 0,
         'command definitions restored for reactivated skill',
+      );
+      let uploadedContents = mockMatrixUtils.getUploadedContents();
+      assert.strictEqual(
+        [...uploadedContents.values()].length,
+        initiallyUploadedContents.length,
+        'no new uploads during reactivation',
+      );
+    });
+
+    test('skips invalid command definitions when uploading skills', async function (assert) {
+      let command = new UpdateRoomSkillsCommand(
+        getService('command-service').commandContext,
+      );
+
+      await command.execute({
+        roomId: matrixRoomId,
+        skillCardIdsToActivate: [`${testRealmURL}skill-with-commands`],
+        skillCardIdsToDeactivate: [],
+      });
+
+      let uploadedContents = mockMatrixUtils.getUploadedContents();
+      assert.strictEqual(
+        [...uploadedContents.entries()].length,
+        2,
+        'skill plus one command definitions were uploaded',
+      );
+      let commandDefJson = JSON.parse(
+        [...uploadedContents.values()][1] as unknown as string,
+      );
+      assert.deepEqual(
+        commandDefJson.codeRef.name,
+        'DoThing',
+        'only valid command definition is uploaded',
       );
     });
   });
