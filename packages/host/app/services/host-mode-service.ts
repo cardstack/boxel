@@ -3,6 +3,7 @@ import Service, { service } from '@ember/service';
 import window from 'ember-window-mock';
 
 import config from '@cardstack/host/config/environment';
+import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 
@@ -13,6 +14,7 @@ interface PublishedRealmMetadata {
 }
 
 export default class HostModeService extends Service {
+  @service declare hostModeStateService: HostModeStateService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare realm: RealmService;
 
@@ -74,12 +76,12 @@ export default class HostModeService extends Service {
   }
 
   get currentCardId() {
-    let stack = this.operatorModeStateService.hostModeStack;
+    let stack = this.hostModeStateService.stackItems;
     if (stack.length > 0) {
       return stack[stack.length - 1];
     }
 
-    return this.operatorModeStateService.hostModePrimaryCard ?? undefined;
+    return this.hostModeStateService.primaryCard ?? undefined;
   }
 
   get publishedRealmMetadata() {
