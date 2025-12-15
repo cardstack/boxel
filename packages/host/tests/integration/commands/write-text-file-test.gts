@@ -41,7 +41,11 @@ class StubRealmService extends RealmService {
 module('Integration | commands | write-text-file', function (hooks) {
   setupRenderingTest(hooks);
 
-  let mockMatrixUtils = setupMockMatrix(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+    autostart: true,
+  });
   let snapshot = setupSnapshotRealm(hooks, {
     mockMatrixUtils,
     async build({ loader }) {
@@ -49,6 +53,7 @@ module('Integration | commands | write-text-file', function (hooks) {
       loaderService.loader = loader;
       await setupIntegrationTestRealm({
         mockMatrixUtils,
+        realmURL: testRealmURL,
         contents: {},
         loader,
       });
