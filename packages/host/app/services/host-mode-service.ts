@@ -259,31 +259,18 @@ export default class HostModeService extends Service {
     parent.insertBefore(fragment, end);
   }
 
-  private findHeadMarkers(): [Comment, Comment] | null {
+  private findHeadMarkers(): [Element, Element] | null {
     let head = document.head;
     if (!head) {
       return null;
     }
 
-    let start: Comment | null = null;
-    let end: Comment | null = null;
+    let start: Element | null = head.querySelector(
+      '[data-boxel-head-start]',
+    );
+    let end: Element | null = head.querySelector('[data-boxel-head-end]');
 
-    head.childNodes.forEach((node) => {
-      if (node.nodeType === Node.COMMENT_NODE) {
-        let content = (node as Comment).data.trim();
-        if (content === 'HEADSTART') {
-          start = node as Comment;
-        } else if (content === 'HEADEND') {
-          end = node as Comment;
-        }
-      }
-    });
-
-    if (start && end) {
-      return [start, end];
-    }
-
-    return null;
+    return start && end ? [start, end] : null;
   }
 
   private parsePublishedAt(value: unknown) {
