@@ -454,7 +454,9 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       lazilyLoadLink(instance as CardDef, this, maybeNotLoaded.reference);
       return this.emptyValue(instance) as BaseInstanceType<FieldT>;
     }
-    return getter(instance, this);
+    let results = getter(instance, this);
+    propagateRealmContext(results, instance);
+    return results;
   }
 
   queryableValue(instances: any[] | null, stack: BaseDef[]): any[] | null {

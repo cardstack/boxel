@@ -450,6 +450,43 @@ module('Integration | serialization', function (hooks) {
     );
   });
 
+  test('computed containsMany assigns realm URL to generated field instances', async function (assert) {
+    class Person extends FieldDef {
+      @field name = contains(StringField);
+    }
+
+    class Post extends CardDef {
+      @field authors = containsMany(Person, {
+        computeVia: function (this: Post) {
+          return [new Person({ name: 'Computed Author' })];
+        },
+      });
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person, Post },
+      },
+    });
+
+    let post = new Post();
+
+    await saveCard(
+      post,
+      `${testRealmURL}Post/3.json`,
+      loader,
+      undefined,
+      testRealmURL,
+    );
+
+    assert.deepEqual(
+      post.authors.map((author) => author[realmURL]?.href),
+      [testRealmURL],
+      'computed field instances know the realm URL',
+    );
+  });
+
   test('manually constructed field assigned after instantiation receives realm URL on save', async function (assert) {
     class Person extends FieldDef {
       @field firstName = contains(StringField);
