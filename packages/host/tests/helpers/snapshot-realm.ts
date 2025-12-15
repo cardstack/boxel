@@ -56,7 +56,6 @@ export function setupSnapshotRealm<T>(
   hooks.beforeEach(async function () {
     let loaderService = getService('loader-service');
     if (cache) {
-      console.log('Restoring loader from snapshot');
       loaderService.loader = Loader.cloneLoader(cache.loaderSnapshot, {
         includeEvaluatedModules: true,
       });
