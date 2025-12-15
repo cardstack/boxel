@@ -39,81 +39,6 @@
           "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
         }
       },
-      "specs.1": {
-        "links": {
-          "self": "../Spec/fa98792f-48a5-43be-aac1-b5500c21d9ea"
-        }
-      },
-      "specs.2": {
-        "links": {
-          "self": "../Spec/135858e8-7ae8-4009-b7c7-370933c7c13a"
-        }
-      },
-      "specs.3": {
-        "links": {
-          "self": "../Spec/48a563be-eac1-4550-8c21-d9ea0f16ee22"
-        }
-      },
-      "specs.4": {
-        "links": {
-          "self": "../Spec/792f48a5-63be-4ac1-b550-0c21d9ea0f16"
-        }
-      },
-      "specs.5": {
-        "links": {
-          "self": "../Spec/2f48a563-beea-41b5-900c-21d9ea0f16ee"
-        }
-      },
-      "specs.6": {
-        "links": {
-          "self": "../Spec/eac1b550-0c21-49ea-8f16-ee2282509a18"
-        }
-      },
-      "specs.7": {
-        "links": {
-          "self": "../Spec/63beeac1-b550-4c21-99ea-0f16ee228250"
-        }
-      },
-      "specs.8": {
-        "links": {
-          "self": "../Spec/e80009b7-c737-4933-87c1-3ab3347782b9"
-        }
-      },
-      "specs.9": {
-        "links": {
-          "self": "../Spec/a563beea-c1b5-400c-a1d9-ea0f16ee2282"
-        }
-      },
-      "specs.10": {
-        "links": {
-          "self": "../Spec/b5500c21-d9ea-4f16-ae22-82509a1803d2"
-        }
-      },
-      "specs.11": {
-        "links": {
-          "self": "../Spec/c1b5500c-21d9-4a0f-96ee-2282509a1803"
-        }
-      },
-      "specs.12": {
-        "links": {
-          "self": "../Spec/7d723a51-e840-4e5f-823c-77c69a222840"
-        }
-      },
-      "specs.13": {
-        "links": {
-          "self": "../Spec/723a51e8-40ae-4f02-bc77-c69a22284063"
-        }
-      },
-      "specs.14": {
-        "links": {
-          "self": "../Spec/500c21d9-ea0f-46ee-a282-509a1803d2d2"
-        }
-      },
-      "specs.15": {
-        "links": {
-          "self": "../Spec/beeac1b5-500c-41d9-aa0f-16ee2282509a"
-        }
-      },
       "publisher": {
         "links": {
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
@@ -137,6 +62,76 @@
       "cardInfo.theme": {
         "links": {
           "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/fa98792f-48a5-43be-aac1-b5500c21d9ea"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/135858e8-7ae8-4009-b7c7-370933c7c13a"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/792f48a5-63be-4ac1-b550-0c21d9ea0f16"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/2f48a563-beea-41b5-900c-21d9ea0f16ee"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/eac1b550-0c21-49ea-8f16-ee2282509a18"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/63beeac1-b550-4c21-99ea-0f16ee228250"
+        }
+      },
+      "specs.6": {
+        "links": {
+          "self": "../Spec/e80009b7-c737-4933-87c1-3ab3347782b9"
+        }
+      },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/a563beea-c1b5-400c-a1d9-ea0f16ee2282"
+        }
+      },
+      "specs.8": {
+        "links": {
+          "self": "../Spec/b5500c21-d9ea-4f16-ae22-82509a1803d2"
+        }
+      },
+      "specs.9": {
+        "links": {
+          "self": "../Spec/c1b5500c-21d9-4a0f-96ee-2282509a1803"
+        }
+      },
+      "specs.10": {
+        "links": {
+          "self": "../Spec/7d723a51-e840-4e5f-823c-77c69a222840"
+        }
+      },
+      "specs.11": {
+        "links": {
+          "self": "../Spec/723a51e8-40ae-4f02-bc77-c69a22284063"
+        }
+      },
+      "specs.12": {
+        "links": {
+          "self": "../Spec/500c21d9-ea0f-46ee-a282-509a1803d2d2"
+        }
+      },
+      "specs.13": {
+        "links": {
+          "self": "../Spec/beeac1b5-500c-41d9-aa0f-16ee2282509a"
         }
       }
     }
