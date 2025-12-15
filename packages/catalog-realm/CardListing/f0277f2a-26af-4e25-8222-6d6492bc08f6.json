@@ -9,13 +9,16 @@
     "type": "card",
     "attributes": {
       "name": "Time Machine Image Generator",
-      "images": [],
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/time-machine-image-generator-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/time-machine-image-generator-listing/screenshot_02.png"
+      ],
       "summary": "This listing defines a module for generating historical-style photographs based on user-input images, time periods, and creative notes, enabling users to create, view, and export collections of era-specific images through an interactive UI.",
       "cardInfo": {
         "notes": null,
         "title": null,
         "description": null,
-        "thumbnailURL": null
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/time-machine-image-generator-listing/thumbnail.png"
       }
     },
     "relationships": {
