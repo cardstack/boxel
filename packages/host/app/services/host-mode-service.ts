@@ -168,8 +168,7 @@ export default class HostModeService extends Service {
 
     let headHTML: string | null = null;
     try {
-      let prerenderedHead =
-        await this.fetchPrerenderedHead(normalizedCardURL);
+      let prerenderedHead = await this.fetchPrerenderedHead(normalizedCardURL);
 
       if (requestId !== this.headUpdateRequestId) {
         return;
