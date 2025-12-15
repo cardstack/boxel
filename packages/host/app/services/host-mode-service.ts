@@ -76,12 +76,15 @@ export default class HostModeService extends Service {
   }
 
   get currentCardId() {
-    let stack = this.hostModeStateService.stackItems;
-    if (stack.length > 0) {
-      return stack[stack.length - 1];
+    if (this.isActive) {
+      let stack = this.hostModeStateService.stackItems;
+
+      if (stack.length > 0) {
+        return stack[stack.length - 1];
+      }
     }
 
-    return this.hostModeStateService.primaryCard ?? undefined;
+    return this.operatorModeStateService.hostModePrimaryCard ?? undefined;
   }
 
   get publishedRealmMetadata() {
