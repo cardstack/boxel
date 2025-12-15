@@ -6,6 +6,7 @@ import {
   contains,
   linksTo,
 } from 'https://cardstack.com/base/card-api';
+import StringField from 'https://cardstack.com/base/string';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
@@ -216,7 +217,7 @@ class ImageFieldEdit extends Component<typeof ImageField> {
     this.selectedFile = null;
     this.uploadStatus = 'idle';
     this.uploadStatusMessage = '';
-    this.args.model.imageCard = null;
+    this.args.model.imageCard = undefined;
   }
 
   @action
@@ -550,6 +551,11 @@ export default class ImageField extends FieldDef {
   static icon = CameraIcon;
 
   @field imageCard = linksTo(ImageCard);
+  @field uploadedImageUrl = contains(StringField, {
+    computeVia: function (this: any) {
+      return this.imageCard?.url ?? '';
+    },
+  });
 
   static embedded = ImageFieldEmbedded;
   static atom = ImageFieldAtom;

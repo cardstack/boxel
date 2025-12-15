@@ -111,8 +111,8 @@ async function generateImage({
   let imageDataUrl = generatedUrl.startsWith('data:image/')
     ? generatedUrl
     : generatedUrl.startsWith('http')
-      ? generatedUrl
-      : `data:image/png;base64,${generatedUrl}`;
+    ? generatedUrl
+    : `data:image/png;base64,${generatedUrl}`;
 
   if (result?.cardId && context?.store?.get) {
     try {
@@ -236,7 +236,7 @@ export class TimeMachineImageGeneratorIsolated extends Component<
   @action
   handleClearSource() {
     if (this.args.model) {
-      this.args.model.sourceImageUrl = null;
+      this.args.model.sourceImageUrl = undefined;
     }
   }
 
@@ -367,9 +367,7 @@ export class TimeMachineImageGeneratorIsolated extends Component<
     return (
       Array.isArray(this.args.model?.generatedImages) &&
       this.args.model.generatedImages.length > 0 &&
-      this.args.model.generatedImages.some(
-        (img) => img?.image?.imageCard?.url,
-      )
+      this.args.model.generatedImages.some((img) => img?.image?.imageCard?.url)
     );
   }
 

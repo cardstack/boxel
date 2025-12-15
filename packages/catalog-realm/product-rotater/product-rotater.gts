@@ -595,9 +595,6 @@ async function persistRotationImage({
 }): Promise<ProductRotationImage> {
   let safeAngle = Math.round(angle);
   let label = buildAngleLabel(safeAngle);
-  let altText = productDescription
-    ? `${productDescription} rotated ${safeAngle} degrees`
-    : `Product rotated ${safeAngle} degrees`;
 
   let dataUrl = base64.startsWith('data:image/')
     ? base64
