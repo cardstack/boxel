@@ -292,7 +292,6 @@ export function getValueForResourcePath(
     }
     if (
       typeof current === 'object' &&
-      current !== null &&
       'attributes' in current &&
       typeof (current as any).attributes === 'object' &&
       (current as any).attributes !== null &&
