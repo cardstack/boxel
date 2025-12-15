@@ -57,7 +57,7 @@ export function setupSnapshotRealm<T>(
     let loaderService = getService('loader-service');
     if (cache) {
       loaderService.loader = Loader.cloneLoader(cache.loaderSnapshot, {
-        includeEvaluatedModules: true,
+        includeEvaluatedModules: '.*',
       });
     }
   });
@@ -88,7 +88,7 @@ export function setupSnapshotRealm<T>(
 
     if (!cache) {
       let clonedLoader = Loader.cloneLoader(loaderService.loader, {
-        includeEvaluatedModules: true,
+        includeEvaluatedModules: '.*',
       });
       cache = {
         loaderSnapshot: clonedLoader,

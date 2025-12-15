@@ -77,9 +77,13 @@ export class BrowserQueue implements QueuePublisher, QueueRunner {
     return job;
   }
 
-  private debouncedDrainJobs = debounce(() => {
-    this.drainJobs();
-  }, 250);
+  private debouncedDrainJobs = debounce(
+    () => {
+      this.drainJobs();
+    },
+    1,
+    { leading: true },
+  );
 
   private async drainJobs() {
     await this.flush();

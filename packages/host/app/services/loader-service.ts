@@ -5,6 +5,7 @@ import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import type { FetcherMiddlewareHandler } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 import {
   fetcher,
   maybeHandleScopedCSSRequest,
@@ -22,6 +23,7 @@ import type NetworkService from './network';
 import type RealmService from './realm';
 import type RealmInfoService from './realm-info-service';
 import type ResetService from './reset';
+import { isTesting } from '@embroider/macros';
 
 const log = logger('loader-service');
 
@@ -68,7 +70,15 @@ export default class LoaderService extends Service {
       // by default we keep the fetch cache so we can take advantage of HTTP
       // caching when rebuilding the loader state
       if (this.loader) {
-        this.loader = Loader.cloneLoader(this.loader);
+        // If we're testing, we can keep the base realm modules cached to speed
+        // up tests
+        if (isTesting()) {
+          this.loader = Loader.cloneLoader(this.loader, {
+            includeEvaluatedModules: `${baseRealm.url}.*`,
+          });
+        } else {
+          this.loader = Loader.cloneLoader(this.loader);
+        }
       } else {
         this.loader = this.makeInstance();
       }

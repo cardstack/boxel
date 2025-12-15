@@ -119,7 +119,7 @@ export class Loader {
 
   static cloneLoader(
     loader: Loader,
-    options?: { includeEvaluatedModules?: boolean },
+    options?: { includeEvaluatedModules?: string },
   ): Loader {
     let clone = new Loader(loader.fetchImplementation, loader.resolveImport);
     for (let [moduleIdentifier, module] of loader.moduleShims) {
@@ -130,7 +130,10 @@ export class Loader {
         if (loader.moduleShims.has(moduleIdentifier)) {
           continue;
         }
-        if (module.state === 'evaluated') {
+        if (
+          module.state === 'evaluated' &&
+          moduleIdentifier.match(options.includeEvaluatedModules)
+        ) {
           clone.shimModule(
             moduleIdentifier,
             module.moduleInstance as Record<string, any>,
