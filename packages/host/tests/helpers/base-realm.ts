@@ -19,6 +19,7 @@ import type * as PhoneNumberFieldModule from 'https://cardstack.com/base/phone-n
 import type * as RealmFieldModule from 'https://cardstack.com/base/realm';
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 import type * as StringFieldModule from 'https://cardstack.com/base/string';
+import type * as SpecModule from 'https://cardstack.com/base/spec';
 import type * as SystemCardModule from 'https://cardstack.com/base/system-card';
 import type * as TextAreaFieldModule from 'https://cardstack.com/base/text-area';
 
@@ -69,6 +70,9 @@ let CardsGrid: CardsGrid;
 
 type Skill = (typeof SkillModule)['Skill'];
 let Skill: Skill;
+
+type Spec = (typeof SpecModule)['Spec'];
+let Spec: Spec;
 
 type ModelConfiguration = (typeof SystemCardModule)['ModelConfiguration'];
 let ModelConfiguration: ModelConfiguration;
@@ -178,6 +182,8 @@ export async function initialize() {
   Skill = (await loader.import<typeof SkillModule>(`${baseRealm.url}skill`))
     .Skill;
 
+  Spec = (await loader.import<typeof SpecModule>(`${baseRealm.url}spec`)).Spec;
+
   ModelConfiguration = (
     await loader.import<typeof SystemCardModule>(`${baseRealm.url}system-card`)
   ).ModelConfiguration;
@@ -248,6 +254,8 @@ export {
   RealmField,
   PhoneNumberField,
   CardsGrid,
+  Skill,
+  Spec,
   SystemCard,
   ModelConfiguration,
   field,
@@ -273,7 +281,6 @@ export {
   getFields,
   getFieldDescription,
   ReadOnlyField,
-  Skill,
   instanceOf,
   CardInfoField,
   enumField,

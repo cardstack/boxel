@@ -79,6 +79,8 @@ module('Integration | operator-mode', function (hooks) {
     autostart: true,
   });
 
+  setupOnSave(hooks);
+
   let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
     mockMatrixUtils,
     async build({ loader }) {
