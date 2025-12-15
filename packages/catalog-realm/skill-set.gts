@@ -1,3 +1,4 @@
+import { on } from '@ember/modifier';
 import {
   SkillPlus,
   slugifyHeading,
@@ -166,6 +167,47 @@ const wrapTables = modifier((element: HTMLElement) => {
   });
 });
 
+// Delegate click/keyboard activation for skill dividers to the container
+const dividerActivation = modifier(
+  (
+    element: HTMLElement,
+    [activate]: [(cardUrl: string, event: Event) => void],
+  ) => {
+    const findDivider = (target: EventTarget | null) =>
+      (target as HTMLElement | null)?.closest(
+        '.skill-divider-clickable',
+      ) as HTMLElement | null;
+
+    const handleClick = (event: Event) => {
+      const divider = findDivider(event.target);
+      const cardUrl = divider?.getAttribute('data-card-url');
+      if (cardUrl) {
+        activate(cardUrl, event);
+      }
+    };
+
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' && event.key !== ' ') {
+        return;
+      }
+      const divider = findDivider(event.target);
+      const cardUrl = divider?.getAttribute('data-card-url');
+      if (cardUrl) {
+        event.preventDefault(); // Prevent page scroll on Space
+        activate(cardUrl, event);
+      }
+    };
+
+    element.addEventListener('click', handleClick);
+    element.addEventListener('keydown', handleKeydown);
+
+    return () => {
+      element.removeEventListener('click', handleClick);
+      element.removeEventListener('keydown', handleKeydown);
+    };
+  },
+);
+
 export class SkillSet extends SkillPlus {
   static displayName = 'Skill Set';
   static prefersWideFormat = true; // ⁴⁰ Enable wide format for documentation
@@ -302,7 +344,7 @@ export class SkillSet extends SkillPlus {
           // Add data attribute for click handler, no href wrapper
           if (skillURL) {
             dividerLines.push(
-              `<div class="skill-divider skill-divider-clickable" id="${dividerAnchorId}" data-card-url="${skillURL}">`,
+              `<div class="skill-divider skill-divider-clickable" id="${dividerAnchorId}" data-card-url="${skillURL}" role="button" tabindex="0" aria-label="Open ${topicName}">`,
               `  <div class="divider-number">${sectionNumber}</div>`,
               '  <div class="divider-content">',
               `    <div class="divider-topic">${topicName}</div>`,
@@ -359,18 +401,12 @@ export class SkillSet extends SkillPlus {
   });
 
   static isolated = class Isolated extends Component<typeof this> {
-    // Click handler for skill dividers using viewCard API
-    handleDividerClick = (event: Event) => {
-      const target = event.target as HTMLElement;
-      const divider = target.closest('.skill-divider-clickable') as HTMLElement;
-
-      if (divider && this.args.viewCard) {
-        const cardUrl = divider.getAttribute('data-card-url');
-        if (cardUrl) {
-          event.preventDefault();
-          event.stopPropagation();
-          this.args.viewCard(new URL(cardUrl), 'isolated');
-        }
+    // Activate skill divider via mouse or keyboard using viewCard API
+    activateDivider = (cardUrl: string, event: Event) => {
+      if (this.args.viewCard) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.args.viewCard(new URL(cardUrl), 'isolated');
       }
     };
 
@@ -455,7 +491,9 @@ export class SkillSet extends SkillPlus {
             <article
               class='instructions-article'
               id='instructions'
+              {{wrapTables}}
               {{addHeaderIds}}
+              {{dividerActivation this.activateDivider}}
             >
               <@fields.instructions />
             </article>
@@ -494,7 +532,7 @@ export class SkillSet extends SkillPlus {
           {{#if this.hasAppendix}}
             <AppendixSection>
               {{#if @model.relatedSkills.length}}
-                <section class='commands-section' id='available-commands'>
+                <section class='commands-section' id='skills-footer'>
                   <h3 class='section-heading'>Related Skills</h3>
                   <@fields.relatedSkills
                     @format='embedded'
@@ -625,13 +663,12 @@ export class SkillSet extends SkillPlus {
             var(--muted)
           ); /* subtle tint */
           padding: 0.125rem 0.25rem;
-          border-radius: var(--radius-sm);
+          border-radius: var(--boxel-border-radius-sm);
           color: var(--foreground);
         }
         .instructions-article :deep(pre) {
           margin: 1rem 0; /* 4 × 0.25rem */
           padding: 0.75rem; /* 3 × 0.25rem */
-          background: var(--muted);
           background: color-mix(
             in lab,
             var(--primary) 8%,
@@ -639,7 +676,6 @@ export class SkillSet extends SkillPlus {
           ); /* subtle tint */
           border: 1px solid var(--border);
           border-left: 3px solid var(--primary);
-          border-radius: var(--radius-md);
           overflow-x: auto;
           font-size: 0.8125rem;
           line-height: 1.5;
@@ -653,7 +689,8 @@ export class SkillSet extends SkillPlus {
           padding: 0.75rem 1rem; /* 3 × 0.25rem, 4 × 0.25rem */
           border-left: 3px solid var(--primary);
           background: var(--muted);
-          border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+          border-radius: 0 var(--boxel-border-radius-sm)
+            var(--boxel-border-radius-sm) 0;
           font-style: italic;
         }
         .instructions-article :deep(a) {
@@ -675,9 +712,6 @@ export class SkillSet extends SkillPlus {
           border-collapse: collapse;
           margin: 0; /* ¹⁴⁵ Margin on wrapper instead */
           font-size: 0.875rem;
-          background: var(--card);
-          border: 1px solid var(--border);
-          border-radius: var(--radius-md);
         }
         /* ¹⁴⁵ Scrollable table wrapper */
         .instructions-article :deep(.table-wrapper) {
@@ -685,7 +719,10 @@ export class SkillSet extends SkillPlus {
           max-width: 900px;
           overflow-x: auto;
           margin: 1.5rem 0;
-          border-radius: var(--radius-md);
+          background-color: var(--card);
+          color: var(--card-foreground);
+          border: 1px solid var(--border);
+          border-radius: var(--boxel-border-radius);
           box-shadow: var(--shadow-sm);
         }
         .instructions-article :deep(thead) {
@@ -750,7 +787,7 @@ export class SkillSet extends SkillPlus {
           color: var(--secondary-foreground);
           border: 2px solid var(--secondary);
           border-radius: var(
-            --radius-xl,
+            --boxel-border-radius-xl,
             16px
           ); /* ¹⁶⁵ Theme radius with fallback */
           scroll-margin-top: 2rem;
@@ -773,7 +810,7 @@ export class SkillSet extends SkillPlus {
           color: var(--foreground);
           border: 2px solid var(--border);
           border-radius: var(
-            --radius-lg,
+            --boxel-border-radius-lg,
             12px
           ); /* ¹⁶⁶ Theme radius with fallback */
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -929,7 +966,7 @@ export class SkillSet extends SkillPlus {
           padding: 1.25rem;
           background: var(--card);
           border: 1px solid var(--border);
-          border-radius: var(--radius-lg);
+          border-radius: var(--boxel-border-radius-lg);
           box-shadow: var(--shadow-sm);
         }
 
@@ -1025,7 +1062,7 @@ export class SkillSet extends SkillPlus {
           padding: 0.125rem 0.375rem;
           background: var(--muted);
           color: var(--muted-foreground);
-          border-radius: var(--radius-sm);
+          border-radius: var(--boxel-border-radius-sm);
           flex-shrink: 0;
         }
 
@@ -1033,7 +1070,7 @@ export class SkillSet extends SkillPlus {
           margin-top: 1rem;
           padding: 1rem;
           background: var(--muted);
-          border-radius: var(--radius-md);
+          border-radius: var(--boxel-border-radius);
           text-align: center;
         }
 

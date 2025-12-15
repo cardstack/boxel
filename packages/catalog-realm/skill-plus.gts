@@ -421,7 +421,7 @@ export class DocLayout extends GlimmerComponent<{
         }
 
         .doc-main {
-          overflow-y: auto;
+          overflow: auto;
           padding-right: var(--boxel-sp);
           padding-bottom: var(--boxel-sp-2xl);
         }
@@ -449,11 +449,14 @@ export class DocLayout extends GlimmerComponent<{
           max-width: 48rem;
         }
 
-        @media (max-width: 1024px) {
+        @media (max-width: 460px) {
           .doc-layout {
             grid-template-columns: 1fr;
             padding: var(--boxel-sp-xs);
             overflow-y: auto;
+          }
+          .toc-sidebar {
+            display: none;
           }
           .toc-sidebar,
           .doc-main {
