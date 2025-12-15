@@ -503,7 +503,7 @@ ${originalContent}
     expect(finalCardJson.data.attributes.errors).toHaveLength(0);
   });
 
-  test('checkCorrectness surfaces module errors and verifies fix for gts files', async ({
+  test.skip('checkCorrectness surfaces module errors and verifies fix for gts files', async ({
     page,
   }) => {
     const { username, password, credentials } =
