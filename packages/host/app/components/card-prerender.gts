@@ -28,8 +28,17 @@ import {
   serializeRenderRouteOptions,
   cleanCapturedHTML,
 } from '@cardstack/runtime-common';
+
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 
+import {
+  buildModuleModel,
+  type ModuleModelContext,
+  type ModuleModelState,
+  type ModuleTypesCache,
+} from '../routes/module';
+
+import { createAuthErrorGuard } from '../utils/auth-error-guard';
 import {
   RenderCardTypeTracker,
   type CardRenderContext,
@@ -63,6 +72,9 @@ export default class CardPrerender extends Component {
   #renderErrorPayload: string | undefined;
   #cardTypeTracker = new RenderCardTypeTracker();
   #currentContext: CardRenderContext | undefined;
+  #moduleTypesCache: ModuleTypesCache = new WeakMap() as ModuleTypesCache;
+  #moduleLastStoreResetKey: string | undefined;
+  #moduleAuthGuard = createAuthErrorGuard();
 
   #renderBasePath(url: string, renderOptions?: RenderRouteOptions) {
     let optionsSegment = encodeURIComponent(
@@ -73,17 +85,9 @@ export default class CardPrerender extends Component {
     }/${optionsSegment}`;
   }
 
-  #moduleBasePath(url: string, renderOptions?: RenderRouteOptions) {
-    let optionsSegment = encodeURIComponent(
-      serializeRenderRouteOptions(renderOptions ?? {}),
-    );
-    return `/module/${encodeURIComponent(url)}/${
-      this.#nonce
-    }/${optionsSegment}`;
-  }
-
   constructor(owner: Owner, args: {}) {
     super(owner, args);
+    this.#moduleAuthGuard.register();
     this.#prerendererDelegate = {
       prerenderCard: this.prerender.bind(this),
       prerenderModule: this.prerenderModule.bind(this),
@@ -96,6 +100,7 @@ export default class CardPrerender extends Component {
         this.#handleRenderErrorEvent,
       );
       this.#cardTypeTracker.clear();
+      this.#moduleAuthGuard.unregister();
     });
   }
 
@@ -314,21 +319,43 @@ export default class CardPrerender extends Component {
       };
       if (shouldClearCache) {
         initialRenderOptions.clearCache = true;
-        this.loaderService.resetLoader({
-          clearFetchCache: true,
-          reason: 'module-prerender clearCache',
-        });
-        this.store.resetCache();
       } else {
         delete initialRenderOptions.clearCache;
       }
 
-      let routeInfo = await this.router.recognizeAndLoad(
-        this.#moduleBasePath(url, initialRenderOptions),
+      let result = await buildModuleModel(
+        {
+          id: url,
+          nonce: String(this.#nonce),
+          renderOptions: initialRenderOptions,
+        },
+        this.#moduleModelContext(),
       );
-      return routeInfo.attributes as ModuleRenderResponse;
+      return result as ModuleRenderResponse;
     },
   );
+
+  #moduleModelContext(): ModuleModelContext {
+    return {
+      router: this.router,
+      store: this.store,
+      loaderService: this.loaderService,
+      network: this.network,
+      authGuard: this.#moduleAuthGuard,
+      state: this.#moduleModelState(),
+    };
+  }
+
+  #moduleModelState(): ModuleModelState {
+    return {
+      getTypesCache: () => this.#moduleTypesCache,
+      setTypesCache: (cache) => (this.#moduleTypesCache = cache),
+      getLastStoreResetKey: () => this.#moduleLastStoreResetKey,
+      setLastStoreResetKey: (key) => {
+        this.#moduleLastStoreResetKey = key;
+      },
+    };
+  }
 
   private renderHTML = enqueueTask(
     async (

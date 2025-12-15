@@ -9,6 +9,7 @@ import type { SerializerName } from './serializers';
 import type { FieldType } from 'https://cardstack.com/base/card-api';
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { Query } from './query';
 
 export interface FieldDefinition {
   type: FieldType;
@@ -16,6 +17,7 @@ export interface FieldDefinition {
   isComputed: boolean;
   fieldOrCard: CodeRef;
   serializerName?: SerializerName;
+  query?: Query;
 }
 
 export interface Definition {
@@ -50,6 +52,9 @@ export function getFieldDefinitions(
   for (let [fieldName, field] of Object.entries(fields)) {
     let fullFieldName = `${prefix ? prefix + '.' : ''}${fieldName}`;
     let isPrimitive = primitive in field.card;
+    let queryDefinition = field.queryDefinition
+      ? (JSON.parse(JSON.stringify(field.queryDefinition)) as Query) // ensure this is a plain object
+      : undefined;
     results[fullFieldName] = {
       type: field.fieldType,
       isPrimitive,
@@ -59,6 +64,7 @@ export function getFieldDefinitions(
         fieldSerializer in field.card
           ? (field.card[fieldSerializer] as SerializerName)
           : undefined,
+      query: queryDefinition,
     };
     if (!isPrimitive) {
       if (visited.filter((v) => v === cardKey).length > recursingDepth()) {

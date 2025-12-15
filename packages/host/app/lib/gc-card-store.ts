@@ -1,3 +1,5 @@
+import { destroy } from '@ember/destroyable';
+
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
@@ -6,18 +8,47 @@ import {
   isLocalId,
   localId as localIdSymbol,
   loadDocument,
+  type Query,
+  type QueryResultsMeta,
+  type ErrorEntry,
   type CardErrorJSONAPI,
   type CardError,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
 
-import type { CardDef, CardStore } from 'https://cardstack.com/base/card-api';
+import type {
+  CardDef,
+  CardStore,
+  GetSearchResourceFuncOpts,
+  StoreSearchResource,
+} from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 export type ReferenceCount = Map<string, number>;
 
 type LocalId = string;
 type InstanceGraph = Map<LocalId, Set<LocalId>>;
+
+type StoreHooks = {
+  getSearchResource<T extends CardDef = CardDef>(
+    parent: object,
+    getQuery: () => Query | undefined,
+    getRealms?: () => string[] | undefined,
+    opts?: {
+      isLive?: boolean;
+      doWhileRefreshing?: (() => void) | undefined;
+      seed?:
+        | {
+            cards: T[];
+            searchURL?: string;
+            realms?: string[];
+            meta?: QueryResultsMeta;
+            errors?: ErrorEntry[];
+          }
+        | undefined;
+    },
+  ): StoreSearchResource<T>;
+};
 
 // we use this 2 way mapping between local ID and remote ID because if we end up
 // trying to search thru all the entries in a single direction Map to find the
@@ -101,9 +132,16 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   #docsInFlight: Map<string, Promise<SingleCardDocument | CardError>> =
     new Map();
 
-  constructor(referenceCount: ReferenceCount, fetch: typeof globalThis.fetch) {
+  #storeHooks: StoreHooks | undefined;
+
+  constructor(
+    referenceCount: ReferenceCount,
+    fetch: typeof globalThis.fetch,
+    storeHooks?: StoreHooks,
+  ) {
     this.#referenceCount = referenceCount;
     this.#fetch = fetch;
+    this.#storeHooks = storeHooks;
   }
 
   get(id: string): CardDef | undefined {
@@ -302,9 +340,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       let localId = instance[localIdSymbol];
       if (!reachable.has(localId)) {
         if (this.#gcCandidates.has(localId)) {
-          console.log(
-            `garbage collecting instance ${localId} (remote id: ${instance.id}) from store`,
-          );
+          destroy(instance);
           // brand the instance to make it easier for debugging
           (instance as unknown as any)[
             Symbol.for('__instance_detached_from_store')
@@ -314,9 +350,6 @@ export default class CardStoreWithGarbageCollection implements CardStore {
             this.delete(instance.id);
           }
         } else {
-          console.debug(
-            `instance [local id:${localId} remote id: ${instance.id}] is now eligible for garbage collection`,
-          );
           this.#gcCandidates.add(localId);
         }
       } else {
@@ -528,6 +561,29 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       );
     }
     return dependencyGraph;
+  }
+
+  getSearchResource<T extends CardDef = CardDef>(
+    parent: object,
+    getQuery: () => Query | undefined,
+    getRealms?: () => string[] | undefined,
+    opts?: GetSearchResourceFuncOpts,
+  ) {
+    if (!this.#storeHooks?.getSearchResource) {
+      return {
+        instances: [],
+        instancesByRealm: [],
+        isLoading: false,
+        meta: { page: { total: 0 } },
+        errors: undefined,
+      } as StoreSearchResource<T>;
+    }
+    return this.#storeHooks.getSearchResource(
+      parent,
+      getQuery,
+      getRealms,
+      opts,
+    );
   }
 }
 
