@@ -18,6 +18,7 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+import { baseRealm } from '@cardstack/runtime-common';
 
 let fetch: NetworkService['fetch'];
 
@@ -51,6 +52,7 @@ module('Integration | commands | write-text-file', function (hooks) {
     async build({ loader }) {
       let loaderService = getService('loader-service');
       loaderService.loader = loader;
+      await loader.import(`${baseRealm.url}command`);
       await setupIntegrationTestRealm({
         mockMatrixUtils,
         realmURL: testRealmURL,
