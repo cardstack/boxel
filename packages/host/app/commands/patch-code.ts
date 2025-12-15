@@ -1,9 +1,6 @@
 import { inject as service } from '@ember/service';
 
-import {
-  hasExecutableExtension,
-  isCardDocumentString,
-} from '@cardstack/runtime-common';
+import { hasExecutableExtension } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -69,11 +66,11 @@ export default class PatchCodeCommand extends HostBaseCommand<
         hasEmptySearchPortion,
       );
 
-      let clientRequestId =
-        this.commandService.registerAiAssistantClientRequestId(
-          'patch-code',
-          roomId,
-        );
+      let clientRequestId = this.commandService.trackAiAssistantCardRequest({
+        action: 'patch-code',
+        roomId,
+        fileUrl: finalFileUrl,
+      });
 
       let savedThroughOpenFile = await this.trySaveThroughOpenFile(
         finalFileUrl,
@@ -90,13 +87,6 @@ export default class PatchCodeCommand extends HostBaseCommand<
             console.error('PatchCodeCommand: failed to save source', error);
           });
       }
-
-      this.trackPatchCardRequestIfApplicable(
-        finalFileUrl,
-        patchedCode,
-        clientRequestId,
-        roomId,
-      );
     }
 
     let commandModule = await this.loadCommandModule();
@@ -258,27 +248,5 @@ export default class PatchCodeCommand extends HostBaseCommand<
   private async fileExists(fileUrl: string): Promise<boolean> {
     let getSourceResult = await this.cardService.getSource(new URL(fileUrl));
     return getSourceResult.status !== 404;
-  }
-
-  private trackPatchCardRequestIfApplicable(
-    fileUrl: string,
-    content: string,
-    clientRequestId: string,
-    roomId: string,
-  ) {
-    if (!fileUrl.endsWith('.json')) {
-      return;
-    }
-
-    if (!isCardDocumentString(content)) {
-      return;
-    }
-
-    let normalizedCardId = fileUrl.replace(/\.json$/, '');
-    this.commandService.trackAiAssistantCardPatchRequest(
-      normalizedCardId,
-      clientRequestId,
-      roomId,
-    );
   }
 }

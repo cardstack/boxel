@@ -12,11 +12,10 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import { waitForRealmState } from './utils';
-
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type RealmService from '../services/realm';
+import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 
 const cardIndexingTimeout = ENV.cardRenderTimeout;
@@ -29,6 +28,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
   @service declare private realm: RealmService;
   @service declare private commandService: CommandService;
   @service declare private cardService: CardService;
+  @service declare private realmServer: RealmServerService;
 
   description =
     'Run post-change correctness checks for a specific file or card instance.';
@@ -76,7 +76,10 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     const { CorrectnessResultCard } = commandModule;
     let errors: string[] = [];
 
-    if (targetType === 'card') {
+    let gtsFileUrl = input.fileUrl ?? input.targetRef;
+    if (gtsFileUrl && gtsFileUrl.endsWith('.gts')) {
+      errors = await this.collectModuleErrors(gtsFileUrl, roomId);
+    } else if (targetType === 'card') {
       if (!cardId) {
         throw new Error('Card correctness checks require a cardId.');
       }
@@ -94,26 +97,16 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     cardId: string,
     roomId: string,
   ): Promise<string[]> {
-    let hasPendingRequest =
-      this.commandService.hasPendingAiAssistantCardRequest(cardId, roomId);
-    let invalidationArrived =
-      this.commandService.invalidationAfterCardPatchDidArrive(cardId, roomId);
-
-    if (hasPendingRequest && !invalidationArrived) {
-      await this.waitForCardIndexing(cardId);
-    }
+    await this.commandService.waitForInvalidationAfterAIAssistantRequest(
+      roomId,
+      cardId,
+      cardIndexingTimeout,
+    );
 
     let error = await this.refreshCard(cardId);
 
     if (!error) {
       error = this.store.peekError(cardId);
-    }
-
-    if (
-      hasPendingRequest &&
-      this.commandService.invalidationAfterCardPatchDidArrive(cardId, roomId)
-    ) {
-      this.commandService.clearAiAssistantRequestForCard(cardId, roomId);
     }
 
     if (!error) {
@@ -142,60 +135,105 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     return undefined;
   }
 
-  private async waitForCardIndexing(cardId: string): Promise<void> {
-    let cardURL: URL | undefined;
-    try {
-      cardURL = new URL(cardId);
-    } catch (error) {
-      console.warn(
-        `CheckCorrectnessCommand: invalid card id ${cardId}, skipping index wait`,
-        error,
-      );
-      return;
+  private async collectModuleErrors(
+    fileUrl: string,
+    roomId: string,
+  ): Promise<string[]> {
+    let moduleInfo = this.moduleInfoFromFile(fileUrl);
+    if (!moduleInfo) {
+      return [
+        `${fileUrl}: Unable to determine module URL or realm for correctness check`,
+      ];
     }
 
-    let realmURL = this.realm.realmOfURL(cardURL);
-    if (!realmURL) {
-      console.warn(
-        `CheckCorrectnessCommand: unable to determine realm for ${cardId}`,
-      );
-      return;
+    let { moduleURL, realmURL, fileURL } = moduleInfo;
+
+    await this.commandService.waitForInvalidationAfterAIAssistantRequest(
+      roomId,
+      fileURL.href,
+      cardIndexingTimeout,
+    );
+
+    let errorMessage = await this.prerenderModule(moduleURL, realmURL);
+
+    if (!errorMessage) {
+      return [];
     }
 
-    try {
-      await waitForRealmState(
-        this.commandContext,
-        realmURL.href,
-        (event) => {
-          if (
-            !event ||
-            event.eventName !== 'index' ||
-            event.indexType !== 'incremental'
-          ) {
-            return false;
-          }
+    return [errorMessage];
+  }
 
-          return event.invalidations?.some((invalidation) =>
-            this.matchesInvalidation(cardURL!.href, invalidation),
-          );
-        },
-        { timeoutMs: cardIndexingTimeout },
-      );
-    } catch (error) {
-      console.warn(
-        `CheckCorrectnessCommand: timed out waiting for indexing of ${cardId}`,
-        error,
-      );
+  private moduleInfoFromFile(
+    fileUrl: string,
+  ): { moduleURL: URL; realmURL: URL; fileURL: URL } | undefined {
+    try {
+      let fileURL = new URL(fileUrl);
+      let realmURL = this.realm.realmOfURL(fileURL);
+      if (!realmURL) {
+        return undefined;
+      }
+
+      let moduleHref = fileURL.href.replace(/\.gts$/, '');
+      let moduleURL = new URL(moduleHref);
+      return { moduleURL, realmURL, fileURL };
+    } catch {
+      return undefined;
     }
   }
 
-  private matchesInvalidation(cardHref: string, invalidation: string): boolean {
-    if (invalidation === cardHref) {
-      return true;
+  private async prerenderModule(
+    moduleURL: URL,
+    realmURL: URL,
+  ): Promise<string | undefined> {
+    try {
+      let prerenderURL = new URL('/_prerender-module', this.realmServer.url);
+
+      let response = await this.realmServer.authedFetch(prerenderURL.href, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.api+json',
+          'Content-Type': 'application/vnd.api+json',
+        },
+        body: JSON.stringify({
+          data: {
+            type: 'prerender-module-request',
+            attributes: {
+              realm: realmURL.href,
+              url: moduleURL.href,
+            },
+          },
+        }),
+      });
+
+      let body: any;
+      try {
+        body = await response.json();
+      } catch (error) {
+        let text = await response.text().catch(() => '');
+        return `${moduleURL.href}: Unable to parse prerender response (${response.status}) ${text}`;
+      }
+
+      if (!response.ok) {
+        return `${moduleURL.href}: prerender request failed (${response.status}) ${JSON.stringify(body)}`;
+      }
+
+      let prerenderError = body?.data?.attributes?.error?.error;
+      if (prerenderError) {
+        let messageParts = [
+          prerenderError.message,
+          prerenderError.stack,
+        ].filter((part) => typeof part === 'string' && part.length > 0);
+        let summary =
+          messageParts.length > 0
+            ? messageParts.join('\n')
+            : 'Unknown prerender error';
+        return `${moduleURL.href}: ${summary}`;
+      }
+
+      return undefined;
+    } catch (error: any) {
+      return `${moduleURL.href}: prerender request threw ${error?.message ?? error}`;
     }
-    let normalizedTarget = cardHref.replace(/\.json$/, '');
-    let normalizedInvalidation = invalidation.replace(/\.json$/, '');
-    return normalizedTarget === normalizedInvalidation;
   }
 
   private describeCardError(cardId: string, error: CardErrorJSONAPI): string {
