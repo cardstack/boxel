@@ -408,8 +408,9 @@ export class TimeMachineImageGeneratorIsolated extends Component<
           <@fields.sourceImageUrl @format='edit' />
 
           <div class='field-block'>
-            <label>Creative note</label>
+            <label for='creative-note-input'>Creative note</label>
             <textarea
+              id='creative-note-input'
               value={{this.creativeNote}}
               {{on 'input' this.handleCreativeNoteChange}}
               placeholder='Add optional creative direction'
