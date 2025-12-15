@@ -32,14 +32,7 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
             <div
               class='card-thumbnail'
               style={{cssUrl 'background-image' @thumbnailURL}}
-            >
-              {{#unless @thumbnailURL}}
-                <div
-                  class='card-thumbnail-placeholder'
-                  data-test-card-thumbnail-placeholder
-                />
-              {{/unless}}
-            </div>
+            />
           {{else}}
             <@iconComponent data-test-card-type-icon class='card-type-icon' />
           {{/if}}
@@ -87,13 +80,20 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
         display: flex;
         align-items: center;
         justify-content: center;
-        background-color: var(--accent, var(--boxel-highlight));
+        background-color: var(--boxel-light);
         background-position: center;
         background-size: cover;
         background-repeat: no-repeat;
         border-radius: var(--boxel-border-radius-sm);
         width: 100%;
         height: 100%;
+        overflow: hidden;
+      }
+      :global(.card-thumbnail-placeholder) {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        background-color: var(--accent, var(--boxel-highlight));
       }
       :global(.card-type-icon) {
         aspect-ratio: 1 / 1;

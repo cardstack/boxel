@@ -31,7 +31,7 @@ export default class BrandFunctionalPalette extends FieldDef {
       </GridContainer>
       <style scoped>
         .functional-palette {
-          grid-template-columns: repeat(auto-fill, 8rem);
+          grid-template-columns: repeat(auto-fill, 7rem);
           gap: var(--boxel-sp-xl) var(--boxel-sp);
           align-items: end;
           text-wrap: pretty;
