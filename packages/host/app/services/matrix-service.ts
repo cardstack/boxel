@@ -368,7 +368,6 @@ export default class MatrixService extends Service {
               );
               // Only do this after we've completed our overall login
               if (this.postLoginCompleted) {
-                console.log('Login to realms');
                 await this.loginToRealms();
                 await this.loadMoreAuthRooms(e.event.content.realms);
               }
