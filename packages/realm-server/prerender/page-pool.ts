@@ -5,12 +5,21 @@ import { resolvePrerenderManagerURL } from './config';
 import type { BrowserManager } from './browser-manager';
 
 type PoolEntry = {
+  type: 'pool';
   realm: string | null;
   context: BrowserContext;
   page: Page;
   pageId: string;
   lastUsedAt: number;
 };
+type StandbyEntry = {
+  type: 'standby';
+  context: BrowserContext;
+  page: Page;
+  pageId: string;
+  lastUsedAt: number;
+};
+type Entry = PoolEntry | StandbyEntry;
 
 const log = logger('prerenderer');
 const STANDBY_CREATION_RETRIES = 3;
@@ -18,8 +27,8 @@ const STANDBY_BACKOFF_MS = 500;
 const STANDBY_BACKOFF_CAP_MS = 4000;
 
 export class PagePool {
-  #realmPages = new Map<string, PoolEntry>();
-  #standbys = new Set<PoolEntry>();
+  #realmPages = new Map<string, Entry>();
+  #standbys = new Set<StandbyEntry>();
   #lru = new Set<string>();
   #maxPages: number;
   #silent: boolean;
@@ -73,8 +82,9 @@ export class PagePool {
       if (!standby) {
         throw new Error('No standby page available for prerender');
       }
-      standby.realm = realm;
-      entry = standby;
+      entry = standby as unknown as PoolEntry;
+      entry.type = 'pool';
+      entry.realm = realm;
       this.#realmPages.set(realm, entry);
       reused = false;
     } else {
@@ -93,10 +103,10 @@ export class PagePool {
 
   async disposeRealm(realm: string): Promise<void> {
     let entry = this.#realmPages.get(realm);
-    if (!entry) return;
+    if (!entry || entry.type !== 'pool') return;
     this.#realmPages.delete(realm);
     this.#lru.delete(realm);
-    await this.#closeEntry(entry, realm);
+    await this.#closeEntry(entry);
     try {
       const managerURL = resolvePrerenderManagerURL();
       let target = new URL(
@@ -124,10 +134,10 @@ export class PagePool {
       }
     }
     for (let entry of this.#realmPages.values()) {
-      await this.#closeEntry(entry, entry.realm ?? 'unknown');
+      await this.#closeEntry(entry);
     }
     for (let entry of this.#standbys.values()) {
-      await this.#closeEntry(entry, 'standby');
+      await this.#closeEntry(entry);
     }
     this.#realmPages.clear();
     this.#standbys.clear();
@@ -199,7 +209,7 @@ export class PagePool {
     await this.disposeRealm(lruRealm);
   }
 
-  async #createStandbyWithRetries(): Promise<PoolEntry | undefined> {
+  async #createStandbyWithRetries(): Promise<StandbyEntry | undefined> {
     let attempt = 0;
     let backoffMs = STANDBY_BACKOFF_MS;
     while (attempt < STANDBY_CREATION_RETRIES) {
@@ -221,7 +231,7 @@ export class PagePool {
     return undefined;
   }
 
-  async #createStandby(): Promise<PoolEntry> {
+  async #createStandby(): Promise<StandbyEntry> {
     this.#creatingStandbys++;
     let context: BrowserContext | undefined;
     try {
@@ -233,8 +243,8 @@ export class PagePool {
         this.#attachPageConsole(page, 'standby', pageId);
       }
       await this.#loadStandbyPage(page, pageId);
-      let entry: PoolEntry = {
-        realm: null,
+      let entry: StandbyEntry = {
+        type: 'standby',
         context,
         page,
         pageId,
@@ -276,22 +286,22 @@ export class PagePool {
     fn: () => Promise<T>,
     pageId: string,
   ): Promise<T> {
-    let result = await Promise.race([
+    let result: T | { timeout: true } = await Promise.race([
       fn(),
       new Promise<{ timeout: true }>((resolve) =>
         setTimeout(() => resolve({ timeout: true }), this.#standbyTimeoutMs),
       ),
     ]);
-    if ((result as any)?.timeout) {
+    if (result && typeof result === 'object' && 'timeout' in result) {
       let message = `Standby page ${pageId} timed out after ${this.#standbyTimeoutMs}ms`;
       log.error(message);
       throw new Error(message);
     }
-    return result as T;
+    return result;
   }
 
-  async #checkoutStandby(): Promise<PoolEntry | undefined> {
-    let standby = this.#standbys.values().next().value as PoolEntry | undefined;
+  async #checkoutStandby(): Promise<StandbyEntry | undefined> {
+    let standby = this.#standbys.values().next().value;
     if (standby) {
       this.#standbys.delete(standby);
       return standby;
@@ -302,7 +312,7 @@ export class PagePool {
       } catch (_e) {
         // best effort
       }
-      standby = this.#standbys.values().next().value as PoolEntry | undefined;
+      standby = this.#standbys.values().next().value;
       if (standby) {
         this.#standbys.delete(standby);
         return standby;
@@ -316,11 +326,14 @@ export class PagePool {
     this.#lru.add(realm);
   }
 
-  async #closeEntry(entry: PoolEntry, realm: string): Promise<void> {
+  async #closeEntry(entry: Entry): Promise<void> {
     try {
       await entry.context.close();
     } catch (e) {
-      log.warn(`Error closing context for realm ${realm}:`, e);
+      log.warn(
+        `Error closing context for ${entry.type === 'pool' ? entry.realm : 'standby'}:`,
+        e,
+      );
     }
   }
 
