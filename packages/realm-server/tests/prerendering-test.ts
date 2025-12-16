@@ -25,6 +25,52 @@ import {
   trimExecutableExtension,
 } from '@cardstack/runtime-common';
 
+function makeStubPagePool(maxPages: number) {
+  let contextCounter = 0;
+  let contextsCreated: string[] = [];
+  let browser = {
+    async createBrowserContext() {
+      let id = `ctx-${++contextCounter}`;
+      contextsCreated.push(id);
+      return {
+        async newPage() {
+          return {
+            async goto(_url: string, _opts?: any) {
+              return;
+            },
+            async waitForFunction(_fn: any) {
+              return true;
+            },
+            removeAllListeners() {
+              return;
+            },
+          } as any;
+        },
+        async close() {
+          return;
+        },
+      } as any;
+    },
+  };
+  let browserManager = {
+    async getBrowser() {
+      return browser as any;
+    },
+    async cleanupUserDataDirs() {
+      return;
+    },
+  };
+  let pool = new PagePool({
+    maxPages,
+    silent: true,
+    serverURL: 'http://localhost',
+    browserManager: browserManager as any,
+    boxelHostURL: 'http://localhost:4200',
+    standbyTimeoutMs: 500,
+  });
+  return { pool, contextsCreated };
+}
+
 module(basename(__filename), function () {
   module('prerender - dynamic tests', function (hooks) {
     let realmURL = 'http://127.0.0.1:4450/';
@@ -1765,6 +1811,61 @@ module(basename(__filename), function () {
             originalRetrySignature;
           await localPrerenderer?.stop();
         }
+      });
+
+      test('creates spare standby when pool is at capacity', async function (assert) {
+        let { pool, contextsCreated } = makeStubPagePool(1);
+        await pool.warmStandbys();
+        assert.strictEqual(
+          contextsCreated.length,
+          1,
+          'initial standby created up to maxPages',
+        );
+
+        let first = await pool.getPage('realm-standby');
+        assert.false(first.reused, 'first checkout uses standby page');
+
+        await pool.warmStandbys();
+        assert.strictEqual(
+          contextsCreated.length,
+          2,
+          'spare standby created once the only slot is occupied',
+        );
+        await pool.closeAll();
+      });
+
+      test('standby pages bind to the first realm they serve', async function (assert) {
+        let { pool } = makeStubPagePool(2);
+        await pool.warmStandbys(); // fill initial standbys
+
+        let realmAFirst = await pool.getPage('realm-a');
+        await pool.warmStandbys(); // replenish after consuming standby
+        let realmBFirst = await pool.getPage('realm-b');
+        await pool.warmStandbys(); // replenish again to keep standbys warm
+
+        let realmASecond = await pool.getPage('realm-a');
+        let realmBSecond = await pool.getPage('realm-b');
+
+        assert.false(realmAFirst.reused, 'first realm A call not reused');
+        assert.false(realmBFirst.reused, 'first realm B call not reused');
+        assert.true(realmASecond.reused, 'realm A reuses its page');
+        assert.true(realmBSecond.reused, 'realm B reuses its page');
+        assert.strictEqual(
+          realmASecond.pageId,
+          realmAFirst.pageId,
+          'realm A keeps the same page',
+        );
+        assert.strictEqual(
+          realmBSecond.pageId,
+          realmBFirst.pageId,
+          'realm B keeps the same page',
+        );
+        assert.notStrictEqual(
+          realmAFirst.pageId,
+          realmBFirst.pageId,
+          'distinct pages per realm from standbys',
+        );
+        await pool.closeAll();
       });
     });
   });

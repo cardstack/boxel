@@ -348,6 +348,7 @@ export default class CardCatalogModal extends Component<Signature> {
         consumingRealm?: URL;
       } = {},
     ) => {
+      await this.realmServer.ready;
       this.stateId++;
       let title = await chooseCardTitle(
         query.filter,
