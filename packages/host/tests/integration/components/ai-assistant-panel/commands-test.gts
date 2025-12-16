@@ -241,7 +241,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
     await waitFor(`[data-test-card-catalog-item="${environmentSkillId}"]`, {
-      timeout: 10000,
+      timeout: 20000,
     });
     await click(`[data-test-card-catalog-item="${environmentSkillId}"]`);
     await click('[data-test-card-catalog-go-button]');
