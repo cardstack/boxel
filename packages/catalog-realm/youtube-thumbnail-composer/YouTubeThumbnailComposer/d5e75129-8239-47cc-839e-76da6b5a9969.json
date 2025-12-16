@@ -20,19 +20,14 @@
       "showGrid": false,
       "background": {
         "type": "image",
-        "imageUrl": null,
+        "image": {},
+        "imageUrl": "",
         "imageScale": 125,
         "primaryColor": "#FA2200",
         "imagePositionX": 87,
         "imagePositionY": 57,
         "secondaryColor": "#FCD2A7",
-        "gradientDirection": "to bottom",
-        "cloudflareImageUrl": {
-          "url": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/3ee0842b-afc6-4f72-a2c1-6284eadee800/public",
-          "resultImageId": "http://localhost:4201/catalog/CloudflareImage/aa6805ce-22e5-498c-84f1-82df60f3e300",
-          "sourceImageUrl": "blob:http://localhost:4200/d73c8e59-b8ea-41f1-a0b9-21ebea0b3058",
-          "targetRealmUrl": "http://localhost:4201/catalog/"
-        }
+        "gradientDirection": "to bottom"
       },
       "previewMode": null,
       "textElements": [
@@ -124,6 +119,11 @@
       "cardInfo.theme": {
         "links": {
           "self": null
+        }
+      },
+      "background.image.imageCard": {
+        "links": {
+          "self": "../../CloudflareImage/aa6805ce-22e5-498c-84f1-82df60f3e300"
         }
       }
     }

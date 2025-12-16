@@ -14,7 +14,7 @@ import NumberField from 'https://cardstack.com/base/number';
 import UrlField from 'https://cardstack.com/base/url';
 
 // Local imports
-import { CloudflareImageUrlField } from '../../fields/cloudflare-image-url';
+import ImageField from '../../fields/image';
 import { createOptionSelectField } from '../../utils/create-option-select';
 
 const BackgroundTypeField = createOptionSelectField({
@@ -43,7 +43,7 @@ export class BackgroundElement extends FieldDef {
   @field primaryColor = contains(ColorField);
   @field secondaryColor = contains(ColorField);
   @field gradientDirection = contains(GradientDirectionField);
-  @field cloudflareImageUrl = contains(CloudflareImageUrlField);
+  @field image = contains(ImageField);
   @field imageUrl = contains(UrlField); // optional override
   @field imageScale = contains(NumberField);
   @field imagePositionX = contains(NumberField);
@@ -114,8 +114,8 @@ export class BackgroundElement extends FieldDef {
 
         {{#if (eq @model.type 'image')}}
           <div class='field-group'>
-            <label>Cloudflare Image URL</label>
-            <@fields.cloudflareImageUrl @format='edit' />
+            <label>Background Image</label>
+            <@fields.image @format='edit' />
           </div>
 
           <div class='field-group'>
