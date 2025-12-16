@@ -5,6 +5,8 @@ import type {
   Realm,
   RealmAdapter,
   RenderResponse,
+  ModuleRenderResponse,
+  RenderRouteOptions,
 } from '@cardstack/runtime-common';
 import { Prerenderer } from '../prerender/index';
 import { PagePool } from '../prerender/page-pool';
@@ -1764,6 +1766,203 @@ module(basename(__filename), function () {
           await localPrerenderer?.stop();
         }
       });
+    });
+  });
+
+  module('prerender - module retries', function () {
+    test('module prerender retries with clear cache on retry signature', async function (assert) {
+      let originalAttempt = RenderRunner.prototype.prerenderModuleAttempt;
+      let prerenderer: Prerenderer | undefined;
+      let attempts: Array<RenderRouteOptions | undefined> = [];
+      let retryRealm = 'https://retry.example/';
+      let moduleURL = `${retryRealm}module.gts`;
+
+      try {
+        let attemptCount = 0;
+        RenderRunner.prototype.prerenderModuleAttempt = async function (
+          args: Parameters<RenderRunner['prerenderModuleAttempt']>[0],
+        ) {
+          let { realm: attemptRealm, url, renderOptions } = args;
+          attempts.push(renderOptions);
+          attemptCount++;
+          let baseResponse = {
+            id: url,
+            nonce: `nonce-${attemptCount}`,
+            isShimmed: false,
+            lastModified: 0,
+            createdAt: 0,
+            deps: [],
+            definitions: {},
+          };
+          let response: ModuleRenderResponse =
+            attemptCount === 1
+              ? {
+                  ...baseResponse,
+                  status: 'error',
+                  error: {
+                    type: 'error',
+                    error: {
+                      message: `Failed to execute 'removeChild' on 'Node': NotFoundError`,
+                      status: 500,
+                      title: 'boom',
+                      additionalErrors: null,
+                      stack: `Failed to execute 'removeChild' on 'Node': NotFoundError`,
+                    },
+                  },
+                }
+              : {
+                  ...baseResponse,
+                  status: 'ready',
+                };
+
+          return {
+            response,
+            timings: { launchMs: 0, renderMs: 1 },
+            pool: {
+              pageId: `page-${attemptCount}`,
+              realm: attemptRealm,
+              reused: attemptCount > 1,
+              evicted: false,
+              timedOut: false,
+            },
+          };
+        };
+
+        prerenderer = new Prerenderer({
+          maxPages: 1,
+          silent: true,
+          serverURL: 'http://127.0.0.1:4225',
+        });
+
+        let result = await prerenderer.prerenderModule({
+          realm: retryRealm,
+          url: moduleURL,
+          auth: 'test-auth',
+        });
+
+        assert.strictEqual(
+          attempts.length,
+          2,
+          'prerender retries once with clearCache',
+        );
+        assert.strictEqual(
+          attempts[0],
+          undefined,
+          'first attempt uses provided render options',
+        );
+        assert.deepEqual(
+          attempts[1],
+          { clearCache: true },
+          'second attempt enables clearCache',
+        );
+        assert.strictEqual(
+          result.response.status,
+          'ready',
+          'successful response returned after retry',
+        );
+      } finally {
+        RenderRunner.prototype.prerenderModuleAttempt = originalAttempt;
+        await prerenderer?.stop();
+      }
+    });
+  });
+
+  module('prerender - card retries', function () {
+    test('card prerender retries with clear cache on retry signature', async function (assert) {
+      let originalAttempt = RenderRunner.prototype.prerenderCardAttempt;
+      let prerenderer: Prerenderer | undefined;
+      let attempts: Array<RenderRouteOptions | undefined> = [];
+      let retryRealm = 'https://card-retry.example/';
+      let cardURL = `${retryRealm}card`;
+
+      try {
+        let attemptCount = 0;
+        RenderRunner.prototype.prerenderCardAttempt = async function (
+          args: Parameters<RenderRunner['prerenderCardAttempt']>[0],
+        ) {
+          let { realm: attemptRealm, url: attemptUrl, renderOptions } = args;
+          attempts.push(renderOptions);
+          attemptCount++;
+          let baseResponse: RenderResponse = {
+            serialized: null,
+            searchDoc: null,
+            displayNames: null,
+            deps: null,
+            types: null,
+            iconHTML: null,
+            isolatedHTML: `${attemptUrl}-render-${attemptCount}`,
+            headHTML: null,
+            atomHTML: null,
+            embeddedHTML: null,
+            fittedHTML: null,
+          };
+          let response: RenderResponse =
+            attemptCount === 1
+              ? {
+                  ...baseResponse,
+                  error: {
+                    type: 'error',
+                    error: {
+                      message: `Failed to execute 'removeChild' on 'Node': NotFoundError`,
+                      status: 500,
+                      title: 'boom',
+                      additionalErrors: null,
+                      stack: `Failed to execute 'removeChild' on 'Node': NotFoundError`,
+                    },
+                  },
+                }
+              : baseResponse;
+
+          return {
+            response,
+            timings: { launchMs: 0, renderMs: 1 },
+            pool: {
+              pageId: `page-${attemptCount}`,
+              realm: attemptRealm,
+              reused: attemptCount > 1,
+              evicted: false,
+              timedOut: false,
+            },
+          };
+        };
+
+        prerenderer = new Prerenderer({
+          maxPages: 1,
+          silent: true,
+          serverURL: 'http://127.0.0.1:4225',
+        });
+
+        let result = await prerenderer.prerenderCard({
+          realm: retryRealm,
+          url: cardURL,
+          auth: 'test-auth',
+        });
+
+        assert.strictEqual(
+          attempts.length,
+          2,
+          'prerender retries once with clearCache',
+        );
+        assert.strictEqual(
+          attempts[0],
+          undefined,
+          'first attempt uses provided render options',
+        );
+        assert.deepEqual(
+          attempts[1],
+          { clearCache: true },
+          'second attempt enables clearCache',
+        );
+        assert.notOk(result.response.error, 'successful response returned');
+        assert.strictEqual(
+          result.response.isolatedHTML,
+          `${cardURL}-render-2`,
+          'final response came from retry attempt',
+        );
+      } finally {
+        RenderRunner.prototype.prerenderCardAttempt = originalAttempt;
+        await prerenderer?.stop();
+      }
     });
   });
 });
