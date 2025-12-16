@@ -6,10 +6,6 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
-
-import { Loader } from '@cardstack/runtime-common/loader';
-
 import {
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -25,7 +21,6 @@ import type { CardMessageContent } from 'https://cardstack.com/base/matrix-event
 
 import {
   testRealmURL,
-  setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
@@ -38,7 +33,6 @@ import { setupRenderingTest } from '../../../helpers/setup';
 
 module('Integration | ai-assistant-panel | debug-message', function (hooks) {
   const realmName = 'Debug Message Test Realm';
-  let loader: Loader;
   let operatorModeStateService: OperatorModeStateService;
 
   setupRenderingTest(hooks);
@@ -56,33 +50,25 @@ module('Integration | ai-assistant-panel | debug-message', function (hooks) {
 
   let { simulateRemoteMessage } = mockMatrixUtils;
 
-  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+  let snapshot = setupSnapshotRealm(hooks, {
     mockMatrixUtils,
     async build({ loader }) {
-      let loaderService = getService('loader-service');
-      loaderService.loader = loader;
-      return { loader };
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          '.realm.json': `{ "name": "${realmName}" }`,
+        },
+      });
+      return {};
     },
   });
 
   setupOnSave(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
-  );
 
   hooks.beforeEach(async function () {
-    ({ loader } = snapshot.get());
     operatorModeStateService = this.owner.lookup(
       'service:operator-mode-state-service',
     ) as OperatorModeStateService;
-
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        '.realm.json': `{ "name": "${realmName}" }`,
-      },
-    });
   });
 
   function setCardInOperatorModeState(

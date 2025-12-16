@@ -6,9 +6,6 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
-
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import { BOTTOM_THRESHOLD } from '@cardstack/host/components/ai-assistant/message';
@@ -18,7 +15,6 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import {
   testRealmURL,
-  setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
@@ -38,7 +34,6 @@ import { setupRenderingTest } from '../../../helpers/setup';
 
 module('Integration | ai-assistant-panel | scrolling', function (hooks) {
   const realmName = 'Operator Mode Workspace';
-  let loader: Loader;
   let operatorModeStateService: OperatorModeStateService;
 
   setupRenderingTest(hooks);
@@ -59,62 +54,55 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
   let { createAndJoinRoom, simulateRemoteMessage, setReadReceipt } =
     mockMatrixUtils;
 
-  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+  let snapshot = setupSnapshotRealm(hooks, {
     mockMatrixUtils,
     async build({ loader }) {
-      let loaderService = getService('loader-service');
-      loaderService.loader = loader;
-      return { loader };
+      class Person extends CardDef {
+        static displayName = 'Person';
+        @field firstName = contains(StringField);
+        @field firstLetterOfTheName = contains(StringField, {
+          computeVia: function (this: Person) {
+            return this.firstName[0];
+          },
+        });
+        @field title = contains(StringField, {
+          computeVia: function (this: Person) {
+            return this.firstName;
+          },
+        });
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h2 data-test-person={{@model.firstName}}>
+              <@fields.firstName />
+            </h2>
+            <p data-test-first-letter-of-the-name={{@model.firstLetterOfTheName}}>
+              <@fields.firstLetterOfTheName />
+            </p>
+          </template>
+        };
+      }
+
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'person.gts': { Person },
+          'Person/fadhlan.json': new Person({
+            firstName: 'Fadhlan',
+          }),
+          '.realm.json': `{ "name": "${realmName}" }`,
+        },
+      });
+
+      return {};
     },
   });
 
   setupOnSave(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
-  );
 
   let noop = () => {};
 
   hooks.beforeEach(async function () {
-    ({ loader } = snapshot.get());
     operatorModeStateService = getService('operator-mode-state-service');
-
-    class Person extends CardDef {
-      static displayName = 'Person';
-      @field firstName = contains(StringField);
-      @field firstLetterOfTheName = contains(StringField, {
-        computeVia: function (this: Person) {
-          return this.firstName[0];
-        },
-      });
-      @field title = contains(StringField, {
-        computeVia: function (this: Person) {
-          return this.firstName;
-        },
-      });
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <h2 data-test-person={{@model.firstName}}>
-            <@fields.firstName />
-          </h2>
-          <p data-test-first-letter-of-the-name={{@model.firstLetterOfTheName}}>
-            <@fields.firstLetterOfTheName />
-          </p>
-        </template>
-      };
-    }
-
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'person.gts': { Person },
-        'Person/fadhlan.json': new Person({
-          firstName: 'Fadhlan',
-        }),
-        '.realm.json': `{ "name": "${realmName}" }`,
-      },
-    });
   });
 
   function setCardInOperatorModeState(

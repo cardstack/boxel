@@ -17,9 +17,7 @@ import {
   REPLACE_MARKER,
   SEARCH_MARKER,
   SEPARATOR_MARKER,
-  baseRealm,
 } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
@@ -28,7 +26,6 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import {
   percySnapshot,
   testRealmURL,
-  setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
@@ -50,7 +47,6 @@ import { setupRenderingTest } from '../../../helpers/setup';
 
 module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
   const realmName = 'Operator Mode Workspace';
-  let loader: Loader;
   let operatorModeStateService: OperatorModeStateService;
 
   setupRenderingTest(hooks);
@@ -70,33 +66,16 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
 
   let { simulateRemoteMessage, createAndJoinRoom } = mockMatrixUtils;
 
-  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+  let snapshot = setupSnapshotRealm(hooks, {
     mockMatrixUtils,
     async build({ loader }) {
-      let loaderService = getService('loader-service');
-      loaderService.loader = loader;
-      return { loader };
-    },
-  });
-
-  setupCardLogs(
-    hooks,
-    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
-  );
-
-  let noop = () => {};
-
-  hooks.beforeEach(async function () {
-    ({ loader } = snapshot.get());
-    operatorModeStateService = getService('operator-mode-state-service');
-
-    // Add cardService mock for example.com/component.gts
-    let cardService = getService('card-service');
-    cardService.getSource = async (url: URL) => {
-      if (url.toString() === 'https://example.com/component.gts') {
-        return {
-          status: 200,
-          content: `import Component from '@glimmer/component';
+      // Add cardService mock for example.com/component.gts
+      let cardService = getService('card-service');
+      cardService.getSource = async (url: URL) => {
+        if (url.toString() === 'https://example.com/component.gts') {
+          return {
+            status: 200,
+            content: `import Component from '@glimmer/component';
 
 export default class MyComponent extends Component {
   a = 1;
@@ -109,79 +88,88 @@ export default class MyComponent extends Component {
     </div>
   </template>
 }`,
+          };
+        }
+        return {
+          status: 404,
+          content: '',
+        };
+      };
+
+      class Address extends FieldDef {
+        static displayName = 'Address';
+        @field city = contains(StringField);
+        @field country = contains(StringField);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <div data-test-address>
+              <h3 data-test-city={{@model.city}}>
+                <@fields.city />
+              </h3>
+              <h3 data-test-country={{@model.country}}>
+                <@fields.country />
+              </h3>
+            </div>
+          </template>
         };
       }
-      return {
-        status: 404,
-        content: '',
-      };
-    };
 
-    class Address extends FieldDef {
-      static displayName = 'Address';
-      @field city = contains(StringField);
-      @field country = contains(StringField);
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <div data-test-address>
-            <h3 data-test-city={{@model.city}}>
-              <@fields.city />
-            </h3>
-            <h3 data-test-country={{@model.country}}>
-              <@fields.country />
-            </h3>
-          </div>
-        </template>
-      };
-    }
+      class Person extends CardDef {
+        static displayName = 'Person';
+        @field firstName = contains(StringField);
+        @field firstLetterOfTheName = contains(StringField, {
+          computeVia: function (this: Person) {
+            return this.firstName[0];
+          },
+        });
+        @field title = contains(StringField, {
+          computeVia: function (this: Person) {
+            return this.firstName;
+          },
+        });
+        @field address = contains(Address);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h2 data-test-person={{@model.firstName}}>
+              <@fields.firstName />
+            </h2>
+            <p data-test-first-letter-of-the-name={{@model.firstLetterOfTheName}}>
+              <@fields.firstLetterOfTheName />
+            </p>
+            <div data-test-addresses>Address: <@fields.address /></div>
+          </template>
+        };
+      }
 
-    class Person extends CardDef {
-      static displayName = 'Person';
-      @field firstName = contains(StringField);
-      @field firstLetterOfTheName = contains(StringField, {
-        computeVia: function (this: Person) {
-          return this.firstName[0];
-        },
-      });
-      @field title = contains(StringField, {
-        computeVia: function (this: Person) {
-          return this.firstName;
-        },
-      });
-      @field address = contains(Address);
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <h2 data-test-person={{@model.firstName}}>
-            <@fields.firstName />
-          </h2>
-          <p data-test-first-letter-of-the-name={{@model.firstLetterOfTheName}}>
-            <@fields.firstLetterOfTheName />
-          </p>
-          <div data-test-addresses>Address: <@fields.address /></div>
-        </template>
-      };
-    }
-
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'address.gts': { Address },
-        'person.gts': { Person },
-        'Person/fadhlan.json': new Person({
-          firstName: 'Fadhlan',
-          address: new Address({
-            city: 'Bandung',
-            country: 'Indonesia',
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'address.gts': { Address },
+          'person.gts': { Person },
+          'Person/fadhlan.json': new Person({
+            firstName: 'Fadhlan',
+            address: new Address({
+              city: 'Bandung',
+              country: 'Indonesia',
+            }),
           }),
-        }),
-        '.realm.json': `{ "name": "${realmName}" }`,
-      },
-    });
+          '.realm.json': `{ "name": "${realmName}" }`,
+        },
+      });
 
-    createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
+      createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'room-test',
+      });
+
+      return {};
+    },
+  });
+
+  let noop = () => {};
+
+  hooks.beforeEach(async function () {
+    operatorModeStateService = getService('operator-mode-state-service');
   });
 
   function setCardInOperatorModeState(

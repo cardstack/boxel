@@ -10,10 +10,8 @@ import {
   REPLACE_MARKER,
   SEARCH_MARKER,
   SEPARATOR_MARKER,
-  baseRealm,
   skillCardRef,
 } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
 
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
@@ -29,7 +27,6 @@ import { FileDef } from 'https://cardstack.com/base/file-api';
 
 import {
   testRealmURL,
-  setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
@@ -54,7 +51,6 @@ import { setupRenderingTest } from '../../../helpers/setup';
 
 module('Integration | ai-assistant-panel | skills', function (hooks) {
   const realmName = 'Operator Mode Workspace';
-  let loader: Loader;
   let operatorModeStateService: OperatorModeStateService;
 
   setupRenderingTest(hooks);
@@ -74,20 +70,127 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
 
   let { getRoomState, getRoomEvents, simulateRemoteMessage } = mockMatrixUtils;
 
-  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+  let snapshot = setupSnapshotRealm(hooks, {
     mockMatrixUtils,
     async build({ loader }) {
-      let loaderService = getService('loader-service');
-      loaderService.loader = loader;
-      return { loader };
+      class Pet extends CardDef {
+        static displayName = 'Pet';
+        @field name = contains(StringField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Pet) {
+            return this.name;
+          },
+        });
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            <h3 data-test-pet={{@model.name}}>
+              <@fields.name />
+            </h3>
+          </template>
+        };
+      }
+
+      class Address extends FieldDef {
+        static displayName = 'Address';
+        @field city = contains(StringField);
+        @field country = contains(StringField);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <div data-test-address>
+              <h3 data-test-city={{@model.city}}>
+                <@fields.city />
+              </h3>
+              <h3 data-test-country={{@model.country}}>
+                <@fields.country />
+              </h3>
+            </div>
+          </template>
+        };
+      }
+
+      class Person extends CardDef {
+        static displayName = 'Person';
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+        @field friends = linksToMany(Pet);
+        @field firstLetterOfTheName = contains(StringField, {
+          computeVia: function (this: Person) {
+            return this.firstName[0];
+          },
+        });
+        @field title = contains(StringField, {
+          computeVia: function (this: Person) {
+            return this.firstName;
+          },
+        });
+        @field address = contains(Address);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h2 data-test-person={{@model.firstName}}>
+              <@fields.firstName />
+            </h2>
+            <p data-test-first-letter-of-the-name={{@model.firstLetterOfTheName}}>
+              <@fields.firstLetterOfTheName />
+            </p>
+            Pet:
+            <@fields.pet />
+            Friends:
+            <@fields.friends />
+            <div data-test-addresses>Address: <@fields.address /></div>
+          </template>
+        };
+      }
+
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'pet.gts': { Pet },
+          'address.gts': { Address },
+          'person.gts': { Person },
+          'Person/fadhlan.json': new Person({
+            firstName: 'Fadhlan',
+            address: new Address({
+              city: 'Bandung',
+              country: 'Indonesia',
+            }),
+            pet: new Pet({
+              name: 'Lion',
+            }),
+            friends: [new Pet({ name: 'Tiger' }), new Pet({ name: 'Bear' })],
+          }),
+          'Person/burcu.json': new Person({
+            firstName: 'Burcu',
+            address: new Address({
+              city: 'Istanbul',
+              country: 'Turkey',
+            }),
+            pet: new Pet({
+              name: 'Lion',
+            }),
+            friends: [new Pet({ name: 'Tiger' }), new Pet({ name: 'Bear' })],
+          }),
+          'Person/mickey.json': new Person({
+            firstName: 'Mickey',
+            address: new Address({
+              city: 'Paris',
+              country: 'France',
+            }),
+            friends: [new Pet({ name: 'Donald' })],
+          }),
+          'Person/justin.json': new Person({ firstName: 'Justin' }),
+          'Person/ian.json': new Person({ firstName: 'Ian' }),
+          'Person/matic.json': new Person({ firstName: 'Matic' }),
+          'Person/buck.json': new Person({ firstName: 'Buck' }),
+          'Person/hassan.json': new Person({ firstName: 'Hassan' }),
+          '.realm.json': `{ "name": "${realmName}" }`,
+        },
+      });
+
+      return {};
     },
   });
 
   setupOnSave(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
-  );
 
   let noop = () => {};
 
