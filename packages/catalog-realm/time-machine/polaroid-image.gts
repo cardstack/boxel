@@ -13,11 +13,12 @@ class PolaroidImageEmbedded extends Component<typeof PolaroidImage> {
     return this.args.model.caption;
   }
 
+  get imageUrl() {
+    return this.args.model?.image?.imageCard?.url ?? '';
+  }
+
   <template>
-    <Polaroid
-      @caption={{this.caption}}
-      @url={{@model.image.imageCard.url}}
-    />
+    <Polaroid @caption={{this.caption}} @url={{this.imageUrl}} />
   </template>
 }
 
@@ -26,11 +27,12 @@ class PolaroidImageFitted extends Component<typeof PolaroidImage> {
     return this.args.model.caption;
   }
 
+  get imageUrl() {
+    return this.args.model?.image?.imageCard?.url ?? '';
+  }
+
   <template>
-    <Polaroid
-      @caption={{this.caption}}
-      @url={{@model.image.imageCard.url}}
-    />
+    <Polaroid @caption={{this.caption}} @url={{this.imageUrl}} />
   </template>
 }
 
