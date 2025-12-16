@@ -1,11 +1,11 @@
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
+import { FieldPathParser } from '../lib/field-path-parser';
 import HostBaseCommand from '../lib/host-base-command';
 
-import SendRequestViaProxyCommand from './send-request-via-proxy';
 import GetCardCommand from './get-card';
 import PatchFieldsCommand from './patch-fields';
-import { FieldPathParser } from '../lib/field-path-parser';
+import SendRequestViaProxyCommand from './send-request-via-proxy';
 
 // Command to apply markdown edits using relace/relace-apply-3 model
 export default class ApplyMarkdownEditCommand extends HostBaseCommand<

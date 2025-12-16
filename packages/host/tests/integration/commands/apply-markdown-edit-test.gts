@@ -4,12 +4,12 @@ import { settled, type RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
 import ApplyMarkdownEditCommand from '@cardstack/host/commands/apply-markdown-edit';
 import RealmService from '@cardstack/host/services/realm';
+
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   setupCardLogs,
@@ -213,7 +213,7 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
 
     let card = (await store.get(
       `${testRealmURL}Article/remote-work`,
-    )) as unknown as CardDef & { body: string };
+    )) as unknown as CardDef & { body: string; intro: string };
 
     assert.strictEqual(
       card.intro,
@@ -277,16 +277,16 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
       instructionContent.includes('&lt;/instruction&gt;'),
       'instruction text escapes tag delimiters',
     );
-    assert.ok(
-      !instructionContent.includes('</instruction>'),
+    assert.notOk(
+      instructionContent.includes('</instruction>'),
       'raw closing instruction tag is not present in instruction payload',
     );
     assert.ok(
       updateContent.includes('&lt;/update&gt;'),
       'diff text escapes tag delimiters',
     );
-    assert.ok(
-      !updateContent.includes('</update> marker'),
+    assert.notOk(
+      updateContent.includes('</update> marker'),
       'raw closing update tag is not present in update payload',
     );
 
