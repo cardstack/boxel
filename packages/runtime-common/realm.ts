@@ -670,7 +670,6 @@ export class Realm {
     let results: { path: LocalPath; lastModified: number }[] = [];
     let fileMetaRows: { path: LocalPath }[] = [];
     let lastWriteType: 'module' | 'instance' | undefined;
-    let currentWriteType: 'module' | 'instance' | undefined;
     let invalidations: Set<string> = new Set();
     let clientRequestId: string | null = options?.clientRequestId ?? null;
     let performIndex = async () => {
@@ -687,26 +686,13 @@ export class Realm {
     };
 
     for (let [path, content] of files) {
-      lastWriteType = currentWriteType ?? lastWriteType;
-      currentWriteType = hasExecutableExtension(path)
-        ? 'module'
-        : path.endsWith('.json') && isCardDocumentString(content)
-          ? 'instance'
-          : undefined;
-      if (lastWriteType === 'module' && currentWriteType === 'instance') {
-        // we need to generate/update possible definition in order for
-        // instance file serialization that may depend on the included module to
-        // work. TODO: we could be more precise here and keep track of what
-        // modules the instances depend on and only flush the modules to index
-        // when you you see that you have an instance that you are about to
-        // write to disk that depends on a module that is part of this
-        // operation.
-        await performIndex();
-        urls = [];
-      }
       let url = this.paths.fileURL(path);
-      this.sendIndexInitiationEvent(url.href);
-      await this.trackOwnWrite(path);
+      let currentWriteType: 'module' | 'instance' | undefined =
+        hasExecutableExtension(path)
+          ? 'module'
+          : path.endsWith('.json') && isCardDocumentString(content)
+            ? 'instance'
+            : undefined;
       try {
         let doc = JSON.parse(content);
         if (isCardResource(doc.data) && options?.serializeFile) {
@@ -724,6 +710,25 @@ export class Realm {
           throw e;
         }
       }
+      let existingFile = await readFileAsText(path, (p) =>
+        this.#adapter.openFile(p),
+      );
+      if (existingFile?.content === content) {
+        continue;
+      }
+      if (lastWriteType === 'module' && currentWriteType === 'instance') {
+        // we need to generate/update possible definition in order for
+        // instance file serialization that may depend on the included module to
+        // work. TODO: we could be more precise here and keep track of what
+        // modules the instances depend on and only flush the modules to index
+        // when you you see that you have an instance that you are about to
+        // write to disk that depends on a module that is part of this
+        // operation.
+        await performIndex();
+        urls = [];
+      }
+      this.sendIndexInitiationEvent(url.href);
+      await this.trackOwnWrite(path);
       let { lastModified } = await this.#adapter.write(path, content);
       this.#sourceCache.invalidate(path);
       if (hasExecutableExtension(path)) {
@@ -732,6 +737,7 @@ export class Realm {
       results.push({ path, lastModified });
       fileMetaRows.push({ path });
       urls.push(url);
+      lastWriteType = currentWriteType ?? lastWriteType;
     }
 
     // persist file meta (created_at) to DB independent of index and retrieve created

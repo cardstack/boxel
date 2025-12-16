@@ -85,6 +85,20 @@ export class CardStoreWithErrors implements CardStore {
   async loaded() {
     await Promise.allSettled(this.#inFlight);
   }
+  getSearchResource<T extends CardDef = CardDef>(
+    _parent: object,
+    _getQuery: () => any,
+    _getRealms?: () => string[] | undefined,
+    _opts?: any,
+  ) {
+    return {
+      instances: [] as T[],
+      instancesByRealm: [],
+      isLoading: false,
+      meta: { page: { total: 0 } },
+      errors: undefined,
+    } as any;
+  }
 }
 
 export interface RenderCardParams {

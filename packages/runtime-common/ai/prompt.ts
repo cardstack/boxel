@@ -1270,6 +1270,16 @@ function collectPendingCodePatchCorrectnessCheck(
       history,
     );
     let commandResults = getCommandResults(event as CardMessageEvent, history);
+    let isCancelled =
+      content.isCanceled || (event as any).status === 'cancelled';
+    let appliedChanges = hasAppliedChanges(
+      codePatchResults,
+      relevantCommands,
+      commandResults,
+    );
+    if (isCancelled && !appliedChanges) {
+      continue;
+    }
 
     let appliedCodePatchResults = codePatchResults.filter(
       (result) => result.content['m.relates_to']?.key === 'applied',
@@ -1310,7 +1320,10 @@ function hasUnresolvedCodePatches(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): boolean {
-  for (let event of history) {
+  // Consider only the most recent relevant bot message; older unresolved
+  // commands should not block correctness for newer changes.
+  for (let index = history.length - 1; index >= 0; index--) {
+    let event = history[index];
     if (
       event.type !== 'm.room.message' ||
       event.sender !== aiBotUserId ||
@@ -1337,14 +1350,23 @@ function hasUnresolvedCodePatches(
       history,
     );
     let commandResults = getCommandResults(event as CardMessageEvent, history);
-    let appliedCodePatchResults = codePatchResults.filter(
-      (result) => result.content['m.relates_to']?.key === 'applied',
+    let isCancelled =
+      content.isCanceled || (event as any).status === 'cancelled';
+    let appliedChanges = hasAppliedChanges(
+      codePatchResults,
+      relevantCommands,
+      commandResults,
     );
+    if (isCancelled && !appliedChanges) {
+      return false;
+    }
     let allCodePatchesResolved =
       codePatchBlocks.length === 0 ||
       codePatchBlocks.every((_block, index) =>
-        appliedCodePatchResults.some(
-          (result) => result.content.codeBlockIndex === index,
+        codePatchResults.some(
+          (result) =>
+            result.content['m.relates_to']?.key === 'applied' &&
+            result.content.codeBlockIndex === index,
         ),
       );
     let allRelevantCommandsResolved =
@@ -1355,9 +1377,7 @@ function hasUnresolvedCodePatches(
         ),
       );
 
-    if (!allCodePatchesResolved || !allRelevantCommandsResolved) {
-      return true;
-    }
+    return !(allCodePatchesResolved && allRelevantCommandsResolved);
   }
   return false;
 }
@@ -1389,6 +1409,16 @@ function buildCodePatchCorrectnessMessage(
 
   let codePatchResults = getCodePatchResults(messageEvent, history);
   let commandResults = getCommandResults(messageEvent, history);
+  let isCancelled =
+    content.isCanceled || (messageEvent as any).status === 'cancelled';
+  let appliedChanges = hasAppliedChanges(
+    codePatchResults,
+    relevantCommands,
+    commandResults,
+  );
+  if (isCancelled && !appliedChanges) {
+    return undefined;
+  }
 
   let appliedCodePatchResults = codePatchResults.filter(
     (result) => result.content['m.relates_to']?.key === 'applied',
@@ -1553,6 +1583,28 @@ function formatFileDisplayName(identifier?: string) {
   } catch {
     return identifier;
   }
+}
+
+function hasAppliedChanges(
+  codePatchResults: CodePatchResultEvent[],
+  relevantCommands: Partial<CommandRequest>[],
+  commandResults: CommandResultEvent[],
+): boolean {
+  if (
+    codePatchResults.some(
+      (result) => result.content['m.relates_to']?.key === 'applied',
+    )
+  ) {
+    return true;
+  }
+
+  return relevantCommands.some((request) =>
+    commandResults.some(
+      (result) =>
+        result.content.commandRequestId === request.id &&
+        result.content['m.relates_to']?.key === 'applied',
+    ),
+  );
 }
 
 export const buildAttachmentsMessagePart = async (
