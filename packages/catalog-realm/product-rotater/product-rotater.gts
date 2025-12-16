@@ -189,12 +189,12 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
   }
 
   private async persistRotations({
-    base64Images,
+    dataUrlImages,
     angles,
     commandContext,
     realmHref,
   }: {
-    base64Images: string[];
+    dataUrlImages: string[];
     angles: number[];
     commandContext: CommandContextForGenerate;
     realmHref: string;
@@ -202,7 +202,7 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
     let tasks: Promise<ProductRotationImage | undefined>[] = [];
     let existingByAngle = this.existingRotationsByAngle();
 
-    base64Images.forEach((base64, index) => {
+    dataUrlImages.forEach((dataUrl, index) => {
       let angle = angles[index];
       if (typeof angle === 'undefined') {
         return;
@@ -212,7 +212,7 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
 
       tasks.push(
         persistRotationImage({
-          base64,
+          dataUrl,
           angle,
           existing,
           commandContext,
@@ -255,7 +255,7 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
     this.error = '';
 
     try {
-      const base64Images = [this.referenceImageUrl].filter(Boolean);
+      const urlImages = [this.referenceImageUrl].filter(Boolean);
 
       const angles = this.rotationAngles;
       const description = this.productDescription.trim();
@@ -267,7 +267,7 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
         commandContext,
       );
       const result = await generateRotationsCommand.execute({
-        productImages: base64Images,
+        productImages: urlImages,
         prompts,
         rotationAngles: angles.map((angle) => angle.toString()),
       });
@@ -277,7 +277,7 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
       }
 
       const persistedRotations = await this.persistRotations({
-        base64Images: result.generatedImages,
+        dataUrlImages: result.generatedImages,
         angles,
         commandContext,
         realmHref,
@@ -576,14 +576,14 @@ function buildAngleLabel(angle: number): string {
 }
 
 async function persistRotationImage({
-  base64,
+  dataUrl,
   angle,
   commandContext,
   realmHref,
   context,
   existing,
 }: {
-  base64: string;
+  dataUrl: string;
   angle: number;
   commandContext: CommandContextForGenerate;
   realmHref: string;
@@ -593,16 +593,16 @@ async function persistRotationImage({
   let safeAngle = Math.round(angle);
   let label = buildAngleLabel(safeAngle);
 
-  let dataUrl = base64.startsWith('data:image/')
-    ? base64
-    : `data:image/png;base64,${base64}`;
+  let ensuredDataUrl = dataUrl.startsWith('data:image/')
+    ? dataUrl
+    : `data:image/png;base64,${dataUrl}`;
 
   let imageCard: BaseImageCard | undefined;
 
   try {
     let uploadCommand = new UploadImageCommand(commandContext);
     let result = await uploadCommand.execute({
-      sourceImageUrl: dataUrl,
+      sourceImageUrl: ensuredDataUrl,
       targetRealmUrl: realmHref,
     });
 
@@ -619,7 +619,7 @@ async function persistRotationImage({
 
   if (!imageCard) {
     imageCard = new BaseImageCard({
-      url: dataUrl,
+      url: ensuredDataUrl,
     });
 
     await new SaveCardCommand(commandContext).execute({
