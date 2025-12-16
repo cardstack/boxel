@@ -328,7 +328,6 @@ export default class MetaTagsPreview extends Component<Signature> {
         );
         border-radius: var(--boxel-border-radius);
         border: 1px solid rgba(255 255 255 / 8%);
-        color: var(--boxel-light);
       }
       .head-preview__grid {
         display: grid;
@@ -496,7 +495,7 @@ export default class MetaTagsPreview extends Component<Signature> {
         border: 1px solid rgba(255 255 255 / 12%);
         border-radius: var(--boxel-border-radius-sm);
         padding: 8px 10px;
-        color: var(--boxel-light);
+        color: var(--boxel-dark);
         display: grid;
         gap: 4px;
         min-width: 220px;
@@ -513,7 +512,7 @@ export default class MetaTagsPreview extends Component<Signature> {
       }
       .raw-head {
         margin-top: var(--boxel-sp-md);
-        color: var(--boxel-light);
+        color: var(--boxel-dark);
       }
       .raw-head > summary {
         cursor: pointer;
