@@ -1,3 +1,4 @@
+import { service } from '@ember/service';
 import {
   type RenderingTestContext,
   waitUntil,
@@ -7,7 +8,7 @@ import {
 } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -26,17 +27,16 @@ import {
 } from '@cardstack/runtime-common';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
-import CardStore from '@cardstack/host/lib/gc-card-store';
+import type CardStore from '@cardstack/host/lib/gc-card-store';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
-import { getSearch } from '@cardstack/host/resources/search';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
-import { type CardErrorJSONAPI } from '@cardstack/host/services/store';
+import type { CardErrorJSONAPI } from '@cardstack/host/services/store';
 
-import { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
+import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
@@ -50,7 +50,7 @@ import {
   withSlowSave,
   setupOperatorModeStateCleanup,
 } from '../helpers';
-import { TestRealmAdapter } from '../helpers/adapter';
+
 import {
   CardDef,
   contains,
@@ -65,6 +65,8 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderComponent } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
+
+import type { TestRealmAdapter } from '../helpers/adapter';
 
 module('Integration | Store', function (hooks) {
   setupRenderingTest(hooks);
@@ -1669,18 +1671,22 @@ module('Integration | Store', function (hooks) {
     let driver = new Driver();
 
     class ResourceConsumer extends GlimmerComponent {
-      resource = getSearch(this, () =>
-        driver.id
-          ? {
-              filter: {
-                on: baseCardRef,
-                eq: {
-                  id: driver.id,
+      @service declare store: StoreService;
+      @cached
+      get resource() {
+        return this.store.getSearchResource(this, () =>
+          driver.id
+            ? {
+                filter: {
+                  on: baseCardRef,
+                  eq: {
+                    id: driver.id,
+                  },
                 },
-              },
-            }
-          : undefined,
-      );
+              }
+            : undefined,
+        );
+      }
       get card() {
         return this.resource.instances[0];
       }
@@ -1756,22 +1762,26 @@ module('Integration | Store', function (hooks) {
     let driver = new Driver();
 
     class ResourceConsumer extends GlimmerComponent {
-      resource = getSearch(
-        this,
-        () =>
-          driver.id
-            ? {
-                filter: {
-                  on: baseCardRef,
-                  eq: {
-                    id: driver.id,
+      @service declare store: StoreService;
+      @cached
+      get resource() {
+        return this.store.getSearchResource(
+          this,
+          () =>
+            driver.id
+              ? {
+                  filter: {
+                    on: baseCardRef,
+                    eq: {
+                      id: driver.id,
+                    },
                   },
-                },
-              }
-            : undefined,
-        undefined,
-        { isLive: true },
-      );
+                }
+              : undefined,
+          undefined,
+          { isLive: true },
+        );
+      }
       get card() {
         return this.resource.instances[0];
       }

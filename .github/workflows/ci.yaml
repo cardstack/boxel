@@ -86,6 +86,7 @@ jobs:
               - 'packages/billing/**'
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
+              - 'packages/host/**'
               - 'packages/eslint-plugin-boxel/**'
               - 'packages/postgres/**'
               - 'packages/realm-server/**'
@@ -282,7 +283,7 @@ jobs:
       - name: Build boxel-motion
         run: pnpm build
         working-directory: packages/boxel-motion/addon
-      - name: Start host to serve assets for fastboot
+      - name: Start host to serve assets for realm server
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
           run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
@@ -427,7 +428,6 @@ jobs:
             "card-source-endpoints-test.ts",
             "definition-lookup-test.ts",
             "file-watcher-events-test.ts",
-            "headless-chrome-indexing-test.ts",
             "indexing-test.ts",
             "transpile-test.ts",
             "module-syntax-test.ts",
@@ -435,13 +435,16 @@ jobs:
             "prerendering-test.ts",
             "prerender-server-test.ts",
             "prerender-manager-test.ts",
+            "prerender-proxy-test.ts",
             "remote-prerenderer-test.ts",
             "queue-test.ts",
+            "realm-endpoints/dependencies-test.ts",
             "realm-endpoints/directory-test.ts",
             "realm-endpoints/info-test.ts",
             "realm-endpoints/lint-test.ts",
             "realm-endpoints/mtimes-test.ts",
             "realm-endpoints/permissions-test.ts",
+            "realm-endpoints/publishability-test.ts",
             "realm-endpoints/search-test.ts",
             "realm-endpoints/user-test.ts",
             "realm-endpoints-test.ts",
@@ -471,7 +474,7 @@ jobs:
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
-      - name: Start host to serve assets for fastboot
+      - name: Start host to serve assets for realm server
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
           run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &

@@ -1,0 +1,105 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "GamingPlayer",
+        "module": "../gaming-player"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "bio": "Competitive FPS player and content creator. 5 years in esports with multiple tournament wins. Streaming variety games on weekends. Always looking for new tactical shooters to master.",
+      "email": "alex.rivera@protonmail.com",
+      "avatar": {
+        "eyeType": null,
+        "topType": null,
+        "hairColor": null,
+        "mouthType": null,
+        "skinColor": null,
+        "clotheType": null,
+        "eyebrowType": null,
+        "facialHairType": null,
+        "accessoriesType": null
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "gamerTag": "ShadowBlade_Alex",
+      "isOnline": true,
+      "joinDate": "2019-03-15",
+      "location": "Austin, Texas",
+      "statistics": {
+        "totalGames": 127,
+        "totalHours": 2847,
+        "averageRating": 8.2,
+        "currentStreak": 12,
+        "favoriteGenre": "FPS",
+        "completionRate": 78,
+        "achievementsUnlocked": 1456
+      },
+      "gamingGroups": [
+        "Texas Esports Coalition",
+        "Midnight Gaming Crew",
+        "FPS Masters"
+      ],
+      "streamSchedule": "Friday-Sunday 8PM-12AM CST",
+      "preferredGenres": [
+        "FPS",
+        "Battle Royale",
+        "Tactical Shooter",
+        "Racing"
+      ],
+      "profileImageUrl": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&h=400&fit=crop&crop=face",
+      "streamingPlatforms": [
+        "Twitch",
+        "YouTube Gaming"
+      ],
+      "contentCreatorStatus": true
+    },
+    "relationships": {
+      "friends.0": {
+        "links": {
+          "self": "./maya-phoenixrise"
+        }
+      },
+      "friends.1": {
+        "links": {
+          "self": "./zlata-voidwalker"
+        }
+      },
+      "tournaments.0": {
+        "links": {
+          "self": "../../tournament/Tournament/valorant-championship"
+        }
+      },
+      "wishlistGames": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "favoriteGames.0": {
+        "links": {
+          "self": "../../video-game/VideoGame/valorant"
+        }
+      },
+      "favoriteGames.1": {
+        "links": {
+          "self": "../../video-game/VideoGame/cyberpunk-2077"
+        }
+      },
+      "connectedPlatforms.0": {
+        "links": {
+          "self": "../../gaming-platform/GamingPlatform/steam-platform"
+        }
+      }
+    }
+  }
+}

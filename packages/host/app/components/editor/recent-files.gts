@@ -7,8 +7,8 @@ import { RealmIcon } from '@cardstack/boxel-ui/components';
 
 import { RealmPaths } from '@cardstack/runtime-common';
 
-import RealmService from '@cardstack/host/services/realm';
-import { RecentFile } from '@cardstack/host/services/recent-files-service';
+import type RealmService from '@cardstack/host/services/realm';
+import type { RecentFile } from '@cardstack/host/services/recent-files-service';
 
 import WithLoadedRealm from '../with-loaded-realm';
 

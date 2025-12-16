@@ -45,7 +45,7 @@ import {
 
 import type { SearchCardsByTypeAndTitleInput } from 'https://cardstack.com/base/command';
 
-import { Skill } from 'https://cardstack.com/base/skill';
+import type { Skill } from 'https://cardstack.com/base/skill';
 
 import {
   setupLocalIndexing,
@@ -522,7 +522,6 @@ module('Acceptance | Commands tests', function (hooks) {
       },
     });
 
-    // open assistant
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-room-settled]');
 
@@ -538,22 +537,6 @@ module('Acceptance | Commands tests', function (hooks) {
         '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]',
       )
       .includesText('Meeting with Hassan');
-
-    let commandService = getService('command-service') as any;
-    let requestIdsByRoom =
-      commandService.aiAssistantClientRequestIdsByRoom as Map<string, any>;
-    let roomRequestIds = requestIdsByRoom?.get(roomId);
-    assert.ok(
-      roomRequestIds,
-      'aiAssistantClientRequestIdsByRoom has an entry for the room after patching instance',
-    );
-    let ids: string[] = roomRequestIds ? Array.from(roomRequestIds) : [];
-    assert.ok(
-      ids.some((id) =>
-        id.startsWith(`bot-patch:${encodeURIComponent(roomId)}:patch-instance`),
-      ),
-      'bot patch clientRequestId recorded for the room when patching instance',
-    );
   });
 
   test('a host command added from a skill can be executed when clicked on', async function (assert) {

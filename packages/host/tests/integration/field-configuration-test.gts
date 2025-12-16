@@ -1,15 +1,17 @@
-import { RenderingTestContext, settled } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
+import { settled } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
 import type { SingleCardDocument } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type {
   CardStore,
   CardDef as CardDefType,
+  StoreSearchResource,
 } from 'https://cardstack.com/base/card-api';
 
 import {
@@ -33,6 +35,7 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
+
 let loader: Loader;
 
 class DeferredLinkStore implements CardStore {
@@ -109,6 +112,15 @@ class DeferredLinkStore implements CardStore {
       pending.fulfill(doc);
       this.pendingDocs.delete(normalized);
     }
+  }
+
+  getSearchResource<T extends CardDefType = CardDefType>(
+    _parent: object,
+    _getQuery: () => any,
+    _getRealms?: () => string[] | undefined,
+    _opts?: any,
+  ): StoreSearchResource<T> {
+    throw new Error('Method not implemented.');
   }
 
   private normalize(url: string) {

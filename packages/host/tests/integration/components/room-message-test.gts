@@ -1,3 +1,4 @@
+import { service } from '@ember/service';
 import { click, waitUntil, render } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
@@ -19,8 +20,9 @@ import RoomMessage, {
 import { parseHtmlContent } from '@cardstack/host/lib/formatted-message/utils';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
-import { type RoomResource } from '@cardstack/host/resources/room';
-import { getSearch } from '@cardstack/host/resources/search';
+
+import type { RoomResource } from '@cardstack/host/resources/room';
+import type StoreService from '@cardstack/host/services/store';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -29,6 +31,8 @@ class GetCardsContextProvider extends GlimmerComponent<{
   Args: {};
   Blocks: { default: [] };
 }> {
+  @service private declare store: StoreService;
+
   @provide(GetCardContextName)
   // @ts-ignore "getCard" is declared but not used
   private get getCard() {
@@ -37,7 +41,7 @@ class GetCardsContextProvider extends GlimmerComponent<{
   @provide(GetCardsContextName)
   // @ts-ignore "getCards" is declared but not used
   private get getCards() {
-    return getSearch;
+    return this.store.getSearchResource.bind(this.store);
   }
   @provide(GetCardCollectionContextName)
   // @ts-ignore "getCardCollection" is declared but not used

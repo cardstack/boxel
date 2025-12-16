@@ -36,6 +36,7 @@ export interface FieldOfType {
   name: string;
   card: Type | CodeRefType;
   isComputed: boolean;
+  isQueryField: boolean;
   type: FieldType;
 }
 
@@ -125,6 +126,7 @@ export default class CardTypeService extends Service {
           name,
           type: field.fieldType,
           isComputed: field.computeVia != undefined,
+          isQueryField: field.queryDefinition != undefined,
           card: await this.toType(field.card, loader, [card, ...stack]),
         }),
       ),

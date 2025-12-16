@@ -4,7 +4,7 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../image-field",
+        "module": "../image",
         "name": "ImageField"
       },
       "specType": "field",
@@ -28,7 +28,7 @@
         "containedExamples": [
           {
             "adoptsFrom": {
-              "module": "../image-field",
+              "module": "../image",
               "name": "ImageField"
             }
           }

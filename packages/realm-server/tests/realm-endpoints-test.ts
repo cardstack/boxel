@@ -36,7 +36,7 @@ import {
   createVirtualNetwork,
   matrixURL,
   closeServer,
-  getFastbootState,
+  getIndexHTML,
   matrixRegistrationSecret,
   testRealmInfo,
   waitUntil,
@@ -45,6 +45,7 @@ import {
   createJWT,
   cardInfo,
   getTestPrerenderer,
+  testCreatePrerenderAuth,
 } from './helpers';
 import { expectIncrementalIndexEvent } from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -977,7 +978,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: '/person',
+                module: '../person',
                 name: 'Person',
               },
               realmInfo: {
@@ -1529,6 +1530,7 @@ module(basename(__filename), function () {
           dbAdapter,
           prerenderer,
           virtualNetwork,
+          testCreatePrerenderAuth,
         );
         virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 
@@ -1563,7 +1565,6 @@ module(basename(__filename), function () {
           username: realmServerTestMatrix.username,
           seed: realmSecretSeed,
         });
-        let getIndexHTML = (await getFastbootState()).getIndexHTML;
         testRealmServer = new RealmServer({
           realms: [base, testRealm],
           virtualNetwork,
@@ -1579,6 +1580,7 @@ module(basename(__filename), function () {
           serverURL: new URL('http://127.0.0.1:4446'),
           assetsURL: new URL(`http://example.com/notional-assets-host/`),
           definitionLookup,
+          prerenderer,
         }).listen(parseInt(localBaseRealmURL.port));
         await base.start();
         await testRealm.start();

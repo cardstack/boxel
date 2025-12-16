@@ -5,7 +5,8 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
-import { htmlSafe, SafeString } from '@ember/template';
+import type { SafeString } from '@ember/template';
+import { htmlSafe } from '@ember/template';
 
 import { isTesting } from '@embroider/macros';
 
@@ -36,6 +37,7 @@ import { cssVar, optional, not } from '@cardstack/boxel-ui/helpers';
 
 import { IconTrash } from '@cardstack/boxel-ui/icons';
 
+import type { CommandContext } from '@cardstack/runtime-common';
 import {
   type Permissions,
   type getCard,
@@ -48,7 +50,6 @@ import {
   GetCardsContextName,
   GetCardCollectionContextName,
   cardTypeIcon,
-  CommandContext,
   realmURL,
   localId as localIdSymbol,
   CardContextName,
@@ -56,7 +57,7 @@ import {
   getCardMenuItems,
 } from '@cardstack/runtime-common';
 
-import { type StackItem } from '@cardstack/host/lib/stack-item';
+import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type {
@@ -428,13 +429,25 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.url;
   }
 
-  private get headerTitle() {
+  private get headerType() {
     if (this.isIndexCard) {
       return 'Workspace';
     } else if (this.card) {
       return cardTypeDisplayName(this.card);
     }
     return undefined;
+  }
+
+  private get headerTitle() {
+    let cardTitle = this.card?.title;
+    if (this.card && cardTitle?.startsWith('Untitled ')) {
+      let strippedTitle = cardTitle.slice('Untitled '.length);
+      if (strippedTitle === cardTypeDisplayName(this.card)) {
+        return 'Untitled';
+      }
+    }
+
+    return cardTitle;
   }
 
   private get cardTitle() {
@@ -766,9 +779,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
           {{this.setWindowTitle}}
           {{#let (this.realm.info this.urlForRealmLookup) as |realmInfo|}}
             <CardHeader
-              @cardTypeDisplayName={{this.headerTitle}}
+              @cardTypeDisplayName={{this.headerType}}
               @cardTypeIcon={{cardTypeIcon this.card}}
-              @cardTitle={{this.card.title}}
+              @cardTitle={{this.headerTitle}}
               @isSaving={{this.cardResource.autoSaveState.isSaving}}
               @isTopCard={{this.isTopCard}}
               @lastSavedMessage={{this.cardResource.autoSaveState.lastSavedErrorMsg}}

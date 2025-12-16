@@ -1,7 +1,12 @@
 import { service } from '@ember/service';
 import Service from '@ember/service';
 
-import { getAncestor, getField, isBaseDef } from '@cardstack/runtime-common';
+import {
+  Command,
+  getAncestor,
+  getField,
+  isBaseDef,
+} from '@cardstack/runtime-common';
 
 import {
   ModuleSyntax,
@@ -29,12 +34,21 @@ export interface CardOrField {
 }
 
 export type CardOrFieldDeclaration = CardOrField &
-  Partial<PossibleCardOrFieldDeclaration>;
+  Partial<PossibleCardOrFieldDeclaration> & { displayName?: string };
 
-export type CardOrFieldReexport = CardOrField & Reexport;
+export type CardOrFieldReexport = CardOrField &
+  Reexport & {
+    displayName?: string;
+  };
+
+export type CommandDeclaration = Omit<ClassDeclaration, 'type'> & {
+  type: 'command';
+  command: typeof Command;
+};
 
 export type ModuleDeclaration =
   | CardOrFieldDeclaration
+  | CommandDeclaration
   | ClassDeclaration
   | FunctionDeclaration
   | CardOrFieldReexport;
@@ -46,6 +60,12 @@ export function isCardOrFieldDeclaration(
     declaration.type === 'possibleCardOrField' &&
     hasCardOrFieldProperties(declaration)
   );
+}
+
+export function isCommandDeclaration(
+  declaration: ModuleDeclaration,
+): declaration is CommandDeclaration {
+  return declaration.type === 'command';
 }
 
 export function isReexportCardOrField(
@@ -105,6 +125,7 @@ export default class ModuleContentsService extends Service {
   ): Promise<ModuleDeclaration[]> {
     let exportedCardsOrFields: Map<string, typeof BaseDef> =
       getExportedCardsOrFields(module);
+    let exportedCommands = getExportedCommands(module);
     let localCardsOrFields = this.collectLocalCardsOrFields(
       moduleSyntax,
       exportedCardsOrFields,
@@ -123,10 +144,15 @@ export default class ModuleContentsService extends Service {
               cardType: await this.cardTypeService.assembleType(
                 cardOrField as typeof BaseDef,
               ),
+              displayName: cardOrField.displayName,
             } as CardOrFieldDeclaration;
           }
           // case where things statically look like cards or fields but are not
           if (value.exportName !== undefined) {
+            let command = exportedCommands.get(value.exportName);
+            if (command) {
+              return asCommandDeclaration(value, command);
+            }
             return {
               ...(value.super ? { super: value.super } : {}),
               localName: value.localName,
@@ -149,10 +175,19 @@ export default class ModuleContentsService extends Service {
                 cardType: await this.cardTypeService.assembleType(
                   cardOrField as typeof BaseDef,
                 ),
+                displayName: cardOrField.displayName,
               } as CardOrFieldReexport;
             }
           }
-        } else if (value.type === 'class' || value.type === 'function') {
+        } else if (value.type === 'class') {
+          if (value.exportName !== undefined) {
+            let command = exportedCommands.get(value.exportName);
+            if (command) {
+              return asCommandDeclaration(value, command);
+            }
+            return value as ModuleDeclaration;
+          }
+        } else if (value.type === 'function') {
           if (value.exportName !== undefined) {
             return value as ModuleDeclaration;
           }
@@ -263,4 +298,35 @@ function getExportedCardsOrFields(module: object) {
   return new Map(
     Object.entries(module).filter(([_, declaration]) => isBaseDef(declaration)),
   );
+}
+
+function getExportedCommands(module: object) {
+  return new Map(
+    Object.entries(module).filter(([_, declaration]) =>
+      isCommandConstructor(declaration),
+    ) as [string, typeof Command][],
+  );
+}
+
+function isCommandConstructor(
+  declaration: unknown,
+): declaration is typeof Command {
+  return (
+    typeof declaration === 'function' &&
+    declaration.prototype instanceof Command
+  );
+}
+
+function asCommandDeclaration(
+  declaration: PossibleCardOrFieldDeclaration | ClassDeclaration,
+  command: typeof Command,
+): CommandDeclaration {
+  return {
+    ...('super' in declaration ? { super: declaration.super } : {}),
+    localName: declaration.localName,
+    exportName: declaration.exportName,
+    path: declaration.path,
+    type: 'command',
+    command,
+  };
 }

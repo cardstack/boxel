@@ -3,8 +3,8 @@ import Component from '@glimmer/component';
 
 import { task } from 'ember-concurrency';
 
-import RealmService from '../services/realm';
-import RealmServerService from '../services/realm-server';
+import type RealmService from '../services/realm';
+import type RealmServerService from '../services/realm-server';
 
 interface Signature {
   Args: {};

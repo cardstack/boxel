@@ -26,20 +26,21 @@ import {
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 
-import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
+import type MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 
-import { RoomResource } from '@cardstack/host/resources/room';
+import type { RoomResource } from '@cardstack/host/resources/room';
 import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import CodeBlock from '../ai-assistant/code-block';
 import CardRenderer from '../card-renderer';
+
+import type { ApplyButtonState } from '../ai-assistant/apply-button';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -69,6 +70,9 @@ export default class RoomMessageCommand extends Component<Signature> {
   private get applyButtonState(): ApplyButtonState {
     if (this.failedCommandState) {
       return 'failed';
+    }
+    if (this.didFailCorrectnessCheck) {
+      return 'applied-with-error';
     }
     return this.args.messageCommand?.status ?? 'ready';
   }
@@ -134,6 +138,22 @@ export default class RoomMessageCommand extends Component<Signature> {
     );
   }
 
+  private get didFailCorrectnessCheck() {
+    if (this.args.messageCommand.name !== 'checkCorrectness') {
+      return false;
+    }
+    let card = this.commandResultCard.card as
+      | { correct?: boolean; errors?: unknown[] }
+      | undefined;
+    if (!card) {
+      return false;
+    }
+    let hasErrors =
+      Array.isArray(card.errors) && card.errors.filter(Boolean).length > 0;
+    let isMarkedIncorrect = card.correct === false;
+    return hasErrors || isMarkedIncorrect;
+  }
+
   private get moreOptionsMenuItems() {
     let menuItems =
       this.commandResultCard.card?.[getCardMenuItems]?.({
@@ -173,13 +193,17 @@ export default class RoomMessageCommand extends Component<Signature> {
     return this.args.messageCommand.description ?? 'Preparing tool call...';
   }
 
+  private get hasFailedState() {
+    return !!(this.failedCommandState || this.didFailCorrectnessCheck);
+  }
+
   <template>
     <div
       class={{cn
         'room-message-command'
         is-pending=@isPending
         is-error=@isError
-        is-failed=(bool this.failedCommandState)
+        is-failed=(bool this.hasFailedState)
       }}
       data-test-command-id={{@messageCommand.commandRequest.id}}
       ...attributes

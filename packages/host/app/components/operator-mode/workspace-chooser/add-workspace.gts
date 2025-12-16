@@ -21,7 +21,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
-import MatrixService from '@cardstack/host/services/matrix-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import {
   getRandomBackgroundURL,

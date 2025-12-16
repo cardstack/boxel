@@ -6,12 +6,12 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
-import { Realm } from '@cardstack/runtime-common/realm';
+import type { Loader } from '@cardstack/runtime-common/loader';
+import type { Realm } from '@cardstack/runtime-common/realm';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   testRealmURL,
@@ -22,10 +22,12 @@ import {
   setupIntegrationTestRealm,
   setupOperatorModeStateCleanup,
 } from '../../helpers';
-import { TestRealmAdapter } from '../../helpers/adapter';
+
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { TestRealmAdapter } from '../../helpers/adapter';
 
 let loader: Loader;
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -39,7 +41,7 @@ module('Integration | card-delete', function (hooks) {
   let adapter: TestRealmAdapter;
   let noop = () => {};
   async function loadCard(url: string): Promise<CardDef> {
-    let { createFromSerialized, ensureLinksLoaded } = cardApi;
+    let { createFromSerialized } = cardApi;
     let result = await realm.realmIndexQueryEngine.cardDocument(new URL(url));
     if (!result || result.type === 'error') {
       throw new Error(
@@ -53,7 +55,6 @@ module('Integration | card-delete', function (hooks) {
       result.doc,
       new URL(url),
     );
-    await ensureLinksLoaded(card);
     return card;
   }
   setupRenderingTest(hooks);

@@ -317,7 +317,7 @@ module('Integration | card-catalog', function (hooks) {
         .dom(
           `[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]`,
         )
-        .hasText('Publishing Packet - Untitled Publishing Packet');
+        .hasText('Publishing Packet - Untitled');
     });
 
     test(`can select card using mouse click and then submit selection using enter key`, async function (assert) {
@@ -380,7 +380,7 @@ module('Integration | card-catalog', function (hooks) {
         .dom(
           `[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]`,
         )
-        .hasText('Author - Untitled Author');
+        .hasText('Author - Untitled');
     });
 
     test(`double-clicking on a card selects the card and submits the selection`, async function (assert) {

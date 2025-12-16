@@ -4,7 +4,6 @@ import {
   type RenderResponse,
   type ModuleRenderResponse,
   type RenderRouteOptions,
-  type RealmPermissions,
   serializeRenderRouteOptions,
   logger,
 } from '@cardstack/runtime-common';
@@ -42,25 +41,55 @@ export class RenderRunner {
   #evictionMetrics = {
     byRealm: new Map<string, { unusable: number; timeout: number }>(),
   };
+  #lastAuthByRealm = new Map<string, string>();
 
   constructor(options: { pagePool: PagePool; boxelHostURL: string }) {
     this.#pagePool = options.pagePool;
     this.#boxelHostURL = options.boxelHostURL;
   }
 
+  async #getPageForRealm(realm: string, auth: string) {
+    let pageInfo = await this.#pagePool.getPage(realm);
+    let lastAuth = this.#lastAuthByRealm.get(realm);
+    if (pageInfo.reused && lastAuth) {
+      let lastKeys = this.#authKeys(lastAuth);
+      let nextKeys = this.#authKeys(auth);
+      let authChanged =
+        lastKeys && nextKeys
+          ? lastKeys.length !== nextKeys.length ||
+            lastKeys.some((k) => !nextKeys.includes(k))
+          : lastAuth !== auth;
+      if (authChanged) {
+        await this.#pagePool.disposeRealm(realm);
+        pageInfo = await this.#pagePool.getPage(realm);
+      }
+    }
+    this.#lastAuthByRealm.set(realm, auth);
+    return pageInfo;
+  }
+
+  clearAuthCache(realm: string) {
+    this.#lastAuthByRealm.delete(realm);
+  }
+
+  #authKeys(auth: string): string[] | null {
+    try {
+      let parsed = JSON.parse(auth) as Record<string, string>;
+      return Object.keys(parsed).sort();
+    } catch (_e) {
+      return null;
+    }
+  }
+
   async prerenderCardAttempt({
     realm,
     url,
-    userId,
-    permissions,
     auth,
     opts,
     renderOptions,
   }: {
     realm: string;
     url: string;
-    userId: string;
-    permissions: RealmPermissions;
     auth: string;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
@@ -76,15 +105,12 @@ export class RenderRunner {
     };
   }> {
     this.#nonce++;
-    log.info(
-      `prerendering url ${url}, nonce=${this.#nonce} realm=${realm} userId=${userId}`,
-    );
-    log.debug(
-      `prerendering url ${url} with permissions=${JSON.stringify(permissions)}`,
-    );
+    log.info(`prerendering url ${url}, nonce=${this.#nonce} realm=${realm}`);
 
-    const { page, reused, launchMs, pageId } =
-      await this.#pagePool.getPage(realm);
+    const { page, reused, launchMs, pageId } = await this.#getPageForRealm(
+      realm,
+      auth,
+    );
     const poolInfo = {
       pageId: pageId ?? 'unknown',
       realm,
@@ -162,6 +188,9 @@ export class RenderRunner {
         poolInfo.evicted = true;
         shortCircuit = true;
       }
+      if (this.#isAuthError(error)) {
+        shortCircuit = true;
+      }
     } else {
       let capture = result as RenderCapture;
       if (capture.status === 'ready') {
@@ -175,6 +204,9 @@ export class RenderRunner {
         let evicted = await this.#maybeEvict(realm, 'isolated render', capErr);
         if (evicted) {
           poolInfo.evicted = true;
+          shortCircuit = true;
+        }
+        if (this.#isAuthError(error)) {
           shortCircuit = true;
         }
       }
@@ -234,6 +266,9 @@ export class RenderRunner {
       }
       error = error ?? (metaMaybeError as RenderError);
       markTimeout(error);
+      if (this.#isAuthError(error)) {
+        shortCircuit = true;
+      }
       meta = {
         serialized: null,
         searchDoc: null,
@@ -324,6 +359,10 @@ export class RenderRunner {
             shortCircuit = true;
             break;
           }
+          if (this.#isAuthError(error)) {
+            shortCircuit = true;
+            break;
+          }
         }
       }
     }
@@ -348,16 +387,12 @@ export class RenderRunner {
   async prerenderModuleAttempt({
     realm,
     url,
-    userId,
-    permissions,
     auth,
     opts,
     renderOptions,
   }: {
     realm: string;
     url: string;
-    userId: string;
-    permissions: RealmPermissions;
     auth: string;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
@@ -374,14 +409,13 @@ export class RenderRunner {
   }> {
     this.#nonce++;
     log.info(
-      `module prerendering url ${url}, nonce=${this.#nonce} realm=${realm} userId=${userId}`,
-    );
-    log.debug(
-      `module prerendering url ${url} with permissions=${JSON.stringify(permissions)}`,
+      `module prerendering url ${url}, nonce=${this.#nonce} realm=${realm}`,
     );
 
-    const { page, reused, launchMs, pageId } =
-      await this.#pagePool.getPage(realm);
+    const { page, reused, launchMs, pageId } = await this.#getPageForRealm(
+      realm,
+      auth,
+    );
     const poolInfo = {
       pageId: pageId ?? 'unknown',
       realm,
@@ -534,6 +568,11 @@ export class RenderRunner {
       }
     }
     return undefined;
+  }
+
+  #isAuthError(err?: RenderError): boolean {
+    let status = Number(err?.error?.status);
+    return status === 401 || status === 403;
   }
 
   async #step<T>(

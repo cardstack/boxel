@@ -8,6 +8,8 @@ import { service } from '@ember/service';
 
 import { isTesting } from '@embroider/macros';
 
+import RSVP from 'rsvp';
+
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
@@ -90,6 +92,17 @@ export default class RenderRoute extends Route<Model> {
   #authGuard = createAuthErrorGuard();
   #restoreRenderTimers: (() => void) | undefined;
   #releaseTimerBlock: (() => void) | undefined;
+  #handleUnhandledError = (error: any) => {
+    if (
+      error?.name === 'TransitionAborted' ||
+      error?.code === 'TRANSITION_ABORTED'
+    ) {
+      return;
+    }
+    this.#markPrerenderUnusable(error);
+    this.#setAllModelStatuses('unusable');
+    this.handleRenderError(error);
+  };
 
   errorHandler = (event: Event) => {
     if (this.isDestroying || this.isDestroyed) {
@@ -103,19 +116,11 @@ export default class RenderRoute extends Route<Model> {
           elements.container.dataset.prerenderStatus = 'unusable';
         }
       },
-      setError: (error) => {
-        if (elements.errorElement) {
-          elements.errorElement.textContent = error;
-        }
-      },
+      setError: (error) =>
+        this.#writePrerenderError(elements.errorElement, error),
       currentURL: this.router.currentURL,
     });
     this.#setAllModelStatuses('unusable');
-    // Only unset lazilyLoadLinks if we last set it
-    if ((globalThis as any).__lazilyLoadLinksOwner === 'render') {
-      (globalThis as any).__lazilyLoadLinks = undefined;
-      (globalThis as any).__lazilyLoadLinksOwner = undefined;
-    }
     (globalThis as any).__boxelRenderContext = undefined;
   };
 
@@ -125,11 +130,6 @@ export default class RenderRoute extends Route<Model> {
   }
 
   deactivate() {
-    // Only unset lazilyLoadLinks if we last set it
-    if ((globalThis as any).__lazilyLoadLinksOwner === 'render') {
-      (globalThis as any).__lazilyLoadLinks = undefined;
-      (globalThis as any).__lazilyLoadLinksOwner = undefined;
-    }
     (globalThis as any).__boxelRenderContext = undefined;
     (globalThis as any).__renderInstance = undefined;
     window.removeEventListener('boxel-render-error', this.handleRenderError);
@@ -154,12 +154,11 @@ export default class RenderRoute extends Route<Model> {
     if (!isTesting()) {
       // tests have their own way of dealing with window level errors in card-prerender.gts
       this.#attachWindowErrorListeners();
+      this.realm.restoreSessionsFromStorage();
     }
 
     // activate() doesn't run early enough for this to be set before the model()
     // hook is run
-    (globalThis as any).__lazilyLoadLinks = true;
-    (globalThis as any).__lazilyLoadLinksOwner = 'render';
     (globalThis as any).__boxelRenderContext = true;
     this.#authGuard.register();
     if (!isTesting()) {
@@ -377,10 +376,7 @@ export default class RenderRoute extends Route<Model> {
       return;
     }
     for (let model of this.#pendingReadyModels) {
-      void this.#settleModelAfterRender(model).catch((error) => {
-        this.#dispositionModel(model, 'error');
-        this.handleRenderError(error);
-      });
+      void this.#settleModelAfterRenderSafely(model);
     }
     this.#pendingReadyModels.clear();
   }
@@ -411,7 +407,7 @@ export default class RenderRoute extends Route<Model> {
         return;
       }
       if (attempts++ >= 2) {
-        void this.#settleModelAfterRender(model);
+        void this.#settleModelAfterRenderSafely(model);
         return;
       }
       requestAnimationFrame(tick);
@@ -428,6 +424,13 @@ export default class RenderRoute extends Route<Model> {
     modelState.state.set('status', 'ready');
     modelState.isReady = true;
     modelState.readyDeferred.fulfill();
+  }
+
+  #settleModelAfterRenderSafely(model: Model) {
+    return this.#settleModelAfterRender(model).catch((error) => {
+      this.#dispositionModel(model, 'error');
+      this.handleRenderError(error);
+    });
   }
 
   #dispositionModel(model: Model, status: RenderStatus = 'error') {
@@ -452,6 +455,18 @@ export default class RenderRoute extends Route<Model> {
   #setAllModelStatuses(status: RenderStatus) {
     for (let model of this.#modelStates.keys()) {
       this.#dispositionModel(model, status);
+    }
+  }
+
+  #writePrerenderError(errorElement: HTMLElement | null, error: any) {
+    if (!errorElement) {
+      return;
+    }
+    try {
+      errorElement.textContent =
+        typeof error === 'string' ? error : JSON.stringify(error, null, 2);
+    } catch {
+      // best-effort; avoid throwing while handling an error
     }
   }
 
@@ -747,12 +762,26 @@ export default class RenderRoute extends Route<Model> {
     }
   }
 
+  #markPrerenderUnusable(error?: any) {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    let { container, errorElement } = this.#ensurePrerenderElements();
+    if (container) {
+      container.dataset.prerenderStatus = 'unusable';
+    }
+    if (error) {
+      this.#writePrerenderError(errorElement, error);
+    }
+  }
+
   #attachWindowErrorListeners() {
     if (this.#windowListenersAttached || typeof window === 'undefined') {
       return;
     }
     window.addEventListener('error', this.errorHandler);
     window.addEventListener('unhandledrejection', this.errorHandler);
+    RSVP.on('error', this.#handleUnhandledError);
     this.#windowListenersAttached = true;
   }
 
@@ -762,6 +791,7 @@ export default class RenderRoute extends Route<Model> {
     }
     window.removeEventListener('error', this.errorHandler);
     window.removeEventListener('unhandledrejection', this.errorHandler);
+    RSVP.off('error', this.#handleUnhandledError);
     this.#windowListenersAttached = false;
   }
 

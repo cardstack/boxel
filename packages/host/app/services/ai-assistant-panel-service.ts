@@ -414,7 +414,7 @@ export default class AiAssistantPanelService extends Service {
           });
         }
       } catch (e) {
-        console.log(e);
+        console.error(e);
         this.displayRoomError = true;
       }
 

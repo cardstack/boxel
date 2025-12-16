@@ -1,5 +1,6 @@
 import { on } from '@ember/modifier';
-import { click, settled, RenderingTestContext } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
+import { click, settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 // @ts-expect-error says unused but the component uses it
@@ -10,7 +11,7 @@ import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 import { testRealmURLToUsername } from '@cardstack/runtime-common/helpers/const';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import SubscribeToRealms from '@cardstack/host/helpers/subscribe-to-realms';

@@ -1,9 +1,7 @@
-import { TemplateOnlyComponent } from '@ember/component/template-only';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-
-import { ComponentLike } from '@glint/template';
 
 import { Label } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
@@ -16,6 +14,8 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import CardRenderer from '../card-renderer';
 
 import { removeFileExtension } from './utils';
+
+import type { ComponentLike } from '@glint/template';
 
 interface SearchResultSignature {
   Element: Element;

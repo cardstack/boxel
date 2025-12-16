@@ -18,6 +18,11 @@ import window from 'ember-window-mock';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
+import type {
+  CodeRef,
+  CardErrorJSONAPI,
+  ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 import {
   type getCards,
   type getCard,
@@ -25,11 +30,8 @@ import {
   type CardResourceMeta,
   isFieldDef,
   internalKeyFor,
-  CodeRef,
-  CardErrorJSONAPI,
   GetCardsContextName,
   GetCardContextName,
-  ResolvedCodeRef,
   specRef,
   localId,
   meta,
@@ -50,7 +52,7 @@ import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import type { FileResource } from '@cardstack/host/resources/file';
-import { type Ready } from '@cardstack/host/resources/file';
+import type { Ready } from '@cardstack/host/resources/file';
 import { isReady } from '@cardstack/host/resources/file';
 import {
   type CardOrFieldDeclaration,
@@ -79,7 +81,7 @@ import type {
   ViewCardFn,
 } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
-import { Spec } from 'https://cardstack.com/base/spec';
+import type { Spec } from 'https://cardstack.com/base/spec';
 
 import type { ComponentLike } from '@glint/template';
 

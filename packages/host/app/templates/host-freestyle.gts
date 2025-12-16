@@ -1,6 +1,6 @@
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { ComponentLike } from '@glint/template';
 import FreestyleGuide from 'ember-freestyle/components/freestyle-guide';
 import FreestyleSection from 'ember-freestyle/components/freestyle-section';
 
@@ -28,9 +28,11 @@ import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
 
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
-import { getSearch } from '@cardstack/host/resources/search';
 
 import formatComponentName from '../helpers/format-component-name';
+
+import type StoreService from '../services/store';
+import type { ComponentLike } from '@glint/template';
 
 interface UsageComponent {
   title: string;
@@ -42,6 +44,7 @@ interface HostFreestyleSignature {
 }
 
 class HostFreestyleComponent extends Component<HostFreestyleSignature> {
+  @service private declare store: StoreService;
   formatComponentName = formatComponentName;
 
   @provide(GetCardContextName)
@@ -53,7 +56,7 @@ class HostFreestyleComponent extends Component<HostFreestyleSignature> {
   @provide(GetCardsContextName)
   // @ts-ignore "getCards" is declared but not used
   private get getCards() {
-    return getSearch;
+    return this.store.getSearchResource.bind(this.store);
   }
 
   @provide(GetCardCollectionContextName)

@@ -17,6 +17,7 @@ import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 import {
   type ModuleDeclaration,
   isCardOrFieldDeclaration,
+  isCommandDeclaration,
   isReexportCardOrField,
 } from '@cardstack/host/resources/module-contents';
 
@@ -111,6 +112,8 @@ export default class Selector extends Component<Signature> {
       return typeOfCardOrField(declaration.cardOrField);
     } else if (isReexportCardOrField(declaration)) {
       return typeOfCardOrField(declaration.cardOrField);
+    } else if (isCommandDeclaration(declaration)) {
+      return 'command';
     } else if (declaration.type === 'class') {
       return 'class';
     } else if (declaration.type === 'function') {

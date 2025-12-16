@@ -27,7 +27,23 @@ import {
   Theme,
   type BaseDefComponent,
 } from './card-api';
-import ThemeVarField from './structured-theme-variables';
+import ThemeVarField, {
+  ThemeTypographyField,
+} from './structured-theme-variables';
+
+export const CSS_PLACEHOLDER = `:root {
+  --background: hsl(0 0% 100%);
+  --foreground: oklch(0.52 0.13 144.17);
+  --primary: #3e2723;
+  /* ... */
+}
+
+.dark {
+  --background: hsl(222.2 84% 4.9%);
+  --foreground: hsl(37.50 36.36% 95.69%);
+  --primary: rgb(46, 125, 50);
+  /* ... */
+}`;
 
 interface SectionToggleSignature {
   Args: {
@@ -81,7 +97,7 @@ class SectionToggleButton extends GlimmerComponent<SectionToggleSignature> {
 }
 
 // Applies parsed CSS rules back onto the card fields for editing.
-const applyCssRulesToField = (
+export const applyCssRulesToField = (
   field: ThemeVarField | undefined,
   rules: CssRuleMap | undefined,
 ) => {
@@ -102,6 +118,29 @@ const applyCssRulesToField = (
     }
     (field as any)[fieldName] = value;
   }
+};
+
+// TODO: move to boxel-ui helpers
+export const mergeRuleMaps = (
+  ...maps: (CssRuleMap | undefined)[]
+): CssRuleMap | undefined => {
+  let combined: CssRuleMap | undefined;
+  for (let map of maps) {
+    if (!map?.size) {
+      continue;
+    }
+    if (!combined) {
+      combined = new Map(map);
+      continue;
+    }
+    for (let [name, value] of map.entries()) {
+      if (!name || !value) {
+        continue;
+      }
+      combined.set(name, value);
+    }
+  }
+  return combined;
 };
 
 class Isolated extends Component<typeof StructuredTheme> {
@@ -146,14 +185,6 @@ class Isolated extends Component<typeof StructuredTheme> {
     );
   }
 
-  private cssPlaceholder = `:root {
-  /* ... */
-}
-
-.dark {
-  /* ... */
-}`;
-
   <template>
     <GridContainer @tag='article' class='structured-theme-card'>
       <BoxelContainer @tag='header' @display='flex' class='theme-header'>
@@ -179,7 +210,7 @@ class Isolated extends Component<typeof StructuredTheme> {
               id='css-textarea'
               @type='textarea'
               @onInput={{this.parseCss}}
-              @placeholder={{this.cssPlaceholder}}
+              @placeholder={{CSS_PLACEHOLDER}}
               class='css-textarea'
               data-test-custom-css-variables
             />
@@ -276,26 +307,6 @@ class Isolated extends Component<typeof StructuredTheme> {
     </GridContainer>
 
     <style scoped>
-      p {
-        margin: 0;
-      }
-
-      h1,
-      h2 {
-        margin: 0;
-      }
-
-      h1 {
-        font-size: var(--boxel-heading-font-size);
-        line-height: var(--boxel-heading-line-height);
-      }
-
-      h2 {
-        font-size: var(--boxel-font-size-md);
-        font-weight: 500;
-        line-height: var(--boxel-line-height-md);
-      }
-
       .structured-theme-card {
         min-height: 100%;
         align-content: start;
@@ -379,6 +390,10 @@ class Isolated extends Component<typeof StructuredTheme> {
 export default class StructuredTheme extends Theme {
   static displayName = 'Structured Theme';
 
+  @field typography = contains(ThemeTypographyField, {
+    description:
+      'Typography styles for headings, body, and captions whose values are emitted as theme CSS variables.',
+  });
   @field rootVariables = contains(ThemeVarField, {
     description:
       '`:root {}` variables for default (light mode) theme. CSS variable names are the dasherized and lowercase version of the field names, prefixed with "--".',
@@ -394,10 +409,18 @@ export default class StructuredTheme extends Theme {
       if (!generateCssVariables || !buildCssGroups) {
         return;
       }
+      let rootRules = mergeRuleMaps(
+        this.rootVariables?.cssRuleMap,
+        this.typography?.cssRuleMap,
+      );
+      let darkRules = mergeRuleMaps(
+        this.darkModeVariables?.cssRuleMap,
+        this.typography?.cssRuleMap,
+      );
       return generateCssVariables(
         buildCssGroups([
-          { selector: ':root', rules: this.rootVariables?.cssRuleMap },
-          { selector: '.dark', rules: this.darkModeVariables?.cssRuleMap },
+          { selector: ':root', rules: rootRules },
+          { selector: '.dark', rules: darkRules },
         ]),
       );
     },

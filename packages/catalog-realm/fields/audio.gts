@@ -194,6 +194,7 @@ class AudioFieldEdit extends Component<typeof AudioField> {
 
       .uploaded-file {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: 0.75rem;
         padding: 0.75rem;

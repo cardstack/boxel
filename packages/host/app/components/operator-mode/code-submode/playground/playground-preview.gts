@@ -1,7 +1,8 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { CardContainer, CardHeader } from '@cardstack/boxel-ui/components';
-import { eq, or, MenuItem } from '@cardstack/boxel-ui/helpers';
+import type { MenuItem } from '@cardstack/boxel-ui/helpers';
+import { eq, or } from '@cardstack/boxel-ui/helpers';
 
 import {
   cardTypeDisplayName,

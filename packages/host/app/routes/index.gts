@@ -1,6 +1,6 @@
 import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
-import Transition from '@ember/routing/transition';
+import type Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
 
@@ -19,7 +19,7 @@ import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import { type SerializedState as OperatorModeSerializedState } from '@cardstack/host/services/operator-mode-state-service';
+import type { SerializedState as OperatorModeSerializedState } from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
@@ -188,18 +188,12 @@ export default class Card extends Route {
             submode: Submodes.Interact,
             aiAssistantOpen: this.operatorModeStateService.aiAssistantOpen,
             workspaceChooserOpened: stacks.length === 0,
-            version: this.operatorModeStateService.version,
           } as OperatorModeSerializedState),
         },
       });
       return;
     } else {
-      let incomingVersion = operatorModeStateObject?.version ?? 0;
-      let currentVersion = this.operatorModeStateService.version ?? 0;
-      if (
-        this.operatorModeStateService.serialize() === operatorModeState ||
-        incomingVersion < currentVersion
-      ) {
+      if (this.operatorModeStateService.serialize() === operatorModeState) {
         // If the operator mode state in the query param is the same as the one we have in memory,
         // we don't want to restore it again, because it will lead to rerendering of the stack items, which can
         // bring various annoyances, e.g reloading of the items in the index card.
@@ -240,6 +234,12 @@ export default class Card extends Route {
       routePath,
       serializedStack: stackParam,
     });
+
+    let stackItems = this.hostModeStateService.stackItems;
+    let headCardId =
+      stackItems.length > 0 ? stackItems[stackItems.length - 1] : primaryCardId;
+
+    await this.hostModeService.updateHeadTemplate(headCardId);
   }
 
   private async getCardUrl(cardPath: string): Promise<string | undefined> {

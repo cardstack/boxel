@@ -2,7 +2,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import ENV from '@cardstack/host/config/environment';
 
@@ -30,7 +30,7 @@ module('Integration | image field configuration', function (hooks) {
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
     const imageModule: any = await loader.import(
-      `${catalogRealmURL}fields/image-field`,
+      `${catalogRealmURL}fields/image`,
     );
     CatalogImageFieldClass = imageModule.default;
   });

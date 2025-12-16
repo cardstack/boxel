@@ -13,8 +13,8 @@ import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 import { consume, provide } from 'ember-provide-consume-context';
 import { resource, use } from 'ember-resources';
 
+import type { BoxelSelect } from '@cardstack/boxel-ui/components';
 import {
-  BoxelSelect,
   CardContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';

@@ -5,7 +5,7 @@ import { filesize } from 'filesize';
 
 import { File } from '@cardstack/boxel-ui/icons';
 
-import { type Ready } from '@cardstack/host/resources/file';
+import type { Ready } from '@cardstack/host/resources/file';
 
 interface Signature {
   Element: HTMLElement;

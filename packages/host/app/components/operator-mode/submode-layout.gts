@@ -24,7 +24,7 @@ import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
 
 import { BoxelIconWithText } from '@cardstack/boxel-ui/icons';
 
-import { ResolvedCodeRef } from '@cardstack/runtime-common';
+import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
 import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
@@ -39,11 +39,9 @@ import type IndexController from '@cardstack/host/controllers';
 import { assertNever } from '@cardstack/host/utils/assert-never';
 import { AiAssistantPanelWidth } from '@cardstack/host/utils/local-storage-keys';
 
-import SearchSheet, {
-  SearchSheetMode,
-  SearchSheetModes,
-} from '../search-sheet';
-import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
+import SearchSheet, { SearchSheetModes } from '../search-sheet';
+
+import SubmodeSwitcher, { Submodes } from '../submode-switcher';
 
 import AskAiContainer from './ask-ai-container';
 
@@ -57,6 +55,8 @@ import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
+import type { SearchSheetMode } from '../search-sheet';
+import type { Submode } from '../submode-switcher';
 
 interface Signature {
   Element: HTMLDivElement;

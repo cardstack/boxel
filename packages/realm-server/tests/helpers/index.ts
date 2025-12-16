@@ -22,7 +22,6 @@ import {
   baseRealm,
   VirtualNetwork,
   Worker,
-  RunnerOptionsManager,
   insertPermissions,
   IndexWriter,
   asExpressions,
@@ -38,7 +37,6 @@ import {
   type MatrixConfig,
   type QueuePublisher,
   type QueueRunner,
-  type IndexRunner,
   type Definition,
   type Prerenderer,
   CachingDefinitionLookup,
@@ -46,7 +44,6 @@ import {
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
-import { makeFastBootIndexRunner } from '../../fastboot';
 import { RealmServer } from '../../server';
 
 import {
@@ -68,6 +65,7 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 import { createRemotePrerenderer } from '../../prerender/remote-prerenderer';
 import { createPrerenderHttpServer } from '../../prerender/prerender-app';
+import { buildCreatePrerenderAuth } from '../../prerender/auth';
 
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
@@ -136,16 +134,13 @@ export const realmSecretSeed = `shhh! it's a secret`;
 export const grafanaSecret = `shhh! it's a secret`;
 export const matrixRegistrationSecret: string =
   getSynapseConfig()!.registration_shared_secret; // as long as synapse has been started at least once, this will always exist
+export const testCreatePrerenderAuth =
+  buildCreatePrerenderAuth(realmSecretSeed);
 
 let prerenderServer: Server | undefined;
 let prerenderServerStart: Promise<void> | undefined;
 
 const basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
-
-let manager = new RunnerOptionsManager();
-let fastbootState:
-  | { getRunner: IndexRunner; getIndexHTML: () => Promise<string> }
-  | undefined;
 
 export function cleanWhiteSpace(text: string) {
   return text
@@ -177,7 +172,6 @@ async function startTestPrerenderServer(): Promise<string> {
     return testPrerenderURL;
   }
   let server = createPrerenderHttpServer({
-    secretSeed: realmSecretSeed,
     silent: Boolean(process.env.SILENT_PRERENDERER),
   });
   prerenderServer = server;
@@ -250,7 +244,6 @@ export function setupDB(
     }
     await dbAdapter?.close();
     await stopTestPrerenderServer();
-    delete (globalThis as any).__useHeadlessChromePrerender;
   };
 
   // we need to pair before/after and beforeEach/afterEach. within this setup
@@ -292,14 +285,10 @@ export function setupDB(
   }
 }
 
-export async function getFastbootState() {
-  if (!fastbootState) {
-    fastbootState = await makeFastBootIndexRunner(
-      new URL(process.env.HOST_URL ?? 'http://localhost:4200/'),
-      manager.getOptions.bind(manager),
-    );
-  }
-  return fastbootState;
+export async function getIndexHTML() {
+  let url = process.env.HOST_URL ?? 'http://localhost:4200/';
+  let request = await fetch(url);
+  return await request.text();
 }
 
 export async function createRealm({
@@ -315,7 +304,6 @@ export async function createRealm({
   matrixConfig = testMatrix,
   withWorker,
   enableFileWatcher = false,
-  disablePrerenderer = false,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -332,7 +320,6 @@ export async function createRealm({
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
-  disablePrerenderer?: boolean;
 }): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
@@ -346,28 +333,22 @@ export async function createRealm({
 
   let adapter = new NodeAdapter(dir, enableFileWatcher);
   let worker: Worker | undefined;
-  if (!disablePrerenderer) {
-    (globalThis as any).__useHeadlessChromePrerender = true;
-  }
   let prerenderer = await getTestPrerenderer();
   if (withWorker) {
     if (!runner) {
       throw new Error(`must provider a QueueRunner when using withWorker`);
     }
-    let indexRunner = (await getFastbootState()).getRunner;
     worker = new Worker({
       indexWriter: new IndexWriter(dbAdapter),
       queue: runner,
       dbAdapter,
       queuePublisher: publisher,
-      runnerOptsManager: manager,
-      indexRunner,
       virtualNetwork,
       matrixURL: matrixConfig.url,
       secretSeed: realmSecretSeed,
       realmServerMatrixUsername: testRealmServerMatrixUsername,
       prerenderer,
-      useHeadlessChromePrerender: Boolean(!disablePrerenderer),
+      createPrerenderAuth: testCreatePrerenderAuth,
     });
   }
   let realmServerMatrixClient = new MatrixClient({
@@ -393,11 +374,7 @@ export async function createRealm({
   return { realm, adapter };
 }
 
-export function setupBaseRealmServer(
-  hooks: NestedHooks,
-  matrixURL: URL,
-  options: { disablePrerenderer?: boolean } = {},
-) {
+export function setupBaseRealmServer(hooks: NestedHooks, matrixURL: URL) {
   let baseRealmServer: Server | undefined;
   setupDB(hooks, {
     before: async (dbAdapter, publisher, runner) => {
@@ -410,7 +387,6 @@ export function setupBaseRealmServer(
         matrixURL,
         dir.name,
         { '*': ['read'] },
-        options,
       );
     },
     after: async () => {
@@ -430,36 +406,28 @@ export async function runBaseRealmServer(
   matrixURL: URL,
   realmsRootPath: string,
   permissions: RealmPermissions = { '*': ['read'] },
-  options: { disablePrerenderer?: boolean } = {},
 ) {
-  let { disablePrerenderer = false } = options;
   let localBaseRealmURL = new URL(localBaseRealm);
   virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
-
-  let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
-  if (!disablePrerenderer) {
-    (globalThis as any).__useHeadlessChromePrerender = true;
-  }
 
   let prerenderer = await getTestPrerenderer();
   let definitionLookup = new CachingDefinitionLookup(
     dbAdapter,
     prerenderer,
     virtualNetwork,
+    testCreatePrerenderAuth,
   );
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue: runner,
     dbAdapter,
     queuePublisher: publisher,
-    runnerOptsManager: manager,
-    indexRunner,
     virtualNetwork,
     matrixURL,
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
-    useHeadlessChromePrerender: Boolean(!disablePrerenderer),
+    createPrerenderAuth: testCreatePrerenderAuth,
   });
   let { realm: testBaseRealm } = await createRealm({
     dir: basePath,
@@ -495,6 +463,7 @@ export async function runBaseRealmServer(
     serverURL: new URL(localBaseRealmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
     definitionLookup,
+    prerenderer,
   });
   return testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
 }
@@ -516,7 +485,6 @@ export async function runTestRealmServer({
     boxelSpace: 'localhost',
     boxelSite: 'localhost',
   },
-  disablePrerenderer = false,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -534,31 +502,25 @@ export async function runTestRealmServer({
     boxelSpace?: string;
     boxelSite?: string;
   };
-  disablePrerenderer?: boolean;
 }) {
-  let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
-  if (!disablePrerenderer) {
-    (globalThis as any).__useHeadlessChromePrerender = true;
-  }
   let prerenderer = await getTestPrerenderer();
   let definitionLookup = new CachingDefinitionLookup(
     dbAdapter,
     prerenderer,
     virtualNetwork,
+    testCreatePrerenderAuth,
   );
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue: runner,
     dbAdapter,
     queuePublisher: publisher,
-    runnerOptsManager: manager,
-    indexRunner,
     virtualNetwork,
     matrixURL,
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
-    useHeadlessChromePrerender: Boolean(!disablePrerenderer),
+    createPrerenderAuth: testCreatePrerenderAuth,
   });
   await worker.run();
   let { realm: testRealm, adapter: testRealmAdapter } = await createRealm({
@@ -600,6 +562,7 @@ export async function runTestRealmServer({
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
     domainsForPublishedRealms,
     definitionLookup,
+    prerenderer,
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   await testRealmServer.start();
@@ -1015,7 +978,6 @@ export function setupPermissionedRealms(
     mode = 'beforeEach',
     realms: realmsArg,
     onRealmSetup,
-    disablePrerenderer,
   }: {
     mode?: 'beforeEach' | 'before';
     realms: {
@@ -1032,7 +994,6 @@ export function setupPermissionedRealms(
         realmAdapter: RealmAdapter;
       }[];
     }) => void;
-    disablePrerenderer?: true;
   },
 ) {
   // We want 2 different realm users to test authorization between them - these
@@ -1074,7 +1035,6 @@ export function setupPermissionedRealms(
           dbAdapter,
           publisher,
           runner,
-          disablePrerenderer,
         });
         realms.push({
           realm,

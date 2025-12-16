@@ -13,11 +13,8 @@ import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
-import {
-  Deferred,
-  SingleCardDocument,
-  isLocalId,
-} from '@cardstack/runtime-common';
+import type { SingleCardDocument } from '@cardstack/runtime-common';
+import { Deferred, isLocalId } from '@cardstack/runtime-common';
 
 import { claimsFromRawToken } from '@cardstack/host/services/realm';
 import { RecentCards } from '@cardstack/host/utils/local-storage-keys';
@@ -187,6 +184,7 @@ module(
         // Press the + button to create a new card instance
         await click('[data-test-boxel-filter-list-button="All Cards"]');
         await click('[data-test-create-new-card-button]');
+        await fillIn('[data-test-search-field]', 'Skill');
         // Select a card from catalog entries
         await click(
           `[data-test-select="https://cardstack.com/base/cards/skill"]`,
@@ -212,6 +210,7 @@ module(
         });
         await click('[data-test-boxel-filter-list-button="All Cards"]');
         await click('[data-test-create-new-card-button]');
+        await fillIn('[data-test-search-field]', 'Skill');
         await click(
           `[data-test-select="https://cardstack.com/base/cards/skill"]`,
         );
@@ -298,6 +297,7 @@ module(
         });
         await click('[data-test-boxel-filter-list-button="All Cards"]');
         await click('[data-test-create-new-card-button]');
+        await fillIn('[data-test-search-field]', 'Skill');
         await click(
           `[data-test-select="https://cardstack.com/base/cards/skill"]`,
         );

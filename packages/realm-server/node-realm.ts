@@ -272,6 +272,10 @@ export class NodeAdapter implements RealmAdapter {
     attempts = 3,
     delayMs = 50,
   ): Promise<Record<string, string>> {
+    if (dbAdapter.isClosed) {
+      return {};
+    }
+
     let dmRooms: Record<string, string> = {};
     try {
       dmRooms = await fetchAllSessionRooms(dbAdapter, realmUrl);

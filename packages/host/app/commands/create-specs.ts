@@ -24,6 +24,7 @@ import {
   type CardOrFieldDeclaration,
   type ModuleDeclaration,
   isCardOrFieldDeclaration,
+  isReexportCardOrField,
 } from '../services/module-contents-service';
 
 import GenerateReadmeSpecCommand from './generate-readme-spec';
@@ -148,7 +149,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
     createIfExists: boolean = false,
     autoGenerateReadme: boolean = false,
   ): Promise<CreateSpecResult> {
-    const title = codeRef.name;
+    const title = this.getSpecTitle(declaration, codeRef.name);
     const specType = new SpecTypeGuesser(declaration).type;
 
     let createdSpecRes: CreateSpecResult;
@@ -210,6 +211,20 @@ export default class CreateSpecCommand extends HostBaseCommand<
     }
 
     return createdSpecRes;
+  }
+
+  private getSpecTitle(
+    declaration: ModuleDeclaration,
+    fallbackName: string,
+  ): string {
+    if (
+      isCardOrFieldDeclaration(declaration) ||
+      isReexportCardOrField(declaration)
+    ) {
+      return declaration.cardOrField.displayName ?? fallbackName;
+    }
+
+    return fallbackName;
   }
 
   protected async run(

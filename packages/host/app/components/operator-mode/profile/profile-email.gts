@@ -9,7 +9,6 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
 
-import { type IAuthData } from 'matrix-js-sdk';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
@@ -28,7 +27,9 @@ import {
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 
-import MatrixService from '@cardstack/host/services/matrix-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
+
+import type { IAuthData } from 'matrix-js-sdk';
 
 interface PasswordModalSignature {
   Args: {

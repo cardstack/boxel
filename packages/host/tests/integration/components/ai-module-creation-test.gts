@@ -6,7 +6,8 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, skip } from 'qunit';
 
-import { baseRealm, Loader, type Realm } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
+import { baseRealm, type Realm } from '@cardstack/runtime-common';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import {
@@ -18,7 +19,7 @@ import {
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import ENV from '@cardstack/host/config/environment';
 
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type { CardMessageContent } from 'https://cardstack.com/base/matrix-event';
 

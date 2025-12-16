@@ -3,8 +3,8 @@ import Component from '@glimmer/component';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import RealmService from '@cardstack/host/services/realm';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type RealmService from '@cardstack/host/services/realm';
 
 interface PublishingRealmArgs {
   isOpen: boolean;

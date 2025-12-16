@@ -1,6 +1,6 @@
 import { getOwner } from '@ember/owner';
 import Service from '@ember/service';
-import { RenderingTestContext } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { setupWindowMock } from 'ember-window-mock/test-support';
@@ -9,7 +9,7 @@ import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
 import { skillCardURL } from '@cardstack/host/lib/utils';

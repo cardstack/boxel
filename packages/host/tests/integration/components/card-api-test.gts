@@ -1,5 +1,6 @@
 import { action } from '@ember/object';
-import { RenderingTestContext } from '@ember/test-helpers';
+import { service } from '@ember/service';
+import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { fillIn } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
@@ -13,10 +14,9 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 import { CardContextName } from '@cardstack/runtime-common';
 
-import { getSearch } from '@cardstack/host/resources/search';
+import type StoreService from '@cardstack/host/services/store';
 
 import {
-  CardDocFiles,
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
@@ -33,16 +33,19 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
+import type { CardDocFiles } from '../../helpers';
+
 interface CardContextProviderSignature {
   Args: {};
   Blocks: { default: [] };
 }
 
 class CardContextProvider extends GlimmerComponent<CardContextProviderSignature> {
+  @service declare store: StoreService;
   @provide(CardContextName)
   get context() {
     return {
-      getCards: getSearch,
+      getCards: this.store.getSearchResource.bind(this.store),
     };
   }
 }

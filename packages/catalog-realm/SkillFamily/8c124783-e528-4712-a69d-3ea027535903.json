@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "title": null,
+      "title": "Boxel Skill Family",
       "cardInfo": {
         "notes": null,
         "title": null,
@@ -32,6 +32,16 @@
       "statements.2": {
         "links": {
           "self": "../Statement/theming-system"
+        }
+      },
+      "statements.3": {
+        "links": {
+          "self": "../Statement/catalog-field-selection"
+        }
+      },
+      "statements.4": {
+        "links": {
+          "self": "../Statement/catalog-field-usage"
         }
       },
       "cardInfo.theme": {

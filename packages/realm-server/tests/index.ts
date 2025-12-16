@@ -16,6 +16,9 @@
   }) as typeof setTimeout;
 }
 
+import * as ContentTagGlobal from 'content-tag';
+(globalThis as any).ContentTagGlobal = ContentTagGlobal;
+
 import QUnit from 'qunit';
 
 QUnit.config.testTimeout = 60000;
@@ -30,20 +33,22 @@ import './card-endpoints-test';
 import './card-source-endpoints-test';
 import './definition-lookup-test';
 import './file-watcher-events-test';
-import './headless-chrome-indexing-test';
 import './indexing-test';
 import './module-syntax-test';
 import './permissions/permission-checker-test';
 import './prerendering-test';
 import './prerender-server-test';
 import './prerender-manager-test';
+import './prerender-proxy-test';
 import './queue-test';
 import './realm-endpoints-test';
+import './realm-endpoints/dependencies-test';
 import './realm-endpoints/directory-test';
 import './realm-endpoints/info-test';
 import './realm-endpoints/lint-test';
 import './realm-endpoints/mtimes-test';
 import './realm-endpoints/permissions-test';
+import './realm-endpoints/publishability-test';
 import './realm-endpoints/search-test';
 import './realm-endpoints/user-test';
 import './search-prerendered-test';

@@ -14,8 +14,6 @@ import {
   type QueuePublisher,
   type QueueRunner,
   DEFAULT_PERMISSIONS,
-  normalizeFullReindexBatchSize,
-  normalizeFullReindexCooldownSeconds,
   systemInitiatedPriority,
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
@@ -1308,8 +1306,6 @@ module(basename(__filename), function () {
               instanceErrors: 0,
               modulesIndexed: 0,
               instancesIndexed: 1,
-              definitionErrors: 0,
-              definitionsIndexed: 0,
               totalIndexEntries: 1,
             });
           }
@@ -1466,20 +1462,6 @@ module(basename(__filename), function () {
                 360,
                 'job has correct timeout (6 minutes)',
               );
-              let jobArgs = (reindexJob.args ?? {}) as {
-                batchSize?: number;
-                cooldownSeconds?: number;
-              };
-              assert.strictEqual(
-                jobArgs.batchSize,
-                normalizeFullReindexBatchSize(),
-                'job includes batch size for full reindex',
-              );
-              assert.strictEqual(
-                jobArgs.cooldownSeconds,
-                normalizeFullReindexCooldownSeconds(),
-                'job includes cooldown seconds for full reindex',
-              );
             }
 
             assert.ok(
@@ -1607,20 +1589,6 @@ module(basename(__filename), function () {
             jobs[0].concurrency_group,
             `full-reindex-group`,
             'concurrency group is correct',
-          );
-          let jobArgs = (jobs[0].args ?? {}) as {
-            batchSize?: number;
-            cooldownSeconds?: number;
-          };
-          assert.strictEqual(
-            jobArgs.batchSize,
-            normalizeFullReindexBatchSize(),
-            'batch size is included for grafana-triggered full reindex',
-          );
-          assert.strictEqual(
-            jobArgs.cooldownSeconds,
-            normalizeFullReindexCooldownSeconds(),
-            'cooldown seconds are included for grafana-triggered full reindex',
           );
         });
 

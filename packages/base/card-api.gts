@@ -14,35 +14,41 @@ import { getContainsManyComponent } from './contains-many-component';
 import { LinksToEditor } from './links-to-editor';
 import { getLinksToManyComponent } from './links-to-many-component';
 import {
-  Deferred,
-  isCardResource,
-  Loader,
-  isRelationship,
-  CardError,
+  assertIsSerializerName,
+  baseRef,
   CardContextName,
-  NotLoaded,
-  getField,
-  isField,
-  primitive,
-  identifyCard,
-  fieldSerializer,
-  isCardInstance as _isCardInstance,
-  isBaseInstance,
-  loadCardDef,
-  humanReadable,
+  CardError,
   CodeRef,
   CommandContext,
-  uuidv4,
-  realmURL,
-  localId,
-  formats,
-  meta,
+  Deferred,
   fields,
+  fieldSerializer,
   fieldsUntracked,
-  baseRef,
+  formats,
   getAncestor,
+  getCardMenuItems,
+  getField,
+  getSerializer,
+  humanReadable,
+  identifyCard,
+  isBaseInstance,
+  isCardError,
+  isCardInstance as _isCardInstance,
+  isCardResource,
+  isField,
+  isFieldInstance,
+  isRelationship,
+  loadCardDef,
+  loadDocument,
+  Loader,
+  localId,
+  LocalPath,
+  meta,
+  primitive,
+  realmURL,
   relativeTo,
-  assertIsSerializerName,
+  SingleCardDocument,
+  uuidv4,
   type Format,
   type Meta,
   type CardFields,
@@ -58,14 +64,16 @@ import {
   type getCardCollection,
   type Store,
   type PrerenderedCardComponentSignature,
-  getSerializer,
-  isCardError,
-  SingleCardDocument,
-  loadDocument,
-  LocalPath,
-  getCardMenuItems,
+  type ErrorEntry,
+  type Query,
+  type QueryWithInterpolations,
+  type QueryResultsMeta,
 } from '@cardstack/runtime-common';
-
+import {
+  captureQueryFieldSeedData,
+  ensureQueryFieldSearchResource,
+  validateRelationshipQuery,
+} from './query-field-support';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
 import DefaultFittedTemplate from './default-templates/fitted';
@@ -106,12 +114,12 @@ import {
   getCardMeta,
 } from './card-serialization';
 import {
+  assertScalar,
   entangleWithCardTracking,
   getDataBucket,
   getFieldDescription,
   getFieldOverrides,
   getFields,
-  getIfReady,
   getter,
   isArrayOfCardOrField,
   isCard,
@@ -119,8 +127,11 @@ import {
   isNotLoadedValue,
   notifyCardTracking,
   peekAtField,
+  propagateRealmContext,
+  realmContext,
   relationshipMeta,
   setFieldDescription,
+  setRealmContextOnField,
   type NotLoadedValue,
 } from './field-support';
 import {
@@ -141,7 +152,6 @@ export {
   getCardMeta,
   getFieldDescription,
   getFields,
-  getIfReady,
   isCard,
   isField,
   localId,
@@ -152,6 +162,8 @@ export {
   relationshipMeta,
   serialize,
   serializeCard,
+  ensureQueryFieldSearchResource,
+  getStore,
   type BoxComponent,
   type DeserializeOpts,
   type GetCardMenuItemParams,
@@ -231,6 +243,10 @@ interface Options {
   configuration?: ConfigurationInput<any>;
 }
 
+interface RelationshipOptions extends Options {
+  query?: QueryWithInterpolations;
+}
+
 export interface CardContext<T extends CardDef = CardDef> {
   commandContext?: CommandContext;
   cardComponentModifier?: typeof Modifier<{
@@ -254,10 +270,11 @@ export interface CardContext<T extends CardDef = CardDef> {
 export interface FieldConstructor<T> {
   cardThunk: () => T;
   computeVia: undefined | (() => unknown);
-  name: string;
+  declaredCardThunk?: () => T;
   isUsed?: true;
   isPolymorphic?: true;
-  declaredCardThunk?: () => T;
+  name: string;
+  queryDefinition?: QueryWithInterpolations;
 }
 
 type CardChangeSubscriber = (
@@ -265,10 +282,7 @@ type CardChangeSubscriber = (
   fieldName: string,
   fieldValue: any,
 ) => void;
-const loadLinksPromises = initSharedState(
-  'loadLinksPromises',
-  () => new WeakMap<BaseDef, Promise<any>>(),
-);
+
 const stores = initSharedState(
   'stores',
   () => new WeakMap<BaseDef, CardStore>(),
@@ -339,6 +353,30 @@ export async function flushLogs() {
   await logger.flush();
 }
 
+export interface StoreSearchResource<T extends CardDef = CardDef> {
+  readonly instances: T[];
+  readonly instancesByRealm: { realm: string; cards: T[] }[];
+  readonly isLoading: boolean;
+  readonly meta: QueryResultsMeta;
+  readonly errors?: ErrorEntry[];
+}
+
+export type GetSearchResourceFuncOpts = {
+  isLive?: boolean;
+  doWhileRefreshing?: (() => void) | undefined;
+  seed?: {
+    cards: CardDef[];
+    searchURL?: string;
+    realms?: string[];
+  };
+};
+export type GetSearchResourceFunc<T extends CardDef = CardDef> = (
+  parent: object,
+  getQuery: () => Query | undefined,
+  getRealms?: () => string[] | undefined,
+  opts?: GetSearchResourceFuncOpts,
+) => StoreSearchResource<T>;
+
 export interface CardStore {
   get(url: string): CardDef | undefined;
   set(url: string, instance: CardDef): void;
@@ -347,6 +385,7 @@ export interface CardStore {
   loadDocument(url: string): Promise<SingleCardDocument | CardError>;
   trackLoad(load: Promise<unknown>): void;
   loaded(): Promise<void>;
+  getSearchResource: GetSearchResourceFunc;
 }
 
 export interface Field<
@@ -359,6 +398,13 @@ export interface Field<
   computeVia: undefined | (() => unknown);
   // Optional per-usage configuration stored on the field descriptor
   configuration?: ConfigurationInput<any>;
+  // Declarative relationship query definition, if provided
+  queryDefinition?: QueryWithInterpolations;
+  captureQueryFieldSeedData?(
+    instance: BaseDef,
+    value: any,
+    resource: LooseCardResource,
+  ): void;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
   // use the rendering mechanism to tell if a card is used or not,
@@ -388,12 +434,6 @@ export interface Field<
   component(model: Box<BaseDef>): BoxComponent;
   getter(instance: BaseDef): BaseInstanceType<CardT> | undefined;
   queryableValue(value: any, stack: BaseDef[]): SearchT;
-  handleNotLoadedError(
-    instance: BaseInstanceType<CardT>,
-    e: NotLoaded,
-  ): Promise<
-    BaseInstanceType<CardT> | BaseInstanceType<CardT>[] | undefined | void
-  >;
 }
 
 function cardTypeFor(
@@ -459,11 +499,11 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     // a not loaded error can blow up thru a computed containsMany field that consumes a link
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance as CardDef, this, maybeNotLoaded.reference);
-      if ((globalThis as any).__lazilyLoadLinks) {
-        return this.emptyValue(instance) as BaseInstanceType<FieldT>;
-      }
+      return this.emptyValue(instance) as BaseInstanceType<FieldT>;
     }
-    return getter(instance, this);
+    let results = getter(instance, this);
+    propagateRealmContext(results, instance);
+    return results;
   }
 
   queryableValue(instances: any[] | null, stack: BaseDef[]): any[] | null {
@@ -715,10 +755,6 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     }, values);
   }
 
-  async handleNotLoadedError<T extends BaseDef>(_instance: T, _e: NotLoaded) {
-    return undefined;
-  }
-
   component(model: Box<BaseDef>): BoxComponent {
     let fieldName = this.name as keyof BaseDef;
     let arrayField = model.field(
@@ -769,11 +805,11 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     // a not loaded error can blow up thru a computed contains field that consumes a link
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance as CardDef, this, maybeNotLoaded.reference);
-      if ((globalThis as any).__lazilyLoadLinks) {
-        return undefined;
-      }
+      return undefined;
     }
-    return getter(instance, this);
+    let value = getter(instance, this);
+    propagateRealmContext(value, instance);
+    return value;
   }
 
   queryableValue(instance: any, stack: BaseDef[]): any {
@@ -928,10 +964,6 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     return value;
   }
 
-  async handleNotLoadedError<T extends BaseDef>(_instance: T, _e: NotLoaded) {
-    return undefined;
-  }
-
   component(model: Box<BaseDef>): BoxComponent {
     return fieldComponent(this, model);
   }
@@ -947,6 +979,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   readonly configuration?: ConfigurationInput<any>;
+  readonly queryDefinition?: QueryWithInterpolations;
   constructor({
     cardThunk,
     declaredCardThunk,
@@ -954,6 +987,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     name,
     isUsed,
     isPolymorphic,
+    queryDefinition,
   }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
     this.declaredCardThunk = declaredCardThunk ?? cardThunk;
@@ -961,6 +995,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     this.name = name;
     this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
+    this.queryDefinition = queryDefinition;
   }
 
   get card(): CardT {
@@ -973,14 +1008,22 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
 
   getter(instance: CardDef): BaseInstanceType<CardT> | undefined {
     let deserialized = getDataBucket(instance);
-    // this establishes that our field should rerender when cardTracking for this card changes
     entangleWithCardTracking(instance);
+
+    if (this.queryDefinition) {
+      let searchResource = ensureQueryFieldSearchResource(
+        getStore(instance),
+        instance,
+        this,
+      );
+      let records = (searchResource as any)?.instances ?? ([] as any[]);
+      return (records as any[])[0] as BaseInstanceType<CardT> | undefined;
+    }
+
     let maybeNotLoaded = deserialized.get(this.name);
     if (isNotLoadedValue(maybeNotLoaded)) {
       lazilyLoadLink(instance, this, maybeNotLoaded.reference);
-      if ((globalThis as any).__lazilyLoadLinks) {
-        return undefined;
-      }
+      return undefined;
     }
     return getter(instance, this);
   }
@@ -1113,10 +1156,11 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         `linksTo field '${this.name}' cannot deserialize a list of resource ids`,
       );
     }
-    if (value?.links?.self == null || value.links.self === '') {
+    let reference = value.links?.self;
+    if (reference == null || reference === '') {
       return null;
     }
-    let cachedInstance = store.get(new URL(value.links.self, relativeTo).href);
+    let cachedInstance = store.get(new URL(reference, relativeTo).href);
     if (cachedInstance) {
       cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
@@ -1136,7 +1180,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       }
       return {
         type: 'not-loaded',
-        reference: value.links.self,
+        reference,
       };
     }
 
@@ -1184,63 +1228,23 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     return value;
   }
 
-  async handleNotLoadedError(
-    instance: BaseInstanceType<CardT>,
-    e: NotLoaded,
-  ): Promise<BaseInstanceType<CardT> | undefined> {
-    let deserialized = getDataBucket(instance as BaseDef);
-    let store = getStore(instance);
-    let fieldValue = store.get(e.reference as string);
-
-    if (fieldValue !== undefined) {
-      deserialized.set(this.name, fieldValue);
-      return fieldValue as BaseInstanceType<CardT>;
+  captureQueryFieldSeedData(
+    instance: BaseDef,
+    value: CardDef,
+    resource: LooseCardResource,
+  ) {
+    if (this.queryDefinition) {
+      captureQueryFieldSeedData(
+        instance,
+        this.name,
+        value ? [value] : [],
+        resource,
+      );
     }
-
-    fieldValue = await this.loadMissingField(
-      instance,
-      e,
-      store,
-      instance[relativeTo],
-    );
-    deserialized.set(this.name, fieldValue);
-    return fieldValue as BaseInstanceType<CardT>;
-  }
-
-  // TODO we should be able to get rid of this when we decommission the old prerender
-  private async loadMissingField(
-    instance: CardDef,
-    notLoaded: NotLoadedValue | NotLoaded,
-    store: CardStore,
-    relativeTo: URL | undefined,
-  ): Promise<CardDef> {
-    let { reference: maybeRelativeReference } = notLoaded;
-    let reference = new URL(
-      maybeRelativeReference as string,
-      instance.id ?? relativeTo, // new instances may not yet have an ID, in that case fallback to the relativeTo
-    ).href;
-    let doc = await store.loadDocument(reference);
-    if (isCardError(doc)) {
-      let cardError = doc;
-      cardError.deps = [reference];
-      cardError.additionalErrors = [
-        new NotLoaded(instance, reference, this.name),
-      ];
-      throw cardError;
-    }
-    let fieldInstance = (await createFromSerialized(
-      doc.data,
-      doc,
-      new URL(doc.data.id!),
-      {
-        store,
-      },
-    )) as CardDef;
-    return fieldInstance;
   }
 
   component(model: Box<CardDef>): BoxComponent {
-    let isComputed = !!this.computeVia;
+    let isComputed = !!this.computeVia || !!this.queryDefinition;
     let fieldName = this.name as keyof CardDef;
     let linksToField = this;
     let getInnerModel = () => {
@@ -1325,6 +1329,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
   readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
   readonly configuration?: ConfigurationInput<any>;
+  readonly queryDefinition?: QueryWithInterpolations;
   constructor({
     cardThunk,
     declaredCardThunk,
@@ -1332,6 +1337,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     name,
     isUsed,
     isPolymorphic,
+    queryDefinition,
   }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
     this.declaredCardThunk = declaredCardThunk ?? cardThunk;
@@ -1339,6 +1345,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     this.name = name;
     this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
+    this.queryDefinition = queryDefinition;
   }
 
   get card(): FieldT {
@@ -1358,14 +1365,23 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
   getter(instance: CardDef): BaseInstanceType<FieldT> {
     entangleWithCardTracking(instance);
-
     if (this.computeVia) {
-      // For computed LinksToMany fields, use the main getter function
       return getter(instance, this);
     }
 
-    // For non-computed LinksToMany fields, handle directly
     let deserialized = getDataBucket(instance);
+
+    if (this.queryDefinition) {
+      let searchResource = ensureQueryFieldSearchResource(
+        getStore(instance),
+        instance,
+        this,
+      )!;
+      let records = searchResource.instances ?? ([] as any[]);
+      return records as BaseInstanceType<FieldT>;
+    }
+
+    // Non-query fields
     let value = deserialized.get(this.name);
 
     if (!value) {
@@ -1373,19 +1389,13 @@ class LinksToMany<FieldT extends CardDefConstructor>
       deserialized.set(this.name, value);
     }
 
-    // Handle the case where the field was set to a single NotLoadedValue during deserialization
     if (isNotLoadedValue(value)) {
-      if (!(globalThis as any).__lazilyLoadLinks) {
-        throw new NotLoaded(instance, value.reference, field.name);
-      }
-      // TODO figure out this test case...
       value = this.emptyValue(instance);
       deserialized.set(this.name, value);
       lazilyLoadLink(instance, this, value.reference, { value });
       return this.emptyValue(instance) as BaseInstanceType<FieldT>;
     }
 
-    // Ensure we have an array - if not, something went wrong during deserialization
     if (!Array.isArray(value)) {
       throw new Error(
         `LinksToMany field '${
@@ -1394,7 +1404,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
       );
     }
 
-    // Check if the returned array contains any NotLoadedValues
     let notLoadedRefs: string[] = [];
     for (let entry of value) {
       if (isNotLoadedValue(entry)) {
@@ -1427,9 +1436,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
       //   `<LoadableCard @card={{card}}/>` instead of calling `getComponent`
       //   themselves.
 
-      if (!(globalThis as any).__lazilyLoadLinks) {
-        throw new NotLoaded(instance, notLoadedRefs, this.name);
-      }
       for (let entry of value) {
         if (isNotLoadedValue(entry) && !(entry as any).loading) {
           lazilyLoadLink(instance, this, entry.reference, { value });
@@ -1616,12 +1622,12 @@ class LinksToMany<FieldT extends CardDefConstructor>
             `linksToMany field '${this.name}' cannot deserialize a list of resource ids`,
           );
         }
-        if (value.links?.self == null) {
+        let reference = value.links?.self;
+        if (reference == null) {
           return null;
         }
-        let cachedInstance = store.get(
-          new URL(value.links.self, relativeTo).href,
-        );
+        let cachedInstance = store.get(new URL(reference, relativeTo).href);
+
         if (cachedInstance) {
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
@@ -1645,7 +1651,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
         if (!resource) {
           return {
             type: 'not-loaded',
-            reference: value.links.self,
+            reference,
           };
         }
         let clazz = await cardClassFromResource(
@@ -1735,114 +1741,14 @@ class LinksToMany<FieldT extends CardDefConstructor>
     }, values);
   }
 
-  async handleNotLoadedError<T extends CardDef>(
-    instance: T,
-    e: NotLoaded,
-  ): Promise<T[] | undefined> {
-    let result: T[] | undefined;
-    let fieldValues: CardDef[] = [];
-    let store = getStore(instance);
-
-    let references = !Array.isArray(e.reference) ? [e.reference] : e.reference;
-    for (let ref of references) {
-      let value = store.get(ref);
-      if (value !== undefined) {
-        fieldValues.push(value);
-      }
+  captureQueryFieldSeedData(
+    instance: BaseDef,
+    value: CardDef[],
+    resource: LooseCardResource,
+  ) {
+    if (this.queryDefinition) {
+      captureQueryFieldSeedData(instance, this.name, value, resource);
     }
-
-    fieldValues = await this.loadMissingFields(
-      instance,
-      e,
-      store,
-      instance[relativeTo],
-    );
-
-    if (fieldValues.length === references.length) {
-      let values: T[] = [];
-      let deserialized = getDataBucket(instance);
-
-      for (let field of deserialized.get(this.name)) {
-        if (isNotLoadedValue(field)) {
-          // replace the not-loaded values with the loaded cards
-          values.push(
-            fieldValues.find(
-              (v) =>
-                v.id === new URL(field.reference, instance[relativeTo]).href,
-            )! as T,
-          );
-        } else {
-          // keep existing loaded cards
-          values.push(field);
-        }
-      }
-
-      deserialized.set(this.name, values);
-      result = values as T[];
-    }
-
-    return result;
-  }
-
-  // TODO we should be able to get rid of this when we decommission the old prerender
-  private async loadMissingFields(
-    instance: CardDef,
-    notLoaded: NotLoaded,
-    store: CardStore,
-    relativeTo: URL | undefined,
-  ): Promise<CardDef[]> {
-    let refs = (
-      !Array.isArray(notLoaded.reference)
-        ? [notLoaded.reference]
-        : notLoaded.reference
-    ).map(
-      (ref) => new URL(ref, instance.id ?? relativeTo).href, // new instances may not yet have an ID, in that case fallback to the relativeTo
-    );
-    let errors = [];
-    let fieldInstances: CardDef[] = [];
-
-    const loadPromises = refs.map(async (reference) => {
-      try {
-        let doc = await store.loadDocument(reference);
-        if (isCardError(doc)) {
-          let cardError = doc;
-          cardError.deps = [reference];
-          cardError.additionalErrors = [
-            new NotLoaded(instance, reference, this.name),
-          ];
-          throw cardError;
-        }
-        let fieldInstance = (await createFromSerialized(
-          doc.data,
-          doc,
-          new URL(doc.data.id!),
-          {
-            store,
-          },
-        )) as CardDef;
-        return { ok: true, value: fieldInstance };
-      } catch (e) {
-        return { ok: false, error: e };
-      }
-    });
-
-    const results = await Promise.allSettled(loadPromises);
-    for (let result of results) {
-      if (result.status === 'fulfilled') {
-        const fetchResult = result.value;
-        if (fetchResult.ok && fetchResult.value) {
-          fieldInstances.push(fetchResult.value);
-        } else if (!fetchResult.ok) {
-          errors.push(fetchResult.error);
-        }
-      } else {
-        errors.push(result.reason);
-      }
-    }
-    if (errors.length) {
-      throw errors;
-    }
-    return fieldInstances;
   }
 
   component(model: Box<CardDef>): BoxComponent {
@@ -1884,7 +1790,10 @@ function fieldComponent(
 }
 
 interface InternalFieldInitializer {
-  setupField(name: string): {
+  setupField(
+    name: string,
+    ownerPrototype: BaseDef,
+  ): {
     enumerable?: boolean;
     get(): unknown;
     set(value: unknown): void;
@@ -1904,8 +1813,13 @@ export const field = function (
       `the @field decorator only supports string field names, not symbols`,
     );
   }
+  if (!(target instanceof BaseDef)) {
+    throw new Error(
+      `the @field decorator can only be used inside classes that extend BaseDef`,
+    );
+  }
   let init = initializer() as InternalFieldInitializer;
-  let descriptor = init.setupField(key);
+  let descriptor = init.setupField(key, target as BaseDef);
   if (init.description) {
     setFieldDescription(target.constructor, key as string, init.description);
   }
@@ -1918,7 +1832,7 @@ export function containsMany<FieldT extends FieldDefConstructor>(
   options?: Options,
 ): BaseInstanceType<FieldT>[] {
   return {
-    setupField(fieldName: string) {
+    setupField(fieldName: string, _ownerPrototype: BaseDef) {
       let { computeVia, isUsed } = options ?? {};
       let instance = new ContainsMany({
         cardThunk: cardThunk(field),
@@ -1938,7 +1852,7 @@ export function contains<FieldT extends FieldDefConstructor>(
   options?: Options,
 ): BaseInstanceType<FieldT> {
   return {
-    setupField(fieldName: string) {
+    setupField(fieldName: string, _ownerPrototype: BaseDef) {
       let { computeVia, isUsed } = options ?? {};
       let instance = new Contains({
         cardThunk: cardThunk(field),
@@ -1955,18 +1869,22 @@ export function contains<FieldT extends FieldDefConstructor>(
 
 export function linksTo<CardT extends CardDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
-  options?: Options,
+  options?: RelationshipOptions,
 ): BaseInstanceType<CardT> {
   return {
-    setupField(fieldName: string) {
-      let { computeVia, isUsed } = options ?? {};
+    setupField(fieldName: string, ownerPrototype: BaseDef) {
+      let { computeVia, isUsed, query } = options ?? {};
       let fieldCardThunk = cardThunk(cardOrThunk);
+      if (query) {
+        validateRelationshipQuery(ownerPrototype, fieldName, query);
+      }
       let instance = new LinksTo({
         cardThunk: fieldCardThunk,
         declaredCardThunk: fieldCardThunk,
         computeVia,
         name: fieldName,
         isUsed,
+        queryDefinition: query,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
@@ -1977,18 +1895,22 @@ export function linksTo<CardT extends CardDefConstructor>(
 
 export function linksToMany<CardT extends CardDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
-  options?: Options,
+  options?: RelationshipOptions,
 ): BaseInstanceType<CardT>[] {
   return {
-    setupField(fieldName: string) {
-      let { computeVia, isUsed } = options ?? {};
+    setupField(fieldName: string, ownerPrototype: BaseDef) {
+      let { computeVia, isUsed, query } = options ?? {};
       let fieldCardThunk = cardThunk(cardOrThunk);
+      if (query) {
+        validateRelationshipQuery(ownerPrototype, fieldName, query);
+      }
       let instance = new LinksToMany({
         cardThunk: fieldCardThunk,
         declaredCardThunk: fieldCardThunk,
         computeVia,
         name: fieldName,
         isUsed,
+        queryDefinition: query,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
@@ -2020,6 +1942,10 @@ export class BaseDef {
   }
   static getIconComponent(instance: BaseDef) {
     return instance.constructor.icon;
+  }
+
+  get [realmURL](): URL | undefined {
+    return undefined; // override in CardDef, FieldDef
   }
 
   static [emptyValue]: object | string | number | null | boolean | undefined;
@@ -2208,6 +2134,12 @@ export class FieldDef extends BaseDef {
   static isFieldDef = true;
   static displayName = 'Field';
   static icon = RectangleEllipsisIcon;
+  [realmContext]?: string;
+
+  get [realmURL](): URL | undefined {
+    let realmURLString = this[realmContext];
+    return realmURLString ? new URL(realmURLString) : undefined;
+  }
 
   // Optional provider for default configuration, merged with per-usage configuration
   static configuration?: ConfigurationInput<any>;
@@ -2457,8 +2389,8 @@ export class CardDef extends BaseDef {
     return getCardMeta(this, 'realmInfo');
   }
 
-  get [realmURL]() {
-    let realmURLString = getCardMeta(this, 'realmURL');
+  get [realmURL](): URL | undefined {
+    let realmURLString: string | undefined = getCardMeta(this, 'realmURL');
     return realmURLString ? new URL(realmURLString) : undefined;
   }
 
@@ -2475,8 +2407,14 @@ export class CssImportField extends StringField {
 export class Theme extends CardDef {
   static displayName = 'Theme';
   static icon = ThemeIcon;
-  @field cssVariables = contains(CSSField);
-  @field cssImports = containsMany(CssImportField);
+  @field cssVariables = contains(CSSField, {
+    description:
+      'CSS variable definitions that build on shadcn variables (typically for :root and .dark selectors) injected into the CardContainer.',
+  });
+  @field cssImports = containsMany(CssImportField, {
+    description:
+      'CSS links (e.g. Google Fonts) imported via the CardContainer.',
+  });
 
   [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
     let menuItems = super[getCardMenuItems](params);
@@ -2679,162 +2617,117 @@ function lazilyLoadLink(
   link: string,
   pluralArgs?: { value: any[] },
 ) {
-  if ((globalThis as any).__lazilyLoadLinks) {
-    let inflightLoads = inflightLinkLoads.get(instance);
-    if (!inflightLoads) {
-      inflightLoads = new Map();
-      inflightLinkLoads.set(instance, inflightLoads);
-    }
-    let reference = new URL(link, instance.id ?? instance[relativeTo]).href;
-    let key = `${field.name}/${reference}`;
-    let promise = inflightLoads.get(key);
-    let store = getStore(instance);
-    if (promise) {
-      store.trackLoad(promise);
-      return;
-    }
-    let deferred = new Deferred<void>();
-    inflightLoads.set(key, deferred.promise);
-    store.trackLoad(
-      // we wrap the promise with a catch that will prevent the rejections from bubbling up but
-      // not interfere with the original deferred. this prevents QUnit from being really noisy
-      // and reporting a "global error" even though that is a normal operating circumstance for
-      // the rendering when it encounters an error. the original deferred.promise still
-      // rejects as expected for anyone awaiting it, but it won't cause unnecessary noise in QUnit.
-      deferred.promise.then(
-        () => {},
-        () => {},
-      ),
-    );
-    (async () => {
-      try {
-        let doc = await store.loadDocument(reference);
-        if (isCardError(doc)) {
-          let cardError = doc;
-          cardError.deps = [
-            !reference.endsWith('.json') ? `${reference}.json` : reference,
-          ];
-          throw cardError;
-        }
-        let fieldValue = (await createFromSerialized(
-          doc.data,
-          doc,
-          new URL(doc.data.id!),
-          {
-            store,
-          },
-        )) as CardDef;
-        if (pluralArgs) {
-          let { value } = pluralArgs;
-          let indices: number[] = [];
-          for (let [index, item] of value.entries()) {
-            if (!isNotLoadedValue(item)) {
-              continue;
-            }
-            let notLoadedRef = new URL(
-              item.reference,
-              instance.id ?? instance[relativeTo],
-            ).href;
-            if (reference === notLoadedRef) {
-              indices.push(index);
-            }
-          }
-          for (let index of indices) {
-            value[index] = fieldValue;
-          }
-        } else {
-          (instance as any)[field.name] = fieldValue;
-        }
-      } catch (e) {
-        // we replace the node-loaded value with a null
-        // TODO in the future consider recording some link meta that this reference is actually missing
-        (instance as any)[field.name] = null;
-
-        let error = e as Error;
-        let isMissingFile =
-          typeof error?.message === 'string' &&
-          /not found/i.test(error.message);
-        let payloadError: {
-          title: string;
-          status: number;
-          message: string;
-          stack?: string;
-          deps?: string[];
-        } = {
-          title: isMissingFile
-            ? 'Link Not Found'
-            : error?.message ?? 'Card Error',
-          status: isMissingFile ? 404 : (error as any)?.status ?? 500,
-          message: isMissingFile
-            ? `missing file ${reference}.json`
-            : error?.message ?? String(e),
-          stack: error?.stack,
-        };
-        if (isCardError(error) && error.deps?.length) {
-          payloadError.deps = [...new Set(error.deps)];
-        }
-        let payload = JSON.stringify({
-          type: 'error',
-          error: payloadError,
-        });
-        // We use a custom event for render errors--otherwise QUnit will report a "global error"
-        // when we use a promise rejection to signal to the prerender that there was an error
-        // even though everything is working as designed. QUnit is very noisy about these errors...
-        const event = new CustomEvent('boxel-render-error', {
-          detail: { reason: payload },
-        });
-        globalThis.dispatchEvent(event);
-      } finally {
-        deferred.fulfill();
-        inflightLoads.delete(key);
-        if (inflightLoads.size === 0) {
-          inflightLinkLoads.delete(instance);
-        }
+  let inflightLoads = inflightLinkLoads.get(instance);
+  if (!inflightLoads) {
+    inflightLoads = new Map();
+    inflightLinkLoads.set(instance, inflightLoads);
+  }
+  let reference = new URL(link, instance.id ?? instance[relativeTo]).href;
+  let key = `${field.name}/${reference}`;
+  let promise = inflightLoads.get(key);
+  let store = getStore(instance);
+  if (promise) {
+    store.trackLoad(promise);
+    return;
+  }
+  let deferred = new Deferred<void>();
+  inflightLoads.set(key, deferred.promise);
+  store.trackLoad(
+    // we wrap the promise with a catch that will prevent the rejections from bubbling up but
+    // not interfere with the original deferred. this prevents QUnit from being really noisy
+    // and reporting a "global error" even though that is a normal operating circumstance for
+    // the rendering when it encounters an error. the original deferred.promise still
+    // rejects as expected for anyone awaiting it, but it won't cause unnecessary noise in QUnit.
+    deferred.promise.then(
+      () => {},
+      () => {},
+    ),
+  );
+  (async () => {
+    try {
+      let doc = await store.loadDocument(reference);
+      if (isCardError(doc)) {
+        let cardError = doc;
+        cardError.deps = [
+          !reference.endsWith('.json') ? `${reference}.json` : reference,
+        ];
+        throw cardError;
       }
-    })();
-  } else {
-    throw new NotLoaded(instance, link, field.name);
-  }
-}
+      let fieldValue = (await createFromSerialized(
+        doc.data,
+        doc,
+        new URL(doc.data.id!),
+        {
+          store,
+        },
+      )) as CardDef;
+      if (pluralArgs) {
+        let { value } = pluralArgs;
+        let indices: number[] = [];
+        for (let [index, item] of value.entries()) {
+          if (!isNotLoadedValue(item)) {
+            continue;
+          }
+          let notLoadedRef = new URL(
+            item.reference,
+            instance.id ?? instance[relativeTo],
+          ).href;
+          if (reference === notLoadedRef) {
+            indices.push(index);
+          }
+        }
+        for (let index of indices) {
+          value[index] = fieldValue;
+        }
+      } else {
+        (instance as any)[field.name] = fieldValue;
+      }
+    } catch (e) {
+      // we replace the node-loaded value with a null
+      // TODO in the future consider recording some link meta that this reference is actually missing
+      (instance as any)[field.name] = null;
 
-type Scalar =
-  | string
-  | number
-  | boolean
-  | null
-  | undefined
-  | (string | null | undefined)[]
-  | (number | null | undefined)[]
-  | (boolean | null | undefined)[];
-
-function assertScalar(
-  scalar: any,
-  fieldCard: typeof BaseDef,
-): asserts scalar is Scalar {
-  if (Array.isArray(scalar)) {
-    if (
-      scalar.find(
-        (i) =>
-          !['undefined', 'string', 'number', 'boolean'].includes(typeof i) &&
-          i !== null,
-      )
-    ) {
-      throw new Error(
-        `expected queryableValue for field type ${
-          fieldCard.name
-        } to be scalar but was ${typeof scalar}`,
-      );
+      let error = e as Error;
+      let isMissingFile =
+        typeof error?.message === 'string' && /not found/i.test(error.message);
+      let payloadError: {
+        title: string;
+        status: number;
+        message: string;
+        stack?: string;
+        deps?: string[];
+      } = {
+        title: isMissingFile
+          ? 'Link Not Found'
+          : error?.message ?? 'Card Error',
+        status: isMissingFile ? 404 : (error as any)?.status ?? 500,
+        message: isMissingFile
+          ? `missing file ${reference}.json`
+          : error?.message ?? String(e),
+        stack: error?.stack,
+      };
+      if (isCardError(error) && error.deps?.length) {
+        payloadError.deps = [...new Set(error.deps)];
+      }
+      let payload = JSON.stringify({
+        type: 'error',
+        error: payloadError,
+      });
+      // We use a custom event for render errors--otherwise QUnit will report a "global error"
+      // when we use a promise rejection to signal to the prerender that there was an error
+      // even though everything is working as designed. QUnit is very noisy about these errors...
+      const event = new CustomEvent('boxel-render-error', {
+        detail: { reason: payload },
+      });
+      globalThis.dispatchEvent(event);
+    } finally {
+      deferred.fulfill();
+      inflightLoads.delete(key);
+      if (inflightLoads.size === 0) {
+        inflightLinkLoads.delete(instance);
+      }
     }
-  } else if (
-    !['undefined', 'string', 'number', 'boolean'].includes(typeof scalar) &&
-    scalar !== null
-  ) {
-    throw new Error(
-      `expected queryableValue for field type ${
-        fieldCard.name
-      } to be scalar but was ${typeof scalar}`,
-    );
-  }
+  })();
 }
 
 export function setId(instance: CardDef, id: string) {
@@ -3092,9 +2985,10 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   let existingOverrides = getFieldOverrides(instance);
   let loadedValues = getDataBucket(instance);
   let instanceRelativeTo =
+    instance[relativeTo] ??
     ('id' in instance && typeof instance.id === 'string'
       ? new URL(instance.id)
-      : instance[relativeTo]) ?? undefined;
+      : undefined);
 
   function getFieldMeta(
     fieldsMeta: CardFields | undefined,
@@ -3160,10 +3054,13 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     }
     let override = await loadCardDef(overrideMeta.adoptsFrom, {
       loader: myLoader(),
+      // Prefer the deserialization context (instanceRelativeTo) so overrides resolve
+      // relative to the document we fetched (e.g. catalog/index), then fall back to the resource id.
       relativeTo:
-        resource.id && typeof resource.id === 'string'
+        instanceRelativeTo ??
+        (resource.id && typeof resource.id === 'string'
           ? new URL(resource.id)
-          : instanceRelativeTo,
+          : undefined),
     });
     if (!override) {
       return false;
@@ -3182,6 +3079,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         changed = applyFieldOverride(
           fieldName,
           value.constructor as typeof BaseDef,
+          field,
         );
       }
     } else if (field.fieldType === 'linksToMany') {
@@ -3191,6 +3089,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
           changed = applyFieldOverride(
             fieldName,
             linked.constructor as typeof BaseDef,
+            field,
           );
         }
       }
@@ -3266,10 +3165,12 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       if (overrideApplied) {
         field = (getField(instance, fieldName) ?? field) as Field<T>;
       }
+      // Prefer the deserialization context ([relativeTo]) when available; fall back to the instance id
       let relativeToVal =
-        'id' in instance && typeof instance.id === 'string'
+        instance[relativeTo] ??
+        ('id' in instance && typeof instance.id === 'string'
           ? new URL(instance.id)
-          : instance[relativeTo];
+          : undefined);
       let deserializedValue = await getDeserializedValue({
         card,
         loadedValue: loadedValues.get(fieldName),
@@ -3292,6 +3193,9 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     }),
   )) as [Field<T>, any][];
 
+  let realmURLString =
+    getCardMeta(instance as CardDef, 'realmURL') ?? resource.meta?.realmURL;
+
   // this block needs to be synchronous
   {
     let wasSaved = false;
@@ -3312,6 +3216,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
           `cannot change the id for saved instance ${originalId}`,
         );
       }
+      propagateRealmContext(value, realmURLString);
       field.validate(instance, value);
 
       // Before updating field's value, we also have to make sure
@@ -3326,11 +3231,15 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         applySubscribersToInstanceValue(instance, field, existingValue, value);
       }
       deserialized.set(field.name as string, value);
+      field.captureQueryFieldSeedData?.(instance, value, resource);
     }
 
     // assign the realm meta before we compute as computeds may be relying on this
     if (isCardInstance(instance) && resource.id != null) {
       (instance as any)[meta] = resource.meta;
+    }
+    if (realmURLString && isFieldInstance(instance)) {
+      setRealmContextOnField(instance, realmURLString);
     }
     notifyCardTracking(instance);
     if (isCardInstance(instance) && resource.id != null) {
@@ -3404,6 +3313,7 @@ function makeDescriptor<
 }
 
 function setField(instance: BaseDef, field: Field, value: any) {
+  propagateRealmContext(value, instance);
   // TODO: refactor validate to not have a return value and accomplish this normalization another way
   value = field.validate(instance, value);
   let deserialized = getDataBucket(instance);
@@ -3483,63 +3393,6 @@ export function getComponent(
     opts,
   );
   return boxComponent;
-}
-
-// TODO we should be able to get rid of this when we decommission the old prerender
-export async function ensureLinksLoaded(card: BaseDef): Promise<void> {
-  // Note that after each async step we check to see if we are still the
-  // current promise, otherwise we bail
-  let done: () => void;
-  let loadLinksPromise = new Promise<void>((res) => (done = res));
-  loadLinksPromises.set(card, loadLinksPromise);
-
-  // wait a full micro task before we start - this is simple debounce
-  await Promise.resolve();
-  if (loadLinksPromises.get(card) !== loadLinksPromise) {
-    return;
-  }
-
-  async function _loadModel<T extends BaseDef>(
-    model: T,
-    stack: BaseDef[] = [],
-  ): Promise<void> {
-    let pendingFields = new Set<string>(
-      Object.keys(
-        getFields(model, {
-          includeComputeds: false, // Not necessary to execute computed to load linked fields
-          usedLinksToFieldsOnly: true,
-        }),
-      ),
-    );
-    do {
-      for (let fieldName of [...pendingFields]) {
-        let value = await getIfReady(model, fieldName as keyof T);
-        pendingFields.delete(fieldName);
-        if (loadLinksPromises.get(card) !== loadLinksPromise) {
-          return;
-        }
-        if (Array.isArray(value)) {
-          for (let item of value) {
-            if (item && isCardOrField(item) && !stack.includes(item)) {
-              await _loadModel(item, [item, ...stack]);
-            }
-          }
-        } else if (isCardOrField(value) && !stack.includes(value)) {
-          await _loadModel(value, [value, ...stack]);
-        }
-      }
-      // TODO should we have a timeout?
-    } while (pendingFields.size > 0);
-  }
-
-  await _loadModel(card);
-  if (loadLinksPromises.get(card) !== loadLinksPromise) {
-    return;
-  }
-
-  // notify glimmer to rerender this card
-  notifyCardTracking(card);
-  done!();
 }
 
 export class Box<T> {
@@ -3744,5 +3597,14 @@ class FallbackCardStore implements CardStore {
     let promise = loadDocument(fetch, url);
     this.trackLoad(promise);
     return await promise;
+  }
+
+  getSearchResource<T extends CardDef = CardDef>(
+    _parent: object,
+    _getQuery: () => any,
+    _getRealms?: () => string[] | undefined,
+    _opts?: any,
+  ): StoreSearchResource<T> {
+    throw new Error('Method not implemented.');
   }
 }

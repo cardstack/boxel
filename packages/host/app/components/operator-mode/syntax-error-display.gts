@@ -1,9 +1,9 @@
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { type CardError } from '@cardstack/runtime-common';
+import type { CardError } from '@cardstack/runtime-common';
 
-import MatrixService from '@cardstack/host/services/matrix-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import ErrorDisplay from './error-display';

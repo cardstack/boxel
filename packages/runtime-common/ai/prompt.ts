@@ -6,6 +6,7 @@ import type {
   CodePatchCorrectnessCard,
   CodePatchCorrectnessFile,
   PromptParts,
+  TextContent,
 } from './types';
 import { constructHistory } from './history';
 import {
@@ -984,9 +985,9 @@ type FormattedCorrectnessSummary = {
   hasErrors: boolean;
 };
 
-const SEARCH_REPLACE_FIX_INSTRUCTION = `1. Propose fixes for the above errors by using a SEARCH/REPLACE block (DO NOT use the patchCardInstance tool function, because it will not work for broken cards).
+const SEARCH_REPLACE_FIX_INSTRUCTION = `1. Propose fixes for the above errors by using one or more SEARCH/REPLACE blocks (DO NOT use the patchCardInstance tool function, because it will not work for broken cards).
 2. You MUST re-fetch the files that have errors so that you can see their updated content before proposing fixes.
-3. Respond very briefly that there is an issue with the file (1 sentence max) that you will attempt to fix and do not mention SEARCH/REPLACE blocks in your prose.`;
+3. Respond very briefly that there is an issue with the file(s) (1 sentence max) that you will attempt to fix and do not mention SEARCH/REPLACE blocks in your prose.`;
 
 const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
   'Summarize the correctness results above in one short sentence confirming that the target is now fixed. Mention any warnings if they exist.';
@@ -1163,25 +1164,40 @@ export async function buildPromptForModel(
         'The automated correctness checks have finished. Summarize their results for me based on the tool output above.',
     });
   }
-  let systemMessage = `${SYSTEM_MESSAGE}\n`;
+  let systemMessageParts = [SYSTEM_MESSAGE];
 
   if (autoCorrectnessChecksEnabled) {
-    systemMessage +=
-      'Never call the checkCorrectness tool on your own; correctness checks are handled automatically by the system.\n';
+    systemMessageParts.push(
+      'Never call the checkCorrectness tool on your own; correctness checks are handled automatically by the system.',
+    );
   }
   if (skillCards.length) {
-    systemMessage += SKILL_INSTRUCTIONS_MESSAGE;
-    systemMessage += skillCardsToMessage(skillCards);
-    systemMessage += '\n';
+    systemMessageParts.push(SKILL_INSTRUCTIONS_MESSAGE);
+    systemMessageParts = systemMessageParts.concat(
+      skillCardsToMessages(skillCards),
+    );
   }
 
   let messages: OpenAIPromptMessage[] = [
     {
       role: 'system',
-      content: systemMessage,
+      content: systemMessageParts.map((part, i) => {
+        let result: TextContent = {
+          type: 'text',
+          text: part,
+        };
+        if (i === systemMessageParts.length - 1) {
+          result = {
+            ...result,
+            cache_control: {
+              type: 'ephemeral',
+            },
+          };
+        }
+        return result;
+      }),
     },
   ];
-
   messages = messages.concat(historicalMessages);
   let contextContent = await buildContextMessage(
     client,
@@ -1254,6 +1270,16 @@ function collectPendingCodePatchCorrectnessCheck(
       history,
     );
     let commandResults = getCommandResults(event as CardMessageEvent, history);
+    let isCancelled =
+      content.isCanceled || (event as any).status === 'cancelled';
+    let appliedChanges = hasAppliedChanges(
+      codePatchResults,
+      relevantCommands,
+      commandResults,
+    );
+    if (isCancelled && !appliedChanges) {
+      continue;
+    }
 
     let appliedCodePatchResults = codePatchResults.filter(
       (result) => result.content['m.relates_to']?.key === 'applied',
@@ -1294,7 +1320,10 @@ function hasUnresolvedCodePatches(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): boolean {
-  for (let event of history) {
+  // Consider only the most recent relevant bot message; older unresolved
+  // commands should not block correctness for newer changes.
+  for (let index = history.length - 1; index >= 0; index--) {
+    let event = history[index];
     if (
       event.type !== 'm.room.message' ||
       event.sender !== aiBotUserId ||
@@ -1321,14 +1350,23 @@ function hasUnresolvedCodePatches(
       history,
     );
     let commandResults = getCommandResults(event as CardMessageEvent, history);
-    let appliedCodePatchResults = codePatchResults.filter(
-      (result) => result.content['m.relates_to']?.key === 'applied',
+    let isCancelled =
+      content.isCanceled || (event as any).status === 'cancelled';
+    let appliedChanges = hasAppliedChanges(
+      codePatchResults,
+      relevantCommands,
+      commandResults,
     );
+    if (isCancelled && !appliedChanges) {
+      return false;
+    }
     let allCodePatchesResolved =
       codePatchBlocks.length === 0 ||
       codePatchBlocks.every((_block, index) =>
-        appliedCodePatchResults.some(
-          (result) => result.content.codeBlockIndex === index,
+        codePatchResults.some(
+          (result) =>
+            result.content['m.relates_to']?.key === 'applied' &&
+            result.content.codeBlockIndex === index,
         ),
       );
     let allRelevantCommandsResolved =
@@ -1339,9 +1377,7 @@ function hasUnresolvedCodePatches(
         ),
       );
 
-    if (!allCodePatchesResolved || !allRelevantCommandsResolved) {
-      return true;
-    }
+    return !(allCodePatchesResolved && allRelevantCommandsResolved);
   }
   return false;
 }
@@ -1373,6 +1409,16 @@ function buildCodePatchCorrectnessMessage(
 
   let codePatchResults = getCodePatchResults(messageEvent, history);
   let commandResults = getCommandResults(messageEvent, history);
+  let isCancelled =
+    content.isCanceled || (messageEvent as any).status === 'cancelled';
+  let appliedChanges = hasAppliedChanges(
+    codePatchResults,
+    relevantCommands,
+    commandResults,
+  );
+  if (isCancelled && !appliedChanges) {
+    return undefined;
+  }
 
   let appliedCodePatchResults = codePatchResults.filter(
     (result) => result.content['m.relates_to']?.key === 'applied',
@@ -1537,6 +1583,28 @@ function formatFileDisplayName(identifier?: string) {
   } catch {
     return identifier;
   }
+}
+
+function hasAppliedChanges(
+  codePatchResults: CodePatchResultEvent[],
+  relevantCommands: Partial<CommandRequest>[],
+  commandResults: CommandResultEvent[],
+): boolean {
+  if (
+    codePatchResults.some(
+      (result) => result.content['m.relates_to']?.key === 'applied',
+    )
+  ) {
+    return true;
+  }
+
+  return relevantCommands.some((request) =>
+    commandResults.some(
+      (result) =>
+        result.content.commandRequestId === request.id &&
+        result.content['m.relates_to']?.key === 'applied',
+    ),
+  );
 }
 
 export const buildAttachmentsMessagePart = async (
@@ -1708,23 +1776,21 @@ export const attachedCardsToMessage = (
   return a + b;
 };
 
-export const skillCardsToMessage = (
+export const skillCardsToMessages = (
   cards: Omit<LooseCardResource, 'meta'>[],
 ) => {
-  return cards
-    .map((card) => {
-      let headerParts = [`id: ${card.id}`];
-      if (card.attributes?.title) {
-        headerParts.push(`title: ${card.attributes.title}`);
-      }
+  return cards.map((card) => {
+    let headerParts = [`id: ${card.id}`];
+    if (card.attributes?.title) {
+      headerParts.push(`title: ${card.attributes.title}`);
+    }
 
-      let header = `Skill (${headerParts.join(', ')}):`;
-      let instructions =
-        card.attributes?.instructions?.trim() ?? 'No instructions provided.';
+    let header = `Skill (${headerParts.join(', ')}):`;
+    let instructions =
+      card.attributes?.instructions?.trim() ?? 'No instructions provided.';
 
-      return `${header}\n${instructions}`;
-    })
-    .join('\n\n');
+    return `${header}\n${instructions}`;
+  });
 };
 
 export function cleanContent(content: string) {

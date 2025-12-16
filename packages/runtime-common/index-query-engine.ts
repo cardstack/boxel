@@ -8,7 +8,6 @@ import {
   baseCardRef,
   internalKeyFor,
   isResolvedCodeRef,
-  trimExecutableExtension,
   baseRealm,
   getSerializer,
 } from './index';
@@ -53,9 +52,8 @@ import {
   coerceTypes,
   type BoxelIndexTable,
   type CardTypeSummary,
-  type Definition,
-  type FieldDefinition,
 } from './index-structure';
+import type { Definition, FieldDefinition } from './definitions';
 import {
   isFilterRefersToNonexistentTypeError,
   type DefinitionLookup,
@@ -65,15 +63,6 @@ import { isScopedCSSRequest } from 'glimmer-scoped-css';
 interface IndexedModule {
   type: 'module';
   canonicalURL: string;
-  lastModified: number | null;
-  resourceCreatedAt: number;
-  deps: string[] | null;
-}
-
-interface IndexedDefinition {
-  type: 'definition';
-  definition: Definition;
-  types: string[] | null;
   lastModified: number | null;
   resourceCreatedAt: number;
   deps: string[] | null;
@@ -125,7 +114,6 @@ interface InstanceError
 
 export type InstanceOrError = IndexedInstance | InstanceError;
 export type IndexedModuleOrError = IndexedModule | IndexedError;
-export type IndexedDefinitionOrError = IndexedDefinition | IndexedError;
 
 type GetEntryOptions = WIPOptions;
 export type QueryOptions = WIPOptions & PrerenderedCardOptions;
@@ -137,7 +125,7 @@ interface PrerenderedCardOptions {
   cardUrls?: string[];
 }
 
-interface WIPOptions {
+export interface WIPOptions {
   useWorkInProgressIndex?: boolean;
 }
 
@@ -187,54 +175,6 @@ export class IndexQueryEngine {
 
   async #queryCards(query: CardExpression) {
     return this.#query(await this.makeExpression(query));
-  }
-
-  async getOwnDefinition(
-    codeRef: ResolvedCodeRef,
-    opts?: GetEntryOptions,
-  ): Promise<IndexedDefinitionOrError | undefined> {
-    let cleansedCodeRef = { ...codeRef };
-    cleansedCodeRef.module = trimExecutableExtension(
-      new URL(cleansedCodeRef.module),
-    ).href;
-    let key = internalKeyFor(cleansedCodeRef, undefined);
-    let rows = (await this.#query([
-      `SELECT i.*
-       FROM ${tableFromOpts(opts)} as i
-       WHERE`,
-      ...every([
-        any([[`i.url =`, param(key)]]),
-        any([
-          ['i.type =', param('definition')],
-          ['i.type =', param('error')],
-        ]),
-      ]),
-    ] as Expression)) as unknown as BoxelIndexTable[];
-    let maybeResult: BoxelIndexTable | undefined = rows[0];
-    if (!maybeResult) {
-      return undefined;
-    }
-    if (maybeResult.is_deleted) {
-      return undefined;
-    }
-    let result = maybeResult;
-    if (result.type === 'error') {
-      return { type: 'error', error: result.error_doc! };
-    }
-    let definitionEntry = assertIndexEntryDefinition(result);
-    let {
-      definition,
-      last_modified: lastModified,
-      resource_created_at: resourceCreatedAt,
-    } = definitionEntry;
-    return {
-      type: 'definition',
-      definition,
-      lastModified: lastModified != null ? parseInt(lastModified) : null,
-      resourceCreatedAt: parseInt(resourceCreatedAt),
-      deps: definitionEntry.deps,
-      types: definitionEntry.types,
-    };
   }
 
   async getModule(
@@ -433,7 +373,7 @@ export class IndexQueryEngine {
         'GROUP BY url',
         ...this.orderExpression(sort),
         ...(page
-          ? [`LIMIT ${page.size} OFFSET ${page.number * page.size}`]
+          ? [`LIMIT ${page.size} OFFSET ${(page.number ?? 0) * page.size}`]
           : []),
       ];
       let queryCount = [
@@ -1175,7 +1115,7 @@ function getField(
     if (currentField(pathTraveled) === '_cardType') {
       // this is a little awkward--we have the need to treat '_cardType' as a
       // type of string field that we can query against from the index (e.g. the
-      // cards grid sorts by the card's display name). current-run is injecting
+      // cards grid sorts by the card's display name). index-runner is injecting
       // this into the searchDoc during index time.
       return {
         type: 'contains',
@@ -1223,43 +1163,6 @@ function assertIndexEntry<T>(obj: T): Omit<
     );
   }
   return obj as Omit<T, 'source' | 'last_modified' | 'resource_created_at'> & {
-    last_modified: string;
-    resource_created_at: string;
-  };
-}
-
-function assertIndexEntryDefinition<T>(obj: T): Omit<
-  T,
-  'definition' | 'last_modified' | 'resource_created_at'
-> & {
-  definition: Definition;
-  last_modified: string | null;
-  resource_created_at: string;
-} {
-  if (!obj || typeof obj !== 'object') {
-    throw new Error(`expected index entry is null or not an object`);
-  }
-  if (!('definition' in obj) || typeof obj.definition !== 'object') {
-    throw new Error(
-      `expected index entry to have "definition" string property`,
-    );
-  }
-  if (!('last_modified' in obj)) {
-    throw new Error(`expected index entry to have "last_modified" property`);
-  }
-  if (
-    !('resource_created_at' in obj) ||
-    typeof obj.resource_created_at !== 'string'
-  ) {
-    throw new Error(
-      `expected index entry to have "resource_created_at" property`,
-    );
-  }
-  return obj as Omit<
-    T,
-    'definition' | 'last_modified' | 'resource_created_at'
-  > & {
-    definition: Definition;
     last_modified: string;
     resource_created_at: string;
   };

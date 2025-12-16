@@ -68,16 +68,18 @@ class Isolated extends Component<typeof CardsGrid> {
       @onChangeSort={{this.onChangeSort}}
     >
       <:content>
-        <div class='add-button'>
-          <Tooltip @placement='left' @offset={{6}}>
-            <:trigger>
-              <AddButton {{on 'click' this.createNew}} />
-            </:trigger>
-            <:content>
-              Add a new card to this collection
-            </:content>
-          </Tooltip>
-        </div>
+        {{#if @canEdit}}
+          <div class='add-button'>
+            <Tooltip @placement='left' @offset={{6}}>
+              <:trigger>
+                <AddButton {{on 'click' this.createNew}} />
+              </:trigger>
+              <:content>
+                Add a new card to this collection
+              </:content>
+            </Tooltip>
+          </div>
+        {{/if}}
       </:content>
     </CardsGridLayout>
     <style scoped>

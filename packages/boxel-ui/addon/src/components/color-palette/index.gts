@@ -49,6 +49,12 @@ export default class ColorPalette extends Component<Signature> {
 
   <template>
     <div class='color-palette-group' ...attributes>
+      <ColorPicker
+        @color={{@color}}
+        @onChange={{@onChange}}
+        @placeholder='Custom hex color (#ff00ff)'
+        @disabled={{@disabled}}
+      />
       {{#unless @disabled}}
         <div class='color-palette'>
           {{#each this.colors as |color|}}
@@ -68,12 +74,6 @@ export default class ColorPalette extends Component<Signature> {
           {{/each}}
         </div>
       {{/unless}}
-      <ColorPicker
-        @color={{@color}}
-        @onChange={{@onChange}}
-        @placeholder='Custom Color'
-        @disabled={{@disabled}}
-      />
     </div>
 
     <style scoped>

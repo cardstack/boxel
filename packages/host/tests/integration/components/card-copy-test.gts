@@ -12,13 +12,13 @@ import {
   type SingleCardDocument,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
-import { Realm } from '@cardstack/runtime-common/realm';
+import type { Realm } from '@cardstack/runtime-common/realm';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import {
+import type {
   IncrementalIndexEventContent,
   IndexRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
@@ -1022,7 +1022,7 @@ module('Integration | card-copy', function (hooks) {
       let included = json.included?.[0]!;
       assert.strictEqual(included.id, `${testRealmURL}Pet/mango`);
       assert.deepEqual(included.meta.adoptsFrom, {
-        module: `../pet`, // this is ok because it is relative to the incuded's id
+        module: `${testRealmURL}pet`,
         name: 'Pet',
       });
       assert.deepEqual(included.meta.realmURL, testRealmURL);
