@@ -672,13 +672,17 @@ export default class OperatorModeStateService extends Service {
     await this.updateCodePath(fileUrl);
   };
 
-  async updateCodePath(codePath: URL | null) {
+  async updateCodePath(
+    codePath: URL | null,
+    moduleInspectorView?: ModuleInspectorView,
+  ) {
     let canonicalCodePath = await this.determineCanonicalCodePath(codePath);
     this._state.codePath = canonicalCodePath;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
 
-    let moduleInspectorView =
+    moduleInspectorView =
+      moduleInspectorView ??
       this.moduleInspectorHistory[canonicalCodePath?.href ?? ''] ??
       DEFAULT_MODULE_INSPECTOR_VIEW;
 
