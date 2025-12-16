@@ -449,7 +449,123 @@ export class DocLayout extends GlimmerComponent<{
           max-width: 48rem;
         }
 
-        @media (max-width: 460px) {
+        /* Markdown content */
+        .doc-main :deep(.markdown-content) {
+          font-size: 0.9375rem;
+          line-height: 1.7;
+        }
+        .doc-main :deep(.markdown-content h2) {
+          font-size: 1.375rem;
+          font-weight: 700;
+          line-height: 1.3;
+          margin-top: var(--sp-6);
+          margin-bottom: var(--sp-3);
+          scroll-margin-top: 6rem; /* Increased for sticky TOC offset */
+          padding-top: var(--sp-2);
+        }
+        .doc-main :deep(.markdown-content h2:first-child) {
+          margin-top: 0;
+        }
+        .doc-main :deep(.markdown-content h3) {
+          font-size: 1.125rem;
+          font-weight: 500;
+          line-height: 1.4;
+          margin-top: var(--sp-6);
+          margin-bottom: var(--sp-2);
+          color: var(--foreground);
+          scroll-margin-top: 6rem; /* Increased for sticky TOC offset */
+        }
+        .doc-main :deep(.markdown-content h4) {
+          font-size: 1rem;
+          font-weight: 600;
+          line-height: 1.5;
+          margin-top: var(--sp-4);
+          margin-bottom: var(--sp-2);
+        }
+        .doc-main :deep(.markdown-content p) {
+          margin: var(--sp-3) 0;
+          line-height: 1.6;
+        }
+        .doc-main :deep(.markdown-content ul),
+        .doc-main :deep(.markdown-content ol) {
+          margin: var(--sp-3) 0;
+          padding-left: var(--sp-6);
+        }
+        .doc-main :deep(.markdown-content li) {
+          margin: var(--sp-2) 0;
+          line-height: 1.5;
+        }
+        .instructions-article :deep(pre),
+        .instructions-article :deep(code) {
+          --code-bg: color-mix(in lab, var(--db-primary) 8%, var(--db-muted));
+          background-color: var(--code-bg, var(--db-muted));
+        }
+        .doc-main :deep(.markdown-content code) {
+          font-size: 0.875em;
+          padding: 0.125rem 0.25rem;
+          border-radius: var(--boxel-border-radius-sm);
+        }
+        .doc-main :deep(.markdown-content pre) {
+          margin: var(--sp-4) 0;
+          padding: var(--sp-3);
+          border: 1px solid var(--db-border);
+          border-left: 3px solid var(--db-primary);
+          overflow-x: auto;
+          font-size: 0.8125rem;
+          line-height: 1.5;
+        }
+        .doc-main :deep(.markdown-content pre code) {
+          background: transparent;
+          padding: 0;
+        }
+        .doc-main :deep(.markdown-content blockquote) {
+          margin: var(--sp-4) 0;
+          padding: var(--sp-3) var(--sp-4);
+          border-left: 3px solid var(--primary);
+          background: var(--muted);
+          border-radius: 0 var(--boxel-border-radius-sm)
+            var(--boxel-border-radius-sm) 0;
+          font-style: italic;
+        }
+        .doc-main :deep(.markdown-content a) {
+          color: var(--primary);
+          text-decoration: none;
+          transition: color 0.15s ease;
+        }
+        .doc-main :deep(.markdown-content a:hover) {
+          text-decoration: underline;
+        }
+        .doc-main :deep(.markdown-content strong) {
+          font-weight: 600;
+          color: var(--db-foreground);
+        }
+        .doc-main :deep(.markdown-content table) {
+          font-size: 0.875rem;
+        }
+        .doc-main :deep(.markdown-content th) {
+          padding: 0.75rem 1rem;
+        }
+        .doc-main :deep(.markdown-content td) {
+          padding: 0.625rem 1rem;
+          vertical-align: top;
+        }
+        .doc-main :deep(.markdown-content tbody tr:hover) {
+          background: color-mix(in lab, var(--primary) 5%, var(--card));
+        }
+        /* Code in tables */
+        .doc-main :deep(.markdown-content table code) {
+          font-size: 0.75rem;
+          white-space: nowrap;
+        }
+        .doc-main :deep(.markdown-content .highlighted-section) {
+          padding: 2rem;
+          margin: 2.5rem 0;
+          background: var(--accent);
+          border: 1px solid var(--db-border);
+          border-radius: 12px;
+        }
+
+        @media (max-width: 640px) {
           .doc-layout {
             grid-template-columns: 1fr;
             padding: var(--boxel-sp-xs);
@@ -461,12 +577,6 @@ export class DocLayout extends GlimmerComponent<{
           .toc-sidebar,
           .doc-main {
             overflow-y: initial;
-          }
-        }
-
-        @media (max-width: 640px) {
-          .doc-layout {
-            padding: var(--boxel-sp-xs);
           }
         }
       }
@@ -566,30 +676,6 @@ export class SkillPlus extends Skill {
           {{/if}}
         </:default>
       </DocLayout>
-
-      <style scoped>
-        @layer {
-          .instructions-article :deep(pre),
-          .instructions-article :deep(code) {
-            --code-bg: color-mix(in lab, var(--db-primary) 8%, var(--db-muted));
-            background-color: var(--code-bg, var(--db-muted));
-          }
-          .instructions-article :deep(pre) {
-            border-radius: 0;
-            border: 1px solid var(--db-border);
-            border-left: 3px solid var(--db-primary);
-            font-size: 0.8125rem;
-            line-height: 1.5;
-          }
-          .instructions-article :deep(h3) {
-            margin-top: var(--boxel-sp-2xl);
-            font-weight: 500;
-          }
-          .instructions-article :deep(p) {
-            margin-top: var(--boxel-sp);
-          }
-        }
-      </style>
     </template>
   };
 }

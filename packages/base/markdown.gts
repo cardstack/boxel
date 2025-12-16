@@ -1,3 +1,4 @@
+import { modifier } from 'ember-modifier';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { Component } from './card-api';
 import StringField from './string';
@@ -5,15 +6,29 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { markdownToHtml } from '@cardstack/runtime-common';
 import AlignBoxLeftMiddleIcon from '@cardstack/boxel-icons/align-box-left-middle';
 
+// Function modifier to wrap tables in scrollable containers
+export const wrapTables = modifier((element: HTMLElement) => {
+  const tables = element.querySelectorAll('table:not(.table-wrapper table)');
+  tables.forEach((table) => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'table-wrapper';
+    table.parentNode?.insertBefore(wrapper, table);
+    wrapper.appendChild(table);
+  });
+});
+
 class View extends Component<typeof MarkdownField> {
   <template>
-    <div class='markdown-content'>
+    <div class='markdown-content' {{wrapTables}}>
       {{! template-lint-disable no-triple-curlies }}
       {{{markdownToHtml @model}}}
     </div>
     <style scoped>
       @layer baseComponent {
         .markdown-content {
+          --md-border: var(--border, var(--boxel-border-color));
+          --md-muted: var(--muted, var(--boxel-100));
+
           max-width: 100%;
           font-size: var(--markdown-font-size, inherit);
           font-family: var(--markdown-font-family, inherit);
@@ -126,7 +141,7 @@ class View extends Component<typeof MarkdownField> {
           border-bottom: none;
           border-right: none;
           border-left: none;
-          border-top: var(--boxel-border);
+          border-top: 1px solid var(--md-border);
         }
 
         /* Code */
@@ -211,17 +226,39 @@ class View extends Component<typeof MarkdownField> {
         /* Emoji */
         /* Must copy/paste emoji */
 
-        /* Table */
-        .markdown-content :deep(table) {
+        /* Scrollable table wrapper */
+        .markdown-content :deep(.table-wrapper) {
+          width: 100%;
+          max-width: var(--markdown-table-max-width, 56.25rem);
+          overflow-x: auto;
           margin-top: var(--boxel-sp-lg);
           margin-bottom: var(--boxel-sp-lg);
-          background-color: #efefef;
-          border-radius: var(--boxel-border-radius-xl);
-          padding: var(--boxel-sp-lg);
+          background-color: var(--md-muted);
+          border: 1px solid var(--md-border);
+          border-radius: var(--boxel-border-radius);
+          word-break: initial;
+        }
+        /* Table */
+        .markdown-content :deep(table) {
+          width: 100%;
+          max-width: 100%; /* Allow full width within scroll container */
+          border-radius: 0;
+          border-collapse: collapse;
+        }
+        .markdown-content :deep(thead) {
+          border-bottom: 2px solid var(--md-border);
         }
         .markdown-content :deep(th),
         .markdown-content :deep(td) {
-          text-align: left;
+          text-align: start;
+          padding: var(--boxel-sp-2xs);
+        }
+        .markdown-content :deep(th:not(:last-child)),
+        .markdown-content :deep(td:not(:last-child)) {
+          border-right: 1px solid var(--md-border);
+        }
+        .markdown-content :deep(tr:not(:last-child) td) {
+          border-bottom: 1px solid var(--md-border);
         }
       }
     </style>

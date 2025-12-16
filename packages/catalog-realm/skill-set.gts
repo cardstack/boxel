@@ -1,4 +1,3 @@
-import { on } from '@ember/modifier';
 import {
   SkillPlus,
   slugifyHeading,
@@ -156,17 +155,6 @@ function computeTableOfContents(
   return toc.length > 0 ? toc : undefined;
 }
 
-// Function modifier to wrap tables in scrollable containers
-const wrapTables = modifier((element: HTMLElement) => {
-  const tables = element.querySelectorAll('table:not(.table-wrapper table)');
-  tables.forEach((table) => {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'table-wrapper';
-    table.parentNode?.insertBefore(wrapper, table);
-    wrapper.appendChild(table);
-  });
-});
-
 // Delegate click/keyboard activation for skill dividers to the container
 const dividerActivation = modifier(
   (
@@ -210,7 +198,7 @@ const dividerActivation = modifier(
 
 export class SkillSet extends SkillPlus {
   static displayName = 'Skill Set';
-  static prefersWideFormat = true; // ⁴⁰ Enable wide format for documentation
+  static prefersWideFormat = true;
 
   @field title = contains(StringField, {
     computeVia: function (this: SkillSet) {
@@ -218,7 +206,7 @@ export class SkillSet extends SkillPlus {
     },
   });
 
-  @field relatedSkills = containsMany(SkillReference); // Related skills with individual inclusion modes
+  @field relatedSkills = containsMany(SkillReference);
 
   @field frontMatter = contains(MarkdownField, {
     // Editable front matter
@@ -491,7 +479,6 @@ export class SkillSet extends SkillPlus {
             <article
               class='instructions-article'
               id='instructions'
-              {{wrapTables}}
               {{addHeaderIds}}
               {{dividerActivation this.activateDivider}}
             >
@@ -606,196 +593,27 @@ export class SkillSet extends SkillPlus {
           font-weight: 600;
         }
 
-        /* Instructions article */
-        .instructions-article {
-          font-size: 0.9375rem;
-          line-height: 1.7;
-          color: var(--foreground);
-        }
-        /* ⁵² Typography hierarchy - compact spacing */
-        .instructions-article :deep(h2) {
-          font-size: 1.375rem;
-          font-weight: 700;
-          line-height: 1.3;
-          margin: 2rem 0 0.75rem 0; /* 8 × 0.25rem, 3 × 0.25rem */
-          color: var(--foreground);
-          scroll-margin-top: 6rem; /* ⁶³ Increased for sticky TOC offset */
-          padding-top: 0.5rem; /* 2 × 0.25rem */
-        }
-        .instructions-article :deep(h2:first-child) {
-          margin-top: 0;
-        }
-        .instructions-article :deep(h3) {
-          font-size: 1.125rem;
-          font-weight: 600;
-          line-height: 1.4;
-          margin: 1.5rem 0 0.5rem 0; /* 6 × 0.25rem, 2 × 0.25rem */
-          color: var(--foreground);
-          scroll-margin-top: 6rem; /* ⁶⁴ Increased for sticky TOC offset */
-        }
-        .instructions-article :deep(h4) {
-          font-size: 1rem;
-          font-weight: 600;
-          line-height: 1.5;
-          margin: 1rem 0 0.5rem 0; /* 4 × 0.25rem, 2 × 0.25rem */
-          color: var(--foreground);
-        }
-        .instructions-article :deep(p) {
-          margin: 0.75rem 0; /* 3 × 0.25rem */
-          line-height: 1.6;
-        }
-        .instructions-article :deep(ul),
-        .instructions-article :deep(ol) {
-          margin: 0.75rem 0; /* 3 × 0.25rem */
-          padding-left: 1.5rem; /* 6 × 0.25rem */
-        }
-        .instructions-article :deep(li) {
-          margin: 0.5rem 0; /* 2 × 0.25rem */
-          line-height: 1.5;
-        }
-        .instructions-article :deep(code) {
-          font-family: var(--font-mono);
-          font-size: 0.875em;
-          background: var(--muted);
-          background: color-mix(
-            in lab,
-            var(--primary) 10%,
-            var(--muted)
-          ); /* subtle tint */
-          padding: 0.125rem 0.25rem;
-          border-radius: var(--boxel-border-radius-sm);
-          color: var(--foreground);
-        }
-        .instructions-article :deep(pre) {
-          margin: 1rem 0; /* 4 × 0.25rem */
-          padding: 0.75rem; /* 3 × 0.25rem */
-          background: color-mix(
-            in lab,
-            var(--primary) 8%,
-            var(--muted)
-          ); /* subtle tint */
-          border: 1px solid var(--border);
-          border-left: 3px solid var(--primary);
-          overflow-x: auto;
-          font-size: 0.8125rem;
-          line-height: 1.5;
-        }
-        .instructions-article :deep(pre code) {
-          background: transparent;
-          padding: 0;
-        }
-        .instructions-article :deep(blockquote) {
-          margin: 1rem 0; /* 4 × 0.25rem */
-          padding: 0.75rem 1rem; /* 3 × 0.25rem, 4 × 0.25rem */
-          border-left: 3px solid var(--primary);
-          background: var(--muted);
-          border-radius: 0 var(--boxel-border-radius-sm)
-            var(--boxel-border-radius-sm) 0;
-          font-style: italic;
-        }
-        .instructions-article :deep(a) {
-          color: var(--primary);
-          text-decoration: none;
-          transition: color 0.15s ease;
-        }
-        .instructions-article :deep(a:hover) {
-          text-decoration: underline;
-        }
-        .instructions-article :deep(strong) {
-          font-weight: 600;
-          color: var(--foreground);
-        }
-        /* ¹⁴³ Table styling - clean professional tables with horizontal scroll */
-        .instructions-article :deep(table) {
-          width: 100%;
-          max-width: 100%; /* ¹⁴⁵ Allow full width within scroll container */
-          border-collapse: collapse;
-          margin: 0; /* ¹⁴⁵ Margin on wrapper instead */
-          font-size: 0.875rem;
-        }
-        /* ¹⁴⁵ Scrollable table wrapper */
-        .instructions-article :deep(.table-wrapper) {
-          width: 100%;
-          max-width: 900px;
-          overflow-x: auto;
-          margin: 1.5rem 0;
-          background-color: var(--card);
-          color: var(--card-foreground);
-          border: 1px solid var(--border);
-          border-radius: var(--boxel-border-radius);
-          box-shadow: var(--shadow-sm);
-        }
-        .instructions-article :deep(thead) {
-          background: var(--muted);
-          border-bottom: 2px solid var(--border);
-        }
-        .instructions-article :deep(th) {
-          padding: 0.75rem 1rem;
-          text-align: left;
-          font-weight: 600;
-          color: var(--foreground);
-          border-right: 1px solid var(--border);
-        }
-        .instructions-article :deep(th:last-child) {
-          border-right: none;
-        }
-        .instructions-article :deep(td) {
-          padding: 0.625rem 1rem;
-          border-right: 1px solid var(--border);
-          border-bottom: 1px solid var(--border);
-          vertical-align: top;
-        }
-        .instructions-article :deep(td:last-child) {
-          border-right: none;
-        }
-        .instructions-article :deep(tbody tr:last-child td) {
-          border-bottom: none;
-        }
-        .instructions-article :deep(tbody tr:hover) {
-          background: color-mix(in lab, var(--primary) 5%, var(--card));
-        }
-        /* Code in tables */
-        .instructions-article :deep(table code) {
-          font-size: 0.75rem;
-          white-space: nowrap;
-        }
-        /* ¹⁰⁷ Highlighted section - clean callout box */
-        .instructions-article :deep(.highlighted-section) {
-          padding: 2rem;
-          margin: 2.5rem 0;
-          background: var(--accent);
-          border: 1px solid var(--border);
-          border-radius: 12px;
-        }
-
-        /* ²⁵⁰ Clickable skill divider styling */
+        /* Clickable skill divider styling */
         .instructions-article :deep(.skill-divider-clickable) {
-          cursor: pointer; /* ²⁵¹ Show clickable cursor */
+          cursor: pointer;
         }
-
         .instructions-article :deep(.skill-divider-clickable:hover) {
-          /* ²⁵² Hover state for clickable dividers */
           transform: translateY(-2px);
           box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
         }
-
-        /* ¹¹¹ Premium numbered skill divider - distinct from code blocks */
         .instructions-article :deep(.skill-divider) {
-          margin: 4rem 0 2.5rem 0; /* ²⁵³ Margin on divider itself */
+          margin: 4rem 0 2.5rem 0;
           padding: 2rem;
-          background: var(--secondary); /* Different color than code blocks */
+          background: var(--secondary);
           color: var(--secondary-foreground);
           border: 2px solid var(--secondary);
-          border-radius: var(
-            --boxel-border-radius-xl,
-            16px
-          ); /* ¹⁶⁵ Theme radius with fallback */
+          border-radius: var(--boxel-border-radius-xl, 16px);
           scroll-margin-top: 2rem;
           display: flex;
           align-items: flex-start;
           gap: 1.5rem;
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-          transition: all 0.3s ease; /* ²³⁸ Smooth hover transitions */
+          transition: all 0.3s ease;
         }
         .instructions-article :deep(.divider-number) {
           flex-shrink: 0;
@@ -809,10 +627,7 @@ export class SkillSet extends SkillPlus {
           background: var(--background);
           color: var(--foreground);
           border: 2px solid var(--border);
-          border-radius: var(
-            --boxel-border-radius-lg,
-            12px
-          ); /* ¹⁶⁶ Theme radius with fallback */
+          border-radius: var(--boxel-border-radius-lg, 12px);
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
         .instructions-article :deep(.divider-content) {
@@ -843,15 +658,14 @@ export class SkillSet extends SkillPlus {
         .instructions-article :deep(.divider-link:hover) {
           opacity: 1;
         }
-        /* ¹¹³ Divider context text - activation conditions */
         .instructions-article :deep(.divider-context) {
-          font-size: 0.6875rem; /* ¹²⁵ Smaller, aligned with link */
+          font-size: 0.6875rem;
           color: var(--secondary-foreground);
-          opacity: 0.75; /* ¹²⁶ Slightly more subtle */
+          opacity: 0.75;
           font-style: italic;
-          margin-top: 0.25rem; /* ¹²⁷ Tighter spacing to link */
+          margin-top: 0.25rem;
           line-height: 1.5;
-          padding-left: 0; /* ¹²⁸ Align with link text */
+          padding-left: 0;
         }
         /* ²²⁸ Divider inclusion mode badge - pill style */
         .instructions-article :deep(.divider-mode) {
@@ -860,10 +674,10 @@ export class SkillSet extends SkillPlus {
           font-weight: 700;
           text-transform: uppercase;
           letter-spacing: 0.05em;
-          padding: 0.375rem 0.75rem; /* ²⁴⁰ More padding for pill shape */
-          border-radius: 999px; /* ²⁴¹ Full rounded pill */
+          padding: 0.375rem 0.75rem;
+          border-radius: 999px;
           margin-top: 0.5rem;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); /* ²⁴² Subtle shadow */
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
         .instructions-article :deep(.divider-mode-full) {
           /* ²²⁹ Full mode styling - pill */
@@ -898,9 +712,6 @@ export class SkillSet extends SkillPlus {
   };
 
   static embedded = class Embedded extends Component<typeof this> {
-    // ¹⁹⁴ Professional embedded format for skill set
-    // ⁿ Bind modifiers for template usage
-    wrapTables = wrapTables;
     addHeaderIds = addHeaderIds;
 
     <template>
@@ -1085,20 +896,18 @@ export class SkillSet extends SkillPlus {
   };
 
   static fitted = class Fitted extends Component<typeof this> {
-    // ¹⁹⁶ Professional fitted format with four sub-formats
     <template>
       <div class='fitted-container'>
-        {{! ¹⁹⁷ Badge format (≤150px width, <170px height) - Compact title display }}
+        {{! Badge format (≤150px width, <170px height) - Compact title display }}
         <div class='badge-format'>
           <div class='badge-title'>{{if
               @model.title
               @model.title
               'Skill Set'
             }}</div>
-          {{! ²⁰⁷ Show title instead of icon }}
         </div>
 
-        {{! ¹⁹⁸ Strip format (>150px width, <170px height) - Horizontal info bar }}
+        {{! Strip format (>150px width, <170px height) - Horizontal info bar }}
         <div class='strip-format'>
           <div class='strip-left'>
             <svg
@@ -1120,7 +929,7 @@ export class SkillSet extends SkillPlus {
           <div class='strip-count'>{{@model.relatedSkills.length}} skills</div>
         </div>
 
-        {{! ¹⁹⁹ Tile format (<400px width, ≥170px height) - Vertical card }}
+        {{! Tile format (<400px width, ≥170px height) - Vertical card }}
         <div class='tile-format'>
           <div class='tile-header'>
             <svg
@@ -1148,7 +957,7 @@ export class SkillSet extends SkillPlus {
           {{/if}}
         </div>
 
-        {{! ²⁰⁰ Card format (≥400px width, ≥170px height) - Full information }}
+        {{! Card format (≥400px width, ≥170px height) - Full information }}
         <div class='card-format'>
           <div class='card-header'>
             <div class='card-meta'>
@@ -1193,7 +1002,7 @@ export class SkillSet extends SkillPlus {
       </div>
 
       <style scoped>
-        /* ²⁰¹ Fitted container with size-based display */
+        /* Fitted container with size-based display */
         .fitted-container {
           container-type: size;
           width: 100%;
@@ -1226,7 +1035,6 @@ export class SkillSet extends SkillPlus {
         }
 
         .badge-title {
-          /* ²⁰⁸ Badge shows title */
           font-size: clamp(0.625rem, 4%, 0.75rem);
           font-weight: 700;
           color: var(--foreground);
@@ -1239,7 +1047,7 @@ export class SkillSet extends SkillPlus {
           line-height: 1.2;
         }
 
-        /* ²⁰⁴ Strip format - horizontal bar */
+        /* Strip format - horizontal bar */
         @container (min-width: 151px) and (max-height: 169px) {
           .strip-format {
             display: flex;
@@ -1281,7 +1089,7 @@ export class SkillSet extends SkillPlus {
           flex-shrink: 0;
         }
 
-        /* ²⁰⁵ Tile format - vertical card */
+        /* Tile format - vertical card */
         @container (max-width: 399px) and (min-height: 170px) {
           .tile-format {
             display: flex;
@@ -1347,7 +1155,7 @@ export class SkillSet extends SkillPlus {
           -webkit-box-orient: vertical;
         }
 
-        /* ²⁰⁶ Card format - full layout */
+        /* Card format - full layout */
         @container (min-width: 400px) and (min-height: 170px) {
           .card-format {
             display: flex;
