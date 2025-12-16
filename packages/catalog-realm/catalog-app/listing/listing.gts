@@ -33,6 +33,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { eq, type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 import Wand from '@cardstack/boxel-icons/wand';
+import Refresh from '@cardstack/boxel-icons/refresh';
 
 import AppListingHeader from '../components/app-listing-header';
 import ChooseRealmAction from '../components/choose-realm-action';
@@ -626,6 +627,7 @@ export class Listing extends CardDef {
     return {
       label: 'Update Specs',
       id: 'update-listing-specs',
+      icon: Refresh,
       action: () =>
         new ListingUpdateSpecsCommand(commandContext).execute({
           listing: this,
