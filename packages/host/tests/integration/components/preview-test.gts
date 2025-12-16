@@ -83,6 +83,7 @@ module('Integration | preview', function (hooks) {
 
     await renderComponent(TestDriver);
     await waitFor('.head-preview');
+    await waitFor('[data-test-head-markup]');
 
     await percySnapshot(assert);
 
@@ -93,5 +94,15 @@ module('Integration | preview', function (hooks) {
     assert
       .dom('.preview-image img')
       .hasAttribute('src', 'https://example.com/cover.png');
+    assert
+      .dom('[data-test-head-markup]')
+      .includesText(
+        '<meta property="og:url" content="https://example.com/post">',
+      );
+    assert
+      .dom('[data-test-head-markup]')
+      .includesText(
+        '<meta name="description" content="Preview description">',
+      );
   });
 });

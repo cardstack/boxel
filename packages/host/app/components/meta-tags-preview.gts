@@ -313,7 +313,7 @@ export default class MetaTagsPreview extends Component<Signature> {
       {{#if this.headMarkup}}
         <details class='raw-head'>
           <summary>View raw head markup</summary>
-          <pre>{{this.headMarkup}}</pre>
+          <pre data-test-head-markup>{{this.headMarkup}}</pre>
         </details>
       {{/if}}
     </div>
