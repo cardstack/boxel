@@ -4568,6 +4568,166 @@ new content
     );
   });
 
+  test('getPromptParts treats a cancelled code patch message with no applied changes as resolved for subsequent patches', async function () {
+    const roomId = 'room-checks-cancelled-patch';
+    const cancelledAiMessageId = 'cancelled-ai-message';
+    const aiMessageId = 'ai-message';
+    const patchedFileSource = 'http://localhost/realm/button.gts';
+
+    const eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: 'user-message',
+        origin_server_ts: 1,
+        room_id: roomId,
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Please update the profile card.',
+          format: 'org.matrix.custom.html',
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/test',
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'user-message',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: cancelledAiMessageId,
+        origin_server_ts: 2,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: `Updating the file...
+${patchedFileSource}
+╔═══ SEARCH ════╗
+old content
+╠═══════════════╣
+new content
+╚═══ REPLACE ═══╝
+`,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          isCanceled: true,
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/test',
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: cancelledAiMessageId,
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: aiMessageId,
+        origin_server_ts: 3,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: `Updating the file...
+${patchedFileSource}
+╔═══ SEARCH ════╗
+old content
+╠═══════════════╣
+new content
+╚═══ REPLACE ═══╝
+`,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/test',
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: aiMessageId,
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+        event_id: 'patch-result',
+        origin_server_ts: 4,
+        room_id: roomId,
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+          },
+          codeBlockIndex: 0,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: patchedFileSource,
+                url: patchedFileSource,
+                name: 'button.gts',
+                contentType: 'text/plain',
+              },
+            ],
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'patch-result',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const { pendingCodePatchCorrectnessChecks } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.ok(
+      pendingCodePatchCorrectnessChecks,
+      'Should collect pending code patch correctness after a cancelled prior patch',
+    );
+    assert.strictEqual(
+      pendingCodePatchCorrectnessChecks?.targetEventId,
+      aiMessageId,
+      'Summary should target the later AI message with the applied patch',
+    );
+    assert.deepEqual(
+      pendingCodePatchCorrectnessChecks?.files,
+      [
+        {
+          sourceUrl: patchedFileSource,
+          displayName: 'realm/button.gts',
+        },
+      ],
+      'Patched files should be surfaced',
+    );
+  });
+
   test('getPromptParts toggles correctness summary and patch result prompts based on autoCorrectnessChecksEnabled option', async function () {
     const roomId = '!room:localhost';
     const aiMessageId = '$ai-msg';

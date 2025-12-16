@@ -1298,6 +1298,11 @@ function collectPendingCodePatchCorrectnessCheck(
           (result) => result.content.commandRequestId === request.id,
         ),
       );
+    // Treat cancelled messages with no applied changes as resolved
+    if (isCancelled && !appliedChanges) {
+      allCodePatchesResolved = true;
+      allRelevantCommandsResolved = true;
+    }
 
     // If the most recent message with patches/commands isn't resolved yet,
     // don't walk back to earlier messages—wait for the current one to finish.
