@@ -151,11 +151,11 @@ export default class CopyButton extends Component<Signature> {
   }
 
   private get state() {
+    let topMostStackItems = this.operatorModeStateService.topMostStackItems();
     // Need to have 2 stacks in order for a copy button to exist
-    if (this.stacks.length < 2) {
+    if (topMostStackItems.length < 2) {
       return undefined;
     }
-    let topMostStackItems = this.operatorModeStateService.topMostStackItems();
     if (!topMostStackItems[LEFT].id || !topMostStackItems[RIGHT].id) {
       return undefined;
     }
