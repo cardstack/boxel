@@ -63,12 +63,16 @@ export class Prerenderer {
       silent,
       serverURL: options.serverURL,
       browserManager: this.#browserManager,
+      boxelHostURL,
     });
     this.#renderRunner = new RenderRunner({
       pagePool: this.#pagePool,
       boxelHostURL,
     });
     this.#startCleanupLoop();
+    void this.#pagePool.warmStandbys().catch((e) => {
+      log.error('Failed to warm standby pages during prerenderer startup:', e);
+    });
   }
 
   getWarmRealms(): string[] {
@@ -385,6 +389,9 @@ export class Prerenderer {
     log.warn('Restarting prerender browser');
     await this.#pagePool.closeAll();
     await this.#browserManager.restartBrowser();
+    await this.#pagePool.warmStandbys().catch((e) => {
+      log.error('Failed to warm standby pages after browser restart:', e);
+    });
   }
 
   #startCleanupLoop(): void {
