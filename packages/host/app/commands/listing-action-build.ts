@@ -49,9 +49,8 @@ export default class ListingActionBuildCommand extends HostBaseCommand<
     });
 
     const defaultSkills = [
-      skillCardURL('boxel-development'),
-      skillCardURL('catalog-listing'),
-      skillCardURL('source-code-editing'),
+      skillCardURL('boxel-dev-1203'),
+      skillCardURL('boxel-env-1205'),
     ];
 
     if (roomId) {

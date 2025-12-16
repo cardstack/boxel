@@ -1191,12 +1191,11 @@ export default class MatrixService extends Service {
   }
 
   async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [skillCardURL('boxel-environment')];
+    let interactModeDefaultSkills = [skillCardURL('boxel-env-1205')];
 
     let codeModeDefaultSkills = [
-      skillCardURL('boxel-environment'),
-      skillCardURL('boxel-development'),
-      skillCardURL('source-code-editing'),
+      skillCardURL('boxel-dev-1203'),
+      skillCardURL('boxel-env-1205'),
     ];
 
     let defaultSkills;
