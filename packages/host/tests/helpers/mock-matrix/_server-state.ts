@@ -36,10 +36,6 @@ export class ServerState {
     return Array.from(this.#rooms.keys()).map((id) => ({ id }));
   }
 
-  hasRoom(roomId: string) {
-    return this.#rooms.has(roomId);
-  }
-
   addListener(callback: (event: IEvent) => void) {
     this.#listeners.push(callback);
   }

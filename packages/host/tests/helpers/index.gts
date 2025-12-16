@@ -854,9 +854,6 @@ function ensureAuthHandlerState(network: NetworkService): AuthHandlerState {
       if (req.url.includes('_realm-auth')) {
         const authTokens: Record<string, string> = {};
         for (let [realmURL, permissions] of realmPermissions.entries()) {
-          if (state.ensureSessionRoom) {
-            await state.ensureSessionRoom(realmURL, TEST_MATRIX_USER);
-          }
           authTokens[realmURL] = createJWT(
             {
               user: TEST_MATRIX_USER,
