@@ -4,7 +4,7 @@ import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
 
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
@@ -49,8 +49,6 @@ import { setupRenderingTest } from '../../../helpers/setup';
 
 module('Integration | ai-assistant-panel | commands', function (hooks) {
   const realmName = 'Operator Mode Workspace';
-  const environmentSkillId =
-    'http://localhost:4201/skills/Skill/boxel-environment';
   let loader: Loader;
   let operatorModeStateService: OperatorModeStateService;
 
@@ -235,16 +233,6 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     );
     let roomId = await openAiAssistant();
     return roomId;
-  }
-
-  async function attachEnvironmentSkill() {
-    await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await waitFor(`[data-test-card-catalog-item="${environmentSkillId}"]`, {
-      timeout: 10000,
-    });
-    await click(`[data-test-card-catalog-item="${environmentSkillId}"]`);
-    await click('[data-test-card-catalog-go-button]');
   }
 
   test<TestContextWithSave>('it allows chat commands to change cards in the stack', async function (assert) {
@@ -1181,8 +1169,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       .exists({ count: 2 });
   });
 
-  // flaky test CS-9884
-  skip('command that returns a FileForAttachmentCard result is specially handled to attach the file', async function (assert) {
+  test('command that returns a FileForAttachmentCard result is specially handled to attach the file', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1202,7 +1189,12 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await waitFor('[data-test-room-name="test room 1"]', { timeout: 10000 });
 
     // add environment skill
-    await attachEnvironmentSkill();
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click(
+      '[data-test-card-catalog-item="http://localhost:4201/skills/Skill/boxel-environment"]',
+    );
+    await click('[data-test-card-catalog-go-button]');
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1274,8 +1266,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     );
   });
 
-  // flaky test CS-9884
-  skip('command that returns a CardForAttachmentCard result is specially handled to attach the card', async function (assert) {
+  test('command that returns a CardForAttachmentCard result is specially handled to attach the card', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1295,7 +1286,12 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await waitFor('[data-test-room-name="test room 1"]', { timeout: 10000 });
 
     // add environment skill
-    await attachEnvironmentSkill();
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click(
+      '[data-test-card-catalog-item="http://localhost:4201/skills/Skill/boxel-environment"]',
+    );
+    await click('[data-test-card-catalog-go-button]');
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
