@@ -1,14 +1,12 @@
 import { service } from '@ember/service';
-
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
-import { isCardInstance, SupportedMimeType } from '@cardstack/runtime-common';
-
-import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
-
-import type { CardDef as BaseCardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type { CardDef as BaseCardDef } from 'https://cardstack.com/base/card-api';
 import type { Spec } from 'https://cardstack.com/base/spec';
+
+import { isCardInstance, SupportedMimeType } from '@cardstack/runtime-common';
+import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
 
 import HostBaseCommand from '../lib/host-base-command';
 
@@ -39,11 +37,9 @@ export default class ListingUpdateSpecsCommand extends HostBaseCommand<
         return false;
       }
       if (
-        [
-          'https://cardstack.com',
-          'https://packages',
-          'https://boxel-icons.boxel.ai',
-        ].some((urlStem) => dep.startsWith(urlStem))
+        ['https://cardstack.com', 'https://packages', 'https://boxel-icons.boxel.ai'].some(
+          (urlStem) => dep.startsWith(urlStem),
+        )
       ) {
         return false;
       }
