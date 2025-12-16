@@ -265,9 +265,7 @@ export default class HostModeService extends Service {
       return null;
     }
 
-    let start: Element | null = head.querySelector(
-      '[data-boxel-head-start]',
-    );
+    let start: Element | null = head.querySelector('[data-boxel-head-start]');
     let end: Element | null = head.querySelector('[data-boxel-head-end]');
 
     return start && end ? [start, end] : null;
