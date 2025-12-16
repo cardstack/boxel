@@ -9,8 +9,9 @@ import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import MetaTagsPreview from '@cardstack/host/components/meta-tags-preview';
 
-import { testRealmURL } from '../../helpers';
+import { percySnapshot, testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -54,5 +55,43 @@ module('Integration | preview', function (hooks) {
     );
     await waitFor('[data-test-firstName]'); // we need to wait for the card instance to load
     assert.dom('[data-test-firstName]').hasText('Mango');
+  });
+
+  test('renders head meta tags preview', async function (assert) {
+    class HeadContent extends GlimmerComponent<{
+      Args: { displayContainer?: boolean };
+    }> {
+      <template>
+        <title>Preview Title</title>
+        <meta name='description' content='Preview description' />
+        <meta property='og:url' content='https://example.com/post' />
+        <meta property='og:image' content='/cover.png' />
+        <meta name='twitter:card' content='summary' />
+      </template>
+    }
+
+    class TestDriver extends GlimmerComponent<{ Args: { format?: string } }> {
+      HeadContent = HeadContent;
+
+      <template>
+        <MetaTagsPreview
+          @renderedCard={{this.HeadContent}}
+          @cardURL='https://example.com/post'
+        />
+      </template>
+    }
+
+    await renderComponent(TestDriver);
+    await waitFor('.head-preview');
+
+    await percySnapshot(assert);
+
+    assert.dom('.search-title').hasText('Preview Title');
+    assert.dom('.search-description').hasText('Preview description');
+    assert.dom('.domain').hasText('example.com');
+    assert.dom('.path').hasText('/post');
+    assert
+      .dom('.preview-image img')
+      .hasAttribute('src', 'https://example.com/cover.png');
   });
 });
