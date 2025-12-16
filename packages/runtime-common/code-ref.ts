@@ -257,7 +257,7 @@ export function getField<T extends BaseDef>(
       }
       if (fieldOverride) {
         let cardThunk = fieldOverride;
-        let { computeVia, name, isUsed } = result;
+        let { computeVia, name, isUsed, queryDefinition } = result;
         let originalField = result;
         let declaredCardThunk =
           (originalField as any).declaredCardResolver ??
@@ -271,6 +271,7 @@ export function getField<T extends BaseDef>(
           name,
           isUsed,
           isPolymorphic: true,
+          queryDefinition,
         }) as Field;
       }
       localIdentities.set(result.card, {
