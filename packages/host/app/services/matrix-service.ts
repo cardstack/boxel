@@ -680,6 +680,9 @@ export default class MatrixService extends Service {
 
           await this.realmServer.authenticateToAllAccessibleRealms();
         }
+        // Login here triggers other setup code that needs to happen after
+        // otherwise we don't have the realm info.
+        // This should be cleaned up as we move to single logins
         await this.loginToRealms();
 
         this.postLoginCompleted = true;
