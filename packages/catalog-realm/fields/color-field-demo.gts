@@ -45,59 +45,77 @@ export class ColorFieldDemo extends CardDef {
     },
   });
 
-  // ⁷ Slider variant - RGB sliders only
+  // ⁷ Slider variant - RGB only
   @field sliderRgbColor = contains(ColorField, {
     configuration: {
       variant: 'slider',
       options: {
-        sliderMode: 'rgb',
+        defaultFormat: 'rgb',
       },
     },
   });
 
-  // ⁸ Slider variant - HSL sliders only
+  // ⁸ Slider variant - HSL only
   @field sliderHslColor = contains(ColorField, {
     configuration: {
       variant: 'slider',
       options: {
-        sliderMode: 'hsl',
+        defaultFormat: 'hsl',
+        allowedFormats: ['rgb', 'hsl'],
       },
     },
   });
 
-  // ⁹ Slider variant - All modes available
+  // ⁹ Slider variant - All formats with selector
   @field sliderAllColor = contains(ColorField, {
     configuration: {
       variant: 'slider',
       options: {
-        sliderMode: 'all',
+        defaultFormat: 'rgb',
+        allowedFormats: ['rgb', 'hsl', 'hsb'],
+        showFormatSelector: false,
       },
     },
   });
 
-  // ¹⁰ Wheel variant - color wheel with restricted formats
+  // ¹⁰ Wheel variant - color wheel with format selector
   @field wheelColor = contains(ColorField, {
     configuration: {
       variant: 'wheel',
       options: {
+        defaultFormat: 'rgb',
         allowedFormats: ['hex', 'rgb', 'hsl'],
+        showFormatSelector: true,
       },
     },
   });
 
-  // ¹¹ Advanced variant - manual hex entry with expanded formats
+  // ¹¹ Advanced variant - full featured with all formats
   @field advancedColor = contains(ColorField, {
     configuration: {
       variant: 'advanced',
       options: {
-        format: 'hex',
+        defaultFormat: 'hex',
         allowedFormats: ['hex', 'rgb', 'hsl', 'hsb', 'css'],
+        showFormatSelector: true,
+      },
+    },
+  });
+
+  // ¹² Advanced variant - locked format (no selector)
+  @field advancedLockedColor = contains(ColorField, {
+    configuration: {
+      variant: 'advanced',
+      options: {
+        defaultFormat: 'hex',
+        allowedFormats: ['hex', 'rgb'],
+        showFormatSelector: false, // Hide dropdown, lock to hex
       },
     },
   });
 
   static isolated = class Isolated extends Component<typeof this> {
-    // ¹² Isolated format
+    // ¹³ Isolated format
     <template>
       <div class='color-demo-container'>
         <header class='demo-header'>
@@ -108,7 +126,7 @@ export class ColorFieldDemo extends CardDef {
         </header>
 
         <div class='variants-grid'>
-          {{! ¹³ Standard variant }}
+          {{! ¹⁴ Standard variant }}
           <section class='variant-card'>
             <div class='variant-header'>
               <h2>Standard</h2>
@@ -125,7 +143,7 @@ export class ColorFieldDemo extends CardDef {
             </div>
           </section>
 
-          {{! ¹⁴ Swatches variant }}
+          {{! ¹⁵ Swatches variant }}
           <section class='variant-card'>
             <div class='variant-header'>
               <h2>Swatches Picker</h2>
@@ -142,91 +160,110 @@ export class ColorFieldDemo extends CardDef {
             </div>
           </section>
 
-          {{! ¹⁵ Slider RGB variant }}
+          {{! ¹⁶ Slider RGB variant }}
           <section class='variant-card'>
             <div class='variant-header'>
-              <h2>Slider (RGB)</h2>
-              <p>RGB sliders for precise color control</p>
+              <h2>Slider (RGB Only)</h2>
+              <p>RGB sliders locked to RGB format</p>
             </div>
             <div class='config-code'>
               <pre><code>@field color = contains(ColorField, &#123;
                   configuration: &#123; variant: 'slider', options: &#123;
-                  sliderMode: 'rgb' &#125; &#125; &#125;);</code></pre>
+                  allowedFormats: ['rgb'] &#125; &#125; &#125;);</code></pre>
             </div>
             <div class='variant-demo'>
               <@fields.sliderRgbColor @format='edit' />
             </div>
           </section>
 
-          {{! ¹⁶ Slider HSL variant }}
+          {{! ¹⁷ Slider HSL variant }}
           <section class='variant-card'>
             <div class='variant-header'>
-              <h2>Slider (HSL)</h2>
-              <p>HSL sliders for hue, saturation, and lightness</p>
+              <h2>Slider (HSL Only)</h2>
+              <p>HSL sliders locked to HSL format</p>
             </div>
             <div class='config-code'>
               <pre><code>@field color = contains(ColorField, &#123;
                   configuration: &#123; variant: 'slider', options: &#123;
-                  sliderMode: 'hsl' &#125; &#125; &#125;);</code></pre>
+                  allowedFormats: ['hsl'] &#125; &#125; &#125;);</code></pre>
             </div>
             <div class='variant-demo'>
               <@fields.sliderHslColor @format='edit' />
             </div>
           </section>
 
-          {{! ¹⁷ Slider All variant }}
+          {{! ¹⁸ Slider All variant }}
           <section class='variant-card'>
             <div class='variant-header'>
-              <h2>Slider (All Modes)</h2>
-              <p>Switch between RGB, HSL, and HSB sliders</p>
+              <h2>Slider (Format Selector)</h2>
+              <p>Switch between RGB, HSL, and HSB with dropdown</p>
             </div>
             <div class='config-code'>
               <pre><code>@field color = contains(ColorField, &#123;
                   configuration: &#123; variant: 'slider', options: &#123;
-                  sliderMode: 'all' &#125; &#125; &#125;);</code></pre>
+                  allowedFormats: ['rgb', 'hsl', 'hsb'], showFormatSelector:
+                  true &#125; &#125; &#125;);</code></pre>
             </div>
             <div class='variant-demo'>
               <@fields.sliderAllColor @format='edit' />
             </div>
           </section>
 
-          {{! ¹⁸ Wheel variant }}
+          {{! ¹⁹ Wheel variant }}
           <section class='variant-card'>
             <div class='variant-header'>
               <h2>Wheel</h2>
-              <p>Color wheel picker with format dropdown</p>
+              <p>Color wheel with format selector dropdown</p>
             </div>
             <div class='config-code'>
               <pre><code>@field color = contains(ColorField, &#123;
                   configuration: &#123; variant: 'wheel', options: &#123;
-                  allowedFormats: ['hex', 'rgb', 'hsl'] &#125; &#125; &#125;);</code></pre>
+                  defaultFormat: 'hex', allowedFormats: ['hex', 'rgb', 'hsl'],
+                  showFormatSelector: true &#125; &#125; &#125;);</code></pre>
             </div>
             <div class='variant-demo'>
               <@fields.wheelColor @format='edit' />
             </div>
           </section>
 
-          {{! ¹⁹ Advanced variant }}
+          {{! ²⁰ Advanced variant }}
           <section class='variant-card'>
             <div class='variant-header'>
-              <h2>Advanced</h2>
-              <p>Manual color entry with all format options</p>
+              <h2>Advanced (All Formats)</h2>
+              <p>Full-featured picker with all format options</p>
             </div>
             <div class='config-code'>
               <pre><code>@field color = contains(ColorField, &#123;
                   configuration: &#123; variant: 'advanced', options: &#123;
-                  format: 'hex', allowedFormats: ['hex', 'rgb', 'hsl', 'hsb',
-                  'css'] &#125; &#125; &#125;);</code></pre>
+                  defaultFormat: 'hex', allowedFormats: ['hex', 'rgb', 'hsl',
+                  'hsb', 'css'], showFormatSelector: true &#125; &#125; &#125;);</code></pre>
             </div>
             <div class='variant-demo'>
               <@fields.advancedColor @format='edit' />
+            </div>
+          </section>
+
+          {{! ²⁰ Advanced locked variant }}
+          <section class='variant-card'>
+            <div class='variant-header'>
+              <h2>Advanced (Locked Format)</h2>
+              <p>Hex-only picker without format selector</p>
+            </div>
+            <div class='config-code'>
+              <pre><code>@field color = contains(ColorField, &#123;
+                  configuration: &#123; variant: 'advanced', options: &#123;
+                  defaultFormat: 'hex', allowedFormats: ['hex', 'rgb'],
+                  showFormatSelector: false &#125; &#125; &#125;);</code></pre>
+            </div>
+            <div class='variant-demo'>
+              <@fields.advancedLockedColor @format='edit' />
             </div>
           </section>
         </div>
       </div>
 
       <style scoped>
-        /* ²⁰ Component styles */
+        /* ²¹ Component styles */
         .color-demo-container {
           padding: 2rem;
           max-width: 1400px;

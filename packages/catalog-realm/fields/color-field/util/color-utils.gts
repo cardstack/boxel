@@ -14,31 +14,38 @@ export interface ColorFieldBaseOptions {
    */
   showRecent?: boolean;
   showContrastChecker?: boolean;
-  maxHistory?: number;
-  storageKey?: string;
 }
 
-export interface ColorFieldAdvancedOptions {
-  format?: ColorFormat;
+export interface ColorFieldFormatOptions {
+  /**
+   * The default/initial output format to use.
+   */
+  defaultFormat?: ColorFormat;
+  /**
+   * List of formats available for user selection.
+   * If only one format is provided, the format selector will be hidden by default.
+   */
   allowedFormats?: ColorFormat[];
+  /**
+   * Whether to show the format selector dropdown.
+   * Defaults to true when multiple formats are available.
+   * Set to false to lock the format to defaultFormat without showing the dropdown.
+   */
+  showFormatSelector?: boolean;
 }
 
 export interface ColorFieldPaletteOptions {
   paletteColors?: string[];
 }
 
-export interface ColorFieldSliderOptions {
-  sliderMode?: 'rgb' | 'hsl' | 'hsb' | 'all';
-}
-
 type AdvancedVariantConfiguration = {
   variant: 'advanced';
-  options?: ColorFieldBaseOptions & ColorFieldAdvancedOptions;
+  options?: ColorFieldBaseOptions & ColorFieldFormatOptions;
 };
 
 type WheelVariantConfiguration = {
   variant: 'wheel';
-  options?: ColorFieldBaseOptions & ColorFieldAdvancedOptions;
+  options?: ColorFieldBaseOptions & ColorFieldFormatOptions;
 };
 
 type PaletteVariantConfiguration = {
@@ -48,7 +55,7 @@ type PaletteVariantConfiguration = {
 
 type SliderVariantConfiguration = {
   variant: 'slider';
-  options?: ColorFieldBaseOptions & ColorFieldSliderOptions;
+  options?: ColorFieldBaseOptions & ColorFieldFormatOptions;
 };
 
 type StandardVariantConfiguration = {

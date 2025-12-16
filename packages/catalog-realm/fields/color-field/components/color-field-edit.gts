@@ -10,7 +10,7 @@ import type {
   ColorVariant,
 } from '../util/color-utils';
 import { parseCssColorSafe, rgbaToHex } from '../util/color-utils';
-import type { ColorFieldSignature } from '../util/colorfieldsignature';
+import type { ColorFieldSignature } from '../util/color-field-signature';
 import AdvancedEdit from './advanced-edit';
 import SwatchesPickerEdit from './swatches-picker-edit';
 import SliderEdit from './slider-edit';

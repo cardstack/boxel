@@ -3,11 +3,11 @@ import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { modifier } from 'ember-modifier';
 import { concat, fn } from '@ember/helper';
 import {
   not,
   eq,
+  or,
   multiply,
   divide,
   subtract,
@@ -34,13 +34,8 @@ import {
   hslToRgb,
   rgbaToFormat,
 } from '../util/color-utils';
-import type { ColorFieldSignature } from '../util/colorfieldsignature';
-
-const setupElement = modifier(
-  (element: any, [callback]: [(el: any) => void]) => {
-    callback(element);
-  },
-);
+import type { ColorFieldSignature } from '../util/color-field-signature';
+import { setupElement } from '../modifiers/setup-element-modifier';
 
 export default class AdvancedEdit extends Component<ColorFieldSignature> {
   @tracked h: number = 0;
@@ -48,11 +43,11 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
   @tracked v: number = 100;
   @tracked a: number = 1;
 
-  @tracked selectedMode: ColorFormat = 'css';
+  @tracked outputFormat: ColorFormat = 'css';
   @tracked isDraggingSV = false;
   @tracked isDraggingAlpha = false;
   @tracked inputValue = '';
-  modeOptions: { label: string; value: ColorFormat }[] = [];
+  formatOptions: { label: string; value: ColorFormat }[] = [];
 
   get eyeDropperSupported(): boolean {
     return typeof (window as any).EyeDropper !== 'undefined';
@@ -67,7 +62,15 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
         variant: 'advanced';
       }
     )?.options;
-    return options?.allowedFormats ?? ['hex', 'rgb', 'hsl', 'hsb', 'css'];
+    const formats = options?.allowedFormats ?? [
+      'hex',
+      'rgb',
+      'hsl',
+      'hsb',
+      'css',
+    ];
+    // Safety: Prevent empty array from breaking component
+    return formats.length > 0 ? formats : ['hex'];
   }
 
   get defaultFormat(): ColorFormat {
@@ -76,14 +79,28 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
         variant: 'advanced';
       }
     )?.options;
-    return options?.format ?? 'hex';
+    return options?.defaultFormat ?? 'hex';
   }
 
-  get selectedModeOption() {
+  get selectedFormatOption() {
     return (
-      this.modeOptions.find((opt) => opt.value === this.selectedMode) ||
-      this.modeOptions[0]
+      this.formatOptions.find((opt) => opt.value === this.outputFormat) ||
+      this.formatOptions[0]
     );
+  }
+
+  get shouldShowFormatSelector(): boolean {
+    const options = (
+      this.args.configuration as ColorFieldConfiguration & {
+        variant: 'advanced';
+      }
+    )?.options;
+    // If explicitly set, use that value
+    if (options?.showFormatSelector !== undefined) {
+      return options.showFormatSelector;
+    }
+    // Default: show when multiple formats available
+    return this.availableFormats.length > 1;
   }
 
   constructor(owner: Owner, args: any) {
@@ -99,11 +116,11 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
       detectedFormat && this.availableFormats.includes(detectedFormat)
         ? detectedFormat
         : fallbackFormat;
-    this.modeOptions = this.availableFormats.map((format) => ({
+    this.formatOptions = this.availableFormats.map((format) => ({
       label: format.toUpperCase(),
       value: format,
     }));
-    this.selectedMode = initialFormat;
+    this.outputFormat = initialFormat;
 
     const rgba = parseCssColor(this.args.model);
     const hsv = rgbaToHsvValues(rgba);
@@ -112,7 +129,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
     this.v = hsv.v;
     this.a = rgba.a;
 
-    this.inputValue = this.getColorString(this.selectedMode);
+    this.inputValue = this.getColorString(this.outputFormat);
     this.hexInputValue = this.args.model || '';
     this.cssInputValue = this.args.model || '';
   }
@@ -149,10 +166,6 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
     };
   }
 
-  get hexValue() {
-    return rgbaToHex(this.rgba, this.rgba.a < 1);
-  }
-
   getColorString = (format: ColorFormat): string => {
     return rgbaToFormat(this.rgba, format);
   };
@@ -160,7 +173,10 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
   @action
   setupSVCanvas(element: HTMLCanvasElement) {
     if (this.svCanvasElement && this.svCanvasElement !== element) {
-      this.svCanvasElement.removeEventListener('pointerdown', this.handleSVMouseDown);
+      this.svCanvasElement.removeEventListener(
+        'pointerdown',
+        this.handleSVMouseDown,
+      );
     }
     this.svCanvasElement = element;
     element.addEventListener('pointerdown', this.handleSVMouseDown);
@@ -184,7 +200,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
   @action
   updateInputValue() {
     if (document.activeElement?.tagName !== 'INPUT') {
-      this.inputValue = this.getColorString(this.selectedMode);
+      this.inputValue = this.getColorString(this.outputFormat);
     }
   }
 
@@ -275,7 +291,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
     this.a = parseFloat((x / rect.width).toFixed(2));
 
     const newRgba = { ...this.rgba, a: this.a };
-    const newColor = rgbaToFormat(newRgba, this.selectedMode);
+    const newColor = rgbaToFormat(newRgba, this.outputFormat);
     this.inputValue = newColor;
 
     if (!this.isDraggingAlpha) {
@@ -342,7 +358,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
   updateColorFromHSV() {
     const rgb = hsvToRgb(this.h, this.s, this.v);
     const newRgba = { ...rgb, a: this.a };
-    const newColor = rgbaToFormat(newRgba, this.selectedMode);
+    const newColor = rgbaToFormat(newRgba, this.outputFormat);
 
     if (!this.isDraggingSV && !this.isDraggingAlpha) {
       this.args.set?.(newColor);
@@ -350,9 +366,9 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
 
     this.inputValue = newColor;
 
-    if (this.selectedMode === 'hex') {
+    if (this.outputFormat === 'hex') {
       this.hexInputValue = newColor;
-    } else if (this.selectedMode === 'css') {
+    } else if (this.outputFormat === 'css') {
       this.cssInputValue = newColor;
     }
 
@@ -363,7 +379,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
   commitColor() {
     const rgb = hsvToRgb(this.h, this.s, this.v);
     const newRgba = { ...rgb, a: this.a };
-    const newColor = rgbaToFormat(newRgba, this.selectedMode);
+    const newColor = rgbaToFormat(newRgba, this.outputFormat);
     this.args.set?.(newColor);
     this.inputValue = newColor;
   }
@@ -380,7 +396,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
     this.h = newValue;
     const rgb = hsvToRgb(this.h, this.s, this.v);
     const newRgba = { ...rgb, a: this.a };
-    const newColor = rgbaToFormat(newRgba, this.selectedMode);
+    const newColor = rgbaToFormat(newRgba, this.outputFormat);
     this.inputValue = newColor;
     requestAnimationFrame(() => {
       this.drawSVCanvas();
@@ -407,7 +423,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
   setColorFromRgba(rgba: RGBA, format?: ColorFormat) {
     this.updateHSVFromRgba(rgba);
 
-    const targetFormat = format ?? this.selectedMode;
+    const targetFormat = format ?? this.outputFormat;
     const newColor = rgbaToFormat(rgba, targetFormat);
     this.args.set?.(newColor);
     this.inputValue = newColor;
@@ -419,9 +435,9 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
   }
 
   @action
-  handleModeSelect(option: { label: string; value: ColorFormat } | null) {
+  handleFormatSelect(option: { label: string; value: ColorFormat } | null) {
     if (!option) return;
-    this.selectedMode = option.value;
+    this.outputFormat = option.value;
     const newColor = rgbaToFormat(this.rgba, option.value);
     this.inputValue = newColor;
   }
@@ -429,9 +445,8 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
   @tracked hexInputValue = '';
 
   @action
-  handleHexInput(event: Event) {
+  handleHexInput(value: string) {
     if (!this.args.canEdit) return;
-    const value = (event.target as HTMLInputElement).value;
     this.hexInputValue = value;
 
     const { rgba, valid } = parseCssColorSafe(value);
@@ -476,7 +491,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
     const newColor = rgbaToFormat(newRgba, 'rgb');
     this.args.set?.(newColor);
     this.inputValue = newColor;
-    this.selectedMode = 'rgb';
+    this.outputFormat = 'rgb';
 
     requestAnimationFrame(() => {
       this.drawSVCanvas();
@@ -492,20 +507,19 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
     const clamped = Math.max(limits[0], Math.min(limits[1], value));
     const nextHsl = { ...this.hslValues, [channel]: clamped };
     const rgb = hslToRgb(nextHsl.h, nextHsl.s, nextHsl.l);
-    this.selectedMode = 'hsl';
+    this.outputFormat = 'hsl';
     this.setColorFromRgba({ ...rgb, a: this.rgba.a }, 'hsl');
   }
 
   @action
-  handleColorInput(event: Event) {
-    const value = (event.target as HTMLInputElement).value;
+  handleColorInput(value: string) {
     this.inputValue = value;
     const { rgba, valid } = parseCssColorSafe(value);
     if (!valid) return;
     const detected = detectColorFormat(value);
-    const targetFormat = detected === 'css' ? this.selectedMode : detected;
-    if (targetFormat !== this.selectedMode) {
-      this.selectedMode = targetFormat;
+    const targetFormat = detected === 'css' ? this.outputFormat : detected;
+    if (targetFormat !== this.outputFormat) {
+      this.outputFormat = targetFormat;
     }
     this.setColorFromRgba(rgba, targetFormat);
   }
@@ -513,9 +527,8 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
   @tracked cssInputValue = '';
 
   @action
-  handleUniversalInput(event: Event) {
+  handleUniversalInput(value: string) {
     if (!this.args.canEdit) return;
-    const value = (event.target as HTMLInputElement).value;
     this.cssInputValue = value;
 
     const { rgba, valid } = parseCssColorSafe(value);
@@ -584,14 +597,16 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
         ></canvas>
         <div
           class='cursor-indicator'
-          style={{htmlSafe (concat
-            'left:'
-            (multiply (divide this.hsv.s 100) 100)
-            '%;'
-            'top:'
-            (subtract 100 (multiply (divide this.hsv.v 100) 100))
-            '%;'
-          )}}
+          style={{htmlSafe
+            (concat
+              'left:'
+              (multiply (divide this.hsv.s 100) 100)
+              '%;'
+              'top:'
+              (subtract 100 (multiply (divide this.hsv.v 100) 100))
+              '%;'
+            )
+          }}
         ></div>
       </div>
 
@@ -611,46 +626,50 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
       </div>
 
       <div class='controls'>
-        <div class='format-switch' data-color-canvas-ignore-drag>
-          <BoxelSelect
-            @placeholder='Format'
-            @options={{this.modeOptions}}
-            @selected={{this.selectedModeOption}}
-            @onChange={{this.handleModeSelect}}
-            @disabled={{not @canEdit}}
-            class='mode-select'
-            as |option|
-          >
-            {{option.label}}
-          </BoxelSelect>
-          {{#if this.eyeDropperSupported}}
-            <button
-              type='button'
-              {{on 'click' this.handleEyeDropper}}
-              disabled={{not @canEdit}}
-              title='Pick color from screen'
-              class='eyedropper-button'
-            >
-              <PipetteIcon />
-            </button>
-          {{/if}}
-        </div>
+        {{#if (or this.shouldShowFormatSelector this.eyeDropperSupported)}}
+          <div class='format-switch' data-color-canvas-ignore-drag>
+            {{#if this.shouldShowFormatSelector}}
+              <BoxelSelect
+                @placeholder='Format'
+                @options={{this.formatOptions}}
+                @selected={{this.selectedFormatOption}}
+                @onChange={{this.handleFormatSelect}}
+                @disabled={{not @canEdit}}
+                class='mode-select'
+                as |option|
+              >
+                {{option.label}}
+              </BoxelSelect>
+            {{/if}}
+            {{#if this.eyeDropperSupported}}
+              <button
+                type='button'
+                {{on 'click' this.handleEyeDropper}}
+                disabled={{not @canEdit}}
+                title='Pick color from screen'
+                class='eyedropper-button'
+              >
+                <PipetteIcon />
+              </button>
+            {{/if}}
+          </div>
+        {{/if}}
 
-        {{#if (eq this.selectedMode 'css')}}
+        {{#if (eq this.outputFormat 'css')}}
           <div class='input-row'>
             <label class='field full'>
               <span>CSS Color</span>
-              <input
-                type='text'
-                value={{this.cssInputValue}}
-                placeholder='e.g., blue, rgb(255,0,0), hsl(120,100%,50%)'
-                {{on 'input' this.handleUniversalInput}}
-                {{on 'blur' this.handleCssBlur}}
-                disabled={{not @canEdit}}
+              <BoxelInput
+                class='color-css-input'
+                @value={{this.cssInputValue}}
+                @placeholder='e.g., blue, rgb(255,0,0), hsl(120,100%,50%)'
+                @onInput={{this.handleUniversalInput}}
+                @onBlur={{this.handleCssBlur}}
+                @disabled={{not @canEdit}}
               />
             </label>
           </div>
-        {{else if (eq this.selectedMode 'rgb')}}
+        {{else if (eq this.outputFormat 'rgb')}}
           <div class='input-row triple'>
             <label class='field'>
               <span>R</span>
@@ -689,7 +708,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
               />
             </label>
           </div>
-        {{else if (eq this.selectedMode 'hsl')}}
+        {{else if (eq this.outputFormat 'hsl')}}
           <div class='input-row triple'>
             <label class='field'>
               <span>H</span>
@@ -728,17 +747,17 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
               />
             </label>
           </div>
-        {{else if (eq this.selectedMode 'hsb')}}
+        {{else if (eq this.outputFormat 'hsb')}}
           <div class='input-row'>
             <label class='field full'>
               <span>HSB Color</span>
-              <input
-                type='text'
-                value={{this.inputValue}}
-                placeholder='hsb(0, 100%, 100%)'
-                {{on 'input' this.handleColorInput}}
-                {{on 'blur' this.updateInputValue}}
-                disabled={{not @canEdit}}
+              <BoxelInput
+                class='color-value-input'
+                @value={{this.inputValue}}
+                @placeholder='hsb(0, 100%, 100%)'
+                @onInput={{this.handleColorInput}}
+                @onBlur={{this.updateInputValue}}
+                @disabled={{not @canEdit}}
               />
             </label>
           </div>
@@ -746,13 +765,13 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
           <div class='input-row'>
             <label class='field full'>
               <span>HEX</span>
-              <input
-                type='text'
-                value={{this.hexInputValue}}
-                placeholder='#3b82f6'
-                {{on 'input' this.handleHexInput}}
-                {{on 'blur' this.handleHexBlur}}
-                disabled={{not @canEdit}}
+              <BoxelInput
+                class='color-hex-input'
+                @value={{this.hexInputValue}}
+                @placeholder='#3b82f6'
+                @onInput={{this.handleHexInput}}
+                @onBlur={{this.handleHexBlur}}
+                @disabled={{not @canEdit}}
               />
             </label>
           </div>

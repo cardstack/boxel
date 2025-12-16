@@ -4,7 +4,7 @@ import { htmlSafe } from '@ember/template';
 import { gte } from '@cardstack/boxel-ui/helpers';
 
 import { hexToRgba } from '../util/color-utils';
-import type { ColorFieldSignature } from '../util/colorfieldsignature';
+import type { ColorFieldSignature } from '../util/color-field-signature';
 
 export default class ContrastCheckerAddon extends Component<ColorFieldSignature> {
   get contrastRatio(): number | null {
@@ -82,18 +82,18 @@ export default class ContrastCheckerAddon extends Component<ColorFieldSignature>
       .contrast-info {
         padding: 0.75rem;
         border: 1px solid var(--border, #e0e0e0);
-        border-radius: 0.375rem;
-        background: white;
+        border-radius: var(--radius, 0.375rem);
+        background: var(--background, #ffffff);
       }
 
       .contrast-info.pass {
-        border-color: #22c55e;
-        background: rgba(34, 197, 94, 0.05);
+        border-color: var(--success, #22c55e);
+        background: color-mix(in srgb, var(--success, #22c55e) 5%, transparent);
       }
 
       .contrast-info.fail {
-        border-color: #f59e0b;
-        background: rgba(245, 158, 11, 0.05);
+        border-color: var(--warning, #f59e0b);
+        background: color-mix(in srgb, var(--warning, #f59e0b) 5%, transparent);
       }
 
       .contrast-ratio {
@@ -126,20 +126,20 @@ export default class ContrastCheckerAddon extends Component<ColorFieldSignature>
       }
 
       .contrast-info.pass .level-badge {
-        background: #22c55e;
-        color: white;
+        background: var(--success, #22c55e);
+        color: var(--success-foreground, #ffffff);
       }
 
       .contrast-info.fail .level-badge {
-        background: #f59e0b;
-        color: white;
+        background: var(--warning, #f59e0b);
+        color: var(--warning-foreground, #ffffff);
       }
 
       .preview-text {
         padding: 0.5rem;
-        background: white;
+        background: var(--background, #ffffff);
         border: 1px solid var(--border, #e0e0e0);
-        border-radius: 0.25rem;
+        border-radius: var(--radius, 0.25rem);
         font-size: 0.75rem;
         font-weight: 500;
         text-align: center;

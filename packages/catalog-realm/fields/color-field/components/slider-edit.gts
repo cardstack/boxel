@@ -18,10 +18,10 @@ import {
   hsvToRgb,
   rgbToHex,
 } from '../util/color-utils';
-import type { ColorFieldSignature } from '../util/colorfieldsignature';
+import type { ColorFieldSignature } from '../util/color-field-signature';
 
 export default class SliderEdit extends Component<ColorFieldSignature> {
-  @tracked selectedMode: ColorFormat = 'rgb';
+  @tracked outputFormat: ColorFormat = 'rgb';
   @tracked isDragging = false;
   @tracked draftColor: string | null = null;
 
@@ -31,52 +31,68 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
       : this.args.model || '#3b82f6';
   }
 
-  get sliderMode(): 'rgb' | 'hsl' | 'hsb' | 'all' {
-    const options = (this.args.configuration as ColorFieldConfiguration & {
-      variant: 'slider';
-    })?.options;
-    return options?.sliderMode ?? 'rgb';
+  get availableFormats(): ColorFormat[] {
+    const options = (
+      this.args.configuration as ColorFieldConfiguration & {
+        variant: 'slider';
+      }
+    )?.options;
+    const formats = options?.allowedFormats ?? ['rgb'];
+    // Safety: Prevent empty array from breaking component
+    return formats.length > 0 ? formats : ['rgb'];
   }
 
-  get availableModes(): ColorFormat[] {
-    if (this.sliderMode === 'all') {
-      return ['rgb', 'hsl', 'hsb'];
-    }
-    return [this.sliderMode as ColorFormat];
+  get defaultFormat(): ColorFormat {
+    const options = (
+      this.args.configuration as ColorFieldConfiguration & {
+        variant: 'slider';
+      }
+    )?.options;
+    return options?.defaultFormat ?? this.availableFormats[0];
   }
 
-  get defaultMode(): ColorFormat {
-    return this.availableModes[0];
-  }
-
-  get modeOptions() {
-    return this.availableModes.map((mode) => ({
-      label: mode.toUpperCase(),
-      value: mode,
+  get formatOptions() {
+    return this.availableFormats.map((format) => ({
+      label: format.toUpperCase(),
+      value: format,
     }));
   }
 
-  get selectedModeOption() {
+  get selectedFormatOption() {
     return (
-      this.modeOptions.find((opt) => opt.value === this.selectedMode) ||
-      this.modeOptions[0]
+      this.formatOptions.find((opt) => opt.value === this.outputFormat) ||
+      this.formatOptions[0]
     );
+  }
+
+  get shouldShowFormatSelector(): boolean {
+    const options = (
+      this.args.configuration as ColorFieldConfiguration & {
+        variant: 'slider';
+      }
+    )?.options;
+    // If explicitly set, use that value
+    if (options?.showFormatSelector !== undefined) {
+      return options.showFormatSelector;
+    }
+    // Default: show when multiple formats available
+    return this.availableFormats.length > 1;
   }
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
-    const detectedMode =
+    const detectedFormat =
       typeof this.args.model === 'string'
         ? detectColorFormat(this.args.model)
         : null;
-    const defaultMode = this.availableModes.includes(this.defaultMode)
-      ? this.defaultMode
-      : this.availableModes[0];
-    const initialMode =
-      detectedMode && this.availableModes.includes(detectedMode)
-        ? detectedMode
-        : defaultMode;
-    this.selectedMode = initialMode;
+    const fallbackFormat = this.availableFormats.includes(this.defaultFormat)
+      ? this.defaultFormat
+      : this.availableFormats[0];
+    const initialFormat =
+      detectedFormat && this.availableFormats.includes(detectedFormat)
+        ? detectedFormat
+        : fallbackFormat;
+    this.outputFormat = initialFormat;
   }
 
   get rgb() {
@@ -92,22 +108,6 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
   get hsb() {
     const rgba = parseCssColor(this.currentColor);
     return rgbaToHsvValues(rgba);
-  }
-
-  get rgbString() {
-    return `rgb(${this.rgb.r}, ${this.rgb.g}, ${this.rgb.b})`;
-  }
-
-  get hslString() {
-    return `hsl(${Math.round(this.hsl.h)}, ${Math.round(
-      this.hsl.s,
-    )}%, ${Math.round(this.hsl.l)}%)`;
-  }
-
-  get hsbString() {
-    return `hsb(${Math.round(this.hsb.h)}, ${Math.round(
-      this.hsb.s,
-    )}%, ${Math.round(this.hsb.v)}%)`;
   }
 
   get rGradient() {
@@ -150,9 +150,9 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
   }
 
   @action
-  handleModeSelect(option: { label: string; value: ColorFormat } | null) {
+  handleFormatSelect(option: { label: string; value: ColorFormat } | null) {
     if (!option) return;
-    this.selectedMode = option.value;
+    this.outputFormat = option.value;
   }
 
   @action
@@ -192,7 +192,7 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
     if (!this.args.canEdit || !this.isDragging) return;
     const colorSource = this.draftColor ?? this.currentColor;
     const rgba = parseCssColor(colorSource);
-    const colorValue = rgbaToFormat(rgba, this.selectedMode);
+    const colorValue = rgbaToFormat(rgba, this.outputFormat);
     this.args.set?.(colorValue);
     this.isDragging = false;
     this.draftColor = null;
@@ -200,14 +200,14 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
 
   <template>
     <div class='slider-variant'>
-      {{#if (gt this.availableModes.length 1)}}
+      {{#if this.shouldShowFormatSelector}}
         <div class='mode-selector'>
-          <label class='mode-label'>Color Mode</label>
+          <label class='mode-label'>Color Format</label>
           <BoxelSelect
-            @placeholder='Mode'
-            @options={{this.modeOptions}}
-            @selected={{this.selectedModeOption}}
-            @onChange={{this.handleModeSelect}}
+            @placeholder='Format'
+            @options={{this.formatOptions}}
+            @selected={{this.selectedFormatOption}}
+            @onChange={{this.handleFormatSelect}}
             class='mode-select'
             as |option|
           >
@@ -217,7 +217,7 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
       {{/if}}
 
       <div class='slider-controls'>
-        {{#if (eq this.selectedMode 'rgb')}}
+        {{#if (eq this.outputFormat 'rgb')}}
           <div class='slider-group'>
             <div class='slider-header'>
               <label class='slider-label red'>
@@ -310,7 +310,7 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
               />
             </div>
           </div>
-        {{else if (eq this.selectedMode 'hsl')}}
+        {{else if (eq this.outputFormat 'hsl')}}
           <div class='slider-group'>
             <div class='slider-header'>
               <label class='slider-label hue'>
@@ -408,7 +408,7 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
               />
             </div>
           </div>
-        {{else if (eq this.selectedMode 'hsb')}}
+        {{else if (eq this.outputFormat 'hsb')}}
           <div class='slider-group'>
             <div class='slider-header'>
               <label class='slider-label hue'>
