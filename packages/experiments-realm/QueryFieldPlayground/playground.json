@@ -1,0 +1,29 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "QueryFieldPlayground",
+        "module": "../query-field-playground"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Query Field Playground",
+        "description": "Interactively exercise linksTo and linksToMany query fields.",
+        "thumbnailURL": null
+      },
+      "pageSize": 3,
+      "nameFilter": "ha",
+      "sortDirection": "asc"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

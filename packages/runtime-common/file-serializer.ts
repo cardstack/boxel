@@ -228,7 +228,7 @@ function processRelationships({
       // Handle both truthy and null values for links.self
       if (processedValue.links.self !== null) {
         let selfLink = processedValue.links.self;
-        if (realmURL) {
+        if (realmURL && selfLink) {
           try {
             selfLink = makeRelativeURL(
               new URL(selfLink, relativeTo),

@@ -125,7 +125,7 @@ interface PrerenderedCardOptions {
   cardUrls?: string[];
 }
 
-interface WIPOptions {
+export interface WIPOptions {
   useWorkInProgressIndex?: boolean;
 }
 
@@ -373,7 +373,7 @@ export class IndexQueryEngine {
         'GROUP BY url',
         ...this.orderExpression(sort),
         ...(page
-          ? [`LIMIT ${page.size} OFFSET ${page.number * page.size}`]
+          ? [`LIMIT ${page.size} OFFSET ${(page.number ?? 0) * page.size}`]
           : []),
       ];
       let queryCount = [

@@ -45,6 +45,7 @@
     "countries-list": "catalog:",
     "dayjs": "catalog:",
     "dompurify": "catalog:",
+    "ember-animated": "catalog:",
     "ember-basic-dropdown": "8.0.4",
     "ember-css-url": "^1.0.0",
     "ember-concurrency": "catalog:",

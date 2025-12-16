@@ -23,10 +23,13 @@ export default class MessageService extends Service {
     // TODO might want to consider making separate subscription methods so that
     // you can subscribe to a specific type of events instead of all of the
     // events...
-    this.listenerCallbacks.get(realmURL)?.push(cb);
+    let wrapper = (ev: RealmEventContent) => {
+      cb(ev);
+    };
+    this.listenerCallbacks.get(realmURL)?.push(wrapper);
 
     return () => {
-      this.removeSubscriptionCallback(realmURL, cb);
+      this.removeSubscriptionCallback(realmURL, wrapper);
     };
   }
 

@@ -58,6 +58,7 @@ export interface SerializeOpts {
   includeUnrenderedFields?: boolean;
   useAbsoluteURL?: boolean;
   omitFields?: [typeof BaseDef];
+  omitQueryFields?: boolean;
   maybeRelativeURL?: (possibleURL: string) => string;
   overrides?: Map<string, typeof BaseDef>;
 }
@@ -260,6 +261,10 @@ export function serializeCardResource(
   let overrides = getFieldOverrides(model);
   opts = { ...(opts ?? {}), overrides };
   let fieldResources = Object.entries(fields)
+    .filter(
+      ([_fieldName, field]) =>
+        !(opts?.omitQueryFields && field.queryDefinition !== undefined),
+    )
     .filter(([_fieldName, field]) =>
       opts?.omitFields ? !opts.omitFields.includes(field.card) : true,
     )

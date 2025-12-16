@@ -1221,16 +1221,48 @@ module(basename(__filename), function () {
               return this.author?.firstName + '-poo';
             }
           })
-          static embedded = class Embedded extends Component<typeof this> {
-            <template><@fields.firstName/> (<@fields.nickName/>)</template>
-          }
-          static fitted = class Fitted extends Component<typeof this> {
-            <template><@fields.firstName/> (<@fields.nickName/>)</template>
-          }
         }
       `,
       );
       {
+        assert.true(
+          await adapter.exists('post.gts'),
+          'post module file exists on disk',
+        );
+        realm.__testOnlyClearCaches();
+        await realm.realmIndexUpdater.update([new URL(`${testRealm}post.gts`)]);
+        let moduleResponse = await realm.handle(
+          new Request(`${testRealm}post`, {
+            headers: { Accept: 'application/javascript' },
+          }),
+        );
+        assert.strictEqual(
+          moduleResponse?.status,
+          200,
+          `module response status ${moduleResponse?.status}`,
+        );
+        assert.ok(
+          realm.realmIndexUpdater.stats.modulesIndexed >= 1,
+          `modulesIndexed=${realm.realmIndexUpdater.stats.modulesIndexed}`,
+        );
+        let [postIndexEntry] = (await testDbAdapter.execute(
+          `SELECT url, is_deleted, type FROM boxel_index WHERE url = '${testRealm}post.gts'`,
+        )) as { url: string; is_deleted: boolean; type: string }[];
+        assert.ok(postIndexEntry, 'post module row exists in index');
+        assert.false(postIndexEntry?.is_deleted);
+        assert.strictEqual(
+          postIndexEntry?.type,
+          'module',
+          JSON.stringify(postIndexEntry, null, 2),
+        );
+        let postModule = await realm.realmIndexQueryEngine.module(
+          new URL(`${testRealm}post`),
+        );
+        assert.strictEqual(
+          postModule?.type,
+          'module',
+          'post module is in the index after recreation',
+        );
         let { data: result } = await realm.realmIndexQueryEngine.search({
           filter: {
             on: { module: `${testRealm}post`, name: 'Post' },
@@ -1242,63 +1274,61 @@ module(basename(__filename), function () {
     });
 
     test('should be able to handle dependencies between modules', async function (assert) {
-      // Create author.gts that depends on blog-app
-      await realm.write(
+      let moduleWrites = new Map<string, string>();
+      moduleWrites.set(
         'author.gts',
         `
-              import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
-              import { BlogApp } from "./blog-app";
+            import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+            import StringField from "https://cardstack.com/base/string";
+            import { BlogApp } from "./blog-app";
 
-              export class Author extends CardDef {
-                @field name = contains(StringField);
-                @field blog = linksTo(BlogApp);
-              }
-            `,
+            export class Author extends CardDef {
+              @field name = contains(StringField);
+              @field blog = linksTo(BlogApp);
+            }
+          `,
       );
-      // Create blog-category.gts that depends on blog-app
-      await realm.write(
+      moduleWrites.set(
         'blog-category.gts',
         `
-          import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
-          import { BlogApp } from "./blog-app";
+        import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        import { BlogApp } from "./blog-app";
 
-          export class BlogCategory extends CardDef {
-            @field name = contains(StringField);
-            @field blog = linksTo(BlogApp);
-          }
-        `,
+        export class BlogCategory extends CardDef {
+          @field name = contains(StringField);
+          @field blog = linksTo(BlogApp);
+        }
+      `,
       );
-      // Create blog-post.gts that depends on author and blog-app
-      await realm.write(
+      moduleWrites.set(
         'blog-post.gts',
         `
-          import { contains, field, CardDef, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
-          import { Author } from "./author";
-          import { BlogApp } from "./blog-app";
+        import { contains, field, CardDef, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        import { Author } from "./author";
+        import { BlogApp } from "./blog-app";
 
-          export class BlogPost extends CardDef {
-            @field title = contains(StringField);
-            @field author = linksToMany(Author);
-            @field blog = linksTo(BlogApp);
-          }
-        `,
+        export class BlogPost extends CardDef {
+          @field title = contains(StringField);
+          @field author = linksToMany(Author);
+          @field blog = linksTo(BlogApp);
+        }
+      `,
       );
-      // Create blog-app.gts that depends on blog-post type
-      await realm.write(
+      moduleWrites.set(
         'blog-app.gts',
         `
-          import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
-          import type { BlogPost } from "./blog-post";
+        import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        import type { BlogPost } from "./blog-post";
 
-          export class BlogApp extends CardDef {
-            @field title = contains(StringField);
-          }
-        `,
+        export class BlogApp extends CardDef {
+          @field title = contains(StringField);
+        }
+      `,
       );
+      await realm.writeMany(moduleWrites);
 
       let blogPostModule = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}blog-post`),
@@ -1338,63 +1368,61 @@ module(basename(__filename), function () {
     });
 
     test('should be able to handle dependencies between modules - with thunk', async function (assert) {
-      // Create author.gts that depends on blog-app
-      await realm.write(
+      let moduleWrites = new Map<string, string>();
+      moduleWrites.set(
         'author.gts',
         `
-              import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
-              import { BlogApp } from "./blog-app";
+            import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+            import StringField from "https://cardstack.com/base/string";
+            import { BlogApp } from "./blog-app";
 
-              export class Author extends CardDef {
-                @field name = contains(StringField);
-                @field blog = linksTo(() => BlogApp);
-              }
-            `,
+            export class Author extends CardDef {
+              @field name = contains(StringField);
+              @field blog = linksTo(() => BlogApp);
+            }
+          `,
       );
-      // Create blog-category.gts that depends on blog-app
-      await realm.write(
+      moduleWrites.set(
         'blog-category.gts',
         `
-          import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
-          import { BlogApp } from "./blog-app";
+        import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        import { BlogApp } from "./blog-app";
 
-          export class BlogCategory extends CardDef {
-            @field name = contains(StringField);
-            @field blog = linksTo(() =>BlogApp);
-          }
-        `,
+        export class BlogCategory extends CardDef {
+          @field name = contains(StringField);
+          @field blog = linksTo(() => BlogApp);
+        }
+      `,
       );
-      // Create blog-post.gts that depends on author and blog-app
-      await realm.write(
+      moduleWrites.set(
         'blog-post.gts',
         `
-          import { contains, field, CardDef, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
-          import { Author } from "./author";
-          import { BlogApp } from "./blog-app";
+        import { contains, field, CardDef, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        import { Author } from "./author";
+        import { BlogApp } from "./blog-app";
 
-          export class BlogPost extends CardDef {
-            @field title = contains(StringField);
-            @field author = linksToMany(() => Author);
-            @field blog = linksTo(() => BlogApp);
-          }
-        `,
+        export class BlogPost extends CardDef {
+          @field title = contains(StringField);
+          @field author = linksToMany(() => Author);
+          @field blog = linksTo(() => BlogApp);
+        }
+      `,
       );
-      // Create blog-app.gts that depends on blog-post type
-      await realm.write(
+      moduleWrites.set(
         'blog-app.gts',
         `
-          import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
-          import type { BlogPost } from "./blog-post";
+        import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        import type { BlogPost } from "./blog-post";
 
-          export class BlogApp extends CardDef {
-            @field title = contains(StringField);
-          }
-        `,
+        export class BlogApp extends CardDef {
+          @field title = contains(StringField);
+        }
+      `,
       );
+      await realm.writeMany(moduleWrites);
 
       let blogPostModule = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}blog-post`),
@@ -1486,25 +1514,25 @@ module(basename(__filename), function () {
     test('can write instances and modules at once', async function (assert) {
       let mapOfWrites = new Map();
       mapOfWrites.set(
-        'place.gts',
+        'city.gts',
         `
         import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
-        export class Place extends CardDef {
+        export class City extends CardDef {
           @field name = contains(StringField);
         }
       `,
       );
       mapOfWrites.set(
-        'place.json',
+        'city.json',
         JSON.stringify({
           data: {
             type: 'card',
             attributes: { name: 'Paris' },
             meta: {
               adoptsFrom: {
-                module: './place',
-                name: 'Place',
+                module: './city',
+                name: 'City',
               },
             },
           },
@@ -1512,18 +1540,18 @@ module(basename(__filename), function () {
       );
       let result = await realm.writeMany(mapOfWrites);
       assert.strictEqual(result.length, 2, '2 files were written');
-      assert.strictEqual(result[0].path, 'place.gts');
-      assert.strictEqual(result[1].path, 'place.json');
+      assert.strictEqual(result[0].path, 'city.gts');
+      assert.strictEqual(result[1].path, 'city.json');
 
       let module = await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}place`),
+        new URL(`${testRealm}city`),
       );
-      assert.ok(module, 'place module is in the index');
+      assert.ok(module, 'city module is in the index');
 
       let instance = await realm.realmIndexQueryEngine.instance(
-        new URL(`${testRealm}place`),
+        new URL(`${testRealm}city`),
       );
-      assert.ok(instance, 'place instance is in the index');
+      assert.ok(instance, 'city instance is in the index');
       assert.deepEqual(
         {
           instancesIndexed: realm.realmIndexUpdater.stats.instancesIndexed,

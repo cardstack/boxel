@@ -42,8 +42,9 @@ export type Relationship = {
   links?: {
     // there are other valid items for links in the spec, but we don't
     // anticipate using them
-    self: string | null;
+    self?: string | null;
     related?: string | null;
+    search?: string | null;
   };
   data?: ResourceID | ResourceID[] | null;
   meta?: Record<string, any>;
@@ -69,6 +70,11 @@ export interface CardResource<Identity extends Unsaved = Saved> {
     self?: string;
   };
 }
+
+export type LooseCardResource = Omit<CardResource, 'id' | 'type'> & {
+  type?: 'card';
+  id?: string;
+};
 
 //prerendered cards
 export interface PrerenderedCardResource {
