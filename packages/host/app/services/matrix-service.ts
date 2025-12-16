@@ -1947,9 +1947,16 @@ export default class MatrixService extends Service {
     return this._systemCard;
   }
 
-  private async setSystemCard(systemCardId: string | undefined) {
+  private async setSystemCard(systemCardId: string | undefined | null) {
     // Set the system card to use
-    // If there is none, we fall back to the default
+    // If it is null, we remove any current system card
+    // If it is undefined, we fall back to the default
+    if (systemCardId === null) {
+      // explicit null means no system card
+      this.store.dropReference(this._systemCard?.id);
+      this._systemCard = undefined;
+      return;
+    }
     if (!systemCardId) {
       systemCardId = ENV.defaultSystemCardId;
     }
