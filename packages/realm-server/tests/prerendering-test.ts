@@ -41,6 +41,9 @@ function makeStubPagePool(maxPages: number) {
             async waitForFunction(_fn: any) {
               return true;
             },
+            removeAllListeners() {
+              return;
+            },
           } as any;
         },
         async close() {
