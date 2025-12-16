@@ -87,7 +87,7 @@ export default class ColorPalette extends Component<Signature> {
           --swatch-size: 1.8rem;
           display: grid;
           grid-template-columns: repeat(auto-fill, var(--swatch-size));
-          gap: var(--boxel-sp-xs);
+          gap: var(--boxel-sp);
         }
         .swatch-button {
           --_swatch-border: color-mix(
