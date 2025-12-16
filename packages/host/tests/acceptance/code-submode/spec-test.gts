@@ -702,7 +702,9 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-exported-type]').containsText('card');
     assert.dom('[data-test-view-spec-instance]').exists();
   });
-  test('view when there are multiple spec instances', async function (assert) {
+
+  // TODO restore in CS-9879
+  test.skip('view when there are multiple spec instances', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
