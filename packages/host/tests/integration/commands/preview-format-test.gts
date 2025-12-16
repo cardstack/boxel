@@ -47,8 +47,6 @@ module('Integration | Command | preview-format', function (hooks) {
   let snapshot = setupSnapshotRealm(hooks, {
     mockMatrixUtils,
     async build({ loader }) {
-      let loaderService = getService('loader-service');
-      loaderService.loader = loader;
       await setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
@@ -103,7 +101,6 @@ module('Integration | Command | preview-format', function (hooks) {
     ({ loader, command } = snapshot.get());
   });
 
-  setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,

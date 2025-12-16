@@ -147,7 +147,7 @@ const SOFT_POP_VARS = `:root {
 
 module('Acceptance | theme-card-test', function (hooks) {
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

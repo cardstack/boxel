@@ -70,7 +70,6 @@ module(`Integration | prerendered-card-search`, function (hooks) {
   let testRealm: Realm;
 
   setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

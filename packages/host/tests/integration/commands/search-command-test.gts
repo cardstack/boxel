@@ -20,17 +20,32 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
+import {
+  StringField,
+  NumberField,
+  field,
+  contains,
+  CardDef,
+  Component,
+  FieldDef,
+  containsMany,
+  linksTo,
+  linksToMany,
+} from '../../helpers/base-realm';
+
 module('Integration | commands | search', function (hooks) {
   setupRenderingTest(hooks);
 
   const realmName = 'Operator Mode Workspace';
   let loader: Loader;
 
-  setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () =>
+      await getService('loader-service').loader.import(
+        `${baseRealm.url}card-api`,
+      ),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -41,23 +56,12 @@ module('Integration | commands | search', function (hooks) {
   let snapshot = setupSnapshotRealm(hooks, {
     mockMatrixUtils,
     async build({ loader }) {
-      let loaderService = getService('loader-service');
-      loaderService.loader = loader;
-      let cardApi: typeof import('https://cardstack.com/base/card-api');
-      let string: typeof import('https://cardstack.com/base/string');
-
-      cardApi = await loader.import(`${baseRealm.url}card-api`);
-      string = await loader.import(`${baseRealm.url}string`);
-
-      let { field, contains, CardDef } = cardApi;
-      let { default: StringField } = string;
-
-      class Author extends CardDef {
-        static displayName = 'Author';
+      class CustomAuthor extends CardDef {
+        static displayName = 'CustomAuthor';
         @field firstName = contains(StringField);
         @field lastName = contains(StringField);
         @field title = contains(StringField, {
-          computeVia: function (this: Author) {
+          computeVia: function (this: CustomAuthor) {
             return [this.firstName, this.lastName].filter(Boolean).join(' ');
           },
         });
@@ -65,9 +69,9 @@ module('Integration | commands | search', function (hooks) {
       await setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
-          'author.gts': { Author },
-          'Author/r2.json': new Author({ firstName: 'R2-D2' }),
-          'Author/mark.json': new Author({
+          'custom-author.gts': { CustomAuthor },
+          'CustomAuthor/r2.json': new CustomAuthor({ firstName: 'R2-D2' }),
+          'CustomAuthor/mark.json': new CustomAuthor({
             firstName: 'Mark',
             lastName: 'Jackson',
           }),
@@ -75,12 +79,8 @@ module('Integration | commands | search', function (hooks) {
         },
         loader,
       });
-      return { loader };
+      return {};
     },
-  });
-
-  hooks.beforeEach(function () {
-    ({ loader } = snapshot.get());
   });
 
   test('search for a title', async function (assert) {
@@ -93,7 +93,10 @@ module('Integration | commands | search', function (hooks) {
       cardType: undefined,
     });
     assert.strictEqual(result.cardIds.length, 1);
-    assert.strictEqual(result.cardIds[0], 'http://test-realm/test/Author/mark');
+    assert.strictEqual(
+      result.cardIds[0],
+      'http://test-realm/test/CustomAuthor/mark',
+    );
   });
 
   test('search for a card type', async function (assert) {
@@ -102,13 +105,13 @@ module('Integration | commands | search', function (hooks) {
       commandService.commandContext,
     );
     let result = await searchCommand.execute({
-      cardType: 'Author',
+      cardType: 'CustomAuthor',
       title: undefined,
     });
     assert.ok(result.cardIds.length > 0, 'Should return at least one result');
     assert.ok(
-      result.cardIds.every((id) => id.includes('Author')),
-      'All results should be Author cards',
+      result.cardIds.every((id) => id.includes('CustomAuthor')),
+      'All results should be Custom Author cards',
     );
   });
 
@@ -121,11 +124,17 @@ module('Integration | commands | search', function (hooks) {
       query: {
         filter: {
           eq: { firstName: 'R2-D2' },
-          on: { module: 'http://test-realm/test/author', name: 'Author' },
+          on: {
+            module: 'http://test-realm/test/custom-author',
+            name: 'CustomAuthor',
+          },
         },
       },
     });
     assert.strictEqual(result.cardIds.length, 1);
-    assert.strictEqual(result.cardIds[0], 'http://test-realm/test/Author/r2');
+    assert.strictEqual(
+      result.cardIds[0],
+      'http://test-realm/test/CustomAuthor/r2',
+    );
   });
 });

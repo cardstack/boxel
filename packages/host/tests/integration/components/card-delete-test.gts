@@ -78,7 +78,7 @@ module('Integration | card-delete', function (hooks) {
     return card;
   }
   setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
+
   setupOperatorModeStateCleanup(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

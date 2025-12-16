@@ -60,7 +60,6 @@ module('Integration | card-copy', function (hooks) {
 
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
-  setupLocalIndexing(hooks);
 
   let loggedInAs = '@testuser:localhost';
 

@@ -35,7 +35,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | Command | patch-fields', function (hooks) {
   setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
+
   setupOnSave(hooks);
   let commandService: CommandService;
   let store: StoreService;

@@ -37,7 +37,6 @@ import { setupRenderingTest } from '../../helpers/setup';
 module('Integration | commands | patch-instance', function (hooks) {
   setupRenderingTest(hooks);
 
-  setupLocalIndexing(hooks);
   setupOnSave(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, { autostart: true });
   let commandService: CommandService;

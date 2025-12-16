@@ -31,8 +31,30 @@ class StubRealmService extends RealmService {
 }
 
 module('Integration | commands | upload-image', function (hooks) {
+  let lastForwardPayload: any;
+  let forwardPayloads: any[] = [];
+  let lastDirectUploadRequest:
+    | {
+        url: string;
+        formData: FormData;
+      }
+    | undefined;
+  let networkService: NetworkService;
+  let directUploadFetchHandler:
+    | ((request: Request) => Promise<Response | null>)
+    | undefined;
+  let handlerMounted = false;
+
+  const directUploadResponse = {
+    success: true,
+    errors: [],
+    result: {
+      id: 'direct-upload-id',
+      uploadURL: 'https://upload.imagedelivery.net/direct-upload-url',
+    },
+  };
+
   setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -50,32 +72,16 @@ module('Integration | commands | upload-image', function (hooks) {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
         },
         loader,
+        realmPermissions: {
+          [testRealmURL]: {
+            read: true,
+            write: true,
+          },
+        },
       });
       return {};
     },
   });
-
-  let lastForwardPayload: any;
-  let forwardPayloads: any[] = [];
-  let lastDirectUploadRequest:
-    | {
-        url: string;
-        formData: FormData;
-      }
-    | undefined;
-  let networkService: NetworkService;
-  let directUploadFetchHandler:
-    | ((request: Request) => Promise<Response | null>)
-    | undefined;
-
-  const directUploadResponse = {
-    success: true,
-    errors: [],
-    result: {
-      id: 'direct-upload-id',
-      uploadURL: 'https://upload.imagedelivery.net/direct-upload-url',
-    },
-  };
 
   setupRealmServerEndpoints(hooks, [
     {
@@ -110,8 +116,8 @@ module('Integration | commands | upload-image', function (hooks) {
   ]);
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    snapshot.get();
     getOwner(this)!.register('service:realm', StubRealmService);
+    networkService = getService('network');
     lastForwardPayload = undefined;
     forwardPayloads = [];
     lastDirectUploadRequest = undefined;
@@ -140,23 +146,17 @@ module('Integration | commands | upload-image', function (hooks) {
       }
       return null;
     };
-    networkService = getService('network');
-    networkService.virtualNetwork.mount(directUploadFetchHandler, {
-      prepend: true,
-    });
-
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-      },
-    });
+    if (!handlerMounted) {
+      networkService.virtualNetwork.mount(directUploadFetchHandler, {
+        prepend: true,
+      });
+    }
   });
 
-  hooks.afterEach(function () {
-    if (directUploadFetchHandler) {
+  hooks.after(function () {
+    if (handlerMounted) {
       networkService.virtualNetwork.unmount(directUploadFetchHandler);
-      directUploadFetchHandler = undefined;
+      handlerMounted = false;
     }
   });
 
@@ -225,34 +225,6 @@ module('Integration | commands | upload-image', function (hooks) {
           });
     const objectUrl = URL.createObjectURL(file);
 
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = async (
-      input: RequestInfo | URL,
-      init?: RequestInit,
-    ): Promise<Response> => {
-      let url: string;
-      if (typeof input === 'string') {
-        url = input;
-      } else if (input instanceof URL) {
-        url = input.href;
-      } else if (input instanceof Request) {
-        url = input.url;
-      } else {
-        url = String(input);
-      }
-
-      if (url.startsWith('blob:')) {
-        return new Response(file, {
-          status: 200,
-          headers: {
-            'Content-Type': file.type,
-          },
-        });
-      }
-
-      return originalFetch(input as RequestInfo, init);
-    };
-
     try {
       const result = await command.execute({
         sourceImageUrl: objectUrl,
@@ -313,7 +285,6 @@ module('Integration | commands | upload-image', function (hooks) {
         'saved card uses id returned by direct upload',
       );
     } finally {
-      globalThis.fetch = originalFetch;
       URL.revokeObjectURL(objectUrl);
     }
   });

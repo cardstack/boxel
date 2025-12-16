@@ -25,7 +25,6 @@ const testRealm2URL = 'http://test-realm/test2/';
 
 module('Integration | commands | copy-card', function (hooks) {
   setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

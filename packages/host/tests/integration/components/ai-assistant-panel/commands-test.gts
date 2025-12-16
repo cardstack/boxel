@@ -6,9 +6,6 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
-
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -25,7 +22,6 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import {
   percySnapshot,
   testRealmURL,
-  setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
@@ -49,7 +45,6 @@ import { setupRenderingTest } from '../../../helpers/setup';
 
 module('Integration | ai-assistant-panel | commands', function (hooks) {
   const realmName = 'Operator Mode Workspace';
-  let loader: Loader;
   let operatorModeStateService: OperatorModeStateService;
 
   setupRenderingTest(hooks);
@@ -70,139 +65,150 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
   let { createAndJoinRoom, simulateRemoteMessage, getRoomEvents } =
     mockMatrixUtils;
 
-  let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {
+  let snapshot = setupSnapshotRealm(hooks, {
     mockMatrixUtils,
     async build({ loader }) {
-      let loaderService = getService('loader-service');
-      loaderService.loader = loader;
-      return { loader };
+      class Pet extends CardDef {
+        static displayName = 'Pet';
+        @field name = contains(StringField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Pet) {
+            return this.name;
+          },
+        });
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            <h3 data-test-pet={{@model.name}}>
+              <@fields.name />
+            </h3>
+          </template>
+        };
+      }
+
+      class Address extends FieldDef {
+        static displayName = 'Address';
+        @field city = contains(StringField);
+        @field country = contains(StringField);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <div data-test-address>
+              <h3 data-test-city={{@model.city}}>
+                <@fields.city />
+              </h3>
+              <h3 data-test-country={{@model.country}}>
+                <@fields.country />
+              </h3>
+            </div>
+          </template>
+        };
+      }
+
+      class Person extends CardDef {
+        static displayName = 'Person';
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+        @field friends = linksToMany(Pet);
+        @field firstLetterOfTheName = contains(StringField, {
+          computeVia: function (this: Person) {
+            return this.firstName[0];
+          },
+        });
+        @field title = contains(StringField, {
+          computeVia: function (this: Person) {
+            return this.firstName;
+          },
+        });
+        @field address = contains(Address);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h2 data-test-person={{@model.firstName}}>
+              <@fields.firstName />
+            </h2>
+            <p
+              data-test-first-letter-of-the-name={{@model.firstLetterOfTheName}}
+            >
+              <@fields.firstLetterOfTheName />
+            </p>
+            Pet:
+            <div class='pet-container'>
+              <@fields.pet />
+            </div>
+            Friends:
+            <@fields.friends />
+            <div data-test-addresses>Address: <@fields.address /></div>
+            <style scoped>
+              div.pet-container {
+                display: flex;
+                flex-wrap: wrap;
+              }
+            </style>
+          </template>
+        };
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            <h3 data-test-person={{@model.firstName}}>
+              <@fields.firstName />
+            </h3>
+          </template>
+        };
+      }
+
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'pet.gts': { Pet },
+          'address.gts': { Address },
+          'person.gts': { Person },
+          'Person/fadhlan.json': new Person({
+            firstName: 'Fadhlan',
+            address: new Address({
+              city: 'Bandung',
+              country: 'Indonesia',
+            }),
+          }),
+          'Person/burcu.json': new Person({
+            firstName: 'Burcu',
+            address: new Address({
+              city: 'Istanbul',
+              country: 'Turkey',
+            }),
+            pet: new Pet({
+              name: 'Lion',
+            }),
+            friends: [new Pet({ name: 'Tiger' }), new Pet({ name: 'Bear' })],
+          }),
+          'Person/mickey.json': new Person({
+            firstName: 'Mickey',
+            address: new Address({
+              city: 'Paris',
+              country: 'France',
+            }),
+            friends: [new Pet({ name: 'Donald' })],
+          }),
+          'Person/justin.json': new Person({ firstName: 'Justin' }),
+          'Person/ian.json': new Person({ firstName: 'Ian' }),
+          'Person/matic.json': new Person({ firstName: 'Matic' }),
+          'Person/buck.json': new Person({ firstName: 'Buck' }),
+          'Person/hassan.json': new Person({ firstName: 'Hassan' }),
+          '.realm.json': `{ "name": "${realmName}" }`,
+        },
+      });
+
+      createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'room-test',
+      });
+
+      return {};
     },
   });
 
-  setupLocalIndexing(hooks);
   setupOnSave(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),
-  );
 
   let noop = () => {};
 
   hooks.beforeEach(async function () {
-    ({ loader } = snapshot.get());
     operatorModeStateService = getService('operator-mode-state-service');
-
-    class Pet extends CardDef {
-      static displayName = 'Pet';
-      @field name = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia: function (this: Pet) {
-          return this.name;
-        },
-      });
-      static fitted = class Fitted extends Component<typeof this> {
-        <template>
-          <h3 data-test-pet={{@model.name}}>
-            <@fields.name />
-          </h3>
-        </template>
-      };
-    }
-
-    class Address extends FieldDef {
-      static displayName = 'Address';
-      @field city = contains(StringField);
-      @field country = contains(StringField);
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <div data-test-address>
-            <h3 data-test-city={{@model.city}}>
-              <@fields.city />
-            </h3>
-            <h3 data-test-country={{@model.country}}>
-              <@fields.country />
-            </h3>
-          </div>
-        </template>
-      };
-    }
-
-    class Person extends CardDef {
-      static displayName = 'Person';
-      @field firstName = contains(StringField);
-      @field pet = linksTo(Pet);
-      @field friends = linksToMany(Pet);
-      @field firstLetterOfTheName = contains(StringField, {
-        computeVia: function (this: Person) {
-          return this.firstName[0];
-        },
-      });
-      @field title = contains(StringField, {
-        computeVia: function (this: Person) {
-          return this.firstName;
-        },
-      });
-      @field address = contains(Address);
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <h2 data-test-person={{@model.firstName}}>
-            <@fields.firstName />
-          </h2>
-          <p data-test-first-letter-of-the-name={{@model.firstLetterOfTheName}}>
-            <@fields.firstLetterOfTheName />
-          </p>
-          Pet:
-          <div class='pet-container'>
-            <@fields.pet />
-          </div>
-          Friends:
-          <@fields.friends />
-          <div data-test-addresses>Address: <@fields.address /></div>
-          <style scoped>
-            .pet-container {
-              height: 120px;
-              padding: 10px;
-            }
-          </style>
-        </template>
-      };
-    }
-
-    let petMango = new Pet({ name: 'Mango' });
-    let petJackie = new Pet({ name: 'Jackie' });
-
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'address.gts': { Address },
-        'hello.txt': 'Hello, world!',
-        'person.gts': { Person },
-        'pet.gts': { Pet },
-        'Pet/mango.json': petMango,
-        'Pet/jackie.json': petJackie,
-        'Person/fadhlan.json': new Person({
-          firstName: 'Fadhlan',
-          address: new Address({
-            city: 'Bandung',
-            country: 'Indonesia',
-          }),
-          pet: petMango,
-        }),
-        'Person/burcu.json': new Person({
-          firstName: 'Burcu',
-          friends: [petJackie, petMango],
-        }),
-        'Person/mickey.json': new Person({
-          firstName: 'Mickey',
-        }),
-        'Person/justin.json': new Person({ firstName: 'Justin' }),
-        'Person/ian.json': new Person({ firstName: 'Ian' }),
-        'Person/matic.json': new Person({ firstName: 'Matic' }),
-        'Person/buck.json': new Person({ firstName: 'Buck' }),
-        'Person/hassan.json': new Person({ firstName: 'Hassan' }),
-        '.realm.json': `{ "name": "${realmName}" }`,
-      },
-    });
   });
 
   function setCardInOperatorModeState(
@@ -707,7 +713,6 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert
       .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
       .containsText('Search Results');
-
     assert.dom('.result-list li').exists({ count: 2 });
 
     assert.dom('.result-list li:nth-child(1)').containsText('Jackie');

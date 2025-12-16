@@ -2,6 +2,7 @@ import { getService } from '@universal-ember/test-support';
 
 import type { RealmAction } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
+import { baseRealm } from '@cardstack/runtime-common';
 
 import type { SerializedServerState } from './mock-matrix/_server-state';
 import type { MockUtils } from './mock-matrix/_utils';
@@ -9,14 +10,16 @@ import {
   type DbSnapshot,
   setupUserSubscription,
   setupAuthEndpoints,
+  setupLocalIndexing,
+  type NestedHooks,
   captureDbSnapshot,
   restoreDbSnapshot,
   deleteSnapshot,
-  createTimingLogger,
   setupRendering,
+  createTimingLogger,
 } from '.';
 
-import { setupBaseRealm } from '../helpers/base-realm';
+import { initialize } from './base-realm';
 
 export interface SnapshotBuildContext {
   isInitialBuild: boolean;
@@ -38,6 +41,7 @@ export interface SnapshotRealmHandle<T> {
 interface SetupSnapshotRealmOptions<T> {
   build: (context: SnapshotBuildContext) => Promise<T>;
   mockMatrixUtils: MockUtils;
+  reInitialiseBaseRealm?: boolean; // TODO: default to true
   realmPermissions?: Record<string, RealmAction[]>;
   acceptanceTest?: boolean;
 }
@@ -49,16 +53,24 @@ export function setupSnapshotRealm<T>(
   let cache: SnapshotCache | undefined;
   let latestState: T | undefined;
 
-  setupBaseRealm(hooks);
+  hooks.beforeEach(async function () {
+    let loaderService = getService('loader-service');
+    if (cache) {
+      loaderService.loader = Loader.cloneLoader(cache.loaderSnapshot, {
+        includeEvaluatedModules: '.*',
+      });
+    }
+  });
   hooks.beforeEach(async function () {
     setupRendering(options.acceptanceTest!!);
   });
 
+  setupLocalIndexing(hooks);
+  hooks.beforeEach(initialize);
+
   hooks.beforeEach(async function () {
-    let timer = createTimingLogger('setupSnapshotRealm');
     setupUserSubscription();
     setupAuthEndpoints(options.realmPermissions);
-    timer.step('setupAuthEndpoints');
 
     let loaderService = getService('loader-service');
 
@@ -67,31 +79,25 @@ export function setupSnapshotRealm<T>(
       if (options.mockMatrixUtils) {
         options.mockMatrixUtils.restoreServerState(cache.matrixState);
       }
-      loaderService.loader = Loader.cloneLoader(cache.loaderSnapshot, {
-        includeEvaluatedModules: true,
-      });
-      timer.step('restored from snapshot');
     }
     latestState = await options.build({
       isInitialBuild: !cache,
       loader: loaderService.loader,
       mockMatrixUtils: options.mockMatrixUtils,
     });
-    timer.step('built latest state');
 
     if (!cache) {
+      let clonedLoader = Loader.cloneLoader(loaderService.loader, {
+        includeEvaluatedModules: '.*',
+      });
       cache = {
-        loaderSnapshot: Loader.cloneLoader(loaderService.loader, {
-          includeEvaluatedModules: true,
-        }),
+        loaderSnapshot: clonedLoader,
         dbSnapshot: await captureDbSnapshot(),
         matrixState: options.mockMatrixUtils
           ? options.mockMatrixUtils.captureServerState()
           : undefined,
       };
-      timer.step('captured snapshot');
     }
-    timer.finish();
   });
 
   hooks.after(async function () {

@@ -200,6 +200,20 @@ export default class SQLiteAdapter implements DBAdapter {
     return alias;
   }
 
+  async deleteSnapshot(snapshotName: string) {
+    this.assertNotClosed();
+    await this.started;
+    let snapshotInfo = this.snapshotInfos.get(snapshotName);
+    if (!snapshotInfo) {
+      throw new Error(`Unknown snapshot database '${snapshotName}'`);
+    }
+    await this.sqlite('exec', {
+      dbId: this.dbId,
+      sql: `DETACH DATABASE ${snapshotName};`,
+    });
+    this.snapshotInfos.delete(snapshotName);
+  }
+
   async importSnapshot(snapshotName: string) {
     this.assertNotClosed();
     await this.started;

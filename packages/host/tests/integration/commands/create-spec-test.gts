@@ -55,7 +55,6 @@ module('Integration | Command | create-specs', function (hooks) {
     },
   ]);
 
-  setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],

@@ -81,7 +81,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     matrixRoomId: string;
   };
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+
   setupOnSave(hooks);
   setupBaseRealm(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, {

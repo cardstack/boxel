@@ -28,7 +28,7 @@ import type { TestRealmAdapter } from '../helpers/adapter';
 
 module('Acceptance | prerender | module', function (hooks) {
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

@@ -23,7 +23,6 @@ let loader: Loader;
 
 module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks);
 

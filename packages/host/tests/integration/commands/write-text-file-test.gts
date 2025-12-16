@@ -18,6 +18,7 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+import { baseRealm } from '@cardstack/runtime-common';
 
 let fetch: NetworkService['fetch'];
 
@@ -40,16 +41,21 @@ class StubRealmService extends RealmService {
 
 module('Integration | commands | write-text-file', function (hooks) {
   setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
 
-  let mockMatrixUtils = setupMockMatrix(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+    autostart: true,
+  });
   let snapshot = setupSnapshotRealm(hooks, {
     mockMatrixUtils,
     async build({ loader }) {
       let loaderService = getService('loader-service');
       loaderService.loader = loader;
+      await loader.import(`${baseRealm.url}command`);
       await setupIntegrationTestRealm({
         mockMatrixUtils,
+        realmURL: testRealmURL,
         contents: {},
         loader,
       });

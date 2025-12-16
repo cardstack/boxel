@@ -31,7 +31,7 @@ export function setupInteractSubmodeTests(
   { setRealm }: InteractSubmodeSetupOptions,
 ) {
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -81,38 +81,38 @@ export function setupInteractSubmodeTests(
         @field name = contains(StringField);
         @field favoriteTreat = contains(StringField);
 
-      @field title = contains(StringField, {
-        computeVia: function (this: Pet) {
-          return this.name;
-        },
-      });
-      static fitted = class Fitted extends Component<typeof this> {
-        <template>
-          <h3 data-test-pet={{@model.name}}>
-            <@fields.name />
-          </h3>
-        </template>
-      };
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <GridContainer class='container'>
-            <h2 data-test-pet-title><@fields.title /></h2>
-            <div>
-              <div>Favorite Treat: <@fields.favoriteTreat /></div>
-              <div data-test-editable-meta>
-                {{#if @canEdit}}
-                  <@fields.title />
-                  is editable.
-                {{else}}
-                  <@fields.title />
-                  is NOT editable.
-                {{/if}}
+        @field title = contains(StringField, {
+          computeVia: function (this: Pet) {
+            return this.name;
+          },
+        });
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            <h3 data-test-pet={{@model.name}}>
+              <@fields.name />
+            </h3>
+          </template>
+        };
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <GridContainer class='container'>
+              <h2 data-test-pet-title><@fields.title /></h2>
+              <div>
+                <div>Favorite Treat: <@fields.favoriteTreat /></div>
+                <div data-test-editable-meta>
+                  {{#if @canEdit}}
+                    <@fields.title />
+                    is editable.
+                  {{else}}
+                    <@fields.title />
+                    is NOT editable.
+                  {{/if}}
+                </div>
               </div>
-            </div>
-          </GridContainer>
-        </template>
-      };
-    }
+            </GridContainer>
+          </template>
+        };
+      }
 
       class Puppy extends Pet {
         static displayName = 'Puppy';
@@ -121,124 +121,130 @@ export function setupInteractSubmodeTests(
 
       class ShippingInfo extends FieldDef {
         static displayName = 'Shipping Info';
-      @field preferredCarrier = contains(StringField);
-      @field remarks = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia: function (this: ShippingInfo) {
-          return this.preferredCarrier;
-        },
-      });
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <span data-test-preferredCarrier={{@model.preferredCarrier}}></span>
-          <@fields.preferredCarrier />
-        </template>
-      };
-    }
+        @field preferredCarrier = contains(StringField);
+        @field remarks = contains(StringField);
+        @field title = contains(StringField, {
+          computeVia: function (this: ShippingInfo) {
+            return this.preferredCarrier;
+          },
+        });
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <span data-test-preferredCarrier={{@model.preferredCarrier}}></span>
+            <@fields.preferredCarrier />
+          </template>
+        };
+      }
 
       class Address extends FieldDef {
         static displayName = 'Address';
-      @field city = contains(StringField);
-      @field country = contains(StringField);
-      @field shippingInfo = contains(ShippingInfo);
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <h3 data-test-city={{@model.city}}>
-            <@fields.city />
-          </h3>
-          <h3 data-test-country={{@model.country}}>
-            <@fields.country />
-          </h3>
-          <div data-test-shippingInfo-field><@fields.shippingInfo /></div>
+        @field city = contains(StringField);
+        @field country = contains(StringField);
+        @field shippingInfo = contains(ShippingInfo);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <h3 data-test-city={{@model.city}}>
+              <@fields.city />
+            </h3>
+            <h3 data-test-country={{@model.country}}>
+              <@fields.country />
+            </h3>
+            <div data-test-shippingInfo-field><@fields.shippingInfo /></div>
 
-          <div data-test-editable-meta>
-            {{#if @canEdit}}
-              address is editable
-            {{else}}
-              address is NOT editable.
-            {{/if}}
-          </div>
-        </template>
-      };
+            <div data-test-editable-meta>
+              {{#if @canEdit}}
+                address is editable
+              {{else}}
+                address is NOT editable.
+              {{/if}}
+            </div>
+          </template>
+        };
 
-      static edit = class Edit extends Component<typeof this> {
-        <template>
-          <FieldContainer @label='city' @tag='label' data-test-boxel-input-city>
-            <@fields.city />
-          </FieldContainer>
-          <FieldContainer
-            @label='country'
-            @tag='label'
-            data-test-boxel-input-country
-          >
-            <@fields.country />
-          </FieldContainer>
-          <div data-test-shippingInfo-field><@fields.shippingInfo /></div>
-        </template>
-      };
-    }
+        static edit = class Edit extends Component<typeof this> {
+          <template>
+            <FieldContainer
+              @label='city'
+              @tag='label'
+              data-test-boxel-input-city
+            >
+              <@fields.city />
+            </FieldContainer>
+            <FieldContainer
+              @label='country'
+              @tag='label'
+              data-test-boxel-input-country
+            >
+              <@fields.country />
+            </FieldContainer>
+            <div data-test-shippingInfo-field><@fields.shippingInfo /></div>
+          </template>
+        };
+      }
 
       class Person extends CardDef {
         static displayName = 'Person';
-      @field firstName = contains(StringField);
-      @field pet = linksTo(Pet);
-      @field friends = linksToMany(Pet);
-      @field firstLetterOfTheName = contains(StringField, {
-        computeVia: function (this: Person) {
-          if (!this.firstName) {
-            return;
-          }
-          return this.firstName[0];
-        },
-      });
-      @field title = contains(StringField, {
-        computeVia: function (this: Person) {
-          return this.firstName;
-        },
-      });
-      @field primaryAddress = contains(Address);
-      @field additionalAddresses = containsMany(Address);
-
-      static isolated = class Isolated extends Component<typeof this> {
-        updateAndSavePet = () => {
-          let pet = this.args.model.pet;
-          if (pet) {
-            pet.name = 'Updated Pet';
-            this.args.saveCard?.(pet.id);
-          }
-        };
-        <template>
-          <h2 data-test-person={{@model.firstName}}>
-            <@fields.firstName />
-          </h2>
-          <p data-test-first-letter-of-the-name={{@model.firstLetterOfTheName}}>
-            <@fields.firstLetterOfTheName />
-          </p>
-          Pet:
-          <div class='pet-container'>
-            <@fields.pet />
-          </div>
-          Friends:
-          <@fields.friends />
-          Primary Address:
-          <@fields.primaryAddress />
-          Additional Adresses:
-          <@fields.additionalAddresses />
-          <button
-            data-test-update-and-save-pet
-            {{on 'click' this.updateAndSavePet}}
-          >
-            Update and Save Pet
-          </button>
-          <style scoped>
-            .pet-container {
-              height: 80px;
-              padding: 10px;
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+        @field friends = linksToMany(Pet);
+        @field firstLetterOfTheName = contains(StringField, {
+          computeVia: function (this: Person) {
+            if (!this.firstName) {
+              return;
             }
-          </style>
-        </template>
-      };
-    }
+            return this.firstName[0];
+          },
+        });
+        @field title = contains(StringField, {
+          computeVia: function (this: Person) {
+            return this.firstName;
+          },
+        });
+        @field primaryAddress = contains(Address);
+        @field additionalAddresses = containsMany(Address);
+
+        static isolated = class Isolated extends Component<typeof this> {
+          updateAndSavePet = () => {
+            let pet = this.args.model.pet;
+            if (pet) {
+              pet.name = 'Updated Pet';
+              this.args.saveCard?.(pet.id);
+            }
+          };
+          <template>
+            <h2 data-test-person={{@model.firstName}}>
+              <@fields.firstName />
+            </h2>
+            <p
+              data-test-first-letter-of-the-name={{@model.firstLetterOfTheName}}
+            >
+              <@fields.firstLetterOfTheName />
+            </p>
+            Pet:
+            <div class='pet-container'>
+              <@fields.pet />
+            </div>
+            Friends:
+            <@fields.friends />
+            Primary Address:
+            <@fields.primaryAddress />
+            Additional Adresses:
+            <@fields.additionalAddresses />
+            <button
+              data-test-update-and-save-pet
+              {{on 'click' this.updateAndSavePet}}
+            >
+              Update and Save Pet
+            </button>
+            <style scoped>
+              .pet-container {
+                height: 80px;
+                padding: 10px;
+              }
+            </style>
+          </template>
+        };
+      }
 
       class Personnel extends Person {
         static displayName = 'Personnel';

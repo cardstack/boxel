@@ -15,7 +15,6 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | commands | search-google-images', function (hooks) {
   setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -207,17 +206,17 @@ module('Integration | commands | search-google-images', function (hooks) {
     );
     assert.strictEqual(
       firstImage.imageUrl,
-      'https://example.com/image1.jpg',
+      'http://localhost:4200/i-do-not-exist/image1.jpg',
       'Should have correct image URL',
     );
     assert.strictEqual(
       firstImage.thumbnailUrl,
-      'https://example.com/thumb1.jpg',
+      'http://localhost:4200/i-do-not-exist/thumb1.jpg',
       'Should have correct thumbnail URL',
     );
     assert.strictEqual(
       firstImage.contextUrl,
-      'https://example.com/page1',
+      'http://localhost:4200/i-do-not-exist/page1',
       'Should have correct context URL',
     );
     assert.strictEqual(firstImage.width, 800, 'Should have correct width');
@@ -249,7 +248,7 @@ module('Integration | commands | search-google-images', function (hooks) {
     );
     assert.strictEqual(
       firstImage.displayLink,
-      'example.com',
+      'localhost',
       'Should have correct display link',
     );
     assert.strictEqual(

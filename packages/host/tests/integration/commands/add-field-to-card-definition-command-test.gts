@@ -31,7 +31,7 @@ module(
   'Integration | commands | add-field-to-card-definition',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupLocalIndexing(hooks);
+
     let mockMatrixUtils = setupMockMatrix(hooks);
     let snapshot = setupSnapshotRealm(hooks, {
       mockMatrixUtils,

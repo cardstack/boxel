@@ -204,7 +204,7 @@ const userRealmFiles: Record<string, any> = {
 
 module('Acceptance | interact submode | create-file tests', function (hooks) {
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

@@ -105,8 +105,6 @@ module(`Integration | realm indexing`, function (hooks) {
     window.removeEventListener('boxel-render-error', onError);
   });
 
-  setupLocalIndexing(hooks);
-
   setupCardLogs(
     hooks,
     async () => await snapshot.get().loader.import(`${baseRealm.url}card-api`),

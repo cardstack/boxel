@@ -295,7 +295,6 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
   module('single realm', function (hooks) {
     let realm: Realm;
     setupApplicationTest(hooks);
-    setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
@@ -304,7 +303,6 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
 
     let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
       mockMatrixUtils;
-
 
     let defaultMatrixRoomId: string;
     let snapshot = setupSnapshotRealm<{ realm: Realm }>(hooks, {
@@ -1096,14 +1094,12 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     let additionalRealmURL = `${origin}/testuser/aaa/`; // writeable realm that is lexically before the personal realm
 
     setupApplicationTest(hooks);
-    setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
       activeRealms: [personalRealmURL, additionalRealmURL],
     });
     let { setRealmPermissions, createAndJoinRoom } = mockMatrixUtils;
-
 
     let defaultMatrixRoomId: string;
     let multiRealmSnapshot = setupSnapshotRealm<{ realm: Realm }>(hooks, {
@@ -1131,7 +1127,8 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
             'author.gts': authorCard,
             '.realm.json': {
               name: `Test User's Workspace`,
-              backgroundURL: 'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
+              backgroundURL:
+                'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
               iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
             },
           },

@@ -198,7 +198,6 @@ const realmInfo = {
 
 module('Acceptance | code submode | file-tree tests', function (hooks) {
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

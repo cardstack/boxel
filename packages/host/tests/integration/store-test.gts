@@ -1,9 +1,4 @@
-import {
-  waitUntil,
-  waitFor,
-  click,
-  typeIn,
-} from '@ember/test-helpers';
+import { waitUntil, waitFor, click, typeIn } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -70,7 +65,6 @@ module('Integration | Store', function (hooks) {
   let BoomPersonDef: typeof CardDefType;
   let realmService: RealmService;
 
-  setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,

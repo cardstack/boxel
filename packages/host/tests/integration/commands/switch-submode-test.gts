@@ -36,7 +36,6 @@ class StubRealmService extends RealmService {
 
 module('Integration | commands | switch-submode', function (hooks) {
   setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

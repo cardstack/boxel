@@ -203,7 +203,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   };
 
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

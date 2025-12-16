@@ -134,7 +134,6 @@ function buildThemeDocument(palette: string): SingleCardDocument {
 module('Integration | field configuration', function (hooks) {
   setupRenderingTest(hooks);
 
-  setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks);
 
   let snapshot = setupSnapshotRealm<{ loader: Loader }>(hooks, {

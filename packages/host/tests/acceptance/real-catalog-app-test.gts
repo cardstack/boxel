@@ -27,7 +27,7 @@ class StubHostModeService extends HostModeService {
 
 module('Acceptance | Catalog | real catalog app', function (hooks) {
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+
   let snapshot = setupSnapshotRealm(hooks, {
     acceptanceTest: true,
     async build() {
