@@ -28,7 +28,7 @@ class PolaroidImageFitted extends Component<typeof PolaroidImage> {
   }
 
   get imageUrl() {
-    return this.args.model?.image?.imageCard?.url ?? '';
+    return this.args.model.image?.imageCard?.url ?? '';
   }
 
   <template>
