@@ -231,7 +231,9 @@ export default class MetaTagsPreview extends Component<Signature> {
             </div>
           </div>
           <div class='search-title'>{{this.headPreviewData.title}}</div>
-          <div class='search-description'>{{this.headPreviewData.description}}</div>
+          <div
+            class='search-description'
+          >{{this.headPreviewData.description}}</div>
         </section>
 
         <div class='social-column'>
