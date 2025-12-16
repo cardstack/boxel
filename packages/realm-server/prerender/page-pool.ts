@@ -85,6 +85,10 @@ export class PagePool {
       entry = standby as unknown as PoolEntry;
       entry.type = 'pool';
       entry.realm = realm;
+      standby.page.removeAllListeners('console');
+      if (!this.#silent) {
+        this.#attachPageConsole(standby.page, realm, standby.pageId);
+      }
       this.#realmPages.set(realm, entry);
       reused = false;
     } else {
