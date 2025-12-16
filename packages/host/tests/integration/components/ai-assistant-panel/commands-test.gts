@@ -1191,6 +1191,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     // add environment skill
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await fillIn('[data-test-search-field]', 'boxel environment');
     await click(
       '[data-test-card-catalog-item="http://localhost:4201/skills/Skill/boxel-environment"]',
     );
@@ -1288,6 +1289,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     // add environment skill
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await fillIn('[data-test-search-field]', 'boxel environment');
     await click(
       '[data-test-card-catalog-item="http://localhost:4201/skills/Skill/boxel-environment"]',
     );
