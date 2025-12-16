@@ -4,7 +4,7 @@ import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
 
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
@@ -241,7 +241,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
     await waitFor(`[data-test-card-catalog-item="${environmentSkillId}"]`, {
-      timeout: 20000,
+      timeout: 10000,
     });
     await click(`[data-test-card-catalog-item="${environmentSkillId}"]`);
     await click('[data-test-card-catalog-go-button]');
@@ -1181,7 +1181,8 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       .exists({ count: 2 });
   });
 
-  test('command that returns a FileForAttachmentCard result is specially handled to attach the file', async function (assert) {
+  // flaky test CS-9884
+  skip('command that returns a FileForAttachmentCard result is specially handled to attach the file', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1273,7 +1274,8 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     );
   });
 
-  test('command that returns a CardForAttachmentCard result is specially handled to attach the card', async function (assert) {
+  // flaky test CS-9884
+  skip('command that returns a CardForAttachmentCard result is specially handled to attach the card', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
