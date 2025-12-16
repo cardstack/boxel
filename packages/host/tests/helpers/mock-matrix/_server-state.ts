@@ -326,4 +326,8 @@ export class ServerState {
   getContent(mxcUrl: string) {
     return this.#contents.get(mxcUrl);
   }
+
+  getUploadedContents() {
+    return this.#contents;
+  }
 }
