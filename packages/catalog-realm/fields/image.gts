@@ -262,7 +262,6 @@ class ImageFieldEdit extends Component<typeof ImageField> {
       return;
     }
 
-    debugger;
     if (!realmHref) {
       this.uploadStatus = 'error';
       this.uploadStatusMessage =
