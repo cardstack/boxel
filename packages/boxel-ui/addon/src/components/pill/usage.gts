@@ -10,28 +10,19 @@ import {
 
 import { cssVar } from '../../helpers.ts';
 import { IconPlus } from '../../icons.gts';
-import Pill, { type BoxelPillKind } from './index.gts';
+import Pill, {
+  type BoxelPillKind,
+  type BoxelPillVariant,
+  boxelPillVariants,
+} from './index.gts';
 
 export default class PillUsage extends Component {
   pillKinds = ['button', 'default'];
   pillKindDefault: BoxelPillKind = 'default';
-  pillVariants = ['default', 'primary', 'secondary', 'muted', 'destructive'];
-  pillVariantDefault:
-    | undefined
-    | 'primary'
-    | 'secondary'
-    | 'muted'
-    | 'destructive'
-    | 'default' = undefined;
+  pillVariants = boxelPillVariants;
 
   @tracked kind: BoxelPillKind = this.pillKindDefault;
-  @tracked variant:
-    | undefined
-    | 'primary'
-    | 'secondary'
-    | 'muted'
-    | 'destructive'
-    | 'default' = undefined;
+  @tracked variant?: BoxelPillVariant;
   @tracked pillBackgroundColor?: string;
   @tracked borderColor?: string;
   @tracked fontColor?: string;
@@ -107,7 +98,6 @@ export default class PillUsage extends Component {
             @name='variant'
             @optional={{true}}
             @description='Theme-based variant for consistent styling'
-            @defaultValue={{this.pillVariantDefault}}
             @options={{this.pillVariants}}
             @onInput={{fn (mut this.variant)}}
             @value={{this.variant}}

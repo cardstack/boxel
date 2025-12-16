@@ -107,6 +107,7 @@ import type { SystemCard } from 'https://cardstack.com/base/system-card';
 
 import UpdateRoomSkillsCommand from '../commands/update-room-skills';
 import { addPatchTools } from '../commands/utils';
+import { getUniqueValidCommandDefinitions } from '../lib/command-definitions';
 import { isSkillCard } from '../lib/file-def-manager';
 import { skillCardURL } from '../lib/utils';
 import { importResource } from '../resources/import';
@@ -876,11 +877,7 @@ export default class MatrixService extends Service {
   public getUniqueCommandDefinitions(
     commandDefinitions: SkillModule.CommandField[],
   ): SkillModule.CommandField[] {
-    return commandDefinitions.filter(
-      (command, index, self) =>
-        index ===
-        self.findIndex((c) => c.functionName === command.functionName),
-    );
+    return getUniqueValidCommandDefinitions(commandDefinitions);
   }
 
   async uploadCards(cards: CardDef[]) {
@@ -891,8 +888,14 @@ export default class MatrixService extends Service {
   async uploadCommandDefinitions(
     commandDefinitions: SkillModule.CommandField[],
   ) {
-    let commandFileDefs =
-      await this.client.uploadCommandDefinitions(commandDefinitions);
+    let validCommandDefinitions =
+      getUniqueValidCommandDefinitions(commandDefinitions);
+    if (validCommandDefinitions.length === 0) {
+      return [];
+    }
+    let commandFileDefs = await this.client.uploadCommandDefinitions(
+      validCommandDefinitions,
+    );
     return commandFileDefs;
   }
 
