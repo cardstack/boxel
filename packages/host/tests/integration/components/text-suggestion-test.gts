@@ -1,9 +1,10 @@
-import { RenderingTestContext } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, Loader } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 
 import {
   suggestCardChooserTitle,

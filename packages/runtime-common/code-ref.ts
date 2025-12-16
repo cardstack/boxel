@@ -15,7 +15,8 @@ import {
   isBaseInstance,
 } from './constants';
 import { CardError } from './error';
-import { meta } from './constants';
+import { meta, relativeTo } from './constants';
+import type { LooseCardResource } from './index';
 import { isUrlLike, trimExecutableExtension } from './index';
 
 export type ResolvedCodeRef = {
@@ -107,6 +108,12 @@ export function isFieldDef(field: any): field is typeof FieldDef {
   return isBaseDef(field) && 'isFieldDef' in field;
 }
 
+export function isFieldInstance<T extends FieldDef>(
+  fieldInstance: any,
+): fieldInstance is T {
+  return isFieldDef(fieldInstance?.constructor);
+}
+
 export function isPrimitive(def: any) {
   return isBaseDef(def) && primitive in def;
 }
@@ -142,9 +149,8 @@ export async function loadCardDef(
   let maybeCard: unknown;
   let loader = opts.loader;
   if (!('type' in ref)) {
-    let module = await loader.import<Record<string, any>>(
-      new URL(ref.module, opts?.relativeTo).href,
-    );
+    let resolvedModuleURL = new URL(ref.module, opts?.relativeTo).href;
+    let module = await loader.import<Record<string, any>>(resolvedModuleURL);
     maybeCard = module[ref.name];
   } else if (ref.type === 'ancestorOf') {
     let child = await loadCardDef(ref.card, opts);
@@ -251,7 +257,7 @@ export function getField<T extends BaseDef>(
       }
       if (fieldOverride) {
         let cardThunk = fieldOverride;
-        let { computeVia, name, isUsed } = result;
+        let { computeVia, name, isUsed, queryDefinition } = result;
         let originalField = result;
         let declaredCardThunk =
           (originalField as any).declaredCardResolver ??
@@ -265,6 +271,7 @@ export function getField<T extends BaseDef>(
           name,
           isUsed,
           isPolymorphic: true,
+          queryDefinition,
         }) as Field;
       }
       localIdentities.set(result.card, {
@@ -337,7 +344,10 @@ export function resolveAdoptedCodeRef(instance: CardDef) {
   if (!adoptsFrom) {
     throw new Error('Instance missing adoptsFrom');
   }
-  let resolved = codeRefWithAbsoluteURL(adoptsFrom, new URL(instance.id));
+  let resolved = codeRefWithAbsoluteURL(
+    adoptsFrom,
+    instance[relativeTo] || new URL(instance.id),
+  );
   if (!isResolvedCodeRef(resolved)) {
     throw new Error('code ref is not resolved');
   }
@@ -402,4 +412,44 @@ function isRelativePath(moduleId: unknown): moduleId is string {
     !moduleId.startsWith('/') &&
     !moduleId.startsWith('data:')
   );
+}
+
+type VisitModuleDep = (
+  moduleURL: string,
+  setModuleURL: (newURL: string) => void,
+) => void;
+
+function visitCodeRef(codeRef: CodeRef, visit: VisitModuleDep): void {
+  if (!('type' in codeRef)) {
+    visit(codeRef.module, (newURL) => {
+      codeRef.module = newURL;
+    });
+  } else {
+    visitCodeRef(codeRef.card, visit);
+  }
+}
+
+export function visitModuleDeps(
+  resourceJson: LooseCardResource,
+  visit: VisitModuleDep,
+): void {
+  let resourceMeta = resourceJson.meta;
+  if (resourceMeta?.adoptsFrom && isCodeRef(resourceMeta.adoptsFrom)) {
+    visitCodeRef(resourceMeta.adoptsFrom, visit);
+  }
+  if (resourceMeta?.fields) {
+    for (let fieldMeta of Object.values(resourceMeta.fields)) {
+      if (Array.isArray(fieldMeta)) {
+        for (let meta of fieldMeta) {
+          if (meta.adoptsFrom && isCodeRef(meta.adoptsFrom)) {
+            visitCodeRef(meta.adoptsFrom, visit);
+          }
+        }
+      } else {
+        if (fieldMeta.adoptsFrom && isCodeRef(fieldMeta.adoptsFrom)) {
+          visitCodeRef(fieldMeta.adoptsFrom, visit);
+        }
+      }
+    }
+  }
 }

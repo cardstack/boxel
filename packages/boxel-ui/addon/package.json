@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "@cardstack/boxel-icons": "workspace:*",
-    "@ember/string": "^3.1.1",
+    "@ember/string": "catalog:",
     "@ember/test-waiters": "catalog:",
     "@embroider/addon-shim": "^1.8.9",
     "@floating-ui/dom": "catalog:",
@@ -45,6 +45,7 @@
     "countries-list": "catalog:",
     "dayjs": "catalog:",
     "dompurify": "catalog:",
+    "ember-animated": "catalog:",
     "ember-basic-dropdown": "8.0.4",
     "ember-css-url": "^1.0.0",
     "ember-concurrency": "catalog:",

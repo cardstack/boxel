@@ -8,7 +8,7 @@ import { eq, gt, or } from '@cardstack/boxel-ui/helpers';
 
 import { specRef } from '@cardstack/runtime-common';
 
-import RealmServerService from '@cardstack/host/services/realm-server';
+import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import PrerenderedCardSearch from '../prerendered-card-search';
 

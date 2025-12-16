@@ -36,19 +36,34 @@
     color: var(--boxel-dark, #000);
     font-family: var(
       --boxel-font-family,
-      'Open Sans',
-      Helvetica,
+      'IBM Plex Sans',
+      'Helvetica Neue',
       Arial,
       sans-serif
     );
+    font-size: var(--boxel-body-font-size, 0.875rem);
+    letter-spacing: var(--boxel-lsp-xs, 0.01em);
+    line-height: var(--boxel-line-height-sm, calc(18 / 13));
     background-color: var(--boxel-light, #fff);
-    font-size: 13px;
-    line-height: calc(18 / 13);
     overscroll-behavior: none;
   }
 
   body.has-modal {
     overflow: hidden;
+  }
+
+  code,
+  pre,
+  kbd,
+  samp {
+    font-family: var(
+      --boxel-monospace-font-family,
+      'IBM Plex Mono',
+      'Menlo',
+      'Courier New',
+      Courier,
+      monospace
+    );
   }
 
   a {

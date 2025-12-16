@@ -1,0 +1,63 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "deepcogito/cogito-v2-preview-deepseek-671b",
+      "canonicalSlug": "deepcogito/cogito-v2-preview-deepseek-671b",
+      "name": "Deep Cogito: Cogito V2 Preview Deepseek 671B",
+      "created": 1756830949,
+      "description": "Cogito v2 is a multilingual, instruction-tuned Mixture of Experts (MoE) large language model with 671 billion parameters. It supports both standard and reasoning-based generation modes. The model introduces hybrid reasoning via Iterated Distillation and Amplification (IDA)—an iterative self-improvement strategy designed to scale alignment with general intelligence. Cogito v2 has been optimized for STEM, programming, instruction following, and tool use. It supports 128k context length and offers strong performance in both multilingual and code-heavy environments. Users can control the reasoning behaviour with the `reasoning` `enabled` boolean. [Learn more in our docs](https://openrouter.ai/docs/use-cases/reasoning-tokens#enable-reasoning-with-default-config)",
+      "pricing": {
+        "prompt": "0.00000125",
+        "completion": "0.00000125",
+        "request": "0",
+        "image": "0"
+      },
+      "contextLength": 163840,
+      "architecture": {
+        "modality": "text->text",
+        "inputModalities": [
+          "text"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "DeepSeek",
+        "instructType": ""
+      },
+      "topProvider": {
+        "isModerated": false,
+        "contextLength": 163840,
+        "maxCompletionTokens": null
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "logit_bias",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "reasoning",
+        "repetition_penalty",
+        "stop",
+        "temperature",
+        "top_k",
+        "top_p"
+      ],
+      "defaultParameters": {},
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

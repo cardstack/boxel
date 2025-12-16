@@ -2,11 +2,11 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import CreateSpecCommand from '@cardstack/host/commands/create-specs';
 
-import { Spec } from 'https://cardstack.com/base/spec';
+import type { Spec } from 'https://cardstack.com/base/spec';
 
 import {
   testRealmURL,
@@ -130,8 +130,8 @@ export default class TestCommand extends Command {
     assert.strictEqual(savedSpec.specType, 'card', 'Spec type is card');
     assert.strictEqual(
       savedSpec.title,
-      'TestCard',
-      'Spec title matches codeRef name',
+      'Test Card',
+      'Spec title matches display name',
     );
     assert.strictEqual(
       savedSpec.ref?.module,
@@ -215,6 +215,11 @@ export default class TestCommand extends Command {
     const savedSpec = (await store.get(result.newSpecs[0].id!)) as Spec;
 
     assert.strictEqual(savedSpec.specType, 'command', 'Spec type is command');
+    assert.strictEqual(
+      savedSpec.title,
+      'TestCommand',
+      'Spec title falls back to export name for commands',
+    );
   });
 
   test('throws error when export is not found in module', async function (assert) {

@@ -15,7 +15,7 @@ import {
   type CopyArgs,
   type CopyResult,
 } from '.';
-import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from './reindex-config';
+import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from './tasks/indexer';
 import type { Realm } from './realm';
 import { RealmPaths } from './paths';
 import ignore, { type Ignore } from 'ignore';
@@ -30,8 +30,6 @@ export class RealmIndexUpdater {
     modulesIndexed: 0,
     instanceErrors: 0,
     moduleErrors: 0,
-    definitionErrors: 0,
-    definitionsIndexed: 0,
     totalIndexEntries: 0,
   };
   #indexWriter: IndexWriter;
@@ -128,7 +126,7 @@ export class RealmIndexUpdater {
     urls: URL[],
     opts?: {
       delete?: true;
-      onInvalidation?: (invalidatedURLs: URL[]) => void;
+      onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>;
       clientRequestId?: string | null;
     },
   ): Promise<void> {
@@ -153,7 +151,7 @@ export class RealmIndexUpdater {
       this.#stats = stats;
       this.#ignoreData = ignoreData;
       if (opts?.onInvalidation) {
-        opts.onInvalidation(
+        await opts.onInvalidation(
           invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
         );
       }
@@ -167,7 +165,7 @@ export class RealmIndexUpdater {
 
   async copy(
     sourceRealmURL: URL,
-    onInvalidation?: (invalidatedURLs: URL[]) => void,
+    onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>,
   ): Promise<void> {
     this.#indexingDeferred = new Deferred<void>();
     try {
@@ -185,7 +183,7 @@ export class RealmIndexUpdater {
       });
       let { invalidations } = await job.done;
       if (onInvalidation) {
-        onInvalidation(
+        await onInvalidation(
           invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
         );
       }
@@ -223,7 +221,8 @@ export function isIgnored(
     [
       `${realmURL.href}.realm.json`,
       `${realmURL.href}.template-lintrc.js`,
-    ].includes(url.href)
+    ].includes(url.href) ||
+    url.href.startsWith(`${realmURL.href}.git/`)
   ) {
     return true;
   }

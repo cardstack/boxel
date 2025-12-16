@@ -55,11 +55,14 @@ export default class PatchCardInstanceCommand extends HostBaseCommand<
         "Patch command can't run because it doesn't have all the fields in arguments returned by open ai",
       );
     }
-    let clientRequestId =
-      this.commandService.registerAiAssistantClientRequestId(
-        'patch-instance',
-        input.roomId,
-      );
+
+    let clientRequestId = this.commandService.trackAiAssistantCardRequest({
+      action: 'patch-instance',
+      roomId: input.roomId,
+      fileUrl: input.cardId.endsWith('.json')
+        ? input.cardId
+        : `${input.cardId}.json`,
+    });
     await this.store.patch(
       input.cardId,
       {

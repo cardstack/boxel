@@ -26,7 +26,6 @@ import type ResetService from './reset';
 const log = logger('loader-service');
 
 export default class LoaderService extends Service {
-  @service declare private fastboot: { isFastBoot: boolean };
   @service declare private realmInfoService: RealmInfoService;
   @service declare private realm: RealmService;
   @service declare private network: NetworkService;
@@ -34,8 +33,6 @@ export default class LoaderService extends Service {
 
   @tracked public loader = this.makeInstance();
   private resetTime: number | undefined;
-
-  public isIndexing = false;
 
   constructor(owner: Owner) {
     super(owner);
@@ -81,20 +78,8 @@ export default class LoaderService extends Service {
     }
   }
 
-  public setIsIndexing(value: boolean) {
-    this.isIndexing = value;
-  }
-
   private makeInstance() {
     let middlewareStack: FetcherMiddlewareHandler[] = [];
-    middlewareStack.push(async (req, next) => {
-      if (this.isIndexing) {
-        // externally hosted sites may object to our custom header--like
-        // esm.run. Their CORS rules reject this header.
-        req.headers.set('X-Boxel-Building-Index', 'true');
-      }
-      return next(req);
-    });
     middlewareStack.push(async (req, next) => {
       return (await maybeHandleScopedCSSRequest(req)) || next(req);
     });
@@ -115,10 +100,8 @@ export default class LoaderService extends Service {
       return response;
     });
 
-    if (!this.fastboot.isFastBoot) {
-      middlewareStack.push(authorizationMiddleware(this.realm));
-      middlewareStack.push(authErrorEventMiddleware());
-    }
+    middlewareStack.push(authorizationMiddleware(this.realm));
+    middlewareStack.push(authErrorEventMiddleware());
     let fetch = fetcher(this.network.fetch, middlewareStack);
     let loader = new Loader(fetch, this.network.resolveImport);
     return loader;

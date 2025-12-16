@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "morph/morph-v3-fast",
+      "canonicalSlug": "morph/morph-v3-fast",
+      "name": "Morph: Morph V3 Fast",
+      "created": 1751910002,
+      "description": "Morph's fastest apply model for code edits. ~10,500 tokens/sec with 96% accuracy for rapid code transformations.\n\nThe model requires the prompt to be in the following format: \n<instruction>{instruction}</instruction>\n<code>{initial_code}</code>\n<update>{edit_snippet}</update>\n\nZero Data Retention is enabled for Morph. Learn more about this model in their [documentation](https://docs.morphllm.com/quickstart)",
+      "pricing": {
+        "prompt": "0.0000008",
+        "completion": "0.0000012",
+        "request": "0",
+        "image": "0"
+      },
+      "contextLength": 81920,
+      "architecture": {
+        "modality": "text->text",
+        "inputModalities": [
+          "text"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "Other",
+        "instructType": ""
+      },
+      "topProvider": {
+        "isModerated": false,
+        "contextLength": 81920,
+        "maxCompletionTokens": 38000
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "max_tokens",
+        "stop",
+        "temperature"
+      ],
+      "defaultParameters": {
+        "temperature": null,
+        "top_p": null,
+        "frequency_penalty": null
+      },
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

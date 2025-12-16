@@ -7,39 +7,443 @@ import type {
   RealmPermissions,
   RealmAdapter,
 } from '@cardstack/runtime-common';
-import type { IndexedInstance } from '@cardstack/runtime-common';
+import type {
+  IndexedInstance,
+  QueuePublisher,
+  QueueRunner,
+} from '@cardstack/runtime-common';
 import {
-  createRealm,
-  testRealm,
   setupBaseRealmServer,
   setupDB,
   createVirtualNetwork,
   matrixURL,
-  setupPermissionedRealms,
   cleanWhiteSpace,
-  testRealmServerMatrixUserId,
-  cardDefinition,
+  runTestRealmServer,
+  closeServer,
+  setupPermissionedRealms,
   cardInfo,
 } from './helpers';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
-import { basename } from 'path';
+import { join, basename } from 'path';
+import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
+import type {
+  PgQueueRunner,
+  PgAdapter,
+  PgQueuePublisher,
+} from '@cardstack/postgres';
 
 function trimCardContainer(text: string) {
-  return cleanWhiteSpace(text).replace(
-    /<div .*? data-test-field-component-card>\s?[<!---->]*? (.*?) <\/div>/g,
-    '$1',
-  );
+  return cleanWhiteSpace(text)
+    .replace(/=""/g, '')
+    .replace(
+      /<div .*? data-test-field-component-card>\s?[<!---->]*? (.*?) <\/div>/g,
+      '$1',
+    );
 }
 
 let testDbAdapter: DBAdapter;
+const testRealm = new URL('http://127.0.0.1:4445/test/');
 
-// Using the node tests for indexing as it is much easier to support the dynamic
-// loading of cards necessary for indexing and the ability to manipulate the
-// underlying filesystem in a manner that doesn't leak into other tests (as well
-// as to test through loader caching)
+type TestRealmServerResult = Awaited<ReturnType<typeof runTestRealmServer>>;
+
+function makeTestRealmFileSystem(): Record<
+  string,
+  string | LooseSingleCardDocument
+> {
+  return {
+    'person.gts': `
+      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+      import StringField from "https://cardstack.com/base/string";
+      import NumberField from "https://cardstack.com/base/number";
+
+      export class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field hourlyRate = contains(NumberField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1><@fields.firstName /> \${{@model.hourlyRate}}</h1>
+          </template>
+        }
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <h1> Embedded Card Person: <@fields.firstName/></h1>
+
+            <style scoped>
+              h1 { color: red }
+            </style>
+          </template>
+        }
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            <h1> Fitted Card Person: <@fields.firstName/></h1>
+
+            <style scoped>
+              h1 { color: red }
+            </style>
+          </template>
+        }
+      }
+    `,
+    'pet-person.gts': `
+      import { contains, linksTo, field, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
+      import { Pet } from "./pet";
+
+      export class PetPerson extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(() => Pet);
+        @field nickName = contains(StringField, {
+          computeVia: function (this: Person) {
+            if (this.pet?.firstName) {
+              return this.pet.firstName + "'s buddy";
+            }
+            return 'buddy';
+          },
+        });
+      }
+    `,
+    'pet.gts': `
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+      import StringField from "https://cardstack.com/base/string";
+
+      export class Pet extends CardDef {
+        @field firstName = contains(StringField);
+      }
+    `,
+    'fancy-person.gts': `
+      import { contains, field, Component } from "https://cardstack.com/base/card-api";
+      import StringField from "https://cardstack.com/base/string";
+      import { Person } from "./person";
+
+      export class FancyPerson extends Person {
+        @field favoriteColor = contains(StringField);
+
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <h1> Embedded Card Fancy Person: <@fields.firstName/></h1>
+
+            <style scoped>
+              h1 { color: pink }
+            </style>
+          </template>
+        }
+      }
+    `,
+    'post.gts': `
+      import { contains, field, linksTo, CardDef, Component } from "https://cardstack.com/base/card-api";
+      import StringField from "https://cardstack.com/base/string";
+      import { Person } from "./person";
+
+      export class Post extends CardDef {
+        static displayName = 'Post';
+        @field author = linksTo(Person);
+        @field message = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1><@fields.message/></h1>
+            <h2><@fields.author/></h2>
+          </template>
+        }
+      }
+    `,
+    'boom.gts': `
+      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+      import StringField from "https://cardstack.com/base/string";
+
+      export class Boom extends CardDef {
+        @field firstName = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1><@fields.firstName/>{{this.boom}}</h1>
+          </template>
+          get boom() {
+            throw new Error('intentional error');
+          }
+        }
+      }
+    `,
+    'boom2.gts': `
+      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+      import StringField from "https://cardstack.com/base/string";
+
+      export class Boom extends CardDef {
+        @field firstName = contains(StringField);
+        boom = () => {};
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            {{! From CS-7216 we are using a modifier in a strict mode template that is not imported }}
+            <h1 {{did-insert this.boom}}><@fields.firstName/></h1>
+          </template>
+        }
+      }
+    `,
+    'atom-boom.gts': `
+      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+      import StringField from "https://cardstack.com/base/string";
+
+      export class Boom extends CardDef {
+        @field firstName = contains(StringField);
+        static atom = class Atom extends Component<typeof this> {
+          <template>
+            <h1><@fields.firstName/>{{this.boom}}</h1>
+          </template>
+          get boom() {
+            throw new Error('intentional error');
+          }
+        }
+      }
+    `,
+    'embedded-boom.gts': `
+      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+      import StringField from "https://cardstack.com/base/string";
+
+      export class Boom extends CardDef {
+        @field firstName = contains(StringField);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <h1><@fields.firstName/>{{this.boom}}</h1>
+          </template>
+          get boom() {
+            throw new Error('intentional error');
+          }
+        }
+      }
+    `,
+    'fitted-boom.gts': `
+      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+      import StringField from "https://cardstack.com/base/string";
+
+      export class Boom extends CardDef {
+        @field firstName = contains(StringField);
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            <h1><@fields.firstName/>{{this.boom}}</h1>
+          </template>
+          get boom() {
+            throw new Error('intentional error');
+          }
+        }
+      }
+    `,
+    'mango.json': {
+      data: {
+        attributes: {
+          firstName: 'Mango',
+        },
+        meta: {
+          adoptsFrom: {
+            module: './person',
+            name: 'Person',
+          },
+        },
+      },
+    },
+    'vangogh.json': {
+      data: {
+        attributes: {
+          firstName: 'Van Gogh',
+          hourlyRate: 50,
+        },
+        meta: {
+          adoptsFrom: {
+            module: './person',
+            name: 'Person',
+          },
+        },
+      },
+    },
+    'hassan.json': {
+      data: {
+        attributes: {
+          firstName: 'Hassan',
+        },
+        relationships: {
+          pet: { links: { self: './ringo' } },
+        },
+        meta: {
+          adoptsFrom: {
+            module: './pet-person',
+            name: 'PetPerson',
+          },
+        },
+      },
+    },
+    'ringo.json': {
+      data: {
+        attributes: {
+          firstName: 'Ringo',
+        },
+        meta: {
+          adoptsFrom: {
+            module: './pet',
+            name: 'Pet',
+          },
+        },
+      },
+    },
+    'post-1.json': {
+      data: {
+        attributes: {
+          message: 'Who wants to fetch?!',
+        },
+        relationships: {
+          author: {
+            links: {
+              self: './vangogh',
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: './post',
+            name: 'Post',
+          },
+        },
+      },
+    },
+    'bad-link.json': {
+      data: {
+        attributes: {
+          message: 'I have a bad link',
+        },
+        relationships: {
+          author: {
+            links: {
+              self: 'http://localhost:9000/this-is-a-link-to-nowhere',
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: './post',
+            name: 'Post',
+          },
+        },
+      },
+    },
+    'boom.json': {
+      data: {
+        attributes: {
+          firstName: 'Boom!',
+        },
+        meta: {
+          adoptsFrom: {
+            module: './boom',
+            name: 'Boom',
+          },
+        },
+      },
+    },
+    'boom2.json': {
+      data: {
+        attributes: {
+          firstName: 'Boom!',
+        },
+        meta: {
+          adoptsFrom: {
+            module: './boom2',
+            name: 'Boom',
+          },
+        },
+      },
+    },
+    'atom-boom.json': {
+      data: {
+        attributes: {
+          firstName: 'Boom!',
+        },
+        meta: {
+          adoptsFrom: {
+            module: './atom-boom',
+            name: 'Boom',
+          },
+        },
+      },
+    },
+    'embedded-boom.json': {
+      data: {
+        attributes: {
+          firstName: 'Boom!',
+        },
+        meta: {
+          adoptsFrom: {
+            module: './embedded-boom',
+            name: 'Boom',
+          },
+        },
+      },
+    },
+    'fitted-boom.json': {
+      data: {
+        attributes: {
+          firstName: 'Boom!',
+        },
+        meta: {
+          adoptsFrom: {
+            module: './fitted-boom',
+            name: 'Boom',
+          },
+        },
+      },
+    },
+    'empty.json': {
+      data: {
+        attributes: {},
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/card-api',
+            name: 'CardDef',
+          },
+        },
+      },
+    },
+    'random-file.txt': 'hello',
+    'random-image.png': 'i am an image',
+    '.DS_Store':
+      'In  macOS, .DS_Store is a file that stores custom attributes of its containing folder',
+  };
+}
+
+async function startTestRealm({
+  dbAdapter,
+  publisher,
+  runner,
+}: {
+  dbAdapter: DBAdapter;
+  publisher: QueuePublisher;
+  runner: QueueRunner;
+}): Promise<TestRealmServerResult> {
+  let virtualNetwork = createVirtualNetwork();
+  let dir = dirSync().name;
+  let testRealmServer = await runTestRealmServer({
+    testRealmDir: dir,
+    realmsRootPath: join(dir, 'realm_server_1'),
+    virtualNetwork,
+    realmURL: testRealm,
+    dbAdapter: dbAdapter as PgAdapter,
+    publisher: publisher as PgQueuePublisher,
+    runner: runner as PgQueueRunner,
+    matrixURL,
+    fileSystem: makeTestRealmFileSystem(),
+  });
+  await testRealmServer.testRealm.start();
+  return testRealmServer;
+}
+
+async function stopTestRealm(testRealmServer?: TestRealmServerResult) {
+  if (!testRealmServer) {
+    return;
+  }
+  testRealmServer.testRealm.unsubscribe();
+  await closeServer(testRealmServer.testRealmHttpServer);
+  resetCatalogRealms();
+}
 
 module(basename(__filename), function () {
-  module('indexing', function (hooks) {
+  module('indexing (read only)', function (hooks) {
+    let realm: Realm;
+    let adapter: RealmAdapter;
+    let testRealmServer: TestRealmServerResult | undefined;
+
     async function getInstance(
       realm: Realm,
       url: URL,
@@ -51,378 +455,22 @@ module(basename(__filename), function () {
       return maybeInstance;
     }
 
-    let dir: string;
-    let realm: Realm;
-    let adapter: RealmAdapter;
-
-    setupBaseRealmServer(hooks, matrixURL, { disablePrerenderer: true });
+    setupBaseRealmServer(hooks, matrixURL);
 
     setupDB(hooks, {
-      beforeEach: async (dbAdapter, publisher, runner) => {
+      before: async (dbAdapter, publisher, runner) => {
         testDbAdapter = dbAdapter;
-        let virtualNetwork = createVirtualNetwork();
-        dir = dirSync().name;
-        ({ realm, adapter } = await createRealm({
-          disablePrerenderer: true,
-          withWorker: true,
-          dir,
-          virtualNetwork,
+        testRealmServer = await startTestRealm({
           dbAdapter,
           publisher,
           runner,
-          fileSystem: {
-            'person.gts': `
-            import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
-            import NumberField from "https://cardstack.com/base/number";
-
-            export class Person extends CardDef {
-              @field firstName = contains(StringField);
-              @field hourlyRate = contains(NumberField);
-              static isolated = class Isolated extends Component<typeof this> {
-                <template>
-                  <h1><@fields.firstName /> \${{@model.hourlyRate}}</h1>
-                </template>
-              }
-              static embedded = class Embedded extends Component<typeof this> {
-                <template>
-                  <h1> Embedded Card Person: <@fields.firstName/></h1>
-
-                  <style scoped>
-                    h1 { color: red }
-                  </style>
-                </template>
-              }
-              static fitted = class Fitted extends Component<typeof this> {
-                <template>
-                  <h1> Fitted Card Person: <@fields.firstName/></h1>
-
-                  <style scoped>
-                    h1 { color: red }
-                  </style>
-                </template>
-              }
-            }
-          `,
-            'pet-person.gts': `
-            import { contains, linksTo, field, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
-            import { Pet } from "./pet";
-
-            export class PetPerson extends CardDef {
-              @field firstName = contains(StringField);
-              @field pet = linksTo(() => Pet);
-              @field nickName = contains(StringField, {
-                computeVia: function (this: Person) {
-                  if (this.pet?.firstName) {
-                    return this.pet.firstName + "'s buddy";
-                  }
-                  return firstName;
-                },
-              });
-            }
-          `,
-            'pet.gts': `
-            import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
-
-            export class Pet extends CardDef {
-              @field firstName = contains(StringField);
-            }
-          `,
-            'fancy-person.gts': `
-            import { contains, field, Component } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
-            import { Person } from "./person";
-
-            export class FancyPerson extends Person {
-              @field favoriteColor = contains(StringField);
-
-              static embedded = class Embedded extends Component<typeof this> {
-                <template>
-                  <h1> Embedded Card Fancy Person: <@fields.firstName/></h1>
-
-                  <style scoped>
-                    h1 { color: pink }
-                  </style>
-                </template>
-              }
-            }
-          `,
-            'post.gts': `
-            import { contains, field, linksTo, CardDef, Component } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
-            import { Person } from "./person";
-
-            export class Post extends CardDef {
-              static displayName = 'Post';
-              @field author = linksTo(Person);
-              @field message = contains(StringField);
-              static isolated = class Isolated extends Component<typeof this> {
-                <template>
-                  <h1><@fields.message/></h1>
-                  <h2><@fields.author/></h2>
-                </template>
-              }
-            }
-          `,
-            'boom.gts': `
-            import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
-
-            export class Boom extends CardDef {
-              @field firstName = contains(StringField);
-              static isolated = class Isolated extends Component<typeof this> {
-                <template>
-                  <h1><@fields.firstName/>{{this.boom}}</h1>
-                </template>
-                get boom() {
-                  throw new Error('intentional error');
-                }
-              }
-            }
-          `,
-            'boom2.gts': `
-            import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
-
-            export class Boom extends CardDef {
-              @field firstName = contains(StringField);
-              boom = () => {};
-              static isolated = class Isolated extends Component<typeof this> {
-                <template>
-                  {{! From CS-7216 we are using a modifier in a strict mode template that is not imported }}
-                  <h1 {{did-insert this.boom}}><@fields.firstName/></h1>
-                </template>
-              }
-            }
-          `,
-            'atom-boom.gts': `
-            import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
-
-            export class Boom extends CardDef {
-              @field firstName = contains(StringField);
-              static atom = class Atom extends Component<typeof this> {
-                <template>
-                  <h1><@fields.firstName/>{{this.boom}}</h1>
-                </template>
-                get boom() {
-                  throw new Error('intentional error');
-                }
-              }
-            }
-          `,
-            'embedded-boom.gts': `
-            import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
-
-            export class Boom extends CardDef {
-              @field firstName = contains(StringField);
-              static embedded = class Embedded extends Component<typeof this> {
-                <template>
-                  <h1><@fields.firstName/>{{this.boom}}</h1>
-                </template>
-                get boom() {
-                  throw new Error('intentional error');
-                }
-              }
-            }
-          `,
-            'fitted-boom.gts': `
-            import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
-
-            export class Boom extends CardDef {
-              @field firstName = contains(StringField);
-              static fitted = class Fitted extends Component<typeof this> {
-                <template>
-                  <h1><@fields.firstName/>{{this.boom}}</h1>
-                </template>
-                get boom() {
-                  throw new Error('intentional error');
-                }
-              }
-            }
-          `,
-            'mango.json': {
-              data: {
-                attributes: {
-                  firstName: 'Mango',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './person',
-                    name: 'Person',
-                  },
-                },
-              },
-            },
-            'vangogh.json': {
-              data: {
-                attributes: {
-                  firstName: 'Van Gogh',
-                  hourlyRate: 50,
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './person',
-                    name: 'Person',
-                  },
-                },
-              },
-            },
-            'hassan.json': {
-              data: {
-                attributes: {
-                  firstName: 'Hassan',
-                },
-                relationships: {
-                  pet: { links: { self: './ringo' } },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './pet-person',
-                    name: 'PetPerson',
-                  },
-                },
-              },
-            },
-            'ringo.json': {
-              data: {
-                attributes: {
-                  firstName: 'Ringo',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './pet',
-                    name: 'Pet',
-                  },
-                },
-              },
-            },
-            'post-1.json': {
-              data: {
-                attributes: {
-                  message: 'Who wants to fetch?!',
-                },
-                relationships: {
-                  author: {
-                    links: {
-                      self: './vangogh',
-                    },
-                  },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './post',
-                    name: 'Post',
-                  },
-                },
-              },
-            },
-            'bad-link.json': {
-              data: {
-                attributes: {
-                  message: 'I have a bad link',
-                },
-                relationships: {
-                  author: {
-                    links: {
-                      self: 'http://localhost:9000/this-is-a-link-to-nowhere',
-                    },
-                  },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './post',
-                    name: 'Post',
-                  },
-                },
-              },
-            },
-            'boom.json': {
-              data: {
-                attributes: {
-                  firstName: 'Boom!',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './boom',
-                    name: 'Boom',
-                  },
-                },
-              },
-            },
-            'boom2.json': {
-              data: {
-                attributes: {
-                  firstName: 'Boom!',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './boom2',
-                    name: 'Boom',
-                  },
-                },
-              },
-            },
-            'atom-boom.json': {
-              data: {
-                attributes: {
-                  firstName: 'Boom!',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './atom-boom',
-                    name: 'Boom',
-                  },
-                },
-              },
-            },
-            'embedded-boom.json': {
-              data: {
-                attributes: {
-                  firstName: 'Boom!',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './embedded-boom',
-                    name: 'Boom',
-                  },
-                },
-              },
-            },
-            'fitted-boom.json': {
-              data: {
-                attributes: {
-                  firstName: 'Boom!',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './fitted-boom',
-                    name: 'Boom',
-                  },
-                },
-              },
-            },
-            'empty.json': {
-              data: {
-                attributes: {},
-                meta: {
-                  adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'CardDef',
-                  },
-                },
-              },
-            },
-            'random-file.txt': 'hello',
-            'random-image.png': 'i am an image',
-            '.DS_Store':
-              'In  macOS, .DS_Store is a file that stores custom attributes of its containing folder',
-          },
-        }));
-        await realm.start();
+        });
+        realm = testRealmServer.testRealm;
+        adapter = testRealmServer.testRealmAdapter;
+      },
+      after: async () => {
+        await stopTestRealm(testRealmServer);
+        testRealmServer = undefined;
       },
     });
 
@@ -471,6 +519,21 @@ module(basename(__filename), function () {
           cleanWhiteSpace(`<h1> Embedded Card Person: Mango </h1>`),
           'pre-rendered embedded format html is correct',
         );
+
+        assert.ok(entry.headHtml, 'pre-rendered head format html is present');
+
+        let cleanedHead = cleanWhiteSpace(entry.headHtml!);
+
+        // TODO: restore in CS-9807
+        // assert.ok(
+        //   cleanedHead.includes('<title data-test-card-head-title>'),
+        //   `head html includes title: ${cleanedHead}`,
+        // );
+        assert.ok(
+          cleanedHead.includes(`property="og:url" content="${testRealm}mango"`),
+          `head html includes canonical url: ${cleanedHead}`,
+        );
+
         assert.strictEqual(
           trimCardContainer(
             stripScopedCSSAttributes(
@@ -492,7 +555,7 @@ module(basename(__filename), function () {
       if (entry?.type === 'error') {
         assert.strictEqual(
           entry.error.errorDetail.message,
-          'Encountered error rendering HTML for card: intentional error',
+          'intentional error',
         );
         assert.deepEqual(entry.error.errorDetail.deps, [
           `${testRealm}atom-boom`,
@@ -509,7 +572,7 @@ module(basename(__filename), function () {
       if (entry?.type === 'error') {
         assert.strictEqual(
           entry.error.errorDetail.message,
-          'Encountered error rendering HTML for card: intentional error',
+          'intentional error',
         );
         assert.deepEqual(entry.error.errorDetail.deps, [
           `${testRealm}embedded-boom`,
@@ -526,7 +589,7 @@ module(basename(__filename), function () {
       if (entry?.type === 'error') {
         assert.strictEqual(
           entry.error.errorDetail.message,
-          'Encountered error rendering HTML for card: intentional error',
+          'intentional error',
         );
         assert.deepEqual(entry.error.errorDetail.deps, [
           `${testRealm}fitted-boom`,
@@ -536,7 +599,7 @@ module(basename(__filename), function () {
       }
     });
 
-    test('can recover from rendering a card that has a template error', async function (assert) {
+    test('rendering a card that has a template error does not affect indexing other instances', async function (assert) {
       {
         let entry = await realm.realmIndexQueryEngine.cardDocument(
           new URL(`${testRealm}boom`),
@@ -544,7 +607,7 @@ module(basename(__filename), function () {
         if (entry?.type === 'error') {
           assert.strictEqual(
             entry.error.errorDetail.message,
-            'Encountered error rendering HTML for card: intentional error',
+            'intentional error',
           );
           assert.deepEqual(entry.error.errorDetail.deps, [`${testRealm}boom`]);
         } else {
@@ -558,7 +621,7 @@ module(basename(__filename), function () {
         if (entry?.type === 'error') {
           assert.strictEqual(
             entry.error.errorDetail.message,
-            'Encountered error rendering HTML for card: Attempted to resolve a modifier in a strict mode template, but it was not in scope: did-insert',
+            'Attempted to resolve a modifier in a strict mode template, but it was not in scope: did-insert',
           );
           assert.deepEqual(entry.error.errorDetail.deps, [`${testRealm}boom2`]);
         } else {
@@ -616,638 +679,187 @@ module(basename(__filename), function () {
           entry.error.errorDetail.message,
           'unable to fetch http://localhost:9000/this-is-a-link-to-nowhere: fetch failed',
         );
-        assert.deepEqual(entry.error.errorDetail.deps, [
+        let actualDeps = (entry.error.errorDetail.deps ?? []).map((d) =>
+          d.endsWith('.json') ? d.slice(0, -5) : d,
+        );
+        let expectedDeps = [
           `${testRealm}post`,
           `http://localhost:9000/this-is-a-link-to-nowhere`,
-        ]);
+        ];
+        assert.deepEqual(actualDeps.sort(), expectedDeps.sort());
       } else {
         assert.ok('false', 'expected search entry to be an error document');
       }
     });
 
-    test('can make a definition entry in the index', async function (assert) {
-      let entry = await realm.realmIndexQueryEngine.getOwnDefinition({
-        module: `${testRealm}post.gts`,
-        name: 'Post',
-      });
-      if (entry?.type === 'definition') {
-        assert.ok(entry.lastModified, 'last modified date is set');
-        assert.ok(entry.resourceCreatedAt, 'created date is set');
+    // Note this particular test should only be a server test as the nature of
+    // the TestAdapter in the host tests will trigger the linked card to be
+    // already loaded when in fact in the real world it is not.
+    test('it can index a card with a contains computed that consumes a linksTo field', async function (assert) {
+      const hassanId = `${testRealm}hassan`;
+      let queryEngine = realm.realmIndexQueryEngine;
+      let hassan = await queryEngine.cardDocument(new URL(hassanId));
+      if (hassan?.type === 'doc') {
         assert.deepEqual(
-          entry.types,
-          [
-            `${testRealm}post/Post`,
-            'https://cardstack.com/base/card-api/CardDef',
-          ],
-          'types are correct',
-        );
-        assert.deepEqual(
-          entry.definition.codeRef,
+          hassan.doc.data.attributes,
           {
-            name: 'Post',
-            module: `${testRealm}post`,
+            title: 'Untitled Card',
+            nickName: "Ringo's buddy",
+            firstName: 'Hassan',
+            description: null,
+            thumbnailURL: null,
+            cardInfo,
           },
-          'code ref is correct',
+          'doc attributes are correct',
         );
-        assert.strictEqual(
-          entry.definition.displayName,
-          'Post',
-          'display name is correct',
-        );
-
         assert.deepEqual(
-          entry.definition.fields,
+          hassan.doc.data.relationships,
           {
-            ...cardDefinition,
-            message: {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
+            pet: {
+              links: {
+                self: './ringo',
               },
-              isPrimitive: true,
             },
-            author: {
-              type: 'linksTo',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'Person',
-                module: `${testRealm}person`,
+            'cardInfo.theme': {
+              links: {
+                self: null,
               },
-              isPrimitive: false,
             },
-            'author.id': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'ReadOnlyField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.title': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.firstName': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.hourlyRate': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'default',
-                module: 'https://cardstack.com/base/number',
-              },
-              isPrimitive: true,
-              serializerName: 'number',
-            },
-            'author.description': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.thumbnailURL': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'MaybeBase64Field',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'CardInfoField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: false,
-            },
-            'author.cardInfo.title': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.description': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.thumbnailURL': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'MaybeBase64Field',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.notes': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'MarkdownField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme': {
-              type: 'linksTo',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'Theme',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: false,
-            },
-            'author.cardInfo.theme.id': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'ReadOnlyField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.title': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.description': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.thumbnailURL': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'MaybeBase64Field',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'CardInfoField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: false,
-            },
-            'author.cardInfo.theme.cardInfo.title': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.description': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.thumbnailURL': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'MaybeBase64Field',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.notes': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'MarkdownField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cssVariables': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'CSSField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cssImports': {
-              type: 'containsMany',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'CssImportField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme': {
-              type: 'linksTo',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'Theme',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: false,
-            },
-            'author.cardInfo.theme.cardInfo.theme.id': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'ReadOnlyField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.title': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'CardInfoField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: false,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.title': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.description': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'MaybeBase64Field',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.notes': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'MarkdownField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.description': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cssVariables': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'CSSField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cssImports': {
-              type: 'containsMany',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'CssImportField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.thumbnailURL': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'MaybeBase64Field',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme': {
-              type: 'linksTo',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'Theme',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: false,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.id': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'ReadOnlyField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.title': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'CardInfoField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: false,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.title':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'StringField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.description':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'StringField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'MaybeBase64Field',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.notes':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'MarkdownField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.description': {
-              type: 'contains',
-              isComputed: true,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssVariables':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'CSSField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssImports': {
-              type: 'containsMany',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'CssImportField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.thumbnailURL':
-              {
-                type: 'contains',
-                isComputed: true,
-                fieldOrCard: {
-                  name: 'MaybeBase64Field',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme':
-              {
-                type: 'linksTo',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'Theme',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: false,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.id':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'ReadOnlyField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.title':
-              {
-                type: 'contains',
-                isComputed: true,
-                fieldOrCard: {
-                  name: 'StringField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'CardInfoField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: false,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.title':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'StringField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.description':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'StringField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'MaybeBase64Field',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.description':
-              {
-                type: 'contains',
-                isComputed: true,
-                fieldOrCard: {
-                  name: 'StringField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssVariables':
-              {
-                type: 'contains',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'CSSField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssImports':
-              {
-                type: 'containsMany',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'CssImportField',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.thumbnailURL':
-              {
-                type: 'contains',
-                isComputed: true,
-                fieldOrCard: {
-                  name: 'MaybeBase64Field',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: true,
-              },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme':
-              {
-                type: 'linksTo',
-                isComputed: false,
-                fieldOrCard: {
-                  name: 'Theme',
-                  module: 'https://cardstack.com/base/card-api',
-                },
-                isPrimitive: false,
-              },
           },
-          'definition is correct',
-        );
-
-        // this is a crazy long list that includes encoded CSS, so we'll just
-        // check a few deps
-        assert.ok(
-          entry!.deps!.includes(`${testRealm}post`),
-          'deps include ./post',
-        );
-        assert.ok(
-          entry!.deps!.includes(`${testRealm}person`),
-          'deps include ./person',
-        );
-        assert.ok(
-          entry!.deps!.includes(`https://cardstack.com/base/card-api`),
-          'deps include card api',
+          'doc relationships are correct',
         );
       } else {
-        assert.ok('false', 'expected entry to be a card def');
+        assert.ok(
+          false,
+          `search entry was an error: ${hassan?.error.errorDetail.message}`,
+        );
       }
+
+      let hassanEntry = await getInstance(realm, new URL(`${testRealm}hassan`));
+      if (hassanEntry) {
+        assert.deepEqual(
+          hassanEntry.searchDoc,
+          {
+            id: hassanId,
+            pet: {
+              id: `${testRealm}ringo`,
+              title: 'Untitled Card',
+              firstName: 'Ringo',
+              cardInfo: {
+                theme: null,
+              },
+            },
+            nickName: "Ringo's buddy",
+            _cardType: 'PetPerson',
+            firstName: 'Hassan',
+            title: 'Untitled Card',
+            cardInfo: {
+              theme: null,
+            },
+          },
+          'searchData is correct',
+        );
+      } else {
+        assert.ok(false, `could not find ${hassanId} in the index`);
+      }
+    });
+
+    test('sets resource_created_at for modules and instances', async function (assert) {
+      let entry = (await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}fancy-person.gts`),
+      )) as { resourceCreatedAt: number };
+
+      assert.ok(entry!.resourceCreatedAt, 'resourceCreatedAt is set');
+
+      entry = (await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}mango`),
+      )) as { resourceCreatedAt: number };
+
+      assert.ok(entry!.resourceCreatedAt, 'resourceCreatedAt is set');
+    });
+
+    test('sets urls containing encoded CSS for deps for a module', async function (assert) {
+      let entry = (await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}fancy-person.gts`),
+      )) as { deps: string[] };
+
+      let assertCssDependency = (
+        deps: string[],
+        pattern: RegExp,
+        fileName: string,
+      ) => {
+        assert.true(
+          !!deps.find((dep) => pattern.test(dep)),
+          `css for ${fileName} is in the deps`,
+        );
+      };
+
+      let dependencies = [
+        {
+          pattern: /fancy-person\.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'fancy-person.gts',
+        },
+        {
+          pattern: /\/person\.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'person.gts',
+        },
+        {
+          pattern:
+            /cardstack.com\/base\/default-templates\/embedded\.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'default-templates/embedded.gts',
+        },
+        {
+          pattern:
+            /cardstack.com\/base\/default-templates\/isolated-and-edit\.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'default-templates/isolated-and-edit.gts',
+        },
+        {
+          pattern:
+            /cardstack.com\/base\/default-templates\/missing-template\.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'default-templates/missing-template.gts',
+        },
+        {
+          pattern:
+            /cardstack.com\/base\/default-templates\/field-edit\.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'default-templates/field-edit.gts',
+        },
+        {
+          pattern:
+            /cardstack.com\/base\/links-to-many-component.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'links-to-many-component.gts',
+        },
+        {
+          pattern:
+            /cardstack.com\/base\/links-to-editor.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'links-to-editor.gts',
+        },
+        {
+          pattern:
+            /cardstack.com\/base\/contains-many-component.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'contains-many-component.gts',
+        },
+        {
+          pattern:
+            /cardstack.com\/base\/field-component.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'field-component.gts',
+        },
+      ];
+
+      dependencies.forEach(({ pattern, fileName }) => {
+        assertCssDependency(entry.deps, pattern, fileName);
+      });
+    });
+
+    test('will not invalidate non-json/non-executable files', async function (assert) {
+      let deletedEntries = (await testDbAdapter.execute(
+        `SELECT url FROM boxel_index WHERE is_deleted = TRUE`,
+      )) as { url: string }[];
+
+      let deletedEntryUrls = deletedEntries.map((row) => row.url);
+
+      ['random-file.txt', 'random-image.png', '.DS_Store'].forEach((file) => {
+        assert.notOk(deletedEntryUrls.includes(file));
+      });
     });
 
     test('can incrementally index updated instance', async function (assert) {
@@ -1275,19 +887,10 @@ module(basename(__filename), function () {
         },
       });
       assert.strictEqual(result.length, 1, 'found updated document');
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 1,
-          instanceErrors: 0,
-          moduleErrors: 0,
-          modulesIndexed: 0,
-          definitionErrors: 0,
-          definitionsIndexed: 0,
-          totalIndexEntries: 26,
-        },
-        'indexed correct number of files',
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.instancesIndexed,
+        1,
+        'indexed updated instance',
       );
     });
 
@@ -1305,50 +908,12 @@ module(basename(__filename), function () {
           throw new Error('boom!');
         `,
       );
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 0,
-          instanceErrors: 2,
-          moduleErrors: 2,
-          modulesIndexed: 0,
-          definitionErrors: 0,
-          definitionsIndexed: 0,
-          totalIndexEntries: 20,
-        },
-        'indexed correct number of files',
-      );
-      let petDefinitionEntry =
-        await realm.realmIndexQueryEngine.getOwnDefinition({
-          module: `${testRealm}pet`,
-          name: 'Pet',
-        });
-      assert.strictEqual(
-        petDefinitionEntry,
-        undefined,
-        'Pet card def does not exist',
-      );
       await realm.write(
         'person.gts',
         `
           // syntax error
           export class Intentionally Thrown Error {}
         `,
-      );
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 0,
-          instanceErrors: 4, // 1 post, 2 persons, 1 bad-link post
-          moduleErrors: 3, // post, fancy person, person
-          modulesIndexed: 0,
-          definitionErrors: 0,
-          definitionsIndexed: 0,
-          totalIndexEntries: 11,
-        },
-        'indexed correct number of files',
       );
       let { data: result } = await realm.realmIndexQueryEngine.search({
         filter: {
@@ -1359,26 +924,6 @@ module(basename(__filename), function () {
         result,
         [],
         'the broken type results in no instance results',
-      );
-      let personDefinitionEntry =
-        await realm.realmIndexQueryEngine.getOwnDefinition({
-          module: `${testRealm}person`,
-          name: 'Person',
-        });
-      assert.strictEqual(
-        personDefinitionEntry,
-        undefined,
-        'Person card def does not exist',
-      );
-      let fancyPersonDefinitionEntry =
-        await realm.realmIndexQueryEngine.getOwnDefinition({
-          module: `${testRealm}fancy-person`,
-          name: 'FancyPerson',
-        });
-      assert.strictEqual(
-        fancyPersonDefinitionEntry,
-        undefined,
-        'FancyPerson card def does not exist',
       );
       await realm.write(
         'person.gts',
@@ -1391,20 +936,6 @@ module(basename(__filename), function () {
           }
         `,
       );
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 3, // 1 post and 2 persons
-          instanceErrors: 1,
-          moduleErrors: 0,
-          modulesIndexed: 3,
-          definitionErrors: 0,
-          definitionsIndexed: 3, // Person card, Post card, FancyPerson card
-          totalIndexEntries: 20,
-        },
-        'indexed correct number of files',
-      );
       result = (
         await realm.realmIndexQueryEngine.search({
           filter: {
@@ -1416,26 +947,6 @@ module(basename(__filename), function () {
         result.length,
         2,
         'correct number of instances returned',
-      );
-      personDefinitionEntry =
-        await realm.realmIndexQueryEngine.getOwnDefinition({
-          module: `${testRealm}person`,
-          name: 'Person',
-        });
-      assert.strictEqual(
-        personDefinitionEntry?.type,
-        'definition',
-        'Person card def has recovered',
-      );
-      fancyPersonDefinitionEntry =
-        await realm.realmIndexQueryEngine.getOwnDefinition({
-          module: `${testRealm}fancy-person`,
-          name: 'FancyPerson',
-        });
-      assert.strictEqual(
-        fancyPersonDefinitionEntry?.type,
-        'definition',
-        'FancyPerson card def has recovered',
       );
     });
 
@@ -1451,29 +962,6 @@ module(basename(__filename), function () {
             @field name = contains(Name);
           }
         `,
-      );
-      assert.deepEqual(
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 0,
-          instanceErrors: 2,
-          moduleErrors: 2,
-          modulesIndexed: 0,
-          definitionErrors: 0,
-          definitionsIndexed: 0,
-          totalIndexEntries: 20,
-        },
-        'indexed correct number of files',
-      );
-      let petDefinitionEntry =
-        await realm.realmIndexQueryEngine.getOwnDefinition({
-          module: `${testRealm}pet`,
-          name: 'Pet',
-        });
-      assert.strictEqual(
-        petDefinitionEntry,
-        undefined,
-        'Pet card def does not exist',
       );
       await realm.write(
         'name.gts',
@@ -1497,31 +985,8 @@ module(basename(__filename), function () {
         'module',
         'Name module is successfully indexed',
       );
-      petDefinitionEntry = await realm.realmIndexQueryEngine.getOwnDefinition({
-        module: `${testRealm}pet`,
-        name: 'Pet',
-      });
-      assert.strictEqual(
-        petDefinitionEntry?.type,
-        'definition',
-        'Pet card def has recovered',
-      );
 
       // Since the name is ready, the pet should be indexed and not in an error state
-      assert.deepEqual(
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 1,
-          instanceErrors: 1,
-          moduleErrors: 0,
-          modulesIndexed: 3,
-          definitionErrors: 0,
-          definitionsIndexed: 3,
-          totalIndexEntries: 27,
-        },
-        'indexed correct number of files',
-      );
-
       // Fetch the pet module
       let pet = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}pet`),
@@ -1545,22 +1010,6 @@ module(basename(__filename), function () {
             @field name = contains(Name);
           }
         `,
-      );
-
-      // Verify initial error state
-      assert.deepEqual(
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 0,
-          instanceErrors: 2,
-          moduleErrors: 2,
-          modulesIndexed: 0,
-
-          definitionErrors: 0,
-          definitionsIndexed: 0,
-          totalIndexEntries: 20,
-        },
-        'instance and module are in error state before dependency is available',
       );
 
       // Now create the missing name.gts module
@@ -1628,19 +1077,25 @@ module(basename(__filename), function () {
         },
       });
       assert.strictEqual(result.length, 0, 'found no documents');
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 0,
-          instanceErrors: 0,
-          moduleErrors: 0,
-          modulesIndexed: 0,
-          definitionErrors: 0,
-          definitionsIndexed: 0,
-          totalIndexEntries: 25,
-        },
-        'index did not touch any files',
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.instancesIndexed,
+        0,
+        'index did not touch any instance files',
+      );
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.modulesIndexed,
+        0,
+        'index did not touch any module files',
+      );
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.instanceErrors,
+        0,
+        'no instance errors occurred',
+      );
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.moduleErrors,
+        0,
+        'no module errors occurred',
       );
     });
 
@@ -1648,7 +1103,7 @@ module(basename(__filename), function () {
       await realm.write(
         'post.gts',
         `
-        import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
+        import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
         import { Person } from "./person";
 
@@ -1660,6 +1115,12 @@ module(basename(__filename), function () {
               return this.author.firstName + '-poo';
             }
           })
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <h1><@fields.message/></h1>
+              <h2><@fields.author/></h2>
+            </template>
+          }
         }
       `,
       );
@@ -1671,20 +1132,6 @@ module(basename(__filename), function () {
         },
       });
       assert.strictEqual(result.length, 1, 'found updated document');
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 1,
-          instanceErrors: 1,
-          moduleErrors: 0,
-          modulesIndexed: 1,
-          definitionErrors: 0,
-          definitionsIndexed: 1,
-          totalIndexEntries: 26,
-        },
-        'indexed correct number of files',
-      );
     });
 
     test('can incrementally index instance that depends on updated card source consumed by other card sources', async function (assert) {
@@ -1704,6 +1151,9 @@ module(basename(__filename), function () {
             static embedded = class Embedded extends Component<typeof this> {
               <template><@fields.firstName/> (<@fields.nickName/>)</template>
             }
+            static fitted = class Fitted extends Component<typeof this> {
+              <template><@fields.firstName/> (<@fields.nickName/>)</template>
+            }
           }
         `,
       );
@@ -1715,20 +1165,6 @@ module(basename(__filename), function () {
         },
       });
       assert.strictEqual(result.length, 1, 'found updated document');
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 3,
-          instanceErrors: 1,
-          moduleErrors: 0,
-          modulesIndexed: 3,
-          definitionErrors: 0,
-          definitionsIndexed: 3,
-          totalIndexEntries: 26,
-        },
-        'indexed correct number of files',
-      );
     });
 
     test('can incrementally index instance that depends on deleted card source', async function (assert) {
@@ -1758,9 +1194,9 @@ module(basename(__filename), function () {
             id: `${testRealm}post`,
             isCardError: true,
             additionalErrors: null,
-            message: `${testRealm}post not found`,
+            message: `missing file ${testRealm}post`,
             status: 404,
-            title: 'Not Found',
+            title: 'Link Not Found',
             deps: [`${testRealm}post`],
           },
           'card instance is an error document',
@@ -1768,26 +1204,12 @@ module(basename(__filename), function () {
       } else {
         assert.ok(false, 'search index entry is not an error document');
       }
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 0,
-          instanceErrors: 2,
-          moduleErrors: 0,
-          modulesIndexed: 0,
-          definitionErrors: 0,
-          definitionsIndexed: 0,
-          totalIndexEntries: 23,
-        },
-        'indexed correct number of files',
-      );
 
       // when the definitions is created again, the instance should mend its broken link
       await realm.write(
         'post.gts',
         `
-        import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
+        import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
         import { Person } from "./person";
 
@@ -1796,13 +1218,51 @@ module(basename(__filename), function () {
           @field message = contains(StringField);
           @field nickName = contains(StringField, {
             computeVia: function() {
-              return this.author.firstName + '-poo';
+              return this.author?.firstName + '-poo';
             }
           })
         }
       `,
       );
       {
+        assert.true(
+          await adapter.exists('post.gts'),
+          'post module file exists on disk',
+        );
+        realm.__testOnlyClearCaches();
+        await realm.realmIndexUpdater.update([new URL(`${testRealm}post.gts`)]);
+        let moduleResponse = await realm.handle(
+          new Request(`${testRealm}post`, {
+            headers: { Accept: 'application/javascript' },
+          }),
+        );
+        assert.strictEqual(
+          moduleResponse?.status,
+          200,
+          `module response status ${moduleResponse?.status}`,
+        );
+        assert.ok(
+          realm.realmIndexUpdater.stats.modulesIndexed >= 1,
+          `modulesIndexed=${realm.realmIndexUpdater.stats.modulesIndexed}`,
+        );
+        let [postIndexEntry] = (await testDbAdapter.execute(
+          `SELECT url, is_deleted, type FROM boxel_index WHERE url = '${testRealm}post.gts'`,
+        )) as { url: string; is_deleted: boolean; type: string }[];
+        assert.ok(postIndexEntry, 'post module row exists in index');
+        assert.false(postIndexEntry?.is_deleted);
+        assert.strictEqual(
+          postIndexEntry?.type,
+          'module',
+          JSON.stringify(postIndexEntry, null, 2),
+        );
+        let postModule = await realm.realmIndexQueryEngine.module(
+          new URL(`${testRealm}post`),
+        );
+        assert.strictEqual(
+          postModule?.type,
+          'module',
+          'post module is in the index after recreation',
+        );
         let { data: result } = await realm.realmIndexQueryEngine.search({
           filter: {
             on: { module: `${testRealm}post`, name: 'Post' },
@@ -1811,359 +1271,64 @@ module(basename(__filename), function () {
         });
         assert.strictEqual(result.length, 1, 'found the post instance');
       }
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 1,
-          instanceErrors: 1,
-          moduleErrors: 0,
-          modulesIndexed: 1,
-          definitionErrors: 0,
-          definitionsIndexed: 1,
-          totalIndexEntries: 26,
-        },
-        'indexed correct number of files',
-      );
-    });
-
-    // Note this particular test should only be a server test as the nature of
-    // the TestAdapter in the host tests will trigger the linked card to be
-    // already loaded when in fact in the real world it is not.
-    test('it can index a card with a contains computed that consumes a linksTo field', async function (assert) {
-      const hassanId = `${testRealm}hassan`;
-      let queryEngine = realm.realmIndexQueryEngine;
-      let hassan = await queryEngine.cardDocument(new URL(hassanId));
-      if (hassan?.type === 'doc') {
-        assert.deepEqual(
-          hassan.doc.data.attributes,
-          {
-            title: 'Untitled Card',
-            nickName: "Ringo's buddy",
-            firstName: 'Hassan',
-            description: null,
-            thumbnailURL: null,
-            cardInfo,
-          },
-          'doc attributes are correct',
-        );
-        assert.deepEqual(
-          hassan.doc.data.relationships,
-          {
-            pet: {
-              links: {
-                self: './ringo',
-              },
-            },
-            'cardInfo.theme': {
-              links: {
-                self: null,
-              },
-            },
-          },
-          'doc relationships are correct',
-        );
-      } else {
-        assert.ok(
-          false,
-          `search entry was an error: ${hassan?.error.errorDetail.message}`,
-        );
-      }
-
-      let hassanEntry = await getInstance(realm, new URL(`${testRealm}hassan`));
-      if (hassanEntry) {
-        assert.deepEqual(
-          hassanEntry.searchDoc,
-          {
-            id: hassanId,
-            pet: {
-              id: `${testRealm}ringo`,
-              title: 'Untitled Card',
-              firstName: 'Ringo',
-              description: null,
-              thumbnailURL: null,
-              cardInfo: {
-                ...cardInfo,
-                theme: null,
-              },
-            },
-            nickName: "Ringo's buddy",
-            _cardType: 'PetPerson',
-            firstName: 'Hassan',
-            title: 'Untitled Card',
-            cardInfo: {
-              theme: null,
-            },
-          },
-          'searchData is correct',
-        );
-      } else {
-        assert.ok(false, `could not find ${hassanId} in the index`);
-      }
-
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          moduleErrors: 0,
-          instanceErrors: 6,
-          modulesIndexed: 10,
-          instancesIndexed: 6,
-          definitionErrors: 0,
-          definitionsIndexed: 10,
-          totalIndexEntries: 26,
-        },
-        'indexed correct number of files',
-      );
-    });
-
-    test('it can index a card with a contains computed that consumes a linksTo field that is NOT in template but uses "isUsed" option', async function (assert) {
-      await realm.write(
-        'task.gts',
-        `
-            import StringField from 'https://cardstack.com/base/string';
-            import {
-              Component,
-              CardDef,
-              contains,
-              field,
-              linksTo,
-            } from 'https://cardstack.com/base/card-api';
-
-
-            export class Team extends CardDef {
-              static displayName = 'Team'
-              @field name = contains(StringField, {isUsed: true});
-            }
-
-            export class Task extends CardDef {
-              static displayName = 'Sprint Task';
-              @field team = linksTo(() => Team, {isUsed: true});
-              @field shortId = contains(StringField, {
-                computeVia: function (this: Task) {
-                  return this.team?.name
-                },
-              });
-
-              //template with no reference to shortId
-              static isolated = class TaskIsolated extends Component<typeof this> {
-              <template>
-              </template>
-              }
-            }
-            `,
-      );
-      await realm.write(
-        'team.json',
-        JSON.stringify({
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Team B',
-              description: null,
-              thumbnailURL: null,
-            },
-            meta: {
-              adoptsFrom: {
-                module: './task',
-                name: 'Team',
-              },
-            },
-          },
-        }),
-      );
-      await realm.write(
-        'task.json',
-        JSON.stringify({
-          data: {
-            type: 'card',
-            attributes: {
-              title: null,
-              description: null,
-              thumbnailURL: null,
-            },
-            relationships: {
-              team: {
-                links: {
-                  self: './team',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: './task',
-                name: 'Task',
-              },
-            },
-          },
-        }),
-      );
-      let taskInstance = (await realm.realmIndexQueryEngine.instance(
-        new URL(`${testRealm}task`),
-      )) as any;
-      assert.strictEqual(
-        taskInstance?.type,
-        'instance',
-        'task instance created without any error',
-      );
-    });
-
-    test('sets resource_created_at for modules and instances', async function (assert) {
-      let entry = (await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}fancy-person.gts`),
-      )) as { resourceCreatedAt: number };
-
-      assert.ok(entry!.resourceCreatedAt, 'resourceCreatedAt is set');
-
-      entry = (await realm.realmIndexQueryEngine.instance(
-        new URL(`${testRealm}mango`),
-      )) as { resourceCreatedAt: number };
-
-      assert.ok(entry!.resourceCreatedAt, 'resourceCreatedAt is set');
-    });
-
-    test('sets urls containing encoded CSS for deps for a module', async function (assert) {
-      let entry = (await realm.realmIndexQueryEngine.module(
-        new URL('http://test-realm/fancy-person.gts'),
-      )) as { deps: string[] };
-
-      let assertCssDependency = (
-        deps: string[],
-        pattern: RegExp,
-        fileName: string,
-      ) => {
-        assert.true(
-          !!deps.find((dep) => pattern.test(dep)),
-          `css for ${fileName} is in the deps`,
-        );
-      };
-
-      let dependencies = [
-        {
-          pattern: /fancy-person\.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'fancy-person.gts',
-        },
-        {
-          pattern: /test-realm\/person\.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'person.gts',
-        },
-        {
-          pattern:
-            /cardstack.com\/base\/default-templates\/embedded\.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'default-templates/embedded.gts',
-        },
-        {
-          pattern:
-            /cardstack.com\/base\/default-templates\/isolated-and-edit\.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'default-templates/isolated-and-edit.gts',
-        },
-        {
-          pattern:
-            /cardstack.com\/base\/default-templates\/missing-template\.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'default-templates/missing-template.gts',
-        },
-        {
-          pattern:
-            /cardstack.com\/base\/default-templates\/field-edit\.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'default-templates/field-edit.gts',
-        },
-        {
-          pattern:
-            /cardstack.com\/base\/links-to-many-component.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'links-to-many-component.gts',
-        },
-        {
-          pattern:
-            /cardstack.com\/base\/links-to-editor.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'links-to-editor.gts',
-        },
-        {
-          pattern:
-            /cardstack.com\/base\/contains-many-component.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'contains-many-component.gts',
-        },
-        {
-          pattern:
-            /cardstack.com\/base\/field-component.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'field-component.gts',
-        },
-      ];
-
-      dependencies.forEach(({ pattern, fileName }) => {
-        assertCssDependency(entry.deps, pattern, fileName);
-      });
-    });
-
-    test('will not invalidate non-json/non-executable files', async function (assert) {
-      let deletedEntries = (await testDbAdapter.execute(
-        `SELECT url FROM boxel_index WHERE is_deleted = TRUE`,
-      )) as { url: string }[];
-
-      let deletedEntryUrls = deletedEntries.map((row) => row.url);
-
-      ['random-file.txt', 'random-image.png', '.DS_Store'].forEach((file) => {
-        assert.notOk(deletedEntryUrls.includes(file));
-      });
     });
 
     test('should be able to handle dependencies between modules', async function (assert) {
-      // Create author.gts that depends on blog-app
-      await realm.write(
+      let moduleWrites = new Map<string, string>();
+      moduleWrites.set(
         'author.gts',
         `
-              import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
-              import { BlogApp } from "./blog-app";
+            import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+            import StringField from "https://cardstack.com/base/string";
+            import { BlogApp } from "./blog-app";
 
-              export class Author extends CardDef {
-                @field name = contains(StringField);
-                @field blog = linksTo(BlogApp);
-              }
-            `,
+            export class Author extends CardDef {
+              @field name = contains(StringField);
+              @field blog = linksTo(BlogApp);
+            }
+          `,
       );
-      // Create blog-category.gts that depends on blog-app
-      await realm.write(
+      moduleWrites.set(
         'blog-category.gts',
         `
-          import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
-          import { BlogApp } from "./blog-app";
+        import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        import { BlogApp } from "./blog-app";
 
-          export class BlogCategory extends CardDef {
-            @field name = contains(StringField);
-            @field blog = linksTo(BlogApp);
-          }
-        `,
+        export class BlogCategory extends CardDef {
+          @field name = contains(StringField);
+          @field blog = linksTo(BlogApp);
+        }
+      `,
       );
-      // Create blog-post.gts that depends on author and blog-app
-      await realm.write(
+      moduleWrites.set(
         'blog-post.gts',
         `
-          import { contains, field, CardDef, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
-          import { Author } from "./author";
-          import { BlogApp } from "./blog-app";
+        import { contains, field, CardDef, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        import { Author } from "./author";
+        import { BlogApp } from "./blog-app";
 
-          export class BlogPost extends CardDef {
-            @field title = contains(StringField);
-            @field author = linksToMany(Author);
-            @field blog = linksTo(BlogApp);
-          }
-        `,
+        export class BlogPost extends CardDef {
+          @field title = contains(StringField);
+          @field author = linksToMany(Author);
+          @field blog = linksTo(BlogApp);
+        }
+      `,
       );
-      // Create blog-app.gts that depends on blog-post type
-      await realm.write(
+      moduleWrites.set(
         'blog-app.gts',
         `
-          import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
-          import type { BlogPost } from "./blog-post";
+        import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        import type { BlogPost } from "./blog-post";
 
-          export class BlogApp extends CardDef {
-            @field title = contains(StringField);
-          }
-        `,
+        export class BlogApp extends CardDef {
+          @field title = contains(StringField);
+        }
+      `,
       );
+      await realm.writeMany(moduleWrites);
 
       let blogPostModule = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}blog-post`),
@@ -2203,63 +1368,61 @@ module(basename(__filename), function () {
     });
 
     test('should be able to handle dependencies between modules - with thunk', async function (assert) {
-      // Create author.gts that depends on blog-app
-      await realm.write(
+      let moduleWrites = new Map<string, string>();
+      moduleWrites.set(
         'author.gts',
         `
-              import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
-              import { BlogApp } from "./blog-app";
+            import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+            import StringField from "https://cardstack.com/base/string";
+            import { BlogApp } from "./blog-app";
 
-              export class Author extends CardDef {
-                @field name = contains(StringField);
-                @field blog = linksTo(() => BlogApp);
-              }
-            `,
+            export class Author extends CardDef {
+              @field name = contains(StringField);
+              @field blog = linksTo(() => BlogApp);
+            }
+          `,
       );
-      // Create blog-category.gts that depends on blog-app
-      await realm.write(
+      moduleWrites.set(
         'blog-category.gts',
         `
-          import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
-          import { BlogApp } from "./blog-app";
+        import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        import { BlogApp } from "./blog-app";
 
-          export class BlogCategory extends CardDef {
-            @field name = contains(StringField);
-            @field blog = linksTo(() =>BlogApp);
-          }
-        `,
+        export class BlogCategory extends CardDef {
+          @field name = contains(StringField);
+          @field blog = linksTo(() => BlogApp);
+        }
+      `,
       );
-      // Create blog-post.gts that depends on author and blog-app
-      await realm.write(
+      moduleWrites.set(
         'blog-post.gts',
         `
-          import { contains, field, CardDef, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
-          import { Author } from "./author";
-          import { BlogApp } from "./blog-app";
+        import { contains, field, CardDef, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        import { Author } from "./author";
+        import { BlogApp } from "./blog-app";
 
-          export class BlogPost extends CardDef {
-            @field title = contains(StringField);
-            @field author = linksToMany(() => Author);
-            @field blog = linksTo(() => BlogApp);
-          }
-        `,
+        export class BlogPost extends CardDef {
+          @field title = contains(StringField);
+          @field author = linksToMany(() => Author);
+          @field blog = linksTo(() => BlogApp);
+        }
+      `,
       );
-      // Create blog-app.gts that depends on blog-post type
-      await realm.write(
+      moduleWrites.set(
         'blog-app.gts',
         `
-          import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
-          import type { BlogPost } from "./blog-post";
+        import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        import type { BlogPost } from "./blog-post";
 
-          export class BlogApp extends CardDef {
-            @field title = contains(StringField);
-          }
-        `,
+        export class BlogApp extends CardDef {
+          @field title = contains(StringField);
+        }
+      `,
       );
+      await realm.writeMany(moduleWrites);
 
       let blogPostModule = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}blog-post`),
@@ -2297,6 +1460,7 @@ module(basename(__filename), function () {
         'BlogApp module is in resolved module successfully',
       );
     });
+
     test('can write several modules at once', async function (assert) {
       let mapOfWrites = new Map();
       mapOfWrites.set(
@@ -2341,9 +1505,7 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 2,
-          definitionErrors: 0,
-          definitionsIndexed: 2,
-          totalIndexEntries: 30,
+          totalIndexEntries: 23,
         },
         'indexed correct number of files',
       );
@@ -2352,25 +1514,25 @@ module(basename(__filename), function () {
     test('can write instances and modules at once', async function (assert) {
       let mapOfWrites = new Map();
       mapOfWrites.set(
-        'place.gts',
+        'city.gts',
         `
         import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
-        export class Place extends CardDef {
+        export class City extends CardDef {
           @field name = contains(StringField);
         }
       `,
       );
       mapOfWrites.set(
-        'place.json',
+        'city.json',
         JSON.stringify({
           data: {
             type: 'card',
             attributes: { name: 'Paris' },
             meta: {
               adoptsFrom: {
-                module: './place',
-                name: 'Place',
+                module: './city',
+                name: 'City',
               },
             },
           },
@@ -2378,34 +1540,30 @@ module(basename(__filename), function () {
       );
       let result = await realm.writeMany(mapOfWrites);
       assert.strictEqual(result.length, 2, '2 files were written');
-      assert.strictEqual(result[0].path, 'place.gts');
-      assert.strictEqual(result[1].path, 'place.json');
+      assert.strictEqual(result[0].path, 'city.gts');
+      assert.strictEqual(result[1].path, 'city.json');
 
       let module = await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}place`),
+        new URL(`${testRealm}city`),
       );
-      assert.ok(module, 'place module is in the index');
+      assert.ok(module, 'city module is in the index');
 
       let instance = await realm.realmIndexQueryEngine.instance(
-        new URL(`${testRealm}place`),
+        new URL(`${testRealm}city`),
       );
-      assert.ok(instance, 'place instance is in the index');
+      assert.ok(instance, 'city instance is in the index');
       assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
         {
-          // this is a little misleading because now that we are batching out the
-          // modules and instances to ensure that the definition is generated before
-          // we trying file serialization, this will only report the last batch
-          // of indexing when in fact there where actually 2 batches of indexing
-          // generated by this writeMany()
+          instancesIndexed: realm.realmIndexUpdater.stats.instancesIndexed,
+          instanceErrors: realm.realmIndexUpdater.stats.instanceErrors,
+          moduleErrors: realm.realmIndexUpdater.stats.moduleErrors,
+          modulesIndexed: realm.realmIndexUpdater.stats.modulesIndexed,
+        },
+        {
           instancesIndexed: 1,
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 0,
-          definitionErrors: 0,
-          definitionsIndexed: 0,
-          totalIndexEntries: 29,
         },
         'indexed correct number of files',
       );
@@ -2436,7 +1594,6 @@ module(basename(__filename), function () {
 
       await adapter.remove('test-file.json'); // incremental doesn't get triggered (like in development) here bcos there is no filewatcher enabled
       realm.__testOnlyClearCaches();
-
       let fileExists = await adapter.exists('test-file.json');
       assert.false(fileExists);
       await realm.realmIndexUpdater.fullIndex();
@@ -2445,15 +1602,15 @@ module(basename(__filename), function () {
         `SELECT * FROM boxel_index where is_deleted = true and type = 'instance'`,
       )) as { url: string; is_deleted: boolean }[];
 
-      assert.strictEqual(deletedEntries.length, 1, 'found tombstone entry');
-      assert.strictEqual(
-        deletedEntries[0].url,
-        `${testRealm}test-file.json`,
-        'tombstone has correct URL',
+      assert.ok(
+        deletedEntries.some(
+          (entry) => entry.url === `${testRealm}test-file.json`,
+        ),
+        'found tombstone entry for deleted file',
       );
       assert.true(
-        deletedEntries[0].is_deleted,
-        'tombstone is marked as deleted',
+        deletedEntries.every((entry) => entry.is_deleted),
+        'all tombstones are marked as deleted',
       );
 
       // Verify the file is no longer retrievable through the query engine
@@ -2469,7 +1626,7 @@ module(basename(__filename), function () {
   });
 
   module('permissioned realm', function (hooks) {
-    setupBaseRealmServer(hooks, matrixURL, { disablePrerenderer: true });
+    setupBaseRealmServer(hooks, matrixURL);
 
     let testRealm1URL = 'http://127.0.0.1:4447/';
     let testRealm2URL = 'http://127.0.0.1:4448/';
@@ -2483,7 +1640,6 @@ module(basename(__filename), function () {
       },
     ) {
       setupPermissionedRealms(hooks, {
-        disablePrerenderer: true,
         // provider
         realms: [
           {
@@ -2533,7 +1689,7 @@ module(basename(__filename), function () {
     module('readable realm', function (hooks) {
       setupRealms(hooks, {
         provider: {
-          [testRealmServerMatrixUserId]: ['read'],
+          ['@node-test_realm:localhost']: ['read'],
         },
         consumer: {
           '*': ['read', 'write'],
@@ -2549,9 +1705,7 @@ module(basename(__filename), function () {
             instanceErrors: 0,
             moduleErrors: 0,
             modulesIndexed: 1,
-            definitionErrors: 0,
-            definitionsIndexed: 1,
-            totalIndexEntries: 3,
+            totalIndexEntries: 2,
           },
           'has no module errors',
         );
@@ -2579,8 +1733,6 @@ module(basename(__filename), function () {
             instancesIndexed: 0,
             moduleErrors: 1,
             modulesIndexed: 0,
-            definitionErrors: 0,
-            definitionsIndexed: 0,
             totalIndexEntries: 0,
           },
           'has a module error',

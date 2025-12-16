@@ -33,11 +33,10 @@ import type IndexController from '@cardstack/host/controllers/index';
 
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
-import { getSearch } from '@cardstack/host/resources/search';
 
 import type CommandService from '@cardstack/host/services/command-service';
 
-import HostModeStateService from '@cardstack/host/services/host-mode-state-service';
+import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 
@@ -72,7 +71,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
 
   @provide(GetCardsContextName)
   private get getCards() {
-    return getSearch;
+    return this.store.getSearchResource.bind(this.store);
   }
 
   @provide(GetCardCollectionContextName)
@@ -221,6 +220,9 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     <style scoped>
       .host-mode-content {
         height: 100%;
+        position: fixed;
+        top: 0;
+        left: 0;
       }
     </style>
   </template>

@@ -1,9 +1,15 @@
-import type * as JSON from 'json-typescript';
 import isEqual from 'lodash/isEqual';
 import { assertJSONValue, assertJSONPrimitive } from './json-validation';
 import qs from 'qs';
 
 import { type CodeRef, isCodeRef, generalSortFields } from './index';
+type JSONValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JSONValue[]
+  | { [key: string]: JSONValue };
 
 export class InvalidQueryError extends Error {
   constructor(message: string) {
@@ -16,10 +22,22 @@ export interface Query {
   filter?: Filter;
   sort?: Sort;
   page?: {
-    number: number; // page.number is 0-based
+    number?: number; // page.number is 0-based
     size: number;
     realmVersion?: number;
   };
+  realm?: string;
+}
+
+export interface QueryWithInterpolations {
+  filter?: Filter;
+  sort?: SortWithInterpolations;
+  page?: {
+    number?: number; // page.number is 0-based
+    size: number | string;
+    realmVersion?: number;
+  };
+  realm?: string;
 }
 
 export type CardURL = string;
@@ -49,9 +67,23 @@ type SortExpressionWithCodeRef = {
   direction?: 'asc' | 'desc';
 };
 
-type SortExpression = SortExpressionWithoutCodeRef | SortExpressionWithCodeRef;
+type SortExpressionWithoutCodeRefWithInterpolations = {
+  by: GeneralSortField;
+  direction?: string;
+};
 
+type SortExpressionWithCodeRefWithInterpolations = {
+  by: string;
+  on?: CodeRef;
+  direction?: string;
+};
+
+type SortExpression = SortExpressionWithoutCodeRef | SortExpressionWithCodeRef;
+type SortExpressionWithInterpolations =
+  | SortExpressionWithoutCodeRefWithInterpolations
+  | SortExpressionWithCodeRefWithInterpolations;
 export type Sort = SortExpression[];
+type SortWithInterpolations = SortExpressionWithInterpolations[];
 
 // The CardTypeFilter is used when you solely want to filter for all cards that
 // adopt from some particular card type--no other predicates are included in
@@ -73,7 +105,7 @@ export interface NotFilter extends TypedFilter {
 }
 
 export interface EqFilter extends TypedFilter {
-  eq: { [fieldName: string]: JSON.Value };
+  eq: { [fieldName: string]: JSONValue };
 }
 
 export const RANGE_OPERATORS: Record<RangeOperator, string> = {
@@ -84,7 +116,7 @@ export const RANGE_OPERATORS: Record<RangeOperator, string> = {
 };
 export type RangeOperator = 'gt' | 'gte' | 'lt' | 'lte';
 export type RangeFilterValue = {
-  [range in RangeOperator]?: JSON.Value;
+  [range in RangeOperator]?: JSONValue;
 };
 
 export interface RangeFilter extends TypedFilter {
@@ -94,7 +126,7 @@ export interface RangeFilter extends TypedFilter {
 }
 
 export interface ContainsFilter extends TypedFilter {
-  contains: { [fieldName: string]: JSON.Value };
+  contains: { [fieldName: string]: JSONValue };
 }
 
 export function isCardTypeFilter(filter: Filter): filter is CardTypeFilter {
@@ -157,10 +189,21 @@ export function assertQuery(
       case 'page':
         assertPage(value, pointer.concat('page'));
         break;
+      case 'realm':
+        assertRealm(value, pointer.concat('realm'));
+        break;
 
       default:
         throw new InvalidQueryError(`unknown field in query: ${key}`);
     }
+  }
+}
+
+function assertRealm(realm: any, pointer: string[]): asserts realm is string {
+  if (typeof realm !== 'string') {
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: realm must be a string`,
+    );
   }
 }
 
@@ -472,3 +515,55 @@ export const parseQuery = (queryString: string) => {
     strictNullHandling: true,
   });
 };
+
+export function normalizeQueryForSignature(query: Query): Query {
+  let cloned = sortKeysDeep(JSON.parse(JSON.stringify(query)));
+
+  if (cloned.page) {
+    let page: any = cloned.page;
+    if (typeof page.size === 'string') {
+      let parsedSize = Number(page.size);
+      page.size = Number.isFinite(parsedSize) ? parsedSize : page.size;
+    }
+    if (typeof page.number === 'string') {
+      let parsedNumber = Number(page.number);
+      page.number = Number.isFinite(parsedNumber) ? parsedNumber : page.number;
+    }
+  }
+
+  return cloned;
+}
+
+export function sortKeysDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => sortKeysDeep(item)) as unknown as T;
+  }
+  if (value && typeof value === 'object') {
+    let sorted = Object.keys(value)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = sortKeysDeep((value as Record<string, unknown>)[key]);
+        return acc;
+      }, {});
+    return sorted as unknown as T;
+  }
+  return value;
+}
+
+export function parseSearchURL(searchURL: string | URL): {
+  query: Query;
+  realm: URL;
+} {
+  let url = new URL(searchURL);
+  let query = parseQuery(url.search.slice(1));
+
+  // strip the trailing "_search" path segment to recover the realm URL
+  if (url.pathname.endsWith('_search')) {
+    url.pathname = url.pathname.replace(/_search$/, '');
+  } else if (url.pathname.endsWith('_search/')) {
+    url.pathname = url.pathname.replace(/_search\/$/, '/');
+  }
+  url.search = '';
+
+  return { query, realm: url };
+}

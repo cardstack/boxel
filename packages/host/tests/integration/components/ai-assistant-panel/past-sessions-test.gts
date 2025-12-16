@@ -6,7 +6,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 

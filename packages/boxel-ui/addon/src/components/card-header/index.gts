@@ -285,7 +285,7 @@ export default class CardHeader extends Component<Signature> {
           padding: 0 30px;
         }
         .card-type-display-name-text {
-          font: 600 var(--boxel-font-sm);
+          font: 700 var(--boxel-font-sm);
         }
         .card-title-text {
           font: 500 var(--boxel-font-sm);

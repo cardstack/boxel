@@ -11,9 +11,9 @@ import { IconHexagon } from '@cardstack/boxel-ui/icons';
 import WithSubscriptionData from '@cardstack/host/components/with-subscription-data';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import NetworkService from '@cardstack/host/services/network';
+import type NetworkService from '@cardstack/host/services/network';
 
-import RealmServerService from '@cardstack/host/services/realm-server';
+import type RealmServerService from '@cardstack/host/services/realm-server';
 
 interface Signature {
   Args: {};
@@ -32,11 +32,7 @@ export default class ProfileSubscription extends Component<Signature> {
 
   <template>
     <WithSubscriptionData as |subscriptionData|>
-      <FieldContainer
-        @label='Membership Tier'
-        @tag='label'
-        class='profile-field'
-      >
+      <FieldContainer @label='Membership Tier' class='profile-field'>
         <div class='profile-subscription'>
           <div class='monthly-credit'>
             <div class='plan-name'>{{subscriptionData.plan}}</div>
@@ -61,11 +57,7 @@ export default class ProfileSubscription extends Component<Signature> {
           {{/if}}
         </div>
       </FieldContainer>
-      <FieldContainer
-        @label='Additional Credit'
-        @tag='label'
-        class='profile-field'
-      >
+      <FieldContainer @label='Additional Credit' class='profile-field'>
         <div class='additional-credit'>
           <div class='profile-subscription'>
             <div class='credit-info'>

@@ -7,7 +7,7 @@ import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import { createMonacoWaiterManager } from '@cardstack/host/utils/editor/monaco-test-waiter';
 
-import { MonacoEditorOptions } from './monaco';
+import type { MonacoEditorOptions } from './monaco';
 
 import type * as _MonacoSDK from 'monaco-editor';
 
@@ -15,7 +15,9 @@ export const commonEditorOptions: MonacoEditorOptions = {
   theme: 'vs-dark',
 
   automaticLayout: true,
-  fontSize: 10,
+  fontSize: 12,
+  fontFamily: 'IBM Plex Mono',
+  fontWeight: '500',
   lineNumbers: 'off',
   readOnly: true,
   scrollbar: {

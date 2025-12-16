@@ -5,13 +5,16 @@ import {
   clearLocalStorage,
   createRealm,
   createSubscribedUserAndLogin,
+  postCardSource,
+  postNewCard,
 } from '../helpers';
+
+let serverIndexUrl = new URL(appURL).origin;
 
 test.describe('Publish realm', () => {
   let user: { username: string; password: string; credentials: any };
 
   async function openPublishRealmModal(page: Page) {
-    let serverIndexUrl = new URL(appURL).origin;
     await clearLocalStorage(page, serverIndexUrl);
 
     user = await createSubscribedUserAndLogin(
@@ -99,7 +102,9 @@ test.describe('Publish realm', () => {
       page.locator('[data-test-custom-subdomain-input]'),
     ).toHaveCount(0);
 
-    await page.locator('[data-test-custom-subdomain-checkbox]').click();
+    await expect(
+      page.locator('[data-test-custom-subdomain-checkbox]'),
+    ).toBeChecked();
     await page.locator('[data-test-publish-button]').click();
 
     let newTabPromise = page.waitForEvent('popup');
@@ -123,6 +128,115 @@ test.describe('Publish realm', () => {
     ).toBeVisible();
     await newTab.close();
     await page.bringToFront();
+  });
+
+  test('it warns when private dependencies would cause host mode errors', async ({
+    page,
+  }) => {
+    await clearLocalStorage(page, serverIndexUrl);
+
+    user = await createSubscribedUserAndLogin(
+      page,
+      'publish-realm',
+      serverIndexUrl,
+    );
+
+    let serverURL = new URL(serverIndexUrl);
+    let publishedRealmBase = `${serverURL.protocol}//${serverURL.host}/${user.username}`;
+
+    let defaultRealmURL = `${publishedRealmBase}/new-workspace/`;
+    let privateRealmURL = `${publishedRealmBase}/secret-realm/`;
+
+    await createRealm(page, 'new-workspace', '1New Workspace');
+    await createRealm(page, 'secret-realm', 'Secret Realm');
+
+    await postCardSource(
+      page,
+      privateRealmURL,
+      'secret-card.gts',
+      `
+        import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+
+        export class SecretCard extends CardDef {
+          @field name = contains(StringField);
+        }
+      `,
+    );
+
+    await postNewCard(page, privateRealmURL, {
+      data: {
+        attributes: {
+          name: 'Private Info',
+        },
+        meta: {
+          adoptsFrom: {
+            module: './secret-card',
+            name: 'SecretCard',
+          },
+        },
+      },
+    });
+
+    await postCardSource(
+      page,
+      defaultRealmURL,
+      'dependent-card.gts',
+      `
+        import { CardDef, field, contains, linksTo } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        import { SecretCard } from "${privateRealmURL}secret-card";
+
+        export class DependentCard extends CardDef {
+          @field label = contains(StringField);
+          @field secret = linksTo(() => SecretCard);
+        }
+      `,
+    );
+
+    await postCardSource(
+      page,
+      defaultRealmURL,
+      'index.json',
+      JSON.stringify(
+        {
+          data: {
+            type: 'card',
+            attributes: {
+              label: 'Leaky Card',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './dependent-card',
+                name: 'DependentCard',
+              },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    let dependentCardURL = `${defaultRealmURL}index.json`;
+
+    await page.locator('[data-test-workspace="1New Workspace"]').click();
+    await page.locator('[data-test-submode-switcher] button').click();
+    await page.locator('[data-test-boxel-menu-item-text="Host"]').click();
+    await page.locator('[data-test-publish-realm-button]').click();
+
+    await expect(
+      page.locator('[data-test-private-dependency-warning]'),
+    ).toBeVisible();
+
+    await expect(
+      page.locator(
+        `[data-test-private-dependency-resource="${dependentCardURL}"]`,
+      ),
+    ).toBeVisible();
+
+    await expect(
+      page.locator(`[data-test-private-dependency-realm="${privateRealmURL}"]`),
+    ).toBeVisible();
   });
 
   test('open site popover opens with shift-click', async ({ page }) => {

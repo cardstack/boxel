@@ -1,0 +1,62 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "amazon/nova-premier-v1",
+      "canonicalSlug": "amazon/nova-premier-v1",
+      "name": "Amazon: Nova Premier 1.0",
+      "created": 1761950332,
+      "description": "Amazon Nova Premier is the most capable of Amazon’s multimodal models for complex reasoning tasks and for use as the best teacher for distilling custom models.",
+      "pricing": {
+        "prompt": "0.0000025",
+        "completion": "0.0000125",
+        "request": "0",
+        "image": "0"
+      },
+      "contextLength": 1000000,
+      "architecture": {
+        "modality": "text+image->text",
+        "inputModalities": [
+          "text",
+          "image"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "tokenizer": "Nova",
+        "instructType": ""
+      },
+      "topProvider": {
+        "isModerated": true,
+        "contextLength": 1000000,
+        "maxCompletionTokens": 32000
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "max_tokens",
+        "stop",
+        "temperature",
+        "tools",
+        "top_k",
+        "top_p"
+      ],
+      "defaultParameters": {
+        "temperature": null,
+        "top_p": null,
+        "frequency_penalty": null
+      },
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

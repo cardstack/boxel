@@ -24,7 +24,7 @@ import {
 } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import { AuthMode } from './auth';
+import type { AuthMode } from './auth';
 
 export type ResetPasswordParams = {
   sid: string;
@@ -164,7 +164,7 @@ export default class ForgotPassword extends Component<Signature> {
 
     <style scoped>
       .title {
-        font: 600 var(--boxel-font-med);
+        font: 600 var(--boxel-font-md);
         margin-bottom: var(--boxel-sp);
       }
       .info {

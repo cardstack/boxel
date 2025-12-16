@@ -1,3 +1,6 @@
+import { type TestContext, getContext } from '@ember/test-helpers';
+
+import { setupTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import {
@@ -12,11 +15,20 @@ import {
   type CardResource,
   type RealmInfo,
 } from '@cardstack/runtime-common';
-import { DefinitionsCache } from '@cardstack/runtime-common/definitions-cache';
+import { CachingDefinitionLookup } from '@cardstack/runtime-common/definition-lookup';
+import { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
 
 import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
+import type LocalIndexer from '@cardstack/host/services/local-indexer';
 
-import { getDbAdapter, testRealmURL, setupIndex } from '../helpers';
+import {
+  getDbAdapter,
+  testRealmURL,
+  setupIndex,
+  makeRenderer,
+  createPrerenderAuth,
+} from '../helpers';
+
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 const testRealmURL2 = `http://test-realm/test2/`;
@@ -25,6 +37,8 @@ const testRealmInfo: RealmInfo = {
   backgroundURL: null,
   iconURL: null,
   showAsCatalog: null,
+  interactHome: null,
+  hostHome: null,
   visibility: 'public',
   publishable: null,
   lastPublishedAt: null,
@@ -34,6 +48,7 @@ module('Unit | index-writer', function (hooks) {
   let adapter: SQLiteAdapter;
   let indexWriter: IndexWriter;
   let indexQueryEngine: IndexQueryEngine;
+  setupTest(hooks);
 
   hooks.before(async function () {
     adapter = await getDbAdapter();
@@ -42,10 +57,29 @@ module('Unit | index-writer', function (hooks) {
   hooks.beforeEach(async function () {
     await adapter.reset();
     indexWriter = new IndexWriter(adapter);
-    indexQueryEngine = new IndexQueryEngine(
+    let owner = (getContext() as TestContext).owner;
+    await makeRenderer();
+    let localIndexer = owner.lookup('service:local-indexer') as LocalIndexer;
+    let virtualNetwork = new VirtualNetwork();
+
+    let definitionLookup = new CachingDefinitionLookup(
       adapter,
-      new DefinitionsCache(fetch),
+      localIndexer.prerenderer,
+      virtualNetwork,
+      createPrerenderAuth,
     );
+
+    definitionLookup.registerRealm({
+      url: testRealmURL,
+      async getRealmOwnerUserId() {
+        return '@user1:localhost';
+      },
+      async visibility() {
+        return 'private';
+      },
+    });
+
+    indexQueryEngine = new IndexQueryEngine(adapter, definitionLookup);
   });
 
   test('can perform invalidations for a instance entry', async function (assert) {
@@ -215,145 +249,6 @@ module('Unit | index-writer', function (hooks) {
       `${testRealmURL}employee.gts`,
       `${testRealmURL}person.gts`,
     ]);
-  });
-
-  test('definition entries can be invalidated', async function (assert) {
-    let modified = Date.now();
-    await setupIndex(
-      adapter,
-      [
-        { realm_url: testRealmURL, current_version: 1 },
-        { realm_url: testRealmURL2, current_version: 5 },
-      ],
-      [
-        {
-          url: `${testRealmURL}person.gts`,
-          file_alias: `${testRealmURL}person`,
-          type: 'module',
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [],
-          last_modified: String(modified),
-          resource_created_at: String(modified),
-        },
-        {
-          url: `${testRealmURL}person/Person`,
-          file_alias: `${testRealmURL}person`,
-          type: 'definition',
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [`${testRealmURL}person`],
-          last_modified: String(modified),
-          resource_created_at: String(modified),
-        },
-        {
-          url: `${testRealmURL}employee.gts`,
-          file_alias: `${testRealmURL}employee`,
-          type: 'module',
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [`${testRealmURL}person`],
-          last_modified: String(modified),
-          resource_created_at: String(modified),
-        },
-        {
-          url: `${testRealmURL}employee/Employee`,
-          file_alias: `${testRealmURL}employee`,
-          type: 'definition',
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [`${testRealmURL}employee`, `${testRealmURL}person`],
-          last_modified: String(modified),
-          resource_created_at: String(modified),
-        },
-        {
-          url: `${testRealmURL}1.json`,
-          file_alias: `${testRealmURL}1.json`,
-          type: 'instance',
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [`${testRealmURL}employee`],
-          last_modified: String(modified),
-          resource_created_at: String(modified),
-        },
-        {
-          url: `${testRealmURL}2.json`,
-          file_alias: `${testRealmURL}2.json`,
-          type: 'instance',
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [`${testRealmURL}1.json`],
-          last_modified: String(modified),
-          resource_created_at: String(modified),
-        },
-        {
-          url: `${testRealmURL}3.json`,
-          file_alias: `${testRealmURL}3.json`,
-          type: 'instance',
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [],
-          last_modified: String(modified),
-          resource_created_at: String(modified),
-        },
-      ],
-    );
-
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
-    await batch.invalidate([new URL(`${testRealmURL}person.gts`)]);
-    let invalidations = batch.invalidations;
-
-    // the definition id's are notional, they are not file resources that can be
-    // visited, so instead we return the module that contains the definition
-    assert.deepEqual(invalidations.sort(), [
-      `${testRealmURL}1.json`,
-      `${testRealmURL}2.json`,
-      `${testRealmURL}employee.gts`,
-      `${testRealmURL}person.gts`,
-    ]);
-
-    let personDefinition = await indexQueryEngine.getOwnDefinition({
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
-    assert.strictEqual(
-      personDefinition?.type,
-      'definition',
-      'definition exists in production index',
-    );
-    personDefinition = await indexQueryEngine.getOwnDefinition(
-      {
-        module: `${testRealmURL}person`,
-        name: 'Person',
-      },
-      { useWorkInProgressIndex: true },
-    );
-    assert.strictEqual(
-      personDefinition,
-      undefined,
-      'definition entry has been marked for deletion in working index',
-    );
-    let employeeDefinition = await indexQueryEngine.getOwnDefinition({
-      module: `${testRealmURL}employee`,
-      name: 'Employee',
-    });
-    assert.strictEqual(
-      employeeDefinition?.type,
-      'definition',
-      'definition exists in production index',
-    );
-    employeeDefinition = await indexQueryEngine.getOwnDefinition(
-      {
-        module: `${testRealmURL}employee`,
-        name: 'Employee',
-      },
-      { useWorkInProgressIndex: true },
-    );
-    assert.strictEqual(
-      employeeDefinition,
-      undefined,
-      'definition entry has been marked for deletion in working index',
-    );
   });
 
   test("invalidations don't cross realm boundaries", async function (assert) {
@@ -661,48 +556,6 @@ module('Unit | index-writer', function (hooks) {
           atom_html: null,
           icon_html: null,
         },
-        {
-          url: `${testRealmURL}person/Person`,
-          realm_version: 1,
-          realm_url: testRealmURL,
-          type: 'definition',
-          pristine_doc: null,
-          search_doc: null,
-          display_names: null,
-          deps: [
-            `${testRealmURL}person`,
-            `https://cardstack.com/base/card-api.gts`,
-          ],
-          types,
-          last_modified: String(modified),
-          resource_created_at: String(modified),
-          head_html: null,
-          embedded_html: null,
-          fitted_html: null,
-          isolated_html: null,
-          atom_html: null,
-          icon_html: null,
-          definition: {
-            type: 'card-def',
-            displayName: 'Person',
-            codeRef: { module: `${testRealmURL}person`, name: 'Person' },
-            fields: {
-              name: {
-                type: 'contains',
-                isPrimitive: true,
-                isComputed: false,
-                fieldOrCard: {
-                  card: {
-                    module: `${testRealmURL}fancy-string`,
-                    name: 'StringField',
-                  },
-                  type: 'fieldOf',
-                  field: 'fancy',
-                },
-              },
-            },
-          },
-        },
       ],
     );
     let batch = await indexWriter.createBatch(new URL(testRealmURL2));
@@ -715,17 +568,16 @@ module('Unit | index-writer', function (hooks) {
     )) as unknown as BoxelIndexTable[];
     assert.strictEqual(
       results.length,
-      3,
+      2,
       'correct number of items were copied',
     );
 
-    let [copiedInstance, copiedModule, copiedDefinition] = results;
+    let [copiedInstance, copiedModule] = results;
     assert.ok(copiedInstance.indexed_at, 'indexed_at was set');
     assert.ok(copiedModule.indexed_at, 'indexed_at was set');
 
     delete (copiedInstance as Partial<BoxelIndexTable>).indexed_at;
     delete (copiedModule as Partial<BoxelIndexTable>).indexed_at;
-    delete (copiedDefinition as Partial<BoxelIndexTable>).indexed_at;
 
     assert.deepEqual(
       copiedInstance as Omit<BoxelIndexTable, 'indexed_at'>,
@@ -779,7 +631,6 @@ module('Unit | index-writer', function (hooks) {
         head_html: `<span class="head">Head HTML</span>`,
         icon_html: '<svg>test icon</svg>',
         is_deleted: null,
-        definition: null,
       },
       'the copied instance is correct',
     );
@@ -806,59 +657,8 @@ module('Unit | index-writer', function (hooks) {
         head_html: null,
         icon_html: null,
         is_deleted: null,
-        definition: null,
       },
       'the copied module is correct',
-    );
-
-    assert.deepEqual(
-      copiedDefinition as Omit<BoxelIndexTable, 'indexed_at'>,
-      {
-        url: `${testRealmURL2}person/Person`,
-        file_alias: `${testRealmURL2}person`,
-        realm_version: 2,
-        realm_url: testRealmURL2,
-        type: 'definition',
-        error_doc: null,
-        pristine_doc: null,
-        search_doc: null,
-        display_names: null,
-        deps: [
-          `${testRealmURL2}person`,
-          `https://cardstack.com/base/card-api.gts`,
-        ],
-        types: destTypes,
-        last_modified: String(modified),
-        resource_created_at: String(modified),
-        embedded_html: null,
-        fitted_html: null,
-        isolated_html: null,
-        atom_html: null,
-        head_html: null,
-        icon_html: null,
-        is_deleted: null,
-        definition: {
-          type: 'card-def',
-          displayName: 'Person',
-          codeRef: { module: `${testRealmURL2}person`, name: 'Person' },
-          fields: {
-            name: {
-              type: 'contains',
-              isPrimitive: true,
-              isComputed: false,
-              fieldOrCard: {
-                card: {
-                  module: `${testRealmURL2}fancy-string`,
-                  name: 'StringField',
-                },
-                type: 'fieldOf',
-                field: 'fancy',
-              },
-            },
-          },
-        },
-      },
-      'the copied definition is correct',
     );
   });
 
@@ -988,7 +788,6 @@ module('Unit | index-writer', function (hooks) {
         resource_created_at: String(modified),
         is_deleted: null,
         icon_html: '<svg>test icon</svg>',
-        definition: null,
       },
       'the error entry includes last known good state of instance',
     );
@@ -1043,7 +842,6 @@ module('Unit | index-writer', function (hooks) {
         resource_created_at: null,
         is_deleted: false,
         icon_html: null,
-        definition: null,
       },
       'the error entry does not include last known good state of instance',
     );
@@ -1477,160 +1275,6 @@ module('Unit | index-writer', function (hooks) {
       noResult,
       undefined,
       'module does not exist in production index',
-    );
-  });
-
-  test('can get a definition entry', async function (assert) {
-    let types = [{ module: `./person`, name: 'Person' }, baseCardRef].map((i) =>
-      internalKeyFor(i, new URL(testRealmURL)),
-    );
-    await setupIndex(adapter);
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
-    let now = Date.now();
-    await batch.updateEntry(new URL(`${testRealmURL}person/Person`), {
-      type: 'definition',
-      fileAlias: `${testRealmURL}person`,
-      types,
-      lastModified: now,
-      resourceCreatedAt: now,
-      deps: new Set(types),
-      definition: {
-        type: 'card-def',
-        displayName: 'Person',
-        codeRef: {
-          module: `${testRealmURL}person`,
-          name: 'Person',
-        },
-        fields: {
-          name: {
-            type: 'contains',
-            isPrimitive: true,
-            isComputed: false,
-            fieldOrCard: {
-              module: `${testRealmURL}fancy-string`,
-              name: 'StringField',
-            },
-          },
-        },
-      },
-    });
-    await batch.done();
-
-    let result = await indexQueryEngine.getOwnDefinition({
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
-
-    if (result?.type === 'definition') {
-      assert.deepEqual(result.deps, types, 'the deps are correct');
-      assert.deepEqual(
-        result.definition,
-        {
-          displayName: 'Person',
-          codeRef: {
-            module: `${testRealmURL}person`,
-            name: 'Person',
-          },
-          type: 'card-def',
-          fields: {
-            name: {
-              type: 'contains',
-              isPrimitive: true,
-              isComputed: false,
-              fieldOrCard: {
-                module: `${testRealmURL}fancy-string`,
-                name: 'StringField',
-              },
-            },
-          },
-        },
-        'the definition is correct',
-      );
-    } else {
-      assert.ok(false, `expected definition entry not to be an error document`);
-    }
-  });
-
-  test('can get a definition entry from the working index', async function (assert) {
-    let types = [{ module: `./person`, name: 'Person' }, baseCardRef].map((i) =>
-      internalKeyFor(i, new URL(testRealmURL)),
-    );
-    await setupIndex(adapter);
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
-    let now = Date.now();
-    await batch.updateEntry(new URL(`${testRealmURL}person/Person`), {
-      type: 'definition',
-      fileAlias: `${testRealmURL}person`,
-      types,
-      lastModified: now,
-      resourceCreatedAt: now,
-      deps: new Set(types),
-      definition: {
-        type: 'card-def',
-        displayName: 'Person',
-        codeRef: {
-          module: `${testRealmURL}person`,
-          name: 'Person',
-        },
-        fields: {
-          name: {
-            type: 'contains',
-            isPrimitive: true,
-            isComputed: false,
-            fieldOrCard: {
-              module: `${testRealmURL}fancy-string`,
-              name: 'StringField',
-            },
-          },
-        },
-      },
-    });
-
-    let result = await indexQueryEngine.getOwnDefinition(
-      {
-        module: `${testRealmURL}person`,
-        name: 'Person',
-      },
-      { useWorkInProgressIndex: true },
-    );
-
-    if (result?.type === 'definition') {
-      assert.deepEqual(result.deps, types, 'the deps are correct');
-      assert.deepEqual(
-        result.definition,
-        {
-          displayName: 'Person',
-          codeRef: {
-            module: `${testRealmURL}person`,
-            name: 'Person',
-          },
-          type: 'card-def',
-          fields: {
-            name: {
-              type: 'contains',
-              isPrimitive: true,
-              isComputed: false,
-              fieldOrCard: {
-                module: `${testRealmURL}fancy-string`,
-                name: 'StringField',
-              },
-            },
-          },
-        },
-        'the definition is correct',
-      );
-    } else {
-      assert.ok(false, `expected definition entry not to be an error document`);
-    }
-
-    let noResult = await indexQueryEngine.getOwnDefinition({
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
-    assert.strictEqual(
-      noResult,
-      undefined,
-      'definition entry does not exist in production index',
     );
   });
 

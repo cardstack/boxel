@@ -15,6 +15,7 @@ import {
 import type { Args as SearchResourceArgs } from '@cardstack/host/resources/search';
 import { SearchResource } from '@cardstack/host/resources/search';
 
+import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
@@ -317,11 +318,63 @@ module(`Integration | search resource`, function (hooks) {
         isLive: false,
         isAutoSaved: false,
         storeService,
+        owner: this.owner,
       },
     }));
     await search.loaded;
     assert.strictEqual(search.instances[0].id, `${testRealmURL}card-2`);
     assert.strictEqual(search.instances[0].constructor.name, 'Book');
+  });
+
+  test(`search is not re-run when query and realms are unchanged`, async function (assert) {
+    let cardService = getService('card-service') as CardService;
+    let fetchCalls = 0;
+    let originalFetchJSON = cardService.fetchJSON.bind(cardService);
+    cardService.fetchJSON = (async (...args) => {
+      fetchCalls++;
+      return await originalFetchJSON(...args);
+    }) as CardService['fetchJSON'];
+
+    try {
+      let query: Query = {
+        filter: {
+          on: {
+            module: `${testRealmURL}book`,
+            name: 'Book',
+          },
+          eq: {
+            'author.lastName': 'Jones',
+          },
+        },
+      };
+      let args = {
+        query,
+        realms: [testRealmURL],
+        isLive: false,
+        isAutoSaved: false,
+        storeService,
+        owner: this.owner,
+      } satisfies SearchResourceArgs['named'];
+
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: args,
+      }));
+
+      await search.loaded;
+      assert.strictEqual(fetchCalls, 1, 'initial search performed once');
+
+      // Re-run modify with the same args; this should short-circuit and avoid another fetch
+      search.modify([], args);
+      await settled();
+
+      assert.strictEqual(
+        fetchCalls,
+        1,
+        'search is not invoked again when query/realms are unchanged',
+      );
+    } finally {
+      cardService.fetchJSON = originalFetchJSON;
+    }
   });
 
   test(`can perform a live search for cards`, async function (assert) {
@@ -343,6 +396,7 @@ module(`Integration | search resource`, function (hooks) {
         isLive: true,
         isAutoSaved: false,
         storeService,
+        owner: this.owner,
       },
     }));
     await search.loaded;
@@ -400,6 +454,7 @@ module(`Integration | search resource`, function (hooks) {
         isLive: true,
         isAutoSaved: false,
         storeService,
+        owner: this.owner,
       },
     }));
     await search.loaded;
@@ -468,6 +523,7 @@ module(`Integration | search resource`, function (hooks) {
         isLive: false,
         isAutoSaved: false,
         storeService,
+        owner: this.owner,
       },
     }));
 
@@ -491,6 +547,7 @@ module(`Integration | search resource`, function (hooks) {
         isLive: false,
         isAutoSaved: false,
         storeService,
+        owner: this.owner,
       },
     }));
 
@@ -514,6 +571,7 @@ module(`Integration | search resource`, function (hooks) {
         isLive: false,
         isAutoSaved: false,
         storeService,
+        owner: this.owner,
       },
     }));
 

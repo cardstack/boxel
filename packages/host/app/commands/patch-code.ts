@@ -66,19 +66,18 @@ export default class PatchCodeCommand extends HostBaseCommand<
         hasEmptySearchPortion,
       );
 
-      let clientRequestId =
-        this.commandService.registerAiAssistantClientRequestId(
-          'patch-code',
-          roomId,
-        );
+      let clientRequestId = this.commandService.trackAiAssistantCardRequest({
+        action: 'patch-code',
+        roomId,
+        fileUrl: finalFileUrl,
+      });
 
-      if (
-        !(await this.trySaveThroughOpenFile(
-          finalFileUrl,
-          patchedCode,
-          clientRequestId,
-        ))
-      ) {
+      let savedThroughOpenFile = await this.trySaveThroughOpenFile(
+        finalFileUrl,
+        patchedCode,
+        clientRequestId,
+      );
+      if (!savedThroughOpenFile) {
         this.cardService
           .saveSource(new URL(finalFileUrl), patchedCode, 'bot-patch', {
             resetLoader: hasExecutableExtension(finalFileUrl),

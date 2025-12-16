@@ -3,8 +3,6 @@ import { tracked } from '@glimmer/tracking';
 
 import { consume } from 'ember-provide-consume-context';
 
-import { TrackedSet } from 'tracked-built-ins';
-
 import {
   GetCardCollectionContextName,
   type getCardCollection,
@@ -12,12 +10,13 @@ import {
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
-import { type FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import AttachButton from './attach-button';
 import AttachedItems from './attached-items';
 
 import type { WithBoundArgs } from '@glint/template';
+import type { TrackedSet } from 'tracked-built-ins';
 
 interface Signature {
   Element: HTMLDivElement;

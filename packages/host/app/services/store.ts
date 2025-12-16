@@ -1,5 +1,6 @@
 import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
+import { getOwner } from '@ember/owner';
 import Service, { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 
@@ -23,17 +24,19 @@ import {
   Deferred,
   delay,
   mergeRelationships,
+  isLocalId,
   realmURL as realmURLSymbol,
   localId as localIdSymbol,
   meta,
   logger,
   formattedError,
+  SupportedMimeType,
   RealmPaths,
-  isLocalId,
   type Store as StoreInterface,
   type AddOptions,
   type CreateOptions,
   type Query,
+  type QueryResultsMeta,
   type PatchData,
   type Relationship,
   type AutoSaveState,
@@ -44,7 +47,7 @@ import {
   type LooseCardResource,
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
-  SupportedMimeType,
+  type ErrorEntry,
 } from '@cardstack/runtime-common';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
@@ -54,6 +57,8 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
 
+import { getSearch } from '../resources/search';
+
 import {
   enableRenderTimerStub,
   withTimersBlocked,
@@ -61,6 +66,7 @@ import {
 
 import type { CardSaveSubscriber } from './card-service';
 import type CardService from './card-service';
+import type CommandService from './command-service';
 import type EnvironmentService from './environment-service';
 
 import type HostModeService from './host-mode-service';
@@ -71,6 +77,7 @@ import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
+import type { SearchResource } from '../resources/search';
 
 export { CardErrorJSONAPI, CardSaveSubscriber };
 
@@ -86,6 +93,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private cardService: CardService;
+  @service declare private commandService: CommandService;
   @service declare private hostModeService: HostModeService;
   @service declare private network: NetworkService;
   @service declare private environmentService: EnvironmentService;
@@ -102,6 +110,7 @@ export default class StoreService extends Service implements StoreInterface {
   private inflightGetCards: Map<string, Promise<CardDef | CardErrorJSONAPI>> =
     new Map();
   private inflightCardMutations: Map<string, Promise<void>> = new Map();
+  private inflightCardLoads: Map<string, Deferred<void>> = new Map();
   private store: CardStore;
   protected isRenderStore = false;
 
@@ -112,7 +121,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   constructor(owner: Owner) {
     super(owner);
-    this.store = new CardStore(this.referenceCount, this.network.authedFetch);
+    this.store = this.createCardStore();
     this.reset.register(this);
     this.ready = this.setup();
     registerDestructor(this, () => {
@@ -147,9 +156,10 @@ export default class StoreService extends Service implements StoreInterface {
     this.autoSaveStates = new TrackedMap();
     this.inflightGetCards = new Map();
     this.inflightCardMutations = new Map();
+    this.inflightCardLoads = new Map();
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
-    this.store = new CardStore(this.referenceCount, this.network.authedFetch);
+    this.store = this.createCardStore();
     this.ready = this.setup();
   }
 
@@ -166,9 +176,10 @@ export default class StoreService extends Service implements StoreInterface {
     this.newReferencePromises = [];
     this.inflightGetCards = new Map();
     this.inflightCardMutations = new Map();
+    this.inflightCardLoads = new Map();
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
-    this.store = new CardStore(this.referenceCount, this.network.authedFetch);
+    this.store = this.createCardStore();
   }
 
   dropReference(id: string | undefined) {
@@ -239,6 +250,9 @@ export default class StoreService extends Service implements StoreInterface {
     opts?: CreateOptions,
   ): Promise<string | CardErrorJSONAPI> {
     return await this.withTestWaiters(async () => {
+      if (opts?.realm) {
+        doc.data.meta = { ...(doc.data.meta ?? {}), realmURL: opts.realm };
+      }
       let cardOrError = await this.getInstance({
         idOrDoc: doc,
         relativeTo: opts?.relativeTo,
@@ -352,6 +366,13 @@ export default class StoreService extends Service implements StoreInterface {
     return await this.getInstance<T>({ idOrDoc: id });
   }
 
+  // Bypass cached state and fetch from source of truth
+  async getWithoutCache<T extends CardDef>(
+    id: string,
+  ): Promise<T | CardErrorJSONAPI> {
+    return await this.getInstance<T>({ idOrDoc: id, opts: { noCache: true } });
+  }
+
   async delete(id: string): Promise<void> {
     if (!id) {
       // the card isn't actually saved yet, so do nothing
@@ -407,7 +428,9 @@ export default class StoreService extends Service implements StoreInterface {
     if (opts?.doNotPersist) {
       await this.stopAutoSaving(instance);
     }
-    let doc = await this.cardService.serializeCard(instance);
+    let doc = await this.cardService.serializeCard(instance, {
+      omitQueryFields: true,
+    });
     if (patch.attributes) {
       doc.data.attributes = merge(doc.data.attributes, patch.attributes);
     }
@@ -513,6 +536,33 @@ export default class StoreService extends Service implements StoreInterface {
     ).filter(Boolean) as CardDef[];
   }
 
+  getSearchResource<T extends CardDef = CardDef>(
+    parent: object,
+    getQuery: () => Query | undefined,
+    getRealms?: () => string[] | undefined,
+    opts?: {
+      isLive?: boolean;
+      doWhileRefreshing?: (() => void) | undefined;
+      seed?: {
+        cards: T[];
+        searchURL?: string;
+        meta?: QueryResultsMeta;
+        errors?: ErrorEntry[];
+      };
+    },
+  ): SearchResource<T> {
+    if (this.isRenderStore && opts) {
+      opts.isLive = false;
+    }
+    return getSearch<T>(
+      parent,
+      getOwner(this)!,
+      getQuery,
+      getRealms,
+      opts,
+    ) as unknown as SearchResource<T>;
+  }
+
   getSaveState(id: string): AutoSaveState | undefined {
     return this.autoSaveStates.get(id);
   }
@@ -532,6 +582,50 @@ export default class StoreService extends Service implements StoreInterface {
 
   isSameId(a: string, b: string): boolean {
     return a === b || this.peek(a) === this.peek(b);
+  }
+
+  async waitForCardLoad(cardId: string): Promise<void> {
+    let normalizedId = asURL(cardId);
+    if (!normalizedId) {
+      return;
+    }
+    let inflightLoad = this.inflightCardLoads.get(normalizedId);
+    if (inflightLoad) {
+      await inflightLoad.promise;
+    }
+  }
+
+  private startTrackingCardLoad(
+    cardId: string | undefined,
+  ): Deferred<void> | undefined {
+    if (!cardId) {
+      return;
+    }
+    let normalizedId = asURL(cardId);
+    if (!normalizedId) {
+      return;
+    }
+    let deferred = new Deferred<void>();
+    this.inflightCardLoads.set(normalizedId, deferred);
+    return deferred;
+  }
+
+  private finishTrackingCardLoad(
+    cardId: string | undefined,
+    deferred?: Deferred<void>,
+  ) {
+    if (!cardId || !deferred) {
+      return;
+    }
+    let normalizedId = asURL(cardId);
+    if (!normalizedId) {
+      return;
+    }
+    let current = this.inflightCardLoads.get(normalizedId);
+    if (current === deferred) {
+      this.inflightCardLoads.delete(normalizedId);
+    }
+    deferred.fulfill();
   }
 
   private async wireUpNewReference(url: string) {
@@ -578,10 +672,6 @@ export default class StoreService extends Service implements StoreInterface {
     let card = shouldStubTimers
       ? await withStubbedRenderTimers(performCreate)
       : await performCreate();
-    if (!(globalThis as any).__lazilyLoadLinks) {
-      // TODO we should be able to get rid of this when we decommission the old prerender
-      await api.ensureLinksLoaded(card);
-    }
     return card;
   }
 
@@ -625,6 +715,13 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
+  private createCardStore(): CardStore {
+    return new CardStore(this.referenceCount, this.network.authedFetch, {
+      getSearchResource: (parent, getQuery, getRealms, opts) =>
+        this.getSearchResource(parent, getQuery, getRealms, opts),
+    });
+  }
+
   private handleInvalidations = (event: RealmEventContent) => {
     if (event.eventName !== 'index') {
       return;
@@ -649,55 +746,60 @@ export default class StoreService extends Service implements StoreInterface {
         // we already dealt with this
         continue;
       }
+      let clientRequestId = event.clientRequestId ?? undefined;
+
       let instance = this.peekLive(invalidation);
-      if (instance && isCardInstance(instance)) {
-        // Do not reload if the event is a result of an instance-editing request that we made. Otherwise we risk
-        // overwriting the inputs with past values. This can happen if the user makes edits in the time between
-        // the auto save request and the arrival realm event.
+      if (instance) {
+        if (isCardInstance(instance)) {
+          // Do not reload if the event is a result of an instance-editing request that we made. Otherwise we risk
+          // overwriting the inputs with past values. This can happen if the user makes edits in the time between
+          // the auto save request and the arrival realm event.
+          let reloadFile = false;
 
-        let clientRequestId = event.clientRequestId;
-        let reloadFile = false;
-
-        if (!clientRequestId) {
-          reloadFile = true;
-          realmEventsLogger.debug(
-            `reloading file resource ${invalidation} because event has no clientRequestId`,
-          );
-        } else if (this.cardService.clientRequestIds.has(clientRequestId)) {
-          if (
-            clientRequestId.startsWith('instance:') ||
-            clientRequestId.startsWith('editor-with-instance')
-          ) {
+          if (!clientRequestId) {
+            reloadFile = true;
             realmEventsLogger.debug(
-              `ignoring invalidation for card ${invalidation} because request id ${clientRequestId} is ours and an instance type`,
+              `reloading file resource ${invalidation} because event has no clientRequestId`,
             );
+          } else if (this.cardService.clientRequestIds.has(clientRequestId)) {
+            if (
+              clientRequestId.startsWith('instance:') ||
+              clientRequestId.startsWith('editor-with-instance')
+            ) {
+              realmEventsLogger.debug(
+                `ignoring invalidation for card ${invalidation} because request id ${clientRequestId} is ours and an instance type`,
+              );
+            } else {
+              reloadFile = true;
+              realmEventsLogger.debug(
+                `reloading file resource ${invalidation} because request id ${clientRequestId} is not instance type`,
+              );
+            }
           } else {
             reloadFile = true;
             realmEventsLogger.debug(
-              `reloading file resource ${invalidation} because request id ${clientRequestId} is not instance type`,
+              `reloading file resource ${invalidation} because request id ${clientRequestId} is not contained within known clientRequestIds`,
+              Array.from(this.cardService.clientRequestIds.values()),
+            );
+          }
+
+          if (reloadFile) {
+            this.reloadTask.perform(instance);
+          } else {
+            realmEventsLogger.debug(
+              `ignoring invalidation ${invalidation} for request id ${clientRequestId}`,
             );
           }
         } else {
-          reloadFile = true;
           realmEventsLogger.debug(
-            `reloading file resource ${invalidation} because request id ${clientRequestId} is not contained within known clientRequestIds`,
-            Array.from(this.cardService.clientRequestIds.values()),
+            `reloading file resource ${invalidation} because it is in an error state`,
           );
-        }
-
-        if (reloadFile) {
-          this.reloadTask.perform(instance);
-        } else {
-          realmEventsLogger.debug(
-            `ignoring invalidation ${invalidation} for request id ${clientRequestId}`,
-          );
+          this.loadInstanceTask.perform(invalidation);
         }
       } else {
-        // load the card using just the ID because we don't have a running card on hand
         realmEventsLogger.debug(
-          `reloading file resource ${invalidation} because it is not found in the identity context`,
+          `ignoring invalidation ${invalidation} because we did not previously try to load it`,
         );
-        this.loadInstanceTask.perform(invalidation);
       }
     }
   };
@@ -705,16 +807,21 @@ export default class StoreService extends Service implements StoreInterface {
   private loadInstanceTask = task(
     async (idOrDoc: string | LooseSingleCardDocument) => {
       let url = asURL(idOrDoc);
-      let oldInstance = url ? this.store.get(url) : undefined;
-      let instanceOrError = await this.getInstance({
-        idOrDoc,
-        opts: { noCache: true },
-      });
-      if (oldInstance) {
-        await this.stopAutoSaving(oldInstance);
+      let reloadTracker = this.startTrackingCardLoad(url);
+      try {
+        let oldInstance = url ? this.store.get(url) : undefined;
+        let instanceOrError = await this.getInstance({
+          idOrDoc,
+          opts: { noCache: true },
+        });
+        if (oldInstance) {
+          await this.stopAutoSaving(oldInstance);
+        }
+        this.setIdentityContext(instanceOrError);
+        await this.startAutoSaving(instanceOrError);
+      } finally {
+        this.finishTrackingCardLoad(url, reloadTracker);
       }
-      this.setIdentityContext(instanceOrError);
-      await this.startAutoSaving(instanceOrError);
     },
   );
 
@@ -745,31 +852,37 @@ export default class StoreService extends Service implements StoreInterface {
   });
 
   private reloadTask = task(async (instance: CardDef) => {
+    let reloadTracker = this.startTrackingCardLoad(instance.id);
     let maybeReloadedInstance: CardDef | CardErrorJSONAPI | undefined;
     let isDelete = false;
+
     try {
-      await this.reloadInstance(instance);
-      maybeReloadedInstance = instance;
-    } catch (err: any) {
-      if (err.status === 404) {
-        // in this case the document was invalidated in the index because the
-        // file was deleted
-        isDelete = true;
-      } else {
-        let errorResponse = processCardError(instance.id, err);
-        maybeReloadedInstance = errorResponse.errors[0];
+      try {
+        await this.reloadInstance(instance);
+        maybeReloadedInstance = instance;
+      } catch (err: any) {
+        if (err.status === 404) {
+          // in this case the document was invalidated in the index because the
+          // file was deleted
+          isDelete = true;
+        } else {
+          let errorResponse = processCardError(instance.id, err);
+          maybeReloadedInstance = errorResponse.errors[0];
+        }
       }
-    }
-    if (!isCardInstance(maybeReloadedInstance)) {
-      await this.stopAutoSaving(instance);
-    }
-    if (maybeReloadedInstance) {
-      this.setIdentityContext(maybeReloadedInstance);
-      await this.startAutoSaving(maybeReloadedInstance);
-    }
-    if (isDelete) {
-      await this.stopAutoSaving(instance);
-      this.store.delete(instance.id);
+      if (!isCardInstance(maybeReloadedInstance)) {
+        await this.stopAutoSaving(instance);
+      }
+      if (maybeReloadedInstance) {
+        this.setIdentityContext(maybeReloadedInstance);
+        await this.startAutoSaving(maybeReloadedInstance);
+      }
+      if (isDelete) {
+        await this.stopAutoSaving(instance);
+        this.store.delete(instance.id);
+      }
+    } finally {
+      this.finishTrackingCardLoad(instance.id, reloadTracker);
     }
   });
 
@@ -1122,10 +1235,15 @@ export default class StoreService extends Service implements StoreInterface {
       'meta' in error &&
       typeof error.meta === 'object' &&
       'responseHeaders' in error.meta &&
-      typeof error.meta.responseHeaders === 'object' &&
-      error.meta.responseHeaders['x-blocked-by-waf-rule']
+      error.meta.responseHeaders &&
+      typeof error.meta.responseHeaders === 'object'
     ) {
-      return 'Rejected by firewall';
+      let wafRule = Object.entries(error.meta.responseHeaders).find(
+        ([header]) => header.toLowerCase() === 'x-blocked-by-waf-rule',
+      )?.[1];
+      if (wafRule) {
+        return `Request blocked by Web Application Firewall. X-blocked-by-waf-rule response header specifies rule: ${wafRule}`;
+      }
     }
     if (error.message) {
       return error.message;
@@ -1158,6 +1276,7 @@ export default class StoreService extends Service implements StoreInterface {
           // URL's should be absolute
           useAbsoluteURL: true,
           withIncluded: true,
+          omitQueryFields: true,
         });
 
         // send doc over the wire with absolute URL's. The realm server will convert
@@ -1287,9 +1406,8 @@ export default class StoreService extends Service implements StoreInterface {
     let subscription = this.subscriptions.get(realm);
     if (!subscription) {
       this.subscriptions.set(realm, {
-        unsubscribe: this.messageService.subscribe(
-          realm,
-          this.handleInvalidations,
+        unsubscribe: this.messageService.subscribe(realm, (event) =>
+          this.handleInvalidations(event),
         ),
       });
     }

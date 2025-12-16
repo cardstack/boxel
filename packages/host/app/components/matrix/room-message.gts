@@ -20,10 +20,10 @@ import {
 } from '@cardstack/runtime-common';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
-import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
-import { type RoomResource } from '@cardstack/host/resources/room';
-import CommandService from '@cardstack/host/services/command-service';
-import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
+import type { RoomResource } from '@cardstack/host/resources/room';
+import type CommandService from '@cardstack/host/services/command-service';
+import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
@@ -205,6 +205,7 @@ export default class RoomMessage extends Component<Signature> {
         @retryAction={{@retryAction}}
         @waitAction={{if this.streamingTimeout this.waitLonger}}
         @isPending={{@isPending}}
+        @commands={{this.message.commands}}
         data-test-boxel-message-from={{this.message.author.name}}
         data-test-boxel-message-instance-id={{this.message.instanceId}}
         ...attributes

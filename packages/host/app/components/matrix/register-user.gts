@@ -10,11 +10,6 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
 
-import {
-  type RegisterResponse,
-  type IRequestTokenResponse,
-  type LoginResponse,
-} from 'matrix-js-sdk';
 import { v4 as uuidv4 } from 'uuid';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
@@ -38,7 +33,12 @@ import {
 } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import { AuthMode } from './auth';
+import type { AuthMode } from './auth';
+import type {
+  RegisterResponse,
+  IRequestTokenResponse,
+  LoginResponse,
+} from 'matrix-js-sdk';
 
 const MATRIX_REGISTRATION_TYPES = {
   sendToken: 'm.login.registration_token',
@@ -226,7 +226,7 @@ export default class RegisterUser extends Component<Signature> {
     {{/if}}
     <style scoped>
       .title {
-        font: 600 var(--boxel-font-med);
+        font: 600 var(--boxel-font-md);
         margin-bottom: var(--boxel-sp-sm);
       }
       .button-wrapper {
@@ -251,7 +251,7 @@ export default class RegisterUser extends Component<Signature> {
         margin-top: var(--boxel-sp);
       }
       .registration-field :deep(.text-accessory) {
-        color: var(--boxel-highlight);
+        color: var(--boxel-450);
       }
       .registration-field :deep(.validation-icon-container.invalid) {
         display: none;

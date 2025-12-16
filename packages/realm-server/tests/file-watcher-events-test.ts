@@ -1,4 +1,4 @@
-import QUnit, { module, test } from 'qunit';
+import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
 import type { Server } from 'http';
@@ -19,8 +19,6 @@ import type {
   RealmEvent,
   UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
-
-QUnit.config.testTimeout = 30000;
 
 module(basename(__filename), function () {
   module('file watcher realm events', function (hooks) {

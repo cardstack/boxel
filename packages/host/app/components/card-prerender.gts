@@ -1,11 +1,10 @@
 import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
-import { getOwner, setOwner } from '@ember/owner';
 import type {
   RouteInfo,
   RouteInfoWithAttributes,
 } from '@ember/routing/-internals';
-import RouterService from '@ember/routing/router-service';
+import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 
 import { isTesting } from '@embroider/macros';
@@ -22,29 +21,24 @@ import {
   type RenderResponse,
   type RenderError,
   type ModuleRenderResponse,
-  type IndexWriter,
-  type JobInfo,
   type Prerenderer,
-  type RealmPermissions,
   type Format,
   type PrerenderMeta,
   type RenderRouteOptions,
-  type FromScratchArgs,
-  type IncrementalArgs,
-  type FromScratchResult,
-  type IncrementalResult,
   serializeRenderRouteOptions,
   cleanCapturedHTML,
 } from '@cardstack/runtime-common';
-import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
-import {
-  getReader,
-  type Reader,
-  type RunnerOpts,
-  type StatusArgs,
-} from '@cardstack/runtime-common/worker';
 
-import { CurrentRun } from '../lib/current-run';
+import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
+
+import {
+  buildModuleModel,
+  type ModuleModelContext,
+  type ModuleModelState,
+  type ModuleTypesCache,
+} from '../routes/module';
+
+import { createAuthErrorGuard } from '../utils/auth-error-guard';
 import {
   RenderCardTypeTracker,
   type CardRenderContext,
@@ -64,15 +58,12 @@ import type NetworkService from '../services/network';
 import type RenderService from '../services/render-service';
 import type RenderStoreService from '../services/render-store';
 
-// This component is used in a node/Fastboot context to perform
-// server-side rendering for indexing as well as by the TestRealm
-// to perform rendering for indexing in Ember test contexts.
+// This component is used to perform rendering for indexing in Ember test contexts
 export default class CardPrerender extends Component {
   @service('render-store') private declare store: RenderStoreService;
   @service private declare network: NetworkService;
   @service private declare router: RouterService;
   @service private declare renderService: RenderService;
-  @service private declare fastboot: { isFastBoot: boolean };
   @service private declare localIndexer: LocalIndexer;
   @service private declare loaderService: LoaderService;
   #nonce = 0;
@@ -81,6 +72,9 @@ export default class CardPrerender extends Component {
   #renderErrorPayload: string | undefined;
   #cardTypeTracker = new RenderCardTypeTracker();
   #currentContext: CardRenderContext | undefined;
+  #moduleTypesCache: ModuleTypesCache = new WeakMap() as ModuleTypesCache;
+  #moduleLastStoreResetKey: string | undefined;
+  #moduleAuthGuard = createAuthErrorGuard();
 
   #renderBasePath(url: string, renderOptions?: RenderRouteOptions) {
     let optionsSegment = encodeURIComponent(
@@ -91,63 +85,34 @@ export default class CardPrerender extends Component {
     }/${optionsSegment}`;
   }
 
-  #moduleBasePath(url: string, renderOptions?: RenderRouteOptions) {
-    let optionsSegment = encodeURIComponent(
-      serializeRenderRouteOptions(renderOptions ?? {}),
-    );
-    return `/module/${encodeURIComponent(url)}/${
-      this.#nonce
-    }/${optionsSegment}`;
-  }
-
   constructor(owner: Owner, args: {}) {
     super(owner, args);
+    this.#moduleAuthGuard.register();
     this.#prerendererDelegate = {
       prerenderCard: this.prerender.bind(this),
       prerenderModule: this.prerenderModule.bind(this),
     };
-    if (this.fastboot.isFastBoot) {
-      try {
-        this.doRegistration.perform();
-      } catch (e: any) {
-        if (!didCancel(e)) {
-          throw e;
-        }
-        throw new Error(
-          `card-prerender component is missing or being destroyed before runner registration was completed`,
-        );
-      }
-    } else {
-      this.localIndexer.setup(
-        this.fromScratch.bind(this),
-        this.incremental.bind(this),
-        this.#prerendererDelegate,
-      );
-      window.addEventListener(
+    this.localIndexer.setup(this.#prerendererDelegate);
+    window.addEventListener('boxel-render-error', this.#handleRenderErrorEvent);
+    registerDestructor(this, () => {
+      window.removeEventListener(
         'boxel-render-error',
         this.#handleRenderErrorEvent,
       );
-      registerDestructor(this, () => {
-        window.removeEventListener(
-          'boxel-render-error',
-          this.#handleRenderErrorEvent,
-        );
-        this.#cardTypeTracker.clear();
-      });
-    }
+      this.#cardTypeTracker.clear();
+      this.#moduleAuthGuard.unregister();
+    });
   }
 
   private async prerender({
     url,
     realm,
-    userId,
-    permissions,
+    auth,
     renderOptions,
   }: {
     realm: string;
     url: string;
-    userId: string;
-    permissions: RealmPermissions;
+    auth: string;
     renderOptions?: RenderRouteOptions;
   }): Promise<RenderResponse> {
     return await withRenderContext(async () => {
@@ -156,8 +121,7 @@ export default class CardPrerender extends Component {
           this.prerenderTask.perform({
             url,
             realm,
-            userId,
-            permissions,
+            auth,
             renderOptions,
           });
         let results = isTesting() ? await run() : await withTimersBlocked(run);
@@ -176,14 +140,12 @@ export default class CardPrerender extends Component {
   private async prerenderModule({
     url,
     realm,
-    userId,
-    permissions,
+    auth,
     renderOptions,
   }: {
     realm: string;
     url: string;
-    userId: string;
-    permissions: RealmPermissions;
+    auth: string;
     renderOptions?: RenderRouteOptions;
   }): Promise<ModuleRenderResponse> {
     return await withRenderContext(async () => {
@@ -192,8 +154,7 @@ export default class CardPrerender extends Component {
           this.modulePrerenderTask.perform({
             url,
             realm,
-            userId,
-            permissions,
+            auth,
             renderOptions,
           });
         return isTesting() ? await run() : await withTimersBlocked(run);
@@ -216,8 +177,7 @@ export default class CardPrerender extends Component {
     }: {
       realm: string;
       url: string;
-      userId: string;
-      permissions: RealmPermissions;
+      auth: string;
       renderOptions?: RenderRouteOptions;
     }): Promise<RenderResponse> => {
       this.#nonce++;
@@ -347,8 +307,7 @@ export default class CardPrerender extends Component {
     }: {
       realm: string;
       url: string;
-      userId: string;
-      permissions: RealmPermissions;
+      auth: string;
       renderOptions?: RenderRouteOptions;
     }): Promise<ModuleRenderResponse> => {
       this.#nonce++;
@@ -360,21 +319,43 @@ export default class CardPrerender extends Component {
       };
       if (shouldClearCache) {
         initialRenderOptions.clearCache = true;
-        this.loaderService.resetLoader({
-          clearFetchCache: true,
-          reason: 'module-prerender clearCache',
-        });
-        this.store.resetCache();
       } else {
         delete initialRenderOptions.clearCache;
       }
 
-      let routeInfo = await this.router.recognizeAndLoad(
-        this.#moduleBasePath(url, initialRenderOptions),
+      let result = await buildModuleModel(
+        {
+          id: url,
+          nonce: String(this.#nonce),
+          renderOptions: initialRenderOptions,
+        },
+        this.#moduleModelContext(),
       );
-      return routeInfo.attributes as ModuleRenderResponse;
+      return result as ModuleRenderResponse;
     },
   );
+
+  #moduleModelContext(): ModuleModelContext {
+    return {
+      router: this.router,
+      store: this.store,
+      loaderService: this.loaderService,
+      network: this.network,
+      authGuard: this.#moduleAuthGuard,
+      state: this.#moduleModelState(),
+    };
+  }
+
+  #moduleModelState(): ModuleModelState {
+    return {
+      getTypesCache: () => this.#moduleTypesCache,
+      setTypesCache: (cache) => (this.#moduleTypesCache = cache),
+      getLastStoreResetKey: () => this.#moduleLastStoreResetKey,
+      setLastStoreResetKey: (key) => {
+        this.#moduleLastStoreResetKey = key;
+      },
+    };
+  }
 
   private renderHTML = enqueueTask(
     async (
@@ -575,139 +556,6 @@ export default class CardPrerender extends Component {
     return Promise.resolve();
   }
 
-  private async fromScratch({
-    realmURL,
-  }: FromScratchArgs): Promise<FromScratchResult> {
-    try {
-      let results = await this.doFromScratch.perform({
-        realmURL,
-      });
-      return results;
-    } catch (e: any) {
-      if (!didCancel(e)) {
-        throw e;
-      }
-    }
-    throw new Error(
-      `card-prerender component is missing or being destroyed before from scratch index of realm ${realmURL} was completed`,
-    );
-  }
-
-  private async incremental({
-    realmURL,
-    urls,
-    operation,
-    ignoreData,
-  }: IncrementalArgs): Promise<IncrementalResult> {
-    try {
-      let state = await this.doIncremental.perform({
-        urls,
-        realmURL,
-        operation,
-        ignoreData,
-      });
-      return state;
-    } catch (e: any) {
-      if (!didCancel(e)) {
-        throw e;
-      }
-    }
-    throw new Error(
-      `card-prerender component is missing or being destroyed before incremental index of ${urls.join()} was completed`,
-    );
-  }
-
-  private doRegistration = enqueueTask(async () => {
-    let optsId = (globalThis as any).runnerOptsId;
-    if (optsId == null) {
-      throw new Error(`Runner Options Identifier was not set`);
-    }
-    let register = getRunnerOpts(optsId).registerRunner;
-    await register(this.fromScratch.bind(this), this.incremental.bind(this));
-  });
-
-  private doFromScratch = enqueueTask(
-    async ({ realmURL }: { realmURL: string }) => {
-      let { reader, indexWriter, jobInfo, reportStatus } =
-        this.getRunnerParams(realmURL);
-      let currentRun = new CurrentRun({
-        realmURL: new URL(realmURL),
-        reader,
-        indexWriter,
-        jobInfo,
-        renderCard: this.renderService.renderCard,
-        render: this.renderService.render,
-        reportStatus,
-      });
-      setOwner(currentRun, getOwner(this)!);
-
-      let current = await CurrentRun.fromScratch(currentRun);
-      this.renderService.indexRunDeferred?.fulfill();
-      return current;
-    },
-  );
-
-  private doIncremental = enqueueTask(
-    async ({
-      urls,
-      realmURL,
-      operation,
-      ignoreData,
-    }: {
-      urls: string[];
-      realmURL: string;
-      operation: 'delete' | 'update';
-      ignoreData: Record<string, string>;
-    }) => {
-      let { reader, indexWriter, jobInfo, reportStatus } =
-        this.getRunnerParams(realmURL);
-      let currentRun = new CurrentRun({
-        realmURL: new URL(realmURL),
-        reader,
-        indexWriter,
-        jobInfo,
-        ignoreData: { ...ignoreData },
-        renderCard: this.renderService.renderCard,
-        render: this.renderService.render,
-        reportStatus,
-      });
-      setOwner(currentRun, getOwner(this)!);
-      let current = await CurrentRun.incremental(currentRun, {
-        urls: urls.map((u) => new URL(u)),
-        operation,
-      });
-      this.renderService.indexRunDeferred?.fulfill();
-      return current;
-    },
-  );
-
-  private getRunnerParams(realmURL: string): {
-    reader: Reader;
-    indexWriter: IndexWriter;
-    jobInfo?: JobInfo;
-    reportStatus?: (args: StatusArgs) => void;
-  } {
-    if (this.fastboot.isFastBoot) {
-      let optsId = (globalThis as any).runnerOptsId;
-      if (optsId == null) {
-        throw new Error(`Runner Options Identifier was not set`);
-      }
-      let { reader, indexWriter, jobInfo, reportStatus } =
-        getRunnerOpts(optsId);
-      return {
-        reader,
-        indexWriter,
-        jobInfo,
-        reportStatus,
-      };
-    } else {
-      return {
-        reader: getReader(this.network.authedFetch, realmURL),
-        indexWriter: this.localIndexer.indexWriter,
-      };
-    }
-  }
-
   #consumeClearCacheForRender(requestedClear = false): boolean {
     if (requestedClear) {
       this.#shouldClearCacheForNextRender = true;
@@ -750,12 +598,6 @@ async function withRenderContext<T>(cb: () => Promise<T>): Promise<T> {
       restoreTimers?.();
     }
   }
-}
-
-function getRunnerOpts(optsId: number): RunnerOpts {
-  return ((globalThis as any).getRunnerOpts as (optsId: number) => RunnerOpts)(
-    optsId,
-  );
 }
 
 function omitOneTimeOptions(options: RenderRouteOptions): RenderRouteOptions {

@@ -29,7 +29,7 @@
     "@babel/plugin-proposal-decorators": "catalog:",
     "@cardstack/boxel-motion": "workspace:*",
     "@ember/optional-features": "^2.0.0",
-    "@ember/string": "^3.1.1",
+    "@ember/string": "catalog:",
     "@ember/test-helpers": "^3.3.1",
     "@embroider/compat": "^3.5.5",
     "@embroider/core": "^3.4.15",

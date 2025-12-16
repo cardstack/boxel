@@ -20,8 +20,11 @@ const scopedCSSTransform = generateScopedCSSPlugin({
   noGlobal: true,
 }) as ExtendedPluginBuilder;
 
-export function transpileJS(content: string, debugFilename: string): string {
-  let contentIsAllWhitespace = content.match(/^\s*$/);
+export async function transpileJS(
+  content: string,
+  debugFilename: string,
+): Promise<string> {
+  const contentIsAllWhitespace = content.match(/^\s*$/);
 
   if (contentIsAllWhitespace) {
     return '';
@@ -33,12 +36,12 @@ export function transpileJS(content: string, debugFilename: string): string {
     inline_source_map: true,
   }).code;
 
-  let templateOptions: EmberTemplatePluginOptions = {
+  const templateOptions: EmberTemplatePluginOptions = {
     compiler,
     transforms: [scopedCSSTransform],
   };
 
-  let src = babel.transformSync(content, {
+  const transformed = await babel.transformAsync(content, {
     filename: debugFilename,
     compact: false, // this helps for readability when debugging
     plugins: [
@@ -49,7 +52,8 @@ export function transpileJS(content: string, debugFilename: string): string {
       loaderPlugin,
     ],
     highlightCode: false, // Do not output ANSI color codes in error messages so that the client can display them plainly
-  })?.code;
+  });
+  const src = transformed?.code;
   if (!src) {
     throw new Error('bug: should never get here');
   }

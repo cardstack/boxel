@@ -9,7 +9,7 @@ import { IconButton } from '@cardstack/boxel-ui/components';
 import { not, pick } from '@cardstack/boxel-ui/helpers';
 import { ArrowUp } from '@cardstack/boxel-ui/icons';
 
-import AttachButton from '../attachment-picker/attach-button';
+import type AttachButton from '../attachment-picker/attach-button';
 
 import type { WithBoundArgs } from '@glint/template';
 
@@ -111,7 +111,6 @@ export default class AiAssistantChatInput extends Component<Signature> {
       .clone {
         width: 100%;
         padding: var(--boxel-sp-4xs);
-        padding-top: 10px;
 
         max-height: 150px;
         overflow-y: auto;

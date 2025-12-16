@@ -1,11 +1,6 @@
-import Owner from '@ember/owner';
-import {
-  RenderingTestContext,
-  click,
-  render,
-  settled,
-  waitFor,
-} from '@ember/test-helpers';
+import type Owner from '@ember/owner';
+import type { RenderingTestContext } from '@ember/test-helpers';
+import { click, render, settled, waitFor } from '@ember/test-helpers';
 
 import { waitUntil } from '@ember/test-helpers';
 
@@ -28,8 +23,8 @@ import {
   makeCodeDiffStats,
   parseHtmlContent,
 } from '@cardstack/host/lib/formatted-message/utils';
-import CardService from '@cardstack/host/services/card-service';
-import MonacoService from '@cardstack/host/services/monaco-service';
+import type CardService from '@cardstack/host/services/card-service';
+import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';

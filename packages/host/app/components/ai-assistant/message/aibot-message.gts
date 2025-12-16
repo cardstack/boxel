@@ -1,6 +1,7 @@
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
+
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -13,14 +14,16 @@ import CodeBlock from '@cardstack/host/components/ai-assistant/code-block';
 
 import { sanitizedHtml } from '@cardstack/host/helpers/sanitized-html';
 
-import {
-  type HtmlTagGroup,
-  wrapLastTextNodeInStreamingTextSpan,
+import type {
   HtmlPreTagGroup,
   CodeData,
 } from '@cardstack/host/lib/formatted-message/utils';
+import {
+  type HtmlTagGroup,
+  wrapLastTextNodeInStreamingTextSpan,
+} from '@cardstack/host/lib/formatted-message/utils';
 
-import { type Message as MatrixMessage } from '@cardstack/host/lib/matrix-classes/message';
+import type { Message as MatrixMessage } from '@cardstack/host/lib/matrix-classes/message';
 import type MessageCodePatchResult from '@cardstack/host/lib/matrix-classes/message-code-patch-result';
 
 import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-parsing';
@@ -30,10 +33,10 @@ import {
   getCodeDiffResultResource,
 } from '@cardstack/host/resources/code-diff';
 
-import CommandService from '@cardstack/host/services/command-service';
-import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type CommandService from '@cardstack/host/services/command-service';
+import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 
-import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
+import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import Message from './text-content';
 
@@ -52,6 +55,9 @@ interface Signature {
       isExpanded: boolean;
       updateExpanded: (ev: MouseEvent | KeyboardEvent) => void;
     };
+  };
+  Blocks: {
+    default: [];
   };
 }
 

@@ -1,6 +1,6 @@
 import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
-import Transition from '@ember/routing/transition';
+import type Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
 
@@ -19,7 +19,7 @@ import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import { type SerializedState as OperatorModeSerializedState } from '@cardstack/host/services/operator-mode-state-service';
+import type { SerializedState as OperatorModeSerializedState } from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
@@ -234,6 +234,12 @@ export default class Card extends Route {
       routePath,
       serializedStack: stackParam,
     });
+
+    let stackItems = this.hostModeStateService.stackItems;
+    let headCardId =
+      stackItems.length > 0 ? stackItems[stackItems.length - 1] : primaryCardId;
+
+    await this.hostModeService.updateHeadTemplate(headCardId);
   }
 
   private async getCardUrl(cardPath: string): Promise<string | undefined> {

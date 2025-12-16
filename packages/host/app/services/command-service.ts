@@ -13,6 +13,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import type { Command, CommandContext } from '@cardstack/runtime-common';
 import {
+  Deferred,
   CommandContextStamp,
   delay,
   getClass,
@@ -22,6 +23,7 @@ import {
 
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 
+import CheckCorrectnessCommand from '@cardstack/host/commands/check-correctness';
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -30,6 +32,7 @@ import type Realm from '@cardstack/host/services/realm';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
+import { waitForRealmState } from '../commands/utils';
 import LimitedSet from '../lib/limited-set';
 
 import type LoaderService from './loader-service';
@@ -42,6 +45,7 @@ import type MessageCommand from '../lib/matrix-classes/message-command';
 import type { IEvent } from 'matrix-js-sdk';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
+const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
 
 type GenericCommand = Command<
   typeof CardDef | undefined,
@@ -62,19 +66,21 @@ export default class CommandService extends Service {
     string,
     LimitedSet<string>
   >();
-
+  private aiAssistantInvalidations = new Map<
+    string,
+    {
+      clientRequestId: string;
+      roomId: string;
+      targetHref: string;
+      deferred: Deferred<void>;
+    }
+  >();
   private commandProcessingEventQueue: string[] = [];
   private codePatchProcessingEventQueue: string[] = [];
   private flushCommandProcessingQueue: Promise<void> | undefined;
   private flushCodePatchProcessingQueue: Promise<void> | undefined;
 
-  registerAiAssistantClientRequestId(
-    action: string,
-    roomId?: string,
-  ): string | undefined {
-    if (!roomId) {
-      return `bot-patch:${action}:${uuidv4()}`;
-    }
+  registerAiAssistantClientRequestId(action: string, roomId: string): string {
     let encodedRoom = encodeURIComponent(roomId);
     let clientRequestId = `bot-patch:${encodedRoom}:${action}:${uuidv4()}`;
 
@@ -86,6 +92,100 @@ export default class CommandService extends Service {
     roomSet.add(clientRequestId);
 
     return clientRequestId;
+  }
+
+  trackAiAssistantCardRequest({
+    action,
+    roomId,
+    fileUrl,
+  }: {
+    action: string;
+    roomId: string;
+    fileUrl: string;
+  }): string | undefined {
+    if (!action || !roomId || !fileUrl) {
+      return;
+    }
+    let clientRequestId = this.registerAiAssistantClientRequestId(
+      action,
+      roomId,
+    );
+    // We only track invalidations for card instances and card definitions
+    if (!fileUrl.endsWith('.gts') && !fileUrl.endsWith('.json')) {
+      return clientRequestId;
+    }
+    let normalizedTarget = fileUrl.endsWith('.json')
+      ? fileUrl.replace(/\.json$/, '')
+      : fileUrl;
+    let key = `${roomId}::${normalizedTarget}`;
+
+    let realmURL: URL | undefined;
+    try {
+      realmURL = this.realm.realmOfURL(new URL(fileUrl)) ?? undefined;
+    } catch (_e) {
+      return clientRequestId;
+    }
+    if (!realmURL) {
+      return clientRequestId;
+    }
+
+    let deferred = new Deferred<void>();
+    this.aiAssistantInvalidations.set(key, {
+      clientRequestId,
+      roomId,
+      targetHref: normalizedTarget,
+      deferred,
+    });
+
+    waitForRealmState(
+      this.commandContext,
+      realmURL.href,
+      (event) => {
+        return Boolean(
+          event &&
+            event.eventName === 'index' &&
+            event.indexType === 'incremental' &&
+            event.clientRequestId === clientRequestId,
+        );
+      },
+      { timeoutMs: 5 * 60 * 1000, keepRealmSubscription: true }, // we don't wanna close the realm subscription since other places could be subscribed, like the store service
+    )
+      .then(() => {
+        let current = this.aiAssistantInvalidations.get(key);
+        current?.deferred.fulfill();
+      })
+      .catch(() => {
+        this.aiAssistantInvalidations.delete(key);
+      });
+    return clientRequestId;
+  }
+
+  async waitForInvalidationAfterAIAssistantRequest(
+    roomId: string,
+    targetHref: string,
+    timeoutMs?: number,
+  ): Promise<void> {
+    if (!roomId || !targetHref) {
+      return;
+    }
+    let normalizedTarget = targetHref.endsWith('.json')
+      ? targetHref.replace(/\.json$/, '')
+      : targetHref;
+    let key = `${roomId}::${normalizedTarget}`;
+    let existing = this.aiAssistantInvalidations.get(key);
+    if (!existing) {
+      return;
+    }
+
+    let waitPromise: Promise<void> = existing.deferred.promise;
+    if (timeoutMs) {
+      waitPromise = Promise.race([
+        waitPromise,
+        delay(timeoutMs).then(() => {}),
+      ]);
+    }
+    await waitPromise;
+    this.aiAssistantInvalidations.delete(key);
   }
 
   public queueEventForCommandProcessing(event: Partial<IEvent>) {
@@ -223,8 +323,11 @@ export default class CommandService extends Service {
         // Auto-execute if LLM mode is 'act' AND the command came after the LLM mode was set to 'act',
         // or if requiresApproval is false
         let shouldAutoExecute = false;
+        let isCheckCorrectnessCommand =
+          messageCommand.name === CHECK_CORRECTNESS_COMMAND_NAME;
 
         if (
+          isCheckCorrectnessCommand ||
           messageCommand.requiresApproval === false ||
           activeModeAtMessageTime === 'act'
         ) {
@@ -369,6 +472,10 @@ export default class CommandService extends Service {
         commandToRun = new CommandConstructor(this.commandContext);
       }
 
+      if (!commandToRun && command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
+        commandToRun = new CheckCorrectnessCommand(this.commandContext);
+      }
+
       if (commandToRun) {
         let typedInput = await this.instantiateCommandInput(
           commandToRun,
@@ -386,12 +493,16 @@ export default class CommandService extends Service {
             "Patch command can't run because it doesn't have all the fields in arguments returned by open ai",
           );
         }
-        let clientRequestId = this.registerAiAssistantClientRequestId(
-          'patch-instance',
-          command.message.roomId,
-        );
+        let cardId = payload.attributes.cardId;
+
+        let clientRequestId = this.trackAiAssistantCardRequest({
+          action: 'patch-instance',
+          roomId: command.message.roomId,
+          fileUrl: `${cardId}.json`,
+        });
+
         await this.store.patch(
-          payload?.attributes?.cardId,
+          cardId,
           {
             attributes: payload?.attributes?.patch?.attributes,
             relationships: payload?.attributes?.patch?.relationships,
@@ -449,7 +560,11 @@ export default class CommandService extends Service {
     }
 
     let commandCodeRef = command.codeRef;
-    if (!commandCodeRef) {
+    let commandInstance: GenericCommand | undefined;
+
+    if (command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
+      commandInstance = new CheckCorrectnessCommand(this.commandContext);
+    } else if (!commandCodeRef) {
       error = `No command for the name "${command.name}" was found`;
     } else {
       let CommandConstructor = (await getClass(
@@ -458,8 +573,12 @@ export default class CommandService extends Service {
       )) as { new (context: CommandContext): Command<any, any> };
       if (!CommandConstructor) {
         error = `No command for the name "${command.name}" was found`;
+      } else {
+        commandInstance = new CommandConstructor(this.commandContext);
       }
-      let commandInstance = new CommandConstructor(this.commandContext);
+    }
+
+    if (commandInstance && !error) {
       let loader = (
         getOwner(this.commandContext)!.lookup(
           'service:loader-service',

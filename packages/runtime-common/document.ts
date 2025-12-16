@@ -5,12 +5,7 @@ export async function loadDocument(
   url: string,
 ) {
   let response: Response;
-  // TODO remove the __lazilyLoadLinks feature flag after we are ready to
-  // retire old indexer
-  let urlWithExtension =
-    (globalThis as any).__lazilyLoadLinks && !url.endsWith('.json')
-      ? `${url}.json`
-      : url;
+  let urlWithExtension = !url.endsWith('.json') ? `${url}.json` : url;
   let requestURL = new URL(urlWithExtension);
   requestURL.searchParams.set('noCache', 'true');
   try {
@@ -23,9 +18,7 @@ export async function loadDocument(
       // the visit() function when crawling the links of documents being indexed
       // and not finding the document yet in the index.
       headers: {
-        Accept: (globalThis as any).__lazilyLoadLinks
-          ? SupportedMimeType.CardSource
-          : SupportedMimeType.CardJson,
+        Accept: SupportedMimeType.CardSource,
       },
     });
   } catch (err: any) {

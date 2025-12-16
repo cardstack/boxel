@@ -9,7 +9,7 @@ import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { cn, formatNumber } from '@cardstack/boxel-ui/helpers';
 import { IconHexagon } from '@cardstack/boxel-ui/icons';
 
-import BillingService from '../services/billing-service';
+import type BillingService from '../services/billing-service';
 
 import type { ComponentLike } from '@glint/template';
 

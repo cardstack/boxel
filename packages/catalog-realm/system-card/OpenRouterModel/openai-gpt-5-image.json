@@ -1,0 +1,74 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "openai/gpt-5-image",
+      "canonicalSlug": "openai/gpt-5-image",
+      "name": "OpenAI: GPT-5 Image",
+      "created": 1760447986,
+      "description": "[GPT-5](https://openrouter.ai/openai/gpt-5) Image combines OpenAI's most advanced language model with state-of-the-art image generation capabilities. It offers major improvements in reasoning, code quality, and user experience while incorporating GPT Image 1's superior instruction following, text rendering, and detailed image editing.",
+      "pricing": {
+        "prompt": "0.00001",
+        "completion": "0.00001",
+        "request": "0",
+        "image": "0.00001"
+      },
+      "contextLength": 400000,
+      "architecture": {
+        "modality": "text+image->text+image",
+        "inputModalities": [
+          "image",
+          "text",
+          "file"
+        ],
+        "outputModalities": [
+          "image",
+          "text"
+        ],
+        "tokenizer": "GPT",
+        "instructType": ""
+      },
+      "topProvider": {
+        "isModerated": true,
+        "contextLength": 400000,
+        "maxCompletionTokens": 128000
+      },
+      "perRequestLimits": null,
+      "supportedParameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "logit_bias",
+        "logprobs",
+        "max_tokens",
+        "presence_penalty",
+        "reasoning",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_logprobs",
+        "top_p"
+      ],
+      "defaultParameters": {
+        "temperature": null,
+        "top_p": null,
+        "frequency_penalty": null
+      },
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../openrouter-model",
+        "name": "OpenRouterModel"
+      }
+    }
+  }
+}

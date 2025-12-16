@@ -79,6 +79,10 @@ export class PatchThemeInput extends CardDef {
   @field skillCard = linksTo(Skill);
 }
 
+export class CopyAndEditInput extends CardDef {
+  @field card = linksTo(CardDef);
+}
+
 export class FileUrlCard extends CardDef {
   @field fileUrl = contains(StringField);
 }
@@ -88,6 +92,11 @@ export class RealmUrlCard extends CardDef {
 }
 
 export class ReadTextFileInput extends CardDef {
+  @field realm = contains(StringField);
+  @field path = contains(StringField);
+}
+
+export class ReadSourceInput extends CardDef {
   @field realm = contains(StringField);
   @field path = contains(StringField);
 }
@@ -197,6 +206,20 @@ export class PatchCodeInput extends CardDef {
   @field fileUrl = contains(StringField);
   @field codeBlocks = containsMany(StringField);
   @field roomId = contains(StringField);
+}
+
+export class CheckCorrectnessInput extends CardDef {
+  @field targetType = contains(StringField);
+  @field targetRef = contains(StringField);
+  @field fileUrl = contains(StringField);
+  @field cardId = contains(StringField);
+  @field roomId = contains(StringField);
+}
+
+export class CorrectnessResultCard extends CardDef {
+  @field correct = contains(BooleanField);
+  @field errors = containsMany(StringField);
+  @field warnings = containsMany(StringField);
 }
 
 export class CreateAIAssistantRoomInput extends CardDef {

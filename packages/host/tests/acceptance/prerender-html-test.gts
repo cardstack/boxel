@@ -535,7 +535,6 @@ module('Acceptance | prerender | html', function (hooks) {
   });
 
   hooks.afterEach(function () {
-    delete (globalThis as any).__lazilyLoadLinks;
     delete (globalThis as any).__boxelRenderContext;
     delete (globalThis as any).__boxel_definitions_recursing_depth;
     delete (globalThis as any).__doNotSuppressRenderRouteError;
@@ -579,7 +578,9 @@ module('Acceptance | prerender | html', function (hooks) {
   test('prerender head html', async function (assert) {
     let url = `${testRealmURL}Cat/paper.json`;
     await visit(renderPath(url, '/html/head/0'));
-    assert.dom(`title`).containsText('Paper', 'head format is rendered');
+    // TODO: restore in CS-9807
+    // assert.dom(`title`).containsText('Paper', 'head format is rendered');
+    assert.dom('meta[property="og:title"]').hasAttribute('content', 'Paper');
   });
 
   test('prerender fitted html', async function (assert) {

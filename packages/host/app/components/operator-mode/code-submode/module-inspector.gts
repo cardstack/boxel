@@ -18,6 +18,11 @@ import window from 'ember-window-mock';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
+import type {
+  CodeRef,
+  CardErrorJSONAPI,
+  ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 import {
   type getCards,
   type getCard,
@@ -25,11 +30,8 @@ import {
   type CardResourceMeta,
   isFieldDef,
   internalKeyFor,
-  CodeRef,
-  CardErrorJSONAPI,
   GetCardsContextName,
   GetCardContextName,
-  ResolvedCodeRef,
   specRef,
   localId,
   meta,
@@ -50,7 +52,7 @@ import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import type { FileResource } from '@cardstack/host/resources/file';
-import { type Ready } from '@cardstack/host/resources/file';
+import type { Ready } from '@cardstack/host/resources/file';
 import { isReady } from '@cardstack/host/resources/file';
 import {
   type CardOrFieldDeclaration,
@@ -73,9 +75,13 @@ import type StoreService from '@cardstack/host/services/store';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import type {
+  CardDef,
+  Format,
+  ViewCardFn,
+} from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
-import { Spec } from 'https://cardstack.com/base/spec';
+import type { Spec } from 'https://cardstack.com/base/spec';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -167,6 +173,16 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       DEFAULT_MODULE_INSPECTOR_VIEW
     );
   }
+
+  private viewCardInCodeSubmode: ViewCardFn = async (cardOrURL) => {
+    let cardId = cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id;
+    if (!cardId) {
+      return;
+    }
+
+    const fileUrl = cardId.endsWith('.json') ? cardId : `${cardId}.json`;
+    await this.operatorModeStateService.updateCodePath(new URL(fileUrl));
+  };
 
   @action private setActivePanel(item: ModuleInspectorView) {
     this.operatorModeStateService.updateModuleInspectorView(item);
@@ -443,6 +459,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
               @codeRef={{@selectedCodeRef}}
               @isUpdating={{@moduleAnalysis.isLoading}}
               @cardOrField={{@selectedCardOrField.cardOrField}}
+              @viewCard={{this.viewCardInCodeSubmode}}
             />
           {{else if (eq this.activePanel 'spec')}}
             <SpecPreview
@@ -483,6 +500,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         @card={{@card}}
         @format={{@previewFormat}}
         @setFormat={{@setPreviewFormat}}
+        @viewCard={{this.viewCardInCodeSubmode}}
         data-test-card-resource-loaded
       />
     {{/if}}

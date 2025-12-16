@@ -8,6 +8,8 @@ import { service } from '@ember/service';
 
 import { isTesting } from '@embroider/macros';
 
+import RSVP from 'rsvp';
+
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
@@ -66,6 +68,7 @@ type ModelState = {
   state: TrackedMap<string, unknown>;
   readyDeferred: Deferred<void>;
   isReady: boolean;
+  readyWatchdogStarted?: boolean;
 };
 
 export default class RenderRoute extends Route<Model> {
@@ -81,6 +84,7 @@ export default class RenderRoute extends Route<Model> {
   private lastStoreResetKey: string | undefined;
   private renderBaseParams: [string, string, string] | undefined;
   private lastRenderErrorSignature: string | undefined;
+  #windowListenersAttached = false;
   #cardTypeTracker = new RenderCardTypeTracker();
   #modelStates = new Map<Model, ModelState>();
   #pendingReadyModels = new Set<Model>();
@@ -88,39 +92,48 @@ export default class RenderRoute extends Route<Model> {
   #authGuard = createAuthErrorGuard();
   #restoreRenderTimers: (() => void) | undefined;
   #releaseTimerBlock: (() => void) | undefined;
+  #handleUnhandledError = (error: any) => {
+    if (
+      error?.name === 'TransitionAborted' ||
+      error?.code === 'TRANSITION_ABORTED'
+    ) {
+      return;
+    }
+    this.#markPrerenderUnusable(error);
+    this.#setAllModelStatuses('unusable');
+    this.handleRenderError(error);
+  };
 
   errorHandler = (event: Event) => {
+    if (this.isDestroying || this.isDestroyed) {
+      return;
+    }
+    let elements = this.#ensurePrerenderElements();
     windowErrorHandler({
       event,
-      setStatusToUnusable() {
-        let element: HTMLElement = document.querySelector('[data-prerender]')!;
-        element.dataset.prerenderStatus = 'unusable';
+      setStatusToUnusable: () => {
+        if (elements.container) {
+          elements.container.dataset.prerenderStatus = 'unusable';
+        }
       },
-      setError(error) {
-        let element: HTMLElement = document.querySelector('[data-prerender]')!;
-        element.innerHTML = error;
-      },
+      setError: (error) =>
+        this.#writePrerenderError(elements.errorElement, error),
       currentURL: this.router.currentURL,
     });
     this.#setAllModelStatuses('unusable');
-    (globalThis as any).__lazilyLoadLinks = undefined;
     (globalThis as any).__boxelRenderContext = undefined;
   };
 
   activate() {
-    window.addEventListener('error', this.errorHandler);
-    window.addEventListener('unhandledrejection', this.errorHandler);
     // this is for route errors, not window level error
     window.addEventListener('boxel-render-error', this.handleRenderError);
   }
 
   deactivate() {
-    (globalThis as any).__lazilyLoadLinks = undefined;
     (globalThis as any).__boxelRenderContext = undefined;
     (globalThis as any).__renderInstance = undefined;
-    window.removeEventListener('error', this.errorHandler);
-    window.removeEventListener('unhandledrejection', this.errorHandler);
     window.removeEventListener('boxel-render-error', this.handleRenderError);
+    this.#detachWindowErrorListeners();
     this.lastStoreResetKey = undefined;
     this.renderBaseParams = undefined;
     this.lastRenderErrorSignature = undefined;
@@ -138,9 +151,14 @@ export default class RenderRoute extends Route<Model> {
 
   async beforeModel(transition: Transition) {
     await super.beforeModel?.(transition);
+    if (!isTesting()) {
+      // tests have their own way of dealing with window level errors in card-prerender.gts
+      this.#attachWindowErrorListeners();
+      this.realm.restoreSessionsFromStorage();
+    }
+
     // activate() doesn't run early enough for this to be set before the model()
     // hook is run
-    (globalThis as any).__lazilyLoadLinks = true;
     (globalThis as any).__boxelRenderContext = true;
     this.#authGuard.register();
     if (!isTesting()) {
@@ -349,6 +367,7 @@ export default class RenderRoute extends Route<Model> {
     }
     this.#pendingReadyModels.add(model);
     scheduleOnce('afterRender', this, this.#processPendingReadyModels);
+    this.#startReadyWatchdog(model);
   }
 
   #processPendingReadyModels() {
@@ -357,12 +376,43 @@ export default class RenderRoute extends Route<Model> {
       return;
     }
     for (let model of this.#pendingReadyModels) {
-      void this.#settleModelAfterRender(model).catch((error) => {
-        this.#dispositionModel(model, 'error');
-        this.handleRenderError(error);
-      });
+      void this.#settleModelAfterRenderSafely(model);
     }
     this.#pendingReadyModels.clear();
+  }
+
+  // In rare cases the afterRender queue does not fire, leaving prerender
+  // status stuck at "loading" forever. This watchdog forces the ready path
+  // after a few animation frames so we can unblock prerenders.
+  #startReadyWatchdog(model: Model) {
+    let modelState = this.#modelStates.get(model);
+    if (
+      !modelState ||
+      modelState.isReady ||
+      modelState.readyWatchdogStarted ||
+      typeof requestAnimationFrame !== 'function'
+    ) {
+      return;
+    }
+    modelState.readyWatchdogStarted = true;
+    let attempts = 0;
+    let tick = () => {
+      let current = this.#modelStates.get(model);
+      if (
+        !current ||
+        current.isReady ||
+        this.isDestroying ||
+        this.isDestroyed
+      ) {
+        return;
+      }
+      if (attempts++ >= 2) {
+        void this.#settleModelAfterRenderSafely(model);
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
   }
 
   async #settleModelAfterRender(model: Model): Promise<void> {
@@ -374,6 +424,13 @@ export default class RenderRoute extends Route<Model> {
     modelState.state.set('status', 'ready');
     modelState.isReady = true;
     modelState.readyDeferred.fulfill();
+  }
+
+  #settleModelAfterRenderSafely(model: Model) {
+    return this.#settleModelAfterRender(model).catch((error) => {
+      this.#dispositionModel(model, 'error');
+      this.handleRenderError(error);
+    });
   }
 
   #dispositionModel(model: Model, status: RenderStatus = 'error') {
@@ -398,6 +455,18 @@ export default class RenderRoute extends Route<Model> {
   #setAllModelStatuses(status: RenderStatus) {
     for (let model of this.#modelStates.keys()) {
       this.#dispositionModel(model, status);
+    }
+  }
+
+  #writePrerenderError(errorElement: HTMLElement | null, error: any) {
+    if (!errorElement) {
+      return;
+    }
+    try {
+      errorElement.textContent =
+        typeof error === 'string' ? error : JSON.stringify(error, null, 2);
+    } catch {
+      // best-effort; avoid throwing while handling an error
     }
   }
 
@@ -469,6 +538,9 @@ export default class RenderRoute extends Route<Model> {
   }
 
   private handleRenderError = (errorOrEvent: any, transition?: Transition) => {
+    if (this.isDestroying || this.isDestroyed) {
+      return;
+    }
     let event =
       'reason' in errorOrEvent || 'detail' in errorOrEvent
         ? errorOrEvent
@@ -486,6 +558,9 @@ export default class RenderRoute extends Route<Model> {
   };
 
   #processRenderError(error: any, transition?: Transition) {
+    if (this.isDestroying || this.isDestroyed) {
+      return;
+    }
     this.currentTransition?.abort();
     this.#rejectAllModelStates('error');
     let context = this.#deriveErrorContext(transition);
@@ -685,6 +760,65 @@ export default class RenderRoute extends Route<Model> {
         errorElement.dataset.prerenderNonce = context.nonce;
       }
     }
+  }
+
+  #markPrerenderUnusable(error?: any) {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    let { container, errorElement } = this.#ensurePrerenderElements();
+    if (container) {
+      container.dataset.prerenderStatus = 'unusable';
+    }
+    if (error) {
+      this.#writePrerenderError(errorElement, error);
+    }
+  }
+
+  #attachWindowErrorListeners() {
+    if (this.#windowListenersAttached || typeof window === 'undefined') {
+      return;
+    }
+    window.addEventListener('error', this.errorHandler);
+    window.addEventListener('unhandledrejection', this.errorHandler);
+    RSVP.on('error', this.#handleUnhandledError);
+    this.#windowListenersAttached = true;
+  }
+
+  #detachWindowErrorListeners() {
+    if (!this.#windowListenersAttached || typeof window === 'undefined') {
+      return;
+    }
+    window.removeEventListener('error', this.errorHandler);
+    window.removeEventListener('unhandledrejection', this.errorHandler);
+    RSVP.off('error', this.#handleUnhandledError);
+    this.#windowListenersAttached = false;
+  }
+
+  #ensurePrerenderElements(): {
+    container: HTMLElement | null;
+    errorElement: HTMLElement | null;
+  } {
+    if (typeof document === 'undefined') {
+      return { container: null, errorElement: null };
+    }
+    let container = document.querySelector(
+      '[data-prerender]',
+    ) as HTMLElement | null;
+    if (!container) {
+      container = document.createElement('div');
+      container.setAttribute('data-prerender', '');
+      document.body.appendChild(container);
+    }
+    let errorElement = document.querySelector(
+      '[data-prerender-error]',
+    ) as HTMLElement | null;
+    if (!errorElement) {
+      errorElement = document.createElement('pre');
+      errorElement.setAttribute('data-prerender-error', '');
+      container.appendChild(errorElement);
+    }
+    return { container, errorElement };
   }
 
   #transitionToErrorRoute(transition?: Transition) {

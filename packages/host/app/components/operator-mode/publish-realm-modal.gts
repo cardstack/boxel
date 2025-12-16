@@ -25,13 +25,15 @@ import { not } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
+import PrivateDependencyViolationComponent from '@cardstack/host/components/operator-mode/private-dependency-violation';
 import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
 
 import config from '@cardstack/host/config/environment';
 
-import HostModeService from '@cardstack/host/services/host-mode-service';
+import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type { PrivateDependencyViolation } from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type {
   ClaimedDomain,
@@ -76,9 +78,18 @@ export default class PublishRealmModal extends Component<Signature> {
   @tracked private isCheckingCustomSubdomain = false;
   @tracked private claimedDomain: ClaimedDomain | null = null;
 
+  @tracked private privateDependencyCheckError: string | null = null;
+  @tracked private privateDependencyViolations:
+    | PrivateDependencyViolation[]
+    | null = null;
+
+  @tracked private initialSelectionsSet = false;
+
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
+    this.ensureInitialSelectionsTask.perform();
     this.fetchBoxelClaimedDomain.perform();
+    this.checkPrivateDependenciesTask.perform();
   }
 
   get isSubdirectoryRealmPublished() {
@@ -92,6 +103,28 @@ export default class PublishRealmModal extends Component<Signature> {
       this.isPublishing
     );
   }
+
+  get shouldShowPrivateDependencyWarning() {
+    return (
+      Array.isArray(this.privateDependencyViolations) &&
+      this.privateDependencyViolations.length > 0
+    );
+  }
+
+  get isCheckingPrivateDependencies() {
+    return this.checkPrivateDependenciesTask.isRunning;
+  }
+
+  private privateRealmURLsForViolation = (
+    violation: PrivateDependencyViolation,
+  ): string[] => {
+    if (!violation.externalDependencies?.length) {
+      return [];
+    }
+    return Array.from(
+      new Set(violation.externalDependencies.map((dep) => dep.realmURL)),
+    );
+  };
 
   get lastPublishedTime() {
     return this.getFormattedLastPublishedTime(this.subdirectoryRealmUrl);
@@ -263,20 +296,58 @@ export default class PublishRealmModal extends Component<Signature> {
     this.customSubdomainError = null;
   }
 
-  private applyClaimedDomain(claim: ClaimedDomain | null) {
+  private applyClaimedDomain(
+    claim: ClaimedDomain | null,
+    options: { select?: boolean } = {},
+  ) {
+    const { select = false } = options;
+    const previousSelectionUrl = this.customSubdomainSelection?.url;
     this.claimedDomain = claim;
 
     if (claim) {
+      const publishedUrl = this.buildPublishedRealmUrl(claim.hostname);
+      if (previousSelectionUrl && previousSelectionUrl !== publishedUrl) {
+        this.removePublishedRealmUrl(previousSelectionUrl);
+      }
       this.setCustomSubdomainSelection({
-        url: this.buildPublishedRealmUrl(claim.hostname),
+        url: publishedUrl,
         subdomain: claim.subdomain,
       });
+      if (select) {
+        this.addPublishedRealmUrl(publishedUrl);
+      }
       this.customSubdomain = '';
       this.isCustomSubdomainSetupVisible = false;
-    } else if (!this.isCustomSubdomainSetupVisible) {
-      this.setCustomSubdomainSelection(null);
+    } else {
+      if (previousSelectionUrl) {
+        this.removePublishedRealmUrl(previousSelectionUrl);
+      }
+      if (!this.isCustomSubdomainSetupVisible) {
+        this.setCustomSubdomainSelection(null);
+      }
     }
+    this.applyInitialSelections(claim);
   }
+
+  private checkPrivateDependenciesTask = restartableTask(async () => {
+    this.privateDependencyCheckError = null;
+    try {
+      let report = await this.realm.fetchPrivateDependencyReport(
+        this.currentRealmURL,
+      );
+      this.privateDependencyViolations = report.publishable
+        ? []
+        : report.violations;
+    } catch (error) {
+      console.error(
+        'Failed to check for private dependencies before publishing',
+        error,
+      );
+      this.privateDependencyCheckError =
+        'Unable to verify private dependencies. Publishing may cause errors.';
+      this.privateDependencyViolations = null;
+    }
+  });
 
   private fetchBoxelClaimedDomain = restartableTask(async () => {
     try {
@@ -339,28 +410,48 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   @action
-  toggleDefaultDomain() {
+  toggleDefaultDomain(event: Event) {
     const defaultUrl = this.subdirectoryRealmUrl;
-    if (!this.isSubdirectoryRealmSelected) {
-      this.selectedPublishedRealmURLs = [
-        ...this.selectedPublishedRealmURLs,
-        defaultUrl,
-      ];
+    const input = event.target as HTMLInputElement;
+    if (input.checked) {
+      this.addPublishedRealmUrl(defaultUrl);
+    } else {
+      this.removePublishedRealmUrl(defaultUrl);
     }
   }
 
   @action
-  toggleCustomSubdomain() {
+  toggleCustomSubdomain(event: Event) {
     if (this.claimedDomain) {
       const customUrl = this.buildPublishedRealmUrl(
         this.claimedDomain.hostname,
       );
-      if (!this.selectedPublishedRealmURLs.includes(customUrl)) {
-        this.selectedPublishedRealmURLs = [
-          ...this.selectedPublishedRealmURLs,
-          customUrl,
-        ];
+      const input = event.target as HTMLInputElement;
+      if (input.checked) {
+        this.addPublishedRealmUrl(customUrl);
+      } else {
+        this.removePublishedRealmUrl(customUrl);
       }
+    }
+  }
+
+  private addPublishedRealmUrl(url: string) {
+    if (!this.selectedPublishedRealmURLs.includes(url)) {
+      this.selectedPublishedRealmURLs = [
+        ...this.selectedPublishedRealmURLs,
+        url,
+      ];
+    }
+  }
+
+  private removePublishedRealmUrl(url: string | undefined) {
+    if (!url) {
+      return;
+    }
+    if (this.selectedPublishedRealmURLs.includes(url)) {
+      this.selectedPublishedRealmURLs = this.selectedPublishedRealmURLs.filter(
+        (selectedUrl) => selectedUrl !== url,
+      );
     }
   }
 
@@ -429,12 +520,15 @@ export default class PublishRealmModal extends Component<Signature> {
                 };
               };
             };
-            this.applyClaimedDomain({
-              id: claimResult.data.id,
-              subdomain: claimResult.data.attributes.subdomain,
-              hostname: claimResult.data.attributes.hostname,
-              sourceRealmURL: claimResult.data.attributes.sourceRealmURL,
-            });
+            this.applyClaimedDomain(
+              {
+                id: claimResult.data.id,
+                subdomain: claimResult.data.attributes.subdomain,
+                hostname: claimResult.data.attributes.hostname,
+                sourceRealmURL: claimResult.data.attributes.sourceRealmURL,
+              },
+              { select: true },
+            );
             this.isCustomSubdomainSetupVisible = false;
           } catch (claimError) {
             let errorMessage = (claimError as Error).message;
@@ -502,6 +596,35 @@ export default class PublishRealmModal extends Component<Signature> {
     return this.getPublishErrorForUrl(this.claimedDomainPublishedUrl);
   }
 
+  ensureInitialSelectionsTask = restartableTask(
+    async (claim: ClaimedDomain | null = null) => {
+      await this.realm.ensureRealmMeta(this.currentRealmURL);
+      this.applyInitialSelections(claim);
+    },
+  );
+
+  private applyInitialSelections(claim: ClaimedDomain | null = null) {
+    let selections = this.initialSelectionsSet
+      ? this.selectedPublishedRealmURLs
+      : [...this.hostModeService.publishedRealmURLs];
+
+    if (claim) {
+      let claimedUrl = this.buildPublishedRealmUrl(claim.hostname);
+      if (!selections.includes(claimedUrl)) {
+        selections = [...selections, claimedUrl];
+      }
+    }
+
+    if (
+      !this.initialSelectionsSet ||
+      selections !== this.selectedPublishedRealmURLs
+    ) {
+      this.selectedPublishedRealmURLs = [...selections];
+    }
+
+    this.initialSelectionsSet = true;
+  }
+
   <template>
     <ModalContainer
       class='publish-realm-modal'
@@ -518,6 +641,36 @@ export default class PublishRealmModal extends Component<Signature> {
         </div>
       </:header>
       <:content>
+        {{#if this.privateDependencyCheckError}}
+          <div class='publish-warning error' data-test-private-dependency-error>
+            {{this.privateDependencyCheckError}}
+          </div>
+        {{else if this.shouldShowPrivateDependencyWarning}}
+          <div class='publish-warning' data-test-private-dependency-warning>
+            <div>
+              This workspace will have rendering errors when published because
+              of private external dependencies.
+            </div>
+            <ul class='violation-list'>
+              {{#each this.privateDependencyViolations as |violation|}}
+                <PrivateDependencyViolationComponent
+                  @violation={{violation}}
+                  @privateRealmURLs={{this.privateRealmURLsForViolation
+                    violation
+                  }}
+                />
+              {{/each}}
+            </ul>
+          </div>
+        {{else if this.isCheckingPrivateDependencies}}
+          <div
+            class='publish-warning info'
+            data-test-private-dependency-loading
+          >
+            <LoadingIndicator />
+            Checking for private dependencies…
+          </div>
+        {{/if}}
 
         <div class='domain-options'>
           <div class='domain-option'>
@@ -866,6 +1019,41 @@ export default class PublishRealmModal extends Component<Signature> {
       .modal-subtitle {
         font-size: normal var(--boxel-font-sm);
         color: var(--boxel-dark);
+      }
+
+      .publish-warning {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+        margin-bottom: var(--boxel-sp);
+        padding: var(--boxel-sp-sm);
+        border: 1px solid var(--boxel-warning-200);
+        background-color: rgb(from var(--boxel-warning-200) r g b / 12%);
+        border-radius: var(--boxel-border-radius-lg);
+        font-size: var(--boxel-font-size-sm);
+      }
+
+      .publish-warning.error {
+        border-color: var(--boxel-error-200);
+        background-color: rgb(from var(--boxel-error-200) r g b / 8%);
+        color: var(--boxel-error-200);
+      }
+
+      .publish-warning.info {
+        border-color: var(--boxel-300);
+        background-color: var(--boxel-50);
+        color: var(--boxel-500);
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
+
+      .violation-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
       }
 
       .domain-options {

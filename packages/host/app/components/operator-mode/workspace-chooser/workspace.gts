@@ -10,8 +10,8 @@ import { RealmIcon } from '@cardstack/boxel-ui/components';
 import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { Group, IconGlobe, Lock } from '@cardstack/boxel-ui/icons';
 
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import RealmService from '@cardstack/host/services/realm';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type RealmService from '@cardstack/host/services/realm';
 
 import ItemContainer from './item-container';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';

@@ -4,6 +4,8 @@ import * as AddFieldToCardDefinitionCommandModule from './add-field-to-card-defi
 import * as UseAiAssistantCommandModule from './ai-assistant';
 import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-block';
 import * as AskAiCommandModule from './ask-ai';
+import * as CheckCorrectnessCommandModule from './check-correctness';
+import * as CopyAndEditCommandModule from './copy-and-edit';
 import * as CopyCardToRealmModule from './copy-card';
 import * as CopyCardToStackCommandModule from './copy-card-to-stack';
 import * as CopySourceCommandModule from './copy-source';
@@ -35,6 +37,7 @@ import * as PopulateWithSampleDataCommandModule from './populate-with-sample-dat
 import * as PreviewFormatCommandModule from './preview-format';
 import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assistant';
 import * as ReadFileForAiAssistantCommandModule from './read-file-for-ai-assistant';
+import * as ReadSourceCommandModule from './read-source';
 import * as ReadTextFileCommandModule from './read-text-file';
 import * as SaveCardCommandModule from './save-card';
 import * as SearchAndChooseCommandModule from './search-and-choose';
@@ -83,12 +86,20 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     CopySourceCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/copy-and-edit',
+    CopyAndEditCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/create-ai-assistant-room',
     CreateAIAssistantRoomCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/create-specs',
     CreateSpecCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/check-correctness',
+    CheckCorrectnessCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/generate-theme-example',
@@ -161,6 +172,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/read-file-for-ai-assistant',
     ReadFileForAiAssistantCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/read-source',
+    ReadSourceCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/read-text-file',
@@ -289,6 +304,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   CopyCardToStackCommandModule.default,
   CopySourceCommandModule.default,
   CreateAIAssistantRoomCommandModule.default,
+  CopyAndEditCommandModule.default,
   CreateSpecCommandModule.default,
   GenerateExampleCardsCommandModule.default,
   GenerateReadmeSpecCommandModule.default,
@@ -315,6 +331,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   PreviewFormatCommandModule.default,
   ReadCardForAiAssistantCommandModule.default,
   ReadFileForAiAssistantCommandModule.default,
+  ReadSourceCommandModule.default,
   ReadTextFileCommandModule.default,
   SaveCardCommandModule.default,
   SearchAndChooseCommandModule.default,
@@ -330,6 +347,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   SummarizeSessionCommandModule.default,
   SwitchSubmodeCommandModule.default,
   TransformCardsCommandModule.default,
+  CheckCorrectnessCommandModule.default,
   UpdateCodePathWithSelectionCommandModule.default,
   UpdatePlaygroundSelectionCommandModule.default,
   UpdateRoomSkillsCommandModule.default,

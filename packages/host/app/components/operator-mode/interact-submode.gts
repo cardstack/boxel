@@ -73,10 +73,11 @@ import NeighborStackTriggerButton, {
   type SearchSheetTrigger,
 } from './interact-submode/neighbor-stack-trigger';
 import OperatorModeStack from './stack';
-import { CardDefOrId } from './stack-item';
+
 import SubmodeLayout from './submode-layout';
 
 import type { NewFileOptions } from './new-file-button';
+import type { CardDefOrId } from './stack-item';
 
 import type { StackItemComponentAPI } from './stack-item';
 
@@ -194,7 +195,12 @@ export default class InteractSubmode extends Component {
     stackIndex: number,
     cardOrURL: CardDef | URL | string,
     format: Format | Event = 'isolated',
-    opts?: { openCardInRightMostStack?: boolean; stackIndex?: number },
+    opts?: {
+      openCardInRightMostStack?: boolean;
+      stackIndex?: number;
+      fieldType?: 'linksTo' | 'linksToMany' | 'contains' | 'containsMany';
+      fieldName?: string;
+    },
   ): void => {
     if (format instanceof Event) {
       // common when invoked from template {{on}} modifier
@@ -227,20 +233,22 @@ export default class InteractSubmode extends Component {
       id: cardId,
       format,
       stackIndex,
+      relationshipContext: opts?.fieldName
+        ? {
+            fieldName: opts.fieldName,
+            fieldType:
+              opts.fieldType === 'linksTo' || opts.fieldType === 'linksToMany'
+                ? opts.fieldType
+                : undefined,
+          }
+        : undefined,
     });
     this.addToStack(newItem);
     this.operatorModeStateService.closeWorkspaceChooser();
   };
 
   private editCard = (stackIndex: number, card: CardDef): void => {
-    let item = this.findCardInStack(card, stackIndex);
-    this.operatorModeStateService.replaceItemInStack(
-      item,
-      item.clone({
-        request: new Deferred(),
-        format: 'edit',
-      }),
-    );
+    this.operatorModeStateService.editCardOnStack(stackIndex, card);
   };
 
   private saveCard = (id: string): void => {
@@ -262,19 +270,6 @@ export default class InteractSubmode extends Component {
       );
     }
     return htmlSafe('');
-  }
-
-  private findCardInStack(card: CardDef, stackIndex: number): StackItem {
-    let item = this.stacks[stackIndex].find(
-      (item: StackItem) =>
-        item.id === card.id || item.id === card[localIdSymbol],
-    );
-    if (!item) {
-      throw new Error(
-        `Could not find card ${card.id} (localId ${card[localIdSymbol]}) in stack ${stackIndex}`,
-      );
-    }
-    return item;
   }
 
   private close = (item: StackItem) => {

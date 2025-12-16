@@ -30,9 +30,8 @@ import HostSubmode from '@cardstack/host/components/operator-mode/host-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
-import { getSearch } from '@cardstack/host/resources/search';
 
-import MessageService from '@cardstack/host/services/message-service';
+import type MessageService from '@cardstack/host/services/message-service';
 
 import type { CardContext } from 'https://cardstack.com/base/card-api';
 
@@ -82,7 +81,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @provide(GetCardsContextName)
   // @ts-ignore "getCards" is declared but not used
   private get getCards() {
-    return getSearch;
+    return this.store.getSearchResource.bind(this.store);
   }
 
   @provide(GetCardCollectionContextName)

@@ -1,12 +1,12 @@
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
+import type { RenderingTestContext } from '@ember/test-helpers';
 import {
   waitUntil,
   waitFor,
   fillIn,
   click,
   render,
-  RenderingTestContext,
   triggerEvent,
 } from '@ember/test-helpers';
 
@@ -24,6 +24,7 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 import { dayjsFormat } from '@cardstack/boxel-ui/helpers';
 
+import type { Loader } from '@cardstack/runtime-common';
 import {
   baseRealm,
   primitive,
@@ -31,7 +32,6 @@ import {
   PermissionsContextName,
   fields,
   cardTypeDisplayName,
-  Loader,
   type CodeRef,
 } from '@cardstack/runtime-common';
 
@@ -3976,6 +3976,20 @@ module('Integration | card-basics', function (hooks) {
         getFieldDescription(new Person(), 'hometown'),
         'The place where the person was born',
         'getFieldDescription works for instance',
+      );
+
+      class Employee extends Person {}
+
+      assert.strictEqual(
+        getFieldDescription(Employee, 'hometown'),
+        'The place where the person was born',
+        'getFieldDescription works for subclasses',
+      );
+
+      assert.strictEqual(
+        getFieldDescription(new Employee(), 'hometown'),
+        'The place where the person was born',
+        'getFieldDescription works for subclass instances',
       );
     });
 

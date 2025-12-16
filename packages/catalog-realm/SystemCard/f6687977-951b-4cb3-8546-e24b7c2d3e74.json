@@ -1,0 +1,81 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "GallerySystem",
+        "module": "../gallery-system"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Boxel Default WIP",
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "modelConfigurations.0": {
+        "links": {
+          "self": "../RecommendedModel/3a455b7a-ecfd-4169-a469-76e155bec2d5"
+        }
+      },
+      "modelConfigurations.1": {
+        "links": {
+          "self": "../RecommendedModel/37533a45-5b7a-4cfd-a169-a46976e155be"
+        }
+      },
+      "modelConfigurations.2": {
+        "links": {
+          "self": "../RecommendedModel/b752630d-f4a0-4c04-b902-ab65f7353e99"
+        }
+      },
+      "modelConfigurations.3": {
+        "links": {
+          "self": "../RecommendedModel/bda2b752-630d-44a0-8c04-f902ab65f735"
+        }
+      },
+      "modelConfigurations.4": {
+        "links": {
+          "self": "../RecommendedModel/c60d1dfa-ada2-4060-ba67-e9c8795ad226"
+        }
+      },
+      "modelConfigurations.5": {
+        "links": {
+          "self": "../RecommendedModel/25c01c7f-73bd-4c00-a6d5-76e0574d383a"
+        }
+      },
+      "modelConfigurations.6": {
+        "links": {
+          "self": "../RecommendedModel/630df4a0-0c04-4902-ab65-f7353e994e6f"
+        }
+      },
+      "modelConfigurations.7": {
+        "links": {
+          "self": "../OpenRouterModel/deepseek-deepseek-v3-2"
+        }
+      },
+      "modelConfigurations.8": {
+        "links": {
+          "self": "../OpenRouterModel/openai-gpt-5-mini"
+        }
+      },
+      "modelConfigurations.9": {
+        "links": {
+          "self": "../OpenRouterModel/xai-grok-4-fast"
+        }
+      },
+      "defaultModelConfiguration": {
+        "links": {
+          "self": "../RecommendedModel/3a455b7a-ecfd-4169-a469-76e155bec2d5"
+        }
+      }
+    }
+  }
+}

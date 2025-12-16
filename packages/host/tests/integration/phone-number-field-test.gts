@@ -8,7 +8,7 @@ import {
   type Permissions,
   baseRealm,
 } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import { provideConsumeContext, setupCardLogs } from '../helpers';
 import {

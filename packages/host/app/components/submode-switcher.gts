@@ -12,7 +12,8 @@ import get from 'lodash/get';
 
 import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
 
-import { menuItemFunc, MenuItem } from '@cardstack/boxel-ui/helpers';
+import type { MenuItem } from '@cardstack/boxel-ui/helpers';
+import { menuItemFunc } from '@cardstack/boxel-ui/helpers';
 import {
   DropdownArrowUp,
   DropdownArrowDown,
@@ -92,7 +93,6 @@ export default class SubmodeSwitcher extends Component<Signature> {
       }
       .submode-switcher-dropdown-trigger {
         --icon-color: var(--boxel-highlight);
-        --boxel-button-font: 500 var(--boxel-font-sm);
 
         padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
         background-color: var(--boxel-dark);

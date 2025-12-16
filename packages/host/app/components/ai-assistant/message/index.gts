@@ -17,14 +17,15 @@ import {
   type getCardCollection,
 } from '@cardstack/runtime-common';
 
-import { type HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
-import { type Message } from '@cardstack/host/lib/matrix-classes/message';
+import type { HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
+import type { Message } from '@cardstack/host/lib/matrix-classes/message';
+import type MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { type FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import AiBotMessage from './aibot-message';
 import Attachments from './attachments';
@@ -63,6 +64,8 @@ interface Signature {
     retryAction?: () => void;
     waitAction?: () => void;
     hideMeta?: boolean;
+    isCodePatchCorrectness?: boolean;
+    commands?: MessageCommand[];
   };
   Blocks: { default: [] };
 }

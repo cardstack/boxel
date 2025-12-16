@@ -15,9 +15,9 @@ import stringify from 'safe-stable-stringify';
 
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
+import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import {
   Deferred,
-  ResolvedCodeRef,
   baseRealm,
   ensureTrailingSlash,
   skillCardRef,
@@ -35,7 +35,7 @@ import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { AiAssistantMessageDrafts } from '@cardstack/host/utils/local-storage-keys';
 
-import { BoxelContext } from 'https://cardstack.com/base/matrix-event';
+import type { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 
 import {
   setupLocalIndexing,
@@ -1242,7 +1242,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
 
     // Test with AI assistant opened
-    operatorModeStateParam = stringify({
+    await visitOperatorMode({
       stacks: [
         [
           {
@@ -1252,12 +1252,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         ],
       ],
       aiAssistantOpen: true,
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
+    });
     assert.dom('[data-test-ai-assistant-panel]').exists();
   });
 

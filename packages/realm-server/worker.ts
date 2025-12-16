@@ -4,13 +4,10 @@ import {
   Worker,
   VirtualNetwork,
   logger,
-  RunnerOptionsManager,
   IndexWriter,
   type StatusArgs,
-  type Prerenderer,
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
-import { makeFastBootIndexRunner } from './fastboot';
 import * as Sentry from '@sentry/node';
 import {
   PgAdapter,
@@ -18,6 +15,7 @@ import {
   PgQueueRunner,
 } from '@cardstack/postgres';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer';
+import { buildCreatePrerenderAuth } from './prerender/auth';
 
 let log = logger('worker');
 
@@ -47,7 +45,6 @@ let workerId = ECS_CONTAINER_METADATA_URI
 
 let {
   matrixURL,
-  distURL = process.env.HOST_URL ?? 'http://localhost:4200',
   fromUrl: fromUrls,
   toUrl: toUrls,
   priority = 0,
@@ -66,11 +63,6 @@ let {
       demandOption: true,
       type: 'array',
     },
-    distURL: {
-      description:
-        'the URL of a deployed host app. (This can be provided instead of the --distPath)',
-      type: 'string',
-    },
     migrateDB: {
       description:
         'When this flag is set the database will automatically migrate when server is started',
@@ -87,33 +79,17 @@ let {
       type: 'number',
     },
     prerendererUrl: {
-      // TODO make this required when feature flag is removed
       description: 'URL of the prerender server to invoke',
+      demandOption: true,
       type: 'string',
     },
   })
   .parseSync();
 
 log.info(`starting worker with pid ${process.pid} and priority ${priority}`);
-let useHeadlessChromePrerender =
-  process.env.USE_HEADLESS_CHROME_INDEXING === 'true' &&
-  Boolean(prerendererUrl);
-let prerenderer: Prerenderer;
-if (useHeadlessChromePrerender && prerendererUrl) {
-  (globalThis as any).__useHeadlessChromePrerender = true;
-  log.info(`Using prerender server ${prerendererUrl}`);
-  prerenderer = createRemotePrerenderer(prerendererUrl);
-} else {
-  prerenderer = {
-    async prerenderCard() {
-      throw new Error(`Prerenderer server has not been configured/enabled`);
-    },
-    async prerenderModule() {
-      throw new Error(`Prerenderer server has not been configured/enabled`);
-    },
-  };
-}
 
+let prerenderer = createRemotePrerenderer(prerendererUrl);
+let createPrerenderAuth = buildCreatePrerenderAuth(REALM_SECRET_SEED);
 if (fromUrls.length !== toUrls.length) {
   log.error(
     `Mismatched number of URLs, the --fromUrl params must be matched to the --toUrl params`,
@@ -129,7 +105,6 @@ let urlMappings = fromUrls.map((fromUrl, i) => [
 for (let [from, to] of urlMappings) {
   virtualNetwork.addURLMapping(from, to);
 }
-let dist: URL = new URL(distURL);
 let autoMigrate = migrateDB || undefined;
 
 (async () => {
@@ -143,25 +118,18 @@ let autoMigrate = migrateDB || undefined;
 
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueueRunner({ adapter: dbAdapter, workerId, priority });
-  let manager = new RunnerOptionsManager();
-  let { getRunner } = await makeFastBootIndexRunner(
-    dist,
-    manager.getOptions.bind(manager),
-  );
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue,
-    runnerOptsManager: manager,
     virtualNetwork,
     matrixURL: new URL(matrixURL),
     secretSeed: REALM_SECRET_SEED,
-    indexRunner: getRunner,
     reportStatus,
     realmServerMatrixUsername: REALM_SERVER_MATRIX_USERNAME,
     dbAdapter,
     queuePublisher: new PgQueuePublisher(dbAdapter),
     prerenderer,
-    useHeadlessChromePrerender,
+    createPrerenderAuth,
   });
 
   await worker.run();

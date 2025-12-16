@@ -1,12 +1,15 @@
 import { module, test, assert } from 'qunit';
 import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
-
 import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   DEFAULT_LLM,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -33,6 +36,7 @@ import {
   getTools,
   SKILL_INSTRUCTIONS_MESSAGE,
 } from '@cardstack/runtime-common/ai';
+import type { TextContent } from '@cardstack/runtime-common/ai/types';
 
 const DEFAULT_CATALOG_REALM_URL = 'http://localhost:4201/catalog/';
 const catalogRealmURL = ensureTrailingSlash(
@@ -512,7 +516,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(result[1].role, 'system');
     assert.equal(result[2].role, 'user');
     assert.true(
-      result[2].content?.startsWith('Hey'),
+      (result[2].content as string).startsWith('Hey'),
       'message body should be in the user prompt',
     );
     if (
@@ -520,29 +524,29 @@ Current date and time: 2025-06-11T11:43:00.533Z
       history[0].content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
     ) {
       assert.true(
-        result[2].content?.includes(`"firstName": "Terry"`),
+        (result[2].content as string).includes(`"firstName": "Terry"`),
         'attached card should be in the message that it was sent with 1',
       );
       assert.true(
-        result[2].content?.includes(`"lastName": "Pratchett"`),
+        (result[2].content as string).includes(`"lastName": "Pratchett"`),
         'attached card should be in the message that it was sent with 2',
       );
       assert.true(
-        result[1].content?.includes('Room ID: room1'),
+        (result[1].content as string).includes('Room ID: room1'),
         'roomId should be in the system context message',
       );
       assert.true(
-        result[1].content?.includes('Submode: interact'),
+        (result[1].content as string).includes('Submode: interact'),
         'submode should be in the system context message',
       );
       assert.true(
-        result[1].content?.includes(
+        (result[1].content as string).includes(
           'Workspace: http://localhost:4201/experiments',
         ),
         'workspace should be in the system context message',
       );
       assert.true(
-        result[1].content?.includes(
+        (result[1].content as string).includes(
           'Open cards:\n - http://localhost:4201/experiments/Author/1\n',
         ),
         'open card ids should be in the system context message',
@@ -1011,7 +1015,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
 
     let userMessages = prompt.filter((message) => message.role === 'user');
     assert.ok(
-      userMessages[0]?.content?.includes(
+      (userMessages[0]?.content as string).includes(
         `
 Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
@@ -1020,7 +1024,7 @@ Attached Files (files with newer versions don't show their content):
       ),
     );
     assert.ok(
-      userMessages[1]?.content?.includes(
+      (userMessages[1]?.content as string).includes(
         `
 Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
@@ -1031,7 +1035,7 @@ Attached Files (files with newer versions don't show their content):
       ),
     );
     assert.ok(
-      userMessages[2]?.content?.includes(
+      (userMessages[2]?.content as string).includes(
         `
 Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts):
@@ -1043,7 +1047,7 @@ Attached Files (files with newer versions don't show their content):
     );
 
     assert.ok(
-      prompt[prompt.length - 2].content?.includes(
+      (prompt[prompt.length - 2].content as string).includes(
         'File open in code editor: http://test-realm-server/my-realm/spaghetti-recipe.gts',
       ),
       'Context should include the URL of the file open in the code editor',
@@ -1346,24 +1350,26 @@ Attached Files (files with newer versions don't show their content):
       (message) => message.role === 'user',
     );
     assert.true(
-      userMessages[0]?.content?.includes(
+      (userMessages[0]?.content as string).includes(
         'http://localhost:4201/experiments/Author/1',
       ),
     );
     assert.false(
-      userMessages[0]?.content?.includes('"firstName": "Terry"'),
+      (userMessages[0]?.content as string).includes('"firstName": "Terry"'),
       'should not include the contents of the first version of the card in the first user message',
     );
     assert.true(
-      userMessages[1]?.content?.includes(
+      (userMessages[1]?.content as string).includes(
         'http://localhost:4201/experiments/Author/1',
       ),
     );
     assert.true(
-      userMessages[1]?.content?.includes('"firstName": "Newer Terry"'),
+      (userMessages[1]?.content as string).includes(
+        '"firstName": "Newer Terry"',
+      ),
     );
     assert.true(
-      userMessages[1]?.content?.includes(
+      (userMessages[1]?.content as string).includes(
         'http://localhost:4201/experiments/Author/2',
       ),
     );
@@ -1735,7 +1741,7 @@ Attached Files (files with newer versions don't show their content):
 
     let userContextMessage = messages?.[messages.length - 2];
     assert.ok(
-      userContextMessage?.content?.includes(nonEditableCardsMessage),
+      (userContextMessage?.content as string).includes(nonEditableCardsMessage),
       'System context message should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files, but was ' +
         userContextMessage?.content,
     );
@@ -1756,7 +1762,7 @@ Attached Files (files with newer versions don't show their content):
     );
 
     assert.ok(
-      !messages2?.[messages2.length - 2].content?.includes(
+      !(messages2?.[messages2.length - 2].content as string).includes(
         nonEditableCardsMessage,
       ),
       'System context message should not include the "unable to edit cards" message when there are attached cards and a tool',
@@ -1782,7 +1788,7 @@ Attached Files (files with newer versions don't show their content):
     );
 
     assert.ok(
-      !messages3?.[messages3.length - 2].content?.includes(
+      !(messages3?.[messages3.length - 2].content as string).includes(
         nonEditableCardsMessage,
       ),
       'System context message should not include the "unable to edit cards" message when there is an attached file',
@@ -1963,21 +1969,24 @@ Attached Files (files with newer versions don't show their content):
     ).messages!;
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
-    assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.true(
-      result[0].content?.includes(
+      (result[0].content[1] as TextContent).text.includes(
+        SKILL_INSTRUCTIONS_MESSAGE,
+      ),
+    );
+    assert.true(
+      (result[0].content[2] as TextContent).text.includes(
         'Skill (id: https://cardstack.com/base/Skill/card-editing, title: Card Editing):',
       ),
       'includes skill title metadata when present',
     );
-    assert.false(result[0].content?.includes('['));
     assert.true(
-      result[0].content?.includes(
+      (result[0].content[2] as TextContent).text.includes(
         'If the user wants the data they see edited, AND the patchCardInstance function is available',
       ),
     );
     assert.true(
-      result[0].content?.includes(
+      (result[0].content[3] as TextContent).text.includes(
         'Given a prompt, fill in the product requirements document.',
       ),
     );
@@ -2078,20 +2087,26 @@ Attached Files (files with newer versions don't show their content):
     ).messages!;
 
     assert.equal(result[0].role, 'system');
-    assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.true(
-      result[0].content?.includes(
+      (result[0].content[1] as TextContent).text.includes(
+        SKILL_INSTRUCTIONS_MESSAGE,
+      ),
+    );
+    assert.true(
+      (result[0].content[2] as TextContent).text.includes(
         'If the user wants the data they see edited, AND the patchCardInstance function is available',
       ),
       'skill card instructions included in the system message',
     );
     assert.true(
-      result[0].content?.includes('Use pirate colloquialism when responding.'),
+      (result[0].content[3] as TextContent).text.includes(
+        'Use pirate colloquialism when responding.',
+      ),
       'skill card instructions included in the system message',
     );
     assert.equal(result[2].role, 'user');
     assert.true(
-      result![2].content?.includes(
+      (result[2].content as string).includes(
         '"appTitle": "Radio Episode Tracker for Nerds"',
       ),
       'attached card details included in the user message',
@@ -2141,10 +2156,20 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.true(messages!.length > 0);
     assert.true(messages![0].role === 'system');
-    let systemPrompt = messages![0].content;
-    assert.true(systemPrompt?.includes(SKILL_INSTRUCTIONS_MESSAGE));
-    assert.false(systemPrompt?.includes('This is skill 1'));
-    assert.true(systemPrompt?.includes('This is skill 2'));
+    let systemPromptParts = messages![0].content;
+    assert.true(
+      (systemPromptParts[1] as TextContent).text.includes(
+        SKILL_INSTRUCTIONS_MESSAGE,
+      ),
+    );
+    assert.false(
+      (systemPromptParts as TextContent[])
+        .map((c) => c.text)
+        .some((text) => text.includes('This is skill 1')),
+    );
+    assert.true(
+      (systemPromptParts[2] as TextContent).text.includes('This is skill 2'),
+    );
   });
 
   test('If there are no skill cards active in the latest matrix room state, remove from system prompt', async () => {
@@ -2189,7 +2214,9 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.true(messages!.length > 0);
     assert.true(messages![0].role === 'system');
-    let systemPrompt = messages![0].content;
+    let systemPrompt = (messages![0].content as TextContent[])
+      .map((c) => c.text)
+      .join('\n');
     assert.false(systemPrompt?.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.false(systemPrompt?.includes('This is skill 1'));
     assert.false(systemPrompt?.includes('This is skill 2'));
@@ -2250,7 +2277,11 @@ Attached Files (files with newer versions don't show their content):
       '@aibot:localhost',
       fakeMatrixClient,
     );
-    assert.true(messages![0]!.content?.includes('Skill Instructions'));
+    assert.true(
+      (messages![0]!.content[1] as TextContent).text.includes(
+        'Skill Instructions',
+      ),
+    );
   });
 
   test('Has the skill card specified by the last state update, even if there are other skill cards with the same id', async () => {
@@ -2290,11 +2321,20 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.true(messages!.length > 0);
     assert.equal(messages![0].role, 'system');
-    assert.true(messages![0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
-    assert.false(messages![0].content?.includes('SKILL_INSTRUCTIONS_V1'));
     assert.true(
-      messages![0].content?.includes(
-        'Skill (id: skill-card-1):\nSKILL_INSTRUCTIONS_V2\n',
+      (messages![0].content[1] as TextContent).text.includes(
+        SKILL_INSTRUCTIONS_MESSAGE,
+      ),
+    );
+    assert.false(
+      (messages![0].content as TextContent[])
+        .map((c) => c.text)
+        .join('')
+        .includes('SKILL_INSTRUCTIONS_V1'),
+    );
+    assert.true(
+      (messages![0].content[2] as TextContent).text.includes(
+        'Skill (id: skill-card-1):\nSKILL_INSTRUCTIONS_V2',
       ),
     );
   });
@@ -2671,7 +2711,7 @@ Attached Files (files with newer versions don't show their content):
     assert.equal(result[5].tool_call_id, 'tool-call-id-1');
     const expected = `Tool call executed, with result card: {"data":{"type":"card","attributes":{"title":"Search Results","description":"Here are the search results","results":[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Alice is a software engineer at Google.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]},"meta":{"adoptsFrom":{"module":"https://cardstack.com/base/search-results","name":"SearchResults"}}}}.`;
 
-    assert.equal(result[5].content!.trim(), expected.trim());
+    assert.equal((result[5].content as string).trim(), expected.trim());
   });
 
   test('Tools remain available in prompt parts even when not in last message', async () => {
@@ -2788,7 +2828,7 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.ok(toolCallMessage, 'Should have a tool call message');
     assert.ok(
-      toolCallMessage!.content!.includes('Cloudy'),
+      (toolCallMessage!.content as string).includes('Cloudy'),
       'Tool call result should include "Cloudy"',
     );
   });
@@ -2913,7 +2953,7 @@ Attached Files (files with newer versions don't show their content):
       'Should have one tool call message',
     );
     assert.ok(
-      toolCallMessages[0].content!.includes('Tool call executed'),
+      (toolCallMessages[0].content as string).includes('Tool call executed'),
       'Tool call result should include "Tool call executed"',
     );
   });
@@ -3028,11 +3068,11 @@ Attached Files (files with newer versions don't show their content):
       'Should have two tool call messages',
     );
     assert.ok(
-      toolCallMessages[0].content!.includes('Cloudy'),
+      (toolCallMessages[0].content as string).includes('Cloudy'),
       'Tool call result should include "Cloudy"',
     );
     assert.ok(
-      toolCallMessages[1].content!.includes('Sunny'),
+      (toolCallMessages[1].content as string).includes('Sunny'),
       'Tool call result should include "Sunny"',
     );
   });
@@ -3459,7 +3499,12 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.equal(messages!.length, 10);
     assert.equal(messages![0].role, 'system');
-    assert.false(messages![0].content!.includes('Business Card V1'));
+    assert.false(
+      (messages![0].content as TextContent[])
+        .map((c) => c.text)
+        .join('')
+        .includes('Business Card V1'),
+    );
     assert.equal(messages![2].role, 'assistant');
     assert.equal(
       messages![2].content,
@@ -3467,7 +3512,9 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.equal(messages![3].role, 'user');
     assert.true(
-      messages![3].content!.startsWith('change the name to stephanie'),
+      (messages![3].content as string).startsWith(
+        'change the name to stephanie',
+      ),
     );
     assert.equal(messages![4].role, 'assistant');
     assert.equal(
@@ -3481,7 +3528,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       'patchCardInstance',
       'Should have patchCardInstance tool call',
     );
-    assert.true(messages![6].content!.includes('Business Card V2'));
+    assert.true((messages![6].content as string).includes('Business Card V2'));
   });
 
   test('Responds to successful completion of lone code patch', async function () {
@@ -3640,7 +3687,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       'Should have one tool result message',
     );
     assert.ok(
-      toolResultMessages[0].content!.includes('Cloudy'),
+      (toolResultMessages[0].content as string).includes('Cloudy'),
       'Tool call result should include "Cloudy"',
     );
   });
@@ -3708,7 +3755,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       'Should have one tool result message',
     );
     assert.ok(
-      toolResultMessages[0].content!.includes('Cloudy'),
+      (toolResultMessages[0].content as string).includes('Cloudy'),
       'Tool call result should include "Cloudy"',
     );
   });
@@ -3831,7 +3878,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.equal(messages![3].role, 'system');
     assert.true(
-      !!messages![3].content!.match(
+      !!(messages![3].content as string).match(
         /Current date and time: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,
       ),
       'Context message should contain the current date and time but was ' +
@@ -3863,11 +3910,11 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.ok(toolCallMessage, 'Should have a tool call message');
     assert.true(
-      toolCallMessage!.content!.includes('executed'),
+      (toolCallMessage!.content as string).includes('executed'),
       'Tool call result should reflect that the tool was executed',
     );
     assert.true(
-      toolCallMessage!.content!.includes(
+      (toolCallMessage!.content as string).includes(
         `
 Attached Files (files with newer versions don't show their content):
 [postcard.gts](http://test-realm-server/user/test-realm/postcard.gts):
@@ -3901,11 +3948,11 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.ok(toolCallMessage, 'Should have a tool call message');
     assert.true(
-      toolCallMessage!.content!.includes('executed'),
+      (toolCallMessage!.content as string).includes('executed'),
       'Tool call result should reflect that the tool was executed',
     );
     assert.true(
-      toolCallMessage!.content!.includes(
+      (toolCallMessage!.content as string).includes(
         `
 Attached Cards (cards with newer versions don't show their content):
 [
@@ -3952,13 +3999,13 @@ Attached Cards (cards with newer versions don't show their content):
     );
     assert.ok(lastUserMessage, 'Should have a code patch result message');
     assert.ok(
-      lastUserMessage!.content!.includes(
+      (lastUserMessage!.content as string).includes(
         'The user has successfully applied code patch 1.',
       ),
       'Code patch result should reflect that the code patch was applied',
     );
     assert.ok(
-      lastUserMessage!.content!.includes(
+      (lastUserMessage!.content as string).includes(
         `
 Attached Files (files with newer versions don't show their content):
 [postcard.gts](http://test-realm-server/user/test-realm/postcard.gts):
@@ -3966,6 +4013,848 @@ Attached Files (files with newer versions don't show their content):
       `.trim(),
       ),
       'Code patch result should include attached files',
+    );
+  });
+
+  test('getPromptParts surfaces pending code patch correctness summary after patches', async function () {
+    const roomId = 'room-checks';
+    const aiMessageId = 'ai-message';
+    const cardId = 'http://localhost/cards/Profile/1';
+    const patchedFileSource =
+      'http://localhost/files/src/components/button.gts';
+
+    const eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: 'user-message',
+        origin_server_ts: 1,
+        room_id: roomId,
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Please update the profile card and button styles.',
+          format: 'org.matrix.custom.html',
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/test',
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'user-message',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: aiMessageId,
+        origin_server_ts: 2,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: `Updating the file...
+${patchedFileSource}
+╔═══ SEARCH ════╗
+old content
+╠═══════════════╣
+new content
+╚═══ REPLACE ═══╝
+`,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/test',
+              tools: [],
+              functions: [],
+            },
+          },
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: 'patch-card',
+              name: 'patchCardInstance',
+              arguments: JSON.stringify({
+                description: 'Update the profile card',
+                attributes: {
+                  cardId,
+                  patch: { attributes: { name: 'Updated Name' } },
+                },
+              }),
+            },
+          ],
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: aiMessageId,
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+        event_id: 'patch-result',
+        origin_server_ts: 3,
+        room_id: roomId,
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+          },
+          codeBlockIndex: 0,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: patchedFileSource,
+                url: patchedFileSource,
+                name: 'button.gts',
+                contentType: 'text/plain',
+              },
+            ],
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'patch-result',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        event_id: 'command-result',
+        origin_server_ts: 4,
+        room_id: roomId,
+        sender: '@admin:localhost',
+        content: {
+          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          },
+          commandRequestId: 'patch-card',
+          data: {
+            card: {
+              url: 'mxc://mock-server/profile-card',
+              sourceUrl: 'http://mock/card',
+              name: 'ProfileCard',
+              contentType: 'application/vnd.card+json',
+              content: JSON.stringify({ data: { id: cardId } }),
+            },
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'command-result',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const { pendingCodePatchCorrectnessChecks } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.ok(
+      pendingCodePatchCorrectnessChecks,
+      'Should collect pending code patch correctness info',
+    );
+    assert.strictEqual(
+      pendingCodePatchCorrectnessChecks?.targetEventId,
+      aiMessageId,
+      'Summary should target the AI message with patches',
+    );
+    assert.strictEqual(
+      pendingCodePatchCorrectnessChecks?.roomId,
+      roomId,
+      'Summary should include the room id',
+    );
+    assert.deepEqual(
+      pendingCodePatchCorrectnessChecks?.files,
+      [
+        {
+          sourceUrl: patchedFileSource,
+          displayName: 'files/src/components/button.gts',
+        },
+      ],
+      'Patched files should be surfaced',
+    );
+    assert.deepEqual(
+      pendingCodePatchCorrectnessChecks?.cards,
+      [{ cardId }],
+      'Patched cards should be surfaced',
+    );
+  });
+
+  test('getPromptParts ignores cancelled patch commands when collecting pending code patch correctness checks', async function () {
+    const roomId = 'room-checks-cancelled';
+    const aiMessageId = 'ai-message';
+    const cancelledAiMessageId = 'cancelled-ai-message';
+    const cardId = 'http://localhost/cards/Profile/1';
+    const patchedFileSource = 'http://localhost/realm/button.gts';
+
+    const eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: cancelledAiMessageId,
+        origin_server_ts: 0,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: '',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          isCanceled: true,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: 'cancelled-patch',
+              name: 'patchFields',
+              arguments: JSON.stringify({
+                description: 'Cancelled patch request',
+                attributes: {
+                  cardId,
+                  patch: { attributes: { name: 'Cancelled' } },
+                },
+              }),
+            },
+          ],
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: cancelledAiMessageId,
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: 'user-message',
+        origin_server_ts: 1,
+        room_id: roomId,
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Please update the profile card and button styles.',
+          format: 'org.matrix.custom.html',
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/test',
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'user-message',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: aiMessageId,
+        origin_server_ts: 2,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: `Updating the file...
+${patchedFileSource}
+╔═══ SEARCH ════╗
+old content
+╠═══════════════╣
+new content
+╚═══ REPLACE ═══╝
+`,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/test',
+              tools: [],
+              functions: [],
+            },
+          },
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: 'patch-card',
+              name: 'patchCardInstance',
+              arguments: JSON.stringify({
+                description: 'Update the profile card',
+                attributes: {
+                  cardId,
+                  patch: { attributes: { name: 'Updated Name' } },
+                },
+              }),
+            },
+          ],
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: aiMessageId,
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+        event_id: 'patch-result',
+        origin_server_ts: 3,
+        room_id: roomId,
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+          },
+          codeBlockIndex: 0,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: patchedFileSource,
+                url: patchedFileSource,
+                name: 'button.gts',
+                contentType: 'text/plain',
+              },
+            ],
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'patch-result',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        event_id: 'command-result',
+        origin_server_ts: 4,
+        room_id: roomId,
+        sender: '@admin:localhost',
+        content: {
+          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          },
+          commandRequestId: 'patch-card',
+          data: {
+            card: {
+              url: 'mxc://mock-server/profile-card',
+              sourceUrl: 'http://mock/card',
+              name: 'ProfileCard',
+              contentType: 'application/vnd.card+json',
+              content: JSON.stringify({ data: { id: cardId } }),
+            },
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'command-result',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const { pendingCodePatchCorrectnessChecks } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.ok(
+      pendingCodePatchCorrectnessChecks,
+      'Should collect pending code patch correctness info even after a cancelled command',
+    );
+    assert.strictEqual(
+      pendingCodePatchCorrectnessChecks?.targetEventId,
+      aiMessageId,
+      'Summary should target the AI message with patches',
+    );
+  });
+
+  test('getPromptParts ignores older unresolved commands when a newer code patch is applied', async function () {
+    const roomId = 'room-checks-older-unresolved';
+    const aiMessageId = 'ai-message';
+    const olderAiMessageId = 'older-ai-message';
+    const patchedFileSource = 'http://localhost/realm/button.gts';
+
+    const eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: 'user-message',
+        origin_server_ts: 1,
+        room_id: roomId,
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Please update the profile card.',
+          format: 'org.matrix.custom.html',
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/test',
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'user-message',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: olderAiMessageId,
+        origin_server_ts: 2,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Earlier command that never finished.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: 'stale-command',
+              name: 'patchFields',
+              arguments: JSON.stringify({
+                description: 'Stale command',
+                attributes: {
+                  cardId: 'http://localhost/cards/Old/1',
+                  patch: { attributes: { name: 'Stale' } },
+                },
+              }),
+            },
+          ],
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: olderAiMessageId,
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: aiMessageId,
+        origin_server_ts: 3,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: `Updating the file...
+${patchedFileSource}
+╔═══ SEARCH ════╗
+old content
+╠═══════════════╣
+new content
+╚═══ REPLACE ═══╝
+`,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/test',
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: aiMessageId,
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+        event_id: 'patch-result',
+        origin_server_ts: 4,
+        room_id: roomId,
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+          },
+          codeBlockIndex: 0,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: patchedFileSource,
+                url: patchedFileSource,
+                name: 'button.gts',
+                contentType: 'text/plain',
+              },
+            ],
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'patch-result',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const { pendingCodePatchCorrectnessChecks } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.ok(
+      pendingCodePatchCorrectnessChecks,
+      'Should collect pending code patch correctness despite older unresolved commands',
+    );
+    assert.strictEqual(
+      pendingCodePatchCorrectnessChecks?.targetEventId,
+      aiMessageId,
+      'Summary should target the latest AI patch message',
+    );
+    assert.deepEqual(
+      pendingCodePatchCorrectnessChecks?.files,
+      [
+        {
+          sourceUrl: patchedFileSource,
+          displayName: 'realm/button.gts',
+        },
+      ],
+      'Patched files should be surfaced',
+    );
+  });
+
+  test('getPromptParts toggles correctness summary and patch result prompts based on autoCorrectnessChecksEnabled option', async function () {
+    const roomId = '!room:localhost';
+    const aiMessageId = '$ai-msg';
+    const eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '$user-msg',
+        room_id: roomId,
+        sender: '@user:localhost',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Please fix the file and run correctness checks.',
+          format: 'org.matrix.custom.html',
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+          isStreamingFinished: true,
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: '$user-msg',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: aiMessageId,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        origin_server_ts: 2,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: `Applying patch...
+http://localhost/example.gts
+╔═══ SEARCH ════╗
+old
+╠═══════════════╣
+new
+╚═══ REPLACE ═══╝
+`,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: 'check-1',
+              name: 'checkCorrectness',
+              arguments: JSON.stringify({
+                description: 'Check file correctness',
+                attributes: {
+                  targetType: 'file',
+                  targetRef: 'http://localhost/example.gts',
+                  fileUrl: 'http://localhost/example.gts',
+                  roomId,
+                },
+              }),
+            },
+          ],
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: aiMessageId,
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+        event_id: '$patch-result',
+        room_id: roomId,
+        sender: '@user:localhost',
+        origin_server_ts: 3,
+        content: {
+          msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+          codeBlockIndex: 0,
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+          },
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+              submode: 'code',
+            },
+            attachedFiles: [],
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: '$patch-result',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        event_id: '$command-result',
+        room_id: roomId,
+        sender: '@command:localhost',
+        origin_server_ts: 4,
+        content: {
+          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: 'check-1',
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          },
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+            attachedFiles: [],
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: '$command-result',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const summaryMessage =
+      'The automated correctness checks have finished. Summarize their results for me based on the tool output above.';
+
+    const promptPartsWithAutoCorrectnessChecksDisabled = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+      { autoCorrectnessChecksEnabled: false },
+    );
+    let disabledUserMessages =
+      promptPartsWithAutoCorrectnessChecksDisabled.messages?.filter(
+        (message) => message.role === 'user',
+      ) ?? [];
+    assert.false(
+      disabledUserMessages.some(
+        (message) => message.content === summaryMessage,
+      ),
+      'When disabled the automated summary should be omitted',
+    );
+    assert.true(
+      disabledUserMessages.some((message) =>
+        (message.content as string).includes(
+          'The user has successfully applied code patch 1.',
+        ),
+      ),
+      'When disabled the code patch result message should be included',
+    );
+
+    const promptPartsWithAutoCorrectnessChecksEnabled = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+      { autoCorrectnessChecksEnabled: true },
+    );
+    let enabledUserMessages =
+      promptPartsWithAutoCorrectnessChecksEnabled.messages?.filter(
+        (message) => message.role === 'user',
+      ) ?? [];
+    assert.true(
+      enabledUserMessages.some((message) => message.content === summaryMessage),
+      'When enabled the summary should be included',
+    );
+    assert.false(
+      enabledUserMessages.some((message) =>
+        (message.content as string).includes(
+          'The user has successfully applied code patch 1.',
+        ),
+      ),
+      'When enabled the legacy code patch result message should be omitted',
+    );
+  });
+
+  test('system message parts include cache_control directive on last part', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hello',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/experiments',
+              submode: 'interact',
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    // Create some skill cards to ensure we have multiple system message parts
+    const skillCards: LooseCardResource[] = [
+      {
+        id: 'http://localhost:4201/skills/skill-1',
+        type: 'card',
+        attributes: {
+          title: 'Test Skill',
+          instructions: 'Test instructions for skill 1',
+        },
+        meta: {
+          adoptsFrom: skillCardRef,
+        },
+      },
+      {
+        id: 'http://localhost:4201/skills/skill-2',
+        type: 'card',
+        attributes: {
+          title: 'Another Skill',
+          instructions: 'Test instructions for skill 2',
+        },
+        meta: {
+          adoptsFrom: skillCardRef,
+        },
+      },
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      [],
+      skillCards,
+      [],
+      fakeMatrixClient,
+    );
+
+    // Find the system message
+    const systemMessage = result.find((msg) => msg.role === 'system');
+    assert.ok(systemMessage, 'Should have a system message');
+
+    const content = systemMessage!.content;
+    assert.ok(
+      Array.isArray(content),
+      'System message content should be an array',
+    );
+
+    const contentParts = content as TextContent[];
+    assert.true(
+      contentParts.length > 1,
+      'Should have multiple system message parts',
+    );
+
+    // Check that all parts except the last don't have cache_control
+    for (let i = 0; i < contentParts.length - 1; i++) {
+      assert.equal(
+        contentParts[i].type,
+        'text',
+        `Part ${i} should be text type`,
+      );
+      assert.notOk(
+        contentParts[i].cache_control,
+        `Part ${i} should not have cache_control`,
+      );
+    }
+
+    // Check that the last part has cache_control
+    const lastPart = contentParts[contentParts.length - 1];
+    assert.equal(lastPart.type, 'text', 'Last part should be text type');
+    assert.ok(lastPart.cache_control, 'Last part should have cache_control');
+    assert.deepEqual(
+      lastPart.cache_control,
+      { type: 'ephemeral' },
+      'cache_control should be set to ephemeral',
     );
   });
 });

@@ -22,8 +22,6 @@ import { consume } from 'ember-provide-consume-context';
 import { resource, use } from 'ember-resources';
 import max from 'lodash/max';
 
-import { MatrixEvent } from 'matrix-js-sdk';
-
 import pluralize from 'pluralize';
 
 import { TrackedObject, TrackedArray } from 'tracked-built-ins';
@@ -33,10 +31,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { Alert, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 
+import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import {
   type getCard,
   GetCardContextName,
-  ResolvedCodeRef,
   internalKeyFor,
   isCardInstance,
 } from '@cardstack/runtime-common';
@@ -46,16 +44,16 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
-import { Message } from '@cardstack/host/lib/matrix-classes/message';
+import type { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
-import { RoomResource } from '@cardstack/host/resources/room';
+import type { RoomResource } from '@cardstack/host/resources/room';
 
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
@@ -80,6 +78,7 @@ import RoomMessage from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
 import type { RoomSkill } from '../../resources/room';
+import type { MatrixEvent } from 'matrix-js-sdk';
 
 interface Signature {
   Element: HTMLElement;
@@ -1237,7 +1236,10 @@ export default class Room extends Component<Signature> {
   @cached
   private get readyCommands() {
     let lastMessage = this.messages[this.messages.length - 1];
-    if (!lastMessage || !lastMessage.commands) return [];
+
+    if (!lastMessage || !lastMessage.commands) {
+      return [];
+    }
     return lastMessage.commands.filter(
       (command) =>
         (command.status === 'ready' || command.status === undefined) &&

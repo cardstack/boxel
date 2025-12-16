@@ -16,7 +16,7 @@ import { format, subMinutes } from 'date-fns';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
@@ -28,7 +28,7 @@ import {
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import LocalPersistenceService from '@cardstack/host/services/local-persistence-service';
+import type LocalPersistenceService from '@cardstack/host/services/local-persistence-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 

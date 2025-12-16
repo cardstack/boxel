@@ -1,0 +1,225 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/brand-guide"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "spacing": "0.25rem",
+      "cardInfo": {
+        "notes": null,
+        "title": "Cardstack",
+        "description": "Guide to brand elements and visual style",
+        "thumbnailURL": "https://app-assets-cardstack.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-icon.svg"
+      },
+      "markUsage": {
+        "primaryMark1": "https://app-assets-cardstack.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-logo-primary-mark-1.svg",
+        "primaryMark2": "https://app-assets-cardstack.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-logo-primary-mark-2.svg",
+        "secondaryMark1": "https://app-assets-cardstack.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-logo-secondary-mark-1.svg",
+        "secondaryMark2": "https://app-assets-cardstack.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-logo-secondary-mark-2.svg",
+        "primaryMarkMinHeight": "1.25rem",
+        "primaryMarkGreyscale1": "https://app-assets-cardstack.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-logo-greyscale-primary-black.svg",
+        "primaryMarkGreyscale2": "https://app-assets-cardstack.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-logo-greyscale-primary-white.svg",
+        "secondaryMarkMinHeight": "2.5rem",
+        "socialMediaProfileIcon": "https://app-assets-cardstack.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-icon.svg",
+        "secondaryMarkGreyscale1": "https://app-assets-cardstack.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-logo-greyscale-secondary-black.svg",
+        "secondaryMarkGreyscale2": "https://app-assets-cardstack.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-logo-greyscale-secondary-white.svg",
+        "primaryMarkClearanceRatio": "1",
+        "secondaryMarkClearanceRatio": "0.5"
+      },
+      "styleName": null,
+      "visualDNA": null,
+      "cssImports": [],
+      "typography": {
+        "body": {
+          "fontSize": null,
+          "fontFamily": "IBM Plex sans",
+          "fontWeight": null,
+          "lineHeight": null,
+          "sampleText": null
+        },
+        "caption": {
+          "fontSize": null,
+          "fontFamily": null,
+          "fontWeight": null,
+          "lineHeight": null,
+          "sampleText": null
+        },
+        "heading": {
+          "fontSize": "22px",
+          "fontFamily": "IBM Plex sans",
+          "fontWeight": "700",
+          "lineHeight": null,
+          "sampleText": null
+        },
+        "subheading": {
+          "fontSize": "",
+          "fontFamily": null,
+          "fontWeight": null,
+          "lineHeight": null,
+          "sampleText": null
+        },
+        "sectionHeading": {
+          "fontSize": null,
+          "fontFamily": null,
+          "fontWeight": null,
+          "lineHeight": null,
+          "sampleText": null
+        }
+      },
+      "cornerRadius": "0.625rem",
+      "inspirations": [],
+      "rootVariables": {
+        "card": "oklch(1 0 0)",
+        "ring": "oklch(0.8859 0.1865 164.8865)",
+        "input": "oklch(1 0 0)",
+        "muted": "oklch(0.9777 0.0041 301.4256)",
+        "accent": "oklch(0.931 0 0)",
+        "border": "oklch(0.8669 0 0)",
+        "chart1": "oklch(0.5838 0.299 307.6101)",
+        "chart2": "oklch(0.5354 0.2684 283.1486)",
+        "chart3": "oklch(0.9194 0.2182 125.1586)",
+        "chart4": "oklch(0.5641 0.2301 259.998)",
+        "chart5": "oklch(0.8277 0.2119 149.9571)",
+        "radius": "0.625rem",
+        "shadow": "0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1)",
+        "popover": "oklch(1 0 0)",
+        "primary": "oklch(0.833 0.174691 165.1921)",
+        "sidebar": "oklch(1 0 0)",
+        "spacing": "0.25rem",
+        "fontMono": "'IBM Plex Mono', 'Menlo', 'Courier New', Courier, ui-monospace, monospace",
+        "fontSans": "'IBM Plex Sans', 'Helvetica Neue', Arial, ui-sans-serif, sans-serif, system-ui",
+        "shadowLg": "0 1px 3px 0px hsl(0 0% 0% / 0.1),\n    0 4px 6px -1px hsl(0 0% 0% / 0.1)",
+        "shadowMd": "0 1px 3px 0px hsl(0 0% 0% / 0.1),\n    0 2px 4px -1px hsl(0 0% 0% / 0.1)",
+        "shadowSm": "0 1px 3px 0px hsl(0 0% 0% / 0.1),\n    0 1px 2px -1px hsl(0 0% 0% / 0.1)",
+        "shadowXl": "0 1px 3px 0px hsl(0 0% 0% / 0.1),\n    0 8px 10px -1px hsl(0 0% 0% / 0.1)",
+        "shadowXs": "0 1px 3px 0px hsl(0 0% 0% / 0.05)",
+        "fontSerif": "'IBM Plex Serif', 'Georgia', Times, serif",
+        "secondary": "oklch(1 0 0)",
+        "shadow2xl": "0 1px 3px 0px hsl(0 0% 0% / 0.25)",
+        "shadow2xs": "0 1px 3px 0px hsl(0 0% 0% / 0.05)",
+        "background": "oklch(1 0 0)",
+        "foreground": "oklch(0 0 0)",
+        "destructive": "oklch(0.6763 0.2115 24.8106)",
+        "sidebarRing": "oklch(0.8859 0.1865 164.8865)",
+        "sidebarAccent": "oklch(0.931 0 0)",
+        "sidebarBorder": "oklch(0.8669 0 0)",
+        "cardForeground": "oklch(0 0 0)",
+        "sidebarPrimary": "oklch(0 0 0)",
+        "trackingNormal": "0.01em",
+        "mutedForeground": "oklch(0.4495 0 0)",
+        "accentForeground": "oklch(0 0 0)",
+        "popoverForeground": "oklch(0 0 0)",
+        "primaryForeground": "oklch(0 0 0)",
+        "sidebarForeground": "oklch(0 0 0)",
+        "secondaryForeground": "oklch(0 0 0)",
+        "destructiveForeground": "oklch(0.9672 0 0)",
+        "sidebarAccentForeground": "oklch(0 0 0)",
+        "sidebarPrimaryForeground": "oklch(1 0 0)"
+      },
+      "wallpaperImages": [],
+      "brandColorPalette": [
+        {
+          "name": null,
+          "value": "#37EB77"
+        },
+        {
+          "name": null,
+          "value": "#00EBE5"
+        },
+        {
+          "name": null,
+          "value": "#272330"
+        },
+        {
+          "name": null,
+          "value": "#FFFFFF"
+        },
+        {
+          "name": null,
+          "value": "#F8F7FA"
+        },
+        {
+          "name": null,
+          "value": "#FF5050"
+        },
+        {
+          "name": null,
+          "value": "#C3FC33"
+        },
+        {
+          "name": null,
+          "value": "#ac00ff"
+        },
+        {
+          "name": null,
+          "value": "#6638FF"
+        },
+        {
+          "name": null,
+          "value": "#281E78"
+        }
+      ],
+      "darkModeVariables": {
+        "card": "oklch(0.3541 0.031 289.8048)",
+        "ring": "oklch(0.8859 0.1865 164.8865)",
+        "input": "oklch(0 0 0)",
+        "muted": "oklch(0.4211 0.0203 300.7169)",
+        "accent": "oklch(0.5769 0.0259 290.9642)",
+        "border": "oklch(0.4386 0 0)",
+        "chart1": "oklch(0.5838 0.299 307.6101)",
+        "chart2": "oklch(0.5354 0.2684 283.1486)",
+        "chart3": "oklch(0.9194 0.2182 125.1586)",
+        "chart4": "oklch(0.5641 0.2301 259.998)",
+        "chart5": "oklch(0.8277 0.2119 149.9571)",
+        "radius": "0.625rem",
+        "shadow": "0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1)",
+        "popover": "oklch(0.4211 0.0203 300.7169)",
+        "primary": "oklch(0.8859 0.1865 164.8865)",
+        "sidebar": "oklch(0.3541 0.031 289.8048)",
+        "spacing": "0.25rem",
+        "fontMono": "'IBM Plex Mono', 'Menlo', 'Courier New', Courier, ui-monospace, monospace",
+        "fontSans": "'IBM Plex Sans', 'Helvetica Neue', Arial, ui-sans-serif, sans-serif, system-ui",
+        "shadowLg": "0 1px 3px 0px hsl(0 0% 0% / 0.1),\n    0 4px 6px -1px hsl(0 0% 0% / 0.1)",
+        "shadowMd": "0 1px 3px 0px hsl(0 0% 0% / 0.1),\n    0 2px 4px -1px hsl(0 0% 0% / 0.1)",
+        "shadowSm": "0 1px 3px 0px hsl(0 0% 0% / 0.1),\n    0 1px 2px -1px hsl(0 0% 0% / 0.1)",
+        "shadowXl": "0 1px 3px 0px hsl(0 0% 0% / 0.1),\n    0 8px 10px -1px hsl(0 0% 0% / 0.1)",
+        "shadowXs": "0 1px 3px 0px hsl(0 0% 0% / 0.05)",
+        "fontSerif": "'IBM Plex Serif', 'Georgia', Times, serif",
+        "secondary": "oklch(0 0 0)",
+        "shadow2xl": "0 1px 3px 0px hsl(0 0% 0% / 0.25)",
+        "shadow2xs": "0 1px 3px 0px hsl(0 0% 0% / 0.05)",
+        "background": "oklch(0.2663 0.0245 298.8206)",
+        "foreground": "oklch(1 0 0)",
+        "destructive": "oklch(0.6763 0.2115 24.8106)",
+        "sidebarRing": "oklch(0.8859 0.1865 164.8865)",
+        "sidebarAccent": "oklch(0.5769 0.0259 290.9642)",
+        "sidebarBorder": "oklch(0.4386 0 0)",
+        "cardForeground": "oklch(1 0 0)",
+        "sidebarPrimary": "oklch(0.8859 0.1865 164.8865)",
+        "trackingNormal": "0.01em",
+        "mutedForeground": "oklch(0.7565 0.0113 286.1261)",
+        "accentForeground": "oklch(1 0 0)",
+        "popoverForeground": "oklch(1 0 0)",
+        "primaryForeground": "oklch(0 0 0)",
+        "sidebarForeground": "oklch(1 0 0)",
+        "secondaryForeground": "oklch(1 0 0)",
+        "destructiveForeground": "oklch(0.9672 0 0)",
+        "sidebarAccentForeground": "oklch(1 0 0)",
+        "sidebarPrimaryForeground": "oklch(0 0 0)"
+      },
+      "functionalPalette": {
+        "dark": "#000000",
+        "light": "#ffffff",
+        "accent": "#e8e8e8",
+        "border": "#d3d3d3",
+        "neutral": "#f8f7fa",
+        "primary": "#00ffba",
+        "secondary": "#00EBE5"
+      }
+    }
+  }
+}

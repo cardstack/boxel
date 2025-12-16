@@ -4,27 +4,28 @@ import {
   Realm,
   VirtualNetwork,
   logger,
-  RunnerOptionsManager,
   Deferred,
+  CachingDefinitionLookup,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
 import { RealmServer } from './server';
 import { resolve } from 'path';
-import { makeFastBootIndexRunner } from './fastboot';
 import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
+import * as ContentTagGlobal from 'content-tag';
+
 import 'decorator-transforms/globals';
+import { createRemotePrerenderer } from './prerender/remote-prerenderer';
+import { buildCreatePrerenderAuth } from './prerender/auth';
+
+(globalThis as any).ContentTagGlobal = ContentTagGlobal;
 
 let log = logger('main');
 if (process.env.NODE_ENV === 'test') {
   (globalThis as any).__environment = 'test';
-}
-
-if (process.env.USE_HEADLESS_CHROME_INDEXING === 'true') {
-  (globalThis as any).__useHeadlessChromePrerender = true;
 }
 
 const REALM_SERVER_SECRET_SEED = process.env.REALM_SERVER_SECRET_SEED;
@@ -91,6 +92,7 @@ let {
   useRegistrationSecretFunction,
   migrateDB,
   workerManagerPort,
+  prerendererUrl,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -153,6 +155,11 @@ let {
         'The port the worker manager is running on. used to wait for the workers to be ready',
       type: 'number',
     },
+    prerendererUrl: {
+      demandOption: true,
+      description: 'URL of the prerender server to invoke',
+      type: 'string',
+    },
   })
   .parseSync();
 
@@ -195,15 +202,27 @@ let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let dist: URL = new URL(distURL);
 let autoMigrate = migrateDB || undefined;
 
+const getIndexHTML = async () => {
+  let response = await fetch(distURL);
+  if (!response.ok) {
+    throw new Error(
+      `Received unsuccessful response fetching index.html from host app URL: ${response.status} - ${await response.text()}`,
+    );
+  }
+  return await response.text();
+};
+
 (async () => {
+  try {
+    await getIndexHTML();
+  } catch (e: any) {
+    Sentry.captureException(e);
+    console.error(`Unable to fetch from host app URL ${distURL}: ${e.message}`);
+    process.exit(-2);
+  }
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueuePublisher(dbAdapter);
-  let manager = new RunnerOptionsManager();
-  let { getIndexHTML } = await makeFastBootIndexRunner(
-    dist,
-    manager.getOptions.bind(manager),
-  );
 
   if (workerManagerPort != null) {
     await waitForWorkerManager(workerManagerPort);
@@ -214,6 +233,15 @@ let autoMigrate = migrateDB || undefined;
     username: REALM_SERVER_MATRIX_USERNAME,
     seed: REALM_SECRET_SEED,
   });
+  let prerenderer = createRemotePrerenderer(prerendererUrl);
+  let createPrerenderAuth = buildCreatePrerenderAuth(REALM_SECRET_SEED);
+
+  let definitionLookup = new CachingDefinitionLookup(
+    dbAdapter,
+    prerenderer,
+    virtualNetwork,
+    createPrerenderAuth,
+  );
 
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
@@ -239,6 +267,7 @@ let autoMigrate = migrateDB || undefined;
         dbAdapter,
         queue,
         realmServerMatrixClient,
+        definitionLookup,
       },
       {
         fullIndexOnStartup: true,
@@ -282,6 +311,7 @@ let autoMigrate = migrateDB || undefined;
     grafanaSecret: GRAFANA_SECRET,
     dbAdapter,
     queue,
+    definitionLookup,
     assetsURL: process.env.ASSETS_URL_OVERRIDE
       ? new URL(process.env.ASSETS_URL_OVERRIDE)
       : dist,
@@ -293,6 +323,7 @@ let autoMigrate = migrateDB || undefined;
     getRegistrationSecret: useRegistrationSecretFunction
       ? getRegistrationSecret
       : undefined,
+    prerenderer,
   });
 
   let httpServer = server.listen(port);
@@ -353,7 +384,7 @@ let autoMigrate = migrateDB || undefined;
       log.info(`    ${from} => ${to}`);
     }
   }
-  log.info(`Using host url: '${dist}' for card pre-rendering`);
+  log.info(`Using host url: '${distURL}' for card pre-rendering`);
 
   if (process.send) {
     process.send('ready');

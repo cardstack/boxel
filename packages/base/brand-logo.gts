@@ -13,8 +13,8 @@ import {
   StringField,
   getFieldDescription,
 } from './card-api';
+import { buildCssVariableName } from '@cardstack/boxel-ui/helpers';
 import {
-  dasherize,
   type CssVariableField,
   type CssVariableFieldEntry,
 } from './structured-theme-variables';
@@ -44,7 +44,7 @@ class Embedded extends Component<typeof BrandLogo> {
       <FieldContainer @label='Minimum Size' @vertical={{true}}>
         <div class='preview-field'>
           <p>For screen use</p>
-          <div class='preview-grid border-container'>
+          <div class='preview-flex-container border-container'>
             <div class='preview-container'>
               <span class='annotation'><@fields.primaryMarkMinHeight /></span>
               <@fields.primaryMark1
@@ -198,7 +198,18 @@ class Embedded extends Component<typeof BrandLogo> {
         display: grid;
         grid-template-columns: 1fr 1fr;
       }
+      .preview-flex-container {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-around;
+      }
+      .preview-flex-container > .preview-container {
+        flex-wrap: nowrap;
+      }
       .border-container {
+        background-color: var(--boxel-light);
+        color: var(--boxel-dark);
         border: var(--container-border);
         border-radius: var(--boxel-border-radius);
         overflow: hidden;
@@ -214,15 +225,13 @@ class Embedded extends Component<typeof BrandLogo> {
         justify-content: center;
         flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
+        background-color: var(--boxel-light);
+        color: var(--boxel-dark);
         overflow: hidden;
       }
-      .border-container {
-        border: var(--container-border);
-        border-radius: var(--boxel-border-radius);
-      }
       .dark-container {
-        background-color: var(--foreground);
-        color: var(--background);
+        background-color: var(--boxel-dark);
+        color: var(--boxel-light);
       }
       .greyscale-group {
         justify-content: space-evenly;
@@ -236,7 +245,7 @@ class Embedded extends Component<typeof BrandLogo> {
       }
       .annotation {
         color: var(--annotation-foreground);
-        font-weight: var(--boxel-font-weight-bold);
+        font-weight: 700;
         white-space: nowrap;
       }
       .height-annotation-border {
@@ -260,7 +269,6 @@ class Embedded extends Component<typeof BrandLogo> {
       .profile-icon {
         --logo-min-height: var(--boxel-icon-lg);
         aspect-ratio: 1;
-        padding: 5px;
       }
       .grayscale {
         filter: grayscale(1);
@@ -274,7 +282,7 @@ class Embedded extends Component<typeof BrandLogo> {
         overflow: hidden;
       }
       .media-handle {
-        font-weight: var(--boxel-font-weight-semibold);
+        font-weight: 600;
       }
     </style>
   </template>
@@ -357,7 +365,9 @@ export default class BrandLogo extends FieldDef {
 
     let cssVariableFields: CssVariableFieldEntry[] = [];
     for (let fieldName of fieldNames) {
-      let cssVariableName = `--brand-${dasherize(fieldName)}`;
+      let cssVariableName = buildCssVariableName(fieldName, {
+        prefix: 'brand',
+      });
       let value = (this as CssVariableField)?.[fieldName];
       cssVariableFields.push({
         fieldName,

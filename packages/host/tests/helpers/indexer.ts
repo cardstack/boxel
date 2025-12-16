@@ -19,8 +19,6 @@ import {
   type RealmVersionsTable,
   trimExecutableExtension,
   query,
-  isDefinitionId,
-  trimExportNameFromDefinitionId,
   coerceTypes,
 } from '@cardstack/runtime-common';
 
@@ -35,7 +33,7 @@ const defaultIndexEntry = {
 
 let typesCache = new WeakMap<typeof CardDef, Promise<string[]>>();
 
-// this leverages the logic from current-run.ts to generate the types for a card
+// this leverages the logic from index-runner.ts to generate the types for a card
 // that are serialized in the same manner as they appear in the index
 export async function getTypes(instance: CardDef): Promise<string[]> {
   let loader = loaderFor(instance);
@@ -252,9 +250,10 @@ async function indexedCardsExpressions({
             ? `${row.url}.json`
             : row.url
           : row.url;
-      row.file_alias = isDefinitionId(row.url)
-        ? trimExportNameFromDefinitionId(row.url)
-        : trimExecutableExtension(new URL(row.url)).href.replace(/\.json$/, '');
+      row.file_alias = trimExecutableExtension(new URL(row.url)).href.replace(
+        /\.json$/,
+        '',
+      );
       row.type = row.type ?? 'instance';
       row.last_modified = String(row.last_modified ?? now);
 

@@ -3,7 +3,6 @@ import merge from 'lodash/merge';
 import { isNode } from './index';
 
 const cache = new Map<string, { etag: string; body: string }>();
-const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
 // we need to be careful not to read the response stream before the intended
 // consumer has read it. so we use this callback to allow the consumer to set
@@ -32,7 +31,7 @@ export async function cachedFetch(
   urlOrRequest: string | URL | Request,
   init?: RequestInit,
 ): Promise<MaybeCachedResponse> {
-  if (isNode || isFastBoot) {
+  if (isNode) {
     // we don't have the necessary isolation to cache safely with module scoped
     // cache on the server and during indexing
     return fetchImplementation(urlOrRequest, init);

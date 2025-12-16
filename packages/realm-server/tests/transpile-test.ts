@@ -6,7 +6,7 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 module(basename(__filename), function () {
   module('Transpile', function () {
     test('can rewrite fetch()', async function (assert) {
-      let transpiled = transpileJS(
+      let transpiled = await transpileJS(
         `
         async function test() {
           return await fetch('http://test.com');
@@ -24,7 +24,7 @@ module(basename(__filename), function () {
   });
 
   test('can rewrite import() that has url like argument', async function (assert) {
-    let transpiled = transpileJS(
+    let transpiled = await transpileJS(
       `
       async function test() {
         return await import('./x'); 
@@ -41,7 +41,7 @@ module(basename(__filename), function () {
   });
 
   test('can rewrite import() that has module specifier argument', async function (assert) {
-    let transpiled = transpileJS(
+    let transpiled = await transpileJS(
       `
       async function test() {
         return await import('lodash'); 

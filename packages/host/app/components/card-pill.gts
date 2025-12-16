@@ -22,9 +22,9 @@ import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
-import RealmService from '../services/realm';
-
 import AttachedFileDropdownMenu from './ai-assistant/attached-file-dropdown-menu';
+
+import type RealmService from '../services/realm';
 
 interface CardPillSignature {
   Element: HTMLDivElement | HTMLButtonElement;

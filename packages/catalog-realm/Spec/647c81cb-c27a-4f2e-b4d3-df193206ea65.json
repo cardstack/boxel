@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "module": "../fields/audio",
+        "name": "AudioField"
+      },
+      "specType": "field",
+      "containedExamples": [
+        {
+          "url": null,
+          "filename": null,
+          "mimeType": null,
+          "duration": null,
+          "fileSize": null,
+          "title": null,
+          "artist": null,
+          "waveformData": null,
+          "liked": false,
+          "playCount": null,
+          "lastPlayed": null,
+          "trimStart": null,
+          "trimEnd": null,
+          "playbackRate": null,
+          "loopEnabled": null,
+          "loopStart": null,
+          "loopEnd": null
+        }
+      ],
+      "title": "AudioField",
+      "description": null,
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../fields/audio",
+              "name": "AudioField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

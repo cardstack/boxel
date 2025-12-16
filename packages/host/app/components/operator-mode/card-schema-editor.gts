@@ -20,7 +20,7 @@ import { ArrowTopLeft, IconLink, IconPlus } from '@cardstack/boxel-ui/icons';
 
 import { getPlural } from '@cardstack/runtime-common';
 
-import { type CodeRef } from '@cardstack/runtime-common/code-ref';
+import type { CodeRef } from '@cardstack/runtime-common/code-ref';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import EditFieldModal from '@cardstack/host/components/operator-mode/edit-field-modal';
@@ -37,8 +37,8 @@ import {
 } from '@cardstack/host/services/card-type-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import RealmService from '@cardstack/host/services/realm';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type RealmService from '@cardstack/host/services/realm';
 import {
   isOwnField,
   calculateTotalOwnFields,
@@ -135,6 +135,19 @@ export default class CardSchemaEditor extends Component<Signature> {
           calc(var(--boxel-sp-5xs) * -1)
         );
         height: 100%;
+      }
+
+      .query-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font: 600 var(--boxel-font);
+        line-height: 20px;
+        padding: 0 var(--boxel-sp-xxs);
+        background-color: var(--boxel-200);
+        margin-right: var(--boxel-sp-5xs);
+        border-radius: var(--boxel-border-radius-sm);
+        height: 20px;
       }
 
       .linked-icon {
@@ -367,6 +380,11 @@ export default class CardSchemaEditor extends Component<Signature> {
                                   =
                                 </span>
                               {{/if}}
+                              {{#if field.isQueryField}}
+                                <span class='query-icon' data-test-query-icon>
+                                  Q
+                                </span>
+                              {{/if}}
                               {{#if (this.isLinkedField field)}}
                                 <IconLink
                                   class='linked-icon'
@@ -527,6 +545,10 @@ export default class CardSchemaEditor extends Component<Signature> {
 
     if (field.isComputed) {
       types.push('Computed');
+    }
+
+    if (field.isQueryField) {
+      types.push('Query');
     }
 
     return types.join(', ');

@@ -35,12 +35,12 @@ import {
   type FileResource,
   type Ready,
 } from '@cardstack/host/resources/file';
-import {
-  type ModuleAnalysis,
-  type ModuleDeclaration,
+import type {
+  ModuleAnalysis,
+  ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
 import type { SaveType } from '@cardstack/host/services/card-service';
-import CommandService from '@cardstack/host/services/command-service';
+import type CommandService from '@cardstack/host/services/command-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import { findDeclarationByName } from '@cardstack/host/services/module-contents-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
@@ -612,7 +612,7 @@ export default class CodeEditor extends Component<Signature> {
               onSetup=this.setupFormatAction
               onDispose=this.onEditorDispose
               readOnly=@isReadOnly
-              editorDisplayOptions=(hash lineNumbersMinChars=3 fontSize=13)
+              editorDisplayOptions=(hash lineNumbersMinChars=3 fontSize=12)
             }}
           ></div>
         </div>
@@ -659,6 +659,9 @@ export default class CodeEditor extends Component<Signature> {
         min-width: 100%;
         padding-top: var(--boxel-sp-xxs);
         background-color: var(--monaco-background);
+        font-family: var(--boxel-monospace-font-family);
+        font-size: var(--boxel-caption-font-size);
+        font-weight: 500;
       }
       .monaco-container:not(.readonly) {
         filter: contrast(1.05) brightness(1.05);

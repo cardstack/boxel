@@ -7,18 +7,25 @@ import {
   setupBaseRealmServer,
   setupPermissionedRealm,
   matrixURL,
-  realmSecretSeed,
   testRealmHref,
+  testCreatePrerenderAuth,
 } from './helpers';
 import { buildPrerenderApp } from '../prerender/prerender-app';
 import type { Prerenderer } from '../prerender';
 import { baseCardRef } from '@cardstack/runtime-common';
+import {
+  PRERENDER_SERVER_DRAINING_STATUS_CODE,
+  PRERENDER_SERVER_STATUS_DRAINING,
+  PRERENDER_SERVER_STATUS_HEADER,
+} from '../prerender/prerender-constants';
+import { Deferred } from '@cardstack/runtime-common';
 
 module(basename(__filename), function () {
   module('Prerender server', function (hooks) {
     let request: SuperTest<Test>;
     let prerenderer: Prerenderer;
     const testUserId = '@jade:localhost';
+    let draining = false;
 
     setupBaseRealmServer(hooks, matrixURL);
 
@@ -47,8 +54,10 @@ module(basename(__filename), function () {
     });
 
     hooks.before(function () {
-      let built = buildPrerenderApp(realmSecretSeed, {
+      draining = false;
+      let built = buildPrerenderApp({
         serverURL: 'http://127.0.0.1:4221',
+        isDraining: () => draining,
       });
       prerenderer = built.prerenderer;
       request = supertest(built.app.callback());
@@ -73,6 +82,7 @@ module(basename(__filename), function () {
           | 'realm-owner'
         )[],
       };
+      let auth = testCreatePrerenderAuth(testUserId, permissions);
       let res = await request
         .post('/prerender-card')
         .set('Accept', 'application/vnd.api+json')
@@ -82,8 +92,7 @@ module(basename(__filename), function () {
             type: 'prerender-request',
             attributes: {
               url,
-              userId: testUserId,
-              permissions,
+              auth,
               realm: testRealmHref,
             },
           },
@@ -151,6 +160,7 @@ module(basename(__filename), function () {
           | 'realm-owner'
         )[],
       };
+      let auth = testCreatePrerenderAuth(testUserId, permissions);
       let res = await request
         .post('/prerender-module')
         .set('Accept', 'application/vnd.api+json')
@@ -160,8 +170,7 @@ module(basename(__filename), function () {
             type: 'prerender-module-request',
             attributes: {
               url,
-              userId: testUserId,
-              permissions,
+              auth,
               realm: testRealmHref,
             },
           },
@@ -189,6 +198,210 @@ module(basename(__filename), function () {
       );
       assert.ok(res.body.meta?.timing?.totalMs >= 0, 'has timing meta');
       assert.ok(res.body.meta?.pool?.pageId, 'has pool.pageId');
+    });
+
+    test('reports draining status when shutting down', async function (assert) {
+      draining = true;
+      const permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> =
+        { [testRealmHref]: ['read', 'write', 'realm-owner'] };
+      let auth = testCreatePrerenderAuth(testUserId, permissions);
+      let res = await request
+        .post('/prerender-card')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'prerender-request',
+            attributes: {
+              url: `${testRealmHref}drain`,
+              auth,
+              realm: testRealmHref,
+            },
+          },
+        });
+
+      assert.strictEqual(
+        res.status,
+        PRERENDER_SERVER_DRAINING_STATUS_CODE,
+        'returns draining status code',
+      );
+      assert.strictEqual(
+        res.headers[PRERENDER_SERVER_STATUS_HEADER.toLowerCase()],
+        PRERENDER_SERVER_STATUS_DRAINING,
+        'sets draining header',
+      );
+      draining = false;
+    });
+
+    test('HEAD reflects draining state', async function (assert) {
+      draining = true;
+      let res = await request.head('/').set('Accept', 'application/json');
+      assert.strictEqual(
+        res.status,
+        PRERENDER_SERVER_DRAINING_STATUS_CODE,
+        'HEAD returns draining status',
+      );
+      assert.strictEqual(
+        res.headers[PRERENDER_SERVER_STATUS_HEADER.toLowerCase()],
+        PRERENDER_SERVER_STATUS_DRAINING,
+        'HEAD sets draining header',
+      );
+      draining = false;
+    });
+
+    test('tracks warmed realms for heartbeat', async function (assert) {
+      let beforeWarm = prerenderer.getWarmRealms();
+      let url = `${testRealmHref}2`;
+      const permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> =
+        { [testRealmHref]: ['read', 'write', 'realm-owner'] };
+      let auth = testCreatePrerenderAuth(testUserId, permissions);
+      await request
+        .post('/prerender-card')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'prerender-request',
+            attributes: {
+              url,
+              auth,
+              realm: testRealmHref,
+            },
+          },
+        });
+
+      assert.true(
+        prerenderer.getWarmRealms().includes(testRealmHref),
+        'warm realms include prerendered realm',
+      );
+      assert.true(
+        prerenderer.getWarmRealms().length >= beforeWarm.length,
+        'warm realm list does not shrink',
+      );
+    });
+
+    test('responds draining immediately when shutdown begins during an in-flight prerender', async function (assert) {
+      let localDraining = false;
+      let drainingDeferred = new Deferred<void>();
+      let built = buildPrerenderApp({
+        serverURL: 'http://127.0.0.1:4222',
+        isDraining: () => localDraining,
+        drainingPromise: drainingDeferred.promise,
+        silent: true,
+      });
+      let localRequest = supertest(built.app.callback());
+
+      let execDeferred = new Deferred<void>();
+      let stubResponse = {
+        response: { ok: true },
+        timings: { launchMs: 0, renderMs: 0 },
+        pool: {
+          pageId: 'p',
+          realm: testRealmHref,
+          reused: false,
+          evicted: false,
+          timedOut: false,
+        },
+      };
+      let originalPrerender = (built.prerenderer as any).prerenderCard;
+      (built.prerenderer as any).prerenderCard = async () => {
+        await execDeferred.promise;
+        return stubResponse;
+      };
+
+      let permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> = {
+        [testRealmHref]: ['read', 'write', 'realm-owner'],
+      };
+      let auth = testCreatePrerenderAuth(testUserId, permissions);
+      let resPromise = localRequest
+        .post('/prerender-card')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'prerender-request',
+            attributes: {
+              url: `${testRealmHref}drain-midflight`,
+              auth,
+              realm: testRealmHref,
+            },
+          },
+        });
+
+      // Allow handler to start by yielding once inside execute
+      await Promise.resolve();
+      // simulate shutdown signal while prerender is in progress (after handler start)
+      localDraining = true;
+      drainingDeferred.fulfill();
+
+      let res = await resPromise;
+      assert.strictEqual(
+        res.status,
+        PRERENDER_SERVER_DRAINING_STATUS_CODE,
+        'returns draining status code during in-flight prerender',
+      );
+      assert.strictEqual(
+        res.headers[PRERENDER_SERVER_STATUS_HEADER.toLowerCase()],
+        PRERENDER_SERVER_STATUS_DRAINING,
+        'sets draining header during in-flight prerender',
+      );
+
+      // clean up
+      execDeferred.fulfill();
+      (built.prerenderer as any).prerenderCard = originalPrerender;
+      await built.prerenderer.stop();
+    });
+
+    test('draining race does not leak unhandled rejection from execute', async function (assert) {
+      let unhandled = 0;
+      let onUnhandled = () => unhandled++;
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4223',
+          isDraining: () => true,
+          drainingPromise: Promise.resolve(),
+          silent: true,
+        });
+        let localRequest = supertest(built.app.callback());
+        let originalPrerender = (built.prerenderer as any).prerenderCard;
+        (built.prerenderer as any).prerenderCard = async () => {
+          throw new Error('boom');
+        };
+
+        let permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> =
+          { [testRealmHref]: ['read', 'write', 'realm-owner'] };
+        let auth = testCreatePrerenderAuth(testUserId, permissions);
+        let res = await localRequest
+          .post('/prerender-card')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .send({
+            data: {
+              type: 'prerender-request',
+              attributes: {
+                url: `${testRealmHref}drain-unhandled`,
+                auth,
+                realm: testRealmHref,
+              },
+            },
+          });
+
+        assert.strictEqual(res.status, PRERENDER_SERVER_DRAINING_STATUS_CODE);
+        assert.strictEqual(
+          res.headers[PRERENDER_SERVER_STATUS_HEADER.toLowerCase()],
+          PRERENDER_SERVER_STATUS_DRAINING,
+        );
+
+        // allow promise rejection to settle
+        await Promise.resolve();
+        assert.strictEqual(unhandled, 0, 'no unhandled rejections raised');
+
+        (built.prerenderer as any).prerenderCard = originalPrerender;
+        await built.prerenderer.stop();
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
     });
   });
 });

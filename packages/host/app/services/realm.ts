@@ -4,14 +4,12 @@ import {
 } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import { setOwner, getOwner } from '@ember/owner';
-import Service from '@ember/service';
-
-import { service } from '@ember/service';
-
+import Service, { service } from '@ember/service';
 import { waitForPromise } from '@ember/test-waiters';
-import { tracked } from '@glimmer/tracking';
 
-import { cached } from '@glimmer/tracking';
+import { isTesting } from '@embroider/macros';
+
+import { tracked, cached } from '@glimmer/tracking';
 
 import { dropTask, task, restartableTask, rawTimeout } from 'ember-concurrency';
 import window from 'ember-window-mock';
@@ -54,6 +52,29 @@ export type EnhancedRealmInfo = RealmInfo & {
   isIndexing: boolean;
   isPublic: boolean;
 };
+
+export interface PrivateDependencyReference {
+  dependency: string;
+  realmURL: string;
+  via?: string[];
+}
+
+export interface PrivateDependencyViolation {
+  resource: string;
+  externalDependencies: PrivateDependencyReference[];
+}
+
+export interface RealmPrivateDependencyReport {
+  publishable: boolean;
+  realmURL: string;
+  violations: PrivateDependencyViolation[];
+}
+
+type RealmInfoProperty =
+  | 'backgroundURL'
+  | 'iconURL'
+  | 'interactHome'
+  | 'hostHome';
 
 type AuthStatus =
   | { type: 'logged-in'; token: string; claims: JWTPayload }
@@ -272,6 +293,49 @@ class RealmResource {
     }
   });
 
+  async setRealmInfoProperty(
+    property: RealmInfoProperty,
+    value: string | null,
+  ): Promise<void> {
+    await this.loginTask.perform();
+    let headers: Record<string, string> = {
+      Accept: SupportedMimeType.JSON,
+      Authorization: `Bearer ${this.token}`,
+    };
+    let response = await this.network.authedFetch(`${this.realmURL}_config`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({
+        data: {
+          type: 'realm-config',
+          id: this.url,
+          attributes: { [property]: value },
+        },
+      }),
+    });
+
+    if (response.status !== 200) {
+      throw new Error(
+        `Failed to set realm config property '${property}' for realm ${this.url}: ${response.status}`,
+      );
+    }
+    let json = await waitForPromise(response.json());
+    let isPublic = Boolean(
+      response.headers.get('x-boxel-realm-public-readable'),
+    );
+    let updatedInfo = new TrackedObject({
+      url: json.data.id,
+      ...json.data.attributes,
+      isIndexing: this.info?.isIndexing ?? false,
+      isPublic,
+    }) as EnhancedRealmInfo;
+    this.info = updatedInfo;
+  }
+
+  async setHostHome(hostHome: string | null): Promise<void> {
+    return await this.setRealmInfoProperty('hostHome', hostHome);
+  }
+
   async fetchRealmPermissions() {
     return await this.fetchRealmPermissionsTask.perform();
   }
@@ -305,6 +369,44 @@ class RealmResource {
     this.realmPermissions = json.data.attributes.permissions;
     return this.realmPermissions;
   });
+
+  async fetchPrivateDependencyReport(): Promise<RealmPrivateDependencyReport> {
+    await this.loginTask.perform();
+    let headers: Record<string, string> = {
+      Accept: SupportedMimeType.JSONAPI,
+      Authorization: `Bearer ${this.token}`,
+    };
+    let response = await this.network.authedFetch(
+      `${this.realmURL}_publishability`,
+      {
+        headers,
+      },
+    );
+
+    if (response.status !== 200) {
+      throw new Error(
+        `Failed to check private dependencies for ${this.realmURL}: ${response.status}`,
+      );
+    }
+
+    let json = (await waitForPromise(response.json())) as {
+      data: {
+        attributes: {
+          publishable: boolean;
+          realmURL: string;
+          violations: PrivateDependencyViolation[];
+        };
+      };
+    };
+
+    let attributes = json.data.attributes;
+
+    return {
+      publishable: attributes.publishable,
+      realmURL: attributes.realmURL,
+      violations: attributes.violations ?? [],
+    };
+  }
 
   async setRealmPermission(
     userId: string,
@@ -358,10 +460,7 @@ class RealmResource {
 
     let refreshMs = 0;
 
-    if (!this.claims.sessionRoom) {
-      // Force JWT renewal to ensure presence of sessionRoom property
-      console.log(`JWT for realm ${this.url} has no session room, renewing`);
-    } else {
+    if (this.claims.sessionRoom) {
       // token expiration is unix time (seconds)
       let expirationMs = this.claims.exp * 1000;
 
@@ -524,6 +623,19 @@ export default class RealmService extends Service {
     await resource.login();
   }
 
+  restoreSessionsFromStorage(): void {
+    let tokens = SessionStorage.getAll();
+    if (!tokens) {
+      return;
+    }
+    for (let [realmURL, token] of Object.entries(tokens)) {
+      let resource = this.getOrCreateRealmResource(realmURL, token);
+      if (token && resource.token !== token) {
+        resource.token = token;
+      }
+    }
+  }
+
   info = (url: string): EnhancedRealmInfo => {
     let resource = this.knownRealm(url, false);
     if (!resource) {
@@ -541,6 +653,8 @@ export default class RealmService extends Service {
         isIndexing: false,
         isPublic: false,
         lastPublishedAt: null,
+        interactHome: null,
+        hostHome: null,
       };
     }
 
@@ -556,6 +670,8 @@ export default class RealmService extends Service {
         isIndexing: false,
         isPublic: false,
         lastPublishedAt: null,
+        interactHome: null,
+        hostHome: null,
       };
     } else {
       return resource.info;
@@ -576,6 +692,10 @@ export default class RealmService extends Service {
     permissions: ('read' | 'write')[],
   ) {
     await this.knownRealm(url)?.setRealmPermission(userId, permissions);
+  }
+
+  async setHostHome(url: string, hostHome: string | null): Promise<void> {
+    await this.knownRealm(url)?.setHostHome(hostHome);
   }
 
   isPublic = (url: string): boolean => {
@@ -698,7 +818,13 @@ export default class RealmService extends Service {
   }
 
   token = (url: string): string | undefined => {
-    return this.knownRealm(url, false)?.token;
+    let resource = this.knownRealm(url, false);
+    if (!resource && (globalThis as any).__boxelRenderContext && !isTesting()) {
+      // prerender contexts should always reflect localStorage session state
+      this.restoreSessionsFromStorage();
+      resource = this.knownRealm(url, false);
+    }
+    return resource?.token;
   };
 
   logout() {
@@ -710,6 +836,13 @@ export default class RealmService extends Service {
   async publish(realmURL: string, publishedRealmURLs: string[]) {
     let resource = this.getOrCreateRealmResource(realmURL);
     return await resource.publish(publishedRealmURLs);
+  }
+
+  async fetchPrivateDependencyReport(
+    realmURL: string,
+  ): Promise<RealmPrivateDependencyReport> {
+    let resource = this.getOrCreateRealmResource(realmURL);
+    return await resource.fetchPrivateDependencyReport();
   }
 
   async unpublish(realmURL: string, publishedRealmURL: string) {

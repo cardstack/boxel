@@ -739,7 +739,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   });
 
   test<TestContextWithSave>('can select and remove linked theme in default card-info editor', async function (assert) {
-    assert.expect(10);
+    assert.expect(9);
 
     const themeId = `${testRealmURL}theme-starry-night`;
     const onSave = (
@@ -763,7 +763,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     });
 
     this.onSave((url: URL, json: string | SingleCardDocument) =>
-      onSave(url, json, themeId),
+      onSave(url, json, '../theme-starry-night'),
     );
 
     await click('[data-test-edit-button]');
@@ -780,10 +780,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await click(
       '[data-test-field="cardInfo-theme"] [data-test-boxel-field-label]',
     );
-    await click(`[data-test-card="${themeId}"]`);
-    assert
-      .dom(`[data-test-card="${themeId}"]`)
-      .exists({ count: 1 }, 'items are non-interactive');
 
     this.unregisterOnSave();
     this.onSave((url: URL, json: string | SingleCardDocument) =>

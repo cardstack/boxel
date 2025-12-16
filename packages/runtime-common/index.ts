@@ -1,16 +1,10 @@
-import type { CardResource, Meta } from './resource-types';
+import type { CardResource, LooseCardResource, Meta } from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
-import type { Definition } from './index-structure';
+import type { Definition } from './definitions';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import type { ErrorEntry } from './index-writer';
-
-// a card resource but with optional "id" and "type" props
-export type LooseCardResource = Omit<CardResource, 'id' | 'type'> & {
-  type?: 'card';
-  id?: string;
-};
 
 export interface LooseSingleCardDocument {
   data: LooseCardResource;
@@ -73,8 +67,7 @@ export interface ModuleRenderResponse extends ModulePrerenderModel {}
 export type ModulePrerenderArgs = {
   realm: string;
   url: string;
-  userId: string;
-  permissions: RealmPermissions;
+  auth: string;
   renderOptions?: RenderRouteOptions;
 };
 
@@ -148,6 +141,7 @@ import type { CardTypeFilter, Query, EveryFilter } from './query';
 import { Loader } from './loader';
 export * from './paths';
 export * from './cached-fetch';
+export * from './definition-lookup';
 export * from './definitions';
 export * from './catalog';
 export * from './commands';
@@ -159,6 +153,7 @@ export * from './queue';
 export * from './expression';
 export * from './index-query-engine';
 export * from './index-writer';
+export * from './definitions';
 export * from './index-structure';
 export * from './db';
 export * from './tasks';
@@ -166,7 +161,6 @@ export * from './worker';
 export * from './stream';
 export * from './realm';
 export * from './realm-index-updater';
-export * from './reindex-config';
 export * from './fetcher';
 export * from './scoped-css';
 export * from './html-utils';
@@ -174,11 +168,11 @@ export * from './utils';
 export * from './authorization-middleware';
 export * from './resource-types';
 export * from './query';
+export * from './query-field-utils';
 export * from './formats';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
 export { Loader };
-export { NotLoaded, isNotLoadedError } from './not-loaded';
 export {
   cardTypeDisplayName,
   cardTypeIcon,
@@ -187,6 +181,7 @@ export {
 export * from './helpers/ensure-extension';
 export * from './url';
 export * from './render-route-options';
+export * from './publishability';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
@@ -460,6 +455,9 @@ export function subscribeToRealm(
 ): () => void {
   let here = globalThis as any;
   if (!here._CARDSTACK_REALM_SUBSCRIBE) {
+    console.warn(
+      `subscribeToRealm: no subscription handler registered for ${realmURL}; callbacks will never fire`,
+    );
     // eventually we'll support subscribing to a realm in node since this will
     // be how realms will coordinate with one another, but for now do nothing
     return () => {
@@ -467,7 +465,9 @@ export function subscribeToRealm(
     };
   } else {
     let realmSubscribe: RealmSubscribe = here._CARDSTACK_REALM_SUBSCRIBE;
-    return realmSubscribe.subscribe(realmURL, cb);
+    return realmSubscribe.subscribe(realmURL, (ev) => {
+      cb(ev);
+    });
   }
 }
 
