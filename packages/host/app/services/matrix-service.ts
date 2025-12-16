@@ -362,11 +362,13 @@ export default class MatrixService extends Service {
         async (e) => {
           switch (e.event.type) {
             case APP_BOXEL_REALMS_EVENT_TYPE:
+              console.log('Realms event', e.event);
               await this.realmServer.setAvailableRealmURLs(
                 e.event.content.realms,
               );
               // Only do this after we've completed our overall login
               if (this.postLoginCompleted) {
+                console.log('Login to realms');
                 await this.loginToRealms();
                 await this.loadMoreAuthRooms(e.event.content.realms);
               }
@@ -679,6 +681,7 @@ export default class MatrixService extends Service {
 
           await this.realmServer.authenticateToAllAccessibleRealms();
         }
+        await this.loginToRealms();
 
         this.postLoginCompleted = true;
       } catch (e) {
