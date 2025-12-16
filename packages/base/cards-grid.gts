@@ -296,6 +296,7 @@ class Isolated extends Component<typeof CardsGrid> {
     let excludedCardTypeIds = [
       `${baseRealm.url}card-api/CardDef`,
       `${baseRealm.url}cards-grid/CardsGrid`,
+      `${baseRealm.url}index/IndexCard`,
     ];
 
     this.cardTypeFilters.splice(0, this.cardTypeFilters.length);

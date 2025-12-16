@@ -1,7 +1,6 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -24,7 +23,6 @@ import OpenSitePopover from '@cardstack/host/components/operator-mode/host-submo
 import PublishingRealmPopover from '@cardstack/host/components/operator-mode/host-submode/publishing-realm-popover';
 import PublishRealmModal from '@cardstack/host/components/operator-mode/publish-realm-modal';
 
-import type HomePageResolverService from '@cardstack/host/services/home-page-resolver';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -48,16 +46,10 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   @service private declare store: StoreService;
   @service private declare realm: RealmService;
   @service private declare hostModeService: HostModeService;
-  @service private declare homePageResolver: HomePageResolverService;
 
   @tracked isPublishRealmModalOpen = false;
   @tracked isPublishingRealmPopoverOpen = false;
   @tracked isOpenSitePopoverOpen = false;
-
-  constructor(owner: Owner, args: HostSubmodeSignature['Args']) {
-    super(owner, args);
-    this.ensureHomePageCardTask.perform();
-  }
 
   @action
   openPublishRealmModal() {
@@ -146,29 +138,6 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
   handleUnpublish = restartableTask(async (publishedRealmURL: string) => {
     await this.realm.unpublish(this.realmURL, publishedRealmURL);
-  });
-
-  // Ensure host mode shows the resolved home page card when the operator switches
-  // realms so the primary card state always matches the realm's configured entry point.
-  private ensureHomePageCardTask = restartableTask(async () => {
-    let realmURL = this.operatorModeStateService.realmURL.href;
-    let homePage = await this.homePageResolver.resolve(realmURL);
-    let homePageCardId = homePage?.cardId;
-    if (homePageCardId) {
-      // Prefer the resolved home page card whenever host mode is empty or still
-      // pointing at the realm index so operators always land on the realm's
-      // configured entry card instead of a stale default.
-      let currentPrimary =
-        this.operatorModeStateService.hostModePrimaryCard ?? undefined;
-      let normalizedRealm = realmURL.endsWith('/') ? realmURL : `${realmURL}/`;
-      let isRealmIndex = homePageCardId === `${normalizedRealm}index`;
-      let shouldUseHome =
-        !currentPrimary ||
-        (!isRealmIndex && currentPrimary === `${normalizedRealm}index`);
-      if (shouldUseHome && currentPrimary !== homePageCardId) {
-        this.operatorModeStateService.setHostModePrimaryCard(homePageCardId);
-      }
-    }
   });
 
   get defaultPublishedSiteURL(): string | undefined {
