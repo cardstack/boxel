@@ -4,17 +4,12 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../image",
-        "name": "ImageField"
+        "name": "default",
+        "module": "http://localhost:4201/catalog/fields/image"
       },
       "specType": "field",
-      "containedExamples": [
-        {
-          "uploadUrl": null,
-          "uploadedImageUrl": null
-        }
-      ],
-      "title": "ImageField",
+      "containedExamples": [],
+      "title": "Image",
       "description": null,
       "cardInfo": {
         "title": null,
@@ -23,17 +18,14 @@
         "notes": null
       }
     },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
     "meta": {
-      "fields": {
-        "containedExamples": [
-          {
-            "adoptsFrom": {
-              "module": "../image",
-              "name": "ImageField"
-            }
-          }
-        ]
-      },
       "adoptsFrom": {
         "module": "https://cardstack.com/base/spec",
         "name": "Spec"

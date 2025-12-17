@@ -99,7 +99,7 @@ module('Integration | audio fields', function (hooks) {
 
   // Sample audio data for tests
   const sampleAudioData = {
-    url: 'https://example.com/audio/sample.mp3',
+    url: 'http://localhost:4201/does-not-exist/audio/sample.mp3',
     filename: 'sample.mp3',
     mimeType: 'audio/mpeg',
     duration: 180, // 3 minutes
@@ -109,7 +109,7 @@ module('Integration | audio fields', function (hooks) {
   };
 
   const minimalAudioData = {
-    url: 'https://example.com/audio/minimal.mp3',
+    url: 'http://localhost:4201/does-not-exist/audio/minimal.mp3',
     filename: 'minimal.mp3',
   };
 
@@ -238,7 +238,7 @@ module('Integration | audio fields', function (hooks) {
     await renderField(
       AudioFieldClass,
       buildField(AudioFieldClass, {
-        url: 'https://example.com/audio.mp3',
+        url: 'http://localhost:4201/does-not-exist/audio.mp3',
         filename: 'my-song.mp3',
       }),
     );
@@ -252,7 +252,7 @@ module('Integration | audio fields', function (hooks) {
     await renderField(
       AudioFieldClass,
       buildField(AudioFieldClass, {
-        url: 'https://example.com/audio.mp3',
+        url: 'http://localhost:4201/does-not-exist/audio.mp3',
       }),
     );
 

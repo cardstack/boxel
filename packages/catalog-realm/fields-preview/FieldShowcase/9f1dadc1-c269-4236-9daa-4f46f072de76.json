@@ -16,17 +16,14 @@
       },
       "colorWheel": "#00ffd9",
       "imageAvatar": {
-        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642749200",
-        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642749200/public"
+        "imageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642749200/public"
       },
       "imageBrowse": {
-        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642741446",
-        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642741446/public"
+        "imageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642741446/public"
       },
       "colorAdvanced": "rgba(0, 255, 153, 1.00)",
       "imageDropzone": {
-        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642756898",
-        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642756898/public"
+        "imageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642756898/public"
       },
       "playgroundDay": {
         "value": 2
@@ -68,8 +65,7 @@
       },
       "playgroundColor": "#9cb931",
       "playgroundImage": {
-        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642806276",
-        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642806276/public"
+        "imageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642806276/public"
       },
       "playgroundMonth": {
         "value": 4
@@ -83,12 +79,10 @@
       "multipleImageList": {
         "images": [
           {
-            "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764582386156/public"
+            "imageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764582386156/public"
           },
           {
-            "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764577101407/public"
+            "imageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764577101407/public"
           }
         ]
       },
@@ -117,7 +111,7 @@
         "end": null,
         "start": null
       },
-      "playgroundFieldType": "color",
+      "playgroundFieldType": "multipleImage",
       "playgroundMonthYear": {
         "value": "2025-10"
       },
@@ -148,12 +142,10 @@
       "multipleImageGallery": {
         "images": [
           {
-            "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642638586/public"
+            "imageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642638586/public"
           },
           {
-            "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642635903/public"
+            "imageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642635903/public"
           }
         ]
       },
@@ -164,12 +156,10 @@
       "multipleImageDropzone": {
         "images": [
           {
-            "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764577019466/public"
+            "imageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764577019466/public"
           },
           {
-            "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764577017328/public"
+            "imageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764577017328/public"
           }
         ]
       },
@@ -183,8 +173,7 @@
       "playgroundMultipleImage": {
         "images": [
           {
-            "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642655034/public"
+            "imageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764642655034/public"
           }
         ]
       },

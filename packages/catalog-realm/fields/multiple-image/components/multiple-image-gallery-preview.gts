@@ -11,20 +11,7 @@ import {
   SortableItemModifier as sortableItem,
 } from '@cardstack/boxel-ui/modifiers';
 
-type UploadStatus = 'idle' | 'pending' | 'success' | 'error';
-
-interface UploadEntry {
-  id: string;
-  file: File;
-  preview: string;
-  uploadedImageUrl?: string;
-  selected?: boolean;
-  readProgress?: number;
-  isReading?: boolean;
-  isUploading?: boolean;
-  uploadStatus?: UploadStatus;
-  uploadError?: string;
-}
+import type { UploadEntry } from '../image-upload-types';
 
 interface MultipleImageGalleryPreviewArgs {
   Args: {
@@ -89,11 +76,7 @@ export default class MultipleImageGalleryPreview extends GlimmerComponent<Multip
         </div>
       {{else}}
         <img
-          src={{if
-            @entry.uploadedImageUrl
-            @entry.uploadedImageUrl
-            @entry.preview
-          }}
+          src={{if @entry.url @entry.url @entry.preview}}
           alt=''
           class='gallery-image'
         />

@@ -4,12 +4,12 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../time-machine/image-upload-section",
-        "name": "ImageUploadSection"
+        "module": "http://localhost:4201/catalog/fields/image/components/preview-modal",
+        "name": "default"
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "ImageUploadSection",
+      "title": "default",
       "description": null,
       "cardInfo": {
         "title": null,
