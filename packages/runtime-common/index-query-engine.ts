@@ -696,7 +696,7 @@ export class IndexQueryEngine {
     return [
       tableValuedEach('types'),
       '=',
-    param(internalKeyFor(ref, undefined)),
+      param(internalKeyFor(ref, undefined)),
     ];
   }
 
@@ -705,8 +705,7 @@ export class IndexQueryEngine {
     on: CodeRef,
     typeConditionRef?: CodeRef,
   ): CardExpression {
-    on = filter.on ?? on;
-    let typeRef = filter.on ?? typeConditionRef;
+    let typeRef = typeConditionRef;
     return every([
       ...(typeRef ? [this.typeCondition(typeRef)] : []),
       ...Object.entries(filter.eq).map(([key, value]) => {
@@ -720,8 +719,7 @@ export class IndexQueryEngine {
     on: CodeRef,
     typeConditionRef?: CodeRef,
   ): CardExpression {
-    on = filter.on ?? on;
-    let typeRef = filter.on ?? typeConditionRef;
+    let typeRef = typeConditionRef;
     return every([
       ...(typeRef ? [this.typeCondition(typeRef)] : []),
       ...Object.entries(filter.contains).map(([key, value]) => {
@@ -735,8 +733,7 @@ export class IndexQueryEngine {
     on: CodeRef,
     typeConditionRef?: CodeRef,
   ): CardExpression {
-    on = filter.on ?? on;
-    let typeRef = filter.on ?? typeConditionRef;
+    let typeRef = typeConditionRef;
     return every([
       ...(typeRef ? [this.typeCondition(typeRef)] : []),
       ['NOT', ...addExplicitParens(this.filterCondition(filter.not, on))],
@@ -748,8 +745,7 @@ export class IndexQueryEngine {
     on: CodeRef,
     typeConditionRef?: CodeRef,
   ): CardExpression {
-    on = filter.on ?? on;
-    let typeRef = filter.on ?? typeConditionRef;
+    let typeRef = typeConditionRef;
     return every([
       ...(typeRef ? [this.typeCondition(typeRef)] : []),
       ...Object.entries(filter.range).map(([key, filterValue]) => {

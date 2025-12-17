@@ -1782,6 +1782,229 @@ module('Unit | query', function (hooks) {
     );
   });
 
+  test(`eq filter works when both 'type' and 'on' are provided`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+          },
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
+      filter: {
+        on: type,
+        type,
+        eq: { name: 'Mango' },
+      },
+    });
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
+  });
+
+  test(`contains filter works when both 'type' and 'on' are provided`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            address: {
+              city: 'Barksville',
+            },
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            address: {
+              city: 'Barksville',
+            },
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+            address: {
+              city: 'Waggington',
+            },
+          },
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
+      filter: {
+        on: type,
+        type,
+        contains: { 'address.city': 'Barks' },
+      },
+    });
+
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [mango.id, vangogh.id],
+      'results are correct',
+    );
+  });
+
+  test(`not filter works when both 'type' and 'on' are provided`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+          },
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
+      filter: {
+        on: type,
+        type,
+        not: {
+          eq: { name: 'Mango' },
+        },
+      },
+      sort: [
+        {
+          on: type,
+          by: 'name',
+          direction: 'asc',
+        },
+      ],
+    });
+
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [ringo.id, vangogh.id],
+      'results are correct',
+    );
+  });
+
+  test(`'on' takes precedence over 'type' when they differ`, async function (assert) {
+    let { mango, vangogh, ringo, paper } = testCards;
+    await setupIndex(dbAdapter, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            address: {
+              street: '123 Main Street',
+              city: 'Barksville',
+            },
+            age: 35,
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            address: {
+              street: '456 Grand Blvd',
+              city: 'Barksville',
+            },
+            age: 30,
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+            address: {
+              street: '100 Treat Street',
+              city: 'Waggington',
+            },
+            age: 25,
+          },
+        },
+      },
+      {
+        card: paper,
+        data: {
+          search_doc: {
+            name: 'Paper',
+            age: 99,
+          },
+        },
+      },
+    ]);
+
+    let personType = await personCardType(testCards);
+    let catType = internalKeyToCodeRef([...(await getTypes(paper))].shift()!);
+    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
+      filter: {
+        on: personType,
+        type: catType,
+        range: { age: { gt: 25 } },
+      },
+    });
+
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [mango.id, vangogh.id],
+      'results are drawn from the on type and ignore conflicting type',
+    );
+  });
+
   test(`can filter using 'gte'`, async function (assert) {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
