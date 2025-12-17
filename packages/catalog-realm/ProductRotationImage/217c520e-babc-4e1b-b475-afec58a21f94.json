@@ -8,6 +8,9 @@
     },
     "type": "card",
     "attributes": {
+      "image": {
+        "imageUrl": null
+      },
       "cardInfo": {
         "notes": null,
         "title": "Blue Bottle 6",
@@ -15,10 +18,7 @@
         "thumbnailURL": null
       },
       "angleLabel": "300° view",
-      "angleDegrees": 300,
-      "image": {
-        "imageUrl": null
-      }
+      "angleDegrees": 300
     },
     "relationships": {
       "cardInfo.theme": {
