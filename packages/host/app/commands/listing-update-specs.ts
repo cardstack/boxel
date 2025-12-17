@@ -30,7 +30,8 @@ export default class ListingUpdateSpecsCommand extends HostBaseCommand<
 
   async getInputType() {
     const commandModule = await this.loadCommandModule();
-    return commandModule.ListingUpdateSpecsInput;
+    let { ListingUpdateSpecsInput } = commandModule;
+    return ListingUpdateSpecsInput;
   }
 
   private sanitizeDeps(deps: string[]) {
