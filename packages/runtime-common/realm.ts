@@ -714,6 +714,8 @@ export class Realm {
         this.#adapter.openFile(p),
       );
       if (existingFile?.content === content) {
+        results.push({ path, lastModified: existingFile.lastModified });
+        fileMetaRows.push({ path });
         continue;
       }
       if (lastWriteType === 'module' && currentWriteType === 'instance') {
