@@ -523,7 +523,7 @@ export default class HeadFormatPreview extends Component<Signature> {
         border: 1px solid var(--head-preview-chip-border);
         border-radius: var(--boxel-border-radius-sm);
         padding: 8px 10px;
-        color: var(--boxel-dark);
+        color: var(--boxel-light);
         display: grid;
         gap: 4px;
         min-width: 220px;
@@ -540,7 +540,7 @@ export default class HeadFormatPreview extends Component<Signature> {
       }
       .raw-head {
         margin-top: var(--boxel-sp-md);
-        color: var(--boxel-dark);
+        color: var(--boxel-light);
       }
       .raw-head > summary {
         cursor: pointer;
