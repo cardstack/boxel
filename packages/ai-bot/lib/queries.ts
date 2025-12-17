@@ -12,7 +12,7 @@ export async function acquireRoomLock(
   pgAdapter: PgAdapter,
   roomId: string,
   aiBotInstanceId: string,
-  eventId?: string,
+  eventId: string,
 ): Promise<boolean> {
   // Attempts to take an exclusive lock per room by upserting a row. The insert succeeds when no
   // unfinished processing exists for the room; otherwise an UPDATE runs only if the previous run
