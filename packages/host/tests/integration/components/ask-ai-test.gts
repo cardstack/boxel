@@ -221,7 +221,7 @@ module('Integration | ask-ai', function (hooks) {
     assert
       .dom('[data-test-ai-assistant-panel] [data-test-chat-title]')
       .hasText('New AI Assistant Chat');
-    assert.dom('[data-test-active-skills-count]').containsText('3 Skills');
+    assert.dom('[data-test-active-skills-count]').containsText('2 Skills');
     await assertMessages(assert, [
       {
         from: 'testuser',
