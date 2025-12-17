@@ -1881,6 +1881,7 @@ module(basename(__filename), function () {
         );
 
         await pool.getPage('realm-a');
+        await pool.warmStandbys(); // ensure standby pool replenishment settles before idle sweep
 
         let originalNow = Date.now;
         try {
