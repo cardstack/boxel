@@ -215,9 +215,9 @@ export default class HeadFormatPreview extends Component<Signature> {
     </div>
 
     <div class='head-preview'>
-      <div class='head-preview__grid'>
+      <div class='preview-grid'>
         <section class='preview-card search-preview'>
-          <div class='preview-card__header'>
+          <div class='preview-header'>
             <span class='pill pill-google'>Google</span>
             <span class='muted'>Search result</span>
           </div>
@@ -242,7 +242,7 @@ export default class HeadFormatPreview extends Component<Signature> {
 
         <div class='social-column'>
           <section class='preview-card social facebook-preview'>
-            <div class='preview-card__header'>
+            <div class='preview-header'>
               <span class='pill pill-facebook'>Facebook</span>
               <span class='muted'>{{this.headPreviewData.type}}</span>
             </div>
@@ -268,7 +268,7 @@ export default class HeadFormatPreview extends Component<Signature> {
           </section>
 
           <section class='preview-card social twitter-preview'>
-            <div class='preview-card__header'>
+            <div class='preview-header'>
               <span class='pill pill-twitter'>Twitter / X</span>
               <span class='muted'>{{this.headPreviewData.twitterCard}}</span>
             </div>
@@ -357,7 +357,7 @@ export default class HeadFormatPreview extends Component<Signature> {
         border-radius: var(--boxel-border-radius);
         border: 1px solid var(--head-preview-border);
       }
-      .head-preview__grid {
+      .preview-grid {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-md);
@@ -375,7 +375,7 @@ export default class HeadFormatPreview extends Component<Signature> {
         box-shadow: var(--head-preview-card-shadow);
         padding: var(--boxel-sp-md);
       }
-      .preview-card__header {
+      .preview-header {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xs);
