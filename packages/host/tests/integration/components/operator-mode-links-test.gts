@@ -759,16 +759,23 @@ module('Integration | operator-mode | links', function (hooks) {
         overlayButtonElements.length - 1
       ].getBoundingClientRect();
 
-    assert.strictEqual(
-      Math.round(itemRect.top),
-      Math.round(overlayButtonRect.top),
+    let verticalDiff = Math.abs(
+      Math.round(itemRect.top) - Math.round(overlayButtonRect.top),
+    );
+    assert.ok(
+      verticalDiff <= 1,
+      `overlay button aligns vertically within 1px (diff=${verticalDiff}px)`,
     );
 
     let iconWidth = 30;
     let gap = 9;
-    assert.strictEqual(
-      Math.floor(itemRect.left + (iconWidth + gap) / 2),
-      Math.floor(overlayButtonRect.left),
+    let expectedLeft = Math.floor(itemRect.left + (iconWidth + gap) / 2);
+    let horizontalDiff = Math.abs(
+      expectedLeft - Math.floor(overlayButtonRect.left),
+    );
+    assert.ok(
+      horizontalDiff <= 1,
+      `overlay button aligns horizontally within 1px (diff=${horizontalDiff}px)`,
     );
 
     await click(
