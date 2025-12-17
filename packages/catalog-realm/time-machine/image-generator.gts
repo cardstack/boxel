@@ -180,7 +180,7 @@ export class TimeMachineImageGeneratorIsolated extends Component<
   }
 
   get sourceImageUrl() {
-    return this.args.model?.sourceImageUrl?.imageCard?.url ?? '';
+    return this.args.model?.sourceImageUrl?.uploadedImageUrl ?? '';
   }
 
   get creativeNote() {
@@ -217,7 +217,7 @@ export class TimeMachineImageGeneratorIsolated extends Component<
 
   get lightboxItems(): LightboxItem[] {
     return this.polaroidImages
-      .filter((image) => Boolean(image?.image?.imageCard?.url))
+      .filter((image) => Boolean(image?.image?.uploadedImageUrl))
       .map((image) => ({
         card: image,
         component: image.constructor.getComponent(image),
@@ -326,7 +326,7 @@ export class TimeMachineImageGeneratorIsolated extends Component<
 
   @action
   handlePolaroidSelect(image: PolaroidImage) {
-    if (!image?.image?.imageCard?.url) {
+    if (!image?.image?.uploadedImageUrl) {
       return;
     }
     let items = this.lightboxItems;
@@ -367,7 +367,9 @@ export class TimeMachineImageGeneratorIsolated extends Component<
     return (
       Array.isArray(this.args.model?.generatedImages) &&
       this.args.model.generatedImages.length > 0 &&
-      this.args.model.generatedImages.some((img) => img?.image?.imageCard?.url)
+      this.args.model.generatedImages.some(
+        (img) => img?.image?.uploadedImageUrl,
+      )
     );
   }
 
@@ -386,7 +388,7 @@ export class TimeMachineImageGeneratorIsolated extends Component<
       );
     }
     let polaroids = (model.generatedImages ?? []).filter(
-      (img) => img?.image?.imageCard?.url,
+      (img) => img?.image?.uploadedImageUrl,
     );
 
     this.isExporting = true;

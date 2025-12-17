@@ -1,15 +1,22 @@
-import { CardDef, field, contains, Component } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  field,
+  contains,
+  Component,
+} from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import ImageField from '../../fields/image';
 
-class ProductRotationImageEmbedded extends Component<typeof ProductRotationImage> {
+class ProductRotationImageEmbedded extends Component<
+  typeof ProductRotationImage
+> {
   get angleLabel() {
     return this.args.model?.angleLabel ?? '';
   }
 
   get imageUrl() {
-    return this.args.model?.image?.imageCard?.url ?? '';
+    return this.args.model?.image?.uploadedImageUrl ?? '';
   }
 
   <template>
@@ -47,7 +54,7 @@ export class ProductRotationImage extends CardDef {
 
   @field thumbnailURL = contains(StringField, {
     computeVia: function (this: ProductRotationImage) {
-      return this.image?.imageCard?.url ?? '';
+      return this.image?.uploadedImageUrl ?? '';
     },
   });
 

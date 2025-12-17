@@ -71,18 +71,18 @@ class ImageFieldEdit extends Component<typeof ImageField> {
   constructor(owner: any, args: any) {
     super(owner, args);
     // Initialize preview from uploaded URL
-    if (args.model?.imageCard?.url) {
-      this.preview = args.model.imageCard.url;
+    if (args.model?.uploadedImageUrl) {
+      this.preview = args.model.uploadedImageUrl;
     }
   }
 
   get hasImage() {
     // Show preview components when reading (to display progress) or when image exists
-    return this.isReading || this.preview || this.args.model?.imageCard?.url;
+    return this.isReading || this.preview || this.args.model?.uploadedImageUrl;
   }
 
   get displayPreview() {
-    return this.preview || this.args.model?.imageCard?.url || '';
+    return this.preview || this.args.model?.uploadedImageUrl || '';
   }
 
   get variant(): ImageInputVariant {
@@ -454,11 +454,11 @@ class ImageFieldEdit extends Component<typeof ImageField> {
 class ImageFieldEmbedded extends Component<typeof ImageField> {
   // Embedded format with presentation modes
   get hasImage() {
-    return !!this.args.model?.imageCard?.url;
+    return !!this.args.model?.uploadedImageUrl;
   }
 
   get imageUrl() {
-    return this.args.model?.imageCard?.url ?? '';
+    return this.args.model?.uploadedImageUrl ?? '';
   }
 
   get presentation(): ImagePresentationType {
@@ -490,11 +490,11 @@ class ImageFieldEmbedded extends Component<typeof ImageField> {
 
 class ImageFieldAtom extends Component<typeof ImageField> {
   get hasImage() {
-    return !!this.args.model?.imageCard?.url;
+    return !!this.args.model?.uploadedImageUrl;
   }
 
   get imageUrl() {
-    return this.args.model?.imageCard?.url ?? '';
+    return this.args.model?.uploadedImageUrl ?? '';
   }
 
   <template>
@@ -552,7 +552,7 @@ export default class ImageField extends FieldDef {
   @field imageCard = linksTo(ImageCard);
   @field uploadedImageUrl = contains(StringField, {
     computeVia: function (this: any) {
-      return this.imageCard?.url ?? '';
+      return this.uploadedImageUrl ?? '';
     },
   });
 
