@@ -86,7 +86,7 @@ export default class MonacoService extends Service {
 
   // === context ===
   // A context is needed to pass a loaded sdk into components and modifiers
-  // The monaco sdk is dyanmically loaded when visiting /code route
+  // The monaco sdk is dynamically loaded when visiting /code route
   async getMonacoContext(): Promise<MonacoSDK> {
     return await this.#ready;
   }

@@ -17,6 +17,11 @@ export default class MarkDownTemplate extends GlimmerComponent<{
         font-size: var(--markdown-font-size, inherit);
         font-family: var(--markdown-font-family, inherit);
         overflow: hidden;
+
+        --vscode-editor-background: var(--boxel-dark);
+        --vscode-editorCodeLens-lineHeight: 15px;
+        --vscode-editorCodeLens-fontSize: 10px;
+        --vscode-editorCodeLens-fontFeatureSettings: 'liga' off, 'calt' off;
       }
 
       /* Heading */

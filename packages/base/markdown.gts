@@ -3,8 +3,13 @@ import { not } from '@cardstack/boxel-ui/helpers';
 import { Component } from './card-api';
 import StringField from './string';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { markdownToHtml } from '@cardstack/runtime-common';
+import {
+  markdownToHtml,
+  preloadMarkdownLanguages,
+} from '@cardstack/runtime-common';
 import AlignBoxLeftMiddleIcon from '@cardstack/boxel-icons/align-box-left-middle';
+import { tracked } from '@glimmer/tracking';
+import { task } from 'ember-concurrency';
 
 // Function modifier to wrap tables in scrollable containers
 export const wrapTables = modifier((element: HTMLElement) => {
@@ -18,10 +23,29 @@ export const wrapTables = modifier((element: HTMLElement) => {
 });
 
 class View extends Component<typeof MarkdownField> {
+  @tracked _monacoContext: any = undefined;
+  get monacoContext() {
+    if (!this._monacoContext) {
+      this.loadMonacoContextTask.perform();
+    }
+    return this._monacoContext;
+  }
+  loadMonacoContextTask = task(async () => {
+    let monacoContext = await (window as any).__loadMonacoForMarkdown();
+    await preloadMarkdownLanguages(this.args.model ?? '', monacoContext);
+    this._monacoContext = monacoContext;
+  });
+
   <template>
     <div class='markdown-content' {{wrapTables}}>
-      {{! template-lint-disable no-triple-curlies }}
-      {{{markdownToHtml @model}}}
+      {{#if this.monacoContext}}
+        {{! template-lint-disable no-triple-curlies }}
+        {{{markdownToHtml
+          @model
+          enableMonacoSyntaxHighlighting=true
+          monaco=this.monacoContext
+        }}}
+      {{/if}}
     </div>
     <style scoped>
       @layer baseComponent {
@@ -33,6 +57,10 @@ class View extends Component<typeof MarkdownField> {
           font-size: var(--markdown-font-size, inherit);
           font-family: var(--markdown-font-family, inherit);
           overflow: hidden;
+          --vscode-editor-background: var(--boxel-dark);
+          --vscode-editorCodeLens-lineHeight: 15px;
+          --vscode-editorCodeLens-fontSize: 10px;
+          --vscode-editorCodeLens-fontFeatureSettings: 'liga' off, 'calt' off;
         }
 
         /* Heading */
@@ -144,6 +172,14 @@ class View extends Component<typeof MarkdownField> {
           border-top: 1px solid var(--md-border);
         }
 
+        /* Code Block */
+        .markdown-content :deep(pre) {
+          white-space: var(--boxel-markdown-field-pre-wrap, pre-wrap);
+          background-color: var(--vscode-editor-background);
+          border-radius: var(--boxel-border-radius-xl);
+          padding: var(--boxel-sp-lg);
+        }
+
         /* Code */
         .markdown-content :deep(code) {
           padding: var(--boxel-sp-6xs) var(--boxel-sp-4xs);
@@ -154,15 +190,8 @@ class View extends Component<typeof MarkdownField> {
           background-color: var(--muted, var(--boxel-200));
         }
 
-        /* Code Block */
-        .markdown-content :deep(pre) {
-          white-space: var(--boxel-markdown-field-pre-wrap, pre-wrap);
-          background-color: var(
-            --muted,
-            color-mix(in oklab, currentColor 10%, transparent)
-          );
-          border-radius: var(--boxel-border-radius-xl);
-          padding: var(--boxel-sp-lg);
+        .markdown-content :deep(pre code) {
+          background-color: var(--vscode-editor-background);
         }
 
         /* Link */
