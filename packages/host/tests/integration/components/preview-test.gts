@@ -109,4 +109,43 @@ module('Integration | preview', function (hooks) {
       'raw head markup does not include the card container wrapper',
     );
   });
+
+  test('renders head preview fallbacks without image or favicon', async function (assert) {
+    class HeadContent extends GlimmerComponent<{
+      Args: { displayContainer?: boolean };
+    }> {
+      <template>
+        <title>Fallback Title</title>
+        <meta property='og:type' content='article' />
+      </template>
+    }
+
+    class TestDriver extends GlimmerComponent<{ Args: { format?: string } }> {
+      HeadContent = HeadContent;
+
+      <template>
+        <HeadFormatPreview
+          @renderedCard={{this.HeadContent}}
+          @cardURL='https://example.com/no-image'
+        />
+      </template>
+    }
+
+    await renderComponent(TestDriver);
+    await waitFor('.head-preview');
+
+    assert.dom('.search-title').hasText('Fallback Title');
+    assert
+      .dom('.search-description')
+      .hasText('Add title and description meta tags to see them here.');
+    assert.dom('.facebook-preview .muted').hasText('article');
+    assert.dom('.twitter-preview .muted').hasText('summary_large_image');
+    assert.dom('.favicon img').doesNotExist();
+    assert.dom('.favicon span').hasText('E');
+    assert.dom('.preview-image img').doesNotExist();
+    assert.dom('.facebook-preview .image-placeholder').hasText('Add og:image');
+    assert
+      .dom('.twitter-preview .image-placeholder')
+      .hasText('Add twitter:image');
+  });
 });
