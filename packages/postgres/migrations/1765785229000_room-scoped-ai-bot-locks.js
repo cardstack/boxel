@@ -1,18 +1,25 @@
 exports.shorthands = undefined;
 
 exports.up = (pgm) => {
+  // Existing rows may contain Matrix event ids (e.g. $abc:domain) which cannot be
+  // converted to room ids (e.g. !room:domain) without additional context. Force a
+  // manual cleanup/backfill so we do not silently persist invalid room ids.
+  pgm.sql(`
+    DO $$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM ai_bot_event_processing) THEN
+        RAISE EXCEPTION 'ai_bot_event_processing contains existing rows; truncate or backfill with actual Matrix room ids (e.g. !room:domain) before rerunning migration 1765785229000_room-scoped-ai-bot-locks';
+      END IF;
+    END;
+    $$;
+  `);
+
   pgm.addColumn('ai_bot_event_processing', {
     room_id: {
       type: 'varchar',
       notNull: false,
     },
   });
-
-  pgm.sql(`
-    UPDATE ai_bot_event_processing
-    SET room_id = event_id_being_processed
-    WHERE room_id IS NULL;
-  `);
 
   pgm.alterColumn('ai_bot_event_processing', 'room_id', { notNull: true });
 
