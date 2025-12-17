@@ -1721,6 +1721,67 @@ module('Unit | query', function (hooks) {
     );
   });
 
+  test(`range filter works when both 'type' and 'on' are provided`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            address: {
+              street: '123 Main Street',
+              city: 'Barksville',
+            },
+            age: 35,
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            address: {
+              street: '456 Grand Blvd',
+              city: 'Barksville',
+            },
+            age: 30,
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+            address: {
+              street: '100 Treat Street',
+              city: 'Waggington',
+            },
+            age: 25,
+          },
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
+      filter: {
+        on: type,
+        type,
+        range: { age: { gt: 25 } },
+      },
+    });
+
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(cards),
+      [mango.id, vangogh.id],
+      'results are correct',
+    );
+  });
+
   test(`can filter using 'gte'`, async function (assert) {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
