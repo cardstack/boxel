@@ -62,6 +62,7 @@ module('Integration | preview', function (hooks) {
       Args: { displayContainer?: boolean };
     }> {
       <template>
+        {{! template-lint-disable no-forbidden-elements }}
         <title>Preview Title</title>
         <meta name='description' content='Preview description' />
         <meta property='og:url' content='https://example.com/post' />
@@ -115,6 +116,7 @@ module('Integration | preview', function (hooks) {
       Args: { displayContainer?: boolean };
     }> {
       <template>
+        {{! template-lint-disable no-forbidden-elements }}
         <title>Fallback Title</title>
         <meta property='og:type' content='article' />
       </template>
