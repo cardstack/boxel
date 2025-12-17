@@ -326,14 +326,36 @@ export default class HeadFormatPreview extends Component<Signature> {
 
     <style scoped>
       .head-preview {
+        --head-preview-surface-strong: var(--boxel-purple-700);
+        --head-preview-surface-soft: var(--boxel-purple-800);
+        --head-preview-border: var(--boxel-border-flexible);
+        --head-preview-card-border: var(--boxel-border-card);
+        --head-preview-card-shadow: var(--boxel-deep-box-shadow);
+        --head-preview-muted: var(--boxel-450);
+        --head-preview-path: var(--boxel-500);
+        --head-preview-description: var(--boxel-550);
+        --head-preview-domain: var(--boxel-dark-green);
+        --head-preview-title: var(--boxel-blue);
+        --head-preview-favicon-bg: var(--boxel-light-400);
+        --head-preview-image-bg-start: var(--boxel-light-200);
+        --head-preview-image-bg-end: var(--boxel-light-400);
+        --head-preview-image-border: var(--boxel-light-500);
+        --head-preview-chip-bg: var(--boxel-purple-700);
+        --head-preview-chip-border: var(--boxel-border-flexible);
+        --head-preview-raw-bg: var(--boxel-purple-800);
+        --head-preview-raw-border: var(--boxel-border-flexible);
+        --head-preview-pill-bg: var(--boxel-light-200);
+        --head-preview-pill-border: var(--boxel-light-500);
+        --head-preview-pill-color: var(--boxel-600);
+
         padding: var(--boxel-sp-lg);
         background: linear-gradient(
           145deg,
-          rgba(255 255 255 / 6%),
-          rgba(255 255 255 / 2%)
+          var(--head-preview-surface-strong),
+          var(--head-preview-surface-soft)
         );
         border-radius: var(--boxel-border-radius);
-        border: 1px solid rgba(255 255 255 / 8%);
+        border: 1px solid var(--head-preview-border);
       }
       .head-preview__grid {
         display: grid;
@@ -349,8 +371,8 @@ export default class HeadFormatPreview extends Component<Signature> {
         background: var(--boxel-light);
         color: var(--boxel-dark);
         border-radius: var(--boxel-border-radius);
-        border: 1px solid rgba(0 0 0 / 8%);
-        box-shadow: 0 12px 40px rgba(0 0 0 / 24%);
+        border: var(--head-preview-card-border);
+        box-shadow: var(--head-preview-card-shadow);
         padding: var(--boxel-sp-md);
       }
       .preview-card__header {
@@ -363,7 +385,7 @@ export default class HeadFormatPreview extends Component<Signature> {
         text-transform: uppercase;
       }
       .muted {
-        color: rgba(0 0 0 / 55%);
+        color: var(--head-preview-muted);
         font-weight: 500;
       }
       .pill {
@@ -377,19 +399,19 @@ export default class HeadFormatPreview extends Component<Signature> {
         text-transform: uppercase;
       }
       .pill-google {
-        background: #e8f3e6;
-        color: #1b7f3c;
-        border: 1px solid #c6e2c1;
+        background: var(--head-preview-pill-bg);
+        color: var(--head-preview-pill-color);
+        border: 1px solid var(--head-preview-pill-border);
       }
       .pill-facebook {
-        background: #e7edfb;
-        color: #1d4ed8;
-        border: 1px solid #c2d1f8;
+        background: var(--head-preview-pill-bg);
+        color: var(--head-preview-pill-color);
+        border: 1px solid var(--head-preview-pill-border);
       }
       .pill-twitter {
-        background: #e7f4fb;
-        color: #0f89c4;
-        border: 1px solid #c1e3f8;
+        background: var(--head-preview-pill-bg);
+        color: var(--head-preview-pill-color);
+        border: 1px solid var(--head-preview-pill-border);
       }
       .search-url {
         display: flex;
@@ -401,7 +423,7 @@ export default class HeadFormatPreview extends Component<Signature> {
         width: 28px;
         height: 28px;
         border-radius: 6px;
-        background: rgba(0 0 0 / 6%);
+        background: var(--head-preview-favicon-bg);
         display: grid;
         place-items: center;
         font: 700 var(--boxel-font-xs);
@@ -419,22 +441,22 @@ export default class HeadFormatPreview extends Component<Signature> {
         gap: 2px;
       }
       .domain {
-        color: #0f6938;
+        color: var(--head-preview-domain);
         font: 600 var(--boxel-font-xs);
         letter-spacing: 0.15px;
       }
       .path {
-        color: rgba(0 0 0 / 60%);
+        color: var(--head-preview-path);
         font: 500 var(--boxel-font-xs);
       }
       .search-title {
-        color: #1a0dab;
+        color: var(--head-preview-title);
         font: 700 var(--boxel-font-md);
         margin-bottom: var(--boxel-sp-xxs);
         line-height: 1.3;
       }
       .search-description {
-        color: rgba(0 0 0 / 74%);
+        color: var(--head-preview-description);
         font: 500 var(--boxel-font-sm);
         line-height: 1.5;
       }
@@ -451,10 +473,10 @@ export default class HeadFormatPreview extends Component<Signature> {
         border-radius: var(--boxel-border-radius-sm);
         background: linear-gradient(
           135deg,
-          rgba(0 0 0 / 5%),
-          rgba(0 0 0 / 10%)
+          var(--head-preview-image-bg-start),
+          var(--head-preview-image-bg-end)
         );
-        border: 1px solid rgba(0 0 0 / 6%);
+        border: 1px solid var(--head-preview-image-border);
         overflow: hidden;
         min-height: 180px;
         display: grid;
@@ -472,7 +494,7 @@ export default class HeadFormatPreview extends Component<Signature> {
       .image-placeholder {
         width: 100%;
         text-align: center;
-        color: rgba(0 0 0 / 65%);
+        color: var(--head-preview-path);
         font: 600 var(--boxel-font-sm);
         padding: var(--boxel-sp-sm);
       }
@@ -486,7 +508,7 @@ export default class HeadFormatPreview extends Component<Signature> {
         line-height: 1.3;
       }
       .social-description {
-        color: rgba(0 0 0 / 70%);
+        color: var(--head-preview-description);
         font: 500 var(--boxel-font-xs);
         line-height: 1.4;
       }
@@ -497,8 +519,8 @@ export default class HeadFormatPreview extends Component<Signature> {
         gap: var(--boxel-sp-xs);
       }
       .meta-chip {
-        background: rgba(255 255 255 / 10%);
-        border: 1px solid rgba(255 255 255 / 12%);
+        background: var(--head-preview-chip-bg);
+        border: 1px solid var(--head-preview-chip-border);
         border-radius: var(--boxel-border-radius-sm);
         padding: 8px 10px;
         color: var(--boxel-dark);
@@ -528,8 +550,8 @@ export default class HeadFormatPreview extends Component<Signature> {
       .raw-head > pre {
         margin-top: var(--boxel-sp-xs);
         white-space: pre-wrap;
-        background: rgba(0 0 0 / 45%);
-        border: 1px solid rgba(255 255 255 / 12%);
+        background: var(--head-preview-raw-bg);
+        border: 1px solid var(--head-preview-raw-border);
         border-radius: var(--boxel-border-radius-sm);
         padding: var(--boxel-sp-sm);
         color: var(--boxel-light);
