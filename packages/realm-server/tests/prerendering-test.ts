@@ -28,6 +28,7 @@ import {
 function makeStubPagePool(maxPages: number) {
   let contextCounter = 0;
   let contextsCreated: string[] = [];
+  let contextsClosed: string[] = [];
   let browser = {
     async createBrowserContext() {
       let id = `ctx-${++contextCounter}`;
@@ -47,6 +48,7 @@ function makeStubPagePool(maxPages: number) {
           } as any;
         },
         async close() {
+          contextsClosed.push(id);
           return;
         },
       } as any;
@@ -68,7 +70,7 @@ function makeStubPagePool(maxPages: number) {
     boxelHostURL: 'http://localhost:4200',
     standbyTimeoutMs: 500,
   });
-  return { pool, contextsCreated };
+  return { pool, contextsCreated, contextsClosed };
 }
 
 module(basename(__filename), function () {
@@ -1864,6 +1866,69 @@ module(basename(__filename), function () {
           realmAFirst.pageId,
           realmBFirst.pageId,
           'distinct pages per realm from standbys',
+        );
+        await pool.closeAll();
+      });
+
+      test('evicts idle realms without touching standbys', async function (assert) {
+        let { pool, contextsCreated, contextsClosed } = makeStubPagePool(2);
+        await pool.warmStandbys();
+
+        assert.strictEqual(
+          contextsCreated.length,
+          2,
+          'initial standbys created up to maxPages',
+        );
+
+        await pool.getPage('realm-a');
+
+        let originalNow = Date.now;
+        try {
+          let now = Date.now();
+          (Date as any).now = () => now + 13 * 60 * 60 * 1000; // 13 hours later
+
+          let evicted = await pool.evictIdleRealms(12 * 60 * 60 * 1000);
+
+          assert.deepEqual(evicted, ['realm-a'], 'idle realm evicted');
+          assert.deepEqual(
+            pool.getWarmRealms(),
+            [],
+            'realm entry removed from warm set',
+          );
+          let closedAtEviction = [...contextsClosed];
+          assert.deepEqual(
+            closedAtEviction,
+            [contextsCreated[0]],
+            'only the realm-bound page closed during idle eviction',
+          );
+          assert.true(
+            contextsCreated.length > closedAtEviction.length,
+            'standby pages remain available after idle eviction',
+          );
+        } finally {
+          (Date as any).now = originalNow;
+          await pool.closeAll();
+        }
+      });
+
+      test('idle eviction skips unassigned standbys', async function (assert) {
+        let { pool, contextsCreated, contextsClosed } = makeStubPagePool(1);
+        await pool.warmStandbys();
+
+        let createdBeforeSweep = contextsCreated.length;
+        let evicted = await pool.evictIdleRealms(1);
+        let closedAfterSweep = contextsClosed.length;
+
+        assert.deepEqual(evicted, [], 'no idle realms to evict');
+        assert.strictEqual(
+          contextsCreated.length,
+          createdBeforeSweep,
+          'standby pool untouched by idle eviction',
+        );
+        assert.strictEqual(
+          closedAfterSweep,
+          0,
+          'no contexts closed when only standbys are present',
         );
         await pool.closeAll();
       });
