@@ -216,6 +216,12 @@ export default class HeadFormatPreview extends Component<Signature> {
 
     <div class='head-preview'>
       <div class='preview-grid'>
+        <p>The
+          <code>meta</code>
+          tags in the head format template will result in link previews like
+          these:
+        </p>
+
         <section class='preview-card search-preview'>
           <div class='preview-header'>
             <span class='pill pill-google'>Google</span>
@@ -364,6 +370,7 @@ export default class HeadFormatPreview extends Component<Signature> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp);
+        color: var(--boxel-light);
       }
       .social-column {
         display: flex;
