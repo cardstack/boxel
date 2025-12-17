@@ -550,9 +550,10 @@ export default class ImageField extends FieldDef {
   static icon = CameraIcon;
 
   @field imageCard = linksTo(ImageCard);
-  @field uploadedImageUrl = contains(StringField, {
+  @field imageUrl = contains(StringField); // Direct URL to image resource
+  @field url = contains(StringField, {
     computeVia: function (this: any) {
-      return this.imageCard?.url ?? '';
+      return this.imageUrl || this.imageCard?.url || '';
     },
   });
 

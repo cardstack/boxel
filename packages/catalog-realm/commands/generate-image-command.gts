@@ -3,15 +3,12 @@ import StringField from 'https://cardstack.com/base/string';
 import UrlField from 'https://cardstack.com/base/url';
 import { Command } from '@cardstack/runtime-common';
 import SendRequestViaProxyCommand from '@cardstack/boxel-host/commands/send-request-via-proxy';
-import Base64ImageField from 'https://cardstack.com/base/base64-image';
 import UploadImageCommand from './upload-image';
 
 class GenerateImageInput extends CardDef {
   @field prompt = contains(StringField);
-  @field uploadedImage = contains(Base64ImageField);
   @field sourceImageUrl = contains(StringField);
   @field targetRealmUrl = contains(StringField);
-  @field imageUrl = contains(StringField);
 }
 
 class GenerateImageOutput extends CardDef {
@@ -55,34 +52,31 @@ export class GenerateImageCommand extends Command<
   }
 
   protected async run(input: GenerateImageInput): Promise<GenerateImageOutput> {
-    const { prompt, uploadedImage, sourceImageUrl, targetRealmUrl, imageUrl } =
-      input;
-    const uploadedImageData = uploadedImage?.base64?.trim();
+    const { prompt, sourceImageUrl, targetRealmUrl } = input;
     const sourceUrlTrimmed = sourceImageUrl?.trim();
-    const explicitImageUrl = imageUrl?.trim();
 
-    let imageUrlForMessage = explicitImageUrl;
+    if (!sourceUrlTrimmed) {
+      throw new Error('A source image URL is required to generate an image.');
+    }
 
-    if (!imageUrlForMessage && uploadedImageData) {
-      imageUrlForMessage = uploadedImageData;
-    } else if (!imageUrlForMessage && sourceUrlTrimmed) {
-      if (sourceUrlTrimmed.startsWith('data:image/')) {
-        imageUrlForMessage = sourceUrlTrimmed;
-      } else {
-        const imageResponse = await fetch(sourceUrlTrimmed);
+    let imageUrlForMessage: string | undefined;
 
-        if (!imageResponse.ok) {
-          throw new Error(
-            `Failed to fetch source image: ${imageResponse.statusText}`,
-          );
-        }
+    if (sourceUrlTrimmed.startsWith('data:image/')) {
+      imageUrlForMessage = sourceUrlTrimmed;
+    } else {
+      const imageResponse = await fetch(sourceUrlTrimmed);
 
-        const contentType =
-          imageResponse.headers.get('content-type') ?? 'image/png';
-        const arrayBuffer = await imageResponse.arrayBuffer();
-        const base64 = arrayBufferToBase64(arrayBuffer);
-        imageUrlForMessage = `data:${contentType};base64,${base64}`;
+      if (!imageResponse.ok) {
+        throw new Error(
+          `Failed to fetch source image: ${imageResponse.statusText}`,
+        );
       }
+
+      const contentType =
+        imageResponse.headers.get('content-type') ?? 'image/png';
+      const arrayBuffer = await imageResponse.arrayBuffer();
+      const base64 = arrayBufferToBase64(arrayBuffer);
+      imageUrlForMessage = `data:${contentType};base64,${base64}`;
     }
 
     let promptText = prompt?.trim();

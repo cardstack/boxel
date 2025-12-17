@@ -51,29 +51,6 @@ function buildPrompt({
   return prompt;
 }
 
-// SaveCardCommand detaches the instance from the store after persisting, so we
-// immediately fetch a fresh copy to maintain reactivity in the UI.
-async function persistAndHydrate<T extends CardDef>(
-  card: T,
-  commandContext: CommandContextForGenerateImage,
-  realmHref: string,
-  context?: CardContext,
-): Promise<T> {
-  await new SaveCardCommand(commandContext).execute({
-    card,
-    realm: realmHref,
-  });
-
-  if (context?.store && card.id) {
-    let rehydrated = (await context.store.get(card.id)) as T | undefined;
-    if (rehydrated) {
-      return rehydrated;
-    }
-  }
-
-  return card;
-}
-
 async function generateImage({
   polaroid,
   timePeriod,
@@ -126,10 +103,6 @@ async function generateImage({
 
   if (!hydratedImageCard) {
     hydratedImageCard = new BaseImageCard({ url: imageDataUrl });
-    await new SaveCardCommand(commandContext).execute({
-      card: hydratedImageCard,
-      realm: realmHref,
-    });
   }
 
   let imageField = new ImageField({
@@ -140,7 +113,7 @@ async function generateImage({
     polaroid.image = imageField;
     polaroid.caption = normalizedPeriod;
 
-    return persistAndHydrate(polaroid, commandContext, realmHref, context);
+    return polaroid;
   }
 
   let newPolaroid = new PolaroidImage({
@@ -148,7 +121,7 @@ async function generateImage({
     image: imageField,
   });
 
-  return persistAndHydrate(newPolaroid, commandContext, realmHref, context);
+  return newPolaroid;
 }
 
 export class TimeMachineImageGeneratorIsolated extends Component<

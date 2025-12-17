@@ -20,7 +20,9 @@
       "showGrid": false,
       "background": {
         "type": "image",
-        "image": {},
+        "image": {
+          "imageUrl": null
+        },
         "imageUrl": "",
         "imageScale": 125,
         "primaryColor": "#FA2200",
