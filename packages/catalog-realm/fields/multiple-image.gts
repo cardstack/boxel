@@ -23,14 +23,11 @@ import NotificationBubble from '../components/notification-bubble';
 
 import { SortableGroupModifier } from '@cardstack/boxel-ui/modifiers';
 
-import { uuidv4 } from '@cardstack/runtime-common';
+import { realmURL as realmURLSymbol, uuidv4 } from '@cardstack/runtime-common';
 
 import ImageField from './image';
 
-import {
-  requestCloudflareUploadUrl,
-  uploadFileToCloudflare,
-} from './image/util/cloudflare-upload';
+import UploadImageCommand from '../commands/upload-image';
 
 import MultipleImageGalleryUpload from './multiple-image/components/multiple-image-gallery-upload';
 import MultipleImageDropzoneUpload from './multiple-image/components/multiple-image-dropzone-upload';
@@ -378,14 +375,14 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
 
     // Only persist successful uploads
     this.uploadEntries
-      .filter((entry) => entry.url && entry.uploadStatus !== 'error')
+      .filter(
+        (entry) => entry.url && entry.uploadStatus !== 'error',
+      )
       .forEach((entry) => {
         const imageField = new ImageField();
-        if (entry.url) {
-          imageField.url = entry.url;
-          if (this.args.model.images) {
-            this.args.model.images.push(imageField);
-          }
+        imageField.imageUrl = entry.url;
+        if (this.args.model.images) {
+          this.args.model.images.push(imageField);
         }
       });
   }
@@ -406,6 +403,22 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
     this.uploadStatusMessage = 'Uploading images...';
 
     const errorMessages: string[] = [];
+    const commandContext = this.args.context?.commandContext;
+    const realmHref = this.args.model?.[realmURLSymbol]?.href;
+
+    if (!commandContext) {
+      this.uploadStatus = 'error';
+      this.uploadStatusMessage =
+        'Upload failed: missing command context. Open in host with command context available.';
+      return;
+    }
+
+    if (!realmHref) {
+      this.uploadStatus = 'error';
+      this.uploadStatusMessage =
+        'Upload failed: missing realm URL to save the image card.';
+      return;
+    }
 
     // Upload each image individually
     for (const entry of pendingEntries) {
@@ -425,14 +438,27 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
             : e,
         );
 
-        // Step 1: Get Cloudflare upload URL
-        const uploadUrl = await requestCloudflareUploadUrl(
-          this.args.context?.commandContext,
-          { source: 'boxel-multiple-image-field' },
-        );
+        const uploadCommand = new UploadImageCommand(commandContext);
+        const result = await uploadCommand.execute({
+          sourceImageUrl: entry.preview,
+          targetRealmUrl: realmHref,
+        });
 
-        // Step 2: Upload to Cloudflare
-        const imageUrl = await uploadFileToCloudflare(uploadUrl, entryFile);
+        if (!result?.cardId) {
+          throw new Error('Upload succeeded but no card id was returned');
+        }
+
+        let uploadedUrl = entry.preview;
+        let store =
+          (commandContext as any)?.store || (this.args.context as any)?.store;
+        if (store?.get) {
+          try {
+            let savedCard = await store.get(result.cardId);
+            uploadedUrl = (savedCard as any)?.url ?? uploadedUrl;
+          } catch (error) {
+            console.warn('Unable to hydrate uploaded image card', error);
+          }
+        }
 
         // Update entry with success status - update immutably for live reactivity
         // This triggers immediate UI update with green border
@@ -440,7 +466,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
           e.id === entryId
             ? {
                 ...e,
-                url: imageUrl,
+                url: uploadedUrl,
                 uploadStatus: 'success' as const,
                 uploadError: undefined,
                 isUploading: false,
