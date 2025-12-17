@@ -38,11 +38,11 @@ import MultipleImageGalleryPreview from './multiple-image/components/multiple-im
 import MultipleImageDropzonePreview from './multiple-image/components/multiple-image-dropzone-preview';
 import GridPresentation from './multiple-image/components/grid-presentation';
 import CarouselPresentation from './multiple-image/components/carousel-presentation';
+import type { UploadEntry, UploadStatus } from './multiple-image/image-upload-types';
 
 // Type definitions
 type ImageInputVariant = 'list' | 'gallery' | 'dropzone';
 type ImagePresentationType = 'standard' | 'grid' | 'carousel';
-type UploadStatus = 'idle' | 'pending' | 'success' | 'error';
 type SortableDirection = 'x' | 'y' | 'grid';
 
 // Configuration interface
@@ -56,20 +56,6 @@ interface MultipleImageFieldConfiguration {
     maxFiles?: number; // Max number of files (default 10)
     showProgress?: boolean; // Show progress during file reading (default: true)
   };
-}
-
-// Upload entry for local preview before upload
-interface UploadEntry {
-  id: string;
-  file: File;
-  preview: string; // Local base64 preview
-  uploadedImageUrl?: string; // Cloudflare CDN URL
-  selected?: boolean; // Batch selection state
-  readProgress?: number; // File reading progress (0-100)
-  isReading?: boolean; // Currently reading file
-  isUploading?: boolean; // Currently uploading to Cloudflare
-  uploadStatus?: UploadStatus; // Upload result status
-  uploadError?: string; // Error message if upload failed
 }
 
 class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
@@ -293,7 +279,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
 
   // Create entry from existing ImageField
   createEntryFromExisting(img: ImageField): UploadEntry {
-    // Extract filename from uploadedImageUrl
+    // Extract filename from url
     const extractFilename = (url: string | undefined): string => {
       if (!url) return 'uploaded-image';
       try {
@@ -316,7 +302,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
       id: `${Date.now()}-${Math.random()}`,
       file: fileLike,
       preview: img.url || '',
-      uploadedImageUrl: img.url,
+      url: img.url,
       selected: false, // Initialize selection state
       uploadStatus: img.url ? 'success' : undefined, // Mark existing uploads as success
     };
@@ -406,7 +392,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
 
   // Bulk upload task - uploads all pending images and retries errors
   bulkUploadTask = restartableTask(async () => {
-    // Include entries without uploadedImageUrl OR entries with error status (for retry)
+    // Include entries without url OR entries with error status (for retry)
     const pendingEntries = this.uploadEntries.filter(
       (entry) => !entry.url || entry.uploadStatus === 'error',
     );
@@ -454,7 +440,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
           e.id === entryId
             ? {
                 ...e,
-                uploadedImageUrl: imageUrl,
+                url: imageUrl,
                 uploadStatus: 'success' as const,
                 uploadError: undefined,
                 isUploading: false,
