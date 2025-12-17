@@ -1846,7 +1846,7 @@ module(basename(__filename), function () {
                 type: 'card',
                 meta: {
                   adoptsFrom: {
-                    module: './person.gts',
+                    module: './person',
                     name: 'Person',
                   },
                 },
