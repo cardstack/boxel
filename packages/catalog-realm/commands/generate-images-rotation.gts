@@ -12,7 +12,8 @@ export const DEFAULT_IMAGE_MODEL = 'google/gemini-2.5-flash-image-preview';
 
 class GenerateImagesRotationInput extends CardDef {
   @field productImages = containsMany(StringField, {
-    description: 'Array of Base64 encoded product images from different angles',
+    description:
+      'Array of product image URLs (https or data URLs/base64) from different angles',
   });
 
   @field prompts = containsMany(StringField, {
@@ -28,7 +29,8 @@ class GenerateImagesRotationInput extends CardDef {
 
 class GenerateImagesRotationResult extends CardDef {
   @field generatedImages = containsMany(StringField, {
-    description: 'Array of Base64 encoded generated rotation images',
+    description:
+      'Array of generated rotation images as base64 data URLs (data:image/*)',
   });
 }
 
@@ -145,7 +147,7 @@ export class GenerateImagesRotation extends Command<
     const images = messageContent?.images;
 
     if (!Array.isArray(images) || images.length === 0) {
-      throw new Error('No images found in the response for a rotation view.');
+      throw new Error('No images were returned for a rotation view.');
     }
 
     const firstValidImage = images.find(
@@ -154,7 +156,9 @@ export class GenerateImagesRotation extends Command<
     );
 
     if (!firstValidImage?.image_url?.url) {
-      throw new Error('No valid base64 image returned for a rotation view.');
+      throw new Error(
+        'No valid image URL returned for a rotation view (expected data:image/*).',
+      );
     }
 
     return firstValidImage.image_url.url;

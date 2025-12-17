@@ -9,22 +9,23 @@ import {
 import PackageIcon from '@cardstack/boxel-icons/package';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import Base64ImageField from 'https://cardstack.com/base/base64-image';
+import BaseImageCard from 'https://cardstack.com/base/image';
+import ImageField from '../fields/image';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
 
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
+import UploadImageCommand from '../commands/upload-image';
 
 import { GenerateImagesRotation } from '../commands/generate-images-rotation';
 import { ExportProductCatalogCommand } from '../commands/export-product-catalog';
-import { ProductRotatorForm } from './components/product-rotator-form';
 import {
   RotationPreview,
   type RotationFrame,
 } from './components/rotation-preview';
 import { ProductRotationImage } from './components/product-rotation-image';
-import type Owner from '@ember/owner';
 
 const DEFAULT_IMAGE_COUNT = 4;
 
@@ -32,16 +33,7 @@ type CommandContextForGenerate = ConstructorParameters<
   typeof GenerateImagesRotation
 >[0];
 
-interface FileSelection {
-  file: File;
-  url: string;
-}
-
 export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
-  @tracked selections: FileSelection[] = [];
-  @tracked productDescription =
-    this.args.model?.productDescription?.trim() ?? '';
-  @tracked imageCount = this.args.model?.imageCount ?? DEFAULT_IMAGE_COUNT;
   @tracked generatedCards: ProductRotationImage[] =
     this.args.model?.generatedImages ?? [];
   @tracked rotationFrames: RotationFrame[] = rotationFramesFromCards(
@@ -53,22 +45,8 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
   @tracked isExporting = false;
   @tracked error = '';
 
-  constructor(owner: Owner, args: any) {
-    super(owner, args);
-    // Initialize imageCount before any getters might access it
-    let initialCount = this.args.model?.imageCount ?? DEFAULT_IMAGE_COUNT;
-    this.imageCount = this.normalizeImageCount(initialCount);
-  }
-
-  get previews() {
-    return this.selections.map((selection, index) => ({
-      url: selection.url,
-      label: `Reference ${index + 1}`,
-    }));
-  }
-
   get rotationAngles() {
-    let count = this.imageCount;
+    let count = Math.max(2, Math.min(16, this.imageCount));
     const angles: number[] = [];
     if (count < 2) {
       return [0];
@@ -84,10 +62,22 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
     return this.rotationFrames.length > 0;
   }
 
+  get referenceImageUrl() {
+    return this.args.model?.referenceImage?.url ?? '';
+  }
+
+  get productDescription() {
+    return this.args.model?.productDescription?.trim() ?? '';
+  }
+
+  get imageCount() {
+    return this.args.model?.imageCount ?? DEFAULT_IMAGE_COUNT;
+  }
+
   get canGenerate() {
     return (
-      this.selections.length > 0 &&
-      this.productDescription.trim().length > 0 &&
+      Boolean(this.referenceImageUrl) &&
+      this.productDescription.length > 0 &&
       !this.isGenerating
     );
   }
@@ -97,9 +87,7 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
       this.hasGeneratedFrames &&
       !this.isExporting &&
       Array.isArray(this.args.model?.generatedImages) &&
-      this.args.model.generatedImages.some((image) =>
-        Boolean(image?.data?.base64),
-      )
+      this.args.model.generatedImages.some((image) => image?.image?.url)
     );
   }
 
@@ -140,59 +128,6 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
   }
 
   @action
-  updateDescription(value: string) {
-    this.productDescription = value;
-  }
-
-  @action
-  updateImageCount(value: string) {
-    let parsed = parseInt(value, 10);
-    this.imageCount = this.normalizeImageCount(parsed);
-  }
-
-  private normalizeImageCount(count?: number) {
-    if (!Number.isFinite(count)) {
-      return DEFAULT_IMAGE_COUNT;
-    }
-    let clamped = Math.max(2, Math.min(16, Number(count)));
-    return Math.round(clamped);
-  }
-
-  @action
-  handleFilesSelected(files: File[]) {
-    if (!Array.isArray(files) || files.length === 0) {
-      return;
-    }
-
-    let nextSelections = [...this.selections];
-    for (let file of files) {
-      if (!file.type.startsWith('image/')) {
-        this.error = `Unsupported file type: ${file.name}`;
-        continue;
-      }
-      let url = URL.createObjectURL(file);
-      nextSelections.push({ file, url });
-    }
-
-    if (nextSelections.length === this.selections.length) {
-      return;
-    }
-
-    this.error = '';
-    this.selections = nextSelections;
-  }
-
-  @action
-  removeSelection(index: number) {
-    let target = this.selections[index];
-    if (target) {
-      URL.revokeObjectURL(target.url);
-    }
-
-    this.selections = this.selections.filter((_, i) => i !== index);
-  }
-
-  @action
   async handleRotationSelect(index: number) {
     this.currentRotationIndex = index;
   }
@@ -229,15 +164,6 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
     this.lastProcessedDeltaX = cumulativeDeltaX;
   }
 
-  private async fileToBase64(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = (event) => reject(event);
-      reader.readAsDataURL(file);
-    });
-  }
-
   private existingRotationsByAngle() {
     let rotations = this.args.model?.generatedImages ?? [];
     let map = new Map<number, ProductRotationImage>();
@@ -261,12 +187,12 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
   }
 
   private async persistRotations({
-    base64Images,
+    dataUrlImages,
     angles,
     commandContext,
     realmHref,
   }: {
-    base64Images: string[];
+    dataUrlImages: string[];
     angles: number[];
     commandContext: CommandContextForGenerate;
     realmHref: string;
@@ -274,7 +200,7 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
     let tasks: Promise<ProductRotationImage | undefined>[] = [];
     let existingByAngle = this.existingRotationsByAngle();
 
-    base64Images.forEach((base64, index) => {
+    dataUrlImages.forEach((dataUrl, index) => {
       let angle = angles[index];
       if (typeof angle === 'undefined') {
         return;
@@ -284,13 +210,12 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
 
       tasks.push(
         persistRotationImage({
-          base64,
+          dataUrl,
           angle,
           existing,
           commandContext,
           realmHref,
           context: this.args.context,
-          productDescription: this.productDescription,
         }).catch((error) => {
           console.error(`Failed to persist rotation ${angle}°`, error);
           return existing;
@@ -328,9 +253,7 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
     this.error = '';
 
     try {
-      const base64Images = await Promise.all(
-        this.selections.map((selection) => this.fileToBase64(selection.file)),
-      );
+      const urlImages = [this.referenceImageUrl].filter(Boolean);
 
       const angles = this.rotationAngles;
       const description = this.productDescription.trim();
@@ -342,7 +265,7 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
         commandContext,
       );
       const result = await generateRotationsCommand.execute({
-        productImages: base64Images,
+        productImages: urlImages,
         prompts,
         rotationAngles: angles.map((angle) => angle.toString()),
       });
@@ -352,7 +275,7 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
       }
 
       const persistedRotations = await this.persistRotations({
-        base64Images: result.generatedImages,
+        dataUrlImages: result.generatedImages,
         angles,
         commandContext,
         realmHref,
@@ -400,8 +323,8 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
       return;
     }
 
-    let rotationCards = (model.generatedImages ?? []).filter((image) =>
-      Boolean(image?.data?.base64),
+    let rotationCards = (model.generatedImages ?? []).filter(
+      (image) => image?.image?.url,
     );
 
     if (rotationCards.length === 0) {
@@ -428,11 +351,6 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
     }
   }
 
-  willDestroy(): void {
-    this.selections.forEach((selection) => URL.revokeObjectURL(selection.url));
-    super.willDestroy();
-  }
-
   <template>
     <main class='rotator-app'>
       <header class='rotator-app__header'>
@@ -445,23 +363,42 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
 
       <div class='rotator-app__layout'>
         <aside class='rotator-app__sidebar'>
-          <ProductRotatorForm
-            @previews={{this.previews}}
-            @onFilesSelected={{this.handleFilesSelected}}
-            @onRemove={{this.removeSelection}}
-            @productDescription={{this.productDescription}}
-            @onDescriptionChange={{this.updateDescription}}
-            @imageCount={{this.imageCount}}
-            @onImageCountChange={{this.updateImageCount}}
-            @generateLabel={{this.generateButtonLabel}}
-            @onGenerate={{this.generateRotationViews}}
-            @generateDisabled={{this.isGenerateDisabled}}
-            @isGenerating={{this.isGenerating}}
-            @onExport={{this.handleExportCatalog}}
-            @exportDisabled={{this.isExportDisabled}}
-            @isExporting={{this.isExporting}}
-            @errorMessage={{this.error}}
-          />
+          <section class='rotator-panel'>
+            <h3>Reference Image</h3>
+            <@fields.referenceImage @format='edit' />
+
+            <h3>Describe Your Product</h3>
+            <@fields.productDescription @format='edit' />
+
+            <h3>Number of Rotation Images</h3>
+            <@fields.imageCount @format='edit' />
+
+            <div class='rotator-actions'>
+              <button
+                class='primary'
+                type='button'
+                {{on 'click' this.generateRotationViews}}
+                disabled={{this.isGenerateDisabled}}
+              >
+                {{this.generateButtonLabel}}
+              </button>
+              <button
+                class='secondary'
+                type='button'
+                {{on 'click' this.handleExportCatalog}}
+                disabled={{this.isExportDisabled}}
+              >
+                {{if this.isExporting 'Exporting…' 'Export Product Catalog'}}
+              </button>
+            </div>
+
+            {{#if this.error}}
+              <div class='rotator-error'>
+                <strong>Error:</strong>
+                {{this.error}}
+              </div>
+            {{/if}}
+          </section>
         </aside>
 
         <section class='rotator-app__preview'>
@@ -523,6 +460,63 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
         min-width: 0;
       }
 
+      .rotator-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        padding: 1rem;
+        background: #fffcf5;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        border-radius: 12px;
+        box-shadow:
+          0 10px 20px rgba(0, 0, 0, 0.08),
+          0 0 0 1px rgba(0, 0, 0, 0.04);
+      }
+
+      .rotator-panel h3 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #111827;
+      }
+
+      .rotator-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .rotator-actions button {
+        border: none;
+        border-radius: 10px;
+        padding: 0.75rem 1rem;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .rotator-actions .primary {
+        background: #0f172a;
+        color: #f8fafc;
+      }
+
+      .rotator-actions .secondary {
+        background: #e5e7eb;
+        color: #111827;
+      }
+
+      .rotator-actions button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .rotator-error {
+        padding: 0.75rem;
+        border-radius: 10px;
+        background: rgba(254, 226, 226, 0.7);
+        border: 1px solid rgba(252, 165, 165, 0.8);
+        color: #b91c1c;
+      }
+
       .rotator-app__preview {
         min-width: 0;
         overflow: hidden;
@@ -547,6 +541,7 @@ export class ProductRotator extends CardDef {
     },
   });
 
+  @field referenceImage = contains(ImageField);
   @field productDescription = contains(StringField);
   @field imageCount = contains(NumberField);
   @field generatedImages = linksToMany(() => ProductRotationImage);
@@ -580,38 +575,64 @@ function buildAngleLabel(angle: number): string {
 }
 
 async function persistRotationImage({
-  base64,
+  dataUrl,
   angle,
   commandContext,
   realmHref,
   context,
   existing,
-  productDescription,
 }: {
-  base64: string;
+  dataUrl: string;
   angle: number;
   commandContext: CommandContextForGenerate;
   realmHref: string;
   context?: CardContext;
   existing?: ProductRotationImage;
-  productDescription?: string;
 }): Promise<ProductRotationImage> {
   let safeAngle = Math.round(angle);
   let label = buildAngleLabel(safeAngle);
-  let altText = productDescription
-    ? `${productDescription} rotated ${safeAngle} degrees`
-    : `Product rotated ${safeAngle} degrees`;
 
-  let imageField = new Base64ImageField({
-    base64,
-    altText,
-    size: 'contain',
-    width: 1024,
-    height: 1024,
+  let ensuredDataUrl = dataUrl.startsWith('data:image/')
+    ? dataUrl
+    : `data:image/png;base64,${dataUrl}`;
+
+  let imageCard: BaseImageCard | undefined;
+
+  try {
+    let uploadCommand = new UploadImageCommand(commandContext);
+    let result = await uploadCommand.execute({
+      sourceImageUrl: ensuredDataUrl,
+      targetRealmUrl: realmHref,
+    });
+
+    if (result?.cardId) {
+      let store = (context as any)?.store || (commandContext as any)?.store;
+      if (store?.get) {
+        let saved = await store.get(result.cardId);
+        imageCard = saved as BaseImageCard;
+      }
+    }
+  } catch (error) {
+    console.warn('UploadImageCommand failed, falling back to data URL', error);
+  }
+
+  if (!imageCard) {
+    imageCard = new BaseImageCard({
+      url: ensuredDataUrl,
+    });
+
+    await new SaveCardCommand(commandContext).execute({
+      card: imageCard,
+      realm: realmHref,
+    });
+  }
+
+  let imageField = new ImageField({
+    imageCard,
   });
 
   if (existing) {
-    existing.data = imageField;
+    existing.image = imageField;
     existing.angleLabel = label;
     existing.angleDegrees = safeAngle;
     return persistAndHydrate(existing, commandContext, realmHref, context);
@@ -620,7 +641,7 @@ async function persistRotationImage({
   let rotationCard = new ProductRotationImage({
     angleLabel: label,
     angleDegrees: safeAngle,
-    data: imageField,
+    image: imageField,
   });
 
   return persistAndHydrate(rotationCard, commandContext, realmHref, context);
@@ -646,8 +667,8 @@ function rotationFramesFromCards(
 ): RotationFrame[] {
   return cards
     .map((card) => {
-      let base64 = card?.data?.base64;
-      if (!base64) {
+      let url = card?.image?.url;
+      if (!url) {
         return undefined;
       }
       let angle = angleFromCard(card);
@@ -658,7 +679,7 @@ function rotationFramesFromCards(
       return {
         angle,
         label: card.angleLabel ?? buildAngleLabel(angle),
-        base64,
+        base64: url,
       };
     })
     .filter((frame): frame is RotationFrame => Boolean(frame));

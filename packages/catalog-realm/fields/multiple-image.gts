@@ -23,14 +23,11 @@ import NotificationBubble from '../components/notification-bubble';
 
 import { SortableGroupModifier } from '@cardstack/boxel-ui/modifiers';
 
-import { uuidv4 } from '@cardstack/runtime-common';
+import { realmURL as realmURLSymbol, uuidv4 } from '@cardstack/runtime-common';
 
 import ImageField from './image';
 
-import {
-  requestCloudflareUploadUrl,
-  uploadFileToCloudflare,
-} from './image/util/cloudflare-upload';
+import UploadImageCommand from '../commands/upload-image';
 
 import MultipleImageGalleryUpload from './multiple-image/components/multiple-image-gallery-upload';
 import MultipleImageDropzoneUpload from './multiple-image/components/multiple-image-dropzone-upload';
@@ -38,11 +35,11 @@ import MultipleImageGalleryPreview from './multiple-image/components/multiple-im
 import MultipleImageDropzonePreview from './multiple-image/components/multiple-image-dropzone-preview';
 import GridPresentation from './multiple-image/components/grid-presentation';
 import CarouselPresentation from './multiple-image/components/carousel-presentation';
+import type { UploadEntry, UploadStatus } from './multiple-image/image-upload-types';
 
 // Type definitions
 type ImageInputVariant = 'list' | 'gallery' | 'dropzone';
 type ImagePresentationType = 'standard' | 'grid' | 'carousel';
-type UploadStatus = 'idle' | 'pending' | 'success' | 'error';
 type SortableDirection = 'x' | 'y' | 'grid';
 
 // Configuration interface
@@ -56,20 +53,6 @@ interface MultipleImageFieldConfiguration {
     maxFiles?: number; // Max number of files (default 10)
     showProgress?: boolean; // Show progress during file reading (default: true)
   };
-}
-
-// Upload entry for local preview before upload
-interface UploadEntry {
-  id: string;
-  file: File;
-  preview: string; // Local base64 preview
-  uploadedImageUrl?: string; // Cloudflare CDN URL
-  selected?: boolean; // Batch selection state
-  readProgress?: number; // File reading progress (0-100)
-  isReading?: boolean; // Currently reading file
-  isUploading?: boolean; // Currently uploading to Cloudflare
-  uploadStatus?: UploadStatus; // Upload result status
-  uploadError?: string; // Error message if upload failed
 }
 
 class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
@@ -163,7 +146,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
 
   get hasPendingUploads() {
     return this.uploadEntries.some(
-      (entry) => !entry.uploadedImageUrl || entry.uploadStatus === 'error',
+      (entry) => !entry.url || entry.uploadStatus === 'error',
     );
   }
 
@@ -293,7 +276,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
 
   // Create entry from existing ImageField
   createEntryFromExisting(img: ImageField): UploadEntry {
-    // Extract filename from uploadedImageUrl
+    // Extract filename from url
     const extractFilename = (url: string | undefined): string => {
       if (!url) return 'uploaded-image';
       try {
@@ -305,7 +288,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
       }
     };
 
-    const filename = extractFilename(img.uploadedImageUrl);
+    const filename = extractFilename(img.url);
     const fileLike = {
       name: filename,
       size: 0,
@@ -315,10 +298,10 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
     return {
       id: `${Date.now()}-${Math.random()}`,
       file: fileLike,
-      preview: img.uploadedImageUrl || '',
-      uploadedImageUrl: img.uploadedImageUrl,
+      preview: img.url || '',
+      url: img.url,
       selected: false, // Initialize selection state
-      uploadStatus: img.uploadedImageUrl ? 'success' : undefined, // Mark existing uploads as success
+      uploadStatus: img.url ? 'success' : undefined, // Mark existing uploads as success
     };
   }
 
@@ -337,7 +320,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
   handleReorder(reorderedEntries: UploadEntry[]) {
     // Reorder entries
     this.uploadEntries = reorderedEntries;
-    if (this.uploadEntries.some((entry) => entry.uploadedImageUrl)) {
+    if (this.uploadEntries.some((entry) => entry.url)) {
       this.persistEntries();
     }
   }
@@ -393,24 +376,22 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
     // Only persist successful uploads
     this.uploadEntries
       .filter(
-        (entry) => entry.uploadedImageUrl && entry.uploadStatus !== 'error',
+        (entry) => entry.url && entry.uploadStatus !== 'error',
       )
       .forEach((entry) => {
         const imageField = new ImageField();
-        if (entry.uploadedImageUrl) {
-          imageField.uploadedImageUrl = entry.uploadedImageUrl;
-          if (this.args.model.images) {
-            this.args.model.images.push(imageField);
-          }
+        imageField.imageUrl = entry.url!; // Safe to use ! since we filtered for entries with url
+        if (this.args.model.images) {
+          this.args.model.images.push(imageField);
         }
       });
   }
 
   // Bulk upload task - uploads all pending images and retries errors
   bulkUploadTask = restartableTask(async () => {
-    // Include entries without uploadedImageUrl OR entries with error status (for retry)
+    // Include entries without url OR entries with error status (for retry)
     const pendingEntries = this.uploadEntries.filter(
-      (entry) => !entry.uploadedImageUrl || entry.uploadStatus === 'error',
+      (entry) => !entry.url || entry.uploadStatus === 'error',
     );
 
     if (pendingEntries.length === 0) {
@@ -422,6 +403,22 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
     this.uploadStatusMessage = 'Uploading images...';
 
     const errorMessages: string[] = [];
+    const commandContext = this.args.context?.commandContext;
+    const realmHref = this.args.model?.[realmURLSymbol]?.href;
+
+    if (!commandContext) {
+      this.uploadStatus = 'error';
+      this.uploadStatusMessage =
+        'Upload failed: missing command context. Open in host with command context available.';
+      return;
+    }
+
+    if (!realmHref) {
+      this.uploadStatus = 'error';
+      this.uploadStatusMessage =
+        'Upload failed: missing realm URL to save the image card.';
+      return;
+    }
 
     // Upload each image individually
     for (const entry of pendingEntries) {
@@ -441,14 +438,27 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
             : e,
         );
 
-        // Step 1: Get Cloudflare upload URL
-        const uploadUrl = await requestCloudflareUploadUrl(
-          this.args.context?.commandContext,
-          { source: 'boxel-multiple-image-field' },
-        );
+        const uploadCommand = new UploadImageCommand(commandContext);
+        const result = await uploadCommand.execute({
+          sourceImageUrl: entry.preview,
+          targetRealmUrl: realmHref,
+        });
 
-        // Step 2: Upload to Cloudflare
-        const imageUrl = await uploadFileToCloudflare(uploadUrl, entryFile);
+        if (!result?.cardId) {
+          throw new Error('Upload succeeded but no card id was returned');
+        }
+
+        let uploadedUrl = entry.preview;
+        let store =
+          (commandContext as any)?.store || (this.args.context as any)?.store;
+        if (store?.get) {
+          try {
+            let savedCard = await store.get(result.cardId);
+            uploadedUrl = (savedCard as any)?.url ?? uploadedUrl;
+          } catch (error) {
+            console.warn('Unable to hydrate uploaded image card', error);
+          }
+        }
 
         // Update entry with success status - update immutably for live reactivity
         // This triggers immediate UI update with green border
@@ -456,7 +466,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
           e.id === entryId
             ? {
                 ...e,
-                uploadedImageUrl: imageUrl,
+                url: uploadedUrl,
                 uploadStatus: 'success' as const,
                 uploadError: undefined,
                 isUploading: false,
@@ -893,11 +903,7 @@ class MultipleImageFieldAtom extends Component<typeof MultipleImageField> {
   <template>
     <span class='multiple-image-atom'>
       {{#if this.firstImage}}
-        <img
-          src={{this.firstImage.uploadedImageUrl}}
-          alt=''
-          class='atom-thumbnail'
-        />
+        <img src={{this.firstImage.url}} alt='' class='atom-thumbnail' />
         <span class='atom-count'>{{this.imageCount}}
           {{if (eq this.imageCount 1) 'image' 'images'}}</span>
       {{else}}

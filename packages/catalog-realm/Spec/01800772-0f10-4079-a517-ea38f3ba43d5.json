@@ -4,12 +4,12 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../fields/cloudflare-image-url",
-        "name": "CloudflareImageUrlField"
+        "module": "http://localhost:4201/catalog/fields/image/components/image-presentation",
+        "name": "default"
       },
-      "specType": "field",
+      "specType": "component",
       "containedExamples": [],
-      "title": "CloudflareImageUrlField",
+      "title": "default",
       "description": null,
       "cardInfo": {
         "title": null,

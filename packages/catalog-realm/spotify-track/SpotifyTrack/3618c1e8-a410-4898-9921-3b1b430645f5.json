@@ -8,19 +8,13 @@
     },
     "type": "card",
     "attributes": {
-      "tags": [
-        "Mandopop",
-        "Ballad",
-        "Acoustic",
-        "Chinese Pop"
-      ],
+      "tags": ["Mandopop", "Ballad", "Acoustic", "Chinese Pop"],
       "album": "走马 (Zou Ma) - Single",
       "genre": "Mandopop",
       "likes": 1240000,
       "artist": "摩登兄弟 (Modern Brothers)",
       "albumArt": {
-        "uploadUrl": "https://upload.imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764832463338",
-        "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764832463338/public"
+        "imageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764832463338/public"
       },
       "cardInfo": {
         "notes": null,
