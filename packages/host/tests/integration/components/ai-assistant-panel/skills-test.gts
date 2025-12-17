@@ -48,6 +48,7 @@ import {
   field,
   setupBaseRealm,
   StringField,
+  CardsGrid,
 } from '../../../helpers/base-realm';
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
 import { renderComponent } from '../../../helpers/render-component';
@@ -275,6 +276,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
           },
         },
         'hello.txt': 'Hello, world!',
+        'index.json': new CardsGrid(),
         '.realm.json': `{ "name": "${realmName}" }`,
       },
     });
