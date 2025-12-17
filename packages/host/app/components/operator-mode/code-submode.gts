@@ -886,6 +886,8 @@ export default class CodeSubmode extends Component<Signature> {
       }
 
       .module-inspector-container {
+        --boxel-format-chooser-height: var(--boxel-form-control-height);
+
         background-color: transparent;
       }
 

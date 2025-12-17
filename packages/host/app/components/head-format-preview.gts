@@ -349,6 +349,9 @@ export default class HeadFormatPreview extends Component<Signature> {
         --head-preview-pill-color: var(--boxel-600);
 
         padding: var(--boxel-sp-lg);
+        padding-bottom: calc(
+          var(--boxel-format-chooser-height) + var(--boxel-sp-lg)
+        );
         background: linear-gradient(
           145deg,
           var(--head-preview-surface-strong),
