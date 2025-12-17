@@ -211,7 +211,7 @@ export default class HeadFormatPreview extends Component<Signature> {
 
   <template>
     <div hidden aria-hidden='true' {{this.captureHeadMarkup}}>
-      {{component @renderedCard displayContainer=false}}
+      <@renderedCard @displayContainer={{false}} />
     </div>
 
     <div class='head-preview'>
