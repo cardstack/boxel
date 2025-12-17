@@ -6,7 +6,7 @@ import {
   contains,
   linksTo,
 } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import UrlField from 'https://cardstack.com/base/url';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
@@ -550,10 +550,13 @@ export default class ImageField extends FieldDef {
   static icon = CameraIcon;
 
   @field imageCard = linksTo(ImageCard);
-  @field imageUrl = contains(StringField); // Direct URL to image resource
-  @field url = contains(StringField, {
+  @field imageUrl = contains(UrlField); // Direct URL to image resource
+  @field url = contains(UrlField, {
     computeVia: function (this: any) {
-      return this.imageUrl || this.imageCard?.url || '';
+      if (this.imageUrl) {
+        return this.imageUrl;
+      }
+      return this.imageCard?.url || undefined;
     },
   });
 
