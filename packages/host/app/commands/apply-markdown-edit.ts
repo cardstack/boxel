@@ -7,6 +7,9 @@ import GetCardCommand from './get-card';
 import PatchFieldsCommand from './patch-fields';
 import SendRequestViaProxyCommand from './send-request-via-proxy';
 
+const escapeForTag = (value: string) =>
+  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 // Command to apply markdown edits using relace/relace-apply-3 model
 export default class ApplyMarkdownEditCommand extends HostBaseCommand<
   typeof BaseCommandModule.ApplyMarkdownEditInput,
@@ -95,7 +98,8 @@ export default class ApplyMarkdownEditCommand extends HostBaseCommand<
       if (focusedContentIndex === -1) {
         throw new Error(
           `The provided currentContent was not found in the field. ` +
-            `Make sure it exactly matches a portion of the existing content.`,
+            `Try selecting a larger or more unique portion of text. ` +
+            `Field content length: ${fullFieldContent.length}.`,
         );
       }
       const secondOccurrenceIndex = fullFieldContent.indexOf(
@@ -110,18 +114,13 @@ export default class ApplyMarkdownEditCommand extends HostBaseCommand<
       }
     }
 
-    const escapeForTag = (value: string) =>
-      value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
     // Call OpenRouter's relace-apply-3 model to apply the diff
     const requestBody = {
       model: 'relace/relace-apply-3',
       messages: [
         {
           role: 'user',
-          content: `<instruction>${escapeForTag(
-            input.instructions,
-          )}</instruction>\n<code>${escapeForTag(
+          content: `<instruction>${escapeForTag(input.instructions)}</instruction>\n<code>${escapeForTag(
             contentForModel,
           )}</code>\n<update>${escapeForTag(input.markdownDiff)}</update>`,
         },
@@ -174,13 +173,16 @@ export default class ApplyMarkdownEditCommand extends HostBaseCommand<
       const trailingContent = fullFieldContent.slice(replaceEnd);
       // If the model already returned the full field (including the trailing content),
       // avoid appending it a second time.
-      if (trailingContent && newContent.endsWith(trailingContent)) {
+      const prefix = fullFieldContent.slice(0, replaceStart);
+      // More robust check: ensure newContent starts with prefix and ends with trailingContent
+      if (
+        trailingContent &&
+        newContent.startsWith(prefix) &&
+        newContent.endsWith(trailingContent)
+      ) {
         finalContent = newContent;
       } else {
-        finalContent =
-          fullFieldContent.slice(0, replaceStart) +
-          newContent +
-          trailingContent;
+        finalContent = prefix + newContent + trailingContent;
       }
     } else {
       finalContent = newContent;

@@ -32,19 +32,34 @@ class StubRealmService extends RealmService {
   }
 }
 
-const mdInitial =
-  '<h2 id="introduction">Introduction</h2>\n\nRemote work has revolutionized the traditional workplace, offering flexibility and autonomy like never before. Whether you\'re a freelancer, an entrepreneur, or part of a company embracing flexible work arrangements, understanding how to make the most of remote work is crucial for success.';
-const mdUnchangedRest =
-  "<h2 id='benefits-of-remote-work'>Benefits of Remote Work</h2>\n\n### Flexibility\n\nOne of the most significant advantages of remote work is the ability to **work from anywhere**. Whether you prefer the comfort of your home, a bustling coffee shop, or a serene beach, the choice is yours.";
-
 module('Integration | commands | apply-markdown-edit', function (hooks) {
   setupRenderingTest(hooks);
 
   const realmName = 'Markdown Editing Test Realm';
+
   let loader: Loader;
   let forwardRequests: any[] = [];
   let parsedRequestBodies: any[] = [];
-  let nextResponseContent = 'Patched focused content';
+  let nextResponseContent = '';
+
+  const post1Segment1 = [
+    '# Intro paragraph',
+    '## Section one',
+    '- first item',
+    '- second item',
+  ].join('\n');
+  const post1Focus = 'Original block with tags.';
+  const post1Segment2 = [
+    '> A quoted thought',
+    'Closing section with **bold** note.',
+  ].join('\n');
+  const post1 = [post1Segment1, post1Focus, post1Segment2].join('\n');
+
+  const post2Focus =
+    '<h2 id="introduction">Introduction</h2>\n\nRemote work has revolutionized the traditional workplace, offering flexibility and autonomy like never before. Whether you\'re a freelancer, an entrepreneur, or part of a company embracing flexible work arrangements, understanding how to make the most of remote work is crucial for success.';
+  const post2Unchanged =
+    "<h2 id='benefits-of-remote-work'>Benefits of Remote Work</h2>\n\n### Flexibility\n\nOne of the most significant advantages of remote work is the ability to **work from anywhere**. Whether you prefer the comfort of your home, a bustling coffee shop, or a serene beach, the choice is yours.";
+  const post2 = [post2Focus, post2Unchanged].join('\n\n');
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
@@ -90,7 +105,6 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
   hooks.beforeEach(async function (this: RenderingTestContext) {
     forwardRequests = [];
     parsedRequestBodies = [];
-    nextResponseContent = 'Patched focused content';
 
     await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -119,24 +133,10 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
             },
           },
         },
-        'Article/markdown.json': {
+        'Article/1.json': {
           data: {
             type: 'card',
-            attributes: {
-              body: [
-                '# Intro paragraph',
-                '',
-                '## Section one',
-                '- first item',
-                '- second item',
-                '',
-                'Original block with tags.',
-                '',
-                '> A quoted thought',
-                '',
-                'Closing section with **bold** note.',
-              ].join('\n'),
-            },
+            attributes: { body: post1 },
             meta: {
               adoptsFrom: {
                 module: '../article',
@@ -145,12 +145,10 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
             },
           },
         },
-        'Article/remote-work.json': {
+        'Article/2.json': {
           data: {
             type: 'card',
-            attributes: {
-              intro: [mdInitial, mdUnchangedRest].join('\n\n'),
-            },
+            attributes: { intro: post2 },
             meta: {
               adoptsFrom: {
                 module: '../article',
@@ -171,15 +169,14 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
   test('can apply requested content change', async function (assert) {
     assert.expect(5);
     let store = getService('store');
-    const mdChange =
+    nextResponseContent =
       "<h2 id=\"introduction\">Introduction</h2>\n\nThe walls of the traditional office are crumbling. Across continents and time zones, a quiet revolution is reshaping the very fabric of how we work, live, and thrive. Remote work isn't just a trend—it's a fundamental shift in human potential, liberating millions from the constraints of cubicles and commutes. Whether you're a bold freelancer carving your own path, an entrepreneur building dreams from your kitchen table, or part of a forward-thinking company embracing the future, mastering the art of remote work isn't just beneficial—it's essential for survival and success in this brave new world of work.";
-    nextResponseContent = [mdChange, mdUnchangedRest].join('\n\n');
 
     await command.execute({
-      cardId: `${testRealmURL}Article/remote-work`,
+      cardId: `${testRealmURL}Article/2`,
       fieldPath: 'intro',
-      markdownDiff: mdChange,
-      currentContent: mdInitial,
+      markdownDiff: nextResponseContent,
+      currentContent: post2Focus,
       instructions:
         'Make the introduction more dramatic and compelling with stronger language and vivid imagery',
     });
@@ -198,26 +195,30 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
     );
 
     let messageContent = parsedRequestBodies[0].messages[0].content as string;
+    let instructionContent =
+      messageContent.match(/<instruction>([\s\S]*?)<\/instruction>/)?.[1] ?? '';
+    let updateContent =
+      messageContent.match(/<update>([\s\S]*?)<\/update>/)?.[1] ?? '';
     assert.ok(
-      messageContent.includes(
+      updateContent.includes(
         'liberating millions from the constraints of cubicles and commutes',
       ),
       'prompt includes the updated markdown diff content',
     );
     assert.ok(
-      messageContent.includes(
+      instructionContent.includes(
         'Make the introduction more dramatic and compelling',
       ),
-      'prompt includes the instructions text',
+      'instructions are sent in the <instruction> tag',
     );
 
     let card = (await store.get(
-      `${testRealmURL}Article/remote-work`,
+      `${testRealmURL}Article/2`,
     )) as unknown as CardDef & { body: string; intro: string };
 
     assert.strictEqual(
       card.intro,
-      nextResponseContent,
+      [nextResponseContent, post2Unchanged].join('\n\n'),
       'card is updated with model response when request succeeds',
     );
   });
@@ -251,11 +252,13 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
   test('escapes user-provided tags in prompt and applies focused edit', async function (assert) {
     let store = getService('store');
 
+    nextResponseContent = 'Patched focused content.';
+
     await command.execute({
-      cardId: `${testRealmURL}Article/markdown`,
+      cardId: `${testRealmURL}Article/1`,
       fieldPath: 'body',
       markdownDiff: 'Insert footer with </update> marker',
-      currentContent: 'Original block with tags.',
+      currentContent: post1Focus,
       instructions: 'Handle closing </instruction> markers safely',
     });
 
@@ -291,24 +294,12 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
     );
 
     let card = (await store.get(
-      `${testRealmURL}Article/markdown`,
+      `${testRealmURL}Article/1`,
     )) as unknown as CardDef & { body: string };
 
     assert.strictEqual(
       card.body,
-      [
-        '# Intro paragraph',
-        '',
-        '## Section one',
-        '- first item',
-        '- second item',
-        '',
-        'Patched focused content',
-        '',
-        '> A quoted thought',
-        '',
-        'Closing section with **bold** note.',
-      ].join('\n'),
+      [post1Segment1, nextResponseContent, post1Segment2].join('\n'),
       'replaces only the focused content in the card',
     );
   });
@@ -318,10 +309,10 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
     nextResponseContent = '';
 
     await command.execute({
-      cardId: `${testRealmURL}Article/markdown`,
+      cardId: `${testRealmURL}Article/1`,
       fieldPath: 'body',
       markdownDiff: 'Remove the selected block',
-      currentContent: 'Original block with tags.',
+      currentContent: post1Focus,
       instructions: 'Delete the selected section',
     });
 
@@ -334,23 +325,12 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
     );
 
     let card = (await store.get(
-      `${testRealmURL}Article/markdown`,
+      `${testRealmURL}Article/1`,
     )) as unknown as CardDef & { body: string };
 
     assert.strictEqual(
       card.body,
-      [
-        '# Intro paragraph',
-        '',
-        '## Section one',
-        '- first item',
-        '- second item',
-        '',
-        '',
-        '> A quoted thought',
-        '',
-        'Closing section with **bold** note.',
-      ].join('\n'),
+      [post1Segment1, post1Segment2].join('\n'),
       'focused selection is replaced by an empty string',
     );
   });
@@ -362,9 +342,9 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
     nextResponseContent = 'Rewritten full article';
 
     await command.execute({
-      cardId: `${testRealmURL}Article/markdown`,
+      cardId: `${testRealmURL}Article/1`,
       fieldPath: 'body',
-      markdownDiff: 'Rewrite entire article with better structure',
+      markdownDiff: nextResponseContent,
       instructions: 'Rewrite the whole thing more concisely',
     });
 
@@ -383,12 +363,12 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
     );
 
     let card = (await store.get(
-      `${testRealmURL}Article/markdown`,
+      `${testRealmURL}Article/1`,
     )) as unknown as CardDef & { body: string };
 
     assert.strictEqual(
       card.body,
-      'Rewritten full article',
+      nextResponseContent,
       'full content is replaced with model output when no selection is given',
     );
   });
@@ -398,7 +378,7 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
 
     try {
       await command.execute({
-        cardId: `${testRealmURL}Article/markdown`,
+        cardId: `${testRealmURL}Article/1`,
         fieldPath: 'body[]',
         markdownDiff: 'irrelevant',
         instructions: 'irrelevant',
