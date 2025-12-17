@@ -52,7 +52,13 @@ export class MatrixBackendAuthentication {
         }),
       );
     }
-    let roomId = await this.utils.ensureSessionRoom(user);
+    let roomId;
+    // Only create a session room if the user is different from the backend user
+    // because we can't create DM rooms with ourselves
+    // and these are used just for direct messaging.
+    if (this.matrixClient.getUserId() !== user) {
+      roomId = await this.utils.ensureSessionRoom(user);
+    }
 
     let jwt = await this.utils.createJWT(user, roomId);
     return this.utils.createResponse(null, {
