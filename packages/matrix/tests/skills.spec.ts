@@ -1,10 +1,6 @@
 import { expect, test } from './fixtures';
 import type { Page } from '@playwright/test';
 import {
-  devSkillLocalPath,
-  envSkillLocalPath,
-} from '@cardstack/runtime-common';
-import {
   login,
   logout,
   createRoom,
@@ -54,9 +50,9 @@ test.describe('Skills', () => {
     ).toContainClass('checked');
   }
 
-  const environmentSkillCardId = `http://localhost:4205/skills/${envSkillLocalPath}`;
+  const environmentSkillCardId = `http://localhost:4205/skills/Skill/boxel-env-1205`;
   const defaultSkillCardsForCodeMode = [
-    `http://localhost:4205/skills/${devSkillLocalPath}`,
+    `http://localhost:4205/skills/Skill/boxel-dev-1203`,
     environmentSkillCardId,
   ];
   const skillCard1 = `${appURL}/skill-pirate-speak`;
