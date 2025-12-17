@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "PolaroidImage",
+        "module": "../time-machine/polaroid-image"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "image": {},
+      "caption": "2010s",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "image.imageCard": {
+        "links": {
+          "self": "../CloudflareImage/bd66fd8f-fa15-4646-ba1d-d073914de3ac"
+        }
+      }
+    }
+  }
+}

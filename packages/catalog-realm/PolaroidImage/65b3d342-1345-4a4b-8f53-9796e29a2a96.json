@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "PolaroidImage",
+        "module": "../time-machine/polaroid-image"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "image": {},
+      "caption": "1990s",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "image.imageCard": {
+        "links": {
+          "self": "../CloudflareImage/1805babe-f85f-49b8-9c51-183596fca2db"
+        }
+      }
+    }
+  }
+}

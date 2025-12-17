@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Skill Set",
+      "description": "A documentation card of a curated collection of skills",
+      "specType": "card",
+      "ref": {
+        "module": "../skill-set",
+        "name": "SkillSet"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

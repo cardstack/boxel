@@ -4,8 +4,9 @@ import {
   Component,
   field,
   contains,
+  linksTo,
 } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import UrlField from 'https://cardstack.com/base/url';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
@@ -20,10 +21,10 @@ import ImageDropzoneUpload from './image/components/image-dropzone-upload';
 import PreviewModal from './image/components/preview-modal';
 import { Button } from '@cardstack/boxel-ui/components';
 import NotificationBubble from '../components/notification-bubble';
-import {
-  requestCloudflareUploadUrl,
-  uploadFileToCloudflare,
-} from './image/util/cloudflare-upload';
+import UploadImageCommand from '../commands/upload-image';
+import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
+import ImageCard from 'https://cardstack.com/base/image';
+import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 
 import ImagePresentation from './image/components/image-presentation';
 import InlinePresentation from './image/components/inline-presentation';
@@ -65,22 +66,23 @@ class ImageFieldEdit extends Component<typeof ImageField> {
   @tracked uploadStatusMessage = ''; // Upload status message
   @tracked readProgress = 0; // File reading progress (0-100)
   @tracked isReading = false; // Currently reading file
+  @tracked isUploading = false;
 
   constructor(owner: any, args: any) {
     super(owner, args);
     // Initialize preview from uploaded URL
-    if (args.model?.uploadedImageUrl) {
-      this.preview = args.model.uploadedImageUrl;
+    if (args.model?.url) {
+      this.preview = args.model.url;
     }
   }
 
   get hasImage() {
     // Show preview components when reading (to display progress) or when image exists
-    return this.isReading || this.preview || this.args.model?.uploadedImageUrl;
+    return this.isReading || this.preview || this.args.model?.url;
   }
 
   get displayPreview() {
-    return this.preview || this.args.model?.uploadedImageUrl || '';
+    return this.preview || this.args.model?.url || '';
   }
 
   get variant(): ImageInputVariant {
@@ -215,8 +217,7 @@ class ImageFieldEdit extends Component<typeof ImageField> {
     this.selectedFile = null;
     this.uploadStatus = 'idle';
     this.uploadStatusMessage = '';
-    this.args.model.uploadUrl = undefined;
-    this.args.model.uploadedImageUrl = undefined;
+    this.args.model.imageCard = undefined;
   }
 
   @action
@@ -244,60 +245,102 @@ class ImageFieldEdit extends Component<typeof ImageField> {
     this.showPreview = !this.showPreview;
   }
 
-  // Cloudflare upload task
   uploadImageTask = restartableTask(async () => {
-    if (!this.selectedFile) {
+    if (!this.selectedFile && !this.preview) {
       this.uploadStatus = 'error';
       this.uploadStatusMessage = 'Please select a file first';
       return;
     }
 
+    let commandContext = this.args.context?.commandContext;
+    let realmHref = this.args.model?.[realmURLSymbol]?.href;
+
+    if (!commandContext) {
+      this.uploadStatus = 'error';
+      this.uploadStatusMessage =
+        'Upload failed: missing command context. Open in host with command context available.';
+      return;
+    }
+
+    if (!realmHref) {
+      this.uploadStatus = 'error';
+      this.uploadStatusMessage =
+        'Upload failed: missing realm URL to save the image card.';
+      return;
+    }
+
     try {
-      // Set pending status
       this.uploadStatus = 'pending';
       this.uploadStatusMessage = 'Uploading image...';
+      this.isUploading = true;
 
-      // Step 1: Get upload URL from Cloudflare
-      this.args.model.uploadUrl = await requestCloudflareUploadUrl(
-        this.args.context?.commandContext,
-        {
-          source: 'boxel-image-field',
-        },
-      );
+      let dataUrl =
+        typeof this.preview === 'string' && this.preview.startsWith('data:')
+          ? this.preview
+          : await this.readFileAsDataURL(this.selectedFile as File);
 
-      if (!this.args.model.uploadUrl) {
-        this.uploadStatus = 'error';
-        this.uploadStatusMessage = 'Failed to get upload URL';
-        return;
+      let uploadCommand = new UploadImageCommand(commandContext);
+      let result = await uploadCommand.execute({
+        sourceImageUrl: dataUrl,
+        targetRealmUrl: realmHref,
+      });
+
+      if (!result?.cardId) {
+        throw new Error('Upload succeeded but no card id was returned');
       }
 
-      // Step 2: Upload file to Cloudflare
-      const imageUrl = await uploadFileToCloudflare(
-        this.args.model.uploadUrl,
-        this.selectedFile,
-      );
+      // Try to hydrate the Cloudflare image card to get a stable URL
+      let uploadedUrl = dataUrl;
+      let store =
+        (commandContext as any)?.store || (this.args.context as any)?.store;
+      if (store?.get) {
+        try {
+          let savedCard = await store.get(result.cardId);
+          uploadedUrl = (savedCard as any)?.url ?? uploadedUrl;
+        } catch (error) {
+          console.warn('Unable to hydrate uploaded image card', error);
+        }
+      }
 
-      // Update model with permanent CDN URL
-      this.args.model.uploadedImageUrl = imageUrl;
-      this.preview = imageUrl;
+      // Create and save a base ImageCard with the uploaded URL
+      let imageCard = new ImageCard({
+        url: uploadedUrl,
+      });
+      let saveCard = new SaveCardCommand(commandContext);
+      await saveCard.execute({
+        card: imageCard,
+        realm: realmHref,
+      });
+
+      this.args.model.imageCard = imageCard;
+      this.preview = uploadedUrl;
       this.selectedFile = null;
       this.uploadStatus = 'success';
       this.uploadStatusMessage = 'Image uploaded successfully!';
-
-      // Clear success message after 3 seconds
-      setTimeout(() => {
-        if (this.uploadStatus === 'success') {
-          this.uploadStatus = 'idle';
-          this.uploadStatusMessage = '';
-        }
-      }, 3000);
     } catch (error: any) {
-      // Display Cloudflare error messages
       this.uploadStatus = 'error';
       this.uploadStatusMessage = `Upload failed: ${error.message}`;
       throw error;
+    } finally {
+      this.isUploading = false;
     }
   });
+
+  private readFileAsDataURL(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result;
+        if (typeof result === 'string') {
+          resolve(result);
+        } else {
+          reject(new Error('Could not read file as data URL'));
+        }
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
+  }
 
   <template>
     <div class='image-field-edit' data-test-image-field-edit>
@@ -411,7 +454,11 @@ class ImageFieldEdit extends Component<typeof ImageField> {
 class ImageFieldEmbedded extends Component<typeof ImageField> {
   // Embedded format with presentation modes
   get hasImage() {
-    return !!this.args.model?.uploadedImageUrl;
+    return !!this.args.model?.url;
+  }
+
+  get imageUrl() {
+    return this.args.model?.url ?? '';
   }
 
   get presentation(): ImagePresentationType {
@@ -424,17 +471,17 @@ class ImageFieldEmbedded extends Component<typeof ImageField> {
   <template>
     {{#if (eq this.presentation 'inline')}}
       <InlinePresentation
-        @imageUrl={{@model.uploadedImageUrl}}
+        @imageUrl={{this.imageUrl}}
         @hasImage={{this.hasImage}}
       />
     {{else if (eq this.presentation 'card')}}
       <CardPresentation
-        @imageUrl={{@model.uploadedImageUrl}}
+        @imageUrl={{this.imageUrl}}
         @hasImage={{this.hasImage}}
       />
     {{else}}
       <ImagePresentation
-        @imageUrl={{@model.uploadedImageUrl}}
+        @imageUrl={{this.imageUrl}}
         @hasImage={{this.hasImage}}
       />
     {{/if}}
@@ -443,13 +490,17 @@ class ImageFieldEmbedded extends Component<typeof ImageField> {
 
 class ImageFieldAtom extends Component<typeof ImageField> {
   get hasImage() {
-    return !!this.args.model?.uploadedImageUrl;
+    return !!this.args.model?.url;
+  }
+
+  get imageUrl() {
+    return this.args.model?.url ?? '';
   }
 
   <template>
     <span class='image-atom'>
       {{#if this.hasImage}}
-        <img src={{@model.uploadedImageUrl}} alt='' class='atom-thumbnail' />
+        <img src={{this.imageUrl}} alt='' class='atom-thumbnail' />
         <span class='atom-name'>Image</span>
       {{else}}
         <CameraIcon class='atom-icon' />
@@ -498,9 +549,16 @@ export default class ImageField extends FieldDef {
   static displayName = 'Image';
   static icon = CameraIcon;
 
-  // Cloudflare upload fields (replaces imageData)
-  @field uploadUrl = contains(StringField); // Temporary upload URL from Cloudflare
-  @field uploadedImageUrl = contains(StringField); // Permanent CDN URL
+  @field imageCard = linksTo(ImageCard);
+  @field imageUrl = contains(UrlField); // Direct URL to image resource
+  @field url = contains(UrlField, {
+    computeVia: function (this: any) {
+      if (this.imageUrl) {
+        return this.imageUrl;
+      }
+      return this.imageCard?.url || undefined;
+    },
+  });
 
   static embedded = ImageFieldEmbedded;
   static atom = ImageFieldAtom;

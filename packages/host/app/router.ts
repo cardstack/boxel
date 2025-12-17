@@ -16,6 +16,7 @@ Router.map(function () {
   });
   this.route('module', { path: '/module/:id/:nonce/:options' });
   this.route('connect', { path: '/connect/:origin' });
+  this.route('standby');
 
   this.route('index', { path: '/*path' });
   this.route('index-root', { path: '/' });

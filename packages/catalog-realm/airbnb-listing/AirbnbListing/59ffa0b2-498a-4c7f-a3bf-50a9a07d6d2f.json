@@ -14,12 +14,10 @@
       "photos": {
         "images": [
           {
-            "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764831632778/public"
+            "imageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764831632778/public"
           },
           {
-            "uploadUrl": null,
-            "uploadedImageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764833876706/public"
+            "imageUrl": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/upload-1764833876706/public"
           }
         ]
       },

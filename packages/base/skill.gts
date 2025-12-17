@@ -6,20 +6,37 @@ import {
   contains,
   containsMany,
   relativeTo,
+  type BaseDefComponent,
 } from './card-api';
 import BooleanField from './boolean';
 import { AbsoluteCodeRefField } from './code-ref';
 import MarkdownField from './markdown';
 import StringField from './string';
 import RobotIcon from '@cardstack/boxel-icons/robot';
-import SquareChevronRightIcon from '@cardstack/boxel-icons/square-chevron-right';
+import CommandIcon from '@cardstack/boxel-icons/square-chevron-right';
+import { Pill } from '@cardstack/boxel-ui/components';
 import { buildCommandFunctionName } from '@cardstack/runtime-common';
 
 export const isSkillCard = Symbol.for('is-skill-card');
 
 export class CommandField extends FieldDef {
   static displayName = 'CommandField';
-  static icon = SquareChevronRightIcon;
+  static icon = CommandIcon;
+
+  @field title = contains(StringField, {
+    computeVia: function (this: CommandField) {
+      let moduleRef = this.codeRef?.module;
+      if (!moduleRef) {
+        return 'Untitled Command';
+      }
+      let nameSegment = moduleRef.split('/').pop();
+      let formattedName = nameSegment
+        ?.split(/[-_]/g)
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+      return formattedName;
+    },
+  });
 
   @field codeRef = contains(AbsoluteCodeRefField, {
     description: 'An absolute code reference to the command to be executed',
@@ -41,48 +58,61 @@ export class CommandField extends FieldDef {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class='command-embedded'>
-        <SquareChevronRightIcon class='icon' />
-        <div class='command-data'>
-          <div>
-            Module:
-            {{@model.codeRef.module}}
+      <div class='command-compact'>
+        <CommandIcon class='command-icon' />
+        <div class='command-info'>
+          <div class='command-title'>{{@model.title}}</div>
+          <div class='command-meta'>
+            <code
+              class='command-path'
+            >{{@model.codeRef.module}}/{{@model.codeRef.name}}</code>
           </div>
-          <div>
-            Name:
-            {{@model.codeRef.name}}
-          </div>
-          <div class='requires-approval'>
-            Requires Approval:
-            <@fields.requiresApproval />
-          </div>
-          <div class='function-name'>
-            Function Name (computed):
-            <@fields.functionName />
-          </div>
+          {{#if @model.requiresApproval}}
+            <div>
+              <Pill class='command-label'>Requires Approval</Pill>
+            </div>
+          {{/if}}
         </div>
       </div>
       <style scoped>
-        .command-embedded {
+        .command-compact {
+          --muted-color: color-mix(in lab, var(--muted) 60%, var(--foreground));
           display: flex;
-          align-items: top;
-          justify-content: stretch;
-          gap: var(--boxel-sp-xxs);
+          gap: var(--boxel-sp-3xs);
+          padding: var(--boxel-sp-xs);
+          background-color: var(--card, var(--boxel-light));
+          color: var(--card-foreground, var(--boxel-dark));
+          border: 1px solid var(--border, var(--boxel-border-color));
+          border-radius: var(--radius, var(--boxel-border-radius));
         }
-        .command-data {
-          flex-grow: 1;
-          border-left: var(--boxel-sp-4xs) solid var(--boxel-purple-300);
-          padding-left: var(--boxel-sp-xxs);
+        .command-icon {
+          color: var(--muted-color, var(--boxel-400));
+          flex-shrink: 0;
         }
-        .icon {
-          color: var(--boxel-purple-300);
-          margin-top: var(--boxel-sp-xxs);
-          width: 30px;
-          height: 30px;
+        .command-info {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-3xs);
+          padding-left: var(--boxel-sp-2xs);
+          border-left: 3px solid var(--muted-color, var(--boxel-400));
         }
-        .requires-approval,
-        .function-name {
-          margin-top: var(--boxel-sp-xxs);
+        .command-title {
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 500;
+        }
+        .command-meta {
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 500;
+          color: var(--muted-foreground, var(--boxel-700));
+        }
+        .command-path {
+          word-break: break-all;
+        }
+        .command-label {
+          font-size: var(--boxel-font-size-2xs);
+          letter-spacing: var(--boxel-lsp-lg);
         }
       </style>
     </template>
@@ -99,7 +129,9 @@ export class Skill extends CardDef {
   @field instructions = contains(MarkdownField);
   @field commands = containsMany(CommandField);
 
-  static embedded = class Embedded extends Component<typeof this> {
+  static embedded: BaseDefComponent = class Embedded extends Component<
+    typeof this
+  > {
     <template>
       <@fields.title />
     </template>

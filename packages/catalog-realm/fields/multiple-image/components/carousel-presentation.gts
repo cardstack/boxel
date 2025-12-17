@@ -64,11 +64,7 @@ export default class CarouselPresentation extends GlimmerComponent<CarouselPrese
   <template>
     <div class='carousel-container'>
       <div class='main-banner'>
-        <img
-          src={{this.selectedImage.uploadedImageUrl}}
-          alt=''
-          class='banner-image'
-        />
+        <img src={{this.selectedImage.url}} alt='' class='banner-image' />
         {{! Pagination pill }}
         {{#if this.hasMultipleImages}}
           <div class='pagination-pill'>
@@ -106,11 +102,7 @@ export default class CarouselPresentation extends GlimmerComponent<CarouselPrese
               class='thumbnail {{if (eq index this.selectedIndex) "active"}}'
               {{on 'click' (fn this.selectImage index)}}
             >
-              <img
-                src={{image.uploadedImageUrl}}
-                alt='Thumbnail'
-                class='thumbnail-image'
-              />
+              <img src={{image.url}} alt='Thumbnail' class='thumbnail-image' />
             </button>
           {{/each}}
         </div>

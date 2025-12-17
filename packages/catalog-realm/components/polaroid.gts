@@ -2,6 +2,7 @@ import GlimmerComponent from '@glimmer/component';
 
 export interface PolaroidSignature {
   Args: {
+    url?: string;
     base64?: string;
     caption?: string;
   };
@@ -17,6 +18,8 @@ export default class Polaroid extends GlimmerComponent<PolaroidSignature> {
       <div class='polaroid-photo'>
         {{#if (has-block 'content')}}
           {{yield to='content'}}
+        {{else if @url}}
+          <img src={{@url}} alt={{@caption}} class='generated-image' />
         {{else if @base64}}
           <img
             src='data:image/*;base64={{@base64}}'

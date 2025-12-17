@@ -81,7 +81,7 @@ module('Integration | multiple image field configuration', function (hooks) {
   test('list variant renders list upload component', async function (assert) {
     await renderConfiguredField(
       {
-        images: [{ uploadedImageUrl: 'https://example.com/image1.jpg' }],
+        images: [{ imageUrl: 'https://example.com/image1.jpg' }],
       },
       {
         variant: 'list',
@@ -101,7 +101,7 @@ module('Integration | multiple image field configuration', function (hooks) {
   test('gallery variant renders gallery upload component', async function (assert) {
     await renderConfiguredField(
       {
-        images: [{ uploadedImageUrl: 'https://example.com/image1.jpg' }],
+        images: [{ imageUrl: 'https://example.com/image1.jpg' }],
       },
       {
         variant: 'gallery',
@@ -121,7 +121,7 @@ module('Integration | multiple image field configuration', function (hooks) {
   test('dropzone variant renders dropzone upload component', async function (assert) {
     await renderConfiguredField(
       {
-        images: [{ uploadedImageUrl: 'https://example.com/image1.jpg' }],
+        images: [{ imageUrl: 'https://example.com/image1.jpg' }],
       },
       {
         variant: 'dropzone',
@@ -158,8 +158,8 @@ module('Integration | multiple image field configuration', function (hooks) {
     await renderConfiguredField(
       {
         images: [
-          { uploadedImageUrl: 'https://example.com/image1.jpg' },
-          { uploadedImageUrl: 'https://example.com/image2.jpg' },
+          { imageUrl: 'https://example.com/image1.jpg' },
+          { imageUrl: 'https://example.com/image2.jpg' },
         ],
       },
       {
@@ -178,8 +178,8 @@ module('Integration | multiple image field configuration', function (hooks) {
     await renderConfiguredField(
       {
         images: [
-          { uploadedImageUrl: 'https://example.com/image1.jpg' },
-          { uploadedImageUrl: 'https://example.com/image2.jpg' },
+          { imageUrl: 'https://example.com/image1.jpg' },
+          { imageUrl: 'https://example.com/image2.jpg' },
         ],
       },
       {
@@ -197,7 +197,7 @@ module('Integration | multiple image field configuration', function (hooks) {
   test('invalid presentation falls back to default grid', async function (assert) {
     await renderConfiguredField(
       {
-        images: [{ uploadedImageUrl: 'https://example.com/image1.jpg' }],
+        images: [{ imageUrl: 'https://example.com/image1.jpg' }],
       },
       {
         variant: 'list',
@@ -219,7 +219,7 @@ module('Integration | multiple image field configuration', function (hooks) {
     // Test with allowBatchSelect: true
     await renderConfiguredField(
       {
-        images: [{ uploadedImageUrl: 'https://example.com/image1.jpg' }],
+        images: [{ imageUrl: 'https://example.com/image1.jpg' }],
       },
       {
         variant: 'list',
@@ -239,7 +239,7 @@ module('Integration | multiple image field configuration', function (hooks) {
     // Test with allowBatchSelect: false
     await renderConfiguredField(
       {
-        images: [{ uploadedImageUrl: 'https://example.com/image1.jpg' }],
+        images: [{ imageUrl: 'https://example.com/image1.jpg' }],
       },
       {
         variant: 'list',
@@ -292,7 +292,7 @@ module('Integration | multiple image field configuration', function (hooks) {
   test('multiple image field embedded view falls back to default grid presentation when config is missing', async function (assert) {
     await renderConfiguredField(
       {
-        images: [{ uploadedImageUrl: 'https://example.com/image1.jpg' }],
+        images: [{ imageUrl: 'https://example.com/image1.jpg' }],
       },
       {},
       'embedded',

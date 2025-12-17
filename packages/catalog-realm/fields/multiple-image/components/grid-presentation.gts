@@ -12,7 +12,7 @@ export default class GridPresentation extends GlimmerComponent<GridPresentationS
     <div class='images-grid'>
       {{#each @images as |image|}}
         <div class='grid-item'>
-          <img src={{image.uploadedImageUrl}} alt='' class='grid-image' />
+          <img src={{image.url}} alt='' class='grid-image' />
         </div>
       {{/each}}
     </div>
