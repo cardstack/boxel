@@ -380,7 +380,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
       )
       .forEach((entry) => {
         const imageField = new ImageField();
-        imageField.imageUrl = entry.url;
+        imageField.imageUrl = entry.url!; // Safe to use ! since we filtered for entries with url
         if (this.args.model.images) {
           this.args.model.images.push(imageField);
         }
