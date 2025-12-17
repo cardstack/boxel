@@ -9,7 +9,6 @@ import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
-import HeadFormatPreview from '@cardstack/host/components/head-format-preview';
 
 import { percySnapshot, testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
@@ -57,32 +56,43 @@ module('Integration | preview', function (hooks) {
     assert.dom('[data-test-firstName]').hasText('Mango');
   });
 
-  test('renders head meta tags preview', async function (assert) {
-    class HeadContent extends GlimmerComponent<{
-      Args: { displayContainer?: boolean };
-    }> {
-      <template>
-        {{! template-lint-disable no-forbidden-elements }}
-        <title>Preview Title</title>
-        <meta name='description' content='Preview description' />
-        <meta property='og:url' content='https://example.com/post' />
-        <meta property='og:image' content='/cover.png' />
-        <meta name='twitter:card' content='summary' />
-      </template>
+  test('renders head meta tags preview for a card head format', async function (assert) {
+    let { field, contains, CardDef, Component } = cardApi;
+    let { default: StringField } = string;
+
+    class HeadCard extends CardDef {
+      @field title = contains(StringField);
+      @field description = contains(StringField);
+      @field image = contains(StringField);
+      @field url = contains(StringField);
+
+      static head = class Head extends Component<typeof this> {
+        <template>
+          <title>{{@model.title}}</title>
+          <meta name='description' content={{@model.description}} />
+          <meta property='og:url' content={{@model.url}} />
+          <meta property='og:image' content={{@model.image}} />
+          <meta name='twitter:card' content='summary' />
+        </template>
+      };
     }
+
+    let headCard = new HeadCard({
+      title: 'Preview Title',
+      description: 'Preview description',
+      image: 'https://example.com/cover.png',
+      url: 'https://example.com/post',
+    });
 
     class TestDriver extends GlimmerComponent<{ Args: { format?: string } }> {
-      HeadContent = HeadContent;
+      card = headCard;
 
       <template>
-        <HeadFormatPreview
-          @renderedCard={{this.HeadContent}}
-          @cardURL='https://example.com/post'
-        />
+        <CardRenderer @card={{this.card}} @format={{@format}} />
       </template>
     }
 
-    await renderComponent(TestDriver);
+    await renderComponent(TestDriver, 'head');
     await waitFor('.head-preview');
     await waitFor('[data-test-head-markup]');
 
@@ -112,28 +122,36 @@ module('Integration | preview', function (hooks) {
   });
 
   test('renders head preview fallbacks without image or favicon', async function (assert) {
-    class HeadContent extends GlimmerComponent<{
-      Args: { displayContainer?: boolean };
-    }> {
-      <template>
-        {{! template-lint-disable no-forbidden-elements }}
-        <title>Fallback Title</title>
-        <meta property='og:type' content='article' />
-      </template>
+    let { field, contains, CardDef, Component } = cardApi;
+    let { default: StringField } = string;
+
+    class FallbackHeadCard extends CardDef {
+      @field title = contains(StringField);
+      @field url = contains(StringField);
+
+      static head = class Head extends Component<typeof this> {
+        <template>
+          <title>{{@model.title}}</title>
+          <meta property='og:type' content='article' />
+          <meta property='og:url' content={{@model.url}} />
+        </template>
+      };
     }
+
+    let fallbackCard = new FallbackHeadCard({
+      title: 'Fallback Title',
+      url: 'https://example.com/no-image',
+    });
 
     class TestDriver extends GlimmerComponent<{ Args: { format?: string } }> {
-      HeadContent = HeadContent;
+      card = fallbackCard;
 
       <template>
-        <HeadFormatPreview
-          @renderedCard={{this.HeadContent}}
-          @cardURL='https://example.com/no-image'
-        />
+        <CardRenderer @card={{this.card}} @format={{@format}} />
       </template>
     }
 
-    await renderComponent(TestDriver);
+    await renderComponent(TestDriver, 'head');
     await waitFor('.head-preview');
 
     assert.dom('.search-title').hasText('Fallback Title');
