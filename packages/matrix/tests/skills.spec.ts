@@ -371,6 +371,9 @@ test.describe('Skills', () => {
       .click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await page
+      .locator('[data-test-field="title"] input')
+      .fill('Automatic Switch Command');
+    await page
       .locator('[data-test-field="instructions"] textarea')
       .fill(
         'Here is a command you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode.',
@@ -381,9 +384,6 @@ test.describe('Skills', () => {
     await page
       .locator('[data-test-field="codeRef"] input')
       .fill('@cardstack/boxel-host/commands/switch-submode/default');
-    await page
-      .locator('[data-test-field="title"] input')
-      .fill('Automatic Switch Command');
     await page.waitForSelector('[data-test-last-saved]');
     const cards = await page.locator('[data-test-card]').all();
     const skillCard =

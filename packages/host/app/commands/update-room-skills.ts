@@ -161,12 +161,12 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
           let allCommandDefinitions = validEnabledSkills.flatMap(
             (skill) => skill.commands ?? [],
           );
-          let uniqueCommandDefinitions =
-            this.matrixService.getUniqueCommandDefinitions(
-              allCommandDefinitions,
-            );
 
-          if (uniqueCommandDefinitions.length > 0) {
+          if (allCommandDefinitions.length > 0) {
+            let uniqueCommandDefinitions =
+              this.matrixService.getUniqueCommandDefinitions(
+                allCommandDefinitions,
+              );
             let uploadedCommandDefs =
               await this.matrixService.uploadCommandDefinitions(
                 uniqueCommandDefinitions,
