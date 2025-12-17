@@ -251,7 +251,7 @@ export default class HeadFormatPreview extends Component<Signature> {
                 {{#if this.headPreviewData.image}}
                   <img
                     src={{this.headPreviewData.image}}
-                    alt='Open Graph image preview'
+                    alt='Open Graph preview'
                   />
                 {{else}}
                   <div class='image-placeholder'>Add og:image</div>
@@ -277,7 +277,7 @@ export default class HeadFormatPreview extends Component<Signature> {
                 {{#if this.headPreviewData.image}}
                   <img
                     src={{this.headPreviewData.image}}
-                    alt='Twitter image preview'
+                    alt='Twitter preview'
                   />
                 {{else}}
                   <div class='image-placeholder'>Add twitter:image</div>
