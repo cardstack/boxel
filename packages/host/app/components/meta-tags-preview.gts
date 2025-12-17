@@ -30,7 +30,11 @@ export default class MetaTagsPreview extends Component<Signature> {
   @tracked private headMarkup = '';
 
   captureHeadMarkup = modifier((element: HTMLElement) => {
-    this.headMarkup = element.innerHTML.trim();
+    let container =
+      element.querySelector<HTMLElement>('[data-test-boxel-card-container]') ??
+      element.firstElementChild;
+    let markupSource = container ?? element;
+    this.headMarkup = markupSource.innerHTML.trim();
   });
 
   private get urlBase() {

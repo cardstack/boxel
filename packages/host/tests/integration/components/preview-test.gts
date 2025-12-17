@@ -104,5 +104,11 @@ module('Integration | preview', function (hooks) {
       .includesText(
         '<meta name="description" content="Preview description">',
       );
+    let rawMarkup =
+      document.querySelector('[data-test-head-markup]')?.textContent ?? '';
+    assert.notOk(
+      rawMarkup.includes('boxel-card-container'),
+      'raw head markup does not include the card container wrapper',
+    );
   });
 });
