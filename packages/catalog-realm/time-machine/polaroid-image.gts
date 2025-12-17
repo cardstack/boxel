@@ -14,7 +14,7 @@ class PolaroidImageEmbedded extends Component<typeof PolaroidImage> {
   }
 
   get imageUrl() {
-    return this.args.model.image?.uploadedImageUrl ?? '';
+    return this.args.model.image?.url ?? '';
   }
 
   <template>
@@ -28,7 +28,7 @@ class PolaroidImageFitted extends Component<typeof PolaroidImage> {
   }
 
   get imageUrl() {
-    return this.args.model.image?.uploadedImageUrl ?? '';
+    return this.args.model.image?.url ?? '';
   }
 
   <template>

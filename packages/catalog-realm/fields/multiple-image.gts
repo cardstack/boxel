@@ -163,7 +163,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
 
   get hasPendingUploads() {
     return this.uploadEntries.some(
-      (entry) => !entry.uploadedImageUrl || entry.uploadStatus === 'error',
+      (entry) => !entry.url || entry.uploadStatus === 'error',
     );
   }
 
@@ -305,7 +305,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
       }
     };
 
-    const filename = extractFilename(img.uploadedImageUrl);
+    const filename = extractFilename(img.url);
     const fileLike = {
       name: filename,
       size: 0,
@@ -315,10 +315,10 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
     return {
       id: `${Date.now()}-${Math.random()}`,
       file: fileLike,
-      preview: img.uploadedImageUrl || '',
-      uploadedImageUrl: img.uploadedImageUrl,
+      preview: img.url || '',
+      uploadedImageUrl: img.url,
       selected: false, // Initialize selection state
-      uploadStatus: img.uploadedImageUrl ? 'success' : undefined, // Mark existing uploads as success
+      uploadStatus: img.url ? 'success' : undefined, // Mark existing uploads as success
     };
   }
 
@@ -337,7 +337,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
   handleReorder(reorderedEntries: UploadEntry[]) {
     // Reorder entries
     this.uploadEntries = reorderedEntries;
-    if (this.uploadEntries.some((entry) => entry.uploadedImageUrl)) {
+    if (this.uploadEntries.some((entry) => entry.url)) {
       this.persistEntries();
     }
   }
@@ -392,13 +392,11 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
 
     // Only persist successful uploads
     this.uploadEntries
-      .filter(
-        (entry) => entry.uploadedImageUrl && entry.uploadStatus !== 'error',
-      )
+      .filter((entry) => entry.url && entry.uploadStatus !== 'error')
       .forEach((entry) => {
         const imageField = new ImageField();
-        if (entry.uploadedImageUrl) {
-          imageField.uploadedImageUrl = entry.uploadedImageUrl;
+        if (entry.url) {
+          imageField.url = entry.url;
           if (this.args.model.images) {
             this.args.model.images.push(imageField);
           }
@@ -410,7 +408,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
   bulkUploadTask = restartableTask(async () => {
     // Include entries without uploadedImageUrl OR entries with error status (for retry)
     const pendingEntries = this.uploadEntries.filter(
-      (entry) => !entry.uploadedImageUrl || entry.uploadStatus === 'error',
+      (entry) => !entry.url || entry.uploadStatus === 'error',
     );
 
     if (pendingEntries.length === 0) {
@@ -893,11 +891,7 @@ class MultipleImageFieldAtom extends Component<typeof MultipleImageField> {
   <template>
     <span class='multiple-image-atom'>
       {{#if this.firstImage}}
-        <img
-          src={{this.firstImage.uploadedImageUrl}}
-          alt=''
-          class='atom-thumbnail'
-        />
+        <img src={{this.firstImage.url}} alt='' class='atom-thumbnail' />
         <span class='atom-count'>{{this.imageCount}}
           {{if (eq this.imageCount 1) 'image' 'images'}}</span>
       {{else}}

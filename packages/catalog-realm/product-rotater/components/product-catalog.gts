@@ -20,12 +20,12 @@ class ProductCatalogIsolated extends Component<typeof ProductCatalog> {
 
   get rotationImages() {
     return (this.args.model?.rotationImages ?? []).filter((rotation) =>
-      Boolean(rotation?.image?.uploadedImageUrl),
+      Boolean(rotation?.image?.url),
     );
   }
 
   imageFor(rotation: ProductRotationImage) {
-    return rotation?.image?.uploadedImageUrl ?? '';
+    return rotation?.image?.url ?? '';
   }
 
   angleLabel(rotation: ProductRotationImage) {

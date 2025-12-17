@@ -89,11 +89,7 @@ export default class MultipleImageGalleryPreview extends GlimmerComponent<Multip
         </div>
       {{else}}
         <img
-          src={{if
-            @entry.uploadedImageUrl
-            @entry.uploadedImageUrl
-            @entry.preview
-          }}
+          src={{if @entry.url @entry.url @entry.preview}}
           alt=''
           class='gallery-image'
         />

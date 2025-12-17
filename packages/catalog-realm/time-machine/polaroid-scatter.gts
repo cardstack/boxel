@@ -22,11 +22,11 @@ export class PolaroidScatter extends Component<PolaroidScatterSignature> {
   }
 
   hasImage(image?: PolaroidImage) {
-    return Boolean(image?.image?.uploadedImageUrl);
+    return Boolean(image?.image?.url);
   }
 
   imageUrlFor(image: PolaroidImage) {
-    return image.image?.uploadedImageUrl ?? '';
+    return image.image?.url ?? '';
   }
 
   get loadingSet() {

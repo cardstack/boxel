@@ -63,7 +63,7 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
   }
 
   get referenceImageUrl() {
-    return this.args.model?.referenceImage?.uploadedImageUrl ?? '';
+    return this.args.model?.referenceImage?.url ?? '';
   }
 
   get productDescription() {
@@ -87,9 +87,7 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
       this.hasGeneratedFrames &&
       !this.isExporting &&
       Array.isArray(this.args.model?.generatedImages) &&
-      this.args.model.generatedImages.some(
-        (image) => image?.image?.uploadedImageUrl,
-      )
+      this.args.model.generatedImages.some((image) => image?.image?.url)
     );
   }
 
@@ -326,7 +324,7 @@ export class ProductRotatorIsolated extends Component<typeof ProductRotator> {
     }
 
     let rotationCards = (model.generatedImages ?? []).filter(
-      (image) => image?.image?.uploadedImageUrl,
+      (image) => image?.image?.url,
     );
 
     if (rotationCards.length === 0) {
@@ -669,7 +667,7 @@ function rotationFramesFromCards(
 ): RotationFrame[] {
   return cards
     .map((card) => {
-      let url = card?.image?.uploadedImageUrl;
+      let url = card?.image?.url;
       if (!url) {
         return undefined;
       }

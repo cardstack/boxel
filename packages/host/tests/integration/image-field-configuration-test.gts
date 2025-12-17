@@ -58,7 +58,7 @@ module('Integration | image field configuration', function (hooks) {
 
     // Create proper ImageField instance
     const imageField =
-      value.uploadedImageUrl || value.uploadUrl
+      value.url || value.uploadUrl
         ? new CatalogImageFieldClass(value)
         : new CatalogImageFieldClass();
 

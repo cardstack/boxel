@@ -16,7 +16,7 @@ class ProductRotationImageEmbedded extends Component<
   }
 
   get imageUrl() {
-    return this.args.model?.image?.uploadedImageUrl ?? '';
+    return this.args.model?.image?.url ?? '';
   }
 
   <template>
@@ -54,7 +54,7 @@ export class ProductRotationImage extends CardDef {
 
   @field thumbnailURL = contains(StringField, {
     computeVia: function (this: ProductRotationImage) {
-      return this.image?.uploadedImageUrl ?? '';
+      return this.image?.url ?? '';
     },
   });
 

@@ -150,7 +150,7 @@ class Isolated extends Component<typeof YouTubeThumbnailComposer> {
       return `background: linear-gradient(${direction}, ${primary}, ${secondary});`;
     } else if (bg.type === 'image') {
       // Prioritize manual override, then new wrapper field URL, then legacy link URL
-      const imageUrl = bg.imageUrl || bg.image?.uploadedImageUrl || '';
+      const imageUrl = bg.imageUrl || bg.image?.url || '';
 
       if (imageUrl) {
         const scale = bg.imageScale ?? 100;
@@ -290,7 +290,7 @@ class Isolated extends Component<typeof YouTubeThumbnailComposer> {
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, width, height);
     } else if (bg?.type === 'image') {
-      const imageUrl = bg.imageUrl || bg.image?.uploadedImageUrl || '';
+      const imageUrl = bg.imageUrl || bg.image?.url || '';
       if (imageUrl) {
         try {
           const img = new Image();
