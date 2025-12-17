@@ -360,12 +360,12 @@ export default class HeadFormatPreview extends Component<Signature> {
       .preview-grid {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-md);
+        gap: var(--boxel-sp);
       }
       .social-column {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-md);
+        gap: var(--boxel-sp);
       }
       .preview-card {
         background: var(--boxel-light);
@@ -373,7 +373,7 @@ export default class HeadFormatPreview extends Component<Signature> {
         border-radius: var(--boxel-border-radius);
         border: var(--head-preview-card-border);
         box-shadow: var(--head-preview-card-shadow);
-        padding: var(--boxel-sp-md);
+        padding: var(--boxel-sp-sm);
       }
       .preview-header {
         display: flex;
@@ -513,7 +513,7 @@ export default class HeadFormatPreview extends Component<Signature> {
         line-height: 1.4;
       }
       .meta-highlights {
-        margin-top: var(--boxel-sp-md);
+        margin-top: var(--boxel-sp);
         display: flex;
         flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
@@ -539,7 +539,7 @@ export default class HeadFormatPreview extends Component<Signature> {
         word-break: break-word;
       }
       .raw-head {
-        margin-top: var(--boxel-sp-md);
+        margin-top: var(--boxel-sp);
         color: var(--boxel-light);
       }
       .raw-head > summary {
