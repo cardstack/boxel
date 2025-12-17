@@ -26,7 +26,7 @@ interface Signature {
   };
 }
 
-export default class MetaTagsPreview extends Component<Signature> {
+export default class HeadFormatPreview extends Component<Signature> {
   @tracked private headMarkup = '';
 
   captureHeadMarkup = modifier((element: HTMLElement) => {

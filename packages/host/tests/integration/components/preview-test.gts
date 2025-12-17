@@ -9,7 +9,7 @@ import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
-import MetaTagsPreview from '@cardstack/host/components/meta-tags-preview';
+import HeadFormatPreview from '@cardstack/host/components/head-format-preview';
 
 import { percySnapshot, testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
@@ -74,7 +74,7 @@ module('Integration | preview', function (hooks) {
       HeadContent = HeadContent;
 
       <template>
-        <MetaTagsPreview
+        <HeadFormatPreview
           @renderedCard={{this.HeadContent}}
           @cardURL='https://example.com/post'
         />
@@ -101,9 +101,7 @@ module('Integration | preview', function (hooks) {
       );
     assert
       .dom('[data-test-head-markup]')
-      .includesText(
-        '<meta name="description" content="Preview description">',
-      );
+      .includesText('<meta name="description" content="Preview description">');
     let rawMarkup =
       document.querySelector('[data-test-head-markup]')?.textContent ?? '';
     assert.notOk(
