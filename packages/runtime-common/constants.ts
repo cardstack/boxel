@@ -4,6 +4,9 @@ import type { RealmPermissions } from './index';
 
 export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));
 
+export const devSkillLocalPath = 'Skill/boxel-dev-1203';
+export const envSkillLocalPath = 'Skill/boxel-env-1205';
+
 export const baseRef: ResolvedCodeRef = {
   module: `${baseRealm.url}card-api`,
   name: 'BaseDef',

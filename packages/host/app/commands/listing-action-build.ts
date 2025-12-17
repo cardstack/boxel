@@ -5,7 +5,7 @@ import { DEFAULT_CODING_LLM } from '@cardstack/runtime-common/matrix-constants';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
-import { skillCardURL } from '../lib/utils';
+import { devSkillId, envSkillId } from '../lib/utils';
 
 import CreateAiAssistantRoomCommand from './create-ai-assistant-room';
 import OpenAiAssistantRoomCommand from './open-ai-assistant-room';
@@ -48,10 +48,7 @@ export default class ListingActionBuildCommand extends HostBaseCommand<
       name: `Build ${listing.name}`,
     });
 
-    const defaultSkills = [
-      skillCardURL('boxel-dev-1203'),
-      skillCardURL('boxel-env-1205'),
-    ];
+    const defaultSkills = [devSkillId, envSkillId];
 
     if (roomId) {
       await new SetActiveLLMCommand(this.commandContext).execute({

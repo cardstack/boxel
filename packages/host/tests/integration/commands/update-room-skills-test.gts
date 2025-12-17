@@ -14,13 +14,13 @@ import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
-import { skillCardURL } from '@cardstack/host/lib/utils';
 import RealmService from '@cardstack/host/services/realm';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 
 import {
+  envSkillId,
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -168,7 +168,7 @@ export class DoThing extends Command {
       let command = new UpdateRoomSkillsCommand(
         getService('command-service').commandContext,
       );
-      let skillCardId = skillCardURL('boxel-environment');
+      let skillCardId = envSkillId;
       await command.execute({
         roomId: matrixRoomId,
         skillCardIdsToActivate: [skillCardId],
@@ -211,7 +211,7 @@ export class DoThing extends Command {
       let command = new UpdateRoomSkillsCommand(
         getService('command-service').commandContext,
       );
-      let skillCardId = skillCardURL('boxel-environment');
+      let skillCardId = envSkillId;
       mockMatrixUtils.setRoomState(
         matrixRoomId,
         APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -259,7 +259,7 @@ export class DoThing extends Command {
       let command = new UpdateRoomSkillsCommand(
         getService('command-service').commandContext,
       );
-      let skillCardId = skillCardURL('boxel-environment');
+      let skillCardId = envSkillId;
       await command.execute({
         roomId: matrixRoomId,
         skillCardIdsToActivate: [skillCardId],
