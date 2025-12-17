@@ -4,8 +4,6 @@ import { provide, consume } from 'ember-provide-consume-context';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
-import HeadFormatPreview from '@cardstack/host/components/head-format-preview';
-
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import {
   CardContextName,
@@ -18,6 +16,8 @@ import {
   type getCards,
   type getCardCollection,
 } from '@cardstack/runtime-common';
+
+import HeadFormatPreview from '@cardstack/host/components/head-format-preview';
 
 import type {
   BaseDef,
