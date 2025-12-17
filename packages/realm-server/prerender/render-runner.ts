@@ -124,17 +124,9 @@ export class RenderRunner {
       }
     };
 
-    if (!reused) {
-      page.evaluateOnNewDocument((sessionAuth) => {
-        localStorage.setItem('boxel-session', sessionAuth);
-      }, auth);
-    } else {
-      // Only set immediately when reusing an already-loaded document; on a fresh
-      // navigation, calling localStorage on about:blank can throw a SecurityError.
-      await page.evaluate((sessionAuth) => {
-        localStorage.setItem('boxel-session', sessionAuth);
-      }, auth);
-    }
+    await page.evaluate((sessionAuth) => {
+      localStorage.setItem('boxel-session', sessionAuth);
+    }, auth);
 
     let renderStart = Date.now();
     let error: RenderError | undefined;
@@ -156,21 +148,15 @@ export class RenderRunner {
     let result = await withTimeout(
       page,
       async () => {
-        if (reused) {
-          await transitionTo(
-            page,
-            'render.html',
-            url,
-            String(this.#nonce),
-            serializedOptions,
-            'isolated',
-            '0',
-          );
-        } else {
-          await page.goto(
-            `${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}/html/isolated/0`,
-          );
-        }
+        await transitionTo(
+          page,
+          'render.html',
+          url,
+          String(this.#nonce),
+          serializedOptions,
+          'isolated',
+          '0',
+        );
         return await captureResult(page, 'innerHTML', captureOptions);
       },
       opts?.timeoutMs,
@@ -429,20 +415,13 @@ export class RenderRunner {
       }
     };
 
-    if (!reused) {
-      page.evaluateOnNewDocument((sessionAuth) => {
-        localStorage.setItem('boxel-session', sessionAuth);
-      }, auth);
-    } else {
-      await page.evaluate((sessionAuth) => {
-        localStorage.setItem('boxel-session', sessionAuth);
-      }, auth);
-    }
+    await page.evaluate((sessionAuth) => {
+      localStorage.setItem('boxel-session', sessionAuth);
+    }, auth);
 
     let renderStart = Date.now();
     let options = renderOptions ?? {};
     let serializedOptions = serializeRenderRouteOptions(options);
-    let optionsSegment = encodeURIComponent(serializedOptions);
     const captureOptions: CaptureOptions = {
       expectedId: url,
       expectedNonce: String(this.#nonce),
@@ -452,19 +431,13 @@ export class RenderRunner {
     let capture = await withTimeout(
       page,
       async () => {
-        if (reused) {
-          await transitionTo(
-            page,
-            'module',
-            url,
-            String(this.#nonce),
-            serializedOptions,
-          );
-        } else {
-          await page.goto(
-            `${this.#boxelHostURL}/module/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}`,
-          );
-        }
+        await transitionTo(
+          page,
+          'module',
+          url,
+          String(this.#nonce),
+          serializedOptions,
+        );
         return await captureModule(page, captureOptions);
       },
       opts?.timeoutMs,

@@ -70,6 +70,9 @@ let CardsGrid: CardsGrid;
 type Skill = (typeof SkillModule)['Skill'];
 let Skill: Skill;
 
+type CommandField = (typeof SkillModule)['CommandField'];
+let CommandField: CommandField;
+
 type ModelConfiguration = (typeof SystemCardModule)['ModelConfiguration'];
 let ModelConfiguration: ModelConfiguration;
 
@@ -139,6 +142,10 @@ async function initialize() {
   CodeRefField = (
     await loader.import<typeof CodeRefModule>(`${baseRealm.url}code-ref`)
   ).default;
+
+  CommandField = (
+    await loader.import<typeof SkillModule>(`${baseRealm.url}skill`)
+  ).CommandField;
 
   BigIntegerField = (
     await loader.import<typeof BigIntegerModule>(`${baseRealm.url}big-integer`)
@@ -242,6 +249,7 @@ export {
   EmailField,
   Base64ImageField,
   CodeRefField,
+  CommandField,
   BigIntegerField,
   EthereumAddressField,
   BooleanField,

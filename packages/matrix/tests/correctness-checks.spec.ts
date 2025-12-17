@@ -503,7 +503,7 @@ ${originalContent}
     expect(finalCardJson.data.attributes.errors).toHaveLength(0);
   });
 
-  test.skip('checkCorrectness surfaces module errors and verifies fix for gts files', async ({
+  test('checkCorrectness surfaces module errors and verifies fix for gts files', async ({
     page,
   }) => {
     const { username, password, credentials } =
@@ -630,6 +630,7 @@ ${brokenModuleContent}
     async function runCorrectnessCommand(
       commandRequestId: string,
       description: string,
+      expectedApplyState: 'applied' | 'applied-with-error' = 'applied',
     ) {
       let commandRequests = [
         {
@@ -671,7 +672,7 @@ ${brokenModuleContent}
       );
       await commandContainer.waitFor();
       await commandContainer
-        .locator('[data-test-apply-state="applied"]')
+        .locator(`[data-test-apply-state="${expectedApplyState}"]`)
         .waitFor();
 
       let commandResultEvent: any;
@@ -709,6 +710,7 @@ ${brokenModuleContent}
     let failingResult = await runCorrectnessCommand(
       `check-module-${Date.now()}`,
       'Check correctness of broken module',
+      'applied-with-error',
     );
 
     expect(failingResult.data.attributes.correct).toBe(false);
@@ -733,6 +735,7 @@ ${moduleUrl}
     let fixedResult = await runCorrectnessCommand(
       `check-module-${Date.now()}`,
       'Check correctness after fixing module import',
+      'applied',
     );
 
     expect(fixedResult.data.attributes.correct).toBe(true);

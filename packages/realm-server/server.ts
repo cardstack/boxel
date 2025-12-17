@@ -459,7 +459,7 @@ export class RealmServer {
 
   private injectHeadHTML(indexHTML: string, headHTML: string): string {
     return indexHTML.replace(
-      /(<!-- HEADSTART -->)([\s\S]*?)(<!-- HEADEND -->)/,
+      /(<meta[^>]+data-boxel-head-start[^>]*>)([\s\S]*?)(<meta[^>]+data-boxel-head-end[^>]*>)/,
       `$1\n${headHTML}\n$3`,
     );
   }
