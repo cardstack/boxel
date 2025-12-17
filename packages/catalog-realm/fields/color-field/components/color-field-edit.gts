@@ -2,14 +2,16 @@ import Component from '@glimmer/component';
 import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
+import { debounce } from 'lodash';
 import { eq, or, not } from '@cardstack/boxel-ui/helpers';
 import { ColorPicker } from '@cardstack/boxel-ui/components';
 
 import type {
+  ColorFieldBaseOptions,
   ColorFieldConfiguration,
   ColorVariant,
 } from '../util/color-utils';
-import { parseCssColorSafe, rgbaToHex } from '../util/color-utils';
+import { normalizeColorForHistory } from '../util/color-utils';
 import type { ColorFieldSignature } from '../util/color-field-signature';
 import AdvancedEdit from './advanced-edit';
 import SwatchesPickerEdit from './swatches-picker-edit';
@@ -18,32 +20,37 @@ import ColorWheelEdit from './color-wheel-edit';
 import RecentColorsAddon from './recent-colors-addon';
 import ContrastCheckerAddon from './contrast-checker-addon';
 
+// Global storage for recentColors keyed by configuration
+// Module-level: persists across component recreation within the same page session
+const recentColorsStorage = new WeakMap<
+  ColorFieldConfiguration | object,
+  string[]
+>();
+
 export default class ColorFieldEdit extends Component<ColorFieldSignature> {
   @tracked recentColors: string[] = [];
-  @tracked localColor: string | null = null; // Local state for smooth color pick / color drag
 
-  // Like React's useRef - not tracked, maintains value across renders
-  private previousColorRef: string | null = null;
-  private recentColorTimeout: ReturnType<typeof setTimeout> | null = null;
-  private saveTimeout: ReturnType<typeof setTimeout> | null = null;
+  private debouncedSetColor = debounce((color: string | null) => {
+    this.args.set?.(color);
+  }, 300);
 
-  constructor(owner: Owner, args: any) {
+  private debouncedRecordRecentColor = debounce((color: string) => {
+    this.recordRecentColor(color);
+  }, 300);
+
+  constructor(owner: Owner, args: ColorFieldSignature['Args']) {
     super(owner, args);
-    this.previousColorRef = this.normalizeColor(this.args.model);
-    this.localColor = this.args.model;
+    // Restore recentColors from storage if available
+    const stored = recentColorsStorage.get(this.configKey);
+    if (stored) {
+      this.recentColors = [...stored];
+    }
   }
 
-  willDestroy() {
-    super.willDestroy();
-    // Clean up pending timeouts to prevent memory leak
-    if (this.recentColorTimeout) {
-      clearTimeout(this.recentColorTimeout);
-      this.recentColorTimeout = null;
-    }
-    if (this.saveTimeout) {
-      clearTimeout(this.saveTimeout);
-      this.saveTimeout = null;
-    }
+  // Use configuration as key for persistent storage
+  // Always ensure we have an object (WeakMap requires object keys)
+  get configKey(): ColorFieldConfiguration | object {
+    return (this.args.configuration as ColorFieldConfiguration) || {};
   }
 
   get variant(): ColorVariant {
@@ -53,105 +60,82 @@ export default class ColorFieldEdit extends Component<ColorFieldSignature> {
     );
   }
 
+  // At class level, add this private helper
+  private get baseOptions(): ColorFieldBaseOptions | undefined {
+    const configuration = this.args.configuration as ColorFieldConfiguration | undefined;
+    if (!configuration) {
+      return undefined;
+    }
+    if (configuration.variant === 'advanced') {
+      return undefined;
+    }
+    return configuration.options as ColorFieldBaseOptions | undefined;
+  }
+
   get showRecent(): boolean {
-    return (
-      (this.args.configuration as ColorFieldConfiguration)?.options
-        ?.showRecent ?? false
-    );
+    return this.baseOptions?.showRecent ?? false;
   }
 
   get showContrastChecker(): boolean {
-    return (
-      (this.args.configuration as ColorFieldConfiguration)?.options
-        ?.showContrastChecker ?? false
-    );
+    return this.baseOptions?.showContrastChecker ?? false;
   }
 
-  get maxHistory(): number {
-    return (
-      (this.args.configuration as ColorFieldConfiguration)?.options
-        ?.maxHistory ?? 8
-    );
+  get maxRecentHistory(): number {
+    return this.baseOptions?.maxRecentHistory ?? 10;
   }
 
-  get displayColor(): string | null {
-    // Use local color during dragging, fall back to model
-    return this.localColor ?? this.args.model;
-  }
+  @action recordRecentColor(color: string) {
+    // Normalize and validate the color - this ensures we only store valid colors
+    // in a consistent format (hex uppercase)
+    const normalized = normalizeColorForHistory(color);
+    if (!normalized) {
+      // Color is invalid, don't store it
+      return;
+    }
 
-  normalizeColor(color: string | null | undefined): string | null {
-    if (!color) return null;
-    const { rgba, valid } = parseCssColorSafe(color);
-    if (!valid) return null;
-    return rgbaToHex(rgba, rgba.a < 1).toUpperCase();
+    // Guard clause: Don't store if color is already in the array
+    const current = recentColorsStorage.get(this.configKey) || [];
+    if (current.includes(normalized)) {
+      return;
+    }
+
+    const updated = [normalized, ...current].slice(0, this.maxRecentHistory);
+    this.recentColors = updated;
+    // Persist to storage
+    recentColorsStorage.set(this.configKey, updated);
   }
 
   @action
   handleColorChange(newColor: string | null) {
-    const normalized = this.normalizeColor(newColor);
-
-    // Update local color immediately for smooth UI
-    this.localColor = newColor;
-
-    // Clear any pending debounced save
-    if (this.saveTimeout) {
-      clearTimeout(this.saveTimeout);
-      this.saveTimeout = null;
+    // Debounce the actual set call to avoid excessive updates
+    this.debouncedSetColor(newColor);
+    // Debounce recording recent color to avoid excessive history updates
+    if (newColor) {
+      this.debouncedRecordRecentColor(newColor);
     }
+  }
 
-    // Clear any pending debounced history append
-    if (this.recentColorTimeout) {
-      clearTimeout(this.recentColorTimeout);
-      this.recentColorTimeout = null;
-    }
-
-    // Debounce the actual save to prevent lag
-    this.saveTimeout = setTimeout(() => {
-      this.args.set?.(newColor);
-      this.saveTimeout = null;
-    }, 300);
-
-    // DEBOUNCE the history update (wait 500ms after user stops picking)
-    // This matches the React pattern exactly
-    this.recentColorTimeout = setTimeout(() => {
-      const prevColor = this.previousColorRef;
-
-      // Only add if color actually changed and previous color exists
-      if (
-        prevColor &&
-        prevColor !== normalized &&
-        !this.recentColors.includes(prevColor)
-      ) {
-        this.recentColors = [prevColor, ...this.recentColors].slice(
-          0,
-          this.maxHistory,
-        );
-      }
-
-      // Update the ref INSIDE the timeout (like React's useRef)
-      this.previousColorRef = normalized;
-      this.recentColorTimeout = null;
-    }, 500);
+  @action
+  handleColorChangeImmediate(newColor: string | null) {
+    this.args.set?.(newColor);
   }
 
   @action
   handleRecentColorSelect(color: string) {
-    // Clear any pending saves
-    if (this.saveTimeout) {
-      clearTimeout(this.saveTimeout);
-      this.saveTimeout = null;
-    }
+    this.debouncedSetColor(color);
+  }
 
-    // Clear any pending history updates (like React does)
-    if (this.recentColorTimeout) {
-      clearTimeout(this.recentColorTimeout);
-      this.recentColorTimeout = null;
-    }
+  @action
+  clearRecentColors() {
+    this.recentColors = [];
+    recentColorsStorage.delete(this.configKey);
+  }
 
-    // When clicking a recent color, set it immediately without adding to history
-    this.localColor = color;
-    this.args.set?.(color);
-    this.previousColorRef = this.normalizeColor(color);
+  willDestroy() {
+    super.willDestroy();
+    // Cancel any pending debounced calls
+    this.debouncedSetColor.cancel();
+    this.debouncedRecordRecentColor.cancel();
   }
 
   <template>
@@ -159,35 +143,35 @@ export default class ColorFieldEdit extends Component<ColorFieldSignature> {
       <div class='variant-section'>
         {{#if (eq this.variant 'advanced')}}
           <AdvancedEdit
-            @model={{this.displayColor}}
-            @set={{this.handleColorChange}}
+            @model={{@model}}
+            @set={{this.handleColorChangeImmediate}}
             @canEdit={{@canEdit}}
             @configuration={{@configuration}}
           />
         {{else if (eq this.variant 'swatches-picker')}}
           <SwatchesPickerEdit
-            @model={{this.displayColor}}
+            @model={{@model}}
             @set={{this.handleColorChange}}
             @canEdit={{@canEdit}}
             @configuration={{@configuration}}
           />
         {{else if (eq this.variant 'slider')}}
           <SliderEdit
-            @model={{this.displayColor}}
+            @model={{@model}}
             @set={{this.handleColorChange}}
             @canEdit={{@canEdit}}
             @configuration={{@configuration}}
           />
         {{else if (eq this.variant 'wheel')}}
           <ColorWheelEdit
-            @model={{this.displayColor}}
+            @model={{@model}}
             @set={{this.handleColorChange}}
             @canEdit={{@canEdit}}
             @configuration={{@configuration}}
           />
         {{else}}
           <ColorPicker
-            @color={{this.displayColor}}
+            @color={{@model}}
             @onChange={{this.handleColorChange}}
             @disabled={{not @canEdit}}
           />
@@ -198,16 +182,17 @@ export default class ColorFieldEdit extends Component<ColorFieldSignature> {
         <div class='addons-section'>
           {{#if this.showRecent}}
             <RecentColorsAddon
-              @model={{this.displayColor}}
+              @model={{@model}}
               @recentColors={{this.recentColors}}
               @onSelectColor={{this.handleRecentColorSelect}}
+              @onClear={{this.clearRecentColors}}
               @canEdit={{@canEdit}}
             />
           {{/if}}
 
           {{#if this.showContrastChecker}}
             <ContrastCheckerAddon
-              @model={{this.displayColor}}
+              @model={{@model}}
               @set={{@set}}
               @canEdit={{@canEdit}}
               @configuration={{@configuration}}

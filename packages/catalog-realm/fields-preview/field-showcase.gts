@@ -32,6 +32,7 @@ import QuantityField from '../fields/quantity';
 import ImageField from '../fields/image';
 import MultipleImageField from '../fields/multiple-image';
 import AudioField from '../fields/audio';
+import ColorField from '../fields/color-field';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
 import ChevronRightIcon from '@cardstack/boxel-icons/chevron-right';
 import ChevronLeftIcon from '@cardstack/boxel-icons/chevron-left';
@@ -48,7 +49,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
   @tracked isSidebarCollapsed = false;
   @tracked searchQuery = '';
   @tracked expandedGroups = new Set(['Date & Time Fields']); // Sidebar groups expanded by default
-  @tracked expandedSections = new Set(['configuration', 'variants', 'options']); // Hero sections expanded by default
+  @tracked expandedSections = new Set(['configuration']); // Hero sections expanded by default
   @tracked selectedFormat: 'edit' | 'embedded' | 'atom' = 'edit'; // Format switcher
 
   @action
@@ -304,6 +305,16 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         { value: 'audio', label: 'AudioField', fieldName: 'playgroundAudio' },
       ],
     },
+    {
+      groupName: 'Color Fields',
+      options: [
+        {
+          value: 'color',
+          label: 'ColorField',
+          fieldName: 'playgroundColor',
+        },
+      ],
+    },
   ];
 
   allPresentationOptions = [
@@ -338,6 +349,11 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
     // MultipleImageField presentation modes
     { value: 'grid', label: 'Grid' },
     { value: 'carousel', label: 'Carousel' },
+    // ColorField variants
+    { value: 'wheel', label: 'Wheel' },
+    { value: 'slider', label: 'Slider' },
+    { value: 'swatches-picker', label: 'Swatches Picker' },
+    { value: 'advanced', label: 'Advanced' },
   ];
 
   get selectedPresentation() {
@@ -382,6 +398,63 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       }>
     > = {
       audio: [],
+      color: [
+        {
+          name: 'Standard',
+          description: 'Default color picker',
+          config: '@field myColor = contains(ColorField);',
+          fieldName: 'playgroundColor',
+        },
+        {
+          name: 'Wheel Picker',
+          description: 'Color wheel variant',
+          config:
+            '@field myColor = contains(ColorField, { configuration: { variant: "wheel" } });',
+          fieldName: 'colorWheel',
+        },
+        {
+          name: 'Slider (RGB)',
+          description: 'Slider with RGB format',
+          config:
+            '@field myColor = contains(ColorField, { configuration: { variant: "slider", options: { defaultFormat: "rgb" } } });',
+          fieldName: 'colorSliderRgb',
+        },
+        {
+          name: 'Slider (HSL)',
+          description: 'Slider with HSL format',
+          config:
+            '@field myColor = contains(ColorField, { configuration: { variant: "slider", options: { defaultFormat: "hsl" } } });',
+          fieldName: 'colorSliderHsl',
+        },
+        {
+          name: 'Swatches Picker',
+          description: 'Color swatches picker variant',
+          config:
+            '@field myColor = contains(ColorField, { configuration: { variant: "swatches-picker" } });',
+          fieldName: 'colorSwatchesPicker',
+        },
+        {
+          name: 'Advanced',
+          description: 'Advanced color picker with all format options',
+          config:
+            '@field myColor = contains(ColorField, { configuration: { variant: "advanced" } });',
+          fieldName: 'colorAdvanced',
+        },
+        {
+          name: 'with Recent Colors',
+          description: 'Shows recent color history',
+          config:
+            '@field myColor = contains(ColorField, { configuration: { options: { showRecent: true } } });',
+          fieldName: 'colorShowRecent',
+        },
+        {
+          name: 'with Contrast Checker',
+          description: 'Shows WCAG contrast checker',
+          config:
+            '@field myColor = contains(ColorField, { configuration: { options: { showContrastChecker: true } } });',
+          fieldName: 'colorShowContrast',
+        },
+      ],
       date: [
         {
           name: 'Compact Date',
@@ -1199,6 +1272,141 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
           },
         ],
       },
+      color: {
+        standard: [
+          {
+            key: 'showRecent',
+            label: 'Show Recent',
+            type: 'boolean',
+            description: 'Display recent color history grid below the picker',
+            default: '(uses component default: false)',
+          },
+          {
+            key: 'showContrastChecker',
+            label: 'Show Contrast Checker',
+            type: 'boolean',
+            description: 'Display WCAG contrast checker for accessibility',
+            default: '(uses component default: false)',
+          },
+          {
+            key: 'maxRecentHistory',
+            label: 'Max Recent History',
+            type: 'number',
+            description: 'Maximum number of recent colors to display',
+            default: '(uses component default: 8)',
+          },
+        ],
+        wheel: [
+          {
+            key: 'defaultFormat',
+            label: 'Default Format (Wheel)',
+            type: 'text',
+            description: 'Color format to use: "hex", "rgb", or "hsl"',
+            default: '(uses component default: "hex")',
+          },
+          {
+            key: 'showRecent',
+            label: 'Show Recent',
+            type: 'boolean',
+            description:
+              'Display recent color history grid below the picker (Wheel variant)',
+            default: '(uses component default: false)',
+          },
+          {
+            key: 'showContrastChecker',
+            label: 'Show Contrast Checker',
+            type: 'boolean',
+            description:
+              'Display WCAG contrast checker for accessibility (Wheel variant)',
+            default: '(uses component default: false)',
+          },
+          {
+            key: 'maxRecentHistory',
+            label: 'Max Recent History',
+            type: 'number',
+            description:
+              'Maximum number of recent colors to display (Wheel variant)',
+            default: '(uses component default: 8)',
+          },
+        ],
+        slider: [
+          {
+            key: 'defaultFormat',
+            label: 'Default Format (Slider)',
+            type: 'text',
+            description: 'Slider format to use: "rgb" or "hsl"',
+            default: '(uses component default: "rgb")',
+          },
+          {
+            key: 'showRecent',
+            label: 'Show Recent',
+            type: 'boolean',
+            description:
+              'Display recent color history grid below the picker (Slider variant)',
+            default: '(uses component default: false)',
+          },
+          {
+            key: 'showContrastChecker',
+            label: 'Show Contrast Checker',
+            type: 'boolean',
+            description:
+              'Display WCAG contrast checker for accessibility (Slider variant)',
+            default: '(uses component default: false)',
+          },
+          {
+            key: 'maxRecentHistory',
+            label: 'Max Recent History',
+            type: 'number',
+            description:
+              'Maximum number of recent colors to display (Slider variant)',
+            default: '(uses component default: 8)',
+          },
+        ],
+        'swatches-picker': [
+          {
+            key: 'paletteColors',
+            label: 'Palette Colors (Swatches-picker)',
+            type: 'text',
+            description:
+              'Array of predefined color swatches to display (e.g., ["#FF0000", "#00FF00"])',
+            default: '(uses component default palette)',
+          },
+          {
+            key: 'showRecent',
+            label: 'Show Recent',
+            type: 'boolean',
+            description:
+              'Display recent color history grid below the picker (Swatches-picker variant)',
+            default: '(uses component default: false)',
+          },
+          {
+            key: 'showContrastChecker',
+            label: 'Show Contrast Checker',
+            type: 'boolean',
+            description:
+              'Display WCAG contrast checker for accessibility (Swatches-picker variant)',
+            default: '(uses component default: false)',
+          },
+          {
+            key: 'maxRecentHistory',
+            label: 'Max Recent History',
+            type: 'number',
+            description:
+              'Maximum number of recent colors to display (Swatches-picker variant)',
+            default: '(uses component default: 8)',
+          },
+        ],
+        advanced: [
+          {
+            key: 'defaultFormat',
+            label: 'Default Format (Advanced)',
+            type: 'text',
+            description:
+              'Advanced format to use: "hex", "rgb", "hsl", "hsb", or "css"',
+            default: '(uses component default: "hex")',
+          },
+        ],
+      },
       multipleImage: {
         standard: [
           {
@@ -1320,7 +1528,43 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       },
     };
 
-    return optionsMap[fieldType]?.[presentation] || [];
+    const baseOptions = optionsMap[fieldType]?.[presentation] || [];
+
+    if (fieldType === 'color') {
+      const existingKeys = new Set(baseOptions.map((option) => option.key));
+      const extraOptions: Array<{
+        key: string;
+        label: string;
+        type: 'number' | 'text' | 'boolean';
+        description: string;
+        default: string;
+      }> = [
+        {
+          key: 'defaultFormat',
+          label: 'Default Format',
+          type: 'text',
+          description:
+            'Color format to use (slider defaults to "rgb", wheel/advanced default to "hex")',
+          default: '(depends on variant)',
+        },
+        {
+          key: 'paletteColors',
+          label: 'Palette Colors (Swatches-picker)',
+          type: 'text',
+          description:
+            'Array of predefined swatches to display in the picker (only swatches-picker variant uses this)',
+          default: '(uses component default palette)',
+        },
+      ];
+
+      for (const option of extraOptions) {
+        if (!existingKeys.has(option.key)) {
+          baseOptions.push(option);
+        }
+      }
+    }
+
+    return baseOptions;
   }
 
   get formatOptions() {
@@ -1352,6 +1596,37 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
     }
 
     const fieldTypeName = option?.label || 'DateField';
+
+    // ColorField - handle all variants
+    if (fieldType === 'color') {
+      if (presentation === 'standard') {
+        return `@field myColor = contains(ColorField);`;
+      }
+      if (presentation === 'wheel') {
+        return `@field myColor = contains(ColorField, {
+  configuration: { variant: 'wheel' }
+});`;
+      }
+      if (presentation === 'slider') {
+        return `@field myColor = contains(ColorField, {
+  configuration: { 
+    variant: 'slider',
+    options: { defaultFormat: 'rgb' }
+  }
+});`;
+      }
+      if (presentation === 'swatches-picker') {
+        return `@field myColor = contains(ColorField, {
+  configuration: { variant: 'swatches-picker' }
+});`;
+      }
+      if (presentation === 'advanced') {
+        return `@field myColor = contains(ColorField, {
+  configuration: { variant: 'advanced' }
+});`;
+      }
+      return `@field myColor = contains(ColorField);`;
+    }
 
     // Number fields, rating, quantity - just show presentation without options
     if (fieldType === 'number') {
@@ -1689,6 +1964,8 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
                   <@fields.playgroundMultipleImage
                     @format={{this.selectedFormat}}
                   />
+                {{else if (eq this.currentPlaygroundField 'playgroundColor')}}
+                  <@fields.playgroundColor @format={{this.selectedFormat}} />
                 {{/if}}
               </div>
             </div>
@@ -1840,120 +2117,126 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
           </section>
         {{/if}}
 
-        {{! Collapsible Examples & Variants Section }}
-        {{#if (gt this.examplesForCurrentField.length 0)}}
-          <section class='collapsible-section'>
-            <Button
-              @kind='text-only'
-              class='section-toggle'
-              {{on 'click' (fn this.toggleSection 'examples')}}
-            >
-              <ChevronDownIcon
-                class='section-chevron
-                  {{if (this.isSectionExpanded "examples") "expanded"}}'
-                width='20'
-                height='20'
-              />
-              <span class='section-title'>
-                Examples & Variants
-                <span
-                  class='count-badge'
-                >{{this.examplesForCurrentField.length}}</span>
-              </span>
-            </Button>
+        {{! Variants Display Section - Only for ColorField }}
+        {{#if (eq @model.playgroundFieldType 'color')}}
+          <section class='variants-display-section'>
+            <h2 class='variants-section-title'>ColorField Variants</h2>
 
-            {{#if (this.isSectionExpanded 'examples')}}
-              <div class='section-content'>
-                <div class='examples-list'>
-                  {{#each this.examplesForCurrentField as |example|}}
-                    <div class='example-item'>
-                      <div class='example-header'>
-                        <h4 class='example-name'>{{example.name}}</h4>
-                        <p
-                          class='example-description'
-                        >{{example.description}}</p>
-                      </div>
-
-                      <div class='example-code'>
-                        <pre><code>{{example.config}}</code></pre>
-                      </div>
-
-                      <div class='example-demo'>
-                        {{#if (eq example.fieldName 'appointmentDateCompact')}}
-                          <@fields.appointmentDateCompact
-                            @format={{this.selectedFormat}}
-                          />
-                        {{else if
-                          (eq example.fieldName 'appointmentDateCustom')
-                        }}
-                          <@fields.appointmentDateCustom
-                            @format={{this.selectedFormat}}
-                          />
-                        {{else if (eq example.fieldName 'meetingTime24Hour')}}
-                          <@fields.meetingTime24Hour
-                            @format={{this.selectedFormat}}
-                          />
-                        {{else if (eq example.fieldName 'meetingTimeLong')}}
-                          <@fields.meetingTimeLong
-                            @format={{this.selectedFormat}}
-                          />
-                        {{else if (eq example.fieldName 'eventDateTimeShort')}}
-                          <@fields.eventDateTimeShort
-                            @format={{this.selectedFormat}}
-                          />
-                        {{else if (eq example.fieldName 'eventDateTimeCustom')}}
-                          <@fields.eventDateTimeCustom
-                            @format={{this.selectedFormat}}
-                          />
-                        {{else if (eq example.fieldName 'projectDurationFull')}}
-                          <@fields.projectDurationFull
-                            @format={{this.selectedFormat}}
-                          />
-                        {{else if (eq example.fieldName 'taskDurationDayTime')}}
-                          <@fields.taskDurationDayTime
-                            @format={{this.selectedFormat}}
-                          />
-                        {{else if
-                          (eq example.fieldName 'contractDurationYearMonth')
-                        }}
-                          <@fields.contractDurationYearMonth
-                            @format={{this.selectedFormat}}
-                          />
-                        {{else if (eq example.fieldName 'imageBrowse')}}
-                          <@fields.imageBrowse
-                            @format={{this.selectedFormat}}
-                          />
-                        {{else if (eq example.fieldName 'imageAvatar')}}
-                          <@fields.imageAvatar
-                            @format={{this.selectedFormat}}
-                          />
-                        {{else if (eq example.fieldName 'imageDropzone')}}
-                          <@fields.imageDropzone
-                            @format={{this.selectedFormat}}
-                          />
-                        {{else if (eq example.fieldName 'multipleImageList')}}
-                          <@fields.multipleImageList
-                            @format={{this.selectedFormat}}
-                          />
-                        {{else if
-                          (eq example.fieldName 'multipleImageGallery')
-                        }}
-                          <@fields.multipleImageGallery
-                            @format={{this.selectedFormat}}
-                          />
-                        {{else if
-                          (eq example.fieldName 'multipleImageDropzone')
-                        }}
-                          <@fields.multipleImageDropzone
-                            @format={{this.selectedFormat}}
-                          />
-                        {{/if}}
-                      </div>
-                    </div>
-                  {{/each}}
-                </div>
+            <div class='variant-block'>
+              <div class='variant-block-header'>
+                <h3>Standard</h3>
+                <p>Default color picker</p>
               </div>
-            {{/if}}
+              <div class='variant-code'>
+                <pre><code>@field myColor = contains(ColorField);</code></pre>
+              </div>
+              <div class='variant-demo'>
+                <@fields.playgroundColor @format='edit' />
+              </div>
+            </div>
+
+            <div class='variant-block'>
+              <div class='variant-block-header'>
+                <h3>Wheel Picker</h3>
+                <p>Color wheel variant</p>
+              </div>
+              <div class='variant-code'>
+                <pre><code>@field myColor = contains(ColorField, &#123;
+                    configuration: &#123; variant: 'wheel' &#125; &#125;);</code></pre>
+              </div>
+              <div class='variant-demo'>
+                <@fields.colorWheel @format='edit' />
+              </div>
+            </div>
+
+            <div class='variant-block'>
+              <div class='variant-block-header'>
+                <h3>Slider (RGB)</h3>
+                <p>Slider with RGB format</p>
+              </div>
+              <div class='variant-code'>
+                <pre><code>@field myColor = contains(ColorField, &#123;
+                    configuration: &#123; variant: 'slider', options: &#123;
+                    defaultFormat: 'rgb' &#125; &#125; &#125;);</code></pre>
+              </div>
+              <div class='variant-demo'>
+                <@fields.colorSliderRgb @format='edit' />
+              </div>
+            </div>
+
+            <div class='variant-block'>
+              <div class='variant-block-header'>
+                <h3>Slider (HSL)</h3>
+                <p>Slider with HSL format</p>
+              </div>
+              <div class='variant-code'>
+                <pre><code>@field myColor = contains(ColorField, &#123;
+                    configuration: &#123; variant: 'slider', options: &#123;
+                    defaultFormat: 'hsl' &#125; &#125; &#125;);</code></pre>
+              </div>
+              <div class='variant-demo'>
+                <@fields.colorSliderHsl @format='edit' />
+              </div>
+            </div>
+
+            <div class='variant-block'>
+              <div class='variant-block-header'>
+                <h3>Swatches Picker</h3>
+                <p>Color swatches picker variant</p>
+              </div>
+              <div class='variant-code'>
+                <pre><code>@field myColor = contains(ColorField, &#123;
+                    configuration: &#123; variant: 'swatches-picker' &#125;
+                    &#125;);</code></pre>
+              </div>
+              <div class='variant-demo'>
+                <@fields.colorSwatchesPicker @format='edit' />
+              </div>
+            </div>
+
+            <div class='variant-block'>
+              <div class='variant-block-header'>
+                <h3>Advanced</h3>
+                <p>Advanced color picker with all format options</p>
+              </div>
+              <div class='variant-code'>
+                <pre><code>@field myColor = contains(ColorField, &#123;
+                    configuration: &#123; variant: 'advanced' &#125; &#125;);</code></pre>
+              </div>
+              <div class='variant-demo'>
+                <@fields.colorAdvanced @format='edit' />
+              </div>
+            </div>
+
+            <div class='variant-block'>
+              <div class='variant-block-header'>
+                <h3>with Recent Colors</h3>
+                <p>Shows recent color history</p>
+              </div>
+              <div class='variant-code'>
+                <pre><code>@field myColor = contains(ColorField, &#123;
+                    configuration: &#123; options: &#123; showRecent: true
+                    &#125; &#125; &#125;);</code></pre>
+              </div>
+              <div class='variant-demo'>
+                <@fields.colorShowRecent @format='edit' />
+              </div>
+            </div>
+
+            <div class='variant-block'>
+              <div class='variant-block-header'>
+                <h3>with Contrast Checker</h3>
+                <p>Shows WCAG contrast checker</p>
+              </div>
+              <div class='variant-code'>
+                <pre><code>@field myColor = contains(ColorField, &#123;
+                    configuration: &#123; options: &#123; showContrastChecker:
+                    true &#125; &#125; &#125;);</code></pre>
+              </div>
+              <div class='variant-demo'>
+                <@fields.colorShowContrast @format='edit' />
+              </div>
+            </div>
           </section>
         {{/if}}
 
@@ -2359,6 +2642,79 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
 
       .example-demo > :first-child {
         width: 100%;
+      }
+
+      /* Variants Display Section */
+      .variants-display-section {
+        margin-top: 2rem;
+      }
+
+      .variants-section-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--foreground, #0f172a);
+        margin: 0 0 1.5rem;
+        letter-spacing: -0.02em;
+      }
+
+      /* ColorField Variants Display - Nested Structure */
+      .variant-block {
+        margin-bottom: 2rem;
+        background: var(--card, #ffffff);
+        border: 1px solid var(--border, #e2e8f0);
+        border-radius: var(--radius, 0.5rem);
+        overflow: hidden;
+      }
+
+      .variant-block .variant-block-header {
+        padding: 1rem 1.25rem;
+        background: var(--muted, #f8fafc);
+        border-bottom: 1px solid var(--border, #e2e8f0);
+      }
+
+      .variant-block .variant-block-header h3 {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--foreground, #0f172a);
+        margin: 0 0 0.25rem;
+      }
+
+      .variant-block .variant-block-header p {
+        font-size: 0.875rem;
+        color: var(--muted-foreground, #64748b);
+        margin: 0;
+      }
+
+      .variant-block .variant-code {
+        padding: 1rem 1.25rem;
+        background: var(--muted, #f8fafc);
+        border-bottom: 1px solid var(--border, #e2e8f0);
+      }
+
+      .variant-block .variant-code pre {
+        margin: 0;
+      }
+
+      .variant-block .variant-code code {
+        font-family: var(--font-mono, 'Courier New', monospace);
+        font-size: 0.8125rem;
+        line-height: 1.6;
+        color: var(--foreground, #1e293b);
+        white-space: pre;
+      }
+
+      .variant-block .variant-demo {
+        padding: 2rem 1.25rem;
+        min-height: 300px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--background, #ffffff);
+      }
+
+      .variant-block .variant-demo > :first-child {
+        width: 100%;
+        max-width: 500px;
       }
 
       /* Responsive adjustments for hero */
@@ -3390,6 +3746,9 @@ export class FieldShowcase extends CardDef {
     },
   });
 
+  // Playground color field - responds to variant and options
+  @field playgroundColor = contains(ColorField);
+
   // Playground image fields
   @field playgroundImage = contains(ImageField, {
     configuration: function (this: FieldShowcase) {
@@ -3521,6 +3880,53 @@ export class FieldShowcase extends CardDef {
       includeHours: false,
       includeMinutes: false,
       includeSeconds: false,
+    },
+  });
+
+  // ColorField examples - all variants with proper configurations
+  @field colorWheel = contains(ColorField, {
+    configuration: {
+      variant: 'wheel',
+    },
+  });
+  @field colorSliderRgb = contains(ColorField, {
+    configuration: {
+      variant: 'slider',
+      options: {
+        defaultFormat: 'rgb',
+      },
+    },
+  });
+  @field colorSliderHsl = contains(ColorField, {
+    configuration: {
+      variant: 'slider',
+      options: {
+        defaultFormat: 'hsl',
+      },
+    },
+  });
+  @field colorSwatchesPicker = contains(ColorField, {
+    configuration: {
+      variant: 'swatches-picker',
+    },
+  });
+  @field colorAdvanced = contains(ColorField, {
+    configuration: {
+      variant: 'advanced',
+    },
+  });
+  @field colorShowRecent = contains(ColorField, {
+    configuration: {
+      options: {
+        showRecent: true,
+      },
+    },
+  });
+  @field colorShowContrast = contains(ColorField, {
+    configuration: {
+      options: {
+        showContrastChecker: true,
+      },
     },
   });
 

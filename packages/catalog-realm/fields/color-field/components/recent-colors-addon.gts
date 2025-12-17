@@ -5,7 +5,7 @@ import { fn, concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 import { gt, eq, not } from '@cardstack/boxel-ui/helpers';
 
-import { parseCssColorSafe, rgbaToHex } from '../util/color-utils';
+import { normalizeColorForHistory } from '../util/color-utils';
 
 interface RecentColorsSignature {
   Args: {
@@ -13,19 +13,20 @@ interface RecentColorsSignature {
     recentColors: string[];
     onSelectColor: (color: string) => void;
     canEdit?: boolean;
+    onClear?: () => void;
   };
 }
 
 export default class RecentColorsAddon extends Component<RecentColorsSignature> {
   get currentColor(): string | null {
-    return this.normalizeColor(this.args.model);
+    return normalizeColorForHistory(this.args.model);
   }
 
-  normalizeColor(color: string | null | undefined): string | null {
-    if (!color) return null;
-    const { rgba, valid } = parseCssColorSafe(color);
-    if (!valid) return null;
-    return rgbaToHex(rgba, rgba.a < 1).toUpperCase();
+  /**
+   * Normalize a color from the recent colors array for comparison
+   */
+  normalizeRecentColor(color: string): string | null {
+    return normalizeColorForHistory(color);
   }
 
   @action
@@ -33,16 +34,36 @@ export default class RecentColorsAddon extends Component<RecentColorsSignature> 
     this.args.onSelectColor(color);
   }
 
+  @action
+  clearRecentColors() {
+    this.args.onClear?.();
+  }
+
   <template>
     <div class='recent-colors-addon'>
-      <label class='addon-label'>Recent Colors</label>
+      <div class='recent-colors-header'>
+        <label class='addon-label'>Recent Colors</label>
+        {{#if (gt @recentColors.length 0)}}
+          <button
+            type='button'
+            class='clear-history-button'
+            {{on 'click' this.clearRecentColors}}
+            disabled={{not @canEdit}}
+          >
+            Clear
+          </button>
+        {{/if}}
+      </div>
       {{#if (gt @recentColors.length 0)}}
         <div class='recent-colors-grid'>
           {{#each @recentColors as |color|}}
             <button
               type='button'
               class='recent-color-swatch
-                {{if (eq color this.currentColor) "active"}}'
+                {{if
+                  (eq (this.normalizeRecentColor color) this.currentColor)
+                  "active"
+                }}'
               style={{htmlSafe (concat 'background-color:' color)}}
               title={{color}}
               {{on 'click' (fn this.selectRecentColor color)}}
@@ -71,6 +92,35 @@ export default class RecentColorsAddon extends Component<RecentColorsSignature> 
         color: var(--muted-foreground, #6b7280);
         text-transform: uppercase;
         letter-spacing: 0.025em;
+      }
+
+      .recent-colors-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+      }
+
+      .clear-history-button {
+        border: none;
+        background: transparent;
+        color: var(--muted-foreground, #6b7280);
+        font-size: 0.65rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        cursor: pointer;
+        padding: 0;
+        transition: color 0.2s ease;
+      }
+
+      .clear-history-button:hover:not(:disabled) {
+        color: #ef4444;
+      }
+
+      .clear-history-button:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
       }
 
       .recent-colors-grid {

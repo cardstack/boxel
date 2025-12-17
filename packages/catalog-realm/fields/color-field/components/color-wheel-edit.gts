@@ -4,137 +4,154 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
-import { not } from '@cardstack/boxel-ui/helpers';
-import { BoxelSelect, BoxelInput } from '@cardstack/boxel-ui/components';
 
-import type {
-  ColorFieldConfiguration,
-  ColorFormat,
-  RGBA,
-} from '../util/color-utils';
 import {
-  detectColorFormat,
   parseCssColor,
-  parseCssColorSafe,
   rgbaToHsvValues,
-  rgbaToFormat,
   hslToRgb,
-  rgbToHex,
+  detectColorFormat,
+  rgbaToFormat,
+} from '../util/color-utils';
+import type {
+  WheelColorFormat,
+  WheelVariantConfiguration,
+  RGBA,
 } from '../util/color-utils';
 import type { ColorFieldSignature } from '../util/color-field-signature';
 import { setupElement } from '../modifiers/setup-element-modifier';
 
 export default class ColorWheelEdit extends Component<ColorFieldSignature> {
+  // ========== Properties ==========
   @tracked h: number = 0;
   @tracked isDragging = false;
-  @tracked outputFormat: ColorFormat = 'hex';
-  @tracked colorInputValue = '';
-  @tracked isValueInputFocused = false;
-  formatOptions: { label: string; value: ColorFormat }[] = [];
-
-  get selectedFormatOption() {
-    return (
-      this.formatOptions.find((opt) => opt.value === this.outputFormat) ||
-      this.formatOptions[0]
-    );
-  }
-
-  get shouldShowFormatSelector(): boolean {
-    const options = (
-      this.args.configuration as ColorFieldConfiguration & {
-        variant: 'wheel';
-      }
-    )?.options;
-    // If explicitly set, use that value
-    if (options?.showFormatSelector !== undefined) {
-      return options.showFormatSelector;
-    }
-    // Default: show when multiple formats available
-    return this.availableFormats.length > 1;
-  }
 
   wheelCanvasElement: HTMLCanvasElement | null = null;
   containerElement: HTMLElement | null = null;
+  private lastModelValue: string | null | undefined = null;
 
-  size = 280;
-  centerX = this.size / 2;
-  centerY = this.size / 2;
-  outerRadius = this.size / 2 - 10;
-  innerRadius = this.size / 2 - 40;
-
-  get availableFormats(): ColorFormat[] {
-    const options = (
-      this.args.configuration as ColorFieldConfiguration & {
-        variant: 'wheel';
-      }
-    )?.options;
-    const formats = options?.allowedFormats ?? ['hex', 'rgb', 'hsl', 'hsb'];
-    // Safety: Prevent empty array from breaking component
-    return formats.length > 0 ? formats : ['hex'];
+  // Wheel dimensions
+  private readonly size = 280;
+  private get centerX() {
+    return this.size / 2;
+  }
+  private get centerY() {
+    return this.size / 2;
+  }
+  private get outerRadius() {
+    return this.size / 2 - 10;
+  }
+  private get innerRadius() {
+    return this.size / 2 - 40;
   }
 
-  get defaultFormat(): ColorFormat {
-    const options = (
-      this.args.configuration as ColorFieldConfiguration & {
-        variant: 'wheel';
-      }
-    )?.options;
+  // ========== Getters ==========
+  get configuredDefaultFormat(): WheelColorFormat {
+    const options = (this.args.configuration as WheelVariantConfiguration)
+      ?.options;
     return options?.defaultFormat ?? 'hex';
   }
 
-  constructor(owner: Owner, args: any) {
-    super(owner, args);
-    const rgba = parseCssColor(this.args.model || '#3b82f6');
-    const hsv = rgbaToHsvValues(rgba);
-    this.h = hsv.h;
+  get outputFormat(): WheelColorFormat {
+    const options = (this.args.configuration as WheelVariantConfiguration)
+      ?.options;
 
-    this.outputFormat = this.defaultFormat;
-    this.formatOptions = this.availableFormats.map((format) => ({
-      label: format.toUpperCase(),
-      value: format,
-    }));
-    this.colorInputValue = this.colorValue;
+    if (options?.defaultFormat) {
+      return options.defaultFormat;
+    }
+
+    if (this.args.model) {
+      const format = detectColorFormat(this.args.model);
+      if (format === 'hex' || format === 'rgb' || format === 'hsl') {
+        return format as WheelColorFormat;
+      }
+    }
+
+    return 'hex';
+  }
+
+  get currentHue(): number {
+    // Sync hue from model when not dragging
+    if (!this.isDragging) {
+      this.syncHueFromModel();
+    }
+    return this.h;
   }
 
   get currentColor(): string {
-    return `hsl(${this.h}, 100%, 50%)`;
+    return `hsl(${this.currentHue}, 100%, 50%)`;
   }
 
-  get colorValue(): string {
-    const rgb = hslToRgb(this.h, 100, 50);
-    switch (this.outputFormat) {
-      case 'hex':
-        return rgbToHex(rgb.r, rgb.g, rgb.b);
-      case 'rgb':
-        return `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
-      case 'hsl':
-        return `hsl(${Math.round(this.h)}, 100%, 50%)`;
-      case 'hsb':
-        return `hsb(${Math.round(this.h)}, 100%, 100%)`;
-      default:
-        return rgbToHex(rgb.r, rgb.g, rgb.b);
+  get thumbPosition() {
+    // Sync hue from model before calculating position
+    this.syncHueFromModel();
+    const angle = ((this.h - 90) * Math.PI) / 180;
+    const radius = (this.innerRadius + this.outerRadius) / 2;
+    return {
+      x: this.centerX + Math.cos(angle) * radius,
+      y: this.centerY + Math.sin(angle) * radius,
+    };
+  }
+
+  // ========== Private Helper Methods ==========
+  private syncHueFromModel() {
+    const modelValue = this.args.model;
+
+    // Only update if model actually changed and we're not dragging
+    if (modelValue === this.lastModelValue || this.isDragging) {
+      return;
+    }
+
+    this.lastModelValue = modelValue;
+
+    if (modelValue) {
+      const rgba = parseCssColor(modelValue);
+      const hsv = rgbaToHsvValues(rgba);
+      this.h = hsv.h;
+    } else {
+      // Default fallback
+      const rgba = parseCssColor('#3b82f6');
+      const hsv = rgbaToHsvValues(rgba);
+      this.h = hsv.h;
     }
   }
 
-  @action
-  setupContainer(element: HTMLElement) {
-    if (this.containerElement && this.containerElement !== element) {
-      this.containerElement.removeEventListener(
-        'pointerdown',
-        this.handleWheelMouseDown,
-      );
+  private isRgbaValid(rgba: RGBA): boolean {
+    return (
+      Number.isFinite(rgba.r) &&
+      Number.isFinite(rgba.g) &&
+      Number.isFinite(rgba.b) &&
+      Number.isFinite(rgba.a)
+    );
+  }
+
+  private saveColor(rgba: RGBA) {
+    if (!this.isRgbaValid(rgba)) {
+      return;
     }
-    this.containerElement = element;
-    element.addEventListener('pointerdown', this.handleWheelMouseDown);
+    const colorValue = rgbaToFormat(rgba, this.outputFormat);
+    this.args.set?.(colorValue);
+    this.lastModelValue = colorValue;
   }
 
-  @action
-  setupWheelCanvas(element: HTMLCanvasElement) {
-    this.wheelCanvasElement = element;
-    requestAnimationFrame(() => this.drawColorWheel());
+  private getHueFromPosition(clientX: number, clientY: number): number | null {
+    if (!this.containerElement) return null;
+    const rect = this.containerElement.getBoundingClientRect();
+    const x = clientX - rect.left - this.centerX;
+    const y = clientY - rect.top - this.centerY;
+
+    const distance = Math.sqrt(x * x + y * y);
+
+    if (distance < this.innerRadius || distance > this.outerRadius) {
+      return null;
+    }
+
+    let angle = (Math.atan2(y, x) * 180) / Math.PI + 90;
+    if (angle < 0) angle += 360;
+
+    return angle;
   }
 
-  drawColorWheel() {
+  private drawColorWheel() {
     if (!this.wheelCanvasElement) return;
     const canvas = this.wheelCanvasElement;
     const ctx = canvas.getContext('2d');
@@ -168,34 +185,7 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
     }
   }
 
-  getHueFromPosition(clientX: number, clientY: number): number | null {
-    if (!this.containerElement) return null;
-    const rect = this.containerElement.getBoundingClientRect();
-    const x = clientX - rect.left - this.centerX;
-    const y = clientY - rect.top - this.centerY;
-
-    const distance = Math.sqrt(x * x + y * y);
-
-    if (distance < this.innerRadius || distance > this.outerRadius) {
-      return null;
-    }
-
-    let angle = (Math.atan2(y, x) * 180) / Math.PI + 90;
-    if (angle < 0) angle += 360;
-
-    return angle;
-  }
-
-  @action
-  handleWheelInteraction(event: PointerEvent) {
-    if (!this.args.canEdit) return;
-    const newHue = this.getHueFromPosition(event.clientX, event.clientY);
-    if (newHue !== null) {
-      this.h = newHue;
-      this.updateColor();
-    }
-  }
-
+  // ========== Private Event Handlers ==========
   private windowPointerMoveHandler = (event: PointerEvent) => {
     if (this.isDragging) {
       this.handleWheelInteraction(event);
@@ -221,6 +211,25 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
     window.removeEventListener('pointerup', this.windowPointerUpHandler);
   }
 
+  // ========== Action Methods ==========
+  @action
+  setupContainer(element: HTMLElement) {
+    if (this.containerElement && this.containerElement !== element) {
+      this.containerElement.removeEventListener(
+        'pointerdown',
+        this.handleWheelMouseDown,
+      );
+    }
+    this.containerElement = element;
+    element.addEventListener('pointerdown', this.handleWheelMouseDown);
+  }
+
+  @action
+  setupWheelCanvas(element: HTMLCanvasElement) {
+    this.wheelCanvasElement = element;
+    requestAnimationFrame(() => this.drawColorWheel());
+  }
+
   @action
   handleWheelMouseDown(event: PointerEvent) {
     if (!this.args.canEdit) return;
@@ -228,9 +237,34 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
     if (newHue !== null) {
       this.h = newHue;
       this.isDragging = true;
-      this.updateColor();
       this.addWindowListeners();
     }
+  }
+
+  @action
+  handleWheelInteraction(event: PointerEvent) {
+    if (!this.args.canEdit) return;
+    const newHue = this.getHueFromPosition(event.clientX, event.clientY);
+    if (newHue !== null) {
+      this.h = newHue;
+    }
+  }
+
+  @action
+  commitColor() {
+    if (!this.args.canEdit) return;
+
+    // Convert current hue to RGB
+    const rgb = hslToRgb(this.h, 100, 50);
+    const rgba: RGBA = { ...rgb, a: 1 };
+    this.saveColor(rgba);
+  }
+
+  // ========== Lifecycle ==========
+  constructor(owner: Owner, args: ColorFieldSignature['Args']) {
+    super(owner, args);
+    // Initialize hue from model - will be synced via getters
+    this.syncHueFromModel();
   }
 
   willDestroy() {
@@ -240,87 +274,6 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
       'pointerdown',
       this.handleWheelMouseDown,
     );
-  }
-
-  @action
-  updateColor() {
-    if (!this.isDragging) {
-      const rgb = hslToRgb(this.h, 100, 50);
-      const rgba = { ...rgb, a: 1 };
-      const colorValue = rgbaToFormat(rgba, this.outputFormat);
-      this.args.set?.(colorValue);
-      this.refreshInputValue();
-    }
-  }
-
-  @action
-  commitColor() {
-    const rgb = hslToRgb(this.h, 100, 50);
-    const rgba = { ...rgb, a: 1 };
-    const colorValue = rgbaToFormat(rgba, this.outputFormat);
-    this.args.set?.(colorValue);
-    this.refreshInputValue();
-  }
-
-  @action
-  handleFormatSelect(option: { label: string; value: ColorFormat } | null) {
-    if (!option) return;
-    this.outputFormat = option.value;
-    this.refreshInputValue();
-  }
-
-  @action
-  handleValueInput(value: string) {
-    this.colorInputValue = value;
-    const trimmed = value.trim();
-    if (!trimmed) return;
-
-    const { rgba, valid } = parseCssColorSafe(trimmed);
-    if (!valid) return;
-
-    const detected = detectColorFormat(trimmed);
-    const targetFormat =
-      detected !== 'css' && this.availableFormats.includes(detected)
-        ? detected
-        : this.outputFormat;
-    if (targetFormat !== this.outputFormat && detected !== 'css') {
-      this.outputFormat = targetFormat;
-    }
-
-    this.setHueFromRgba(rgba);
-    const colorValue = rgbaToFormat(rgba, targetFormat);
-    this.args.set?.(colorValue);
-  }
-
-  @action
-  handleValueFocus() {
-    this.isValueInputFocused = true;
-  }
-
-  @action
-  handleValueBlur() {
-    this.isValueInputFocused = false;
-    this.refreshInputValue();
-  }
-
-  refreshInputValue() {
-    if (!this.isValueInputFocused) {
-      this.colorInputValue = this.colorValue;
-    }
-  }
-
-  setHueFromRgba(rgba: RGBA) {
-    const hsv = rgbaToHsvValues(rgba);
-    this.h = hsv.h;
-  }
-
-  get thumbPosition() {
-    const angle = ((this.h - 90) * Math.PI) / 180;
-    const radius = (this.innerRadius + this.outerRadius) / 2;
-    return {
-      x: this.centerX + Math.cos(angle) * radius,
-      y: this.centerY + Math.sin(angle) * radius,
-    };
   }
 
   <template>
@@ -345,36 +298,6 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
             )
           }}
         ></div>
-      </div>
-
-      <div class='wheel-controls' data-color-canvas-ignore-drag>
-        <div class='control-row'>
-          {{#if this.shouldShowFormatSelector}}
-            <BoxelSelect
-              @placeholder='Format'
-              @options={{this.formatOptions}}
-              @selected={{this.selectedFormatOption}}
-              @onChange={{this.handleFormatSelect}}
-              @disabled={{not @canEdit}}
-              class='mode-select'
-              as |option|
-            >
-              {{option.label}}
-            </BoxelSelect>
-          {{/if}}
-
-          <div class='color-value-field'>
-            <BoxelInput
-              class='color-value-input'
-              @value={{this.colorInputValue}}
-              @placeholder={{this.colorValue}}
-              @onInput={{this.handleValueInput}}
-              @onFocus={{this.handleValueFocus}}
-              @onBlur={{this.handleValueBlur}}
-              @disabled={{not @canEdit}}
-            />
-          </div>
-        </div>
       </div>
     </div>
 
@@ -417,58 +340,6 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
           0 0 0 1px rgba(0, 0, 0, 0.1),
           0 2px 4px rgba(0, 0, 0, 0.2);
         transition: none;
-      }
-
-      .wheel-controls {
-        display: flex;
-        width: 100%;
-        max-width: 420px;
-      }
-
-      .control-row {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        width: 100%;
-        padding: 0.5rem 0.75rem;
-        background: var(--muted, #f9fafb);
-        border-radius: calc(var(--radius, 0.5rem));
-        border: 1px solid var(--border, #e5e7eb);
-      }
-
-      .mode-select {
-        flex: 0 0 7rem;
-        min-width: 7rem;
-      }
-
-      .color-value-field {
-        flex: 1 1 0;
-        min-width: 0;
-      }
-
-      .color-value-input {
-        width: 100%;
-        padding: 0.5rem 1rem;
-        font-family: var(--font-mono, monospace);
-        font-size: 0.875rem;
-        background: var(--muted, #f9fafb);
-        border: 1px solid var(--border, #d1d5db);
-        border-radius: calc(var(--radius, 0.5rem));
-        color: var(--foreground, #0f172a);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .color-value-input:focus {
-        outline: none;
-        border-color: var(--primary, #3b82f6);
-        box-shadow: 0 0 0 3px var(--ring, rgba(59, 130, 246, 0.1));
-        background: var(--background, #ffffff);
-      }
-
-      :deep(.ember-basic-dropdown-content-wormhole-origin) {
-        position: absolute;
       }
     </style>
   </template>

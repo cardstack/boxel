@@ -1,221 +1,222 @@
 import Component from '@glimmer/component';
-import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { concat, fn } from '@ember/helper';
-import { gt, eq, not } from '@cardstack/boxel-ui/helpers';
-import { BoxelSelect, BoxelInput } from '@cardstack/boxel-ui/components';
+import { eq, not } from '@cardstack/boxel-ui/helpers';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { htmlSafe } from '@ember/template';
 
-import type { ColorFieldConfiguration, ColorFormat } from '../util/color-utils';
+import type {
+  RGBA,
+  SliderColorFormat,
+  SliderVariantConfiguration,
+} from '../util/color-utils';
 import {
   detectColorFormat,
   parseCssColor,
   rgbaToFormat,
   rgbaToHslValues,
-  rgbaToHsvValues,
   hslToRgb,
-  hsvToRgb,
-  rgbToHex,
 } from '../util/color-utils';
 import type { ColorFieldSignature } from '../util/color-field-signature';
 
 export default class SliderEdit extends Component<ColorFieldSignature> {
-  @tracked outputFormat: ColorFormat = 'rgb';
+  // ========== Properties ==========
   @tracked isDragging = false;
   @tracked draftColor: string | null = null;
 
-  get currentColor() {
+  // Cache for parsed values to avoid recomputation
+  private cachedRgba: RGBA | null = null;
+  private cachedRgb: { r: number; g: number; b: number } | null = null;
+  private cachedHsl: { h: number; s: number; l: number } | null = null;
+  private lastComputedColor: string | null = null;
+
+  // ========== Getters ==========
+  get currentColor(): string {
     return this.isDragging && this.draftColor
       ? this.draftColor
       : this.args.model || '#3b82f6';
   }
 
-  get availableFormats(): ColorFormat[] {
-    const options = (
-      this.args.configuration as ColorFieldConfiguration & {
-        variant: 'slider';
-      }
-    )?.options;
-    const formats = options?.allowedFormats ?? ['rgb'];
-    // Safety: Prevent empty array from breaking component
-    return formats.length > 0 ? formats : ['rgb'];
+  get availableFormats(): SliderColorFormat[] {
+    return ['rgb', 'hsl'];
   }
 
-  get defaultFormat(): ColorFormat {
-    const options = (
-      this.args.configuration as ColorFieldConfiguration & {
-        variant: 'slider';
-      }
-    )?.options;
+  get defaultFormat(): SliderColorFormat {
+    const options = (this.args.configuration as SliderVariantConfiguration)
+      ?.options;
     return options?.defaultFormat ?? this.availableFormats[0];
   }
 
-  get formatOptions() {
-    return this.availableFormats.map((format) => ({
-      label: format.toUpperCase(),
-      value: format,
-    }));
-  }
+  get outputFormat(): SliderColorFormat {
+    const options = (this.args.configuration as SliderVariantConfiguration)
+      ?.options;
 
-  get selectedFormatOption() {
-    return (
-      this.formatOptions.find((opt) => opt.value === this.outputFormat) ||
-      this.formatOptions[0]
-    );
-  }
-
-  get shouldShowFormatSelector(): boolean {
-    const options = (
-      this.args.configuration as ColorFieldConfiguration & {
-        variant: 'slider';
-      }
-    )?.options;
-    // If explicitly set, use that value
-    if (options?.showFormatSelector !== undefined) {
-      return options.showFormatSelector;
+    if (options?.defaultFormat) {
+      return options.defaultFormat;
     }
-    // Default: show when multiple formats available
-    return this.availableFormats.length > 1;
+
+    if (this.args.model) {
+      const format = detectColorFormat(this.args.model);
+      if (format === 'rgb' || format === 'hsl') {
+        return format as SliderColorFormat;
+      }
+    }
+
+    return 'rgb';
   }
 
-  constructor(owner: Owner, args: any) {
-    super(owner, args);
-    const detectedFormat =
-      typeof this.args.model === 'string'
-        ? detectColorFormat(this.args.model)
-        : null;
-    const fallbackFormat = this.availableFormats.includes(this.defaultFormat)
-      ? this.defaultFormat
-      : this.availableFormats[0];
-    const initialFormat =
-      detectedFormat && this.availableFormats.includes(detectedFormat)
-        ? detectedFormat
-        : fallbackFormat;
-    this.outputFormat = initialFormat;
+  get parsedRgba(): RGBA {
+    const color = this.currentColor;
+    // Cache to avoid recomputation on every access
+    if (this.lastComputedColor === color && this.cachedRgba) {
+      return this.cachedRgba;
+    }
+    this.lastComputedColor = color;
+    this.cachedRgba = parseCssColor(color);
+    // Invalidate other caches
+    this.cachedRgb = null;
+    this.cachedHsl = null;
+    return this.cachedRgba;
   }
 
   get rgb() {
-    const rgba = parseCssColor(this.currentColor);
-    return { r: rgba.r, g: rgba.g, b: rgba.b };
+    if (this.cachedRgb) {
+      return this.cachedRgb;
+    }
+    const { r, g, b } = this.parsedRgba;
+    this.cachedRgb = { r, g, b };
+    return this.cachedRgb;
   }
 
   get hsl() {
-    const rgba = parseCssColor(this.currentColor);
-    return rgbaToHslValues(rgba);
+    if (this.cachedHsl) {
+      return this.cachedHsl;
+    }
+    this.cachedHsl = rgbaToHslValues(this.parsedRgba);
+    return this.cachedHsl;
   }
 
-  get hsb() {
-    const rgba = parseCssColor(this.currentColor);
-    return rgbaToHsvValues(rgba);
+  // ========== Gradient Getters ==========
+  get rGradient(): string {
+    const { g, b } = this.rgb;
+    return `linear-gradient(to right, rgb(0, ${g}, ${b}), rgb(255, ${g}, ${b}))`;
   }
 
-  get rGradient() {
-    return `linear-gradient(to right, rgb(0, ${this.rgb.g}, ${this.rgb.b}), rgb(255, ${this.rgb.g}, ${this.rgb.b}))`;
+  get gGradient(): string {
+    const { r, b } = this.rgb;
+    return `linear-gradient(to right, rgb(${r}, 0, ${b}), rgb(${r}, 255, ${b}))`;
   }
 
-  get gGradient() {
-    return `linear-gradient(to right, rgb(${this.rgb.r}, 0, ${this.rgb.b}), rgb(${this.rgb.r}, 255, ${this.rgb.b}))`;
+  get bGradient(): string {
+    const { r, g } = this.rgb;
+    return `linear-gradient(to right, rgb(${r}, ${g}, 0), rgb(${r}, ${g}, 255))`;
   }
 
-  get bGradient() {
-    return `linear-gradient(to right, rgb(${this.rgb.r}, ${this.rgb.g}, 0), rgb(${this.rgb.r}, ${this.rgb.g}, 255))`;
-  }
-
-  get hGradient() {
+  get hGradient(): string {
     return 'linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%)';
   }
 
-  get sGradient() {
+  get sGradient(): string {
     const h = Math.round(this.hsl.h);
     const l = Math.round(this.hsl.l);
     return `linear-gradient(to right, hsl(${h}, 0%, ${l}%), hsl(${h}, 100%, ${l}%))`;
   }
 
-  get lGradient() {
+  get lGradient(): string {
     const h = Math.round(this.hsl.h);
     const s = Math.round(this.hsl.s);
     return `linear-gradient(to right, hsl(${h}, ${s}%, 0%), hsl(${h}, ${s}%, 50%), hsl(${h}, ${s}%, 100%))`;
   }
 
-  get hsbSGradient() {
-    const h = Math.round(this.hsb.h);
-    return `linear-gradient(to right, #ffffff, hsl(${h}, 100%, 50%))`;
+  // ========== Private Helper Methods ==========
+  private isRgbaValid(rgba: RGBA): boolean {
+    return (
+      Number.isFinite(rgba.r) &&
+      Number.isFinite(rgba.g) &&
+      Number.isFinite(rgba.b) &&
+      Number.isFinite(rgba.a)
+    );
   }
 
-  get vGradient() {
-    const h = Math.round(this.hsb.h);
-    const s = Math.round(this.hsb.s);
-    return `linear-gradient(to right, #000000, hsl(${h}, ${s}%, 50%))`;
+  private saveColor(rgba: RGBA) {
+    if (!this.isRgbaValid(rgba)) {
+      return;
+    }
+    const colorValue = rgbaToFormat(rgba, this.outputFormat);
+    this.args.set?.(colorValue);
+    // Clear cache when saving
+    this.clearCache();
   }
 
-  @action
-  handleFormatSelect(option: { label: string; value: ColorFormat } | null) {
-    if (!option) return;
-    this.outputFormat = option.value;
+  private clearCache() {
+    this.cachedRgba = null;
+    this.cachedRgb = null;
+    this.cachedHsl = null;
+    this.lastComputedColor = null;
   }
 
+  private updateDraftColor(newRgba: RGBA) {
+    // Only update draftColor if it actually changed to avoid unnecessary re-renders
+    const newColor = rgbaToFormat(newRgba, this.outputFormat);
+    if (this.draftColor !== newColor) {
+      this.draftColor = newColor;
+      // Clear cache when draft changes
+      this.clearCache();
+    }
+  }
+
+  // ========== Action Methods ==========
   @action
   handleRgbInput(channel: 'r' | 'g' | 'b', value: string | number) {
     if (!this.args.canEdit) return;
-    this.isDragging = true;
+
     const numericValue = Number(value);
     if (Number.isNaN(numericValue)) return;
-    const newRgb = { ...this.rgb, [channel]: numericValue };
-    this.draftColor = rgbToHex(newRgb.r, newRgb.g, newRgb.b);
+
+    if (!this.isDragging) {
+      this.isDragging = true;
+    }
+
+    const clamped = Math.max(0, Math.min(255, numericValue));
+    const newRgba = { ...this.parsedRgba, [channel]: clamped };
+    this.updateDraftColor(newRgba);
   }
 
   @action
   handleHslInput(channel: 'h' | 's' | 'l', value: string | number) {
     if (!this.args.canEdit) return;
-    this.isDragging = true;
-    const numericValue = Number(value);
-    if (Number.isNaN(numericValue)) return;
-    const newHsl = { ...this.hsl, [channel]: numericValue };
-    const rgb = hslToRgb(newHsl.h, newHsl.s, newHsl.l);
-    this.draftColor = rgbToHex(rgb.r, rgb.g, rgb.b);
-  }
 
-  @action
-  handleHsbInput(channel: 'h' | 's' | 'v', value: string | number) {
-    if (!this.args.canEdit) return;
-    this.isDragging = true;
     const numericValue = Number(value);
     if (Number.isNaN(numericValue)) return;
-    const newHsb = { ...this.hsb, [channel]: numericValue };
-    const rgb = hsvToRgb(newHsb.h, newHsb.s, newHsb.v);
-    this.draftColor = rgbToHex(rgb.r, rgb.g, rgb.b);
+
+    if (!this.isDragging) {
+      this.isDragging = true;
+    }
+
+    const limits = channel === 'h' ? [0, 360] : [0, 100];
+    const clamped = Math.max(limits[0], Math.min(limits[1], numericValue));
+    const newHsl = { ...this.hsl, [channel]: clamped };
+    const rgb = hslToRgb(newHsl.h, newHsl.s, newHsl.l);
+    const newRgba = { ...rgb, a: this.parsedRgba.a };
+    this.updateDraftColor(newRgba);
   }
 
   @action
   handleSliderChange() {
     if (!this.args.canEdit || !this.isDragging) return;
+
     const colorSource = this.draftColor ?? this.currentColor;
     const rgba = parseCssColor(colorSource);
-    const colorValue = rgbaToFormat(rgba, this.outputFormat);
-    this.args.set?.(colorValue);
+    this.saveColor(rgba);
+
     this.isDragging = false;
     this.draftColor = null;
+    this.clearCache();
   }
 
   <template>
     <div class='slider-variant'>
-      {{#if this.shouldShowFormatSelector}}
-        <div class='mode-selector'>
-          <label class='mode-label'>Color Format</label>
-          <BoxelSelect
-            @placeholder='Format'
-            @options={{this.formatOptions}}
-            @selected={{this.selectedFormatOption}}
-            @onChange={{this.handleFormatSelect}}
-            class='mode-select'
-            as |option|
-          >
-            {{option.label}}
-          </BoxelSelect>
-        </div>
-      {{/if}}
-
       <div class='slider-controls'>
         {{#if (eq this.outputFormat 'rgb')}}
           <div class='slider-group'>
@@ -408,110 +409,11 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
               />
             </div>
           </div>
-        {{else if (eq this.outputFormat 'hsb')}}
-          <div class='slider-group'>
-            <div class='slider-header'>
-              <label class='slider-label hue'>
-                <svg
-                  class='label-icon'
-                  viewBox='0 0 24 24'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-width='2'
-                >
-                  <circle cx='12' cy='12' r='10' />
-                  <path d='M12 2v20' />
-                </svg>
-                Hue
-              </label>
-              <span class='slider-value'>{{Math.round this.hsb.h}}°</span>
-            </div>
-            <div class='range-slider-container'>
-              <BoxelInput
-                @type='range'
-                @min='0'
-                @max='360'
-                @value={{Math.round this.hsb.h}}
-                class='range-slider'
-                style={{htmlSafe (concat 'background: ' this.hGradient)}}
-                @onInput={{fn this.handleHsbInput 'h'}}
-                @onChange={{this.handleSliderChange}}
-                @disabled={{not @canEdit}}
-              />
-            </div>
-          </div>
-
-          <div class='slider-group'>
-            <div class='slider-header'>
-              <label class='slider-label saturation'>
-                <svg
-                  class='label-icon'
-                  viewBox='0 0 24 24'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-width='2'
-                >
-                  <circle cx='12' cy='12' r='10' />
-                  <circle cx='12' cy='12' r='6' />
-                </svg>
-                Saturation
-              </label>
-              <span class='slider-value'>{{Math.round this.hsb.s}}%</span>
-            </div>
-            <div class='range-slider-container'>
-              <BoxelInput
-                @type='range'
-                @min='0'
-                @max='100'
-                @value={{Math.round this.hsb.s}}
-                class='range-slider'
-                style={{htmlSafe (concat 'background: ' this.hsbSGradient)}}
-                @onInput={{fn this.handleHsbInput 's'}}
-                @onChange={{this.handleSliderChange}}
-                @disabled={{not @canEdit}}
-              />
-            </div>
-          </div>
-
-          <div class='slider-group'>
-            <div class='slider-header'>
-              <label class='slider-label brightness'>
-                <svg
-                  class='label-icon'
-                  viewBox='0 0 24 24'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-width='2'
-                >
-                  <circle cx='12' cy='12' r='5' />
-                  <path
-                    d='M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24'
-                  />
-                </svg>
-                Brightness
-              </label>
-              <span class='slider-value'>{{Math.round this.hsb.v}}%</span>
-            </div>
-            <div class='range-slider-container'>
-              <BoxelInput
-                @type='range'
-                @min='0'
-                @max='100'
-                @value={{Math.round this.hsb.v}}
-                class='range-slider'
-                style={{htmlSafe (concat 'background: ' this.vGradient)}}
-                @onInput={{fn this.handleHsbInput 'v'}}
-                @onChange={{this.handleSliderChange}}
-                @disabled={{not @canEdit}}
-              />
-            </div>
-          </div>
         {{/if}}
       </div>
     </div>
 
     <style scoped>
-      /* Slider Variant Container - Compact and clean */
       .slider-variant {
         display: flex;
         flex-direction: column;
@@ -522,31 +424,6 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
         border: 1px solid var(--border, #e5e7eb);
       }
 
-      /* Mode Selector - Compact */
-      .mode-selector {
-        display: flex;
-        align-items: center;
-        gap: 0.625rem;
-        padding: 0.5rem 0.75rem;
-        background: var(--muted, #f9fafb);
-        border-radius: calc(var(--radius, 0.5rem));
-        border: 1px solid var(--border, #e5e7eb);
-      }
-
-      .mode-label {
-        font-size: 0.75rem;
-        font-weight: 600;
-        color: var(--muted-foreground, #64748b);
-        text-transform: uppercase;
-        letter-spacing: 0.03em;
-      }
-
-      .mode-select {
-        flex: 1;
-        min-width: 12rem;
-      }
-
-      /* Slider Controls Container - Tight spacing */
       .slider-controls {
         display: flex;
         flex-direction: column;
@@ -557,7 +434,6 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
         border: 1px solid var(--border, #e5e7eb);
       }
 
-      /* Individual Slider Group - Minimal gap */
       .slider-group {
         display: flex;
         flex-direction: column;
@@ -586,7 +462,6 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
         color: var(--muted-foreground, #64748b);
       }
 
-      /* Value Display Badge - Compact */
       .slider-value {
         font-family: var(
           --font-mono,
@@ -602,17 +477,10 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
         text-align: right;
       }
 
-      /* Prevent layout shift when dropdown opens */
-      :deep(.ember-basic-dropdown-content-wormhole-origin) {
-        position: absolute;
-      }
-
-      /* Range Slider Container - Remove positioning constraints */
       .range-slider-container {
         width: 100%;
       }
 
-      /* Range Input Styling - Full control */
       .range-slider {
         -webkit-appearance: none;
         appearance: none;
@@ -626,7 +494,6 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
         padding: 0;
       }
 
-      /* Range Thumb Styling - WebKit (Chrome, Safari, Edge) */
       .range-slider::-webkit-slider-thumb {
         -webkit-appearance: none;
         appearance: none;
@@ -641,7 +508,6 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
           0 2px 4px rgba(0, 0, 0, 0.2);
       }
 
-      /* Range Thumb Styling - Firefox */
       .range-slider::-moz-range-thumb {
         width: 1rem;
         height: 1rem;
@@ -654,7 +520,6 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
           0 2px 4px rgba(0, 0, 0, 0.2);
       }
 
-      /* Disabled state */
       .range-slider:disabled {
         opacity: 0.5;
         cursor: not-allowed;

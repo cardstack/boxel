@@ -1,6 +1,10 @@
 import { parseCssColorWithBrowser } from './parse-css-color';
 
-export type ColorFormat = 'hex' | 'rgb' | 'hsl' | 'hsb' | 'css';
+export type AdvancedColorFormat = 'hex' | 'rgb' | 'hsl' | 'hsb' | 'css';
+export type SliderColorFormat = 'rgb' | 'hsl';
+export type WheelColorFormat = 'hex' | 'rgb' | 'hsl';
+export type ColorFormat = AdvancedColorFormat;
+
 export type ColorVariant =
   | 'standard'
   | 'swatches-picker'
@@ -14,38 +18,25 @@ export interface ColorFieldBaseOptions {
    */
   showRecent?: boolean;
   showContrastChecker?: boolean;
-}
-
-export interface ColorFieldFormatOptions {
   /**
-   * The default/initial output format to use.
+   * Maximum number of recent colors to display in the history.
+   * Defaults to 8 if not specified.
    */
-  defaultFormat?: ColorFormat;
-  /**
-   * List of formats available for user selection.
-   * If only one format is provided, the format selector will be hidden by default.
-   */
-  allowedFormats?: ColorFormat[];
-  /**
-   * Whether to show the format selector dropdown.
-   * Defaults to true when multiple formats are available.
-   * Set to false to lock the format to defaultFormat without showing the dropdown.
-   */
-  showFormatSelector?: boolean;
+  maxRecentHistory?: number;
 }
 
 export interface ColorFieldPaletteOptions {
   paletteColors?: string[];
 }
 
-type AdvancedVariantConfiguration = {
+export type AdvancedVariantConfiguration = {
   variant: 'advanced';
-  options?: ColorFieldBaseOptions & ColorFieldFormatOptions;
+  options?: { defaultFormat?: AdvancedColorFormat };
 };
 
-type WheelVariantConfiguration = {
+export type WheelVariantConfiguration = {
   variant: 'wheel';
-  options?: ColorFieldBaseOptions & ColorFieldFormatOptions;
+  options?: ColorFieldBaseOptions & { defaultFormat?: WheelColorFormat };
 };
 
 type PaletteVariantConfiguration = {
@@ -53,9 +44,9 @@ type PaletteVariantConfiguration = {
   options?: ColorFieldBaseOptions & ColorFieldPaletteOptions;
 };
 
-type SliderVariantConfiguration = {
+export type SliderVariantConfiguration = {
   variant: 'slider';
-  options?: ColorFieldBaseOptions & ColorFieldFormatOptions;
+  options?: ColorFieldBaseOptions & { defaultFormat?: SliderColorFormat };
 };
 
 type StandardVariantConfiguration = {
@@ -281,12 +272,26 @@ export function parseCssColorSafe(color: string | null | undefined): {
   return { rgba: { r: 59, g: 130, b: 246, a: 1 }, valid: false };
 }
 
+export function normalizeColorForHistory(
+  color: string | null | undefined,
+): string | null {
+  const { rgba, valid } = parseCssColorSafe(color);
+  if (!valid) {
+    return null;
+  }
+
+  return rgbaToHex(rgba, rgba.a < 1).toUpperCase();
+}
+
 export function detectColorFormat(input: string): ColorFormat {
   const trimmed = input.trim();
   if (/^#?[a-f\d]{3}([a-f\d]{3})?([a-f\d]{2})?$/i.test(trimmed)) {
     return 'hex';
   }
-  if (/^rgba?\(/i.test(trimmed)) {
+  if (/^rgba\(/i.test(trimmed)) {
+    return 'css';
+  }
+  if (/^rgb\(/i.test(trimmed)) {
     return 'rgb';
   }
   if (/^hsla?\(/i.test(trimmed)) {
