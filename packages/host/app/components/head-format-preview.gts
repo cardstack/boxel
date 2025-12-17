@@ -358,13 +358,13 @@ export default class HeadFormatPreview extends Component<Signature> {
         border: 1px solid var(--head-preview-border);
       }
       .head-preview__grid {
-        display: grid;
-        grid-template-columns: 1.35fr 1fr;
+        display: flex;
+        flex-direction: column;
         gap: var(--boxel-sp-md);
-        align-items: start;
       }
       .social-column {
-        display: grid;
+        display: flex;
+        flex-direction: column;
         gap: var(--boxel-sp-md);
       }
       .preview-card {
@@ -556,13 +556,8 @@ export default class HeadFormatPreview extends Component<Signature> {
         padding: var(--boxel-sp-sm);
         color: var(--boxel-light);
       }
-      @media (max-width: 1100px) {
-        .head-preview__grid {
-          grid-template-columns: 1fr;
-        }
-        .social-card.twitter-card {
-          grid-template-columns: 1fr;
-        }
+      .social-card.twitter-card {
+        grid-template-columns: 1fr;
       }
     </style>
   </template>
