@@ -193,17 +193,11 @@ export class IndexRunner {
     let hasExecutableInvalidation = invalidations.some((url) =>
       hasExecutableExtension(url.href),
     );
-    if (hasExecutableInvalidation) {
-      if (!current.#shouldClearCacheForNextRender) {
-        current.#log.debug(
-          `${jobIdentity(current.#jobInfo)} detected executable invalidation, scheduling loader reset`,
-        );
-      }
-      current.#scheduleClearCacheForNextRender();
-    }
-
     let hrefs = urls.map((u) => u.href);
     for (let invalidation of invalidations) {
+      if (hasExecutableInvalidation) {
+        current.#scheduleClearCacheForNextRender();
+      }
       if (operation === 'delete' && hrefs.includes(invalidation.href)) {
         // file is deleted, there is nothing to visit
       } else {

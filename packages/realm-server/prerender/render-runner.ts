@@ -199,11 +199,14 @@ export class RenderRunner {
     }
 
     if (shortCircuit) {
+      let depsFromError =
+        error?.error?.deps ??
+        (captureOptions.expectedId ? [captureOptions.expectedId] : null);
       let meta: PrerenderMeta = {
         serialized: null,
         searchDoc: null,
         displayNames: null,
-        deps: null,
+        deps: depsFromError ?? null,
         types: null,
       };
       return {
@@ -259,7 +262,7 @@ export class RenderRunner {
         serialized: null,
         searchDoc: null,
         displayNames: null,
-        deps: null,
+        deps: error?.error?.deps ?? null,
         types: null,
       };
     } else {
@@ -591,12 +594,15 @@ export class RenderRunner {
 
   #evictionReason(renderError: RenderError): 'timeout' | 'unusable' | null {
     let status = Number(renderError.error?.status);
-    if (status === 401 || status === 403) {
-      // Auth failures are not signs of a bad page; do not evict on auth errors.
+    if (status === 401 || status === 403 || status === 404) {
+      // Auth failures and not-found responses are not signs of a bad page; do not evict on these.
       return null;
     }
     if (renderError.error?.title === 'Render timeout') {
       return 'timeout';
+    }
+    if (!status || status >= 400) {
+      return 'unusable';
     }
     if ((renderError as any).evict) {
       return 'unusable';

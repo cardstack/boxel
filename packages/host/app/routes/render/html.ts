@@ -1,5 +1,6 @@
 import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
+import type Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
 
 import { isValidFormat } from '@cardstack/runtime-common';
@@ -23,13 +24,16 @@ export interface Model {
 export default class RenderHtmlRoute extends Route<Model> {
   @service declare router: RouterService;
 
-  async model({
-    format,
-    ancestor_level,
-  }: {
-    format: string;
-    ancestor_level: string;
-  }) {
+  async model(
+    {
+      format,
+      ancestor_level,
+    }: {
+      format: string;
+      ancestor_level: string;
+    },
+    transition: Transition,
+  ): Promise<Model> {
     let parentModel = this.modelFor('render') as ParentModel;
     let instance: CardDef;
     if (!parentModel) {
@@ -38,6 +42,10 @@ export default class RenderHtmlRoute extends Route<Model> {
       instance = (globalThis as any).__renderInstance;
     } else {
       instance = parentModel.instance;
+    }
+    if (!instance) {
+      transition.abort();
+      return Promise.reject();
     }
 
     if (!isValidFormat(format)) {

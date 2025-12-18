@@ -1,4 +1,5 @@
 import Route from '@ember/routing/route';
+import type Transition from '@ember/routing/transition';
 
 import { cardTypeIcon } from '@cardstack/runtime-common';
 
@@ -14,7 +15,7 @@ export interface Model {
 }
 
 export default class RenderIconRoute extends Route<Model> {
-  async model() {
+  async model(_params: unknown, transition: Transition): Promise<Model> {
     let parentModel = this.modelFor('render') as ParentModel;
     let instance: CardDef;
     if (!parentModel) {
@@ -23,6 +24,10 @@ export default class RenderIconRoute extends Route<Model> {
       instance = (globalThis as any).__renderInstance;
     } else {
       instance = parentModel.instance;
+    }
+    if (!instance) {
+      transition.abort();
+      return Promise.reject();
     }
     return { Component: cardTypeIcon(instance) };
   }
