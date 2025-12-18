@@ -286,7 +286,7 @@ jobs:
       - name: Start host to serve assets for realm server
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
-          run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
+          run: NODE_OPTIONS="--max_old_space_size=4096" ICONS_URL="http://localhost:4206" pnpm start &
           working-directory: packages/host
           wait-for: 3m
           wait-on: http-get://localhost:4200
@@ -477,7 +477,7 @@ jobs:
       - name: Start host to serve assets for realm server
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
-          run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
+          run: NODE_OPTIONS="--max_old_space_size=4096" ICONS_URL="http://localhost:4206" pnpm start &
           working-directory: packages/host
           wait-for: 3m
           wait-on: http-get://localhost:4200
@@ -576,7 +576,7 @@ jobs:
       - name: Start host to serve assets
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
-          run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
+          run: NODE_OPTIONS="--max_old_space_size=4096" ICONS_URL="http://localhost:4206" pnpm start &
           working-directory: packages/host
           wait-for: 3m
           wait-on: http-get://localhost:4200
