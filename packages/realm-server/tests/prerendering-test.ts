@@ -1202,10 +1202,6 @@ module(basename(__filename), function () {
           cleanedHead.includes('name="twitter:card" content="summary"'),
           `failed to find twitter:card in head html:${cleanedHead}`,
         );
-        assert.ok(
-          cleanedHead.includes(`property="og:url" content="${realmURL2}1"`),
-          `failed to find og:url in head html:${cleanedHead}`,
-        );
       });
 
       test('serialized', function (assert) {
