@@ -12,11 +12,7 @@ import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
-import {
-  BoxelButton,
-  LoadingIndicator,
-  Tooltip,
-} from '@cardstack/boxel-ui/components';
+import { BoxelButton, Tooltip } from '@cardstack/boxel-ui/components';
 import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 
 import OpenSitePopover from '@cardstack/host/components/operator-mode/host-submode/open-site-popover';
@@ -247,21 +243,14 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
       </:topBar>
       <:default as |layout|>
-        {{#if this.ensureHomePageCardTask.isRunning}}
-          <div class='host-submode-loading' data-test-host-submode-loading>
-            <LoadingIndicator @color='var(--boxel-teal)' />
-            <div class='loading-text'>Loading…</div>
-          </div>
-        {{else}}
-          <HostModeContent
-            @primaryCardId={{this.operatorModeStateService.hostModePrimaryCard}}
-            @stackItemCardIds={{this.operatorModeStateService.hostModeStack}}
-            @removeCardFromStack={{this.removeCardFromStack}}
-            @openInteractSubmode={{fn layout.updateSubmode 'interact'}}
-            @viewCard={{this.viewCard}}
-            class='host-submode-content'
-          />
-        {{/if}}
+        <HostModeContent
+          @primaryCardId={{this.operatorModeStateService.hostModePrimaryCard}}
+          @stackItemCardIds={{this.operatorModeStateService.hostModeStack}}
+          @removeCardFromStack={{this.removeCardFromStack}}
+          @openInteractSubmode={{fn layout.updateSubmode 'interact'}}
+          @viewCard={{this.viewCard}}
+          class='host-submode-content'
+        />
       </:default>
     </SubmodeLayout>
 
@@ -274,23 +263,6 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     />
 
     <style scoped>
-      .host-submode-loading {
-        background-color: #686283;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        width: 100%;
-        height: 100vh;
-        gap: var(--boxel-sp-xs);
-      }
-
-      .loading-text {
-        color: var(--boxel-light);
-        font-size: 12px;
-        font-weight: 600;
-      }
-
       .host-submode-layout {
         --host-submode-background: var(--boxel-700);
         --submode-bar-item-border-radius: var(--boxel-border-radius);
