@@ -3,8 +3,6 @@ import { cached, tracked } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
 
-import { or } from '@cardstack/boxel-ui/helpers';
-
 import type { ComponentLike } from '@glint/template';
 
 type HeadPreviewData = {
@@ -209,365 +207,517 @@ export default class HeadFormatPreview extends Component<Signature> {
     return this.headPreviewData.siteName?.charAt(0).toUpperCase() ?? 'P';
   }
 
+  private get previewTitle() {
+    return this.headPreviewData.title;
+  }
+
+  private get previewDescription() {
+    return this.headPreviewData.description;
+  }
+
+  private get previewImage() {
+    return this.headPreviewData.image;
+  }
+
+  private get previewUrl() {
+    return this.headPreviewData.url ?? this.urlBase ?? '';
+  }
+
+  private get displayDomain() {
+    return this.previewUrlParts.host || 'example.com';
+  }
+
+  private get breadcrumbPath() {
+    let path = this.previewUrlParts.path?.replace(/^\//, '') ?? '';
+    if (!path) {
+      return '';
+    }
+    let segments = path.split('/').filter(Boolean);
+    if (segments.length === 0) {
+      return '';
+    }
+    return ` › ${segments.slice(0, 2).join(' › ')}`;
+  }
+
+  private truncate(text: string, maxLength: number) {
+    if (!text) {
+      return '';
+    }
+    if (text.length <= maxLength) {
+      return text;
+    }
+    return `${text.substring(0, maxLength - 3)}...`;
+  }
+
+  private get googleTitle() {
+    return this.truncate(this.previewTitle, 60);
+  }
+
+  private get googleDescription() {
+    return this.truncate(this.previewDescription, 160);
+  }
+
+  private get facebookTitle() {
+    return this.truncate(this.previewTitle, 88);
+  }
+
+  private get facebookDescription() {
+    return this.truncate(this.previewDescription, 300);
+  }
+
+  private get twitterTitle() {
+    return this.truncate(this.previewTitle, 70);
+  }
+
+  private get twitterDescription() {
+    return this.truncate(this.previewDescription, 200);
+  }
+
   <template>
     <div hidden aria-hidden='true' {{this.captureHeadMarkup}}>
       <@renderedCard @displayContainer={{false}} />
     </div>
 
-    <div class='head-preview'>
-      <div class='preview-grid'>
-        <p>The
-          <code>meta</code>
-          tags in the head format template will result in link previews like
-          these:
+    <div class='social-preview-container'>
+      <header class='preview-header'>
+        <h1 class='preview-title'>Social Media Preview</h1>
+        <p class='preview-subtitle'>
+          See how your card appears across platforms
         </p>
+      </header>
 
-        <section class='preview-card search-preview'>
-          <div class='preview-header'>
-            <span class='pill pill-google'>Google</span>
-            <span class='muted'>Search result</span>
-          </div>
-          <div class='search-url'>
-            <div class='favicon'>
-              {{#if this.headPreviewData.favicon}}
-                <img src={{this.headPreviewData.favicon}} alt='' />
-              {{else}}
-                <span>{{this.siteInitial}}</span>
-              {{/if}}
-            </div>
-            <div class='url-text'>
-              <div class='domain'>{{this.previewUrlParts.host}}</div>
-              <div class='path'>{{this.previewUrlParts.path}}</div>
-            </div>
-          </div>
-          <div class='search-title'>{{this.headPreviewData.title}}</div>
-          <div
-            class='search-description'
-          >{{this.headPreviewData.description}}</div>
-        </section>
-
-        <div class='social-column'>
-          <section class='preview-card social facebook-preview'>
-            <div class='preview-header'>
-              <span class='pill pill-facebook'>Facebook</span>
-              <span class='muted'>{{this.headPreviewData.type}}</span>
-            </div>
-            <div class='social-card'>
-              <div class='preview-image'>
-                {{#if this.headPreviewData.image}}
+      <section class='platform-section'>
+        <h2 class='section-title'>
+          <svg class='section-icon google-icon' viewBox='0 0 24 24' fill='none'>
+            <path
+              d='M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z'
+              fill='#4285F4'
+            />
+            <path
+              d='M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z'
+              fill='#34A853'
+            />
+            <path
+              d='M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z'
+              fill='#FBBC05'
+            />
+            <path
+              d='M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z'
+              fill='#EA4335'
+            />
+          </svg>
+          Google Search
+        </h2>
+        <div class='google-preview'>
+          <div class='google-result'>
+            <div class='google-url-row'>
+              <div class='google-favicon'>
+                {{#if this.headPreviewData.favicon}}
                   <img
-                    src={{this.headPreviewData.image}}
-                    alt='Open Graph preview'
+                    src={{this.headPreviewData.favicon}}
+                    alt='Site favicon'
                   />
                 {{else}}
-                  <div class='image-placeholder'>Add og:image</div>
+                  <span>{{this.siteInitial}}</span>
                 {{/if}}
               </div>
-              <div class='social-text'>
-                <div class='domain'>{{this.previewUrlParts.host}}</div>
-                <div class='social-title'>{{this.headPreviewData.title}}</div>
-                <div class='social-description'>
-                  {{this.headPreviewData.description}}
+              <div class='google-url-info'>
+                <div class='google-site-name'>{{this.displayDomain}}</div>
+                <div class='google-breadcrumb'>
+                  {{this.displayDomain}}{{this.breadcrumbPath}}
                 </div>
               </div>
             </div>
-          </section>
+            <h3 class='google-title'>{{this.googleTitle}}</h3>
+            <p class='google-description'>{{this.googleDescription}}</p>
+          </div>
+        </div>
+      </section>
 
-          <section class='preview-card social twitter-preview'>
-            <div class='preview-header'>
-              <span class='pill pill-twitter'>Twitter / X</span>
-              <span class='muted'>{{this.headPreviewData.twitterCard}}</span>
+      <section class='platform-section'>
+        <h2 class='section-title'>
+          <svg
+            class='section-icon facebook-icon'
+            viewBox='0 0 24 24'
+            fill='#1877F2'
+          >
+            <path
+              d='M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z'
+            />
+          </svg>
+          Facebook
+        </h2>
+        <div class='facebook-preview'>
+          <div class='facebook-card'>
+            {{#if this.previewImage}}
+              <div class='facebook-image'>
+                <img src={{this.previewImage}} alt='Preview' />
+              </div>
+            {{/if}}
+            <div class='facebook-content'>
+              <div class='facebook-domain'>{{this.displayDomain}}</div>
+              <div class='facebook-title'>{{this.facebookTitle}}</div>
+              <div
+                class='facebook-description'
+              >{{this.facebookDescription}}</div>
             </div>
-            <div class='social-card twitter-card'>
-              <div class='preview-image compact'>
-                {{#if this.headPreviewData.image}}
-                  <img
-                    src={{this.headPreviewData.image}}
-                    alt='Twitter preview'
+          </div>
+        </div>
+      </section>
+
+      <section class='platform-section'>
+        <h2 class='section-title'>
+          <svg
+            class='section-icon twitter-icon'
+            viewBox='0 0 24 24'
+            fill='#000'
+          >
+            <path
+              d='M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z'
+            />
+          </svg>
+          Twitter / X
+        </h2>
+        <div class='twitter-preview'>
+          <div class='twitter-card {{if this.previewImage "has-image" ""}}'>
+            {{#if this.previewImage}}
+              <div class='twitter-image'>
+                <img src={{this.previewImage}} alt='Preview' />
+              </div>
+            {{/if}}
+            <div class='twitter-content'>
+              <div class='twitter-title'>{{this.twitterTitle}}</div>
+              <div class='twitter-description'>{{this.twitterDescription}}</div>
+              <div class='twitter-domain'>
+                <svg
+                  class='link-icon'
+                  viewBox='0 0 24 24'
+                  fill='none'
+                  stroke='currentColor'
+                  stroke-width='2'
+                >
+                  <path
+                    d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'
                   />
-                {{else}}
-                  <div class='image-placeholder'>Add twitter:image</div>
-                {{/if}}
-              </div>
-              <div class='social-text'>
-                <div class='domain'>{{this.previewUrlParts.host}}</div>
-                <div class='social-title'>{{this.headPreviewData.title}}</div>
-                <div class='social-description'>
-                  {{this.headPreviewData.description}}
-                </div>
+                  <path
+                    d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'
+                  />
+                </svg>
+                {{this.displayDomain}}
               </div>
             </div>
-          </section>
+          </div>
         </div>
-      </div>
-
-      <div class='meta-highlights'>
-        <div class='meta-chip'>
-          <span class='label'>og:title</span>
-          <span class='value'>{{this.headPreviewData.title}}</span>
-        </div>
-        <div class='meta-chip'>
-          <span class='label'>og:description</span>
-          <span class='value'>{{this.headPreviewData.description}}</span>
-        </div>
-        <div class='meta-chip'>
-          <span class='label'>og:url</span>
-          <span class='value'>
-            {{or this.headPreviewData.url this.urlBase 'Not set'}}
-          </span>
-        </div>
-        <div class='meta-chip'>
-          <span class='label'>twitter:card</span>
-          <span class='value'>{{this.headPreviewData.twitterCard}}</span>
-        </div>
-      </div>
+      </section>
 
       {{#if this.headMarkup}}
-        <details class='raw-head'>
-          <summary>View raw head markup</summary>
-          <pre data-test-head-markup>{{this.headMarkup}}</pre>
-        </details>
+        <section class='meta-section'>
+          <h2 class='section-title'>
+            <svg
+              class='section-icon'
+              viewBox='0 0 24 24'
+              fill='none'
+              stroke='currentColor'
+              stroke-width='2'
+            >
+              <rect x='3' y='3' width='18' height='18' rx='2' ry='2' />
+              <line x1='3' y1='9' x2='21' y2='9' />
+              <line x1='9' y1='21' x2='9' y2='9' />
+            </svg>
+            Raw head markup
+          </h2>
+          <div class='meta-code'>
+            <pre data-test-head-markup>{{this.headMarkup}}</pre>
+          </div>
+        </section>
       {{/if}}
     </div>
 
     <style scoped>
-      .head-preview {
-        --head-preview-surface-strong: var(--boxel-purple-700);
-        --head-preview-surface-soft: var(--boxel-purple-800);
-        --head-preview-border: var(--boxel-border-flexible);
-        --head-preview-card-border: var(--boxel-border-card);
-        --head-preview-card-shadow: var(--boxel-deep-box-shadow);
-        --head-preview-muted: var(--boxel-450);
-        --head-preview-path: var(--boxel-500);
-        --head-preview-description: var(--boxel-550);
-        --head-preview-domain: var(--boxel-dark-green);
-        --head-preview-title: var(--boxel-blue);
-        --head-preview-favicon-bg: var(--boxel-light-400);
-        --head-preview-image-bg-start: var(--boxel-light-200);
-        --head-preview-image-bg-end: var(--boxel-light-400);
-        --head-preview-image-border: var(--boxel-light-500);
-        --head-preview-chip-bg: var(--boxel-purple-700);
-        --head-preview-chip-border: var(--boxel-border-flexible);
-        --head-preview-raw-bg: var(--boxel-purple-800);
-        --head-preview-raw-border: var(--boxel-border-flexible);
-        --head-preview-pill-bg: var(--boxel-light-200);
-        --head-preview-pill-border: var(--boxel-light-500);
-        --head-preview-pill-color: var(--boxel-600);
-
-        padding: var(--boxel-sp-lg);
-        padding-bottom: calc(
-          var(--boxel-format-chooser-height) + var(--boxel-sp-lg)
-        );
-        background: linear-gradient(
-          145deg,
-          var(--head-preview-surface-strong),
-          var(--head-preview-surface-soft)
-        );
-        border-radius: var(--boxel-border-radius);
-        border: 1px solid var(--head-preview-border);
-      }
-      .preview-grid {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp);
-        color: var(--boxel-light);
-      }
-      .social-column {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp);
-      }
-      .preview-card {
-        background: var(--boxel-light);
-        color: var(--boxel-dark);
-        border-radius: var(--boxel-border-radius);
-        border: var(--head-preview-card-border);
-        box-shadow: var(--head-preview-card-shadow);
-        padding: var(--boxel-sp-sm);
-      }
-      .preview-header {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        margin-bottom: var(--boxel-sp-sm);
-        font: 600 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-xs);
-        text-transform: uppercase;
-      }
-      .muted {
-        color: var(--head-preview-muted);
-        font-weight: 500;
-      }
-      .pill {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
-        padding: 2px 8px;
-        border-radius: 999px;
-        font: 700 var(--boxel-font-xs);
-        letter-spacing: 0.2px;
-        text-transform: uppercase;
-      }
-      .pill-google {
-        background: var(--head-preview-pill-bg);
-        color: var(--head-preview-pill-color);
-        border: 1px solid var(--head-preview-pill-border);
-      }
-      .pill-facebook {
-        background: var(--head-preview-pill-bg);
-        color: var(--head-preview-pill-color);
-        border: 1px solid var(--head-preview-pill-border);
-      }
-      .pill-twitter {
-        background: var(--head-preview-pill-bg);
-        color: var(--head-preview-pill-color);
-        border: 1px solid var(--head-preview-pill-border);
-      }
-      .search-url {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        margin-bottom: var(--boxel-sp-sm);
-      }
-      .favicon {
-        width: 28px;
-        height: 28px;
-        border-radius: 6px;
-        background: var(--head-preview-favicon-bg);
-        display: grid;
-        place-items: center;
-        font: 700 var(--boxel-font-xs);
-        color: var(--boxel-dark);
-        overflow: hidden;
-      }
-      .favicon img {
+      .social-preview-container {
         width: 100%;
-        height: 100%;
-        object-fit: cover;
-        display: block;
+        padding: var(--boxel-sp-xl);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-2xl);
+        background: var(--boxel-light-100);
+        background-image: radial-gradient(
+          circle,
+          var(--boxel-200) 1px,
+          transparent 1px
+        );
+        background-size: 20px 20px;
+        color: var(--boxel-dark);
+        border-radius: var(--boxel-border-radius-lg);
+        border: var(--boxel-border);
       }
-      .url-text {
-        display: grid;
-        gap: 2px;
+
+      .preview-header {
+        padding: var(--boxel-sp-lg);
+        border-bottom: 2px solid var(--boxel-200);
+        background: var(--boxel-light);
+        border-radius: var(--boxel-border-radius);
+        box-shadow: var(--boxel-box-shadow);
       }
-      .domain {
-        color: var(--head-preview-domain);
-        font: 600 var(--boxel-font-xs);
-        letter-spacing: 0.15px;
+
+      .preview-title {
+        font: 700 var(--boxel-font-lg);
+        margin: 0 0 var(--boxel-sp-xxs);
+        color: var(--boxel-dark);
       }
-      .path {
-        color: var(--head-preview-path);
-        font: 500 var(--boxel-font-xs);
+
+      .preview-subtitle {
+        font: 400 var(--boxel-font-sm);
+        color: var(--boxel-500);
+        margin: 0;
       }
-      .search-title {
-        color: var(--head-preview-title);
-        font: 700 var(--boxel-font-md);
-        margin-bottom: var(--boxel-sp-xxs);
-        line-height: 1.3;
-      }
-      .search-description {
-        color: var(--head-preview-description);
-        font: 500 var(--boxel-font-sm);
-        line-height: 1.5;
-      }
-      .social-card {
-        display: grid;
-        grid-template-columns: 1fr;
+
+      .platform-section,
+      .meta-section {
+        display: flex;
+        flex-direction: column;
         gap: var(--boxel-sp-sm);
       }
-      .social-card.twitter-card {
-        grid-template-columns: 140px 1fr;
+
+      .section-title {
+        display: flex;
         align-items: center;
+        gap: var(--boxel-sp-xs);
+        font: 700 var(--boxel-font-sm);
+        margin: 0 0 var(--boxel-sp-sm);
+        color: var(--boxel-dark);
       }
-      .preview-image {
-        border-radius: var(--boxel-border-radius-sm);
-        background: linear-gradient(
-          135deg,
-          var(--head-preview-image-bg-start),
-          var(--head-preview-image-bg-end)
-        );
-        border: 1px solid var(--head-preview-image-border);
+
+      .section-icon {
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+      }
+
+      .google-preview {
+        background: var(--boxel-light);
+        border: var(--boxel-border);
+        border-radius: 12px;
+        padding: var(--boxel-sp-lg);
+        box-shadow: var(--boxel-box-shadow);
+      }
+
+      .google-result {
+        max-width: 600px;
+      }
+
+      .google-url-row {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+        margin-bottom: var(--boxel-sp-3xs);
+      }
+
+      .google-favicon {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
         overflow: hidden;
-        min-height: 180px;
-        display: grid;
-        place-items: center;
+        background: var(--boxel-light-400);
+        font: 700 var(--boxel-font-xs);
       }
-      .preview-image img {
+
+      .google-favicon img {
         width: 100%;
         height: 100%;
         object-fit: cover;
-        display: block;
       }
-      .preview-image.compact {
-        min-height: 120px;
+
+      .google-url-info {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
       }
-      .image-placeholder {
-        width: 100%;
-        text-align: center;
-        color: var(--head-preview-path);
-        font: 600 var(--boxel-font-sm);
-        padding: var(--boxel-sp-sm);
-      }
-      .social-text {
-        display: grid;
-        gap: 4px;
-      }
-      .social-title {
-        font: 700 var(--boxel-font-sm);
+
+      .google-site-name {
+        font: 600 var(--boxel-font-xs);
         color: var(--boxel-dark);
         line-height: 1.3;
       }
-      .social-description {
-        color: var(--head-preview-description);
-        font: 500 var(--boxel-font-xs);
-        line-height: 1.4;
+
+      .google-breadcrumb {
+        font: 500 var(--boxel-font-xxs, var(--boxel-font-xs));
+        color: var(--boxel-500);
+        line-height: 1.3;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
-      .meta-highlights {
-        margin-top: var(--boxel-sp);
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--boxel-sp-xs);
+
+      .google-title {
+        font-family: Arial, sans-serif;
+        font-size: 20px;
+        font-weight: 400;
+        color: #1a0dab;
+        line-height: 1.3;
+        margin: 0 0 var(--boxel-sp-4xs);
       }
-      .meta-chip {
-        background: var(--head-preview-chip-bg);
-        border: 1px solid var(--head-preview-chip-border);
-        border-radius: var(--boxel-border-radius-sm);
-        padding: 8px 10px;
-        color: var(--boxel-light);
-        display: grid;
-        gap: 4px;
-        min-width: 220px;
+
+      .google-description {
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        color: #4d5156;
+        line-height: 1.58;
+        margin: 0;
       }
-      .meta-chip .label {
-        font: 600 var(--boxel-font-xs);
-        letter-spacing: 0.18px;
+
+      .facebook-preview {
+        background: transparent;
+      }
+
+      .facebook-card {
+        background: var(--boxel-light);
+        border: var(--boxel-border);
+        border-radius: 12px;
+        overflow: hidden;
+        max-width: 550px;
+        box-shadow: var(--boxel-box-shadow);
+      }
+
+      .facebook-image {
+        width: 100%;
+        aspect-ratio: 1.91 / 1;
+        background: var(--boxel-light-400);
+        overflow: hidden;
+      }
+
+      .facebook-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .facebook-content {
+        padding: 12px 14px;
+        background: #f0f2f5;
+        border-top: 1px solid #dddfe2;
+      }
+
+      .facebook-domain {
+        font-size: 12px;
+        color: #65676b;
         text-transform: uppercase;
-        opacity: 0.8;
+        letter-spacing: 0.02em;
+        margin-bottom: 4px;
       }
-      .meta-chip .value {
-        font: 500 var(--boxel-font-sm);
-        word-break: break-word;
+
+      .facebook-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #1c1e21;
+        line-height: 1.25;
+        margin-bottom: 4px;
       }
-      .raw-head {
-        margin-top: var(--boxel-sp);
-        color: var(--boxel-light);
+
+      .facebook-description {
+        font-size: 14px;
+        color: #606770;
+        line-height: 1.35;
       }
-      .raw-head > summary {
-        cursor: pointer;
-        font: 600 var(--boxel-font-xs);
-        letter-spacing: 0.2px;
+
+      .twitter-preview {
+        background: transparent;
       }
-      .raw-head > pre {
-        margin-top: var(--boxel-sp-xs);
+
+      .twitter-card {
+        background: #000;
+        border: 1px solid #2f3336;
+        border-radius: 16px;
+        overflow: hidden;
+        max-width: 550px;
+        box-shadow: var(--boxel-deep-box-shadow);
+      }
+
+      .twitter-image {
+        width: 100%;
+        aspect-ratio: 1.91 / 1;
+        background: #2f3336;
+        overflow: hidden;
+      }
+
+      .twitter-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .twitter-content {
+        padding: 12px;
+      }
+
+      .twitter-title {
+        font-size: 15px;
+        font-weight: 400;
+        color: #e7e9ea;
+        line-height: 1.3;
+        margin-bottom: 2px;
+      }
+
+      .twitter-description {
+        font-size: 15px;
+        color: #71767b;
+        line-height: 1.3;
+        margin-bottom: 6px;
+      }
+
+      .twitter-domain {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 15px;
+        color: #71767b;
+      }
+
+      .link-icon {
+        width: 16px;
+        height: 16px;
+        color: #71767b;
+      }
+
+      .meta-code {
+        background: var(--boxel-light);
+        border: var(--boxel-border);
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp-md);
+        overflow-x: auto;
+        box-shadow: var(--boxel-box-shadow);
+      }
+
+      .meta-code pre {
+        margin: 0;
+        font-family: var(
+          --boxel-monospace-font-family,
+          'IBM Plex Mono',
+          monospace
+        );
+        font-size: var(--boxel-font-xs);
+        line-height: 1.6;
+        color: var(--boxel-dark);
         white-space: pre-wrap;
-        background: var(--head-preview-raw-bg);
-        border: 1px solid var(--head-preview-raw-border);
-        border-radius: var(--boxel-border-radius-sm);
-        padding: var(--boxel-sp-sm);
-        color: var(--boxel-light);
       }
-      .social-card.twitter-card {
-        grid-template-columns: 1fr;
+
+      @media (max-width: 640px) {
+        .social-preview-container {
+          padding: var(--boxel-sp-lg);
+          gap: var(--boxel-sp-xl);
+        }
+
+        .preview-title {
+          font-size: var(--boxel-font-md);
+        }
+
+        .google-title {
+          font-size: 18px;
+        }
       }
     </style>
   </template>

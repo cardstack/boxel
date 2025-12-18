@@ -93,17 +93,21 @@ module('Integration | preview', function (hooks) {
     }
 
     await renderComponent(TestDriver, 'head');
-    await waitFor('.head-preview');
+    await waitFor('.social-preview-container');
     await waitFor('[data-test-head-markup]');
 
     await percySnapshot(assert);
 
-    assert.dom('.search-title').hasText('Preview Title');
-    assert.dom('.search-description').hasText('Preview description');
-    assert.dom('.domain').hasText('example.com');
-    assert.dom('.path').hasText('/post');
+    assert.dom('.google-title').hasText('Preview Title');
+    assert.dom('.google-description').hasText('Preview description');
+    assert.dom('.google-site-name').hasText('example.com');
+    assert.dom('.google-breadcrumb').includesText('example.com');
+    assert.dom('.google-breadcrumb').includesText('post');
     assert
-      .dom('.preview-image img')
+      .dom('.facebook-image img')
+      .hasAttribute('src', 'https://example.com/cover.png');
+    assert
+      .dom('.twitter-image img')
       .hasAttribute('src', 'https://example.com/cover.png');
     assert
       .dom('[data-test-head-markup]')
@@ -152,20 +156,20 @@ module('Integration | preview', function (hooks) {
     }
 
     await renderComponent(TestDriver, 'head');
-    await waitFor('.head-preview');
+    await waitFor('.social-preview-container');
 
-    assert.dom('.search-title').hasText('Fallback Title');
+    assert.dom('.google-title').hasText('Fallback Title');
     assert
-      .dom('.search-description')
+      .dom('.google-description')
       .hasText('Add title and description meta tags to see them here.');
-    assert.dom('.facebook-preview .muted').hasText('article');
-    assert.dom('.twitter-preview .muted').hasText('summary_large_image');
-    assert.dom('.favicon img').doesNotExist();
-    assert.dom('.favicon span').hasText('E');
-    assert.dom('.preview-image img').doesNotExist();
-    assert.dom('.facebook-preview .image-placeholder').hasText('Add og:image');
+    assert.dom('.facebook-domain').hasText('example.com');
+    assert.dom('.twitter-domain').includesText('example.com');
+    assert.dom('.google-favicon img').doesNotExist();
+    assert.dom('.google-favicon span').hasText('E');
+    assert.dom('.facebook-image img').doesNotExist();
+    assert.dom('.twitter-image img').doesNotExist();
     assert
-      .dom('.twitter-preview .image-placeholder')
-      .hasText('Add twitter:image');
+      .dom('[data-test-head-markup]')
+      .includesText('<meta property="og:type" content="article">');
   });
 });
