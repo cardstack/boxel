@@ -9,6 +9,8 @@ import type {
 import { isCardInstance, SupportedMimeType } from '@cardstack/runtime-common';
 import { resolveAdoptedCodeRef } from '@cardstack/runtime-common/code-ref';
 
+import config from '@cardstack/host/config/environment';
+
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -84,11 +86,9 @@ export default class ListingCreateCommand extends HostBaseCommand<
       }
       // Exclude known global/package/icon sources
       if (
-        [
-          'https://cardstack.com',
-          'https://packages',
-          'https://boxel-icons.boxel.ai',
-        ].some((urlStem) => dep.startsWith(urlStem))
+        ['https://cardstack.com', 'https://packages', config.iconsURL].some(
+          (urlStem) => dep.startsWith(urlStem),
+        )
       ) {
         return false;
       }
