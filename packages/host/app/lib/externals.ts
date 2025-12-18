@@ -10,6 +10,7 @@ import * as emberTemplateFactory from '@ember/template-factory';
 import * as glimmerComponent from '@glimmer/component';
 import * as glimmerTracking from '@glimmer/tracking';
 
+import * as viewTransitions from '@cardstack/view-transitions';
 import * as awesomePhoneNumber from 'awesome-phonenumber';
 import * as dateFns from 'date-fns';
 import * as emberAnimated from 'ember-animated';
@@ -105,6 +106,8 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     'ember-animated/transitions/move-over',
     eaTransitionsMoveOver,
   );
+
+  virtualNetwork.shimModule('@cardstack/view-transitions', viewTransitions);
 
   virtualNetwork.shimModule('ember-css-url', cssUrl);
   virtualNetwork.shimModule('@ember/template-factory', emberTemplateFactory);
