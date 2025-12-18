@@ -310,7 +310,7 @@ function shouldRetryFetch(url: URL) {
     return true;
   }
 
-  return url.href.startsWith('https://boxel-icons.boxel.ai/');
+  return url.pathname.startsWith('/@cardstack/boxel-icons/');
 }
 
 async function withRetries(
