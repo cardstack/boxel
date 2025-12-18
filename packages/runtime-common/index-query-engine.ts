@@ -44,6 +44,7 @@ import {
   type Sort,
   type RangeFilter,
   RANGE_OPERATORS,
+  isCardTypeFilter,
 } from './query';
 import type { SerializedError } from './error';
 import type { DBAdapter } from './db';
@@ -654,33 +655,37 @@ export class IndexQueryEngine {
   }
 
   private filterCondition(filter: Filter, onRef: CodeRef): CardExpression {
-    if ('type' in filter) {
-      return this.typeCondition(filter.type);
+    let typeRef = (filter as { type?: CodeRef }).type;
+    let onProp = 'on' in filter ? filter.on : undefined;
+    let on = onProp ?? typeRef ?? onRef;
+    let typeConditionRef = onProp ?? typeRef;
+
+    if (typeRef && Object.keys(filter).length === 1) {
+      return this.typeCondition(typeRef);
     }
 
-    let on = filter.on ?? onRef;
-
     if ('eq' in filter) {
-      return this.eqCondition(filter, on);
+      return this.eqCondition(filter, on, typeConditionRef);
     } else if ('contains' in filter) {
-      return this.containsCondition(filter, on);
+      return this.containsCondition(filter, on, typeConditionRef);
     } else if ('not' in filter) {
-      return this.notCondition(filter, on);
+      return this.notCondition(filter, on, typeConditionRef);
     } else if ('range' in filter) {
-      return this.rangeCondition(filter, on);
+      return this.rangeCondition(filter, on, typeConditionRef);
     } else if ('every' in filter) {
       return every([
-        ...(filter.on ? [this.typeCondition(filter.on)] : []),
-        ...filter.every.map((i) => this.filterCondition(i, filter.on ?? on)),
+        ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
+        ...filter.every.map((i) => this.filterCondition(i, on)),
       ]);
     } else if ('any' in filter) {
       return every([
-        ...(filter.on ? [this.typeCondition(filter.on)] : []),
-        any([
-          ...filter.any.map((i) => this.filterCondition(i, filter.on ?? on)),
-        ]),
+        ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
+        any([...filter.any.map((i) => this.filterCondition(i, on))]),
       ]);
     } else {
+      if (isCardTypeFilter(filter)) {
+        return this.typeCondition(filter.type);
+      }
       assertNever(filter);
     }
     throw new Error(`Unknown filter: ${stringify(filter)}`);
@@ -695,10 +700,14 @@ export class IndexQueryEngine {
     ];
   }
 
-  private eqCondition(filter: EqFilter, on: CodeRef): CardExpression {
-    on = filter.on ?? on;
+  private eqCondition(
+    filter: EqFilter,
+    on: CodeRef,
+    typeConditionRef?: CodeRef,
+  ): CardExpression {
+    let typeRef = typeConditionRef;
     return every([
-      ...(filter.on ? [this.typeCondition(filter.on)] : []),
+      ...(typeRef ? [this.typeCondition(typeRef)] : []),
       ...Object.entries(filter.eq).map(([key, value]) => {
         return this.fieldEqFilter(key, value, on);
       }),
@@ -708,28 +717,37 @@ export class IndexQueryEngine {
   private containsCondition(
     filter: ContainsFilter,
     on: CodeRef,
+    typeConditionRef?: CodeRef,
   ): CardExpression {
-    on = filter.on ?? on;
+    let typeRef = typeConditionRef;
     return every([
-      ...(filter.on ? [this.typeCondition(filter.on)] : []),
+      ...(typeRef ? [this.typeCondition(typeRef)] : []),
       ...Object.entries(filter.contains).map(([key, value]) => {
         return this.fieldLikeFilter(key, value, on);
       }),
     ]);
   }
 
-  private notCondition(filter: NotFilter, on: CodeRef): CardExpression {
-    on = filter.on ?? on;
+  private notCondition(
+    filter: NotFilter,
+    on: CodeRef,
+    typeConditionRef?: CodeRef,
+  ): CardExpression {
+    let typeRef = typeConditionRef;
     return every([
-      ...(filter.on ? [this.typeCondition(filter.on)] : []),
+      ...(typeRef ? [this.typeCondition(typeRef)] : []),
       ['NOT', ...addExplicitParens(this.filterCondition(filter.not, on))],
     ]);
   }
 
-  private rangeCondition(filter: RangeFilter, on: CodeRef): CardExpression {
-    on = filter.on ?? on;
+  private rangeCondition(
+    filter: RangeFilter,
+    on: CodeRef,
+    typeConditionRef?: CodeRef,
+  ): CardExpression {
+    let typeRef = typeConditionRef;
     return every([
-      ...(filter.on ? [this.typeCondition(filter.on)] : []),
+      ...(typeRef ? [this.typeCondition(typeRef)] : []),
       ...Object.entries(filter.range).map(([key, filterValue]) => {
         return this.fieldRangeFilter(key, filterValue as RangeFilterValue, on);
       }),
