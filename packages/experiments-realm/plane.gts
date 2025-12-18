@@ -39,6 +39,7 @@ export const Plane = <template>
       pointer-events: auto;
     }
   </style>
+  {{! template-lint-disable no-invalid-interactive }}
   <div class='scrim' {{on 'click' @scrimClicked}}></div>
   <div class='plane'>
     <div class='content'>

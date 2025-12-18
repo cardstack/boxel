@@ -74,7 +74,7 @@ export class ProductCatalog extends CardDef {
 
         {{#if @model.products.length}}
           <div class='catalog__grid'>
-            {{#each @fields.products as |product index|}}
+            {{#each @fields.products as |Product index|}}
               {{#if (this.isExpanded index)}}
                 <div class='catalog__item'>
                   {{! Placeholder. It's important for ViewTransitions that the
@@ -83,7 +83,7 @@ export class ProductCatalog extends CardDef {
                 </div>
               {{else}}
                 <Tray class='catalog__item' @matchId={{index}}>
-                  <product
+                  <Product
                     @format='fitted'
                     {{on 'click' (fn this.expandProduct index)}}
                   />
