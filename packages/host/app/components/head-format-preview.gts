@@ -186,6 +186,26 @@ export default class HeadFormatPreview extends Component<Signature> {
   }
 
   @cached
+  private get prettyHeadMarkup() {
+    if (!this.headMarkup) {
+      return '';
+    }
+
+    let lines = this.headMarkup.split('\n');
+
+    // Strip any shared indent, then remove any remaining leading whitespace
+    let indents = lines
+      .filter((line) => line.trim().length > 0)
+      .map((line) => line.match(/^\s*/)?.[0].length ?? 0);
+    let minIndent = indents.length ? Math.min(...indents) : 0;
+
+    return lines
+      .map((line) => line.slice(minIndent).trimStart())
+      .join('\n')
+      .trim();
+  }
+
+  @cached
   private get previewUrlParts() {
     let raw = this.headPreviewData.url ?? this.urlBase;
     if (!raw) {
@@ -368,7 +388,7 @@ export default class HeadFormatPreview extends Component<Signature> {
         <section class='meta-section'>
           <h2 class='section-title'>Raw head markup</h2>
           <div class='meta-code'>
-            <pre data-test-head-markup>{{this.headMarkup}}</pre>
+            <pre data-test-head-markup>{{this.prettyHeadMarkup}}</pre>
           </div>
         </section>
       {{/if}}
