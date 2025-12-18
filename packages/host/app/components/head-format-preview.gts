@@ -391,27 +391,27 @@ export default class HeadFormatPreview extends Component<Signature> {
         background-size: 22.5px;
         color: var(--boxel-light);
         border-radius: var(--boxel-border-radius-lg);
-        border: 1px solid var(--boxel-500);
-        box-shadow: var(--boxel-deep-box-shadow);
+        border: var(--boxel-border);
+        box-shadow: var(--boxel-box-shadow);
       }
 
       .preview-header {
         padding: var(--boxel-sp-lg);
-        border-bottom: 2px solid var(--boxel-650);
-        background: var(--boxel-500);
+        border-bottom: 2px solid var(--boxel-200);
+        background: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        box-shadow: var(--boxel-box-shadow);
       }
 
       .preview-title {
         font: 700 var(--boxel-font-lg);
         margin: 0 0 var(--boxel-sp-xxs);
-        color: var(--boxel-light);
+        color: var(--boxel-dark);
       }
 
       .preview-subtitle {
         font: 400 var(--boxel-font-sm);
-        color: var(--boxel-400);
+        color: var(--boxel-500);
         margin: 0;
       }
 
@@ -426,18 +426,18 @@ export default class HeadFormatPreview extends Component<Signature> {
         font: 700 var(--boxel-font-sm);
         margin: 0;
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        background: var(--boxel-500);
-        color: var(--boxel-light);
+        background: var(--boxel-200);
+        color: var(--boxel-dark);
         border-radius: var(--boxel-border-radius);
-        border: 1px solid var(--boxel-600);
+        border: 1px solid var(--boxel-200);
       }
 
       .google-preview {
-        background: var(--boxel-650);
-        border: 1px solid var(--boxel-600);
-        border-radius: var(--boxel-border-radius);
+        background: var(--boxel-light);
+        border: 1px solid #e0e0e0;
+        border-radius: 12px;
         padding: var(--boxel-sp-lg);
-        box-shadow: var(--boxel-box-shadow);
+        box-shadow: 0 2px 8px rgba(0 0 0 / 0.08);
       }
 
       .google-result {
@@ -460,9 +460,9 @@ export default class HeadFormatPreview extends Component<Signature> {
         justify-content: center;
         flex-shrink: 0;
         overflow: hidden;
-        background: var(--boxel-500);
+        background: #f1f3f4;
         font: 700 var(--boxel-font-xs);
-        color: var(--boxel-light);
+        color: #5f6368;
       }
 
       .google-favicon img {
@@ -478,14 +478,17 @@ export default class HeadFormatPreview extends Component<Signature> {
       }
 
       .google-site-name {
-        font: 600 var(--boxel-font-xs);
-        color: var(--boxel-light);
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        font-weight: 400;
+        color: #202124;
         line-height: 1.3;
       }
 
       .google-breadcrumb {
-        font: 500 var(--boxel-font-xxs, var(--boxel-font-xs));
-        color: var(--boxel-400);
+        font-family: Arial, sans-serif;
+        font-size: 12px;
+        color: #4d5156;
         line-height: 1.3;
         white-space: nowrap;
         overflow: hidden;
@@ -493,15 +496,18 @@ export default class HeadFormatPreview extends Component<Signature> {
       }
 
       .google-title {
-        font: 600 var(--boxel-font-md);
-        color: var(--boxel-light);
+        font-family: Arial, sans-serif;
+        font-size: 20px;
+        font-weight: 400;
+        color: #1a0dab;
         line-height: 1.3;
         margin: 0 0 var(--boxel-sp-4xs);
       }
 
       .google-description {
-        font: 500 var(--boxel-font-sm);
-        color: var(--boxel-400);
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        color: #4d5156;
         line-height: 1.58;
         margin: 0;
       }
@@ -511,9 +517,8 @@ export default class HeadFormatPreview extends Component<Signature> {
       }
 
       .facebook-card {
-        background: var(--boxel-650);
-        border: 1px solid var(--boxel-600);
-        border-radius: var(--boxel-border-radius);
+        background: var(--boxel-light);
+        border-radius: 12px;
         overflow: hidden;
         max-width: 550px;
         box-shadow: var(--boxel-box-shadow);
@@ -522,7 +527,7 @@ export default class HeadFormatPreview extends Component<Signature> {
       .facebook-image {
         width: 100%;
         aspect-ratio: 1.91 / 1;
-        background: var(--boxel-500);
+        background: #e4e6eb;
         overflow: hidden;
       }
 
@@ -534,13 +539,13 @@ export default class HeadFormatPreview extends Component<Signature> {
 
       .facebook-content {
         padding: 12px 14px;
-        background: var(--boxel-600);
-        border-top: 1px solid var(--boxel-550);
+        background: #f0f2f5;
+        border-top: 1px solid #dddfe2;
       }
 
       .facebook-domain {
         font-size: 12px;
-        color: var(--boxel-400);
+        color: #65676b;
         text-transform: uppercase;
         letter-spacing: 0.02em;
         margin-bottom: 4px;
@@ -549,14 +554,14 @@ export default class HeadFormatPreview extends Component<Signature> {
       .facebook-title {
         font-size: 16px;
         font-weight: 600;
-        color: var(--boxel-light);
+        color: #1c1e21;
         line-height: 1.25;
         margin-bottom: 4px;
       }
 
       .facebook-description {
         font-size: 14px;
-        color: var(--boxel-400);
+        color: #606770;
         line-height: 1.35;
       }
 
@@ -567,7 +572,7 @@ export default class HeadFormatPreview extends Component<Signature> {
       .twitter-card {
         background: var(--boxel-700);
         border: 1px solid var(--boxel-600);
-        border-radius: var(--boxel-border-radius);
+        border-radius: 16px;
         overflow: hidden;
         max-width: 550px;
         box-shadow: var(--boxel-deep-box-shadow);
@@ -576,7 +581,7 @@ export default class HeadFormatPreview extends Component<Signature> {
       .twitter-image {
         width: 100%;
         aspect-ratio: 1.91 / 1;
-        background: var(--boxel-650);
+        background: #2f3336;
         overflow: hidden;
       }
 
@@ -600,7 +605,7 @@ export default class HeadFormatPreview extends Component<Signature> {
 
       .twitter-description {
         font-size: 15px;
-        color: var(--boxel-400);
+        color: #71767b;
         line-height: 1.3;
         margin-bottom: 6px;
       }
@@ -610,18 +615,18 @@ export default class HeadFormatPreview extends Component<Signature> {
         align-items: center;
         gap: 4px;
         font-size: 15px;
-        color: var(--boxel-400);
+        color: #71767b;
       }
 
       .link-icon {
         width: 16px;
         height: 16px;
-        color: var(--boxel-400);
+        color: #71767b;
       }
 
       .meta-code {
-        background: var(--boxel-650);
-        border: 1px solid var(--boxel-600);
+        background: var(--boxel-light);
+        border: var(--boxel-border);
         border-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp-md);
         overflow-x: auto;
@@ -637,7 +642,7 @@ export default class HeadFormatPreview extends Component<Signature> {
         );
         font-size: var(--boxel-font-xs);
         line-height: 1.6;
-        color: var(--boxel-light);
+        color: var(--boxel-dark);
         white-space: pre-wrap;
       }
 
