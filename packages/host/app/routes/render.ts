@@ -575,11 +575,7 @@ export default class RenderRoute extends Route<Model> {
       cardType,
       context,
     );
-    let { container, errorElement } = this.#ensurePrerenderElements();
-    if (container) {
-      container.dataset.prerenderStatus = 'error';
-    }
-    this.#writePrerenderError(errorElement, serializedError);
+    this.#applyErrorMetadata(context, serializedError);
     let signature = this.#makeErrorSignature(serializedError, context);
     if (signature === this.lastRenderErrorSignature) {
       return;
@@ -590,7 +586,6 @@ export default class RenderRoute extends Route<Model> {
       cardId: context.cardId,
       nonce: context.nonce,
     });
-    this.#applyErrorMetadata(context);
     this.#transitionToErrorRoute(transition);
   }
 
@@ -739,13 +734,14 @@ export default class RenderRoute extends Route<Model> {
     }
   }
 
-  #applyErrorMetadata(context: { cardId?: string; nonce?: string }) {
+  #applyErrorMetadata(
+    context: { cardId?: string; nonce?: string },
+    serializedError?: string,
+  ) {
     if (typeof document === 'undefined') {
       return;
     }
-    let container = document.querySelector(
-      '[data-prerender]',
-    ) as HTMLElement | null;
+    let { container, errorElement } = this.#ensurePrerenderElements();
     if (container) {
       container.dataset.prerenderStatus = 'error';
       if (context.cardId) {
@@ -755,15 +751,15 @@ export default class RenderRoute extends Route<Model> {
         container.dataset.prerenderNonce = context.nonce;
       }
     }
-    let errorElement = document.querySelector(
-      '[data-prerender-error]',
-    ) as HTMLElement | null;
     if (errorElement) {
       if (context.cardId) {
         errorElement.dataset.prerenderId = context.cardId;
       }
       if (context.nonce) {
         errorElement.dataset.prerenderNonce = context.nonce;
+      }
+      if (serializedError) {
+        this.#writePrerenderError(errorElement, serializedError);
       }
     }
   }
