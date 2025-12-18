@@ -77,6 +77,7 @@ jobs:
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: dbus-run-session -- pnpm test-with-percy
         env:
+          ICONS_URL: http://localhost:4206
           PERCY_GZIP: true
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
           PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
