@@ -8,6 +8,7 @@
     "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/local-types": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
+    "@cardstack/view-transitions": "catalog:",
     "@types/lodash": "catalog:",
     "ember-animated": "catalog:",
     "chess.js": "catalog:",
