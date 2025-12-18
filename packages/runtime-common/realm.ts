@@ -3851,7 +3851,10 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
   if (!parsed) {
     return false;
   }
-  if (parsed.hostname === 'boxel-icons.boxel.ai') {
+  if (
+    parsed.hostname === 'boxel-icons.boxel.ai' ||
+    parsed.pathname.startsWith('/@cardstack/boxel-icons/')
+  ) {
     return true;
   }
   if (
