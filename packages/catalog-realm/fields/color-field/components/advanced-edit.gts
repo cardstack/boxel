@@ -396,7 +396,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
       if (valid) {
         this.updateHSVFromRgba(rgba);
         // Save color immediately on Enter - triggers immediate color change
-    this.saveColor(rgba, format);
+        this.saveColor(rgba, format);
         this.syncInputValues();
         // Redraw canvas after updating HSV
         requestAnimationFrame(() => {
@@ -438,7 +438,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
     if (valid) {
       this.updateHSVFromRgba(rgba);
       // Save color immediately on blur - triggers immediate color change
-                    this.saveColor(rgba, 'hex');
+      this.saveColor(rgba, 'hex');
       this.syncInputValues();
       // Redraw canvas after updating HSV
       requestAnimationFrame(() => {
@@ -458,7 +458,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
     if (valid) {
       this.updateHSVFromRgba(rgba);
       // Save color immediately on blur - triggers immediate color change
-                    this.saveColor(rgba, this.outputFormat);
+      this.saveColor(rgba, this.outputFormat);
       this.syncInputValues();
       // Redraw canvas after updating HSV
       requestAnimationFrame(() => {
@@ -478,7 +478,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
     if (valid) {
       this.updateHSVFromRgba(rgba);
       // Save color immediately on blur - triggers immediate color change
-                    this.saveColor(rgba, this.outputFormat);
+      this.saveColor(rgba, this.outputFormat);
       this.syncInputValues();
       // Redraw canvas after updating HSV
       requestAnimationFrame(() => {
@@ -504,7 +504,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
         const newRgba = { ...pickedRgba, a: this.rgba.a };
         this.updateHSVFromRgba(newRgba);
         // Save color - triggers color change
-      this.saveColor(newRgba, 'hex');
+        this.saveColor(newRgba, 'hex');
         this.syncInputValues();
         requestAnimationFrame(() => {
           this.drawSVCanvas();
@@ -600,80 +600,55 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
         {{/if}}
 
         {{#if (eq this.outputFormat 'css')}}
-          <div class='input-row'>
-            <label class='field full'>
-              <span>CSS Color</span>
-              <BoxelInput
-                class='color-css-input'
-                @value={{this.cssInputValue}}
-                @placeholder='e.g., blue, rgb(255,0,0), hsl(120,100%,50%)'
-                @onInput={{this.handleCssInput}}
-                @onBlur={{this.handleCssBlur}}
-                @onKeyPress={{this.handleCssKeyPress}}
-                @disabled={{not @canEdit}}
-              />
-            </label>
-          </div>
+          <BoxelInput
+            class='color-css-input'
+            @value={{this.cssInputValue}}
+            @placeholder='e.g., blue, rgb(255,0,0), hsl(120,100%,50%)'
+            @onInput={{this.handleCssInput}}
+            @onBlur={{this.handleCssBlur}}
+            @onKeyPress={{this.handleCssKeyPress}}
+            @disabled={{not @canEdit}}
+          />
         {{else if (eq this.outputFormat 'rgb')}}
-          <div class='input-row'>
-            <label class='field full'>
-              <span>RGB Color</span>
-              <BoxelInput
-                class='color-value-input'
-                @value={{this.inputValue}}
-                @placeholder='rgb(255, 255, 255)'
-                @onInput={{this.handleColorInput}}
-                @onBlur={{this.handleColorBlur}}
-                @onKeyPress={{this.handleColorKeyPress}}
-                @disabled={{not @canEdit}}
-              />
-            </label>
-          </div>
+          <BoxelInput
+            class='color-value-input'
+            @value={{this.inputValue}}
+            @placeholder='rgb(255, 255, 255)'
+            @onInput={{this.handleColorInput}}
+            @onBlur={{this.handleColorBlur}}
+            @onKeyPress={{this.handleColorKeyPress}}
+            @disabled={{not @canEdit}}
+          />
         {{else if (eq this.outputFormat 'hsl')}}
-          <div class='input-row'>
-            <label class='field full'>
-              <span>HSL Color</span>
-              <BoxelInput
-                class='color-value-input'
-                @value={{this.inputValue}}
-                @placeholder='hsl(0, 100%, 50%)'
-                @onInput={{this.handleColorInput}}
-                @onBlur={{this.handleColorBlur}}
-                @onKeyPress={{this.handleColorKeyPress}}
-                @disabled={{not @canEdit}}
-              />
-            </label>
-          </div>
+          <BoxelInput
+            class='color-value-input'
+            @value={{this.inputValue}}
+            @placeholder='hsl(0, 100%, 50%)'
+            @onInput={{this.handleColorInput}}
+            @onBlur={{this.handleColorBlur}}
+            @onKeyPress={{this.handleColorKeyPress}}
+            @disabled={{not @canEdit}}
+          />
         {{else if (eq this.outputFormat 'hsb')}}
-          <div class='input-row'>
-            <label class='field full'>
-              <span>HSB Color</span>
-              <BoxelInput
-                class='color-value-input'
-                @value={{this.inputValue}}
-                @placeholder='hsb(0, 100%, 100%)'
-                @onInput={{this.handleColorInput}}
-                @onBlur={{this.handleColorBlur}}
-                @onKeyPress={{this.handleColorKeyPress}}
-                @disabled={{not @canEdit}}
-              />
-            </label>
-          </div>
+          <BoxelInput
+            class='color-value-input'
+            @value={{this.inputValue}}
+            @placeholder='hsb(0, 100%, 100%)'
+            @onInput={{this.handleColorInput}}
+            @onBlur={{this.handleColorBlur}}
+            @onKeyPress={{this.handleColorKeyPress}}
+            @disabled={{not @canEdit}}
+          />
         {{else}}
-          <div class='input-row'>
-            <label class='field full'>
-              <span>HEX</span>
-              <BoxelInput
-                class='color-hex-input'
-                @value={{this.hexInputValue}}
-                @placeholder='#3b82f6'
-                @onInput={{this.handleHexInput}}
-                @onBlur={{this.handleHexBlur}}
-                @onKeyPress={{this.handleHexKeyPress}}
-                @disabled={{not @canEdit}}
-              />
-            </label>
-          </div>
+          <BoxelInput
+            class='color-hex-input'
+            @value={{this.hexInputValue}}
+            @placeholder='#3b82f6'
+            @onInput={{this.handleHexInput}}
+            @onBlur={{this.handleHexBlur}}
+            @onKeyPress={{this.handleHexKeyPress}}
+            @disabled={{not @canEdit}}
+          />
         {{/if}}
       </div>
     </div>
@@ -683,10 +658,12 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
         display: flex;
         flex-direction: column;
         gap: 0.75rem;
-        padding: 1rem;
-        background: var(--background, #ffffff);
-        border-radius: calc(var(--radius, 0.5rem) * 1.5);
-        border: 1px solid var(--border, #e5e7eb);
+        padding: 0.5rem;
+        border: 1px solid var(--border, #e2e8f0);
+        border-radius: var(--radius, 0.5rem);
+        transition: background 0.2s;
+        background: var(--card, #ffffff);
+        box-shadow: var(--shadow-md, 0 4px 6px -1px rgb(0 0 0 / 0.1));
       }
 
       .canvas-container {
@@ -722,7 +699,6 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
 
       .hue-slider-container {
         width: 100%;
-        margin-bottom: 1rem;
       }
 
       .hue-slider {
@@ -778,44 +754,11 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
         display: flex;
         gap: 0.5rem;
         align-items: center;
-        padding: 0.5rem 0.75rem;
-        background: var(--muted, #f9fafb);
-        border-radius: calc(var(--radius, 0.5rem));
-        border: 1px solid var(--border, #e5e7eb);
       }
 
       .mode-select {
         flex: 1;
         min-width: 9rem;
-      }
-
-      .input-row {
-        display: flex;
-        gap: 0.5rem;
-        width: 100%;
-        padding: 0.625rem 0.75rem;
-        background: var(--muted, #f9fafb);
-        border-radius: calc(var(--radius, 0.5rem));
-        border: 1px solid var(--border, #e5e7eb);
-      }
-
-      .field {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-        flex: 1;
-      }
-
-      .field.full {
-        width: 100%;
-      }
-
-      .field span {
-        font-size: 0.6875rem;
-        font-weight: 600;
-        color: var(--muted-foreground, #64748b);
-        text-transform: uppercase;
-        letter-spacing: 0.03em;
       }
 
       .eyedropper-button {
@@ -832,9 +775,9 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
       }
 
       .eyedropper-button:hover:not(:disabled) {
-        background: var(--accent, #e0e7ff);
-        border-color: var(--primary, #3b82f6);
-        color: var(--primary, #3b82f6);
+        background: var(--accent, #f0f9ff);
+        border-color: var(--ring, #3b82f6);
+        color: var(--accent-foreground, #1e293b);
         transform: translateY(-1px);
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
       }

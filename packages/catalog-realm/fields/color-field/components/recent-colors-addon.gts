@@ -151,11 +151,11 @@ export default class RecentColorsAddon extends Component<RecentColorsSignature> 
       }
 
       .recent-color-swatch.active {
-        border-color: var(--ring, #3b82f6);
+        border-color: var(--ring, #cbd5e1);
         border-width: 2px;
         box-shadow:
           0 0 0 1px rgba(0, 0, 0, 0.1),
-          0 0 0 2px var(--ring, #3b82f6);
+          0 0 0 2px var(--ring, #cbd5e1);
         z-index: 2;
       }
 

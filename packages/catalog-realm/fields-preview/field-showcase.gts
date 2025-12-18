@@ -90,6 +90,112 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
     navigator.clipboard.writeText(this.configCode);
   }
 
+  @action
+  copyVariantCode(code: string) {
+    navigator.clipboard.writeText(code);
+  }
+
+  get colorFieldVariants() {
+    return [
+      {
+        title: 'Standard',
+        description: 'Default color picker',
+        copyCode: `@field myColor = contains(ColorField);`,
+        displayCode: `@field myColor = contains(ColorField);`,
+        fieldName: 'playgroundColor',
+      },
+      {
+        title: 'Wheel Picker',
+        description: 'Color wheel variant',
+        copyCode: `@field myColor = contains(ColorField, {
+  configuration: { variant: 'wheel' }
+});`,
+        displayCode: `@field myColor = contains(ColorField, {
+  configuration: { variant: 'wheel' }
+});`,
+        fieldName: 'colorWheel',
+      },
+      {
+        title: 'Slider (RGB)',
+        description: 'Slider with RGB format',
+        copyCode: `@field myColor = contains(ColorField, {
+  configuration: {
+    variant: 'slider',
+    options: { defaultFormat: 'rgb' }
+  }
+});`,
+        displayCode: `@field myColor = contains(ColorField, {
+  configuration: {
+    variant: 'slider',
+    options: { defaultFormat: 'rgb' }
+  }
+});`,
+        fieldName: 'colorSliderRgb',
+      },
+      {
+        title: 'Slider (HSL)',
+        description: 'Slider with HSL format',
+        copyCode: `@field myColor = contains(ColorField, {
+  configuration: {
+    variant: 'slider',
+    options: { defaultFormat: 'hsl' }
+  }
+});`,
+        displayCode: `@field myColor = contains(ColorField, {
+  configuration: {
+    variant: 'slider',
+    options: { defaultFormat: 'hsl' }
+  }
+});`,
+        fieldName: 'colorSliderHsl',
+      },
+      {
+        title: 'Swatches Picker',
+        description: 'Color swatches picker variant',
+        copyCode: `@field myColor = contains(ColorField, {
+  configuration: { variant: 'swatches-picker' }
+});`,
+        displayCode: `@field myColor = contains(ColorField, {
+  configuration: { variant: 'swatches-picker' }
+});`,
+        fieldName: 'colorSwatchesPicker',
+      },
+      {
+        title: 'Advanced',
+        description: 'Advanced color picker with all format options',
+        copyCode: `@field myColor = contains(ColorField, {
+  configuration: { variant: 'advanced' }
+});`,
+        displayCode: `@field myColor = contains(ColorField, {
+  configuration: { variant: 'advanced' }
+});`,
+        fieldName: 'colorAdvanced',
+      },
+      {
+        title: 'with Recent Colors',
+        description: 'Shows recent color history',
+        copyCode: `@field myColor = contains(ColorField, {
+  configuration: { options: { showRecent: true } }
+});`,
+        displayCode: `@field myColor = contains(ColorField, {
+  configuration: { options: { showRecent: true } }
+});`,
+        fieldName: 'colorShowRecent',
+      },
+      {
+        title: 'with Contrast Checker',
+        description: 'Shows WCAG contrast checker',
+        copyCode: `@field myColor = contains(ColorField, {
+  configuration: { options: { showContrastChecker: true } }
+});`,
+        displayCode: `@field myColor = contains(ColorField, {
+  configuration: { options: { showContrastChecker: true } }
+});`,
+        fieldName: 'colorShowContrast',
+      },
+    ];
+  }
+
   get isGroupExpanded() {
     return (groupName: string): boolean => {
       return this.expandedGroups?.has(groupName) ?? false;
@@ -398,63 +504,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       }>
     > = {
       audio: [],
-      color: [
-        {
-          name: 'Standard',
-          description: 'Default color picker',
-          config: '@field myColor = contains(ColorField);',
-          fieldName: 'playgroundColor',
-        },
-        {
-          name: 'Wheel Picker',
-          description: 'Color wheel variant',
-          config:
-            '@field myColor = contains(ColorField, { configuration: { variant: "wheel" } });',
-          fieldName: 'colorWheel',
-        },
-        {
-          name: 'Slider (RGB)',
-          description: 'Slider with RGB format',
-          config:
-            '@field myColor = contains(ColorField, { configuration: { variant: "slider", options: { defaultFormat: "rgb" } } });',
-          fieldName: 'colorSliderRgb',
-        },
-        {
-          name: 'Slider (HSL)',
-          description: 'Slider with HSL format',
-          config:
-            '@field myColor = contains(ColorField, { configuration: { variant: "slider", options: { defaultFormat: "hsl" } } });',
-          fieldName: 'colorSliderHsl',
-        },
-        {
-          name: 'Swatches Picker',
-          description: 'Color swatches picker variant',
-          config:
-            '@field myColor = contains(ColorField, { configuration: { variant: "swatches-picker" } });',
-          fieldName: 'colorSwatchesPicker',
-        },
-        {
-          name: 'Advanced',
-          description: 'Advanced color picker with all format options',
-          config:
-            '@field myColor = contains(ColorField, { configuration: { variant: "advanced" } });',
-          fieldName: 'colorAdvanced',
-        },
-        {
-          name: 'with Recent Colors',
-          description: 'Shows recent color history',
-          config:
-            '@field myColor = contains(ColorField, { configuration: { options: { showRecent: true } } });',
-          fieldName: 'colorShowRecent',
-        },
-        {
-          name: 'with Contrast Checker',
-          description: 'Shows WCAG contrast checker',
-          config:
-            '@field myColor = contains(ColorField, { configuration: { options: { showContrastChecker: true } } });',
-          fieldName: 'colorShowContrast',
-        },
-      ],
+      color: [],
       date: [
         {
           name: 'Compact Date',
@@ -611,7 +661,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
   }
 
   get hasAvailableOptions() {
-    return !!this.args.model && this.availableOptions.length > 0;
+    return !!this.args.model && (this.availableOptions?.length ?? 0) > 0;
   }
 
   get availableOptions() {
@@ -1528,43 +1578,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
       },
     };
 
-    const baseOptions = optionsMap[fieldType]?.[presentation] || [];
-
-    if (fieldType === 'color') {
-      const existingKeys = new Set(baseOptions.map((option) => option.key));
-      const extraOptions: Array<{
-        key: string;
-        label: string;
-        type: 'number' | 'text' | 'boolean';
-        description: string;
-        default: string;
-      }> = [
-        {
-          key: 'defaultFormat',
-          label: 'Default Format',
-          type: 'text',
-          description:
-            'Color format to use (slider defaults to "rgb", wheel/advanced default to "hex")',
-          default: '(depends on variant)',
-        },
-        {
-          key: 'paletteColors',
-          label: 'Palette Colors (Swatches-picker)',
-          type: 'text',
-          description:
-            'Array of predefined swatches to display in the picker (only swatches-picker variant uses this)',
-          default: '(uses component default palette)',
-        },
-      ];
-
-      for (const option of extraOptions) {
-        if (!existingKeys.has(option.key)) {
-          baseOptions.push(option);
-        }
-      }
-    }
-
-    return baseOptions;
+    return optionsMap[fieldType]?.[presentation] || [];
   }
 
   get formatOptions() {
@@ -2054,6 +2068,123 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
           </section>
         {{/if}}
 
+        {{! Collapsible Examples & Variants Section }}
+        {{#if (gt this.examplesForCurrentField.length 0)}}
+          <section class='collapsible-section'>
+            <Button
+              @kind='text-only'
+              class='section-toggle'
+              {{on 'click' (fn this.toggleSection 'examples')}}
+            >
+              <ChevronDownIcon
+                class='section-chevron
+                  {{if (this.isSectionExpanded "examples") "expanded"}}'
+                width='20'
+                height='20'
+              />
+              <span class='section-title'>
+                Examples & Variants
+                <span
+                  class='count-badge'
+                >{{this.examplesForCurrentField.length}}</span>
+              </span>
+            </Button>
+
+            {{#if (this.isSectionExpanded 'examples')}}
+              <div class='section-content'>
+                <div class='examples-list'>
+                  {{#each this.examplesForCurrentField as |example|}}
+                    <div class='example-item'>
+                      <div class='example-header'>
+                        <h4 class='example-name'>{{example.name}}</h4>
+                        <p
+                          class='example-description'
+                        >{{example.description}}</p>
+                      </div>
+
+                      <div class='example-code'>
+                        <pre><code>{{example.config}}</code></pre>
+                      </div>
+
+                      <div class='example-demo'>
+                        {{#if (eq example.fieldName 'appointmentDateCompact')}}
+                          <@fields.appointmentDateCompact
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if
+                          (eq example.fieldName 'appointmentDateCustom')
+                        }}
+                          <@fields.appointmentDateCustom
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if (eq example.fieldName 'meetingTime24Hour')}}
+                          <@fields.meetingTime24Hour
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if (eq example.fieldName 'meetingTimeLong')}}
+                          <@fields.meetingTimeLong
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if (eq example.fieldName 'eventDateTimeShort')}}
+                          <@fields.eventDateTimeShort
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if (eq example.fieldName 'eventDateTimeCustom')}}
+                          <@fields.eventDateTimeCustom
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if (eq example.fieldName 'projectDurationFull')}}
+                          <@fields.projectDurationFull
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if (eq example.fieldName 'taskDurationDayTime')}}
+                          <@fields.taskDurationDayTime
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if
+                          (eq example.fieldName 'contractDurationYearMonth')
+                        }}
+                          <@fields.contractDurationYearMonth
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if (eq example.fieldName 'imageBrowse')}}
+                          <@fields.imageBrowse
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if (eq example.fieldName 'imageAvatar')}}
+                          <@fields.imageAvatar
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if (eq example.fieldName 'imageDropzone')}}
+                          <@fields.imageDropzone
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if (eq example.fieldName 'multipleImageList')}}
+                          <@fields.multipleImageList
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if
+                          (eq example.fieldName 'multipleImageGallery')
+                        }}
+                          <@fields.multipleImageGallery
+                            @format={{this.selectedFormat}}
+                          />
+                        {{else if
+                          (eq example.fieldName 'multipleImageDropzone')
+                        }}
+                          <@fields.multipleImageDropzone
+                            @format={{this.selectedFormat}}
+                          />
+                        {{/if}}
+                      </div>
+                    </div>
+                  {{/each}}
+                </div>
+              </div>
+            {{/if}}
+          </section>
+        {{/if}}
+
         {{! Collapsible Available Options Section }}
         {{#if this.hasAvailableOptions}}
           <section class='collapsible-section'>
@@ -2120,123 +2251,52 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         {{! Variants Display Section - Only for ColorField }}
         {{#if (eq @model.playgroundFieldType 'color')}}
           <section class='variants-display-section'>
-            <h2 class='variants-section-title'>ColorField Variants</h2>
+            <h2 class='variants-section-title'>Variants Demo</h2>
 
-            <div class='variant-block'>
-              <div class='variant-block-header'>
-                <h3>Standard</h3>
-                <p>Default color picker</p>
+            {{#each this.colorFieldVariants as |variant|}}
+              <div class='variant-block'>
+                <div class='variant-block-header'>
+                  <h3>{{variant.title}}</h3>
+                  <p>{{variant.description}}</p>
+                </div>
+                <div class='code-wrapper'>
+                  <div class='code-header-bar'>
+                    <span class='code-title'>Field Definition</span>
+                    <Button
+                      @kind='secondary-light'
+                      @size='extra-small'
+                      class='copy-button'
+                      {{on 'click' (fn this.copyVariantCode variant.copyCode)}}
+                      title='Copy to clipboard'
+                    >
+                      <CopyIcon width='14' height='14' />
+                      Copy
+                    </Button>
+                  </div>
+                  <pre class='code-content'><code
+                    >{{variant.displayCode}}</code></pre>
+                </div>
+                <div class='variant-demo'>
+                  {{#if (eq variant.fieldName 'playgroundColor')}}
+                    <@fields.playgroundColor @format='edit' />
+                  {{else if (eq variant.fieldName 'colorWheel')}}
+                    <@fields.colorWheel @format='edit' />
+                  {{else if (eq variant.fieldName 'colorSliderRgb')}}
+                    <@fields.colorSliderRgb @format='edit' />
+                  {{else if (eq variant.fieldName 'colorSliderHsl')}}
+                    <@fields.colorSliderHsl @format='edit' />
+                  {{else if (eq variant.fieldName 'colorSwatchesPicker')}}
+                    <@fields.colorSwatchesPicker @format='edit' />
+                  {{else if (eq variant.fieldName 'colorAdvanced')}}
+                    <@fields.colorAdvanced @format='edit' />
+                  {{else if (eq variant.fieldName 'colorShowRecent')}}
+                    <@fields.colorShowRecent @format='edit' />
+                  {{else if (eq variant.fieldName 'colorShowContrast')}}
+                    <@fields.colorShowContrast @format='edit' />
+                  {{/if}}
+                </div>
               </div>
-              <div class='variant-code'>
-                <pre><code>@field myColor = contains(ColorField);</code></pre>
-              </div>
-              <div class='variant-demo'>
-                <@fields.playgroundColor @format='edit' />
-              </div>
-            </div>
-
-            <div class='variant-block'>
-              <div class='variant-block-header'>
-                <h3>Wheel Picker</h3>
-                <p>Color wheel variant</p>
-              </div>
-              <div class='variant-code'>
-                <pre><code>@field myColor = contains(ColorField, &#123;
-                    configuration: &#123; variant: 'wheel' &#125; &#125;);</code></pre>
-              </div>
-              <div class='variant-demo'>
-                <@fields.colorWheel @format='edit' />
-              </div>
-            </div>
-
-            <div class='variant-block'>
-              <div class='variant-block-header'>
-                <h3>Slider (RGB)</h3>
-                <p>Slider with RGB format</p>
-              </div>
-              <div class='variant-code'>
-                <pre><code>@field myColor = contains(ColorField, &#123;
-                    configuration: &#123; variant: 'slider', options: &#123;
-                    defaultFormat: 'rgb' &#125; &#125; &#125;);</code></pre>
-              </div>
-              <div class='variant-demo'>
-                <@fields.colorSliderRgb @format='edit' />
-              </div>
-            </div>
-
-            <div class='variant-block'>
-              <div class='variant-block-header'>
-                <h3>Slider (HSL)</h3>
-                <p>Slider with HSL format</p>
-              </div>
-              <div class='variant-code'>
-                <pre><code>@field myColor = contains(ColorField, &#123;
-                    configuration: &#123; variant: 'slider', options: &#123;
-                    defaultFormat: 'hsl' &#125; &#125; &#125;);</code></pre>
-              </div>
-              <div class='variant-demo'>
-                <@fields.colorSliderHsl @format='edit' />
-              </div>
-            </div>
-
-            <div class='variant-block'>
-              <div class='variant-block-header'>
-                <h3>Swatches Picker</h3>
-                <p>Color swatches picker variant</p>
-              </div>
-              <div class='variant-code'>
-                <pre><code>@field myColor = contains(ColorField, &#123;
-                    configuration: &#123; variant: 'swatches-picker' &#125;
-                    &#125;);</code></pre>
-              </div>
-              <div class='variant-demo'>
-                <@fields.colorSwatchesPicker @format='edit' />
-              </div>
-            </div>
-
-            <div class='variant-block'>
-              <div class='variant-block-header'>
-                <h3>Advanced</h3>
-                <p>Advanced color picker with all format options</p>
-              </div>
-              <div class='variant-code'>
-                <pre><code>@field myColor = contains(ColorField, &#123;
-                    configuration: &#123; variant: 'advanced' &#125; &#125;);</code></pre>
-              </div>
-              <div class='variant-demo'>
-                <@fields.colorAdvanced @format='edit' />
-              </div>
-            </div>
-
-            <div class='variant-block'>
-              <div class='variant-block-header'>
-                <h3>with Recent Colors</h3>
-                <p>Shows recent color history</p>
-              </div>
-              <div class='variant-code'>
-                <pre><code>@field myColor = contains(ColorField, &#123;
-                    configuration: &#123; options: &#123; showRecent: true
-                    &#125; &#125; &#125;);</code></pre>
-              </div>
-              <div class='variant-demo'>
-                <@fields.colorShowRecent @format='edit' />
-              </div>
-            </div>
-
-            <div class='variant-block'>
-              <div class='variant-block-header'>
-                <h3>with Contrast Checker</h3>
-                <p>Shows WCAG contrast checker</p>
-              </div>
-              <div class='variant-code'>
-                <pre><code>@field myColor = contains(ColorField, &#123;
-                    configuration: &#123; options: &#123; showContrastChecker:
-                    true &#125; &#125; &#125;);</code></pre>
-              </div>
-              <div class='variant-demo'>
-                <@fields.colorShowContrast @format='edit' />
-              </div>
-            </div>
+            {{/each}}
           </section>
         {{/if}}
 
@@ -2646,24 +2706,31 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
 
       /* Variants Display Section */
       .variants-display-section {
+        container-type: inline-size;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
         margin-top: 2rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--border, #e2e8f0);
       }
 
       .variants-section-title {
         font-size: 1.5rem;
         font-weight: 700;
         color: var(--foreground, #0f172a);
-        margin: 0 0 1.5rem;
         letter-spacing: -0.02em;
       }
 
       /* ColorField Variants Display - Nested Structure */
       .variant-block {
-        margin-bottom: 2rem;
         background: var(--card, #ffffff);
         border: 1px solid var(--border, #e2e8f0);
         border-radius: var(--radius, 0.5rem);
         overflow: hidden;
+        box-shadow:
+          0 4px 6px -1px rgba(0, 0, 0, 0.05),
+          0 2px 4px -1px rgba(0, 0, 0, 0.03);
       }
 
       .variant-block .variant-block-header {
@@ -2685,24 +2752,6 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
         margin: 0;
       }
 
-      .variant-block .variant-code {
-        padding: 1rem 1.25rem;
-        background: var(--muted, #f8fafc);
-        border-bottom: 1px solid var(--border, #e2e8f0);
-      }
-
-      .variant-block .variant-code pre {
-        margin: 0;
-      }
-
-      .variant-block .variant-code code {
-        font-family: var(--font-mono, 'Courier New', monospace);
-        font-size: 0.8125rem;
-        line-height: 1.6;
-        color: var(--foreground, #1e293b);
-        white-space: pre;
-      }
-
       .variant-block .variant-demo {
         padding: 2rem 1.25rem;
         min-height: 300px;
@@ -2714,7 +2763,7 @@ class FieldShowcaseIsolated extends Component<typeof FieldShowcase> {
 
       .variant-block .variant-demo > :first-child {
         width: 100%;
-        max-width: 500px;
+        max-width: 400px;
       }
 
       /* Responsive adjustments for hero */

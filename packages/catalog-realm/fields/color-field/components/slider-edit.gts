@@ -216,222 +216,210 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
   }
 
   <template>
-    <div class='slider-variant'>
-      <div class='slider-controls'>
-        {{#if (eq this.outputFormat 'rgb')}}
-          <div class='slider-group'>
-            <div class='slider-header'>
-              <label class='slider-label red'>
-                <svg
-                  class='label-icon'
-                  viewBox='0 0 24 24'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-width='2'
-                >
-                  <circle cx='12' cy='12' r='10' />
-                </svg>
-                Red
-              </label>
-              <span class='slider-value'>{{this.rgb.r}}</span>
-            </div>
-            <div class='range-slider-container'>
-              <BoxelInput
-                @type='range'
-                @min='0'
-                @max='255'
-                @value={{this.rgb.r}}
-                class='range-slider'
-                style={{htmlSafe (concat 'background: ' this.rGradient)}}
-                @onInput={{fn this.handleRgbInput 'r'}}
-                @onChange={{this.handleSliderChange}}
-                @disabled={{not @canEdit}}
-              />
-            </div>
+    <div class='slider-controls-editor'>
+      {{#if (eq this.outputFormat 'rgb')}}
+        <div class='slider-group'>
+          <div class='slider-header'>
+            <label class='slider-label red'>
+              <svg
+                class='label-icon'
+                viewBox='0 0 24 24'
+                fill='none'
+                stroke='currentColor'
+                stroke-width='2'
+              >
+                <circle cx='12' cy='12' r='10' />
+              </svg>
+              Red
+            </label>
+            <span class='slider-value'>{{this.rgb.r}}</span>
           </div>
+          <div class='range-slider-container'>
+            <BoxelInput
+              @type='range'
+              @min='0'
+              @max='255'
+              @value={{this.rgb.r}}
+              class='range-slider'
+              style={{htmlSafe (concat 'background: ' this.rGradient)}}
+              @onInput={{fn this.handleRgbInput 'r'}}
+              @onChange={{this.handleSliderChange}}
+              @disabled={{not @canEdit}}
+            />
+          </div>
+        </div>
 
-          <div class='slider-group'>
-            <div class='slider-header'>
-              <label class='slider-label green'>
-                <svg
-                  class='label-icon'
-                  viewBox='0 0 24 24'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-width='2'
-                >
-                  <circle cx='12' cy='12' r='10' />
-                </svg>
-                Green
-              </label>
-              <span class='slider-value'>{{this.rgb.g}}</span>
-            </div>
-            <div class='range-slider-container'>
-              <BoxelInput
-                @type='range'
-                @min='0'
-                @max='255'
-                @value={{this.rgb.g}}
-                class='range-slider'
-                style={{htmlSafe (concat 'background: ' this.gGradient)}}
-                @onInput={{fn this.handleRgbInput 'g'}}
-                @onChange={{this.handleSliderChange}}
-                @disabled={{not @canEdit}}
-              />
-            </div>
+        <div class='slider-group'>
+          <div class='slider-header'>
+            <label class='slider-label green'>
+              <svg
+                class='label-icon'
+                viewBox='0 0 24 24'
+                fill='none'
+                stroke='currentColor'
+                stroke-width='2'
+              >
+                <circle cx='12' cy='12' r='10' />
+              </svg>
+              Green
+            </label>
+            <span class='slider-value'>{{this.rgb.g}}</span>
           </div>
+          <div class='range-slider-container'>
+            <BoxelInput
+              @type='range'
+              @min='0'
+              @max='255'
+              @value={{this.rgb.g}}
+              class='range-slider'
+              style={{htmlSafe (concat 'background: ' this.gGradient)}}
+              @onInput={{fn this.handleRgbInput 'g'}}
+              @onChange={{this.handleSliderChange}}
+              @disabled={{not @canEdit}}
+            />
+          </div>
+        </div>
 
-          <div class='slider-group'>
-            <div class='slider-header'>
-              <label class='slider-label blue'>
-                <svg
-                  class='label-icon'
-                  viewBox='0 0 24 24'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-width='2'
-                >
-                  <circle cx='12' cy='12' r='10' />
-                </svg>
-                Blue
-              </label>
-              <span class='slider-value'>{{this.rgb.b}}</span>
-            </div>
-            <div class='range-slider-container'>
-              <BoxelInput
-                @type='range'
-                @min='0'
-                @max='255'
-                @value={{this.rgb.b}}
-                class='range-slider'
-                style={{htmlSafe (concat 'background: ' this.bGradient)}}
-                @onInput={{fn this.handleRgbInput 'b'}}
-                @onChange={{this.handleSliderChange}}
-                @disabled={{not @canEdit}}
-              />
-            </div>
+        <div class='slider-group'>
+          <div class='slider-header'>
+            <label class='slider-label blue'>
+              <svg
+                class='label-icon'
+                viewBox='0 0 24 24'
+                fill='none'
+                stroke='currentColor'
+                stroke-width='2'
+              >
+                <circle cx='12' cy='12' r='10' />
+              </svg>
+              Blue
+            </label>
+            <span class='slider-value'>{{this.rgb.b}}</span>
           </div>
-        {{else if (eq this.outputFormat 'hsl')}}
-          <div class='slider-group'>
-            <div class='slider-header'>
-              <label class='slider-label hue'>
-                <svg
-                  class='label-icon'
-                  viewBox='0 0 24 24'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-width='2'
-                >
-                  <circle cx='12' cy='12' r='10' />
-                  <path d='M12 2v20' />
-                </svg>
-                Hue
-              </label>
-              <span class='slider-value'>{{Math.round this.hsl.h}}°</span>
-            </div>
-            <div class='range-slider-container'>
-              <BoxelInput
-                @type='range'
-                @min='0'
-                @max='360'
-                @value={{Math.round this.hsl.h}}
-                class='range-slider'
-                style={{htmlSafe (concat 'background: ' this.hGradient)}}
-                @onInput={{fn this.handleHslInput 'h'}}
-                @onChange={{this.handleSliderChange}}
-                @disabled={{not @canEdit}}
-              />
-            </div>
+          <div class='range-slider-container'>
+            <BoxelInput
+              @type='range'
+              @min='0'
+              @max='255'
+              @value={{this.rgb.b}}
+              class='range-slider'
+              style={{htmlSafe (concat 'background: ' this.bGradient)}}
+              @onInput={{fn this.handleRgbInput 'b'}}
+              @onChange={{this.handleSliderChange}}
+              @disabled={{not @canEdit}}
+            />
           </div>
+        </div>
+      {{else if (eq this.outputFormat 'hsl')}}
+        <div class='slider-group'>
+          <div class='slider-header'>
+            <label class='slider-label hue'>
+              <svg
+                class='label-icon'
+                viewBox='0 0 24 24'
+                fill='none'
+                stroke='currentColor'
+                stroke-width='2'
+              >
+                <circle cx='12' cy='12' r='10' />
+                <path d='M12 2v20' />
+              </svg>
+              Hue
+            </label>
+            <span class='slider-value'>{{Math.round this.hsl.h}}°</span>
+          </div>
+          <div class='range-slider-container'>
+            <BoxelInput
+              @type='range'
+              @min='0'
+              @max='360'
+              @value={{Math.round this.hsl.h}}
+              class='range-slider'
+              style={{htmlSafe (concat 'background: ' this.hGradient)}}
+              @onInput={{fn this.handleHslInput 'h'}}
+              @onChange={{this.handleSliderChange}}
+              @disabled={{not @canEdit}}
+            />
+          </div>
+        </div>
 
-          <div class='slider-group'>
-            <div class='slider-header'>
-              <label class='slider-label saturation'>
-                <svg
-                  class='label-icon'
-                  viewBox='0 0 24 24'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-width='2'
-                >
-                  <circle cx='12' cy='12' r='10' />
-                  <circle cx='12' cy='12' r='6' />
-                </svg>
-                Saturation
-              </label>
-              <span class='slider-value'>{{Math.round this.hsl.s}}%</span>
-            </div>
-            <div class='range-slider-container'>
-              <BoxelInput
-                @type='range'
-                @min='0'
-                @max='100'
-                @value={{Math.round this.hsl.s}}
-                class='range-slider'
-                style={{htmlSafe (concat 'background: ' this.sGradient)}}
-                @onInput={{fn this.handleHslInput 's'}}
-                @onChange={{this.handleSliderChange}}
-                @disabled={{not @canEdit}}
-              />
-            </div>
+        <div class='slider-group'>
+          <div class='slider-header'>
+            <label class='slider-label saturation'>
+              <svg
+                class='label-icon'
+                viewBox='0 0 24 24'
+                fill='none'
+                stroke='currentColor'
+                stroke-width='2'
+              >
+                <circle cx='12' cy='12' r='10' />
+                <circle cx='12' cy='12' r='6' />
+              </svg>
+              Saturation
+            </label>
+            <span class='slider-value'>{{Math.round this.hsl.s}}%</span>
           </div>
+          <div class='range-slider-container'>
+            <BoxelInput
+              @type='range'
+              @min='0'
+              @max='100'
+              @value={{Math.round this.hsl.s}}
+              class='range-slider'
+              style={{htmlSafe (concat 'background: ' this.sGradient)}}
+              @onInput={{fn this.handleHslInput 's'}}
+              @onChange={{this.handleSliderChange}}
+              @disabled={{not @canEdit}}
+            />
+          </div>
+        </div>
 
-          <div class='slider-group'>
-            <div class='slider-header'>
-              <label class='slider-label lightness'>
-                <svg
-                  class='label-icon'
-                  viewBox='0 0 24 24'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-width='2'
-                >
-                  <circle cx='12' cy='12' r='5' />
-                  <path
-                    d='M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24'
-                  />
-                </svg>
-                Lightness
-              </label>
-              <span class='slider-value'>{{Math.round this.hsl.l}}%</span>
-            </div>
-            <div class='range-slider-container'>
-              <BoxelInput
-                @type='range'
-                @min='0'
-                @max='100'
-                @value={{Math.round this.hsl.l}}
-                class='range-slider'
-                style={{htmlSafe (concat 'background: ' this.lGradient)}}
-                @onInput={{fn this.handleHslInput 'l'}}
-                @onChange={{this.handleSliderChange}}
-                @disabled={{not @canEdit}}
-              />
-            </div>
+        <div class='slider-group'>
+          <div class='slider-header'>
+            <label class='slider-label lightness'>
+              <svg
+                class='label-icon'
+                viewBox='0 0 24 24'
+                fill='none'
+                stroke='currentColor'
+                stroke-width='2'
+              >
+                <circle cx='12' cy='12' r='5' />
+                <path
+                  d='M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24'
+                />
+              </svg>
+              Lightness
+            </label>
+            <span class='slider-value'>{{Math.round this.hsl.l}}%</span>
           </div>
-        {{/if}}
-      </div>
+          <div class='range-slider-container'>
+            <BoxelInput
+              @type='range'
+              @min='0'
+              @max='100'
+              @value={{Math.round this.hsl.l}}
+              class='range-slider'
+              style={{htmlSafe (concat 'background: ' this.lGradient)}}
+              @onInput={{fn this.handleHslInput 'l'}}
+              @onChange={{this.handleSliderChange}}
+              @disabled={{not @canEdit}}
+            />
+          </div>
+        </div>
+      {{/if}}
     </div>
 
     <style scoped>
-      .slider-variant {
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-        padding: 1rem;
-        background: var(--background, #ffffff);
-        border-radius: calc(var(--radius, 0.5rem) * 1.5);
-        border: 1px solid var(--border, #e5e7eb);
-      }
-
-      .slider-controls {
+      .slider-controls-editor {
         display: flex;
         flex-direction: column;
         gap: 0.625rem;
-        padding: 0.75rem;
-        background: var(--muted, #f9fafb);
-        border-radius: calc(var(--radius, 0.5rem));
-        border: 1px solid var(--border, #e5e7eb);
+        padding: 0.5rem;
+        border-radius: var(--radius, 0.5rem);
+        transition: background 0.2s;
+        background: var(--boxel-light, #ffffff);
       }
 
       .slider-group {

@@ -277,43 +277,30 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
   }
 
   <template>
-    <div class='color-wheel-editor'>
-      <div class='wheel-container' {{setupElement this.setupContainer}}>
-        <canvas
-          width={{this.size}}
-          height={{this.size}}
-          class='color-wheel-canvas'
-          {{setupElement this.setupWheelCanvas}}
-        ></canvas>
-        <div
-          class='wheel-thumb'
-          style={{htmlSafe
-            (concat
-              'left:'
-              this.thumbPosition.x
-              'px;top:'
-              this.thumbPosition.y
-              'px;background-color:'
-              this.currentColor
-            )
-          }}
-        ></div>
-      </div>
+    <div class='color-wheel-editor' {{setupElement this.setupContainer}}>
+      <canvas
+        width={{this.size}}
+        height={{this.size}}
+        class='color-wheel-canvas'
+        {{setupElement this.setupWheelCanvas}}
+      ></canvas>
+      <div
+        class='wheel-thumb'
+        style={{htmlSafe
+          (concat
+            'left:'
+            this.thumbPosition.x
+            'px;top:'
+            this.thumbPosition.y
+            'px;background-color:'
+            this.currentColor
+          )
+        }}
+      ></div>
     </div>
 
     <style scoped>
       .color-wheel-editor {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 1.5rem;
-        padding: 1.5rem;
-        background: var(--background, #ffffff);
-        border-radius: calc(var(--radius, 0.5rem) * 1.5);
-        border: 1px solid var(--border, #e5e7eb);
-      }
-
-      .wheel-container {
         position: relative;
         width: 280px;
         height: 280px;

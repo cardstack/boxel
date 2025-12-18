@@ -64,7 +64,7 @@ module('Integration | color field configuration', function (hooks) {
     const variants = [
       { variant: 'standard', selector: '.color-picker' },
       { variant: 'swatches-picker', selector: '.color-palette-group' },
-      { variant: 'slider', selector: '.slider-variant' },
+      { variant: 'slider', selector: '.slider-controls-editor' },
       { variant: 'advanced', selector: '.advanced-color-editor' },
       { variant: 'wheel', selector: '.color-wheel-editor' },
     ];
@@ -174,7 +174,7 @@ module('Integration | color field configuration', function (hooks) {
 
       const selectors = {
         advanced: '.advanced-color-editor',
-        slider: '.slider-variant',
+        slider: '.slider-controls-editor',
         wheel: '.color-wheel-editor',
       };
 
