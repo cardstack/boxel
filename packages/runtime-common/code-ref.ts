@@ -315,7 +315,7 @@ function exportFrom(ref: CodeRef): string {
   if (!('type' in ref)) {
     return ref.name;
   } else {
-    return moduleFrom(ref.card);
+    return exportFrom(ref.card);
   }
 }
 
