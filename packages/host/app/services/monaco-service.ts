@@ -51,6 +51,7 @@ export default class MonacoService extends Service {
     let promises = languageConfigs.map((lang) =>
       this.extendMonacoLanguage(lang, monaco),
     );
+    monaco.editor.setTheme('vs-dark');
     monaco.editor.onDidCreateEditor((editor: _MonacoSDK.editor.ICodeEditor) => {
       let isMainEditor = ((editor as any)._domElement as HTMLElement)
         .getAttributeNames()
