@@ -391,14 +391,14 @@ export default class HeadFormatPreview extends Component<Signature> {
         background-size: 22.5px;
         color: var(--boxel-light);
         border-radius: var(--boxel-border-radius-lg);
-        border: 1px solid var(--boxel-650);
+        border: 1px solid var(--boxel-500);
         box-shadow: var(--boxel-deep-box-shadow);
       }
 
       .preview-header {
         padding: var(--boxel-sp-lg);
         border-bottom: 2px solid var(--boxel-650);
-        background: var(--boxel-650);
+        background: var(--boxel-500);
         border-radius: var(--boxel-border-radius);
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
       }
@@ -426,7 +426,7 @@ export default class HeadFormatPreview extends Component<Signature> {
         font: 700 var(--boxel-font-sm);
         margin: 0;
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        background: var(--boxel-650);
+        background: var(--boxel-500);
         color: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
         border: 1px solid var(--boxel-600);
