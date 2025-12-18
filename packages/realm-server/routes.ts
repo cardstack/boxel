@@ -4,6 +4,7 @@ import type {
   QueuePublisher,
   Realm,
   VirtualNetwork,
+  Prerenderer,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
@@ -35,6 +36,8 @@ import handleRealmAuth from './handlers/handle-realm-auth';
 import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-claimed-domain';
 import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain';
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain';
+import handlePrerenderProxy from './handlers/handle-prerender-proxy';
+import { buildCreatePrerenderAuth } from './prerender/auth';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -81,9 +84,11 @@ export type CreateRoutesArgs = {
     boxelSite?: string;
   };
   assetsURL: URL;
+  prerenderer?: Prerenderer;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
+  let createPrerenderAuth = buildCreatePrerenderAuth(args.realmSecretSeed);
   let router = new Router();
 
   router.head('/', livenessCheck);
@@ -117,6 +122,26 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed),
     handleRequestForward({
       dbAdapter: args.dbAdapter,
+    }),
+  );
+  router.post(
+    '/_prerender-card',
+    jwtMiddleware(args.realmSecretSeed),
+    handlePrerenderProxy({
+      kind: 'card',
+      prerenderer: args.prerenderer,
+      dbAdapter: args.dbAdapter,
+      createPrerenderAuth,
+    }),
+  );
+  router.post(
+    '/_prerender-module',
+    jwtMiddleware(args.realmSecretSeed),
+    handlePrerenderProxy({
+      kind: 'module',
+      prerenderer: args.prerenderer,
+      dbAdapter: args.dbAdapter,
+      createPrerenderAuth,
     }),
   );
   router.post(

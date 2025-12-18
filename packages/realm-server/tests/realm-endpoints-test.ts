@@ -978,7 +978,7 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: '/person',
+                module: '../person',
                 name: 'Person',
               },
               realmInfo: {
@@ -1580,6 +1580,7 @@ module(basename(__filename), function () {
           serverURL: new URL('http://127.0.0.1:4446'),
           assetsURL: new URL(`http://example.com/notional-assets-host/`),
           definitionLookup,
+          prerenderer,
         }).listen(parseInt(localBaseRealmURL.port));
         await base.start();
         await testRealm.start();

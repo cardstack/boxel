@@ -1,51 +1,30 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "GamingHub",
+        "module": "../gaming-hub"
+      }
+    },
     "type": "card",
     "attributes": {
-      "gamerTag": "CosmicRift_Ravi",
-      "email": "ravi.patel@protonmail.com",
-      "bio": "VR pioneer and space simulation enthusiast. Exploring virtual worlds and pushing the boundaries of immersive gaming. Building the future of gaming one headset at a time.",
-      "joinDate": "2020-01-08",
-      "isOnline": true,
-      "profileImageUrl": "https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=400&h=400&fit=crop&crop=face",
-      "location": "Mumbai, India",
-      "preferredGenres": ["VR", "Simulation", "Space", "Sci-Fi"],
-      "gamingGroups": [
-        "VR Innovators",
-        "Space Sim Society",
-        "Future Gaming Collective"
-      ],
-      "streamingPlatforms": ["Twitch", "YouTube Gaming"],
-      "contentCreatorStatus": true,
-      "streamSchedule": "Monday/Wednesday/Saturday 2PM-6PM IST",
-      "statistics": {
-        "totalGames": 94,
-        "totalHours": 1876,
-        "completionRate": 81,
-        "averageRating": 8.8,
-        "achievementsUnlocked": 1567,
-        "favoriteGenre": "VR",
-        "currentStreak": 14
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
       }
     },
     "relationships": {
-      "favoriteGames.0": {
-        "links": { "self": "../../video-game/VideoGame/cyberpunk-2077" }
+      "player": {
+        "links": {
+          "self": "../../gaming-player/GamingPlayer/ravi-cosmicrift"
+        }
       },
-      "wishlistGames.0": {
-        "links": { "self": "../../video-game/VideoGame/hollow-knight" }
-      },
-      "friends.0": {
-        "links": { "self": "../../gaming-hub/GamingHub/diego-stratmaxx" }
-      },
-      "friends.1": {
-        "links": { "self": "../../gaming-hub/GamingHub/zlata-voidwalker" }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../gaming-hub",
-        "name": "GamingHub"
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

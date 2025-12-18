@@ -56,9 +56,11 @@ import {
   isCardDocumentString,
   isBrowserTestEnv,
 } from './index';
+import { visitModuleDeps } from './code-ref';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
+import isEqual from 'lodash/isEqual';
 import { z } from 'zod';
 import type { CardFields } from './resource-types';
 import {
@@ -669,7 +671,6 @@ export class Realm {
     let results: { path: LocalPath; lastModified: number }[] = [];
     let fileMetaRows: { path: LocalPath }[] = [];
     let lastWriteType: 'module' | 'instance' | undefined;
-    let currentWriteType: 'module' | 'instance' | undefined;
     let invalidations: Set<string> = new Set();
     let clientRequestId: string | null = options?.clientRequestId ?? null;
     let performIndex = async () => {
@@ -686,26 +687,13 @@ export class Realm {
     };
 
     for (let [path, content] of files) {
-      lastWriteType = currentWriteType ?? lastWriteType;
-      currentWriteType = hasExecutableExtension(path)
-        ? 'module'
-        : path.endsWith('.json') && isCardDocumentString(content)
-          ? 'instance'
-          : undefined;
-      if (lastWriteType === 'module' && currentWriteType === 'instance') {
-        // we need to generate/update possible definition in order for
-        // instance file serialization that may depend on the included module to
-        // work. TODO: we could be more precise here and keep track of what
-        // modules the instances depend on and only flush the modules to index
-        // when you you see that you have an instance that you are about to
-        // write to disk that depends on a module that is part of this
-        // operation.
-        await performIndex();
-        urls = [];
-      }
       let url = this.paths.fileURL(path);
-      this.sendIndexInitiationEvent(url.href);
-      await this.trackOwnWrite(path);
+      let currentWriteType: 'module' | 'instance' | undefined =
+        hasExecutableExtension(path)
+          ? 'module'
+          : path.endsWith('.json') && isCardDocumentString(content)
+            ? 'instance'
+            : undefined;
       try {
         let doc = JSON.parse(content);
         if (isCardResource(doc.data) && options?.serializeFile) {
@@ -723,6 +711,27 @@ export class Realm {
           throw e;
         }
       }
+      let existingFile = await readFileAsText(path, (p) =>
+        this.#adapter.openFile(p),
+      );
+      if (existingFile?.content === content) {
+        results.push({ path, lastModified: existingFile.lastModified });
+        fileMetaRows.push({ path });
+        continue;
+      }
+      if (lastWriteType === 'module' && currentWriteType === 'instance') {
+        // we need to generate/update possible definition in order for
+        // instance file serialization that may depend on the included module to
+        // work. TODO: we could be more precise here and keep track of what
+        // modules the instances depend on and only flush the modules to index
+        // when you you see that you have an instance that you are about to
+        // write to disk that depends on a module that is part of this
+        // operation.
+        await performIndex();
+        urls = [];
+      }
+      this.sendIndexInitiationEvent(url.href);
+      await this.trackOwnWrite(path);
       let { lastModified } = await this.#adapter.write(path, content);
       this.#sourceCache.invalidate(path);
       if (hasExecutableExtension(path)) {
@@ -731,6 +740,7 @@ export class Realm {
       results.push({ path, lastModified });
       fileMetaRows.push({ path });
       urls.push(url);
+      lastWriteType = currentWriteType ?? lastWriteType;
     }
 
     // persist file meta (created_at) to DB independent of index and retrieve created
@@ -1286,9 +1296,9 @@ export class Realm {
           return this.#adapter.createJWT(
             {
               user,
-              realm: this.url,
               sessionRoom,
               permissions: userPermissions,
+              realm: this.url,
             },
             '7d',
             this.#realmSecretSeed,
@@ -2156,24 +2166,12 @@ export class Realm {
 
     let url = this.paths.fileURL(localPath);
     let instanceURL = url.href.replace(/\.json$/, '');
-    let originalMaybeError =
-      await this.#realmIndexQueryEngine.cardDocument(url);
-    if (!originalMaybeError) {
+    let indexEntry = await this.#realmIndexQueryEngine.instance(url, {
+      includeErrors: true,
+    });
+    if (!indexEntry) {
       return notFound(request, requestContext);
     }
-    if (originalMaybeError.type === 'error') {
-      return systemError({
-        requestContext,
-        message: `unable to patch card, cannot load original from index`,
-        additionalError: CardError.fromSerializableError(
-          originalMaybeError.error,
-        ),
-        id: instanceURL,
-      });
-    }
-    let { doc: original } = originalMaybeError;
-    let originalClone = cloneDeep(original.data);
-    delete originalClone.meta.lastModified;
 
     let { data: patch, included: maybeIncluded } = await request.json();
     if (!isCardResource(patch)) {
@@ -2198,9 +2196,22 @@ export class Realm {
         }
       }
     }
+    let original = cloneDeep(
+      indexEntry.instance ?? {
+        type: 'card',
+        meta: { adoptsFrom: patch.meta.adoptsFrom },
+      },
+    ) as CardResource;
+    original.meta ??= { adoptsFrom: patch.meta.adoptsFrom };
+    original.meta.adoptsFrom =
+      original.meta.adoptsFrom ?? patch.meta.adoptsFrom;
+    delete original.meta.lastModified;
+    let originalClone = cloneDeep(original);
+
     if (
+      originalClone.meta?.adoptsFrom &&
       internalKeyFor(patch.meta.adoptsFrom, url) !==
-      internalKeyFor(originalClone.meta.adoptsFrom, url)
+        internalKeyFor(originalClone.meta.adoptsFrom, url)
     ) {
       return badRequest({
         message: `Cannot change card instance type to ${JSON.stringify(
@@ -2244,6 +2255,39 @@ export class Realm {
       }
     }
 
+    // If the patch makes no semantic changes and doesn't include side-loaded
+    // resources, short-circuit to avoid touching the file (and changing mtime).
+    if (included.length === 0 && isEqual(primaryResource, original)) {
+      let entry = await this.#realmIndexQueryEngine.cardDocument(
+        new URL(instanceURL),
+        { loadLinks: true },
+      );
+      if (entry && entry.type !== 'error') {
+        let existingDoc = merge({}, entry.doc, {
+          data: {
+            links: { self: instanceURL },
+            meta: { lastModified: entry.doc.data.meta.lastModified },
+          },
+        });
+        let createdAt = await this.getCreatedTime(
+          this.paths.local(url) + '.json',
+        );
+        return createResponse({
+          body: JSON.stringify(existingDoc, null, 2),
+          init: {
+            headers: {
+              'content-type': SupportedMimeType.CardJson,
+              ...lastModifiedHeader(existingDoc),
+              ...(createdAt != null
+                ? { 'x-created': formatRFC7231(createdAt * 1000) }
+                : {}),
+            },
+          },
+          requestContext,
+        });
+      }
+    }
+
     delete (primaryResource as any).id; // don't write the ID to the file
     let files = new Map<LocalPath, string>();
     let resources = [primaryResource, ...included];
@@ -2267,6 +2311,9 @@ export class Realm {
           resource,
           included,
           realmURL: new URL(this.url),
+        });
+        visitModuleDeps(resource, (moduleURL, setModuleURL) => {
+          setModuleURL(new URL(moduleURL, instanceURL).href);
         });
       }
       let fileSerialization: LooseSingleCardDocument | undefined;
@@ -2388,7 +2435,6 @@ export class Realm {
             message: maybeError.error.errorDetail.message,
             // note that this is actually available as part of the response
             // header too--it's just easier for clients when it is here
-            realm: this.url,
             meta: {
               lastKnownGoodHtml: maybeError.error.lastKnownGoodHtml,
               cardTitle: maybeError.error.cardTitle,
@@ -3555,7 +3601,6 @@ export class Realm {
     return serialize({
       doc,
       definition,
-      realm: this.url,
       relativeTo,
       customFieldDefinitions,
     });

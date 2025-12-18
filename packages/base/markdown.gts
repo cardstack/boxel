@@ -1,3 +1,4 @@
+import { modifier } from 'ember-modifier';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { Component } from './card-api';
 import StringField from './string';
@@ -5,212 +6,260 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { markdownToHtml } from '@cardstack/runtime-common';
 import AlignBoxLeftMiddleIcon from '@cardstack/boxel-icons/align-box-left-middle';
 
+// Function modifier to wrap tables in scrollable containers
+export const wrapTables = modifier((element: HTMLElement) => {
+  const tables = element.querySelectorAll('table:not(.table-wrapper table)');
+  tables.forEach((table) => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'table-wrapper';
+    table.parentNode?.insertBefore(wrapper, table);
+    wrapper.appendChild(table);
+  });
+});
+
 class View extends Component<typeof MarkdownField> {
   <template>
-    <div class='markdown-content'>
+    <div class='markdown-content' {{wrapTables}}>
       {{! template-lint-disable no-triple-curlies }}
       {{{markdownToHtml @model}}}
     </div>
     <style scoped>
-      .markdown-content {
-        max-width: 100%;
-        font-size: var(--markdown-font-size, inherit);
-        font-family: var(--markdown-font-family, inherit);
-        overflow: hidden;
-      }
+      @layer baseComponent {
+        .markdown-content {
+          --md-border: var(--border, var(--boxel-border-color));
+          --md-muted: var(--muted, var(--boxel-100));
 
-      /* Heading */
-      .markdown-content :deep(h1),
-      .markdown-content :deep(h2),
-      .markdown-content :deep(h3),
-      .markdown-content :deep(h4),
-      .markdown-content :deep(h5),
-      .markdown-content :deep(h6) {
-        font-weight: 600;
-        font-family: var(--markdown-heading-font-family, inherit);
-      }
-      .markdown-content :deep(h1) {
-        font-size: 2.5em;
-        line-height: 1.25;
-        letter-spacing: normal;
-        margin-top: var(--boxel-sp-xl);
-        margin-bottom: var(--boxel-sp-lg);
-      }
-      .markdown-content :deep(h2) {
-        font-size: 1.625em;
-        margin-top: var(--boxel-sp-xxl);
-        margin-bottom: var(--boxel-sp-xs);
-      }
-      .markdown-content :deep(h3) {
-        font-size: 1.125em;
-        margin-top: var(--boxel-sp-xl);
-        margin-bottom: var(--boxel-sp-xxxs);
-      }
-      .markdown-content :deep(h4) {
-        font-size: 1em;
-        margin-top: var(--boxel-sp-lg);
-        margin-bottom: var(--boxel-sp-xxxs);
-      }
-      .markdown-content :deep(h5) {
-        font-size: 0.8125em;
-        margin-top: var(--boxel-sp);
-        margin-bottom: var(--boxel-sp-xxxs);
-      }
-      .markdown-content :deep(h6) {
-        font-size: 0.6875em;
-        margin-top: var(--boxel-sp-sm);
-        margin-bottom: var(--boxel-sp-xxxs);
-      }
+          max-width: 100%;
+          font-size: var(--markdown-font-size, inherit);
+          font-family: var(--markdown-font-family, inherit);
+          overflow: hidden;
+        }
 
-      /* Paragraph */
-      .markdown-content :deep(p) {
-        font-family: inherit;
-        font-size: inherit;
-        font-weight: 400;
-        margin-top: var(--boxel-sp-lg);
-        margin-bottom: var(--boxel-sp);
-      }
+        /* Heading */
+        .markdown-content :deep(h1),
+        .markdown-content :deep(h2),
+        .markdown-content :deep(h3),
+        .markdown-content :deep(h4),
+        .markdown-content :deep(h5),
+        .markdown-content :deep(h6) {
+          font-weight: 700;
+          font-family: var(--markdown-heading-font-family);
+        }
+        .markdown-content :deep(h1) {
+          font-size: 2.5em;
+          line-height: 1.25;
+          letter-spacing: normal;
+          margin-top: var(--boxel-sp-xl);
+          margin-bottom: var(--boxel-sp-lg);
+        }
+        .markdown-content :deep(h2) {
+          font-size: 1.625em;
+          margin-top: var(--boxel-sp-xxl);
+          margin-bottom: var(--boxel-sp-xs);
+        }
+        .markdown-content :deep(h3) {
+          font-size: 1.25em;
+          margin-top: var(--boxel-sp-xl);
+          margin-bottom: var(--boxel-sp-3xs);
+        }
+        .markdown-content :deep(h4) {
+          font-size: 1em;
+          margin-top: var(--boxel-sp-lg);
+          margin-bottom: var(--boxel-sp-3xs);
+        }
+        .markdown-content :deep(h5) {
+          font-size: 0.8125em;
+          margin-top: var(--boxel-sp);
+          margin-bottom: var(--boxel-sp-3xs);
+        }
+        .markdown-content :deep(h6) {
+          font-size: 0.6875em;
+          margin-top: var(--boxel-sp-sm);
+          margin-bottom: var(--boxel-sp-3xs);
+        }
 
-      /* Bold */
-      .markdown-content :deep(strong),
-      .markdown-content :deep(b) {
-        font-weight: 700;
-      }
+        /* Paragraph */
+        .markdown-content :deep(p) {
+          font-family: inherit;
+          font-size: inherit;
+          font-weight: 400;
+          line-height: 1.6;
+          margin-top: var(--boxel-sp-lg);
+          margin-bottom: var(--boxel-sp);
+        }
 
-      /* Italic */
-      .markdown-content :deep(em),
-      .markdown-content :deep(i) {
-        font-style: italic;
-      }
+        /* Bold */
+        .markdown-content :deep(strong),
+        .markdown-content :deep(b) {
+          font-weight: 700;
+        }
 
-      /* Strikethrough */
-      .markdown-content :deep(del),
-      .markdown-content :deep(s) {
-        text-decoration: line-through;
-      }
+        /* Italic */
+        .markdown-content :deep(em),
+        .markdown-content :deep(i) {
+          font-style: italic;
+        }
 
-      /* Highlight */
-      /** Must use "<mark>...</mark>" html element **/
-      .markdown-content :deep(mark) {
-        background-color: var(--boxel-yellow);
-      }
+        /* Strikethrough */
+        .markdown-content :deep(del),
+        .markdown-content :deep(s) {
+          text-decoration: line-through;
+        }
 
-      /* Subscript */
-      /** Must use <sub> **/
+        /* Highlight */
+        /** Must use "<mark>...</mark>" html element **/
+        .markdown-content :deep(mark) {
+          background-color: var(--boxel-yellow);
+        }
 
-      /* Superscript */
-      /** Must use <sup> **/
+        /* Subscript */
+        /** Must use <sub> **/
 
-      /* Blockquote */
-      .markdown-content :deep(blockquote) {
-        margin-top: var(--boxel-sp-lg);
-        margin-bottom: var(--boxel-sp-lg);
-        margin-right: auto;
-        margin-left: auto;
-        padding-top: var(--boxel-sp-4xs);
-        padding-bottom: var(--boxel-sp-4xs);
-        border-right: 1px solid black;
-        border-left: 1px solid black;
-      }
-      .markdown-content :deep(blockquote p) {
-        font-size: 1.5em;
-        font-style: italic;
-        margin-inline-start: var(--boxel-sp-xl);
-        margin-inline-end: var(--boxel-sp-xl);
-      }
+        /* Superscript */
+        /** Must use <sup> **/
 
-      /* Horizontal rule */
-      .markdown-content :deep(hr) {
-        border-bottom: none;
-        border-right: none;
-        border-left: none;
-        border-top: var(--boxel-border);
-      }
+        /* Blockquote */
+        .markdown-content :deep(blockquote) {
+          margin-top: var(--boxel-sp-lg);
+          margin-bottom: var(--boxel-sp-lg);
+          margin-right: auto;
+          margin-left: auto;
+          padding-top: var(--boxel-sp-4xs);
+          padding-bottom: var(--boxel-sp-4xs);
+          border-right: 1px solid black;
+          border-left: 1px solid black;
+        }
+        .markdown-content :deep(blockquote p) {
+          font-size: 1.5em;
+          font-style: italic;
+          margin-inline-start: var(--boxel-sp-xl);
+          margin-inline-end: var(--boxel-sp-xl);
+        }
 
-      /* Code */
-      .markdown-content :deep(code) {
-        font-family: var(--markdown-code-font-family, monospace);
-      }
+        /* Horizontal rule */
+        .markdown-content :deep(hr) {
+          border-bottom: none;
+          border-right: none;
+          border-left: none;
+          border-top: 1px solid var(--md-border);
+        }
 
-      /* Code Block */
-      .markdown-content :deep(pre) {
-        white-space: var(--boxel-markdown-field-pre-wrap, pre-wrap);
-        background-color: #efefef;
-        border-radius: var(--boxel-border-radius-xl);
-        padding: var(--boxel-sp-lg);
-      }
+        /* Code */
+        .markdown-content :deep(code) {
+          padding: var(--boxel-sp-6xs) var(--boxel-sp-4xs);
+          font-family: var(
+            --markdown-code-font-family,
+            var(--font-mono, monospace)
+          );
+          background-color: var(--muted, var(--boxel-200));
+        }
 
-      /* Link */
-      .markdown-content :deep(a),
-      .markdown-content :deep(a:hover) {
-        color: currentColor;
-        text-decoration: underline;
-      }
+        /* Code Block */
+        .markdown-content :deep(pre) {
+          white-space: var(--boxel-markdown-field-pre-wrap, pre-wrap);
+          background-color: var(
+            --muted,
+            color-mix(in oklab, currentColor 10%, transparent)
+          );
+          border-radius: var(--boxel-border-radius-xl);
+          padding: var(--boxel-sp-lg);
+        }
 
-      /* Image */
-      .markdown-content :deep(figure, img, svg) {
-        max-width: 100%;
-      }
-      .markdown-content :deep(figure) {
-        margin-top: var(--boxel-sp-lg);
-        margin-bottom: var(--boxel-sp-lg);
-        margin-right: auto;
-        margin-left: auto;
-      }
-      .markdown-content :deep(figcaption) {
-        font-size: 0.8125em;
-        font-style: italic;
-      }
-      .markdown-content :deep(img) {
-        border-radius: var(--boxel-border-radius-lg);
-        overflow: hidden;
-      }
+        /* Link */
+        .markdown-content :deep(a),
+        .markdown-content :deep(a:hover) {
+          color: currentColor;
+          text-decoration: underline;
+        }
 
-      /* Ordered & Unordered List */
-      .markdown-content :deep(ol),
-      .markdown-content :deep(ul) {
-        padding-left: 1.375em;
-        margin-top: var(--boxel-sp);
-        margin-bottom: var(--boxel-sp);
-        font-size: inherit;
-        font-weight: 400;
-        font-family: inherit;
-      }
-      /* Nested list */
-      .markdown-content :deep(ol ol),
-      .markdown-content :deep(ol ul),
-      .markdown-content :deep(ul ul),
-      .markdown-content :deep(ul ol) {
-        margin-top: var(--boxel-sp-xxxs);
-        margin-bottom: var(--boxel-sp-xxxs);
-      }
+        /* Image */
+        .markdown-content :deep(figure, img, svg) {
+          max-width: 100%;
+        }
+        .markdown-content :deep(figure) {
+          margin-top: var(--boxel-sp-lg);
+          margin-bottom: var(--boxel-sp-lg);
+          margin-right: auto;
+          margin-left: auto;
+        }
+        .markdown-content :deep(figcaption) {
+          font-size: 0.8125em;
+          font-style: italic;
+        }
+        .markdown-content :deep(img) {
+          border-radius: var(--boxel-border-radius-lg);
+          overflow: hidden;
+        }
 
-      /* Task List */
-      .markdown-content :deep(ul:has(input[type='checkbox'])) {
-        list-style-type: none;
-        padding-left: 0;
-      }
+        /* Ordered & Unordered List */
+        .markdown-content :deep(ol),
+        .markdown-content :deep(ul) {
+          padding-left: 1.375em;
+          margin-top: var(--boxel-sp);
+          margin-bottom: var(--boxel-sp);
+          font-size: inherit;
+          font-weight: 400;
+          font-family: inherit;
+          line-height: 1.5;
+        }
+        /* Nested list */
+        .markdown-content :deep(ol ol),
+        .markdown-content :deep(ol ul),
+        .markdown-content :deep(ul ul),
+        .markdown-content :deep(ul ol) {
+          margin-top: var(--boxel-sp-xxxs);
+          margin-bottom: var(--boxel-sp-xxxs);
+        }
 
-      /* Definition List */
-      /* Must use <dl> <dt> <dd> tags -- default browser styling */
+        /* Task List */
+        .markdown-content :deep(ul:has(input[type='checkbox'])) {
+          list-style-type: none;
+          padding-left: 0;
+        }
 
-      /* Footnote */
-      /* Not available */
+        /* Definition List */
+        /* Must use <dl> <dt> <dd> tags -- default browser styling */
 
-      /* Emoji */
-      /* Must copy/paste emoji */
+        /* Footnote */
+        /* Not available */
 
-      /* Table */
-      .markdown-content :deep(table) {
-        margin-top: var(--boxel-sp-lg);
-        margin-bottom: var(--boxel-sp-lg);
-        background-color: #efefef;
-        border-radius: var(--boxel-border-radius-xl);
-        padding: var(--boxel-sp-lg);
-      }
-      .markdown-content :deep(th),
-      .markdown-content :deep(td) {
-        text-align: left;
+        /* Emoji */
+        /* Must copy/paste emoji */
+
+        /* Scrollable table wrapper */
+        .markdown-content :deep(.table-wrapper) {
+          width: 100%;
+          max-width: var(--markdown-table-max-width, 56.25rem);
+          overflow-x: auto;
+          margin-top: var(--boxel-sp-lg);
+          margin-bottom: var(--boxel-sp-lg);
+          background-color: var(--md-muted);
+          border: 1px solid var(--md-border);
+          border-radius: var(--boxel-border-radius);
+          word-break: initial;
+        }
+        /* Table */
+        .markdown-content :deep(table) {
+          width: 100%;
+          max-width: 100%; /* Allow full width within scroll container */
+          border-radius: 0;
+          border-collapse: collapse;
+        }
+        .markdown-content :deep(thead) {
+          border-bottom: 2px solid var(--md-border);
+        }
+        .markdown-content :deep(th),
+        .markdown-content :deep(td) {
+          text-align: start;
+          padding: var(--boxel-sp-2xs);
+        }
+        .markdown-content :deep(th:not(:last-child)),
+        .markdown-content :deep(td:not(:last-child)) {
+          border-right: 1px solid var(--md-border);
+        }
+        .markdown-content :deep(tr:not(:last-child) td) {
+          border-bottom: 1px solid var(--md-border);
+        }
       }
     </style>
   </template>

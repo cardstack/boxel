@@ -5,7 +5,8 @@ import { on } from '@ember/modifier';
 import { action, get } from '@ember/object';
 import StyleReference from './style-reference';
 import { ThemeTypographyField } from './structured-theme-variables';
-import { contains, field, Component } from './card-api';
+import { applyCssRulesToField, CSS_PLACEHOLDER } from './structured-theme';
+import { contains, field, Component, type BaseDefComponent } from './card-api';
 import MarkdownField from './markdown';
 
 import Moon from '@cardstack/boxel-icons/moon';
@@ -13,14 +14,103 @@ import Sun from '@cardstack/boxel-icons/sun';
 import ChevronCompactRight from '@cardstack/boxel-icons/chevron-compact-right';
 import ChevronCompactLeft from '@cardstack/boxel-icons/chevron-compact-left';
 
-import { Button, CardContainer, Swatch } from '@cardstack/boxel-ui/components';
 import {
+  Button,
+  CardContainer,
+  Swatch,
+  FieldContainer,
+  BoxelInput,
+} from '@cardstack/boxel-ui/components';
+import {
+  cn,
+  parseCssGroups,
   eq,
   extractCssVariables,
   sanitizeHtmlSafe,
 } from '@cardstack/boxel-ui/helpers';
 
-class NavSection extends GlimmerComponent<{
+export const STYLE_GUIDE_SECTIONS = [
+  {
+    id: 'context',
+    navTitle: 'Context',
+    title: 'Historical Context & Philosophy',
+    fieldName: 'historicalContext',
+  },
+  {
+    id: 'visual-dna',
+    navTitle: 'Visual DNA',
+    title: 'Visual DNA',
+  },
+  {
+    id: 'composition',
+    navTitle: 'Composition',
+    title: 'Spatial & Compositional Rules',
+    fieldName: 'compositionRules',
+  },
+  {
+    id: 'motion',
+    navTitle: 'Motion',
+    title: 'Motion & Interaction Language',
+    fieldName: 'motionLanguage',
+  },
+  {
+    id: 'components',
+    navTitle: 'Components',
+    title: 'Component Vocabulary',
+    fieldName: 'componentVocabulary',
+  },
+  {
+    id: 'voice',
+    navTitle: 'Voice',
+    title: 'Content & Voice Principles',
+    fieldName: 'contentVoice',
+  },
+  {
+    id: 'technical',
+    navTitle: 'Technical',
+    title: 'Technical Specifications',
+    fieldName: 'technicalSpecs',
+  },
+  {
+    id: 'applications',
+    navTitle: 'Applications',
+    title: 'Application Scenarios',
+    fieldName: 'applicationScenarios',
+  },
+  {
+    id: 'quality',
+    navTitle: 'Quality',
+    title: 'Quality Standards',
+    fieldName: 'qualityStandards',
+  },
+  {
+    id: 'mindset',
+    navTitle: 'Design Mindset',
+    title: 'Design Mindset',
+    fieldName: 'designMindset',
+  },
+  {
+    id: 'inspirations',
+    navTitle: 'Inspirations',
+    title: 'Key Inspirations',
+    fieldName: 'inspirations',
+  },
+  {
+    id: 'import-css',
+    navTitle: 'Import CSS',
+    title: 'Import Custom CSS',
+    alwaysInclude: true,
+  },
+  {
+    id: 'css-variables',
+    navTitle: 'Generated CSS',
+    title: 'Generated CSS Variables',
+    fieldName: 'cssVariables',
+    alwaysInclude: true,
+  },
+];
+
+export class NavSection extends GlimmerComponent<{
   Args: {
     id: string;
     number?: string;
@@ -30,104 +120,68 @@ class NavSection extends GlimmerComponent<{
   Element: HTMLElement;
 }> {
   <template>
-    <section id={{@id}} class='dsr-section' ...attributes>
-      <header class='section-header'>
+    <section id={{@id}} class='nav-section' ...attributes>
+      <header class='nav-section-header'>
         {{#if @number}}
-          <span class='section-number'>{{@number}}</span>
+          <span class='nav-section-number'>{{@number}}</span>
         {{else}}
-          <span class='section-number' aria-hidden='true' />
+          <span class='nav-section-number' aria-hidden='true' />
         {{/if}}
-        <h2 class='section-title'>{{@title}}</h2>
-        <a
-          class='back-to-top'
+        <h2 class='nav-section-title'>{{@title}}</h2>
+        <Button
+          class='nav-section-button'
+          @as='anchor'
+          @size='extra-small'
           href='#top'
-          aria-label='Back to top'
           {{on 'click' this.scrollToTop}}
-        >Back to top</a>
+        >Back to top</Button>
       </header>
-      <div class='section-content'>
+      <div class='nav-section-content'>
         {{yield}}
       </div>
     </section>
     <style scoped>
-      .dsr-section {
-        margin-bottom: calc(var(--dsr-spacing-unit) * 4);
-        scroll-margin-top: calc(var(--dsr-spacing-unit) * 6);
+      .nav-section {
+        margin-bottom: calc(var(--boxel-sp) * 4);
+        scroll-margin-top: calc(var(--boxel-sp) * 6);
         counter-increment: section;
       }
-
-      .dsr-section:last-of-type {
-        margin-bottom: calc(var(--dsr-spacing-unit) * 2);
+      .nav-section:last-of-type {
+        margin-bottom: calc(var(--boxel-sp) * 2);
       }
-
       /* Section Headers */
-      .section-header {
+      .nav-section-header {
         display: flex;
-        align-items: baseline;
-        gap: calc(var(--dsr-spacing-unit) * 1);
-        margin-bottom: calc(var(--dsr-spacing-unit) * 2);
-        padding-bottom: calc(var(--dsr-spacing-unit) * 1);
+        align-items: center;
+        gap: var(--boxel-sp);
+        margin-bottom: calc(var(--boxel-sp) * 2);
+        padding-bottom: var(--boxel-sp);
         border-bottom: 2px solid var(--dsr-border);
       }
-
-      .section-number {
+      .nav-section-number {
         display: inline-block;
-        font-size: 0.875rem;
+        font-size: var(--boxel-font-size-sm);
         font-weight: 700;
-        color: var(--dsr-accent);
+        color: var(--dsr-muted-fg);
         font-variant-numeric: tabular-nums;
         min-width: 2rem;
       }
-
-      .section-number:empty::before {
+      .nav-section-number:empty::before {
         display: inline-block;
         content: counter(section, decimal-leading-zero);
       }
-
-      .section-title {
-        font-size: 1.75rem;
-        font-weight: 700;
-        margin: 0;
-        letter-spacing: -0.01em;
-        line-height: 1.2;
-      }
-
-      .back-to-top {
+      .nav-section-button {
         margin-left: auto;
-        font-size: var(--boxel-font-size-xs);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        text-decoration: none;
-        color: var(--dsr-secondary);
-        border: 1px solid transparent;
-        border-radius: calc(var(--dsr-radius) * 0.4);
-        padding: calc(var(--dsr-spacing-unit) * 0.2)
-          calc(var(--dsr-spacing-unit) * 0.5);
-        transition:
-          color 0.2s ease,
-          border-color 0.2s ease;
-      }
-
-      .back-to-top:hover,
-      .back-to-top:focus-visible {
-        color: var(--dsr-accent);
-        border-color: var(--dsr-border);
-        outline: none;
       }
 
       @media (max-width: 768px) {
-        .section-header {
+        .nav-section-header {
           flex-direction: column;
           align-items: flex-start;
-          gap: calc(var(--dsr-spacing-unit) * 0.5);
+          gap: calc(var(--boxel-sp) * 0.5);
         }
-
-        .section-title {
-          font-size: 1.5rem;
-        }
-
-        .back-to-top {
-          margin-left: 0;
+        .nav-section-button {
+          margin-left: initial;
         }
       }
     </style>
@@ -179,18 +233,16 @@ class NavBar extends GlimmerComponent<{
       .dsr-nav {
         position: sticky;
         top: 0;
-        background: var(--dsr-background);
         border-bottom: 1px solid var(--dsr-border);
         z-index: 10;
         backdrop-filter: blur(8px);
         display: flex;
         align-items: stretch;
-        padding-inline: var(--dsr-spacing-unit);
+        padding-inline: var(--boxel-sp);
       }
-
       .nav-grid {
         display: flex;
-        gap: calc(var(--dsr-spacing-unit) * 0.5);
+        gap: calc(var(--boxel-sp) * 0.5);
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
@@ -198,32 +250,28 @@ class NavBar extends GlimmerComponent<{
         position: relative;
         align-items: center;
       }
-
       .nav-grid::-webkit-scrollbar {
         display: none;
       }
-
       .nav-item {
         font-size: var(--boxel-font-size-sm);
         font-weight: 500;
-        color: var(--dsr-secondary);
+        color: var(--dsr-fg);
         text-decoration: none;
         white-space: nowrap;
-        padding: calc(var(--dsr-spacing-unit) * 0.5)
-          calc(var(--dsr-spacing-unit) * 0.75);
+        padding: calc(var(--boxel-sp) * 0.5) calc(var(--boxel-sp) * 0.75);
         border: none;
-        border-radius: calc(var(--dsr-radius) * 0.5);
+        border-radius: calc(var(--boxel-border-radius) * 0.5);
       }
-
       .nav-item:hover {
-        color: var(--dsr-accent);
-        background: color-mix(in srgb, var(--dsr-accent) 5%, transparent);
+        background-color: var(--accent);
+        color: var(--accent-foreground);
       }
-
       .nav-scroll {
+        flex-shrink: 0;
         border: none;
         background: none;
-        color: var(--dsr-secondary);
+        color: var(--dsr-muted-fg);
         width: 2.25rem;
         height: 5rem;
         display: flex;
@@ -231,34 +279,30 @@ class NavBar extends GlimmerComponent<{
         justify-content: center;
         cursor: pointer;
         transition:
-          color 0.2s ease,
-          box-shadow 0.2s ease,
-          transform 0.2s ease;
+          color var(--boxel-transition),
+          box-shadow var(--boxel-transition),
+          transform var(--boxel-transition);
         opacity: 0.5;
         padding: 0;
       }
-
       .nav-scroll:hover,
       .nav-scroll:focus-visible {
-        color: var(--dsr-accent);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        color: var(--dsr-fg);
         outline: none;
+        background: color-mix(in lab, var(--dsr-fg) 10%, transparent);
       }
-
       .nav-scroll--left {
         order: -1;
       }
-
       .nav-scroll--right {
         order: 1;
       }
-
       .nav-container {
         position: relative;
+        flex-grow: 1;
         display: flex;
         overflow: hidden;
       }
-
       .nav-container::before,
       .nav-container::after {
         content: '';
@@ -269,38 +313,25 @@ class NavBar extends GlimmerComponent<{
         pointer-events: none;
         z-index: 1;
       }
-
       .nav-container::before {
         left: 0;
-        background: linear-gradient(
-          to right,
-          var(--dsr-background),
-          transparent
-        );
+        background: linear-gradient(to right, var(--dsr-bg) 5%, transparent);
       }
-
       .nav-container::after {
         right: 0;
-        background: linear-gradient(
-          to left,
-          var(--dsr-background),
-          transparent
-        );
+        background: linear-gradient(to left, var(--dsr-bg) 5%, transparent);
       }
 
       @media (max-width: 768px) {
         .dsr-nav {
-          padding: var(--dsr-spacing-unit);
+          padding: var(--boxel-sp);
         }
-
         .nav-grid {
-          gap: var(--dsr-spacing-unit);
+          gap: var(--boxel-sp);
         }
-
         .nav-scroll {
           display: none;
         }
-
         .nav-container::before,
         .nav-container::after {
           display: none;
@@ -308,8 +339,8 @@ class NavBar extends GlimmerComponent<{
       }
     </style>
   </template>
-  @action
-  private scrollTo(direction: 'left' | 'right', event: Event) {
+
+  private scrollTo = (direction: 'left' | 'right', event: Event) => {
     event.preventDefault();
     let navContainer = (event.currentTarget as HTMLElement)
       ?.closest('.dsr-nav')
@@ -322,10 +353,10 @@ class NavBar extends GlimmerComponent<{
         ? -navContainer.clientWidth * 0.8
         : navContainer.clientWidth * 0.8;
     navContainer.scrollBy({ left: offset, behavior: 'smooth' });
-  }
+  };
 }
 
-class ModeToggle extends GlimmerComponent<{
+export class ModeToggle extends GlimmerComponent<{
   Args: {
     toggleDarkMode: () => void;
     isDarkMode: boolean;
@@ -333,65 +364,114 @@ class ModeToggle extends GlimmerComponent<{
   Element: HTMLButtonElement;
 }> {
   <template>
-    <button class='theme-toggle' {{on 'click' @toggleDarkMode}} ...attributes>
+    <Button
+      class='mode-toggle'
+      @kind='primary'
+      @size='small'
+      {{on 'click' @toggleDarkMode}}
+      ...attributes
+    >
       {{#if @isDarkMode}}
-        <Sun class='toggle-icon' role='presentation' />
+        <Sun width='16' height='16' class='toggle-icon' role='presentation' />
         Light Mode
       {{else}}
-        <Moon class='toggle-icon' role='presentation' />
+        <Moon width='16' height='16' class='toggle-icon' role='presentation' />
         Dark Mode
       {{/if}}
-    </button>
+    </Button>
     <style scoped>
-      .theme-toggle {
-        display: flex;
-        align-items: center;
-        gap: calc(var(--dsr-spacing-unit) * 0.5);
-        padding: calc(var(--dsr-spacing-unit) * 0.5)
-          calc(var(--dsr-spacing-unit) * 1);
-        background: var(--dsr-accent);
-        color: white;
-        border: none;
-        border-radius: calc(var(--dsr-radius) * 0.5);
-        font-size: 0.875rem;
-        font-weight: 600;
-        cursor: pointer;
+      .mode-toggle {
+        gap: var(--boxel-sp-xs);
+        transition: none;
       }
-
-      .theme-toggle:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-      }
-
       .toggle-icon {
-        width: 1rem;
-        height: 1rem;
+        flex-shrink: 0;
       }
     </style>
   </template>
 }
 
-class ThemeDashboard extends GlimmerComponent<{
+export class ThemeDashboardHeader extends GlimmerComponent<{
   Args: {
+    title?: string;
+    description?: string;
+    isDarkMode?: boolean;
+  };
+  Element: HTMLElement;
+  Blocks: { meta: []; default: [] };
+}> {
+  <template>
+    <header class='theme-dashboard-header' ...attributes>
+      {{#if (has-block 'meta')}}
+        {{yield to='meta'}}
+      {{else}}
+        <div class='theme-dashboard-header-meta'>
+          <span class='theme-dashboard-header-meta-label'>Style Guide</span>
+          <span class='theme-dashboard-header-meta-version'>Version 1.0</span>
+        </div>
+      {{/if}}
+      <h1 class='theme-dashboard-header-title'>{{@title}}</h1>
+      {{#if @description}}
+        <p class='theme-dashboard-header-tagline'>{{@description}}</p>
+      {{/if}}
+      {{yield}}
+    </header>
+    <style scoped>
+      @layer baseComponent {
+        .theme-dashboard-header {
+          border-bottom: 1px solid var(--dsr-border);
+          padding: calc(var(--boxel-sp) * 3) calc(var(--boxel-sp) * 2);
+          background-color: var(--dsr-muted);
+          color: var(--dsr-muted-fg);
+        }
+        .theme-dashboard-header-meta {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: calc(var(--boxel-sp) * 1.5);
+          font-size: var(--boxel-caption-font-size);
+          text-transform: uppercase;
+          letter-spacing: var(--boxel-lsp-xxl);
+          font-weight: 600;
+        }
+        .theme-dashboard-header-title {
+          margin-bottom: calc(var(--boxel-sp) * 0.75);
+          color: var(--dsr-fg);
+        }
+        .theme-dashboard-header-tagline {
+          max-width: 48rem;
+        }
+      }
+    </style>
+  </template>
+}
+
+export class ThemeDashboard extends GlimmerComponent<{
+  Args: {
+    title?: string;
     description?: string;
     sections?: { id: string; navTitle: string; title: string }[];
-    title?: string;
+    isDarkMode?: boolean;
   };
-  Blocks: { default: [] };
+  Blocks: { default: []; header: [] };
   Element: HTMLElement;
 }> {
   <template>
-    <article id='top' class='detailed-style-reference' ...attributes>
-      <header class='dsr-header'>
-        <div class='header-meta'>
-          <span class='meta-label'>Style Guide</span>
-          <span class='meta-version'>Version 1.0</span>
-        </div>
-        <h1 class='style-title'>{{@title}}</h1>
-        {{#if @description}}
-          <p class='style-tagline'>{{@description}}</p>
-        {{/if}}
-      </header>
+    <article
+      id='top'
+      class={{cn 'detailed-style-reference' dsr--dark=@isDarkMode}}
+      ...attributes
+    >
+      {{#if (has-block 'header')}}
+        {{yield to='header'}}
+      {{else}}
+        <ThemeDashboardHeader
+          class='dsr-header'
+          @title={{@title}}
+          @description={{@description}}
+          @isDarkMode={{@isDarkMode}}
+        />
+      {{/if}}
 
       {{#if @sections.length}}
         <NavBar @sections={{@sections}} />
@@ -412,115 +492,92 @@ class ThemeDashboard extends GlimmerComponent<{
     </article>
 
     <style scoped>
-      /* Root Variables */
       .detailed-style-reference {
-        --dsr-primary: var(--foreground, #1a1a1a);
-        --dsr-secondary: var(--muted-foreground, #666);
-        --dsr-accent: var(--accent, #0066cc);
-        --dsr-background: var(--background, #ffffff);
-        --dsr-surface: var(--card, #f8f9fa);
-        --dsr-border: var(--border, #e0e0e0);
-        --dsr-spacing-unit: var(--boxel-sp, 1rem);
-        --dsr-radius: var(--radius, 8px);
-      }
-
-      /* Layout Structure */
-      .detailed-style-reference {
-        min-height: 100vh;
-        background: var(--dsr-background);
-        color: var(--dsr-primary);
-        font-family: var(
-          --font-sans,
-          -apple-system,
-          BlinkMacSystemFont,
-          'Segoe UI',
-          sans-serif
+        --dsr-bg: var(--background, var(--boxel-light));
+        --dsr-fg: var(--foreground, var(--boxel-700));
+        --dsr-muted: var(
+          --muted,
+          color-mix(in oklab, var(--dsr-fg) 10%, transparent)
         );
-        line-height: 1.6;
+        --dsr-muted-fg: var(
+          --muted-foreground,
+          color-mix(in oklab, var(--dsr-fg) 60%, transparent)
+        );
+        --dsr-border: var(
+          --border,
+          color-mix(in oklab, var(--dsr-fg) 20%, transparent)
+        );
+        --dsr-card: var(
+          --card,
+          color-mix(in oklab, var(--dsr-fg) 5%, transparent)
+        );
+        --dsr-card-fg: var(--card-foreground, var(--dsr-fg));
+
+        min-height: 100vh;
+        background-color: var(--dsr-bg);
+        color: var(--dsr-fg);
         overflow-y: auto;
       }
-
-      /* Header */
-      .dsr-header {
-        border-bottom: 1px solid var(--dsr-border);
-        padding: calc(var(--dsr-spacing-unit) * 3)
-          calc(var(--dsr-spacing-unit) * 2);
-        background: var(--dsr-surface);
+      .dsr--dark {
+        --dsr-bg: var(--background, var(--boxel-700));
+        --dsr-fg: var(--foreground, var(--boxel-light));
+      }
+      .dsr--dark :deep(input),
+      .dsr--dark :deep(textarea),
+      .dsr--dark :deep(pre) {
+        background-color: color-mix(
+          in oklab,
+          var(--dsr-bg),
+          var(--boxel-dark) 20%
+        );
+        color: var(--foreground, var(--boxel-light));
       }
 
-      .header-meta {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: calc(var(--dsr-spacing-unit) * 1.5);
-        font-size: var(--boxel-caption-font-size);
-        text-transform: uppercase;
-        letter-spacing: 0.1em;
-        font-weight: 600;
-        color: var(--dsr-secondary);
+      .dsr-header :deep(h1) {
+        font-size: var(--boxel-font-size-2xl);
       }
-
-      .style-title {
-        font-size: clamp(2rem, 5vw, 3.5rem);
-        font-weight: 700;
-        line-height: 1.1;
-        margin: 0 0 calc(var(--dsr-spacing-unit) * 0.75) 0;
-        letter-spacing: -0.02em;
-      }
-
-      .style-tagline {
-        font-size: 1.125rem;
-        color: var(--dsr-secondary);
-        margin: 0;
-        max-width: 48rem;
-        line-height: 1.5;
+      .dsr-header :deep(p) {
+        font-size: var(--boxel-font-size);
       }
 
       /* Content */
       .dsr-content {
         max-width: 56rem;
         margin: 0 auto;
-        padding: calc(var(--dsr-spacing-unit) * 3)
-          calc(var(--dsr-spacing-unit) * 2);
+        padding: calc(var(--boxel-sp) * 3) calc(var(--boxel-sp) * 2);
         counter-reset: section;
       }
 
       /* Footer */
       .dsr-footer {
         border-top: 1px solid var(--dsr-border);
-        margin-top: calc(var(--dsr-spacing-unit) * 4);
-        padding: calc(var(--dsr-spacing-unit) * 2);
-        background: var(--dsr-surface);
+        margin-top: calc(var(--boxel-sp) * 4);
+        padding: calc(var(--boxel-sp) * 2);
+        background-color: var(--dsr-muted);
+        color: var(--dsr-muted-fg);
       }
-
       .footer-content {
         max-width: 56rem;
         margin: 0 auto;
         text-align: center;
       }
-
       .footer-text {
-        font-size: 0.875rem;
-        color: var(--dsr-secondary);
         font-style: italic;
-        margin: 0;
+        font-size: var(--boxel-font-size-sm);
         text-wrap: pretty;
       }
 
       /* Responsive */
       @media (max-width: 768px) {
         .dsr-header {
-          padding: calc(var(--dsr-spacing-unit) * 2) var(--dsr-spacing-unit);
+          padding: calc(var(--boxel-sp) * 2) var(--boxel-sp);
         }
-
         .style-title {
           font-size: clamp(1.75rem, 8vw, 2.5rem);
         }
-
         .dsr-content {
-          padding: calc(var(--dsr-spacing-unit) * 2) var(--dsr-spacing-unit);
+          padding: calc(var(--boxel-sp) * 2) var(--boxel-sp);
         }
-
         .theme-toggle {
           width: 100%;
           justify-content: center;
@@ -535,6 +592,21 @@ class Isolated extends Component<typeof DetailedStyleReference> {
 
   private toggleDarkMode = () => {
     this.isDarkMode = !this.isDarkMode;
+  };
+
+  private parseCss = (content: string) => {
+    if (!content || !parseCssGroups) {
+      return;
+    }
+    const groups = parseCssGroups(content);
+    if (!groups?.size) {
+      return;
+    }
+    applyCssRulesToField(this.args.model?.rootVariables, groups.get(':root'));
+    applyCssRulesToField(
+      this.args.model?.darkModeVariables,
+      groups.get('.dark'),
+    );
   };
 
   private get colorSystem() {
@@ -579,76 +651,14 @@ class Isolated extends Component<typeof DetailedStyleReference> {
     return [vars.chart1, vars.chart2, vars.chart3, vars.chart4, vars.chart5];
   }
 
-  private sections = [
-    {
-      id: 'context',
-      navTitle: 'Context',
-      title: 'Historical Context & Philosophy',
-      fieldName: 'historicalContext',
-    },
-    {
-      id: 'visual-dna',
-      navTitle: 'Visual DNA',
-      title: 'Visual DNA',
-    },
-    {
-      id: 'composition',
-      navTitle: 'Composition',
-      title: 'Spatial & Compositional Rules',
-      fieldName: 'compositionRules',
-    },
-    {
-      id: 'motion',
-      navTitle: 'Motion',
-      title: 'Motion & Interaction Language',
-      fieldName: 'motionLanguage',
-    },
-    {
-      id: 'components',
-      navTitle: 'Components',
-      title: 'Component Vocabulary',
-      fieldName: 'componentVocabulary',
-    },
-    {
-      id: 'voice',
-      navTitle: 'Voice',
-      title: 'Content & Voice Principles',
-      fieldName: 'contentVoice',
-    },
-    {
-      id: 'technical',
-      navTitle: 'Technical',
-      title: 'Technical Specifications',
-      fieldName: 'technicalSpecs',
-    },
-    {
-      id: 'applications',
-      navTitle: 'Applications',
-      title: 'Application Scenarios',
-      fieldName: 'applicationScenarios',
-    },
-    {
-      id: 'quality',
-      navTitle: 'Quality',
-      title: 'Quality Standards',
-      fieldName: 'qualityStandards',
-    },
-    {
-      id: 'mindset',
-      navTitle: 'Design Mindset',
-      title: 'Design Mindset',
-      fieldName: 'designMindset',
-    },
-    {
-      id: 'inspirations',
-      navTitle: 'Inspirations',
-      title: 'Key Inspirations',
-      fieldName: 'inspirations',
-    },
-  ];
+  private sections = STYLE_GUIDE_SECTIONS;
 
   private get sectionsWithContent() {
     return this.sections.filter((section) => {
+      if (section.id === 'import-css') {
+        return true;
+      }
+
       if (section.id === 'visual-dna') {
         return this.hasVisualDNAContent;
       }
@@ -698,26 +708,27 @@ class Isolated extends Component<typeof DetailedStyleReference> {
       @title={{@model.title}}
       @description={{@model.description}}
       @sections={{this.sectionsWithContent}}
+      @isDarkMode={{this.isDarkMode}}
     >
       {{! Theme Visualizer Section }}
-      <section class='dsr-section theme-visualizer-section'>
-        <div class='section-header'>
-          <h2 class='section-title'>Theme Visualizer</h2>
+      <section class='dsr-section dsr-theme-visualizer'>
+        <div class='dsr-theme-visualizer-header'>
+          <h2>Theme Visualizer</h2>
           <ModeToggle
             @toggleDarkMode={{this.toggleDarkMode}}
             @isDarkMode={{this.isDarkMode}}
           />
         </div>
 
-        <div class='theme-preview'>
-          <div class='preview-container'>
+        <div class='dsr-theme-preview'>
+          <div class='dsr-preview-container'>
             {{! Color Swatches }}
-            <div class='color-section'>
-              <h3 class='preview-subtitle'>Color System</h3>
-              <div class='color-grid'>
+            <div class='dsr-color-section'>
+              <h3 class='dsr-preview-subtitle'>Color System</h3>
+              <div class='dsr-color-grid'>
                 {{#each this.colorSystem as |color|}}
                   <Swatch
-                    class='color-swatch'
+                    class='dsr-color-swatch'
                     @label={{color.name}}
                     @color={{color.value}}
                   />
@@ -726,28 +737,28 @@ class Isolated extends Component<typeof DetailedStyleReference> {
             </div>
 
             {{! Typography Showcase }}
-            <div class='typography-section'>
-              <h3 class='preview-subtitle'>Typography</h3>
+            <div class='dsr-typography-section'>
+              <h3 class='dsr-preview-subtitle'>Typography</h3>
               <@fields.typography />
             </div>
 
             {{! Component Samples }}
-            <div class='components-section'>
-              <h3 class='preview-subtitle'>Components</h3>
-              <div class='component-samples'>
+            <div class='dsr-components-section'>
+              <h3 class='dsr-preview-subtitle'>Components</h3>
+              <div class='dsr-component-samples'>
                 <Button
                   @kind='primary'
-                  @size='touch'
+                  @size='extra-small'
                   @rectangular={{true}}
                 >Primary Action</Button>
                 <Button
                   @kind='secondary'
-                  @size='touch'
+                  @size='extra-small'
                   @rectangular={{true}}
                 >Secondary Action</Button>
 
                 <CardContainer @displayBoundaries={{true}} class='sample-card'>
-                  <h3 class='card-title'>Sample Card</h3>
+                  <h3 class='dsr-card-title'>Sample Card</h3>
                   <p>
                     Card component showcasing background, borders, and shadows
                     from the theme system.
@@ -757,12 +768,12 @@ class Isolated extends Component<typeof DetailedStyleReference> {
             </div>
 
             {{! Chart Colors }}
-            <div class='charts-section'>
-              <h3 class='preview-subtitle'>Chart Colors</h3>
-              <div class='chart-swatches'>
+            <div class='dsr-charts-section'>
+              <h3 class='dsr-preview-subtitle'>Chart Colors</h3>
+              <div class='dsr-chart-swatches'>
                 {{#each this.chartColors as |color|}}
                   <Swatch
-                    class='chart-swatch'
+                    class='dsr-chart-swatch'
                     @hideLabel={{true}}
                     @color={{color}}
                   />
@@ -772,12 +783,12 @@ class Isolated extends Component<typeof DetailedStyleReference> {
 
             {{! Shadow Scale }}
             <div class='shadows-section'>
-              <h3 class='preview-subtitle'>Shadow Scale</h3>
-              <div class='shadow-samples'>
-                <div class='shadow-box sm-shadow'>SM</div>
-                <div class='shadow-box md-shadow'>MD</div>
-                <div class='shadow-box lg-shadow'>LG</div>
-                <div class='shadow-box xl-shadow'>XL</div>
+              <h3 class='dsr-preview-subtitle'>Shadow Scale</h3>
+              <div class='dsr-shadow-samples'>
+                <div class='dsr-shadow-box sm-shadow'>SM</div>
+                <div class='dsr-shadow-box md-shadow'>MD</div>
+                <div class='dsr-shadow-box lg-shadow'>LG</div>
+                <div class='dsr-shadow-box xl-shadow'>XL</div>
               </div>
             </div>
           </div>
@@ -787,7 +798,7 @@ class Isolated extends Component<typeof DetailedStyleReference> {
       {{#each this.sectionsWithContent as |section|}}
         <NavSection @id={{section.id}} @title={{section.title}}>
           {{#if (eq section.id 'visual-dna')}}
-            <div class='section-content'>
+            <div class='dsr-section-content'>
               {{#if @model.colorPalette}}
                 <div class='subsection'>
                   <h3 class='subsection-title'>Color Palette</h3>
@@ -798,42 +809,42 @@ class Isolated extends Component<typeof DetailedStyleReference> {
               {{/if}}
 
               {{#if @model.typographySystem}}
-                <div class='subsection'>
-                  <h3 class='subsection-title'>Typography System</h3>
-                  <div class='content-prose'>
+                <div class='dsr-subsection'>
+                  <h3 class='dsr-subsection-title'>Typography System</h3>
+                  <div class='dsr-content-prose'>
                     <@fields.typographySystem />
                   </div>
                 </div>
               {{/if}}
 
               {{#if @model.geometricLanguage}}
-                <div class='subsection'>
-                  <h3 class='subsection-title'>Geometric Language</h3>
-                  <div class='content-prose'>
+                <div class='dsr-subsection'>
+                  <h3 class='dsr-subsection-title'>Geometric Language</h3>
+                  <div class='dsr-content-prose'>
                     <@fields.geometricLanguage />
                   </div>
                 </div>
               {{/if}}
 
               {{#if @model.materialVocabulary}}
-                <div class='subsection'>
-                  <h3 class='subsection-title'>Material Vocabulary</h3>
-                  <div class='content-prose'>
+                <div class='dsr-subsection'>
+                  <h3 class='dsr-subsection-title'>Material Vocabulary</h3>
+                  <div class='dsr-content-prose'>
                     <@fields.materialVocabulary />
                   </div>
                 </div>
               {{/if}}
 
               {{#if @model.wallpaperImages.length}}
-                <div class='subsection'>
-                  <h3 class='subsection-title'>Visual References</h3>
-                  <div class='image-gallery'>
+                <div class='dsr-subsection'>
+                  <h3 class='dsr-subsection-title'>Visual References</h3>
+                  <div class='dsr-image-gallery'>
                     {{#each @model.wallpaperImages as |imageUrl|}}
-                      <figure class='gallery-item'>
+                      <figure class='dsr-gallery-item'>
                         <img
                           src='{{imageUrl}}'
                           alt='Style reference'
-                          class='gallery-image'
+                          class='dsr-gallery-image'
                         />
                       </figure>
                     {{/each}}
@@ -841,15 +852,31 @@ class Isolated extends Component<typeof DetailedStyleReference> {
                 </div>
               {{/if}}
             </div>
+          {{else if (eq section.id 'import-css')}}
+            <div class='dsr-section-content'>
+              <FieldContainer
+                @vertical={{true}}
+                @label='Paste your CSS below to customize the theme variables'
+                @tag='label'
+              >
+                <BoxelInput
+                  @type='textarea'
+                  @onInput={{this.parseCss}}
+                  @placeholder={{CSS_PLACEHOLDER}}
+                  class='css-textarea'
+                  data-test-custom-css-variables
+                />
+              </FieldContainer>
+            </div>
           {{else if (eq section.id 'inspirations')}}
-            <div class='inspiration-tags'>
+            <div class='dsr-inspiration-tags'>
               {{#each @model.inspirations as |inspiration|}}
-                <span class='inspiration-tag'>{{inspiration}}</span>
+                <span class='dsr-inspiration-tag'>{{inspiration}}</span>
               {{/each}}
             </div>
           {{else if section.fieldName}}
             {{#let (get @fields section.fieldName) as |FieldContent|}}
-              <div class='content-prose'>
+              <div class='dsr-content-prose'>
                 {{! @glint-ignore }}
                 <FieldContent />
               </div>
@@ -861,350 +888,211 @@ class Isolated extends Component<typeof DetailedStyleReference> {
 
     <style scoped>
       .dsr-section {
-        margin-bottom: calc(var(--dsr-spacing-unit) * 4);
-        scroll-margin-top: calc(var(--dsr-spacing-unit) * 6);
+        margin-bottom: calc(var(--boxel-sp) * 4);
+        scroll-margin-top: calc(var(--boxel-sp) * 6);
       }
 
       /* Subsections */
-      .subsection {
-        margin-bottom: calc(var(--dsr-spacing-unit) * 2.5);
+      .dsr-subsection {
+        margin-bottom: calc(var(--boxel-sp) * 2.5);
       }
-
-      .subsection:last-child {
+      .dsr-subsection:last-child {
         margin-bottom: 0;
       }
-
-      .subsection-title {
-        margin: 0 0 calc(var(--dsr-spacing-unit) * 1) 0;
-        color: var(--dsr-primary);
-      }
-
-      /* Content Typography */
-      .content-prose {
-        font-size: 0.9375rem;
-        line-height: 1.7;
-        color: var(--dsr-primary);
-      }
-
-      .content-prose :deep(h1),
-      .content-prose :deep(h2),
-      .content-prose :deep(h3),
-      .content-prose :deep(h4) {
-        font-weight: 600;
-        line-height: 1.3;
-        margin-top: calc(var(--dsr-spacing-unit) * 1.5);
-        margin-bottom: calc(var(--dsr-spacing-unit) * 0.75);
-      }
-
-      .content-prose :deep(h1) {
-        font-size: 1.5rem;
-      }
-
-      .content-prose :deep(h2) {
-        font-size: 1.25rem;
-      }
-
-      .content-prose :deep(h3) {
-        font-size: 1.0625rem;
-      }
-
-      .content-prose :deep(h4) {
-        font-size: 0.9375rem;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--dsr-secondary);
-      }
-
-      .content-prose :deep(p) {
-        margin: 0 0 calc(var(--dsr-spacing-unit) * 1) 0;
-      }
-
-      .content-prose :deep(ul),
-      .content-prose :deep(ol) {
-        margin: 0 0 calc(var(--dsr-spacing-unit) * 1) 0;
-        padding-left: calc(var(--dsr-spacing-unit) * 1.5);
-      }
-
-      .content-prose :deep(li) {
-        margin-bottom: calc(var(--dsr-spacing-unit) * 0.5);
-      }
-
-      .content-prose :deep(strong) {
-        font-weight: 600;
-        color: var(--dsr-primary);
-      }
-
-      .content-prose :deep(em) {
-        font-style: italic;
-        color: var(--dsr-secondary);
-      }
-
-      .content-prose :deep(code) {
-        font-family: var(--font-mono, 'Monaco', 'Courier New', monospace);
-        font-size: 0.875em;
-        background: var(--dsr-surface);
-        padding: 0.125rem 0.375rem;
-        border-radius: calc(var(--dsr-radius) * 0.375);
-        border: 1px solid var(--dsr-border);
-      }
-
-      .content-prose :deep(pre) {
-        background: var(--dsr-surface);
-        padding: calc(var(--dsr-spacing-unit) * 1);
-        border-radius: var(--dsr-radius);
-        overflow-x: auto;
-        border: 1px solid var(--dsr-border);
-        margin: calc(var(--dsr-spacing-unit) * 1.5) 0;
-      }
-
-      .content-prose :deep(pre code) {
-        background: none;
-        padding: 0;
-        border: none;
-      }
-
-      .content-prose :deep(blockquote) {
-        border-left: 3px solid var(--dsr-accent);
-        padding-left: calc(var(--dsr-spacing-unit) * 1);
-        margin: calc(var(--dsr-spacing-unit) * 1.5) 0;
-        font-style: italic;
-        color: var(--dsr-secondary);
-      }
-
-      /* Technical Content */
-      .technical-content :deep(pre) {
-        background: #1e1e1e;
-        color: #d4d4d4;
-        border: none;
-      }
-
-      .technical-content :deep(code) {
-        color: #d4d4d4;
+      .dsr-subsection-title {
+        margin-bottom: var(--boxel-sp);
+        color: var(--dsr-muted-fg);
       }
 
       /* Image Gallery */
-      .image-gallery {
+      .dsr-image-gallery {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-        gap: calc(var(--dsr-spacing-unit) * 1.5);
-        margin-top: calc(var(--dsr-spacing-unit) * 1.5);
+        grid-template-columns: repeat(auto-fill, minmax(17.5rem, 1fr));
+        gap: calc(var(--boxel-sp) * 1.5);
+        margin-top: calc(var(--boxel-sp) * 1.5);
       }
-
-      .gallery-item {
+      .dsr-gallery-item {
         margin: 0;
         aspect-ratio: 16 / 10;
-        border-radius: var(--dsr-radius);
+        border-radius: var(--boxel-border-radius);
         overflow: hidden;
-        background: var(--dsr-surface);
+        background-color: var(--dsr-card);
+        color: var(--dsr-card-fg);
         border: 1px solid var(--dsr-border);
       }
-
-      .gallery-image {
+      .dsr-gallery-image {
         width: 100%;
         height: 100%;
         object-fit: cover;
-        transition: transform 0.3s ease;
+        transition: transform var(--boxel-transition);
       }
-
-      .gallery-item:hover .gallery-image {
+      .dsr-gallery-item:hover .dsr-gallery-image {
         transform: scale(1.05);
       }
 
       /* Inspirations */
-      .inspirations-section {
-        background: var(--dsr-surface);
-        border-radius: var(--dsr-radius);
-        padding: calc(var(--dsr-spacing-unit) * 2);
+      .dsr-inspirations-section {
+        background-color: var(--dsr-card);
+        color: var(--dsr-card-fg);
+        border-radius: var(--boxel-border-radius);
+        padding: calc(var(--boxel-sp) * 2);
         border: 1px solid var(--dsr-border);
       }
-
-      .inspiration-tags {
+      .dsr-inspiration-tags {
         display: flex;
         flex-wrap: wrap;
-        gap: calc(var(--dsr-spacing-unit) * 0.5);
+        gap: calc(var(--boxel-sp) * 0.5);
       }
-
-      .inspiration-tag {
+      .dsr-inspiration-tag {
         display: inline-block;
-        padding: calc(var(--dsr-spacing-unit) * 0.375)
-          calc(var(--dsr-spacing-unit) * 0.75);
-        background: var(--dsr-background);
+        padding: calc(var(--boxel-sp) * 0.375) calc(var(--boxel-sp) * 0.75);
+        background-color: var(--dsr-card);
+        color: var(--dsr-card-fg);
         border: 1px solid var(--dsr-border);
-        border-radius: calc(var(--dsr-radius) * 0.5);
-        font-size: 0.8125rem;
+        border-radius: calc(var(--boxel-border-radius) * 0.5);
+        font-size: var(--boxel-font-size-xs);
         font-weight: 500;
-        color: var(--dsr-secondary);
+      }
+      .dsr-inspiration-tag:hover {
+        border-color: var(--dsr-fg);
       }
 
-      .inspiration-tag:hover {
-        border-color: var(--dsr-accent);
-        color: var(--dsr-accent);
+      /* Import Custom CSS */
+      .css-textarea {
+        --boxel-input-height: 19rem;
       }
 
       /* Theme Visualizer */
-      .theme-visualizer-section {
-        background: var(--dsr-surface);
-        border-radius: var(--dsr-radius);
-        padding: calc(var(--dsr-spacing-unit) * 2);
+      .dsr-theme-visualizer {
+        background-color: var(--dsr-card);
+        color: var(--dsr-card-fg);
+        border-radius: var(--boxel-border-radius);
+        padding: calc(var(--boxel-sp) * 2);
         border: 1px solid var(--dsr-border);
       }
-
-      .theme-visualizer-section .section-header {
+      .dsr-theme-visualizer-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
+        margin-bottom: calc(var(--boxel-sp) * 2);
+        padding-bottom: var(--boxel-sp);
         border-bottom: 2px solid var(--dsr-border);
-        margin-bottom: calc(var(--dsr-spacing-unit) * 2);
-        padding-bottom: calc(var(--dsr-spacing-unit) * 1);
       }
-
-      .theme-preview {
-        padding: calc(var(--dsr-spacing-unit) * 2);
-        background: var(--background);
-        color: var(--foreground);
-        border-radius: var(--dsr-radius);
-        border: 2px solid var(--border);
+      .dsr-theme-preview {
+        padding: calc(var(--boxel-sp) * 2);
+        background: var(--dsr-bg);
+        color: var(--dsr-fg);
+        border-radius: var(--boxel-border-radius);
+        border: 2px solid var(--dsr-border);
       }
-
-      .preview-container {
+      .dsr-preview-container {
         display: flex;
         flex-direction: column;
-        gap: calc(var(--dsr-spacing-unit) * 4);
+        gap: calc(var(--boxel-sp) * 4);
       }
-
-      .preview-subtitle {
+      .dsr-preview-subtitle {
         border-bottom: var(--boxel-border);
-        margin-bottom: calc(var(--dsr-spacing-unit) * 2);
+        margin-bottom: calc(var(--boxel-sp) * 2);
       }
 
       /* Color Swatches */
-      .color-grid {
+      .dsr-color-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-        gap: calc(var(--dsr-spacing-unit) * 1);
+        grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+        gap: var(--boxel-sp);
       }
-
-      .color-swatch {
+      .dsr-color-swatch {
         --swatch-height: 3.75rem;
         display: flex;
         flex-direction: column;
-        gap: calc(var(--dsr-spacing-unit) * 0.5);
-        color: var(--muted-foreground);
-        font-size: var(--boxel-caption-font-size);
+        gap: calc(var(--boxel-sp) * 0.5);
+        font-size: var(--boxel-font-size-xs);
         text-align: center;
       }
-
-      .color-swatch :deep(.boxel-swatch-preview) {
+      .dsr-color-swatch :deep(.boxel-swatch-preview) {
         order: -1;
         box-shadow: var(--shadow-sm);
       }
 
       /* Component Samples */
-      .component-samples {
+      .dsr-component-samples {
         display: flex;
         flex-wrap: wrap;
-        gap: calc(var(--dsr-spacing-unit) * 1);
+        gap: var(--boxel-sp);
         align-items: flex-start;
       }
-
-      .sample-card {
-        flex: 1 1 300px;
-        padding: calc(var(--dsr-spacing-unit) * 1.5);
-        background: var(--card, var(--boxel-light));
-        color: var(--card-foreground, var(--boxel-dark));
+      .dsr-sample-card {
+        flex: 1 1 18.75rem;
+        padding: var(--boxel-sp);
+        background-color: var(--dsr-card);
+        color: var(--dsr-card-fg);
       }
-
-      .card-title {
-        margin-bottom: var(--dsr-spacing-unit);
+      .dsr-card-title {
+        margin-bottom: var(--boxel-sp);
       }
 
       /* Chart Swatches */
-      .chart-swatches {
-        display: flex;
-        gap: calc(var(--dsr-spacing-unit) * 0.5);
+      .dsr-chart-swatches {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+        gap: calc(var(--boxel-sp) * 0.5);
         flex-wrap: wrap;
       }
-
-      .chart-swatch {
+      .dsr-chart-swatch {
         --swatch-height: 5rem;
         flex: 1;
-        transition: transform 0.2s ease;
+        transition: transform var(--boxel-transition);
       }
-
-      .chart-swatch:hover {
+      .dsr-chart-swatch:hover {
         transform: translateY(-4px);
       }
 
       /* Shadow Samples */
-      .shadow-samples {
+      .dsr-shadow-samples {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-        gap: calc(var(--dsr-spacing-unit) * 2);
+        grid-template-columns: repeat(auto-fit, minmax(5rem, 1fr));
+        gap: calc(var(--boxel-sp) * 2);
       }
-
-      .shadow-box {
+      .dsr-shadow-box {
         height: 5rem;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: var(--card, var(--boxel-light));
-        color: var(--card-foreground, var(--boxel-dark));
-        border: 1px solid var(--border, var(--boxel-border-color));
-        border-radius: var(--boxel-radius);
+        background-color: var(--dsr-card);
+        color: var(--dsr-card-fg);
+        border: 1px solid var(--dsr-border);
+        border-radius: var(--boxel-border-radius);
       }
-
       .sm-shadow {
         box-shadow: var(--shadow-sm);
       }
-
       .md-shadow {
         box-shadow: var(--shadow-md);
       }
-
       .lg-shadow {
         box-shadow: var(--shadow-lg);
       }
-
       .xl-shadow {
         box-shadow: var(--shadow-xl);
       }
 
       /* Responsive */
       @media (max-width: 768px) {
-        .dsr-content {
-          padding: calc(var(--dsr-spacing-unit) * 2) var(--dsr-spacing-unit);
-        }
-
-        .section-header {
-          flex-direction: column;
-          align-items: flex-start;
-          gap: calc(var(--dsr-spacing-unit) * 0.5);
-        }
-
-        .section-title {
-          font-size: 1.5rem;
-        }
-
-        .image-gallery {
+        .dsr-image-gallery {
           grid-template-columns: 1fr;
         }
+        .dsr-color-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .dsr-shadow-samples {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
 
-        .theme-visualizer-section .section-header {
+      @media (max-width: 400px) {
+        .dsr-theme-visualizer-header {
           flex-direction: column;
           align-items: stretch;
-        }
-
-        .theme-toggle {
-          width: 100%;
-          justify-content: center;
-        }
-
-        .color-grid {
-          grid-template-columns: repeat(2, 1fr);
-        }
-
-        .shadow-samples {
-          grid-template-columns: repeat(2, 1fr);
         }
       }
     </style>
@@ -1279,5 +1167,5 @@ export default class DetailedStyleReference extends StyleReference {
       'Core principles or mindset reminders for designers and collaborators.',
   });
 
-  static isolated = Isolated;
+  static isolated: BaseDefComponent = Isolated;
 }

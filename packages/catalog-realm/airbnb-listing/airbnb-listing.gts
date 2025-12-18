@@ -621,7 +621,7 @@ export class AirbnbListing extends CardDef {
   static embedded = class Embedded extends Component<typeof AirbnbListing> {
     // ¹² Embedded format
     get firstImage() {
-      return this.args.model?.photos?.images?.[0]?.uploadedImageUrl;
+      return this.args.model?.photos?.images?.[0]?.url;
     }
 
     <template>

@@ -41,10 +41,44 @@ export class RenderRunner {
   #evictionMetrics = {
     byRealm: new Map<string, { unusable: number; timeout: number }>(),
   };
+  #lastAuthByRealm = new Map<string, string>();
 
   constructor(options: { pagePool: PagePool; boxelHostURL: string }) {
     this.#pagePool = options.pagePool;
     this.#boxelHostURL = options.boxelHostURL;
+  }
+
+  async #getPageForRealm(realm: string, auth: string) {
+    let pageInfo = await this.#pagePool.getPage(realm);
+    let lastAuth = this.#lastAuthByRealm.get(realm);
+    if (pageInfo.reused && lastAuth) {
+      let lastKeys = this.#authKeys(lastAuth);
+      let nextKeys = this.#authKeys(auth);
+      let authChanged =
+        lastKeys && nextKeys
+          ? lastKeys.length !== nextKeys.length ||
+            lastKeys.some((k) => !nextKeys.includes(k))
+          : lastAuth !== auth;
+      if (authChanged) {
+        await this.#pagePool.disposeRealm(realm);
+        pageInfo = await this.#pagePool.getPage(realm);
+      }
+    }
+    this.#lastAuthByRealm.set(realm, auth);
+    return pageInfo;
+  }
+
+  clearAuthCache(realm: string) {
+    this.#lastAuthByRealm.delete(realm);
+  }
+
+  #authKeys(auth: string): string[] | null {
+    try {
+      let parsed = JSON.parse(auth) as Record<string, string>;
+      return Object.keys(parsed).sort();
+    } catch (_e) {
+      return null;
+    }
   }
 
   async prerenderCardAttempt({
@@ -73,8 +107,10 @@ export class RenderRunner {
     this.#nonce++;
     log.info(`prerendering url ${url}, nonce=${this.#nonce} realm=${realm}`);
 
-    const { page, reused, launchMs, pageId } =
-      await this.#pagePool.getPage(realm);
+    const { page, reused, launchMs, pageId } = await this.#getPageForRealm(
+      realm,
+      auth,
+    );
     const poolInfo = {
       pageId: pageId ?? 'unknown',
       realm,
@@ -88,17 +124,9 @@ export class RenderRunner {
       }
     };
 
-    if (!reused) {
-      page.evaluateOnNewDocument((sessionAuth) => {
-        localStorage.setItem('boxel-session', sessionAuth);
-      }, auth);
-    } else {
-      // Only set immediately when reusing an already-loaded document; on a fresh
-      // navigation, calling localStorage on about:blank can throw a SecurityError.
-      await page.evaluate((sessionAuth) => {
-        localStorage.setItem('boxel-session', sessionAuth);
-      }, auth);
-    }
+    await page.evaluate((sessionAuth) => {
+      localStorage.setItem('boxel-session', sessionAuth);
+    }, auth);
 
     let renderStart = Date.now();
     let error: RenderError | undefined;
@@ -120,21 +148,15 @@ export class RenderRunner {
     let result = await withTimeout(
       page,
       async () => {
-        if (reused) {
-          await transitionTo(
-            page,
-            'render.html',
-            url,
-            String(this.#nonce),
-            serializedOptions,
-            'isolated',
-            '0',
-          );
-        } else {
-          await page.goto(
-            `${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}/html/isolated/0`,
-          );
-        }
+        await transitionTo(
+          page,
+          'render.html',
+          url,
+          String(this.#nonce),
+          serializedOptions,
+          'isolated',
+          '0',
+        );
         return await captureResult(page, 'innerHTML', captureOptions);
       },
       opts?.timeoutMs,
@@ -376,8 +398,10 @@ export class RenderRunner {
       `module prerendering url ${url}, nonce=${this.#nonce} realm=${realm}`,
     );
 
-    const { page, reused, launchMs, pageId } =
-      await this.#pagePool.getPage(realm);
+    const { page, reused, launchMs, pageId } = await this.#getPageForRealm(
+      realm,
+      auth,
+    );
     const poolInfo = {
       pageId: pageId ?? 'unknown',
       realm,
@@ -391,20 +415,13 @@ export class RenderRunner {
       }
     };
 
-    if (!reused) {
-      page.evaluateOnNewDocument((sessionAuth) => {
-        localStorage.setItem('boxel-session', sessionAuth);
-      }, auth);
-    } else {
-      await page.evaluate((sessionAuth) => {
-        localStorage.setItem('boxel-session', sessionAuth);
-      }, auth);
-    }
+    await page.evaluate((sessionAuth) => {
+      localStorage.setItem('boxel-session', sessionAuth);
+    }, auth);
 
     let renderStart = Date.now();
     let options = renderOptions ?? {};
     let serializedOptions = serializeRenderRouteOptions(options);
-    let optionsSegment = encodeURIComponent(serializedOptions);
     const captureOptions: CaptureOptions = {
       expectedId: url,
       expectedNonce: String(this.#nonce),
@@ -414,19 +431,13 @@ export class RenderRunner {
     let capture = await withTimeout(
       page,
       async () => {
-        if (reused) {
-          await transitionTo(
-            page,
-            'module',
-            url,
-            String(this.#nonce),
-            serializedOptions,
-          );
-        } else {
-          await page.goto(
-            `${this.#boxelHostURL}/module/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}`,
-          );
-        }
+        await transitionTo(
+          page,
+          'module',
+          url,
+          String(this.#nonce),
+          serializedOptions,
+        );
         return await captureModule(page, captureOptions);
       },
       opts?.timeoutMs,
@@ -511,7 +522,7 @@ export class RenderRunner {
   }
 
   shouldRetryWithClearCache(
-    response: RenderResponse,
+    response: RenderResponse | ModuleRenderResponse,
   ): readonly string[] | undefined {
     let renderError = response.error?.error;
     if (!renderError) {

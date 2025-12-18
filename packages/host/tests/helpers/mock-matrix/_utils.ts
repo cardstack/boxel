@@ -114,6 +114,23 @@ export class MockUtils {
     );
     return roomId;
   };
+  getUploadedContents = () => {
+    return this.testState.sdk!.serverState.getUploadedContents();
+  };
+  setRoomState = (
+    roomId: string,
+    eventType: string,
+    content: Record<string, any>,
+    stateKey?: string,
+  ) => {
+    return this.testState.sdk!.serverState.setRoomState(
+      this.testState.opts?.loggedInAs || 'unknown_user',
+      roomId,
+      eventType as string,
+      content,
+      stateKey,
+    );
+  };
 }
 
 function isRealmEvent(e: IEvent): e is RealmEvent {

@@ -25,6 +25,7 @@ import { not } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
+import PrivateDependencyViolationComponent from '@cardstack/host/components/operator-mode/private-dependency-violation';
 import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
 
 import config from '@cardstack/host/config/environment';
@@ -32,6 +33,7 @@ import config from '@cardstack/host/config/environment';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type { PrivateDependencyViolation } from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type {
   ClaimedDomain,
@@ -75,12 +77,19 @@ export default class PublishRealmModal extends Component<Signature> {
   @tracked private customSubdomainError: string | null = null;
   @tracked private isCheckingCustomSubdomain = false;
   @tracked private claimedDomain: ClaimedDomain | null = null;
-  private initialSelectionsSet = false;
+
+  @tracked private privateDependencyCheckError: string | null = null;
+  @tracked private privateDependencyViolations:
+    | PrivateDependencyViolation[]
+    | null = null;
+
+  @tracked private initialSelectionsSet = false;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.ensureInitialSelectionsTask.perform();
     this.fetchBoxelClaimedDomain.perform();
+    this.checkPrivateDependenciesTask.perform();
   }
 
   get isSubdirectoryRealmPublished() {
@@ -94,6 +103,28 @@ export default class PublishRealmModal extends Component<Signature> {
       this.isPublishing
     );
   }
+
+  get shouldShowPrivateDependencyWarning() {
+    return (
+      Array.isArray(this.privateDependencyViolations) &&
+      this.privateDependencyViolations.length > 0
+    );
+  }
+
+  get isCheckingPrivateDependencies() {
+    return this.checkPrivateDependenciesTask.isRunning;
+  }
+
+  private privateRealmURLsForViolation = (
+    violation: PrivateDependencyViolation,
+  ): string[] => {
+    if (!violation.externalDependencies?.length) {
+      return [];
+    }
+    return Array.from(
+      new Set(violation.externalDependencies.map((dep) => dep.realmURL)),
+    );
+  };
 
   get lastPublishedTime() {
     return this.getFormattedLastPublishedTime(this.subdirectoryRealmUrl);
@@ -297,6 +328,26 @@ export default class PublishRealmModal extends Component<Signature> {
     }
     this.applyInitialSelections(claim);
   }
+
+  private checkPrivateDependenciesTask = restartableTask(async () => {
+    this.privateDependencyCheckError = null;
+    try {
+      let report = await this.realm.fetchPrivateDependencyReport(
+        this.currentRealmURL,
+      );
+      this.privateDependencyViolations = report.publishable
+        ? []
+        : report.violations;
+    } catch (error) {
+      console.error(
+        'Failed to check for private dependencies before publishing',
+        error,
+      );
+      this.privateDependencyCheckError =
+        'Unable to verify private dependencies. Publishing may cause errors.';
+      this.privateDependencyViolations = null;
+    }
+  });
 
   private fetchBoxelClaimedDomain = restartableTask(async () => {
     try {
@@ -590,6 +641,36 @@ export default class PublishRealmModal extends Component<Signature> {
         </div>
       </:header>
       <:content>
+        {{#if this.privateDependencyCheckError}}
+          <div class='publish-warning error' data-test-private-dependency-error>
+            {{this.privateDependencyCheckError}}
+          </div>
+        {{else if this.shouldShowPrivateDependencyWarning}}
+          <div class='publish-warning' data-test-private-dependency-warning>
+            <div>
+              This workspace will have rendering errors when published because
+              of private external dependencies.
+            </div>
+            <ul class='violation-list'>
+              {{#each this.privateDependencyViolations as |violation|}}
+                <PrivateDependencyViolationComponent
+                  @violation={{violation}}
+                  @privateRealmURLs={{this.privateRealmURLsForViolation
+                    violation
+                  }}
+                />
+              {{/each}}
+            </ul>
+          </div>
+        {{else if this.isCheckingPrivateDependencies}}
+          <div
+            class='publish-warning info'
+            data-test-private-dependency-loading
+          >
+            <LoadingIndicator />
+            Checking for private dependencies…
+          </div>
+        {{/if}}
 
         <div class='domain-options'>
           <div class='domain-option'>
@@ -938,6 +1019,41 @@ export default class PublishRealmModal extends Component<Signature> {
       .modal-subtitle {
         font-size: normal var(--boxel-font-sm);
         color: var(--boxel-dark);
+      }
+
+      .publish-warning {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+        margin-bottom: var(--boxel-sp);
+        padding: var(--boxel-sp-sm);
+        border: 1px solid var(--boxel-warning-200);
+        background-color: rgb(from var(--boxel-warning-200) r g b / 12%);
+        border-radius: var(--boxel-border-radius-lg);
+        font-size: var(--boxel-font-size-sm);
+      }
+
+      .publish-warning.error {
+        border-color: var(--boxel-error-200);
+        background-color: rgb(from var(--boxel-error-200) r g b / 8%);
+        color: var(--boxel-error-200);
+      }
+
+      .publish-warning.info {
+        border-color: var(--boxel-300);
+        background-color: var(--boxel-50);
+        color: var(--boxel-500);
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
+
+      .violation-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
       }
 
       .domain-options {

@@ -70,12 +70,16 @@ let CardsGrid: CardsGrid;
 type Skill = (typeof SkillModule)['Skill'];
 let Skill: Skill;
 
+type CommandField = (typeof SkillModule)['CommandField'];
+let CommandField: CommandField;
+
 type ModelConfiguration = (typeof SystemCardModule)['ModelConfiguration'];
 let ModelConfiguration: ModelConfiguration;
 
 type SystemCard = (typeof SystemCardModule)['SystemCard'];
 let SystemCard: SystemCard;
 
+let cardAPI: typeof CardAPIModule;
 let field: (typeof CardAPIModule)['field'];
 let CardDef: (typeof CardAPIModule)['CardDef'];
 let Component: (typeof CardAPIModule)['Component'];
@@ -139,6 +143,10 @@ async function initialize() {
     await loader.import<typeof CodeRefModule>(`${baseRealm.url}code-ref`)
   ).default;
 
+  CommandField = (
+    await loader.import<typeof SkillModule>(`${baseRealm.url}skill`)
+  ).CommandField;
+
   BigIntegerField = (
     await loader.import<typeof BigIntegerModule>(`${baseRealm.url}big-integer`)
   ).default;
@@ -186,7 +194,7 @@ async function initialize() {
     await loader.import<typeof SystemCardModule>(`${baseRealm.url}system-card`)
   ).SystemCard;
 
-  let cardAPI = await loader.import<typeof CardAPIModule>(
+  cardAPI = await loader.import<typeof CardAPIModule>(
     `${baseRealm.url}card-api`,
   );
 
@@ -233,6 +241,7 @@ export async function setupBaseRealm(hooks: NestedHooks) {
 }
 
 export {
+  cardAPI,
   StringField,
   NumberField,
   DateField,
@@ -240,6 +249,7 @@ export {
   EmailField,
   Base64ImageField,
   CodeRefField,
+  CommandField,
   BigIntegerField,
   EthereumAddressField,
   BooleanField,

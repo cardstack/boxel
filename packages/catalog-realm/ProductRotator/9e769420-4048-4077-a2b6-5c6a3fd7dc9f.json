@@ -15,6 +15,7 @@
         "thumbnailURL": null
       },
       "imageCount": 6,
+      "referenceImage": {},
       "productDescription": "a blue bottle"
     },
     "relationships": {
@@ -51,6 +52,11 @@
       "generatedImages.5": {
         "links": {
           "self": "../ProductRotationImage/217c520e-babc-4e1b-b475-afec58a21f94"
+        }
+      },
+      "referenceImage.imageCard": {
+        "links": {
+          "self": null
         }
       }
     }

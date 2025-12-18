@@ -8,7 +8,6 @@ import {
   baseCardRef,
   internalKeyFor,
   isResolvedCodeRef,
-  trimExecutableExtension,
   baseRealm,
   getSerializer,
 } from './index';
@@ -45,6 +44,7 @@ import {
   type Sort,
   type RangeFilter,
   RANGE_OPERATORS,
+  isCardTypeFilter,
 } from './query';
 import type { SerializedError } from './error';
 import type { DBAdapter } from './db';
@@ -53,9 +53,8 @@ import {
   coerceTypes,
   type BoxelIndexTable,
   type CardTypeSummary,
-  type Definition,
-  type FieldDefinition,
 } from './index-structure';
+import type { Definition, FieldDefinition } from './definitions';
 import {
   isFilterRefersToNonexistentTypeError,
   type DefinitionLookup,
@@ -65,15 +64,6 @@ import { isScopedCSSRequest } from 'glimmer-scoped-css';
 interface IndexedModule {
   type: 'module';
   canonicalURL: string;
-  lastModified: number | null;
-  resourceCreatedAt: number;
-  deps: string[] | null;
-}
-
-interface IndexedDefinition {
-  type: 'definition';
-  definition: Definition;
-  types: string[] | null;
   lastModified: number | null;
   resourceCreatedAt: number;
   deps: string[] | null;
@@ -125,7 +115,6 @@ interface InstanceError
 
 export type InstanceOrError = IndexedInstance | InstanceError;
 export type IndexedModuleOrError = IndexedModule | IndexedError;
-export type IndexedDefinitionOrError = IndexedDefinition | IndexedError;
 
 type GetEntryOptions = WIPOptions;
 export type QueryOptions = WIPOptions & PrerenderedCardOptions;
@@ -137,7 +126,7 @@ interface PrerenderedCardOptions {
   cardUrls?: string[];
 }
 
-interface WIPOptions {
+export interface WIPOptions {
   useWorkInProgressIndex?: boolean;
 }
 
@@ -187,54 +176,6 @@ export class IndexQueryEngine {
 
   async #queryCards(query: CardExpression) {
     return this.#query(await this.makeExpression(query));
-  }
-
-  async getOwnDefinition(
-    codeRef: ResolvedCodeRef,
-    opts?: GetEntryOptions,
-  ): Promise<IndexedDefinitionOrError | undefined> {
-    let cleansedCodeRef = { ...codeRef };
-    cleansedCodeRef.module = trimExecutableExtension(
-      new URL(cleansedCodeRef.module),
-    ).href;
-    let key = internalKeyFor(cleansedCodeRef, undefined);
-    let rows = (await this.#query([
-      `SELECT i.*
-       FROM ${tableFromOpts(opts)} as i
-       WHERE`,
-      ...every([
-        any([[`i.url =`, param(key)]]),
-        any([
-          ['i.type =', param('definition')],
-          ['i.type =', param('error')],
-        ]),
-      ]),
-    ] as Expression)) as unknown as BoxelIndexTable[];
-    let maybeResult: BoxelIndexTable | undefined = rows[0];
-    if (!maybeResult) {
-      return undefined;
-    }
-    if (maybeResult.is_deleted) {
-      return undefined;
-    }
-    let result = maybeResult;
-    if (result.type === 'error') {
-      return { type: 'error', error: result.error_doc! };
-    }
-    let definitionEntry = assertIndexEntryDefinition(result);
-    let {
-      definition,
-      last_modified: lastModified,
-      resource_created_at: resourceCreatedAt,
-    } = definitionEntry;
-    return {
-      type: 'definition',
-      definition,
-      lastModified: lastModified != null ? parseInt(lastModified) : null,
-      resourceCreatedAt: parseInt(resourceCreatedAt),
-      deps: definitionEntry.deps,
-      types: definitionEntry.types,
-    };
   }
 
   async getModule(
@@ -433,7 +374,7 @@ export class IndexQueryEngine {
         'GROUP BY url',
         ...this.orderExpression(sort),
         ...(page
-          ? [`LIMIT ${page.size} OFFSET ${page.number * page.size}`]
+          ? [`LIMIT ${page.size} OFFSET ${(page.number ?? 0) * page.size}`]
           : []),
       ];
       let queryCount = [
@@ -714,33 +655,37 @@ export class IndexQueryEngine {
   }
 
   private filterCondition(filter: Filter, onRef: CodeRef): CardExpression {
-    if ('type' in filter) {
-      return this.typeCondition(filter.type);
+    let typeRef = (filter as { type?: CodeRef }).type;
+    let onProp = 'on' in filter ? filter.on : undefined;
+    let on = onProp ?? typeRef ?? onRef;
+    let typeConditionRef = onProp ?? typeRef;
+
+    if (typeRef && Object.keys(filter).length === 1) {
+      return this.typeCondition(typeRef);
     }
 
-    let on = filter.on ?? onRef;
-
     if ('eq' in filter) {
-      return this.eqCondition(filter, on);
+      return this.eqCondition(filter, on, typeConditionRef);
     } else if ('contains' in filter) {
-      return this.containsCondition(filter, on);
+      return this.containsCondition(filter, on, typeConditionRef);
     } else if ('not' in filter) {
-      return this.notCondition(filter, on);
+      return this.notCondition(filter, on, typeConditionRef);
     } else if ('range' in filter) {
-      return this.rangeCondition(filter, on);
+      return this.rangeCondition(filter, on, typeConditionRef);
     } else if ('every' in filter) {
       return every([
-        ...(filter.on ? [this.typeCondition(filter.on)] : []),
-        ...filter.every.map((i) => this.filterCondition(i, filter.on ?? on)),
+        ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
+        ...filter.every.map((i) => this.filterCondition(i, on)),
       ]);
     } else if ('any' in filter) {
       return every([
-        ...(filter.on ? [this.typeCondition(filter.on)] : []),
-        any([
-          ...filter.any.map((i) => this.filterCondition(i, filter.on ?? on)),
-        ]),
+        ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
+        any([...filter.any.map((i) => this.filterCondition(i, on))]),
       ]);
     } else {
+      if (isCardTypeFilter(filter)) {
+        return this.typeCondition(filter.type);
+      }
       assertNever(filter);
     }
     throw new Error(`Unknown filter: ${stringify(filter)}`);
@@ -755,10 +700,14 @@ export class IndexQueryEngine {
     ];
   }
 
-  private eqCondition(filter: EqFilter, on: CodeRef): CardExpression {
-    on = filter.on ?? on;
+  private eqCondition(
+    filter: EqFilter,
+    on: CodeRef,
+    typeConditionRef?: CodeRef,
+  ): CardExpression {
+    let typeRef = typeConditionRef;
     return every([
-      ...(filter.on ? [this.typeCondition(filter.on)] : []),
+      ...(typeRef ? [this.typeCondition(typeRef)] : []),
       ...Object.entries(filter.eq).map(([key, value]) => {
         return this.fieldEqFilter(key, value, on);
       }),
@@ -768,28 +717,37 @@ export class IndexQueryEngine {
   private containsCondition(
     filter: ContainsFilter,
     on: CodeRef,
+    typeConditionRef?: CodeRef,
   ): CardExpression {
-    on = filter.on ?? on;
+    let typeRef = typeConditionRef;
     return every([
-      ...(filter.on ? [this.typeCondition(filter.on)] : []),
+      ...(typeRef ? [this.typeCondition(typeRef)] : []),
       ...Object.entries(filter.contains).map(([key, value]) => {
         return this.fieldLikeFilter(key, value, on);
       }),
     ]);
   }
 
-  private notCondition(filter: NotFilter, on: CodeRef): CardExpression {
-    on = filter.on ?? on;
+  private notCondition(
+    filter: NotFilter,
+    on: CodeRef,
+    typeConditionRef?: CodeRef,
+  ): CardExpression {
+    let typeRef = typeConditionRef;
     return every([
-      ...(filter.on ? [this.typeCondition(filter.on)] : []),
+      ...(typeRef ? [this.typeCondition(typeRef)] : []),
       ['NOT', ...addExplicitParens(this.filterCondition(filter.not, on))],
     ]);
   }
 
-  private rangeCondition(filter: RangeFilter, on: CodeRef): CardExpression {
-    on = filter.on ?? on;
+  private rangeCondition(
+    filter: RangeFilter,
+    on: CodeRef,
+    typeConditionRef?: CodeRef,
+  ): CardExpression {
+    let typeRef = typeConditionRef;
     return every([
-      ...(filter.on ? [this.typeCondition(filter.on)] : []),
+      ...(typeRef ? [this.typeCondition(typeRef)] : []),
       ...Object.entries(filter.range).map(([key, filterValue]) => {
         return this.fieldRangeFilter(key, filterValue as RangeFilterValue, on);
       }),
@@ -1223,43 +1181,6 @@ function assertIndexEntry<T>(obj: T): Omit<
     );
   }
   return obj as Omit<T, 'source' | 'last_modified' | 'resource_created_at'> & {
-    last_modified: string;
-    resource_created_at: string;
-  };
-}
-
-function assertIndexEntryDefinition<T>(obj: T): Omit<
-  T,
-  'definition' | 'last_modified' | 'resource_created_at'
-> & {
-  definition: Definition;
-  last_modified: string | null;
-  resource_created_at: string;
-} {
-  if (!obj || typeof obj !== 'object') {
-    throw new Error(`expected index entry is null or not an object`);
-  }
-  if (!('definition' in obj) || typeof obj.definition !== 'object') {
-    throw new Error(
-      `expected index entry to have "definition" string property`,
-    );
-  }
-  if (!('last_modified' in obj)) {
-    throw new Error(`expected index entry to have "last_modified" property`);
-  }
-  if (
-    !('resource_created_at' in obj) ||
-    typeof obj.resource_created_at !== 'string'
-  ) {
-    throw new Error(
-      `expected index entry to have "resource_created_at" property`,
-    );
-  }
-  return obj as Omit<
-    T,
-    'definition' | 'last_modified' | 'resource_created_at'
-  > & {
-    definition: Definition;
     last_modified: string;
     resource_created_at: string;
   };

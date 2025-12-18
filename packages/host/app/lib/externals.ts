@@ -10,8 +10,24 @@ import * as emberTemplateFactory from '@ember/template-factory';
 import * as glimmerComponent from '@glimmer/component';
 import * as glimmerTracking from '@glimmer/tracking';
 
+import * as viewTransitions from '@cardstack/view-transitions';
 import * as awesomePhoneNumber from 'awesome-phonenumber';
 import * as dateFns from 'date-fns';
+import * as emberAnimated from 'ember-animated';
+import * as eaEasingsCosine from 'ember-animated/easings/cosine';
+import * as eaEasingsLinear from 'ember-animated/easings/linear';
+import * as eaMotionsAdjustColor from 'ember-animated/motions/adjust-color';
+import * as eaMotionsAdjustCss from 'ember-animated/motions/adjust-css';
+import * as eaMotionsBoxShadow from 'ember-animated/motions/box-shadow';
+import * as eaMotionsCompensateForScale from 'ember-animated/motions/compensate-for-scale';
+import * as eaMotionsFollow from 'ember-animated/motions/follow';
+import * as eaMotionsMove from 'ember-animated/motions/move';
+import * as eaMotionsMoveSvg from 'ember-animated/motions/move-svg';
+import * as eaMotionsOpacity from 'ember-animated/motions/opacity';
+import * as eaMotionsResize from 'ember-animated/motions/resize';
+import * as eaMotionsScale from 'ember-animated/motions/scale';
+import * as eaTransitionsFade from 'ember-animated/transitions/fade';
+import * as eaTransitionsMoveOver from 'ember-animated/transitions/move-over';
 import * as emberConcurrency from 'ember-concurrency';
 import * as emberConcurrencyAsyncArrowRuntime from 'ember-concurrency/-private/async-arrow-runtime';
 import * as cssUrl from 'ember-css-url';
@@ -24,6 +40,7 @@ import * as emberResources from 'ember-resources';
 import * as flat from 'flat';
 import * as lodash from 'lodash';
 import * as matrixJsSDK from 'matrix-js-sdk';
+import * as rsvp from 'rsvp';
 import * as superFastMD5 from 'super-fast-md5';
 import * as tracked from 'tracked-built-ins';
 
@@ -52,6 +69,46 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     '@ember/component/template-only',
     emberComponentTemplateOnly,
   );
+
+  virtualNetwork.shimModule('ember-animated', emberAnimated);
+  virtualNetwork.shimModule(
+    'ember-animated/motions/adjust-color',
+    eaMotionsAdjustColor,
+  );
+  virtualNetwork.shimModule(
+    'ember-animated/motions/adjust-css',
+    eaMotionsAdjustCss,
+  );
+  virtualNetwork.shimModule(
+    'ember-animated/motions/box-shadow',
+    eaMotionsBoxShadow,
+  );
+  virtualNetwork.shimModule(
+    'ember-animated/motions/compensate-for-scale',
+    eaMotionsCompensateForScale,
+  );
+  virtualNetwork.shimModule('ember-animated/motions/follow', eaMotionsFollow);
+  virtualNetwork.shimModule('ember-animated/motions/move', eaMotionsMove);
+  virtualNetwork.shimModule(
+    'ember-animated/motions/move-svg',
+    eaMotionsMoveSvg,
+  );
+  virtualNetwork.shimModule('ember-animated/motions/opacity', eaMotionsOpacity);
+  virtualNetwork.shimModule('ember-animated/motions/resize', eaMotionsResize);
+  virtualNetwork.shimModule('ember-animated/motions/scale', eaMotionsScale);
+  virtualNetwork.shimModule('ember-animated/easings/cosine', eaEasingsCosine);
+  virtualNetwork.shimModule('ember-animated/easings/linear', eaEasingsLinear);
+  virtualNetwork.shimModule(
+    'ember-animated/transitions/fade',
+    eaTransitionsFade,
+  );
+  virtualNetwork.shimModule(
+    'ember-animated/transitions/move-over',
+    eaTransitionsMoveOver,
+  );
+
+  virtualNetwork.shimModule('@cardstack/view-transitions', viewTransitions);
+
   virtualNetwork.shimModule('ember-css-url', cssUrl);
   virtualNetwork.shimModule('@ember/template-factory', emberTemplateFactory);
   virtualNetwork.shimModule('@ember/template', emberTemplate);
@@ -89,6 +146,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('tracked-built-ins', tracked);
   virtualNetwork.shimModule('date-fns', dateFns);
   virtualNetwork.shimModule('@ember/destroyable', emberDestroyable);
+  virtualNetwork.shimModule('rsvp', rsvp);
   virtualNetwork.shimAsyncModule({
     id: 'ethers',
     resolve: () => import('ethers'),

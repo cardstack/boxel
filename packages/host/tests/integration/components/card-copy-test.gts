@@ -1022,7 +1022,7 @@ module('Integration | card-copy', function (hooks) {
       let included = json.included?.[0]!;
       assert.strictEqual(included.id, `${testRealmURL}Pet/mango`);
       assert.deepEqual(included.meta.adoptsFrom, {
-        module: `../pet`, // this is ok because it is relative to the incuded's id
+        module: `${testRealmURL}pet`,
         name: 'Pet',
       });
       assert.deepEqual(included.meta.realmURL, testRealmURL);

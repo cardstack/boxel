@@ -365,6 +365,72 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     );
   });
 
+  test('skill pill menu opens the skill card', async function (assert) {
+    await renderAiAssistantPanel();
+    await waitFor('[data-test-room-settled]');
+
+    let skillId = `${testRealmURL}Skill/example`;
+
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click(`[data-test-select="${skillId}"]`);
+    await click('[data-test-card-catalog-go-button]');
+    await waitUntil(() =>
+      Boolean(
+        document.querySelector(`[data-test-skill-options-button="${skillId}"]`),
+      ),
+    );
+
+    assert.false(
+      operatorModeStateService.getOpenCardIds().includes(skillId),
+      'skill card is not open before using the menu',
+    );
+
+    await click(`[data-test-skill-options-button="${skillId}"]`);
+    await waitFor('[data-test-boxel-menu-item-text="Open Skill Card"]');
+    await click('[data-test-boxel-menu-item-text="Open Skill Card"]');
+    await waitUntil(() =>
+      operatorModeStateService.getOpenCardIds().includes(skillId),
+    );
+
+    assert.true(
+      operatorModeStateService.getOpenCardIds().includes(skillId),
+      'skill card is opened in operator mode',
+    );
+  });
+
+  test('skill pill menu opens the skill card while in code mode', async function (assert) {
+    await renderAiAssistantPanel(`${testRealmURL}Skill/example`);
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+
+    let skillId = `${testRealmURL}Skill/example`;
+    await click(`[data-test-select="${skillId}"]`);
+    await click('[data-test-card-catalog-go-button]');
+
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    await click('[data-test-skill-menu]');
+    let initialCodePath = operatorModeStateService.codePathString;
+
+    await click(`[data-test-skill-options-button="${skillId}"]`);
+    await waitFor('[data-test-boxel-menu-item-text="Open Skill Card"]');
+    await click('[data-test-boxel-menu-item-text="Open Skill Card"]');
+
+    await waitUntil(
+      () =>
+        operatorModeStateService.codePathString &&
+        operatorModeStateService.codePathString !== initialCodePath &&
+        operatorModeStateService.codePathString.includes('skill'),
+      { timeoutMessage: 'timed out waiting for code mode to open skill card' },
+    );
+
+    assert.ok(
+      operatorModeStateService.codePathString?.includes('skill'),
+      'skill definition is opened in code mode',
+    );
+  });
+
   test('ensures command definitions are reuploaded only when content changes (different rooms)', async function (assert) {
     // Create and set up first room
     const roomId1 = await renderAiAssistantPanel(

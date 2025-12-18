@@ -22,6 +22,7 @@ module(basename(__filename), function () {
     'Realm-specific Endpoints: can make request to post /_atomic',
     function (hooks) {
       let testRealm: Realm;
+      let testRealmAdapter: RealmAdapter;
       let request: SuperTest<Test>;
 
       function onRealmSetup(args: {
@@ -32,6 +33,7 @@ module(basename(__filename), function () {
         dir: DirResult;
       }) {
         testRealm = args.testRealm;
+        testRealmAdapter = args.testRealmAdapter;
         request = args.request;
       }
 
@@ -586,7 +588,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: '/place-modules/place',
+                      module: '/place-modules/place.gts',
                       name: 'Place',
                     },
                   },
@@ -618,6 +620,111 @@ module(basename(__filename), function () {
             source,
             'the card source is correct',
           );
+        });
+
+        test('update is a no-op when content is unchanged', async function (assert) {
+          let source = `
+              import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
+              import StringField from "https://cardstack.com/base/string";
+              export class Place extends CardDef {
+                static displayName = 'Place';
+                @field name = contains(StringField);
+              }
+              `.trim();
+          let addDoc = {
+            'atomic:operations': [
+              {
+                op: 'add',
+                href: '/place-modules/place-noop.gts',
+                data: {
+                  type: 'source',
+                  attributes: {
+                    content: source,
+                  },
+                  meta: {},
+                },
+              },
+            ],
+          };
+
+          let addResponse = await request
+            .post('/_atomic')
+            .set('Accept', SupportedMimeType.JSONAPI)
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+            )
+            .send(JSON.stringify(addDoc));
+
+          assert.strictEqual(addResponse.status, 201, 'initial write succeeds');
+          assert.strictEqual(
+            addResponse.body['atomic:results'].length,
+            1,
+            'initial write returns one result',
+          );
+
+          let initialLastModified = await testRealmAdapter.lastModified(
+            'place-modules/place-noop.gts',
+          );
+
+          let writeCalls = 0;
+          let originalWrite = testRealmAdapter.write.bind(testRealmAdapter);
+          testRealmAdapter.write = (async (path, contents) => {
+            writeCalls++;
+            return originalWrite(path, contents);
+          }) as RealmAdapter['write'];
+
+          try {
+            let updateDoc = {
+              'atomic:operations': [
+                {
+                  op: 'update',
+                  href: '/place-modules/place-noop.gts',
+                  data: {
+                    type: 'source',
+                    attributes: {
+                      content: source,
+                    },
+                    meta: {},
+                  },
+                },
+              ],
+            };
+
+            let updateResponse = await request
+              .post('/_atomic')
+              .set('Accept', SupportedMimeType.JSONAPI)
+              .set(
+                'Authorization',
+                `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+              )
+              .send(JSON.stringify(updateDoc));
+
+            assert.strictEqual(
+              updateResponse.status,
+              201,
+              'atomic update returns created status even when no writes occur',
+            );
+            assert.strictEqual(
+              updateResponse.body['atomic:results'].length,
+              1,
+              'one result entry is returned even when no writes occur',
+            );
+            assert.strictEqual(
+              writeCalls,
+              0,
+              'adapter.write not invoked for identical content',
+            );
+            assert.strictEqual(
+              await testRealmAdapter.lastModified(
+                'place-modules/place-noop.gts',
+              ),
+              initialLastModified,
+              'lastModified unchanged when content is identical',
+            );
+          } finally {
+            testRealmAdapter.write = originalWrite;
+          }
         });
       });
       module('error handling', function (hooks) {
@@ -683,7 +790,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: '/place-modules/place',
+                      module: '/missing-place/does-not-exist',
                       name: 'Place',
                     },
                   },
@@ -704,7 +811,7 @@ module(basename(__filename), function () {
           assert.strictEqual(response.body.errors[0].title, 'Write Error');
           assert.strictEqual(
             response.body.errors[0].detail,
-            `Your filter refers to a nonexistent type: import { Place } from "${testRealmHref}place-modules/place"`,
+            `Your filter refers to a nonexistent type: import { Place } from "${testRealmHref}missing-place/does-not-exist"`,
             'error message is correct',
           );
         });

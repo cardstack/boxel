@@ -42,7 +42,6 @@ export default class AskAiCommand extends HostBaseCommand<
       this.operatorModeStateService.getOpenCards.perform() ||
         Promise.resolve([]),
     ]);
-    console.log('input.llmMode', input.llmMode);
     let { roomId } = await createRoomCommand.execute({
       name: 'AI App Generator Assistant',
       enabledSkills: skills,

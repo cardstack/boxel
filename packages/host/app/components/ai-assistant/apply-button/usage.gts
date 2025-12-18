@@ -22,6 +22,9 @@ export default class AiAssistantApplyButtonUsage extends Component {
         this.state = 'applied';
         break;
       case 'applied':
+        this.state = 'applied-with-error';
+        break;
+      case 'applied-with-error':
         this.state = 'failed';
         break;
       case 'failed':
@@ -52,7 +55,14 @@ export default class AiAssistantApplyButtonUsage extends Component {
         <Args.String
           @name='state'
           @value={{this.state}}
-          @options={{array 'ready' 'applying' 'applied' 'failed' 'preparing'}}
+          @options={{array
+            'ready'
+            'applying'
+            'applied'
+            'applied-with-error'
+            'failed'
+            'preparing'
+          }}
           @description='Button state'
           @onInput={{fn (mut this.state)}}
         />
