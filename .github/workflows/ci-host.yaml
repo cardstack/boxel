@@ -54,7 +54,7 @@ jobs:
         shell: bash
         run: |
           shopt -s dotglob
-          cp -a .test-web-assets-artifact/${{ needs.test-web-assets.outputs.artifact_name }}/. ./
+          cp -a .test-web-assets-artifact/. ./
 
       - name: Serve boxel-icons
         run: pnpm serve &> /tmp/icon-server.log &

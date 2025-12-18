@@ -17,6 +17,9 @@ jobs:
   build:
     name: Build and cache test web assets
     runs-on: ubuntu-latest
+    concurrency:
+      group: test-web-assets-${{ github.ref }}-${{ github.sha }}
+      cancel-in-progress: false
 
     outputs:
       artifact_name: ${{ steps.keys.outputs.artifact_name }}

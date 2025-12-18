@@ -223,7 +223,7 @@ jobs:
         shell: bash
         run: |
           shopt -s dotglob
-          cp -a .test-web-assets-artifact/${{ needs.test-web-assets.outputs.artifact_name }}/. ./
+          cp -a .test-web-assets-artifact/. ./
       - name: Run test suite
         run: pnpm test
         working-directory: packages/boxel-ui/test-app
@@ -287,7 +287,7 @@ jobs:
         shell: bash
         run: |
           shopt -s dotglob
-          cp -a .test-web-assets-artifact/${{ needs.test-web-assets.outputs.artifact_name }}/. ./
+          cp -a .test-web-assets-artifact/. ./
       - name: Install Playwright Browsers
         run: pnpm exec playwright install
         working-directory: packages/matrix
@@ -488,7 +488,7 @@ jobs:
         shell: bash
         run: |
           shopt -s dotglob
-          cp -a .test-web-assets-artifact/${{ needs.test-web-assets.outputs.artifact_name }}/. ./
+          cp -a .test-web-assets-artifact/. ./
       - name: Serve boxel-icons
         run: pnpm serve &
         working-directory: packages/boxel-icons
@@ -547,7 +547,7 @@ jobs:
         shell: bash
         run: |
           shopt -s dotglob
-          cp -a .test-web-assets-artifact/${{ needs.test-web-assets.outputs.artifact_name }}/. ./
+          cp -a .test-web-assets-artifact/. ./
       - name: Prepublish
         run: pnpm vscode:prepublish
         working-directory: packages/vscode-boxel-tools
@@ -595,7 +595,7 @@ jobs:
         shell: bash
         run: |
           shopt -s dotglob
-          cp -a .test-web-assets-artifact/${{ needs.test-web-assets.outputs.artifact_name }}/. ./
+          cp -a .test-web-assets-artifact/. ./
       - name: Build workspace-sync-cli
         run: pnpm build
         working-directory: packages/workspace-sync-cli
