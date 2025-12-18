@@ -37,10 +37,10 @@ if [ -n "${START_CATALOG}" ] && [ -n "${CATALOG_KEEP_DIRS}${CATALOG_INDEX_SOURCE
   KEEP_DIRS="$(printf '%s' "$CATALOG_KEEP_DIRS" | tr ',' ' ')"
   if [ -n "$KEEP_DIRS" ]; then
     for d in $KEEP_DIRS; do
-      if [ -d "$CATALOG_SRC_PATH/$d" ]; then
+      if [ -d "$CATALOG_SRC_PATH/$d" ] || [ -f "$CATALOG_SRC_PATH/$d" ]; then
         cp -a "$CATALOG_SRC_PATH/$d" "$CATALOG_TEMP_PATH/"
       else
-        echo "ERROR: CATALOG_KEEP_DIRS directory not found: $d" >&2
+        echo "ERROR: CATALOG_KEEP_DIRS entry not found: $d" >&2
         exit 1
       fi
     done
