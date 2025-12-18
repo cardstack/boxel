@@ -96,8 +96,6 @@ module('Integration | preview', function (hooks) {
     }
 
     await renderComponent(TestDriver, 'head');
-    await waitFor('.social-preview-container');
-    await waitFor('[data-test-head-markup]');
 
     await percySnapshot(assert);
 
@@ -160,7 +158,6 @@ module('Integration | preview', function (hooks) {
     }
 
     await renderComponent(TestDriver, 'head');
-    await waitFor('.social-preview-container');
 
     assert.dom('.google-title').hasText('Fallback Title');
     assert
