@@ -167,9 +167,12 @@ export async function loadCardDef(
     return maybeCard;
   }
 
-  let err = new CardError(`Unable to loadCard ${humanReadable(ref)}`, {
-    status: 404,
-  });
+  let err = new CardError(
+    `Cannot find card ${humanReadable(ref)}. Make sure ${new URL(moduleFrom(ref), opts?.relativeTo).href} exports ${exportFrom(ref)}`,
+    {
+      status: 404,
+    },
+  );
   err.deps = [moduleFrom(ref)];
   throw err;
 }
@@ -303,6 +306,14 @@ export function getAncestor(
 export function moduleFrom(ref: CodeRef): string {
   if (!('type' in ref)) {
     return ref.module;
+  } else {
+    return moduleFrom(ref.card);
+  }
+}
+
+function exportFrom(ref: CodeRef): string {
+  if (!('type' in ref)) {
+    return ref.name;
   } else {
     return moduleFrom(ref.card);
   }

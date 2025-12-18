@@ -151,6 +151,7 @@ export default class RenderRoute extends Route<Model> {
 
   async beforeModel(transition: Transition) {
     await super.beforeModel?.(transition);
+    this.#ensureBaseParamsFromTransition(transition);
     if (!isTesting()) {
       // tests have their own way of dealing with window level errors in card-prerender.gts
       this.#attachWindowErrorListeners();
@@ -574,6 +575,11 @@ export default class RenderRoute extends Route<Model> {
       cardType,
       context,
     );
+    let { container, errorElement } = this.#ensurePrerenderElements();
+    if (container) {
+      container.dataset.prerenderStatus = 'error';
+    }
+    this.#writePrerenderError(errorElement, serializedError);
     let signature = this.#makeErrorSignature(serializedError, context);
     if (signature === this.lastRenderErrorSignature) {
       return;
@@ -822,7 +828,8 @@ export default class RenderRoute extends Route<Model> {
   }
 
   #transitionToErrorRoute(transition?: Transition) {
-    let baseParams = this.renderBaseParams;
+    let baseParams =
+      this.renderBaseParams ?? this.#ensureBaseParamsFromTransition(transition);
     if (baseParams) {
       if (transition) {
         // During the initial render transition Ember expects to finalize the
@@ -842,5 +849,29 @@ export default class RenderRoute extends Route<Model> {
     } else {
       join(() => this.router.transitionTo('render.error'));
     }
+  }
+
+  #ensureBaseParamsFromTransition(
+    transition?: Transition,
+  ): [string, string, string] | undefined {
+    if (this.renderBaseParams) {
+      return this.renderBaseParams;
+    }
+    let params = transition?.to?.params as
+      | { id?: string; nonce?: string; options?: string }
+      | undefined;
+    if (
+      params &&
+      typeof params.id === 'string' &&
+      typeof params.nonce === 'string' &&
+      typeof params.options === 'string'
+    ) {
+      let canonicalOptions = serializeRenderRouteOptions(
+        parseRenderRouteOptions(params.options),
+      );
+      this.renderBaseParams = [params.id, params.nonce, canonicalOptions];
+      return this.renderBaseParams;
+    }
+    return undefined;
   }
 }
