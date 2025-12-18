@@ -6,6 +6,8 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import ListingUpdateSpecsCommand from '@cardstack/host/commands/listing-update-specs';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
 import {
   setupCardLogs,
   setupIntegrationTestRealm,
@@ -101,7 +103,6 @@ module('Integration | commands | listing-update-specs', function (hooks) {
         },
       },
     });
-    let cardApi = await loader.import(`${baseRealm.url}card-api`);
     Listing = (
       await loader.import('@cardstack/catalog/catalog-app/listing/listing')
     ).Listing;

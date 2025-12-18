@@ -68,7 +68,7 @@ export default class ListingUpdateSpecsCommand extends HostBaseCommand<
     const targetRealm = (listing as any)?.[realmURLSymbol]?.href;
 
     if (!isCardInstance(listing)) {
-      throw new Error('listing is required');
+      throw new Error('listing must be a valid card instance');
     }
 
     if (!targetRealm) {
@@ -77,7 +77,7 @@ export default class ListingUpdateSpecsCommand extends HostBaseCommand<
 
     const exampleId = (listing as any).examples?.[0]?.id;
     if (!exampleId) {
-      throw new Error('No example found to derive specs from');
+      throw new Error('No example found in listing to derive specs from');
     }
 
     const response = await this.network.authedFetch(
