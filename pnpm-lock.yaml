@@ -681,6 +681,9 @@ patchedDependencies:
   openai:
     hash: 6833f1bcf56cde16edb25881777c31d2745994c6ea992d1e2051d1248d213449
     path: patches/openai.patch
+  postcss@8.5.6:
+    hash: 6b81bd40b4b44a492c3a40fe669e475ee6fa0b971bcd1c31070c14b3de72ade6
+    path: patches/postcss@8.5.6.patch
   style-loader@2.0.0:
     hash: 579dd92e6adabd45669f9a99a01c6c28c97488c7bf4ee0d6c1c622a14592e4c8
     path: patches/style-loader@2.0.0.patch
@@ -22515,7 +22518,7 @@ snapshots:
     dependencies:
       '@embroider/addon-shim': 1.10.2
       js-string-escape: 1.0.1
-      postcss: 8.5.6
+      postcss: 8.5.6(patch_hash=6b81bd40b4b44a492c3a40fe669e475ee6fa0b971bcd1c31070c14b3de72ade6)
       postcss-selector-parser: 6.0.13
       super-fast-md5: 1.0.1
     transitivePeerDependencies:
@@ -24927,7 +24930,7 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  postcss@8.5.6:
+  postcss@8.5.6(patch_hash=6b81bd40b4b44a492c3a40fe669e475ee6fa0b971bcd1c31070c14b3de72ade6):
     dependencies:
       nanoid: 3.3.11
       picocolors: 1.1.1
@@ -26899,7 +26902,7 @@ snapshots:
   vite@5.4.18(@types/node@24.3.0)(terser@5.39.0):
     dependencies:
       esbuild: 0.21.5
-      postcss: 8.5.6
+      postcss: 8.5.6(patch_hash=6b81bd40b4b44a492c3a40fe669e475ee6fa0b971bcd1c31070c14b3de72ade6)
       rollup: 4.53.3
     optionalDependencies:
       '@types/node': 24.3.0
@@ -26911,7 +26914,7 @@ snapshots:
       esbuild: 0.25.2
       fdir: 6.5.0(picomatch@4.0.3)
       picomatch: 4.0.3
-      postcss: 8.5.6
+      postcss: 8.5.6(patch_hash=6b81bd40b4b44a492c3a40fe669e475ee6fa0b971bcd1c31070c14b3de72ade6)
       rollup: 4.53.3
       tinyglobby: 0.2.15
     optionalDependencies:
@@ -26926,7 +26929,7 @@ snapshots:
       esbuild: 0.25.2
       fdir: 6.5.0(picomatch@4.0.3)
       picomatch: 4.0.3
-      postcss: 8.5.6
+      postcss: 8.5.6(patch_hash=6b81bd40b4b44a492c3a40fe669e475ee6fa0b971bcd1c31070c14b3de72ade6)
       rollup: 4.53.3
       tinyglobby: 0.2.15
     optionalDependencies:
