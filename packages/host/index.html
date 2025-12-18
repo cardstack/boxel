@@ -95,7 +95,12 @@
     {{content-for "body"}}
 
     <script>
-      globalThis.process = { env: {} };
+      globalThis.process = {
+        env: {},
+        cwd() {
+          return '';
+        },
+      };
       globalThis.global = globalThis;
     </script>
 
