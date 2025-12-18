@@ -1221,12 +1221,6 @@ module(basename(__filename), function () {
               return this.author?.firstName + '-poo';
             }
           })
-          static embedded = class Embedded extends Component<typeof this> {
-            <template><@fields.firstName/> (<@fields.nickName/>)</template>
-          }
-          static fitted = class Fitted extends Component<typeof this> {
-            <template><@fields.firstName/> (<@fields.nickName/>)</template>
-          }
         }
       `,
       );
