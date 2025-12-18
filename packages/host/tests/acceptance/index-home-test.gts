@@ -248,6 +248,12 @@ module('Acceptance | index card home resolution', function (hooks) {
         `[data-test-stack-card="${testRealmURL}index"] [data-test-edit-button]`,
       );
       assert.dom(`[data-test-card="${testRealmURL}cards-grid"]`).exists();
+      assert
+        .dom(`[data-cards-grid-item="${testRealmURL}index"]`)
+        .doesNotExist();
+      assert
+        .dom(`[data-cards-grid-item="${testRealmURL}cards-grid"]`)
+        .doesNotExist();
     });
 
     test('host submode uses hostHome and updates after edit', async function (assert) {

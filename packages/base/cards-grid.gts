@@ -45,6 +45,7 @@ import {
 import type { RealmEventContent } from './matrix-event';
 import { Spec } from './spec';
 import StringField from './string';
+import _ from 'lodash';
 
 const [_CardView, StripView, GridView] = VIEW_OPTIONS;
 
@@ -160,11 +161,22 @@ class Isolated extends Component<typeof CardsGrid> {
       icon: AllCardsIcon,
       query: {
         filter: {
-          not: {
-            eq: {
-              _cardType: 'Cards Grid',
+          every: [
+            {
+              not: {
+                eq: {
+                  _cardType: 'Cards Grid',
+                },
+              },
             },
-          },
+            {
+              not: {
+                eq: {
+                  _cardType: 'Index',
+                },
+              },
+            },
+          ],
         },
       },
       filters: this.cardTypeFilters,
