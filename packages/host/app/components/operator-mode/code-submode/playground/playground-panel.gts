@@ -1015,6 +1015,15 @@ export default class PlaygroundPanel extends Component<Signature> {
         justify-content: center;
         margin: 30vh auto;
       }
+
+      .playground-panel-content:has(.social-preview-container) {
+        padding: 0;
+      }
+
+      .playground-panel :deep(.social-preview-container) {
+        border: 0;
+        border-radius: unset;
+      }
     </style>
   </template>
 }
