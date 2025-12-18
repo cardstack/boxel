@@ -385,7 +385,10 @@ export default class HeadFormatPreview extends Component<Signature> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-2xl);
-        background: var(--boxel-700);
+        background-image: url('./operator-mode/code-submode/playground/playground-background.png');
+        background-position: left top;
+        background-repeat: repeat;
+        background-size: 22.5px;
         color: var(--boxel-light);
         border-radius: var(--boxel-border-radius-lg);
         border: 1px solid var(--boxel-650);
