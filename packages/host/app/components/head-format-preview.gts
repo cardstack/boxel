@@ -245,13 +245,17 @@ export default class HeadFormatPreview extends Component<Signature> {
 
   private get breadcrumbPath() {
     let path = this.previewUrlParts.path?.replace(/^\//, '') ?? '';
+
     if (!path) {
       return '';
     }
+
     let segments = path.split('/').filter(Boolean);
+
     if (segments.length === 0) {
       return '';
     }
+
     return ` › ${segments.slice(0, 2).join(' › ')}`;
   }
 
