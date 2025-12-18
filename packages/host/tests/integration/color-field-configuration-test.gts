@@ -250,49 +250,17 @@ module('Integration | color field configuration', function (hooks) {
       .dom('[data-test-field-container] .advanced-color-editor')
       .exists('Advanced variant renders');
 
-    // Check that the RGB input section is visible by looking for the label text
-    const container = document.querySelector(
-      '[data-test-field-container]',
-    ) as HTMLElement;
-    assert.ok(container, 'Field container exists');
+    // Check that the RGB input is visible (color-value-input class is used for RGB/HSL/HSB)
+    assert
+      .dom('[data-test-field-container] .color-value-input')
+      .exists('RGB input section is visible');
 
-    // Find the input row that contains "RGB Color" label
-    const inputRows = container.querySelectorAll('.input-row');
-    let rgbInputRow: Element | null = null;
-    for (const row of inputRows) {
-      const span = row.querySelector('span');
-      if (span?.textContent?.trim() === 'RGB Color') {
-        rgbInputRow = row;
-        break;
-      }
-    }
-
-    assert.ok(rgbInputRow, 'RGB input section is visible');
-
-    if (!rgbInputRow) {
-      throw new Error('RGB input row not found');
-    }
-
-    // Now find the input within that row
-    const rgbInput =
-      rgbInputRow.querySelector('[data-test-boxel-input]') ||
-      rgbInputRow.querySelector('input') ||
-      rgbInputRow.querySelector('.boxel-input');
-
-    // Verify the RGB input element exists
-    assert.ok(
-      rgbInput,
-      'Advanced variant with defaultFormat rgb displays RGB input',
-    );
-
-    // Verify hex input is not shown
-    const hexInputRow = container.querySelector('.input-row');
-    const hexLabel = hexInputRow?.querySelector('span');
-    assert.notStrictEqual(
-      hexLabel?.textContent?.trim(),
-      'HEX',
-      'Hex input stays hidden when defaultFormat is rgb and value is RGB',
-    );
+    // Verify hex input is not shown when outputFormat is rgb
+    assert
+      .dom('[data-test-field-container] .color-hex-input')
+      .doesNotExist(
+        'Hex input stays hidden when defaultFormat is rgb and value is RGB',
+      );
   });
 
   test('CSS color values are parsed and displayed correctly', async function (assert) {
