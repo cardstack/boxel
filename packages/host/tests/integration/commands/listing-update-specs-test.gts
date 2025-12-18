@@ -7,7 +7,6 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 import ListingUpdateSpecsCommand from '@cardstack/host/commands/listing-update-specs';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { Listing } from '@cardstack/catalog/listing/listing';
 
 import {
   setupCardLogs,
@@ -19,6 +18,8 @@ import {
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { Listing } from '@cardstack/catalog/listing/listing';
 
 module('Integration | commands | listing-update-specs', function (hooks) {
   setupRenderingTest(hooks);
