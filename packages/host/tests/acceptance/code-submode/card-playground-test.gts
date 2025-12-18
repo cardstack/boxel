@@ -149,6 +149,25 @@ const personCard = `import { field, linksTo, CardDef } from 'https://cardstack.c
   }
 `;
 
+const headPreviewCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+  import StringField from "https://cardstack.com/base/string";
+
+  export class HeadPreview extends CardDef {
+    static displayName = 'Head Preview';
+    @field title = contains(StringField);
+    @field description = contains(StringField);
+    @field url = contains(StringField);
+
+    static head = class Head extends Component<typeof this> {
+      <template>
+        <title>{{@model.title}}</title>
+        <meta name='description' content={{@model.description}} />
+        <meta property='og:url' content={{@model.url}} />
+      </template>
+    };
+  }
+`;
+
 const localStyleReferenceCard = {
   data: {
     type: 'card',
@@ -213,6 +232,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           'blog-post.gts': blogPostCard,
           'code-ref-driver.gts': codeRefDriverCard,
           'person.gts': personCard,
+          'head-preview.gts': headPreviewCard,
           'Author/jane-doe.json': {
             data: {
               attributes: {
@@ -224,6 +244,21 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
                 adoptsFrom: {
                   module: `${testRealmURL}author`,
                   name: 'Author',
+                },
+              },
+            },
+          },
+          'HeadPreview/example.json': {
+            data: {
+              attributes: {
+                title: 'Definition Title',
+                description: 'Definition description',
+                url: 'https://example.com/definition',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}head-preview`,
+                  name: 'HeadPreview',
                 },
               },
             },
@@ -491,6 +526,29 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assertCardExists(assert, `${testRealmURL}Category/future-tech`);
 
       await percySnapshot(assert);
+    });
+
+    test('head format preview renders for card definitions in playground', async function (assert) {
+      removePlaygroundSelections();
+      setPlaygroundSelections({
+        [`${testRealmURL}head-preview/HeadPreview`]: {
+          cardId: `${testRealmURL}HeadPreview/example`,
+          format: 'head',
+        },
+      });
+
+      await openFileInPlayground('head-preview.gts', testRealmURL, {
+        declaration: 'HeadPreview',
+      });
+      await selectFormat('head');
+      await waitFor(
+        '[data-test-format-chooser="head"].format-chooser__button.active',
+      );
+      await waitFor('.social-preview-container');
+
+      assert.dom('.google-title').hasText('Definition Title');
+      assert.dom('.google-description').hasText('Definition description');
+      assert.dom('.google-site-name').hasText('example.com');
     });
 
     test('can populate instance chooser options from recent-files and recent-cards, ordered by last viewed timestamp', async function (assert) {
