@@ -56,6 +56,7 @@ import type { ToolChoice } from '../helpers/ai';
 import { logger } from '../log';
 
 import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants';
+import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants';
 import { humanReadable } from '../code-ref';
 import { SEARCH_MARKER, REPLACE_MARKER, SEPARATOR_MARKER } from '../constants';
 
@@ -913,10 +914,17 @@ function buildCheckCorrectnessResultContent(
   }
   let status = commandResult.content['m.relates_to']?.key ?? 'unknown';
   let resultCard = extractCorrectnessResultCard(commandResult);
-  if (status === 'applied' && resultCard) {
-    return toCheckCorrectnessResultContent(
-      formatCorrectnessResultSummary(targetDescription, resultCard),
+  if (resultCard) {
+    let formattedSummary = formatCorrectnessResultSummary(
+      targetDescription,
+      resultCard,
+      status,
     );
+    let attemptNumber = Math.max(
+      1,
+      getCorrectnessCheckAttemptFromRequest(request),
+    );
+    return toCheckCorrectnessResultContent(formattedSummary, attemptNumber);
   }
   if (status === 'applied') {
     return {
@@ -928,11 +936,6 @@ function buildCheckCorrectnessResultContent(
     return {
       toolMessage: `Check correctness was marked as ${status} for ${targetDescription}: ${failureReason}`,
     };
-  }
-  if (resultCard) {
-    return toCheckCorrectnessResultContent(
-      formatCorrectnessResultSummary(targetDescription, resultCard, status),
-    );
   }
   return {
     toolMessage: `Check correctness was marked as ${status} for ${targetDescription}.`,
@@ -991,6 +994,8 @@ const SEARCH_REPLACE_FIX_INSTRUCTION = `1. Propose fixes for the above errors by
 
 const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
   'Summarize the correctness results above in one short sentence confirming that the target is now fixed. Mention any warnings if they exist.';
+
+const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the target is still failing correctness checks. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed.`;
 
 function extractCorrectnessResultCard(
   commandResult?: CommandResultEvent,
@@ -1067,14 +1072,194 @@ function formatCorrectnessResultSummary(
   };
 }
 
+function findCheckCorrectnessCommandRequest(
+  history: DiscreteMatrixEvent[],
+  commandRequestId: string,
+): CommandRequest | undefined {
+  for (let event of history) {
+    let requests = getCheckCorrectnessCommandRequests(event);
+    let match = requests.find((request) => request.id === commandRequestId);
+    if (match) {
+      return match;
+    }
+  }
+  return undefined;
+}
+
+function formatCorrectnessTargetKeyWithEvent(
+  targetType?: string,
+  targetRef?: string,
+  targetEventId?: string,
+): string | undefined {
+  if (!targetRef) {
+    return undefined;
+  }
+  let normalizedType = targetType ?? 'target';
+  let eventPart = targetEventId ? `|event:${targetEventId}` : '';
+  return `${normalizedType}:${String(targetRef)}${eventPart}`;
+}
+
+type CheckCorrectnessTargetParts = {
+  targetType?: string;
+  targetRef?: string;
+  targetEventId?: string;
+};
+
+function extractCheckCorrectnessTargetParts(
+  request?: CommandRequest,
+): CheckCorrectnessTargetParts {
+  if (!request) {
+    return {};
+  }
+  let args = (request.arguments as Record<string, any>) ?? {};
+  let attributes = (args.attributes as Record<string, any>) ?? {};
+  let targetRef =
+    attributes.targetRef ??
+    args.targetRef ??
+    attributes.fileUrl ??
+    args.fileUrl ??
+    attributes.cardId ??
+    args.cardId;
+  if (!targetRef) {
+    return {};
+  }
+  let targetType =
+    attributes.targetType ??
+    args.targetType ??
+    attributes.target_type ??
+    args.target_type;
+  if (!targetType) {
+    if (attributes.cardId || args.cardId) {
+      targetType = 'card';
+    } else if (attributes.fileUrl || args.fileUrl) {
+      targetType = 'file';
+    }
+  }
+  let targetEventId =
+    attributes.targetEventId ??
+    args.targetEventId ??
+    attributes.target_event_id ??
+    args.target_event_id ??
+    undefined;
+  return { targetRef, targetType, targetEventId };
+}
+
+function getCheckCorrectnessTargetKey(
+  request?: CommandRequest,
+): string | undefined {
+  let { targetRef, targetType, targetEventId } =
+    extractCheckCorrectnessTargetParts(request);
+  if (!targetRef) {
+    return undefined;
+  }
+  return formatCorrectnessTargetKeyWithEvent(
+    targetType,
+    targetRef,
+    targetEventId,
+  );
+}
+
+function getCorrectnessCheckAttemptFromRequest(
+  request?: CommandRequest,
+): number {
+  if (!request) {
+    return 0;
+  }
+  let args = (request.arguments as Record<string, any>) ?? {};
+  let attributes = (args.attributes as Record<string, any>) ?? {};
+  let attempt =
+    attributes.correctnessCheckAttempt ??
+    args.correctnessCheckAttempt ??
+    undefined;
+  if (typeof attempt === 'number' && Number.isFinite(attempt)) {
+    return attempt;
+  }
+  return 0;
+}
+
+type CorrectnessCheckAttemptInfo = { attempt: number; succeeded: boolean };
+
+function getLatestCorrectnessCheckAttemptInfo(
+  history: DiscreteMatrixEvent[],
+  targetKey: string,
+): CorrectnessCheckAttemptInfo | undefined {
+  for (let index = history.length - 1; index >= 0; index--) {
+    let event = history[index];
+    if (event.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE) {
+      continue;
+    }
+    let commandResult = event as CommandResultEvent;
+    if (!isCheckCorrectnessCommandResultEvent(commandResult, history)) {
+      continue;
+    }
+    let sourceRequest = findCheckCorrectnessCommandRequest(
+      history,
+      commandResult.content.commandRequestId,
+    );
+    if (!sourceRequest) {
+      continue;
+    }
+    if (getCheckCorrectnessTargetKey(sourceRequest) !== targetKey) {
+      continue;
+    }
+    let attempt = Math.max(1, getCorrectnessCheckAttemptFromRequest(sourceRequest));
+    let resultCard = extractCorrectnessResultCard(commandResult);
+    let status = commandResult.content['m.relates_to']?.key;
+    let succeeded =
+      status === 'applied' &&
+      Boolean(resultCard) &&
+      resultCard!.correct === true &&
+      resultCard!.errors.filter(
+        (entry) => typeof entry === 'string' && entry.trim().length,
+      ).length === 0;
+    return { attempt, succeeded };
+  }
+  return undefined;
+}
+
+function getNextCorrectnessCheckAttempt(
+  history: DiscreteMatrixEvent[],
+  targetKey: string,
+): number {
+  let latest = getLatestCorrectnessCheckAttemptInfo(history, targetKey);
+  if (!latest) {
+    return 1;
+  }
+  if (latest.succeeded) {
+    return 1;
+  }
+  return Math.max(1, latest.attempt + 1);
+}
+
 function toCheckCorrectnessResultContent(
   formattedSummary: FormattedCorrectnessSummary,
+  attemptNumber = 0,
 ): CheckCorrectnessResultContent {
+  let attemptNote =
+    formattedSummary.hasErrors && attemptNumber > 0
+      ? `Automated correctness fix attempts so far: ${Math.min(attemptNumber, MAX_CORRECTNESS_FIX_ATTEMPTS)} of ${MAX_CORRECTNESS_FIX_ATTEMPTS}.`
+      : undefined;
+  let toolMessage = [formattedSummary.summary, attemptNote]
+    .filter(Boolean)
+    .join('\n\n');
+
+  if (!formattedSummary.hasErrors) {
+    return {
+      toolMessage,
+      followUpUserMessage: CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION,
+    };
+  }
+
+  if (attemptNumber >= MAX_CORRECTNESS_FIX_ATTEMPTS) {
+    return {
+      toolMessage,
+      followUpUserMessage: CORRECTNESS_FAILURE_LIMIT_INSTRUCTION,
+    };
+  }
+
   return {
-    toolMessage: formattedSummary.summary,
-    followUpUserMessage: formattedSummary.hasErrors
-      ? SEARCH_REPLACE_FIX_INSTRUCTION
-      : CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION,
+    toolMessage,
+    followUpUserMessage: SEARCH_REPLACE_FIX_INSTRUCTION,
   };
 }
 
@@ -1449,12 +1634,20 @@ function buildCodePatchCorrectnessMessage(
     return undefined;
   }
 
+  let attemptsByTargetKey = buildCorrectnessCheckAttemptMap(
+    history,
+    files,
+    cards,
+    messageEvent.event_id,
+  );
+
   return {
     targetEventId: messageEvent.event_id!,
     roomId: messageEvent.room_id!,
     context: content.data?.context as BoxelContext | undefined,
     files,
     cards,
+    attemptsByTargetKey,
   };
 }
 
@@ -1528,6 +1721,38 @@ function gatherPatchedCards(
     cards.push({ cardId });
   }
   return cards;
+}
+
+function buildCorrectnessCheckAttemptMap(
+  history: DiscreteMatrixEvent[],
+  files: CodePatchCorrectnessFile[],
+  cards: CodePatchCorrectnessCard[],
+  targetEventId?: string,
+): Record<string, number> {
+  let attempts: Record<string, number> = {};
+  for (let file of files) {
+    let targetKey = formatCorrectnessTargetKeyWithEvent(
+      'file',
+      file.sourceUrl || file.displayName,
+      targetEventId,
+    );
+    if (!targetKey) {
+      continue;
+    }
+    attempts[targetKey] = getNextCorrectnessCheckAttempt(history, targetKey);
+  }
+  for (let card of cards) {
+    let targetKey = formatCorrectnessTargetKeyWithEvent(
+      'card',
+      card.cardId,
+      targetEventId,
+    );
+    if (!targetKey) {
+      continue;
+    }
+    attempts[targetKey] = getNextCorrectnessCheckAttempt(history, targetKey);
+  }
+  return attempts;
 }
 
 function extractCardIdFromCommandRequest(
