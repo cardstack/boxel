@@ -1202,7 +1202,10 @@ function getLatestCorrectnessCheckAttemptInfo(
     if (getCheckCorrectnessTargetKey(sourceRequest) !== targetKey) {
       continue;
     }
-    let attempt = Math.max(1, getCorrectnessCheckAttemptFromRequest(sourceRequest));
+    let attempt = Math.max(
+      1,
+      getCorrectnessCheckAttemptFromRequest(sourceRequest),
+    );
     let resultCard = extractCorrectnessResultCard(commandResult);
     let status = commandResult.content['m.relates_to']?.key;
     let succeeded =
