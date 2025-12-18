@@ -10,6 +10,8 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
+import type { Format } from 'https://cardstack.com/base/card-api';
+
 import { percySnapshot, testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -68,6 +70,7 @@ module('Integration | preview', function (hooks) {
 
       static head = class Head extends Component<typeof this> {
         <template>
+          {{! template-lint-disable no-forbidden-elements }}
           <title>{{@model.title}}</title>
           <meta name='description' content={{@model.description}} />
           <meta property='og:url' content={{@model.url}} />
@@ -84,7 +87,7 @@ module('Integration | preview', function (hooks) {
       url: 'https://example.com/post',
     });
 
-    class TestDriver extends GlimmerComponent<{ Args: { format?: string } }> {
+    class TestDriver extends GlimmerComponent<{ Args: { format?: Format } }> {
       card = headCard;
 
       <template>
@@ -135,6 +138,7 @@ module('Integration | preview', function (hooks) {
 
       static head = class Head extends Component<typeof this> {
         <template>
+          {{! template-lint-disable no-forbidden-elements }}
           <title>{{@model.title}}</title>
           <meta property='og:type' content='article' />
           <meta property='og:url' content={{@model.url}} />
@@ -147,7 +151,7 @@ module('Integration | preview', function (hooks) {
       url: 'https://example.com/no-image',
     });
 
-    class TestDriver extends GlimmerComponent<{ Args: { format?: string } }> {
+    class TestDriver extends GlimmerComponent<{ Args: { format?: Format } }> {
       card = fallbackCard;
 
       <template>

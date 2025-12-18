@@ -219,10 +219,6 @@ export default class HeadFormatPreview extends Component<Signature> {
     return this.headPreviewData.image;
   }
 
-  private get previewUrl() {
-    return this.headPreviewData.url ?? this.urlBase ?? '';
-  }
-
   private get displayDomain() {
     return this.previewUrlParts.host || 'example.com';
   }
