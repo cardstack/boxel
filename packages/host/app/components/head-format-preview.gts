@@ -287,7 +287,7 @@ export default class HeadFormatPreview extends Component<Signature> {
       </header>
 
       <section class='platform-section'>
-        <h2 class='section-title'>Google Search</h2>
+        <h2 class='section-title'>Google</h2>
         <div class='google-preview'>
           <div class='google-result'>
             <div class='google-url-row'>
