@@ -28,9 +28,36 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
   wheelCanvasElement: HTMLCanvasElement | null = null;
   containerElement: HTMLElement | null = null;
   private lastModelValue: string | null | undefined = null;
+  private resizeObserver: ResizeObserver | null = null;
 
-  // Wheel dimensions
-  private readonly size = 280;
+  // Wheel dimensions - read from CSS variable
+  @tracked private size = 280;
+
+  private getSizeFromCSS(): number {
+    if (!this.containerElement) return 280;
+    const computedStyle = getComputedStyle(this.containerElement);
+    const sizeValue = computedStyle
+      .getPropertyValue('--color-wheel-size')
+      .trim();
+    if (sizeValue) {
+      // Parse the value (e.g., "280px" -> 280)
+      const parsed = parseFloat(sizeValue);
+      if (!isNaN(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+    return 280; // Default fallback
+  }
+
+  private updateSize() {
+    const newSize = this.getSizeFromCSS();
+    if (newSize !== this.size) {
+      this.size = newSize;
+      // Update canvas size and redraw the wheel when size changes
+      this.updateCanvasSize();
+    }
+  }
+
   private get centerX() {
     return this.size / 2;
   }
@@ -219,15 +246,42 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
         'pointerdown',
         this.handleWheelMouseDown,
       );
+      if (this.resizeObserver) {
+        this.resizeObserver.disconnect();
+      }
     }
     this.containerElement = element;
     element.addEventListener('pointerdown', this.handleWheelMouseDown);
+
+    // Initialize size from CSS variable
+    this.updateSize();
+
+    // Watch for size changes (including CSS variable changes)
+    this.resizeObserver = new ResizeObserver(() => {
+      this.updateSize();
+    });
+    this.resizeObserver.observe(element);
   }
 
   @action
   setupWheelCanvas(element: HTMLCanvasElement) {
     this.wheelCanvasElement = element;
+    // Ensure we have the latest size (in case container was set up first)
+    if (this.containerElement) {
+      this.updateSize();
+    }
+    // Set initial canvas size
+    element.width = this.size;
+    element.height = this.size;
     requestAnimationFrame(() => this.drawColorWheel());
+  }
+
+  private updateCanvasSize() {
+    if (this.wheelCanvasElement) {
+      this.wheelCanvasElement.width = this.size;
+      this.wheelCanvasElement.height = this.size;
+      requestAnimationFrame(() => this.drawColorWheel());
+    }
   }
 
   @action
@@ -274,13 +328,15 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
       'pointerdown',
       this.handleWheelMouseDown,
     );
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
   }
 
   <template>
     <div class='color-wheel-editor' {{setupElement this.setupContainer}}>
       <canvas
-        width={{this.size}}
-        height={{this.size}}
         class='color-wheel-canvas'
         {{setupElement this.setupWheelCanvas}}
       ></canvas>
@@ -302,8 +358,8 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
     <style scoped>
       .color-wheel-editor {
         position: relative;
-        width: 280px;
-        height: 280px;
+        width: var(--color-wheel-size, 280px);
+        height: var(--color-wheel-size, 280px);
         touch-action: none;
         user-select: none;
       }
