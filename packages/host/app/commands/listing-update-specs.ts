@@ -6,7 +6,6 @@ import { isCardInstance, SupportedMimeType } from '@cardstack/runtime-common';
 
 import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
 
-import type { CardDef as BaseCardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import type { Spec } from 'https://cardstack.com/base/spec';
 

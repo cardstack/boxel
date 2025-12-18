@@ -1,12 +1,13 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, type Realm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import ListingUpdateSpecsCommand from '@cardstack/host/commands/listing-update-specs';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { Listing } from '@cardstack/catalog/listing/listing';
 
 import {
   setupCardLogs,
@@ -19,8 +20,6 @@ import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
-let Listing: typeof import('@cardstack/catalog/catalog-app/listing/listing').Listing;
-
 module('Integration | commands | listing-update-specs', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
@@ -28,7 +27,7 @@ module('Integration | commands | listing-update-specs', function (hooks) {
 
   const modulePath = `${testRealmURL}listing-example.gts`;
   let loader: Loader;
-  let testRealm: { write: (path: string, content: string) => Promise<void> };
+  let testRealm: Realm;
 
   setupRealmServerEndpoints(hooks, [
     {
@@ -78,7 +77,7 @@ module('Integration | commands | listing-update-specs', function (hooks) {
   });
 
   hooks.beforeEach(async function () {
-    let result = await setupIntegrationTestRealm({
+    ({ realm: testRealm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       realmURL: testRealmURL,
       contents: {
@@ -102,11 +101,7 @@ module('Integration | commands | listing-update-specs', function (hooks) {
           },
         },
       },
-    });
-    Listing = (
-      await loader.import('@cardstack/catalog/catalog-app/listing/listing')
-    ).Listing;
-    testRealm = result.realm;
+    }));
     await getService('realm').login(testRealmURL);
   });
 
@@ -117,11 +112,19 @@ module('Integration | commands | listing-update-specs', function (hooks) {
     );
 
     let store = getService('store');
-    let listing = (await store.add(new Listing(), {
+
+    let ListingClass = (
+      (await loader.import(
+        '@cardstack/catalog/catalog-app/listing/listing',
+      )) as {
+        Listing: typeof Listing;
+      }
+    ).Listing;
+    let listing = (await store.add(new ListingClass(), {
       realm: testRealmURL,
     })) as InstanceType<typeof Listing>;
     let exampleCard = (await store.get(`${testRealmURL}Example/1`)) as CardDef;
-    (listing as any).examples = [exampleCard];
+    (listing as Listing).examples = [exampleCard];
 
     let result = await listingUpdateSpecsCommand.execute({ listing });
     let specNames = result.specs.map((spec) => spec.ref?.name).filter(Boolean);
