@@ -541,10 +541,6 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         declaration: 'HeadPreview',
       });
       await selectFormat('head');
-      await waitFor(
-        '[data-test-format-chooser="head"].format-chooser__button.active',
-      );
-      await waitFor('.social-preview-container');
 
       assert.dom('.google-title').hasText('Definition Title');
       assert.dom('.google-description').hasText('Definition description');

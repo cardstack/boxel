@@ -118,6 +118,7 @@ module('Integration | preview', function (hooks) {
     assert
       .dom('[data-test-head-markup]')
       .includesText('<meta name="description" content="Preview description">');
+
     let rawMarkup =
       document.querySelector('[data-test-head-markup]')?.textContent ?? '';
     assert.notOk(
