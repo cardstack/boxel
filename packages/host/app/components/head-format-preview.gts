@@ -287,27 +287,7 @@ export default class HeadFormatPreview extends Component<Signature> {
       </header>
 
       <section class='platform-section'>
-        <h2 class='section-title'>
-          <svg class='section-icon google-icon' viewBox='0 0 24 24' fill='none'>
-            <path
-              d='M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z'
-              fill='#4285F4'
-            />
-            <path
-              d='M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z'
-              fill='#34A853'
-            />
-            <path
-              d='M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z'
-              fill='#FBBC05'
-            />
-            <path
-              d='M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z'
-              fill='#EA4335'
-            />
-          </svg>
-          Google Search
-        </h2>
+        <h2 class='section-title'>Google Search</h2>
         <div class='google-preview'>
           <div class='google-result'>
             <div class='google-url-row'>
@@ -335,18 +315,7 @@ export default class HeadFormatPreview extends Component<Signature> {
       </section>
 
       <section class='platform-section'>
-        <h2 class='section-title'>
-          <svg
-            class='section-icon facebook-icon'
-            viewBox='0 0 24 24'
-            fill='#1877F2'
-          >
-            <path
-              d='M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z'
-            />
-          </svg>
-          Facebook
-        </h2>
+        <h2 class='section-title'>Facebook</h2>
         <div class='facebook-preview'>
           <div class='facebook-card'>
             {{#if this.previewImage}}
@@ -366,18 +335,7 @@ export default class HeadFormatPreview extends Component<Signature> {
       </section>
 
       <section class='platform-section'>
-        <h2 class='section-title'>
-          <svg
-            class='section-icon twitter-icon'
-            viewBox='0 0 24 24'
-            fill='#000'
-          >
-            <path
-              d='M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z'
-            />
-          </svg>
-          Twitter / X
-        </h2>
+        <h2 class='section-title'>Twitter / X</h2>
         <div class='twitter-preview'>
           <div class='twitter-card {{if this.previewImage "has-image" ""}}'>
             {{#if this.previewImage}}
@@ -412,20 +370,7 @@ export default class HeadFormatPreview extends Component<Signature> {
 
       {{#if this.headMarkup}}
         <section class='meta-section'>
-          <h2 class='section-title'>
-            <svg
-              class='section-icon'
-              viewBox='0 0 24 24'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='2'
-            >
-              <rect x='3' y='3' width='18' height='18' rx='2' ry='2' />
-              <line x1='3' y1='9' x2='21' y2='9' />
-              <line x1='9' y1='21' x2='9' y2='9' />
-            </svg>
-            Raw head markup
-          </h2>
+          <h2 class='section-title'>Raw head markup</h2>
           <div class='meta-code'>
             <pre data-test-head-markup>{{this.headMarkup}}</pre>
           </div>
@@ -440,35 +385,30 @@ export default class HeadFormatPreview extends Component<Signature> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-2xl);
-        background: var(--boxel-light-100);
-        background-image: radial-gradient(
-          circle,
-          var(--boxel-200) 1px,
-          transparent 1px
-        );
-        background-size: 20px 20px;
-        color: var(--boxel-dark);
+        background: var(--boxel-700);
+        color: var(--boxel-light);
         border-radius: var(--boxel-border-radius-lg);
-        border: var(--boxel-border);
+        border: 1px solid var(--boxel-650);
+        box-shadow: var(--boxel-deep-box-shadow);
       }
 
       .preview-header {
         padding: var(--boxel-sp-lg);
-        border-bottom: 2px solid var(--boxel-200);
-        background: var(--boxel-light);
+        border-bottom: 2px solid var(--boxel-650);
+        background: var(--boxel-650);
         border-radius: var(--boxel-border-radius);
-        box-shadow: var(--boxel-box-shadow);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
       }
 
       .preview-title {
         font: 700 var(--boxel-font-lg);
         margin: 0 0 var(--boxel-sp-xxs);
-        color: var(--boxel-dark);
+        color: var(--boxel-light);
       }
 
       .preview-subtitle {
         font: 400 var(--boxel-font-sm);
-        color: var(--boxel-500);
+        color: var(--boxel-400);
         margin: 0;
       }
 
@@ -480,24 +420,19 @@ export default class HeadFormatPreview extends Component<Signature> {
       }
 
       .section-title {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
         font: 700 var(--boxel-font-sm);
-        margin: 0 0 var(--boxel-sp-sm);
-        color: var(--boxel-dark);
-      }
-
-      .section-icon {
-        width: 20px;
-        height: 20px;
-        flex-shrink: 0;
+        margin: 0;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        background: var(--boxel-650);
+        color: var(--boxel-light);
+        border-radius: var(--boxel-border-radius);
+        border: 1px solid var(--boxel-600);
       }
 
       .google-preview {
-        background: var(--boxel-light);
-        border: var(--boxel-border);
-        border-radius: 12px;
+        background: var(--boxel-650);
+        border: 1px solid var(--boxel-600);
+        border-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp-lg);
         box-shadow: var(--boxel-box-shadow);
       }
@@ -522,8 +457,9 @@ export default class HeadFormatPreview extends Component<Signature> {
         justify-content: center;
         flex-shrink: 0;
         overflow: hidden;
-        background: var(--boxel-light-400);
+        background: var(--boxel-500);
         font: 700 var(--boxel-font-xs);
+        color: var(--boxel-light);
       }
 
       .google-favicon img {
@@ -540,13 +476,13 @@ export default class HeadFormatPreview extends Component<Signature> {
 
       .google-site-name {
         font: 600 var(--boxel-font-xs);
-        color: var(--boxel-dark);
+        color: var(--boxel-light);
         line-height: 1.3;
       }
 
       .google-breadcrumb {
         font: 500 var(--boxel-font-xxs, var(--boxel-font-xs));
-        color: var(--boxel-500);
+        color: var(--boxel-400);
         line-height: 1.3;
         white-space: nowrap;
         overflow: hidden;
@@ -554,18 +490,15 @@ export default class HeadFormatPreview extends Component<Signature> {
       }
 
       .google-title {
-        font-family: Arial, sans-serif;
-        font-size: 20px;
-        font-weight: 400;
-        color: #1a0dab;
+        font: 600 var(--boxel-font-md);
+        color: var(--boxel-light);
         line-height: 1.3;
         margin: 0 0 var(--boxel-sp-4xs);
       }
 
       .google-description {
-        font-family: Arial, sans-serif;
-        font-size: 14px;
-        color: #4d5156;
+        font: 500 var(--boxel-font-sm);
+        color: var(--boxel-400);
         line-height: 1.58;
         margin: 0;
       }
@@ -575,9 +508,9 @@ export default class HeadFormatPreview extends Component<Signature> {
       }
 
       .facebook-card {
-        background: var(--boxel-light);
-        border: var(--boxel-border);
-        border-radius: 12px;
+        background: var(--boxel-650);
+        border: 1px solid var(--boxel-600);
+        border-radius: var(--boxel-border-radius);
         overflow: hidden;
         max-width: 550px;
         box-shadow: var(--boxel-box-shadow);
@@ -586,7 +519,7 @@ export default class HeadFormatPreview extends Component<Signature> {
       .facebook-image {
         width: 100%;
         aspect-ratio: 1.91 / 1;
-        background: var(--boxel-light-400);
+        background: var(--boxel-500);
         overflow: hidden;
       }
 
@@ -598,13 +531,13 @@ export default class HeadFormatPreview extends Component<Signature> {
 
       .facebook-content {
         padding: 12px 14px;
-        background: #f0f2f5;
-        border-top: 1px solid #dddfe2;
+        background: var(--boxel-600);
+        border-top: 1px solid var(--boxel-550);
       }
 
       .facebook-domain {
         font-size: 12px;
-        color: #65676b;
+        color: var(--boxel-400);
         text-transform: uppercase;
         letter-spacing: 0.02em;
         margin-bottom: 4px;
@@ -613,14 +546,14 @@ export default class HeadFormatPreview extends Component<Signature> {
       .facebook-title {
         font-size: 16px;
         font-weight: 600;
-        color: #1c1e21;
+        color: var(--boxel-light);
         line-height: 1.25;
         margin-bottom: 4px;
       }
 
       .facebook-description {
         font-size: 14px;
-        color: #606770;
+        color: var(--boxel-400);
         line-height: 1.35;
       }
 
@@ -629,9 +562,9 @@ export default class HeadFormatPreview extends Component<Signature> {
       }
 
       .twitter-card {
-        background: #000;
-        border: 1px solid #2f3336;
-        border-radius: 16px;
+        background: var(--boxel-700);
+        border: 1px solid var(--boxel-600);
+        border-radius: var(--boxel-border-radius);
         overflow: hidden;
         max-width: 550px;
         box-shadow: var(--boxel-deep-box-shadow);
@@ -640,7 +573,7 @@ export default class HeadFormatPreview extends Component<Signature> {
       .twitter-image {
         width: 100%;
         aspect-ratio: 1.91 / 1;
-        background: #2f3336;
+        background: var(--boxel-650);
         overflow: hidden;
       }
 
@@ -657,14 +590,14 @@ export default class HeadFormatPreview extends Component<Signature> {
       .twitter-title {
         font-size: 15px;
         font-weight: 400;
-        color: #e7e9ea;
+        color: var(--boxel-light);
         line-height: 1.3;
         margin-bottom: 2px;
       }
 
       .twitter-description {
         font-size: 15px;
-        color: #71767b;
+        color: var(--boxel-400);
         line-height: 1.3;
         margin-bottom: 6px;
       }
@@ -674,18 +607,18 @@ export default class HeadFormatPreview extends Component<Signature> {
         align-items: center;
         gap: 4px;
         font-size: 15px;
-        color: #71767b;
+        color: var(--boxel-400);
       }
 
       .link-icon {
         width: 16px;
         height: 16px;
-        color: #71767b;
+        color: var(--boxel-400);
       }
 
       .meta-code {
-        background: var(--boxel-light);
-        border: var(--boxel-border);
+        background: var(--boxel-650);
+        border: 1px solid var(--boxel-600);
         border-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp-md);
         overflow-x: auto;
@@ -701,7 +634,7 @@ export default class HeadFormatPreview extends Component<Signature> {
         );
         font-size: var(--boxel-font-xs);
         line-height: 1.6;
-        color: var(--boxel-dark);
+        color: var(--boxel-light);
         white-space: pre-wrap;
       }
 
