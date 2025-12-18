@@ -266,7 +266,7 @@ export default class HeadFormatPreview extends Component<Signature> {
     if (text.length <= maxLength) {
       return text;
     }
-    return `${text.substring(0, maxLength - 3)}...`;
+    return `${text.substring(0, maxLength - 3)}…`;
   }
 
   private get googleTitle() {
