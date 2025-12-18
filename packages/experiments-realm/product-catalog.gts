@@ -1,10 +1,16 @@
 import {
+  BoxComponent,
   CardDef,
   Component,
   field,
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
 import { IkeaProduct } from './ikea-product';
+import { on } from '@ember/modifier';
+import { fn } from '@ember/helper';
+import { animatable } from '@cardstack/view-transitions';
+import { Plane } from './plane';
+import { Tray } from './transition-tray';
 
 export class ProductCatalog extends CardDef {
   static displayName = 'Product Catalog';
@@ -31,6 +37,30 @@ export class ProductCatalog extends CardDef {
   });
 
   static isolated = class Isolated extends Component<typeof ProductCatalog> {
+    expandedProductIndex = animatable<number | null>(null);
+
+    expandProduct = (productIndex: number, event: Event) => {
+      this.expandedProductIndex.set(productIndex);
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return false;
+    };
+
+    isExpanded = (index: number): boolean => {
+      return this.expandedProductIndex.current === index;
+    };
+
+    get expandedProduct(): { component: BoxComponent; index: number } | null {
+      if (this.expandedProductIndex.current == null) {
+        return null;
+      }
+      return {
+        component:
+          this.args.fields.products![this.expandedProductIndex.current],
+        index: this.expandedProductIndex.current,
+      };
+    }
+
     <template>
       <section class='catalog'>
         <header class='catalog__header'>
@@ -44,10 +74,21 @@ export class ProductCatalog extends CardDef {
 
         {{#if @model.products.length}}
           <div class='catalog__grid'>
-            {{#each @fields.products as |product|}}
-              <div class='catalog__item'>
-                <product @format='fitted' />
-              </div>
+            {{#each @fields.products as |product index|}}
+              {{#if (this.isExpanded index)}}
+                <div class='catalog__item'>
+                  {{! Placeholder. It's important for ViewTransitions that the
+                  Tray for the expanded item disappeared here, so it can match
+                  the one that appears in the overlay Plane. }}
+                </div>
+              {{else}}
+                <Tray class='catalog__item' @matchId={{index}}>
+                  <product
+                    @format='fitted'
+                    {{on 'click' (fn this.expandProduct index)}}
+                  />
+                </Tray>
+              {{/if}}
             {{/each}}
           </div>
         {{else}}
@@ -55,6 +96,17 @@ export class ProductCatalog extends CardDef {
             <p>No products yet. Add IkeaProduct cards to automatically populate
               this grid.</p>
           </div>
+        {{/if}}
+        {{#if this.expandedProduct}}
+          <Plane @scrimClicked={{fn this.expandedProductIndex.set null}}>
+            <Tray @matchId={{this.expandedProduct.index}} @expanded={{true}}>
+              <button
+                class='close'
+                {{on 'click' (fn this.expandedProductIndex.set null)}}
+              >X</button>
+              <this.expandedProduct.component @format='isolated' />
+            </Tray>
+          </Plane>
         {{/if}}
       </section>
       <style scoped>
@@ -104,15 +156,6 @@ export class ProductCatalog extends CardDef {
 
         .catalog__item {
           aspect-ratio: 1 / 1;
-          display: flex;
-          border: none;
-          background: transparent;
-        }
-
-        .catalog__item > * {
-          width: 100%;
-          height: 100%;
-          display: flex;
         }
 
         .catalog__empty {
@@ -121,6 +164,14 @@ export class ProductCatalog extends CardDef {
           padding: var(--boxel-sp-lg);
           text-align: center;
           color: var(--muted-foreground, #6b6e73);
+        }
+
+        .close {
+          position: absolute;
+          top: 0;
+          left: 0;
+          z-index: 1;
+          margin: 0.5rem;
         }
       </style>
     </template>
