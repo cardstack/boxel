@@ -1,4 +1,3 @@
-import { modifier } from 'ember-modifier';
 import { task } from 'ember-concurrency';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -10,16 +9,22 @@ import {
 
 import sanitizedHtml from '../helpers/sanitized-html';
 
-// Function modifier to wrap tables in scrollable containers
-export const wrapTables = modifier((element: HTMLElement) => {
-  const tables = element.querySelectorAll('table:not(.table-wrapper table)');
-  tables.forEach((table) => {
-    const wrapper = document.createElement('div');
+function wrapTablesHtml(html: string | null | undefined): string {
+  if (!html) return '';
+  // Fast path when there are no tables to wrap.
+  if (!html.includes('<table')) return html;
+  if (typeof DOMParser === 'undefined') return html;
+
+  let doc = new DOMParser().parseFromString(html, 'text/html');
+  doc.querySelectorAll('table:not(.table-wrapper table)').forEach((table) => {
+    if (table.parentElement?.classList.contains('table-wrapper')) return;
+    let wrapper = doc.createElement('div');
     wrapper.className = 'table-wrapper';
-    table.parentNode?.insertBefore(wrapper, table);
+    table.replaceWith(wrapper);
     wrapper.appendChild(table);
   });
-});
+  return doc.body.innerHTML;
+}
 
 export default class MarkDownTemplate extends GlimmerComponent<{
   Args: { content: string | null };
@@ -37,10 +42,12 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     this._monacoContext = monacoContext;
   });
   <template>
-    <div class='markdown-content' {{wrapTables}}>
+    <div class='markdown-content'>
       {{sanitizedHtml
-        (markdownToHtml
-          @content enableMonacoSyntaxHighlighting=true monaco=this.monacoContext
+        (wrapTablesHtml
+          (markdownToHtml
+            @content enableMonacoSyntaxHighlighting=true monaco=this.monacoContext
+          )
         )
       }}
     </div>
