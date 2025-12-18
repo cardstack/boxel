@@ -64,12 +64,15 @@ export default class ListingUpdateSpecsCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.ListingUpdateSpecsInput,
   ): Promise<BaseCommandModule.ListingUpdateSpecsResult> {
-    const listing = input.listing as BaseCardDef;
-    const targetRealm = (listing as any)?.[realmURLSymbol]?.href;
-
+    const listing = input.listing;
+    if (!listing) {
+      throw new Error('listing is required');
+    }
     if (!isCardInstance(listing)) {
       throw new Error('listing must be a valid card instance');
     }
+
+    const targetRealm = (listing as any)?.[realmURLSymbol]?.href;
 
     if (!targetRealm) {
       throw new Error('targetRealm is required to update specs');
