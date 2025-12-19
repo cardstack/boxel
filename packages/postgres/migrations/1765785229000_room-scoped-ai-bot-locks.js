@@ -1,18 +1,9 @@
 exports.shorthands = undefined;
 
 exports.up = (pgm) => {
-  // Existing rows may contain Matrix event ids (e.g. $abc:domain) which cannot be
-  // converted to room ids (e.g. !room:domain) without additional context. Force a
-  // manual cleanup/backfill so we do not silently persist invalid room ids.
-  pgm.sql(`
-    DO $$
-    BEGIN
-      IF EXISTS (SELECT 1 FROM ai_bot_event_processing) THEN
-        RAISE EXCEPTION 'ai_bot_event_processing contains existing rows; truncate or backfill with actual Matrix room ids (e.g. !room:domain) before rerunning migration 1765785229000_room-scoped-ai-bot-locks';
-      END IF;
-    END;
-    $$;
-  `);
+  // Backward compatibility is not required here; clear
+  // any existing data so we can safely introduce room-scoped locks.
+  pgm.sql(`DELETE FROM ai_bot_event_processing;`);
 
   pgm.addColumn('ai_bot_event_processing', {
     room_id: {
