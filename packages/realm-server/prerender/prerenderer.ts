@@ -11,6 +11,7 @@ import { RenderRunner } from './render-runner';
 
 const log = logger('prerenderer');
 const boxelHostURL = process.env.BOXEL_HOST_URL ?? 'http://localhost:4200';
+const DEFAULT_REALM_IDLE_EVICT_MS = 12 * 60 * 60 * 1000;
 
 class AsyncSemaphore {
   #available: number;
@@ -47,6 +48,7 @@ export class Prerenderer {
   #pagePool: PagePool;
   #renderRunner: RenderRunner;
   #cleanupInterval: NodeJS.Timeout | undefined;
+  #realmIdleEvictMs: number;
   #semaphore: AsyncSemaphore;
 
   constructor(options: {
@@ -69,6 +71,7 @@ export class Prerenderer {
       pagePool: this.#pagePool,
       boxelHostURL,
     });
+    this.#realmIdleEvictMs = this.#resolveRealmIdleEvictMs();
     this.#startCleanupLoop();
     void this.#pagePool.warmStandbys().catch((e) => {
       log.error('Failed to warm standby pages during prerenderer startup:', e);
@@ -394,6 +397,19 @@ export class Prerenderer {
     });
   }
 
+  #resolveRealmIdleEvictMs(): number {
+    let envIdle = process.env.PRERENDER_REALM_IDLE_EVICT_MS;
+    let idleMs =
+      envIdle !== undefined ? Number(envIdle) : DEFAULT_REALM_IDLE_EVICT_MS;
+    if (!Number.isFinite(idleMs) || idleMs <= 0) {
+      log.warn(
+        'PRERENDER_REALM_IDLE_EVICT_MS is invalid; defaulting to 12 hours',
+      );
+      idleMs = DEFAULT_REALM_IDLE_EVICT_MS;
+    }
+    return idleMs;
+  }
+
   #startCleanupLoop(): void {
     let envInterval = process.env.PRERENDER_USERDATA_CLEAN_INTERVAL_MS;
     let intervalMs =
@@ -412,6 +428,16 @@ export class Prerenderer {
     }
     this.#cleanupInterval = setInterval(() => {
       void this.#browserManager.cleanupUserDataDirs();
+      void this.#pagePool
+        .evictIdleRealms(this.#realmIdleEvictMs)
+        .then((evictedRealms) => {
+          for (let realm of evictedRealms) {
+            this.#renderRunner.clearAuthCache(realm);
+          }
+        })
+        .catch((e) => {
+          log.warn('Error evicting idle prerender realms:', e);
+        });
     }, intervalMs);
     this.#cleanupInterval.unref?.();
   }

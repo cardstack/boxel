@@ -32,6 +32,7 @@ import {
   CardContainer,
 } from '@cardstack/boxel-ui/components';
 import { eq, type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
+import Refresh from '@cardstack/boxel-icons/refresh';
 import Wand from '@cardstack/boxel-icons/wand';
 
 import AppListingHeader from '../components/app-listing-header';
@@ -42,6 +43,7 @@ import { listingActions, isReady } from '../resources/listing-actions';
 
 import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
 import ListingGenerateExampleCommand from '@cardstack/boxel-host/commands/listing-generate-example';
+import ListingUpdateSpecsCommand from '@cardstack/boxel-host/commands/listing-update-specs';
 
 import { getCardMenuItems } from '@cardstack/runtime-common';
 
@@ -610,6 +612,29 @@ export class Listing extends CardDef {
     };
   }
 
+  private getUpdateSpecsMenuItem(
+    params: GetCardMenuItemParams,
+  ): MenuItemOptions | undefined {
+    if (params.menuContext !== 'interact') {
+      return;
+    }
+    const commandContext = params.commandContext;
+    const targetRealm = this[realmURL]?.href;
+    if (!commandContext || !targetRealm) {
+      return;
+    }
+
+    return {
+      label: 'Update Specs',
+      id: 'update-listing-specs',
+      icon: Refresh,
+      action: () =>
+        new ListingUpdateSpecsCommand(commandContext).execute({
+          listing: this,
+        }),
+    };
+  }
+
   [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
     let menuItems = super
       [getCardMenuItems](params)
@@ -618,6 +643,10 @@ export class Listing extends CardDef {
       const extra = this.getGenerateExampleMenuItem(params);
       if (extra) {
         menuItems = [...menuItems, extra];
+      }
+      const updateSpecs = this.getUpdateSpecsMenuItem(params);
+      if (updateSpecs) {
+        menuItems = [...menuItems, updateSpecs];
       }
     }
     return menuItems;

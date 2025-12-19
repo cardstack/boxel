@@ -7,6 +7,12 @@
       }
     },
     "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../garden-design",
+        "name": "GardenDesign"
+      }
+    },
     "attributes": {
       "rows": 10,
       "items": [],
