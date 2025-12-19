@@ -9,6 +9,7 @@
     "type": "card",
     "attributes": {
       "spacing": "0.25rem",
+      "version": "7.0",
       "cardInfo": {
         "notes": "v7.0 - Dense Modularity (UI Optimized)",
         "title": "Boxel Brand Guide",

@@ -2,7 +2,7 @@ import Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash';
 import { WatchedArray } from './watched-array';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { BoxelInput, CopyButton } from '@cardstack/boxel-ui/components';
 import { type MenuItemOptions, not } from '@cardstack/boxel-ui/helpers';
 import {
   getBoxComponent,
@@ -2230,19 +2230,43 @@ export class CSSField extends TextAreaField {
   static displayName = 'CSS Field';
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <pre class='css-field'>{{if @model @model '/* No CSS defined */'}}</pre>
+      <div class='css-field-container'>
+        {{#if @model.length}}
+          <CopyButton class='css-field-copy-button' @textToCopy={{@model}} />
+        {{/if}}
+        <pre class='css-field'>{{if @model @model '/* No CSS defined */'}}</pre>
+      </div>
       <style scoped>
+        .css-field-container {
+          --field-bg: var(--card, var(--boxel-100));
+          --field-fg: var(--card-foreground, var(--boxel-dark));
+          --field-border: var(
+            --border,
+            color-mix(in oklab, var(--field-fg) 20%, var(--field-bg))
+          );
+          position: relative;
+        }
+        .css-field-copy-button {
+          position: absolute;
+          top: var(--boxel-sp-xs);
+          right: var(--boxel-sp-xs);
+        }
         .css-field {
           margin-block: 0;
-          padding: var(--boxel-sp-xxs);
-          background-color: var(--muted, var(--boxel-100));
+          padding: var(--boxel-sp);
+          background-color: var(--field-bg);
+          border: 1px solid var(--field-border);
           border-radius: var(--radius, var(--boxel-border-radius));
-          color: var(--muted-foreground, var(--boxel-700));
+          color: var(--field-fg);
           font-family: var(
             --font-mono,
             var(--boxel-monospace-font-family, monospace)
           );
+          font-size: var(--boxel-font-size-xs);
           white-space: pre-wrap;
+        }
+        .css-field::placeholder {
+          opacity: 0.5;
         }
       </style>
     </template>

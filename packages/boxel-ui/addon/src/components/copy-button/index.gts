@@ -20,6 +20,7 @@ interface Signature {
     placement?: MiddlewareState['placement'];
     size?: BoxelButtonSize;
     textToCopy: string;
+    tooltipText?: string;
     variant?: BoxelButtonKind;
     width?: string;
   };
@@ -66,7 +67,11 @@ export default class CopyButton extends Component<Signature> {
       </:trigger>
       <:content>
         <span>
-          {{if this.recentlyCopied 'Copied!' 'Copy to clipboard'}}
+          {{if
+            this.recentlyCopied
+            'Copied!'
+            (if @tooltipText @tooltipText 'Copy to clipboard')
+          }}
         </span>
       </:content>
     </Tooltip>

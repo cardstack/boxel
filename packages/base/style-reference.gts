@@ -1,89 +1,158 @@
-import { contains, containsMany, field, Component } from './card-api';
+import { tracked } from '@glimmer/tracking';
+import {
+  contains,
+  containsMany,
+  field,
+  Component,
+  type BaseDefComponent,
+} from './card-api';
 import StringField from './string';
 import TextAreaField from './text-area';
 import StructuredTheme from './structured-theme';
 import UrlField from './url';
-import { type BaseDefComponent } from './card-api';
+import {
+  ThemeVisualizer,
+  ThemeDashboard,
+  CssFieldEditor,
+  ResetButton,
+  SimpleNavBar,
+} from './default-templates/theme-dashboard';
 
-import { BoxelTag } from '@cardstack/boxel-ui/components';
+import { BoxelTag, GridContainer } from '@cardstack/boxel-ui/components';
 
 class Isolated extends Component<typeof StyleReference> {
-  <template>
-    <article class='style-reference'>
-      <header class='style-header'>
-        <h1><@fields.title /></h1>
-        <p class='visual-dna'><@fields.description /></p>
-      </header>
-      <section class='inspirations'>
-        <h2>Inspirations</h2>
-        {{#if @model.inspirations.length}}
-          <ul class='inspiration-list'>
-            {{#each @model.inspirations as |inspiration|}}
-              <BoxelTag
-                class='inspiration-tag'
-                @ellipsize={{true}}
-                @htmlTag='li'
-                @name={{inspiration}}
-              />
-            {{/each}}
-          </ul>
-        {{else}}
-          N/A
-        {{/if}}
-      </section>
-      <section class='wallpapers'>
-        <h2>Wallpaper Images</h2>
-        {{#if @model.wallpaperImages.length}}
-          <div class='image-grid'>
-            {{#each @model.wallpaperImages as |imageUrl|}}
-              <div class='image-container'>
-                <img
-                  src='{{imageUrl}}'
-                  alt='Style reference wallpaper'
-                  class='wallpaper-image'
-                />
-              </div>
-            {{/each}}
-          </div>
-        {{else}}
-          N/A
-        {{/if}}
-      </section>
-    </article>
+  @tracked private isDarkMode = false;
 
+  private toggleDarkMode = () => {
+    this.isDarkMode = !this.isDarkMode;
+  };
+
+  <template>
+    <ThemeDashboard
+      class='style-reference'
+      style={{if this.isDarkMode @model.darkModeStyles}}
+      @isDarkMode={{this.isDarkMode}}
+    >
+      <:header>
+        <header class='style-header'>
+          <h1><@fields.title /></h1>
+          <p class='style-header-description'>
+            <@fields.description />
+          </p>
+        </header>
+      </:header>
+      <:navBar>
+        <SimpleNavBar @items={{@model.guideSections}} />
+      </:navBar>
+      <:default>
+        <ThemeVisualizer
+          class='style-ref-section'
+          @toggleDarkMode={{this.toggleDarkMode}}
+          @isDarkMode={{this.isDarkMode}}
+        >
+          <:colorPalette>
+            <@fields.rootVariables />
+          </:colorPalette>
+          <:typography>
+            <@fields.typography />
+          </:typography>
+        </ThemeVisualizer>
+
+        <GridContainer class='style-ref-grid'>
+          {{#if @model.visualDNA.length}}
+            <section class='visual-dna'>
+              <h2>Visual DNA</h2>
+              <div class='visual-dna'>
+                <@fields.visualDNA />
+              </div>
+            </section>
+          {{/if}}
+
+          {{#if @model.inspirations.length}}
+            <section class='inspirations'>
+              <h2>Inspirations</h2>
+              <ul class='inspiration-list'>
+                {{#each @model.inspirations as |inspiration|}}
+                  <BoxelTag
+                    class='inspiration-tag'
+                    @ellipsize={{true}}
+                    @htmlTag='li'
+                    @name={{inspiration}}
+                  />
+                {{/each}}
+              </ul>
+            </section>
+          {{/if}}
+
+          {{#if @model.wallpaperImages.length}}
+            <section class='wallpapers'>
+              <h2>Wallpaper Gallery</h2>
+              <div class='image-grid'>
+                {{#each @model.wallpaperImages as |imageUrl|}}
+                  <div class='image-container'>
+                    <img
+                      src='{{imageUrl}}'
+                      alt='Style reference wallpaper'
+                      class='wallpaper-image'
+                    />
+                  </div>
+                {{/each}}
+              </div>
+            </section>
+          {{/if}}
+
+          <section id='import-css'>
+            <h2>Import Custom CSS</h2>
+            <CssFieldEditor @setCss={{@model.setCss}} />
+          </section>
+
+          <section id='view-code'>
+            <h2>Generated CSS Variables</h2>
+            <@fields.cssVariables />
+          </section>
+
+          <section>
+            <h2>Reset CSS</h2>
+            <ResetButton @reset={{@model.resetCss}} />
+          </section>
+        </GridContainer>
+      </:default>
+    </ThemeDashboard>
     <style scoped>
       h1 {
         margin-bottom: var(--boxel-sp-lg);
       }
       h2 {
         margin-bottom: var(--boxel-sp);
+        border-bottom: 1px solid var(--dsr-border);
       }
       ul {
         list-style: none;
         margin-block: 0;
         padding-inline-start: 0;
       }
-      .style-reference {
-        height: 100%;
-        max-width: 800px;
-        margin: 0 auto;
-        padding: var(--boxel-sp-xl);
-        font-family: var(--font-sans);
-        letter-spacing: var(--tracking-normal);
-        line-height: var(--lineheight-base);
-        background-color: var(--background);
-        color: var(--foreground);
+      section {
+        scroll-margin-top: var(--boxel-sp-2xl);
       }
-      .style-reference > * + * {
-        margin-top: var(--boxel-sp-xxxl);
+      .style-reference {
+        max-width: 50rem;
+        margin: 0 auto;
       }
       .style-header {
+        padding-block: var(--boxel-sp-4xl);
+        padding-inline: var(--boxel-sp-2xl);
+        border-bottom: 1px solid var(--dsr-border);
         text-align: center;
       }
-      .visual-dna {
-        color: var(--muted-foreground);
-        max-width: 600px;
+      .style-header-description {
+        max-width: 37.5rem;
         margin: 0 auto;
+        color: var(--muted-foreground);
+      }
+      .style-ref-grid {
+        gap: var(--boxel-sp-4xl);
+        padding-top: var(--boxel-sp-4xl);
+        padding-inline: var(--boxel-sp-2xl);
       }
       .inspiration-list {
         display: flex;
