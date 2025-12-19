@@ -21,10 +21,6 @@ export default class DefaultHeadTemplate extends GlimmerComponent<{
     return this.args.model?.thumbnailURL;
   }
 
-  get url(): string | undefined {
-    return this.args.model?.id;
-  }
-
   <template>
     {{! template-lint-disable no-forbidden-elements }}
     {{! TODO: restore in CS-9807 }}
@@ -44,11 +40,6 @@ export default class DefaultHeadTemplate extends GlimmerComponent<{
       <meta name='twitter:card' content='summary_large_image' />
     {{else}}
       <meta name='twitter:card' content='summary' />
-    {{/if}}
-
-    {{#if this.url}}
-      <link rel='canonical' href={{this.url}} />
-      <meta property='og:url' content={{this.url}} />
     {{/if}}
 
     <meta property='og:type' content='website' />
