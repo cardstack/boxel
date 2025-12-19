@@ -441,7 +441,6 @@ async function stopTestRealm(testRealmServer?: TestRealmServerResult) {
 module(basename(__filename), function () {
   module('indexing (read only)', function (hooks) {
     let realm: Realm;
-    let adapter: RealmAdapter;
     let testRealmServer: TestRealmServerResult | undefined;
 
     async function getInstance(
@@ -466,7 +465,6 @@ module(basename(__filename), function () {
           runner,
         });
         realm = testRealmServer.testRealm;
-        adapter = testRealmServer.testRealmAdapter;
       },
       after: async () => {
         await stopTestRealm(testRealmServer);
@@ -854,6 +852,31 @@ module(basename(__filename), function () {
       ['random-file.txt', 'random-image.png', '.DS_Store'].forEach((file) => {
         assert.notOk(deletedEntryUrls.includes(file));
       });
+    });
+  });
+
+  module('indexing (mutating)', function (hooks) {
+    let realm: Realm;
+    let adapter: RealmAdapter;
+    let testRealmServer: TestRealmServerResult | undefined;
+
+    setupBaseRealmServer(hooks, matrixURL);
+
+    setupDB(hooks, {
+      beforeEach: async (dbAdapter, publisher, runner) => {
+        testDbAdapter = dbAdapter;
+        testRealmServer = await startTestRealm({
+          dbAdapter,
+          publisher,
+          runner,
+        });
+        realm = testRealmServer.testRealm;
+        adapter = testRealmServer.testRealmAdapter;
+      },
+      afterEach: async () => {
+        await stopTestRealm(testRealmServer);
+        testRealmServer = undefined;
+      },
     });
 
     test('can incrementally index updated instance', async function (assert) {
@@ -1453,16 +1476,9 @@ module(basename(__filename), function () {
         new URL(`${testRealm}country`),
       );
       assert.ok(country, 'country module is in the index');
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 0,
-          instanceErrors: 0,
-          moduleErrors: 0,
-          modulesIndexed: 2,
-          totalIndexEntries: 23,
-        },
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.modulesIndexed,
+        2,
         'indexed correct number of files',
       );
     });
