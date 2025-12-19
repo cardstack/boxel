@@ -263,6 +263,7 @@ export interface ActiveLLMEvent extends RoomStateEvent {
     model: string;
     toolsSupported?: boolean;
     reasoningEffort?: string;
+    selectionSource?: 'system' | 'user';
   };
 }
 

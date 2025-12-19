@@ -671,6 +671,11 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let roomState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
     assert.strictEqual(roomState.model, llmIdToChangeTo);
+    assert.strictEqual(
+      roomState.selectionSource,
+      'user',
+      'LLM selection from the menu is marked as user-selected',
+    );
   });
 
   test('active LLM event includes metadata when switching models', async function (assert) {

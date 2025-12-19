@@ -346,6 +346,24 @@ export class RoomResource extends Resource<Args> {
     return maybeLastActive ?? this.created.getTime();
   }
 
+  @cached
+  get lastActiveLLMEvent(): ActiveLLMEvent | undefined {
+    let latest: ActiveLLMEvent | undefined;
+    for (let event of this.events) {
+      if (event.type === APP_BOXEL_ACTIVE_LLM) {
+        let activeLLMEvent = event as ActiveLLMEvent;
+        if (!latest || event.origin_server_ts > latest.origin_server_ts) {
+          latest = activeLLMEvent;
+        }
+      }
+    }
+    return latest;
+  }
+
+  get hasUserSelectedLLM(): boolean {
+    return this.lastActiveLLMEvent?.content.selectionSource === 'user';
+  }
+
   get activeLLM(): string {
     return (
       this.llmBeingActivated ?? this.matrixRoom?.activeLLM ?? this.defaultLLM
@@ -379,32 +397,35 @@ export class RoomResource extends Resource<Args> {
     return this.activateLLMTask.isRunning;
   }
 
-  activateLLMTask = restartableTask(async (model: string) => {
-    await this.processing;
-    if (this.activeLLM === model) {
-      return;
-    }
-    this.llmBeingActivated = model;
-    try {
-      if (!this.matrixRoom) {
-        throw new Error('matrixRoom is required to activate LLM');
+  activateLLMTask = restartableTask(
+    async (model: string, selectionSource: 'system' | 'user' = 'user') => {
+      await this.processing;
+      if (this.activeLLM === model) {
+        return;
       }
-      await this.matrixService.sendActiveLLMEvent(
-        this.matrixRoom.roomId,
-        model,
-      );
-      let remainingRetries = 20;
-      while (this.matrixRoom.activeLLM !== model && remainingRetries > 0) {
-        await timeout(50);
-        remainingRetries--;
+      this.llmBeingActivated = model;
+      try {
+        if (!this.matrixRoom) {
+          throw new Error('matrixRoom is required to activate LLM');
+        }
+        await this.matrixService.sendActiveLLMEvent(
+          this.matrixRoom.roomId,
+          model,
+          selectionSource,
+        );
+        let remainingRetries = 20;
+        while (this.matrixRoom.activeLLM !== model && remainingRetries > 0) {
+          await timeout(50);
+          remainingRetries--;
+        }
+        if (remainingRetries === 0) {
+          throw new Error('Failed to activate LLM');
+        }
+      } finally {
+        this.llmBeingActivated = undefined;
       }
-      if (remainingRetries === 0) {
-        throw new Error('Failed to activate LLM');
-      }
-    } finally {
-      this.llmBeingActivated = undefined;
-    }
-  });
+    },
+  );
 
   get activeLLMMode(): LLMMode {
     return (

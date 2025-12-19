@@ -1527,7 +1527,11 @@ export default class MatrixService extends Service {
     return this.timelineLoadingState.get(this.currentRoomId) ?? false;
   }
 
-  async sendActiveLLMEvent(roomId: string, model: string) {
+  async sendActiveLLMEvent(
+    roomId: string,
+    model: string,
+    selectionSource: 'system' | 'user' = 'system',
+  ) {
     let modelConfiguration = this.systemCard?.modelConfigurations?.find(
       (configuration) => configuration.modelId === model,
     );
@@ -1536,6 +1540,7 @@ export default class MatrixService extends Service {
       model,
       toolsSupported: modelConfiguration?.toolsSupported,
       reasoningEffort: modelConfiguration?.reasoningEffort,
+      selectionSource,
     });
   }
 
@@ -1869,24 +1874,31 @@ export default class MatrixService extends Service {
     });
   }
 
-  async setLLMForCodeMode() {
-    let preferredModel =
+  private getPreferredDefaultModelForCodeMode(): string {
+    return (
       this.systemCard?.defaultModelConfiguration?.modelId ??
       this.systemCard?.modelConfigurations?.[0]?.modelId ??
-      DEFAULT_CODING_LLM;
-    return this.setLLMModel(preferredModel);
+      DEFAULT_CODING_LLM
+    );
+  }
+
+  private getPreferredDefaultModelForInteractMode(): string {
+    return (
+      this.systemCard?.defaultModelConfiguration?.modelId ??
+      this.systemCard?.modelConfigurations?.[0]?.modelId ??
+      DEFAULT_LLM
+    );
+  }
+
+  async setLLMForCodeMode() {
+    return this.applyDefaultLLMForSubmode('code');
   }
 
   async setLLMForInteractMode() {
-    let preferredModel =
-      this.systemCard?.defaultModelConfiguration?.modelId ??
-      this.systemCard?.modelConfigurations?.[0]?.modelId ??
-      DEFAULT_LLM;
-
-    return this.setLLMModel(preferredModel);
+    return this.applyDefaultLLMForSubmode('interact');
   }
 
-  private async setLLMModel(model: string) {
+  private async applyDefaultLLMForSubmode(submode: 'code' | 'interact') {
     if (!this.currentRoomId) {
       return;
     }
@@ -1894,7 +1906,17 @@ export default class MatrixService extends Service {
     if (!roomResource) {
       return;
     }
-    return roomResource.activateLLMTask.perform(model);
+    if (roomResource.hasUserSelectedLLM) {
+      return;
+    }
+    let preferredModel =
+      submode === 'code'
+        ? this.getPreferredDefaultModelForCodeMode()
+        : this.getPreferredDefaultModelForInteractMode();
+    if (roomResource.activeLLM === preferredModel) {
+      return;
+    }
+    return roomResource.activateLLMTask.perform(preferredModel, 'system');
   }
 
   loadMoreAIRooms() {

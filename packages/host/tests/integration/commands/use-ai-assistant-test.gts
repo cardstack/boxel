@@ -339,6 +339,11 @@ module('Integration | commands | ai-assistant', function (hooks) {
       'gpt-4',
       'LLM model should be set to gpt-4',
     );
+    assert.strictEqual(
+      llmState.selectionSource,
+      'user',
+      'use-ai-assistant command marks LLM selection as user-selected',
+    );
   });
 
   test('adds skill cards to room', async function (assert) {
