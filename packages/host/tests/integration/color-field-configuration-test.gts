@@ -31,7 +31,7 @@ module('Integration | color field configuration', function (hooks) {
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
     const colorModule: any = await loader.import(
-      `${catalogRealmURL}fields/color-field`,
+      `${catalogRealmURL}fields/color`,
     );
     CatalogColorFieldClass = colorModule.default;
   });

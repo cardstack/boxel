@@ -5,18 +5,18 @@ import { action } from '@ember/object';
 import { concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 
-import {
-  parseCssColor,
-  rgbaToHsvValues,
-  hslToRgb,
-  detectColorFormat,
-  rgbaToFormat,
-} from '../util/color-utils';
+import { parseCssColor } from '../util/color-utils';
 import type {
   WheelColorFormat,
   WheelVariantConfiguration,
-  RGBA,
 } from '../util/color-utils';
+import {
+  detectColorFormat,
+  hslToRgb,
+  RGBA,
+  rgbaToFormatString,
+  rgbaToHsv,
+} from '@cardstack/boxel-ui/helpers';
 import type { ColorFieldSignature } from '../util/color-field-signature';
 import { setupElement } from '../modifiers/setup-element-modifier';
 
@@ -29,6 +29,8 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
   containerElement: HTMLElement | null = null;
   private lastModelValue: string | null | undefined = null;
   private resizeObserver: ResizeObserver | null = null;
+  private pendingInteractionFrame: number | null = null;
+  private pendingInteractionEvent: PointerEvent | null = null;
 
   // Wheel dimensions - read from CSS variable
   @tracked private size = 280;
@@ -97,20 +99,21 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
   }
 
   get currentHue(): number {
-    // Sync hue from model when not dragging
+    // Skip sync check during dragging for better performance
     if (!this.isDragging) {
-      this.syncHueFromModel();
+      this.ensureSyncedWithModel();
     }
     return this.h;
   }
 
   get currentColor(): string {
-    return `hsl(${this.currentHue}, 100%, 50%)`;
+    // Use this.h directly instead of this.currentHue to avoid getter overhead
+    return `hsl(${this.h}, 100%, 50%)`;
   }
 
   get thumbPosition() {
-    // Sync hue from model before calculating position
-    this.syncHueFromModel();
+    // Calculate position based on current hue
+    // Use this.h directly to avoid getter overhead during dragging
     const angle = ((this.h - 90) * Math.PI) / 180;
     const radius = (this.innerRadius + this.outerRadius) / 2;
     return {
@@ -120,25 +123,35 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
   }
 
   // ========== Private Helper Methods ==========
-  private syncHueFromModel() {
-    const modelValue = this.args.model;
-
-    // Only update if model actually changed and we're not dragging
-    if (modelValue === this.lastModelValue || this.isDragging) {
+  private ensureSyncedWithModel(): void {
+    // Don't sync while actively dragging
+    if (this.isDragging) {
       return;
     }
+
+    const currentModel = this.args.model;
+
+    // Only sync if the model value actually changed
+    if (currentModel !== this.lastModelValue) {
+      this.syncHueFromModel();
+    }
+  }
+
+  private syncHueFromModel() {
+    const modelValue = this.args.model;
 
     this.lastModelValue = modelValue;
 
     if (modelValue) {
       const rgba = parseCssColor(modelValue);
-      const hsv = rgbaToHsvValues(rgba);
-      this.h = hsv.h;
+      const hsv = rgbaToHsv(rgba);
+      // Round hue to integer for consistency
+      this.h = Math.round(hsv.h);
     } else {
       // Default fallback
       const rgba = parseCssColor('#3b82f6');
-      const hsv = rgbaToHsvValues(rgba);
-      this.h = hsv.h;
+      const hsv = rgbaToHsv(rgba);
+      this.h = Math.round(hsv.h);
     }
   }
 
@@ -155,9 +168,8 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
     if (!this.isRgbaValid(rgba)) {
       return;
     }
-    const colorValue = rgbaToFormat(rgba, this.outputFormat);
+    const colorValue = rgbaToFormatString(rgba, this.outputFormat);
     this.args.set?.(colorValue);
-    this.lastModelValue = colorValue;
   }
 
   private getHueFromPosition(clientX: number, clientY: number): number | null {
@@ -215,11 +227,28 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
   // ========== Private Event Handlers ==========
   private windowPointerMoveHandler = (event: PointerEvent) => {
     if (this.isDragging) {
-      this.handleWheelInteraction(event);
+      // Store the latest event and throttle updates using requestAnimationFrame
+      this.pendingInteractionEvent = event;
+      if (this.pendingInteractionFrame === null) {
+        this.pendingInteractionFrame = requestAnimationFrame(() => {
+          if (this.pendingInteractionEvent) {
+            this.handleWheelInteraction(this.pendingInteractionEvent);
+            this.pendingInteractionEvent = null;
+          }
+          this.pendingInteractionFrame = null;
+        });
+      }
     }
   };
 
   private windowPointerUpHandler = () => {
+    // Cancel any pending interaction frame
+    if (this.pendingInteractionFrame !== null) {
+      cancelAnimationFrame(this.pendingInteractionFrame);
+      this.pendingInteractionFrame = null;
+    }
+    this.pendingInteractionEvent = null;
+
     if (this.isDragging) {
       this.commitColor();
     }
@@ -241,15 +270,25 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
   // ========== Action Methods ==========
   @action
   setupContainer(element: HTMLElement) {
-    if (this.containerElement && this.containerElement !== element) {
+    // If it's the same element, don't re-setup
+    if (this.containerElement === element) {
+      return;
+    }
+
+    // Clean up old container
+    if (this.containerElement) {
       this.containerElement.removeEventListener(
         'pointerdown',
         this.handleWheelMouseDown,
       );
-      if (this.resizeObserver) {
-        this.resizeObserver.disconnect();
-      }
     }
+
+    // Clean up old ResizeObserver
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
+
     this.containerElement = element;
     element.addEventListener('pointerdown', this.handleWheelMouseDown);
 
@@ -289,7 +328,8 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
     if (!this.args.canEdit) return;
     const newHue = this.getHueFromPosition(event.clientX, event.clientY);
     if (newHue !== null) {
-      this.h = newHue;
+      // Round hue to integer
+      this.h = Math.round(newHue);
       this.isDragging = true;
       this.addWindowListeners();
     }
@@ -300,7 +340,8 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
     if (!this.args.canEdit) return;
     const newHue = this.getHueFromPosition(event.clientX, event.clientY);
     if (newHue !== null) {
-      this.h = newHue;
+      // Round hue to integer
+      this.h = Math.round(newHue);
     }
   }
 
@@ -309,7 +350,7 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
     if (!this.args.canEdit) return;
 
     // Convert current hue to RGB
-    const rgb = hslToRgb(this.h, 100, 50);
+    const rgb = hslToRgb({ h: this.h, s: 100, l: 50 });
     const rgba: RGBA = { ...rgb, a: 1 };
     this.saveColor(rgba);
   }
@@ -317,12 +358,17 @@ export default class ColorWheelEdit extends Component<ColorFieldSignature> {
   // ========== Lifecycle ==========
   constructor(owner: Owner, args: ColorFieldSignature['Args']) {
     super(owner, args);
-    // Initialize hue from model - will be synced via getters
+    // Initialize hue from model
     this.syncHueFromModel();
   }
 
   willDestroy() {
     super.willDestroy();
+    // Cancel any pending interaction frame
+    if (this.pendingInteractionFrame !== null) {
+      cancelAnimationFrame(this.pendingInteractionFrame);
+      this.pendingInteractionFrame = null;
+    }
     this.removeWindowListeners();
     this.containerElement?.removeEventListener(
       'pointerdown',

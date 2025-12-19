@@ -1,43 +1,61 @@
 import Component from '@glimmer/component';
-import { and, gte, lt } from '@cardstack/boxel-ui/helpers';
+import {
+  calculateContrast,
+  calculateLuminance,
+} from '@cardstack/boxel-ui/helpers';
 import { concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 
-import { hexToRgba } from '../util/color-utils';
+import { parseCssColor } from '../util/color-utils';
 import type { ColorFieldSignature } from '../util/color-field-signature';
+
+type LevelToken = 'aaa' | 'aa' | 'fail';
 
 export default class ContrastCheckerAddon extends Component<ColorFieldSignature> {
   get contrastRatio(): number | null {
     if (!this.args.model) return null;
-    const ratio = this.calculateContrast(this.args.model, '#ffffff');
-    return parseFloat(ratio);
+    const ratio = this.computeContrastRatio(this.args.model, '#ffffff');
+    return Number(ratio.toFixed(2));
   }
 
-  get contrastLevel(): string | null {
-    if (!this.contrastRatio) return null;
-
-    if (this.contrastRatio >= 7) return 'AAA';
-    if (this.contrastRatio >= 4.5) return 'AA';
-    return 'Fails WCAG';
+  get contrastLevelToken(): LevelToken | null {
+    const ratio = this.contrastRatio;
+    if (ratio == null) return null;
+    if (ratio >= 7) return 'aaa';
+    if (ratio >= 4.5) return 'aa';
+    return 'fail';
   }
 
-  calculateContrast(color1: string, color2: string): string {
-    const getLuminance = (hex: string) => {
-      const rgb = hexToRgba(hex);
-      const [r, g, b] = [rgb.r, rgb.g, rgb.b].map((val) => {
-        val = val / 255;
-        return val <= 0.03928
-          ? val / 12.92
-          : Math.pow((val + 0.055) / 1.055, 2.4);
-      });
-      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    };
+  get contrastLevelLabel(): string | null {
+    switch (this.contrastLevelToken) {
+      case 'aaa':
+        return 'AAA';
+      case 'aa':
+        return 'AA';
+      case 'fail':
+        return 'Fails WCAG';
+      default:
+        return null;
+    }
+  }
 
-    const lum1 = getLuminance(color1);
-    const lum2 = getLuminance(color2);
-    const lighter = Math.max(lum1, lum2);
-    const darker = Math.min(lum1, lum2);
-    return ((lighter + 0.05) / (darker + 0.05)).toFixed(2);
+  get meetsAa(): boolean {
+    return (this.contrastRatio ?? 0) >= 4.5;
+  }
+
+  get meetsAaa(): boolean {
+    return (this.contrastRatio ?? 0) >= 7;
+  }
+
+  private computeContrastRatio(color1: string, color2: string): number {
+    const lum1 = this.getColorLuminance(color1);
+    const lum2 = this.getColorLuminance(color2);
+    return calculateContrast(lum1, lum2);
+  }
+
+  private getColorLuminance(color: string): number {
+    const { r, g, b } = parseCssColor(color);
+    return calculateLuminance({ r, g, b });
   }
 
   <template>
@@ -45,21 +63,15 @@ export default class ContrastCheckerAddon extends Component<ColorFieldSignature>
       <label class='addon-label'>Accessibility Check</label>
       {{#if @model}}
         <div
-          class='contrast-card
-            {{if (gte this.contrastRatio 7) "aaa"}}
-            {{if
-              (and (gte this.contrastRatio 4.5) (lt this.contrastRatio 7))
-              "aa"
-            }}
-            {{if (lt this.contrastRatio 4.5) "fail"}}'
+          class='contrast-card {{if this.contrastLevelToken this.contrastLevelToken}}'
         >
           <div class='contrast-header'>
             <div class='contrast-ratio-group'>
               <span class='ratio-label'>Contrast Ratio</span>
               <span class='ratio-value'>{{this.contrastRatio}}:1</span>
             </div>
-            <span class='level-badge level-{{this.contrastLevel}}'>
-              {{this.contrastLevel}}
+            <span class='level-badge level-{{this.contrastLevelToken}}'>
+              {{this.contrastLevelLabel}}
             </span>
           </div>
 
@@ -69,18 +81,18 @@ export default class ContrastCheckerAddon extends Component<ColorFieldSignature>
                 <span class='requirement-label'>AA (Normal Text):</span>
                 <span
                   class='requirement-status
-                    {{if (gte this.contrastRatio 4.5) "met" "unmet"}}'
+                    {{if this.meetsAa "met" "unmet"}}'
                 >
-                  {{if (gte this.contrastRatio 4.5) '✓ Pass' '✗ Fail'}}
+                  {{if this.meetsAa '✓ Pass' '✗ Fail'}}
                 </span>
               </div>
               <div class='requirement'>
                 <span class='requirement-label'>AAA (Normal Text):</span>
                 <span
                   class='requirement-status
-                    {{if (gte this.contrastRatio 7) "met" "unmet"}}'
+                    {{if this.meetsAaa "met" "unmet"}}'
                 >
-                  {{if (gte this.contrastRatio 7) '✓ Pass' '✗ Fail'}}
+                  {{if this.meetsAaa '✓ Pass' '✗ Fail'}}
                 </span>
               </div>
             </div>
@@ -199,17 +211,17 @@ export default class ContrastCheckerAddon extends Component<ColorFieldSignature>
         white-space: nowrap;
       }
 
-      .level-badge.level-AAA {
+      .level-badge.level-aaa {
         background: var(--chart2, #10b981);
         color: var(--background, #ffffff);
       }
 
-      .level-badge.level-AA {
+      .level-badge.level-aa {
         background: var(--chart3, #f59e0b);
         color: var(--background, #ffffff);
       }
 
-      .level-badge.level-Fails {
+      .level-badge.level-fail {
         background: var(--destructive, #ef4444);
         color: var(--destructive-foreground, #ffffff);
       }

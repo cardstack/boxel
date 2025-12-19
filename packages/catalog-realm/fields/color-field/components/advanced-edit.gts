@@ -9,23 +9,20 @@ import { BoxelSelect, BoxelInput } from '@cardstack/boxel-ui/components';
 import { htmlSafe } from '@ember/template';
 import PipetteIcon from '@cardstack/boxel-icons/pipette';
 
-import type {
-  ColorFieldConfiguration,
-  ColorFormat,
-  RGBA,
-} from '../util/color-utils';
+import type { ColorFieldConfiguration } from '../util/color-utils';
+import { parseCssColor, parseCssColorSafe } from '../util/color-utils';
 import {
-  parseCssColor,
-  parseCssColorSafe,
   detectColorFormat,
+  RichColorFormat,
   hexToRgba,
-  rgbaToHex,
-  rgbaToRgbaString,
-  rgbaToHsvValues,
   hsvToRgb,
-  rgbaToHslValues,
-  rgbaToFormat,
-} from '../util/color-utils';
+  RGBA,
+  rgbaToFormatString,
+  rgbaToHexString,
+  rgbaToHsl,
+  rgbaToHsv,
+  rgbaToRgbaString,
+} from '@cardstack/boxel-ui/helpers';
 import type { ColorFieldSignature } from '../util/color-field-signature';
 import { setupElement } from '../modifiers/setup-element-modifier';
 
@@ -40,7 +37,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
   @tracked inputValue = '';
   @tracked hexInputValue = '';
   @tracked cssInputValue = '';
-  @tracked selectedFormat: ColorFormat | null = null; // User-selected format (null = auto-detect)
+  @tracked selectedFormat: RichColorFormat | null = null; // User-selected format (null = auto-detect)
 
   svCanvasElement: HTMLCanvasElement | null = null;
   private lastModelValue: string | null | undefined = null;
@@ -55,7 +52,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
     return typeof (window as any).EyeDropper !== 'undefined';
   }
 
-  get availableFormats(): ColorFormat[] {
+  get availableFormats(): RichColorFormat[] {
     return ['hex', 'rgb', 'hsl', 'hsb', 'css'];
   }
 
@@ -66,7 +63,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
     }));
   }
 
-  get defaultFormat(): ColorFormat {
+  get defaultFormat(): RichColorFormat {
     const options = (
       this.args.configuration as ColorFieldConfiguration & {
         variant: 'advanced';
@@ -76,7 +73,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
   }
 
   // Simple getter - no persistence, just detect when needed
-  get outputFormat(): ColorFormat {
+  get outputFormat(): RichColorFormat {
     // If user selected a format, use it
     if (this.selectedFormat) {
       return this.selectedFormat;
@@ -119,7 +116,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
     }
 
     // Compute and cache
-    const rgb = hsvToRgb(this.h, this.s, this.v);
+    const rgb = hsvToRgb({ h: this.h, s: this.s, v: this.v });
     this.cachedRgba = { ...rgb, a: this.a };
     this.cachedHsv = { h: this.h, s: this.s, v: this.v, a: this.a };
     return this.cachedRgba;
@@ -147,7 +144,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
   }
 
   get hslValues() {
-    const hsl = rgbaToHslValues(this.rgba);
+    const hsl = rgbaToHsl(this.rgba);
     return {
       h: Math.round(hsl.h),
       s: Math.round(hsl.s),
@@ -159,8 +156,8 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
     return 'linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%)';
   }
 
-  getColorString = (format: ColorFormat): string => {
-    return rgbaToFormat(this.rgba, format);
+  getColorString = (format: RichColorFormat): string => {
+    return rgbaToFormatString(this.rgba, format);
   };
 
   // ========== Private Helper Methods ==========
@@ -202,12 +199,12 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
     );
   }
 
-  private saveColor(rgba: RGBA, format?: ColorFormat) {
+  private saveColor(rgba: RGBA, format?: RichColorFormat) {
     if (!this.isRgbaValid(rgba)) {
       return;
     }
     const targetFormat = format ?? this.outputFormat;
-    const colorValue = rgbaToFormat(rgba, targetFormat);
+    const colorValue = rgbaToFormatString(rgba, targetFormat);
     // Update lastModelValue BEFORE calling set to prevent sync during drag
     // When debounced save completes, lastModelValue will already match
     this.lastModelValue = colorValue;
@@ -217,12 +214,12 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
 
   private syncInputValues() {
     this.inputValue = this.getColorString(this.outputFormat);
-    this.hexInputValue = rgbaToHex(this.rgba, this.rgba.a < 1).toUpperCase();
+    this.hexInputValue = rgbaToHexString(this.rgba).toUpperCase();
     this.cssInputValue = rgbaToRgbaString(this.rgba);
   }
 
   private updateHSVFromRgba(rgba: RGBA) {
-    const hsv = rgbaToHsvValues(rgba);
+    const hsv = rgbaToHsv(rgba);
     this.h = hsv.h;
     this.s = hsv.s;
     this.v = hsv.v;
@@ -360,7 +357,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
   }
 
   @action
-  handleFormatSelect(option: { label: string; value: ColorFormat } | null) {
+  handleFormatSelect(option: { label: string; value: RichColorFormat } | null) {
     if (!option) return;
     // Just update format - DON'T save color
     this.selectedFormat = option.value;
@@ -386,7 +383,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
 
   private handleColorKeyPressInternal(
     inputValue: string,
-    format: ColorFormat,
+    format: RichColorFormat,
     event: KeyboardEvent,
   ) {
     if (!this.args.canEdit) return;
@@ -520,7 +517,7 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
     super(owner, args);
     // Minimal initialization - just sync HSV from model
     const rgba = parseCssColor(this.args.model || '#3b82f6');
-    const hsv = rgbaToHsvValues(rgba);
+    const hsv = rgbaToHsv(rgba);
     this.h = hsv.h;
     this.s = hsv.s;
     this.v = hsv.v;
