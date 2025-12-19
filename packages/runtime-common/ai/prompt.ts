@@ -946,8 +946,10 @@ function describeCheckCorrectnessTarget(request?: CommandRequest) {
   if (!request) {
     return 'the requested target';
   }
-  let attributes = ((request.arguments as Record<string, any>) ?? {})
-    .attributes as Record<string, any> | undefined ?? {};
+  let attributes =
+    (((request.arguments as Record<string, any>) ?? {}).attributes as
+      | Record<string, any>
+      | undefined) ?? {};
   let targetType = attributes.targetType;
   let targetRef = attributes.targetRef;
   if (targetType && targetRef) {
@@ -1095,8 +1097,10 @@ function extractCheckCorrectnessTargetParts(
   if (!request) {
     return {};
   }
-  let attributes = ((request.arguments as Record<string, any>) ?? {})
-    .attributes as Record<string, any> | undefined ?? {};
+  let attributes =
+    (((request.arguments as Record<string, any>) ?? {}).attributes as
+      | Record<string, any>
+      | undefined) ?? {};
   let targetRef = attributes.targetRef;
   if (!targetRef) {
     return {};
@@ -1127,8 +1131,10 @@ function getCorrectnessCheckAttemptFromRequest(
   if (!request) {
     return 0;
   }
-  let attributes = ((request.arguments as Record<string, any>) ?? {})
-    .attributes as Record<string, any> | undefined ?? {};
+  let attributes =
+    (((request.arguments as Record<string, any>) ?? {}).attributes as
+      | Record<string, any>
+      | undefined) ?? {};
   let attempt = attributes.correctnessCheckAttempt;
   if (typeof attempt === 'number' && Number.isFinite(attempt)) {
     return attempt;
