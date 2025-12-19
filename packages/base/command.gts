@@ -219,8 +219,6 @@ export class PatchCodeInput extends CardDef {
 export class CheckCorrectnessInput extends CardDef {
   @field targetType = contains(StringField);
   @field targetRef = contains(StringField);
-  @field fileUrl = contains(StringField);
-  @field cardId = contains(StringField);
   @field roomId = contains(StringField);
 }
 
@@ -347,6 +345,15 @@ export class ListingCreateInput extends CardDef {
 
 export class ListingCreateResult extends CardDef {
   @field listing = linksTo(CardDef);
+}
+
+export class ListingUpdateSpecsInput extends CardDef {
+  @field listing = linksTo(CardDef);
+}
+
+export class ListingUpdateSpecsResult extends CardDef {
+  @field listing = linksTo(CardDef);
+  @field specs = linksToMany(Spec);
 }
 
 export class VisitCardsInput extends CardDef {

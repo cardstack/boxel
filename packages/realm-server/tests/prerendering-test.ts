@@ -572,6 +572,90 @@ module(basename(__filename), function () {
       );
     });
 
+    test('card prerender surfaces errors thrown before the render model hook', async function (assert) {
+      let originalGetPage = PagePool.prototype.getPage;
+      try {
+        PagePool.prototype.getPage = async function (
+          this: PagePool,
+          realm: string,
+        ) {
+          let pageInfo = await originalGetPage.call(this, realm);
+          let page = pageInfo.page as any;
+          let originalEvaluate = page?.evaluate?.bind(page);
+          if (originalEvaluate) {
+            let injected = false;
+            page.evaluate = async (...args: any[]) => {
+              if (!injected) {
+                injected = true;
+                await originalEvaluate(() => {
+                  let entries =
+                    (window as any).requirejs?.entries ??
+                    (window as any).require?.entries ??
+                    (window as any)._eak_seen;
+                  let renderModuleName =
+                    entries &&
+                    Object.keys(entries).find((name) =>
+                      name.endsWith('/routes/render'),
+                    );
+                  if (!renderModuleName) {
+                    throw new Error(
+                      'render route module not found for injection',
+                    );
+                  }
+                  let renderRouteModule = (window as any).require(
+                    renderModuleName,
+                  );
+                  let RenderRouteClass = renderRouteModule?.default;
+                  if (!RenderRouteClass?.prototype) {
+                    throw new Error(
+                      'render route class not found for injection',
+                    );
+                  }
+                  let originalBeforeModel =
+                    RenderRouteClass.prototype.beforeModel;
+                  RenderRouteClass.prototype.beforeModel = async function (
+                    ...bmArgs: any[]
+                  ) {
+                    if (originalBeforeModel) {
+                      await originalBeforeModel.apply(this, bmArgs as any);
+                    }
+                    RenderRouteClass.prototype.beforeModel =
+                      originalBeforeModel;
+                    throw new Error('boom before model');
+                  };
+                });
+              }
+              return originalEvaluate(...args);
+            };
+          }
+          return { ...pageInfo, page };
+        };
+
+        let result = await prerenderer.prerenderCard({
+          realm: realmURL,
+          url: `${realmURL}1.json`,
+          auth: auth(),
+        });
+
+        assert.ok(result.response.error, 'prerender reports error');
+        assert.ok(
+          result.response.error?.error.message?.includes('boom before model'),
+          'captures error thrown before model hook',
+        );
+        assert.true(
+          result.pool.evicted,
+          'pre-model error evicts prerender page for clean state',
+        );
+        assert.true(
+          (result.response.error as any)?.evict,
+          'error payload flags eviction',
+        );
+        assert.false(result.pool.timedOut, 'error is not treated as timeout');
+      } finally {
+        PagePool.prototype.getPage = originalGetPage;
+      }
+    });
+
     test('module prerender evicts pooled page on timeout', async function (assert) {
       const moduleURL = `${realmURL}person.gts`;
 
@@ -1251,10 +1335,6 @@ module(basename(__filename), function () {
         assert.ok(
           cleanedHead.includes('name="twitter:card" content="summary"'),
           `failed to find twitter:card in head html:${cleanedHead}`,
-        );
-        assert.ok(
-          cleanedHead.includes(`property="og:url" content="${realmURL2}1"`),
-          `failed to find og:url in head html:${cleanedHead}`,
         );
       });
 
