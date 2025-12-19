@@ -2,7 +2,6 @@ import type { MatrixClient } from 'matrix-js-sdk';
 import type { RoomMessageEventContent } from 'matrix-js-sdk/lib/@types/events';
 
 import { uuidv4 } from '@cardstack/runtime-common';
-import type { PromptParts } from '@cardstack/runtime-common/ai';
 import type { PendingCodePatchCorrectnessCheck } from '@cardstack/runtime-common/ai/types';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
@@ -82,19 +81,4 @@ export function buildCheckCorrectnessCommandRequests(
     });
   }
   return requests;
-}
-
-export function ensureLegacyPatchSummaryPrompt(promptParts: PromptParts) {
-  if (!promptParts.pendingCodePatchCorrectnessChecks) {
-    return;
-  }
-
-  let instruction = `Briefly summarize the most recent code changes or card patches for the user - list the files and cards that were patched.`;
-
-  promptParts.messages = promptParts.messages ?? [];
-  promptParts.messages.push({
-    role: 'user',
-    content: instruction,
-  });
-  promptParts.shouldRespond = true;
 }
