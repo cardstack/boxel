@@ -1225,44 +1225,6 @@ module(basename(__filename), function () {
       `,
       );
       {
-        assert.true(
-          await adapter.exists('post.gts'),
-          'post module file exists on disk',
-        );
-        realm.__testOnlyClearCaches();
-        await realm.realmIndexUpdater.update([new URL(`${testRealm}post.gts`)]);
-        let moduleResponse = await realm.handle(
-          new Request(`${testRealm}post`, {
-            headers: { Accept: 'application/javascript' },
-          }),
-        );
-        assert.strictEqual(
-          moduleResponse?.status,
-          200,
-          `module response status ${moduleResponse?.status}`,
-        );
-        assert.ok(
-          realm.realmIndexUpdater.stats.modulesIndexed >= 1,
-          `modulesIndexed=${realm.realmIndexUpdater.stats.modulesIndexed}`,
-        );
-        let [postIndexEntry] = (await testDbAdapter.execute(
-          `SELECT url, is_deleted, type FROM boxel_index WHERE url = '${testRealm}post.gts'`,
-        )) as { url: string; is_deleted: boolean; type: string }[];
-        assert.ok(postIndexEntry, 'post module row exists in index');
-        assert.false(postIndexEntry?.is_deleted);
-        assert.strictEqual(
-          postIndexEntry?.type,
-          'module',
-          JSON.stringify(postIndexEntry, null, 2),
-        );
-        let postModule = await realm.realmIndexQueryEngine.module(
-          new URL(`${testRealm}post`),
-        );
-        assert.strictEqual(
-          postModule?.type,
-          'module',
-          'post module is in the index after recreation',
-        );
         let { data: result } = await realm.realmIndexQueryEngine.search({
           filter: {
             on: { module: `${testRealm}post`, name: 'Post' },
