@@ -4568,7 +4568,7 @@ new content
     );
   });
 
-  test('getPromptParts toggles correctness summary and patch result prompts based on autoCorrectnessChecksEnabled option', async function () {
+  test('getPromptParts includes correctness summary and omits patch result messages', async function () {
     const roomId = '!room:localhost';
     const aiMessageId = '$ai-msg';
     const eventList: DiscreteMatrixEvent[] = [
@@ -4704,52 +4704,24 @@ new
     const summaryMessage =
       'The automated correctness checks have finished. Summarize their results for me based on the tool output above.';
 
-    const promptPartsWithAutoCorrectnessChecksDisabled = await getPromptParts(
+    const promptParts = await getPromptParts(
       eventList,
       '@aibot:localhost',
       fakeMatrixClient,
-      { autoCorrectnessChecksEnabled: false },
     );
-    let disabledUserMessages =
-      promptPartsWithAutoCorrectnessChecksDisabled.messages?.filter(
-        (message) => message.role === 'user',
-      ) ?? [];
-    assert.false(
-      disabledUserMessages.some(
-        (message) => message.content === summaryMessage,
-      ),
-      'When disabled the automated summary should be omitted',
-    );
+    let userMessages =
+      promptParts.messages?.filter((message) => message.role === 'user') ?? [];
     assert.true(
-      disabledUserMessages.some((message) =>
+      userMessages.some((message) => message.content === summaryMessage),
+      'The summary should be included',
+    );
+    assert.false(
+      userMessages.some((message) =>
         (message.content as string).includes(
           'The user has successfully applied code patch 1.',
         ),
       ),
-      'When disabled the code patch result message should be included',
-    );
-
-    const promptPartsWithAutoCorrectnessChecksEnabled = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-      { autoCorrectnessChecksEnabled: true },
-    );
-    let enabledUserMessages =
-      promptPartsWithAutoCorrectnessChecksEnabled.messages?.filter(
-        (message) => message.role === 'user',
-      ) ?? [];
-    assert.true(
-      enabledUserMessages.some((message) => message.content === summaryMessage),
-      'When enabled the summary should be included',
-    );
-    assert.false(
-      enabledUserMessages.some((message) =>
-        (message.content as string).includes(
-          'The user has successfully applied code patch 1.',
-        ),
-      ),
-      'When enabled the legacy code patch result message should be omitted',
+      'The code patch result message should be omitted',
     );
   });
 

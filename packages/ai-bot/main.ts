@@ -52,14 +52,9 @@ import { isShuttingDown, setActiveGenerations } from './lib/shutdown';
 import type { MatrixClient } from 'matrix-js-sdk';
 import { debug } from 'debug';
 import { profEnabled, profTime, profNote } from './lib/profiler';
-import {
-  ensureLegacyPatchSummaryPrompt,
-  publishCodePatchCorrectnessMessage,
-} from './lib/code-patch-correctness';
+import { publishCodePatchCorrectnessMessage } from './lib/code-patch-correctness';
 
 let log = logger('ai-bot');
-const AI_PATCHING_CORRECTNESS_CHECKS_ENABLED =
-  process.env.ENABLE_AI_PATCHING_CORRECTNESS_CHECKS === 'true';
 
 let trackAiUsageCostPromises = new Map<string, Promise<void>>();
 let activeGenerations = new Map<
@@ -369,21 +364,11 @@ Common issues are:
             responder.responseState.setAllowedToolNames(
               promptParts.tools?.map((tool) => tool.function.name),
             );
-            if (
-              AI_PATCHING_CORRECTNESS_CHECKS_ENABLED &&
-              promptParts.pendingCodePatchCorrectnessChecks
-            ) {
+            if (promptParts.pendingCodePatchCorrectnessChecks) {
               return await publishCodePatchCorrectnessMessage(
                 promptParts.pendingCodePatchCorrectnessChecks,
                 client,
               );
-            }
-
-            if (
-              !AI_PATCHING_CORRECTNESS_CHECKS_ENABLED &&
-              promptParts.pendingCodePatchCorrectnessChecks
-            ) {
-              ensureLegacyPatchSummaryPrompt(promptParts); // TODO: Remove this after the feature flag is removed
             }
             if (!promptParts.shouldRespond) {
               return;
