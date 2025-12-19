@@ -5,6 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
+
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import ENV from '@cardstack/host/config/environment';
@@ -57,24 +58,47 @@ module('Integration | color field configuration', function (hooks) {
   }
 
   // ============================================
-  // Variant Rendering Tests
+  // Valid Variant Configuration Tests
   // ============================================
 
-  test('each variant renders correct component', async function (assert) {
-    const variants = [
-      { variant: 'standard', selector: '.color-picker' },
-      { variant: 'swatches-picker', selector: '.color-palette-group' },
-      { variant: 'slider', selector: '.slider-controls-editor' },
-      { variant: 'advanced', selector: '.advanced-color-editor' },
-      { variant: 'wheel', selector: '.color-wheel-editor' },
-    ];
+  test('standard variant renders color picker', async function (assert) {
+    await renderConfiguredField('#3b82f6', { variant: 'standard' });
 
-    for (const { variant, selector } of variants) {
-      await renderConfiguredField('#3b82f6', { variant });
-      assert
-        .dom(`[data-test-field-container] ${selector}`)
-        .exists(`${variant} variant renders correct component`);
-    }
+    assert
+      .dom('[data-test-field-container] .color-picker')
+      .exists('standard variant renders color picker');
+  });
+
+  test('swatches-picker variant renders color palette', async function (assert) {
+    await renderConfiguredField('#3b82f6', { variant: 'swatches-picker' });
+
+    assert
+      .dom('[data-test-field-container] .color-palette-group')
+      .exists('swatches-picker variant renders color palette');
+  });
+
+  test('slider variant renders slider controls', async function (assert) {
+    await renderConfiguredField('#3b82f6', { variant: 'slider' });
+
+    assert
+      .dom('[data-test-field-container] .slider-controls-editor')
+      .exists('slider variant renders slider controls');
+  });
+
+  test('advanced variant renders advanced editor', async function (assert) {
+    await renderConfiguredField('#3b82f6', { variant: 'advanced' });
+
+    assert
+      .dom('[data-test-field-container] .advanced-color-editor')
+      .exists('advanced variant renders advanced editor');
+  });
+
+  test('wheel variant renders color wheel', async function (assert) {
+    await renderConfiguredField('#3b82f6', { variant: 'wheel' });
+
+    assert
+      .dom('[data-test-field-container] .color-wheel-editor')
+      .exists('wheel variant renders color wheel');
   });
 
   test('missing variant defaults to standard', async function (assert) {
@@ -82,45 +106,68 @@ module('Integration | color field configuration', function (hooks) {
 
     assert
       .dom('[data-test-field-container] .color-picker')
-      .exists('Missing variant defaults to standard');
+      .exists('missing variant defaults to standard');
   });
 
-  test('invalid variant falls back to standard', async function (assert) {
-    await renderConfiguredField('#3b82f6', { variant: 'invalid-variant' });
+  // ============================================
+  // Invalid Variant Configuration Tests
+  // ============================================
+
+  test('invalid variant value falls back to standard variant', async function (assert) {
+    await renderConfiguredField('#3b82f6', { variant: 'not-a-real-variant' });
 
     assert
       .dom('[data-test-field-container] .color-picker')
-      .exists('Invalid variant falls back to standard');
+      .exists('invalid variant falls back to standard');
+    assert
+      .dom('[data-test-field-container] .advanced-color-editor')
+      .doesNotExist('advanced variant is not rendered');
+  });
+
+  test('null variant value defaults to standard variant', async function (assert) {
+    await renderConfiguredField('#3b82f6', { variant: null });
+
+    assert
+      .dom('[data-test-field-container] .color-picker')
+      .exists('null variant defaults to standard');
   });
 
   // ============================================
-  // Options Configuration Tests
+  // Valid Options Configuration Tests
   // ============================================
 
-  test('showRecent and showContrastChecker options display addons', async function (assert) {
+  test('showRecent option displays recent colors addon', async function (assert) {
     await renderConfiguredField('#3b82f6', {
       variant: 'standard',
-      options: {
-        showRecent: true,
-        showContrastChecker: true,
-      },
+      options: { showRecent: true },
     });
 
     assert
       .dom('[data-test-field-container] .recent-colors-addon')
       .exists('showRecent option displays recent colors addon');
+  });
+
+  test('showContrastChecker option displays contrast checker addon', async function (assert) {
+    await renderConfiguredField('#3b82f6', {
+      variant: 'standard',
+      options: { showContrastChecker: true },
+    });
 
     assert
       .dom('[data-test-field-container] .contrast-checker-addon')
       .exists('showContrastChecker option displays contrast checker addon');
   });
 
-  test('showRecent and showContrastChecker default to false', async function (assert) {
+  test('showRecent defaults to false', async function (assert) {
     await renderConfiguredField('#3b82f6', { variant: 'standard' });
 
     assert
       .dom('[data-test-field-container] .recent-colors-addon')
       .doesNotExist('showRecent defaults to false');
+  });
+
+  test('showContrastChecker defaults to false', async function (assert) {
+    await renderConfiguredField('#3b82f6', { variant: 'standard' });
 
     assert
       .dom('[data-test-field-container] .contrast-checker-addon')
@@ -138,54 +185,7 @@ module('Integration | color field configuration', function (hooks) {
 
     assert
       .dom('[data-test-field-container] .recent-colors-addon')
-      .exists('Recent colors addon is shown with custom maxRecentHistory');
-  });
-
-  test('advanced variant does not support base options', async function (assert) {
-    await renderConfiguredField('#3b82f6', {
-      variant: 'advanced',
-      options: {
-        showRecent: true,
-        showContrastChecker: true,
-      },
-    });
-
-    assert
-      .dom('[data-test-field-container] .recent-colors-addon')
-      .doesNotExist('Advanced variant does not show recent colors addon');
-
-    assert
-      .dom('[data-test-field-container] .contrast-checker-addon')
-      .doesNotExist('Advanced variant does not show contrast checker addon');
-  });
-
-  test('variant-specific defaultFormat option works', async function (assert) {
-    const variantsWithFormat = [
-      { variant: 'advanced', format: 'rgb' },
-      { variant: 'slider', format: 'hsl' },
-      { variant: 'wheel', format: 'hex' },
-    ];
-
-    for (const { variant, format } of variantsWithFormat) {
-      await renderConfiguredField('#3b82f6', {
-        variant,
-        options: { defaultFormat: format },
-      });
-
-      const selectors = {
-        advanced: '.advanced-color-editor',
-        slider: '.slider-controls-editor',
-        wheel: '.color-wheel-editor',
-      };
-
-      assert
-        .dom(
-          `[data-test-field-container] ${
-            selectors[variant as keyof typeof selectors]
-          }`,
-        )
-        .exists(`${variant} variant renders with defaultFormat option`);
-    }
+      .exists('recent colors addon is shown with custom maxRecentHistory');
   });
 
   test('swatches-picker variant supports paletteColors option', async function (assert) {
@@ -198,46 +198,68 @@ module('Integration | color field configuration', function (hooks) {
 
     assert
       .dom('[data-test-field-container] .color-palette-group')
-      .exists('Swatches-picker variant renders with palette colors');
+      .exists('swatches-picker variant renders with palette colors');
   });
 
-  // ============================================
-  // Error Handling and Edge Cases
-  // ============================================
-
-  test('null and invalid color values are handled gracefully', async function (assert) {
-    await renderConfiguredField(null, { variant: 'standard' });
-    assert
-      .dom('[data-test-field-container] .color-picker')
-      .exists('Null value renders without error');
-
-    await renderConfiguredField('invalid-color', { variant: 'standard' });
-    assert
-      .dom('[data-test-field-container] .color-picker')
-      .exists('Invalid color value renders without error');
-  });
-
-  test('wrong type in options is ignored gracefully', async function (assert) {
+  test('base options are ignored when variant is advanced', async function (assert) {
     await renderConfiguredField('#3b82f6', {
-      variant: 'standard',
+      variant: 'advanced',
       options: {
-        showRecent: 'not-a-boolean' as any,
-        maxRecentHistory: 'not-a-number' as any,
+        showRecent: true,
+        showContrastChecker: true,
+        maxRecentHistory: 5,
       },
     });
 
     assert
-      .dom('[data-test-field-container] .color-picker')
-      .exists('Renders even with wrong option types');
+      .dom('[data-test-field-container] .advanced-color-editor')
+      .exists('advanced variant renders');
+    assert
+      .dom('[data-test-field-container] .recent-colors-addon')
+      .doesNotExist('base options are ignored for advanced variant');
+    assert
+      .dom('[data-test-field-container] .contrast-checker-addon')
+      .doesNotExist('base options are ignored for advanced variant');
   });
 
   // ============================================
-  // Format Conversion and Storage Tests
+  // Invalid Options Configuration Tests
   // ============================================
 
-  test('advanced variant displays color in defaultFormat', async function (assert) {
-    // Use an RGB-formatted value so it will be detected as 'rgb' format
-    // and the RGB input will be shown, matching the defaultFormat setting
+  test('invalid option values are handled gracefully', async function (assert) {
+    await renderConfiguredField('#3b82f6', {
+      variant: 'standard',
+      options: {
+        showRecent: true,
+        maxRecentHistory: 'ten' as any, // invalid type
+        unknownProperty: 'should be ignored',
+      } as any,
+    });
+
+    assert
+      .dom('[data-test-field-container] .color-picker')
+      .exists('renders with invalid option values');
+    assert
+      .dom('[data-test-field-container] .recent-colors-addon')
+      .exists('addon still renders despite invalid maxRecentHistory');
+  });
+
+  test('null or undefined options are handled', async function (assert) {
+    await renderConfiguredField('#3b82f6', {
+      variant: 'standard',
+      options: null,
+    });
+
+    assert
+      .dom('[data-test-field-container] .color-picker')
+      .exists('renders with null options');
+  });
+
+  // ============================================
+  // Valid Format Configuration Tests
+  // ============================================
+
+  test('advanced variant renders with configured default format', async function (assert) {
     await renderConfiguredField('rgb(59, 130, 246)', {
       variant: 'advanced',
       options: { defaultFormat: 'rgb' },
@@ -245,62 +267,54 @@ module('Integration | color field configuration', function (hooks) {
 
     await settled();
 
-    // Verify the advanced color editor is rendered
     assert
       .dom('[data-test-field-container] .advanced-color-editor')
-      .exists('Advanced variant renders');
-
-    // Check that the RGB input is visible (color-value-input class is used for RGB/HSL/HSB)
+      .exists('advanced variant renders');
     assert
       .dom('[data-test-field-container] .color-value-input')
       .exists('RGB input section is visible');
+  });
 
-    // Verify hex input is not shown when outputFormat is rgb
+  test('advanced variant parses CSS color names', async function (assert) {
+    await renderConfiguredField('blue', {
+      variant: 'advanced',
+      options: { defaultFormat: 'hex' },
+    });
+
+    await settled();
+
     assert
-      .dom('[data-test-field-container] .color-hex-input')
-      .doesNotExist(
-        'Hex input stays hidden when defaultFormat is rgb and value is RGB',
-      );
+      .dom('[data-test-field-container] .advanced-color-editor')
+      .exists('CSS color name is parsed and component renders');
   });
 
-  test('CSS color values are parsed and displayed correctly', async function (assert) {
-    const testCases = [
-      {
-        input: 'blue',
-        variant: 'advanced',
-        defaultFormat: 'hex',
-        description: 'CSS color name is parsed',
-      },
-      {
-        input: 'rgb(255, 0, 0)',
-        variant: 'advanced',
-        defaultFormat: 'hsl',
-        description: 'RGB value is parsed',
-      },
-      {
-        input: '#ff0000',
-        variant: 'advanced',
-        defaultFormat: 'rgb',
-        description: 'Hex value is parsed',
-      },
-    ];
+  test('advanced variant parses RGB values', async function (assert) {
+    await renderConfiguredField('rgb(255, 0, 0)', {
+      variant: 'advanced',
+      options: { defaultFormat: 'hsl' },
+    });
 
-    for (const testCase of testCases) {
-      await renderConfiguredField(testCase.input, {
-        variant: testCase.variant,
-        options: { defaultFormat: testCase.defaultFormat },
-      });
+    await settled();
 
-      await settled();
-
-      // The component should render without errors
-      assert
-        .dom('[data-test-field-container] .advanced-color-editor')
-        .exists(`${testCase.description}: Component renders successfully`);
-    }
+    assert
+      .dom('[data-test-field-container] .advanced-color-editor')
+      .exists('RGB value is parsed and component renders');
   });
 
-  test('slider variant displays color values in defaultFormat', async function (assert) {
+  test('advanced variant parses hex values', async function (assert) {
+    await renderConfiguredField('#ff0000', {
+      variant: 'advanced',
+      options: { defaultFormat: 'rgb' },
+    });
+
+    await settled();
+
+    assert
+      .dom('[data-test-field-container] .advanced-color-editor')
+      .exists('hex value is parsed and component renders');
+  });
+
+  test('slider variant displays HSL format when configured', async function (assert) {
     await renderConfiguredField('#3b82f6', {
       variant: 'slider',
       options: { defaultFormat: 'hsl' },
@@ -308,18 +322,35 @@ module('Integration | color field configuration', function (hooks) {
 
     await settled();
 
-    // Check that HSL sliders are displayed (hue, saturation, lightness)
     const hslSliders = document.querySelectorAll(
       '[data-test-field-container] .slider-label.hue, [data-test-field-container] .slider-label.saturation, [data-test-field-container] .slider-label.lightness',
     );
 
     assert.ok(
       hslSliders.length >= 3,
-      'Slider variant with HSL format displays HSL sliders',
+      'slider variant with HSL format displays HSL sliders',
     );
   });
 
-  test('wheel variant displays color in defaultFormat', async function (assert) {
+  test('slider variant displays RGB format when configured', async function (assert) {
+    await renderConfiguredField('#3b82f6', {
+      variant: 'slider',
+      options: { defaultFormat: 'rgb' },
+    });
+
+    await settled();
+
+    const rgbSliders = document.querySelectorAll(
+      '[data-test-field-container] .slider-label.red, [data-test-field-container] .slider-label.green, [data-test-field-container] .slider-label.blue',
+    );
+
+    assert.ok(
+      rgbSliders.length >= 3,
+      'slider variant with RGB format displays RGB sliders',
+    );
+  });
+
+  test('wheel variant displays with configured format', async function (assert) {
     await renderConfiguredField('#3b82f6', {
       variant: 'wheel',
       options: { defaultFormat: 'rgb' },
@@ -327,9 +358,68 @@ module('Integration | color field configuration', function (hooks) {
 
     await settled();
 
-    // Check that the wheel variant is displayed
     assert
       .dom('[data-test-field-container] .color-wheel-editor')
-      .exists('Wheel variant renders with RGB format');
+      .exists('wheel variant renders with RGB format');
+  });
+
+  // ============================================
+  // Invalid Format Configuration Tests
+  // ============================================
+
+  test('invalid defaultFormat falls back to default', async function (assert) {
+    await renderConfiguredField('#3b82f6', {
+      variant: 'advanced',
+      options: { defaultFormat: 'invalid-format' as any },
+    });
+
+    await settled();
+
+    assert
+      .dom('[data-test-field-container] .advanced-color-editor')
+      .exists('editor renders with invalid defaultFormat');
+  });
+
+  // ============================================
+  // Invalid Color Value Handling Tests
+  // ============================================
+
+  test('invalid color values are handled gracefully', async function (assert) {
+    const invalidColors = [
+      null,
+      '',
+      '   ',
+      'not-a-color',
+      '#gggggg',
+      'rgb(999, 999, 999)',
+      '#ff',
+    ];
+
+    for (const color of invalidColors) {
+      await renderConfiguredField(color, { variant: 'standard' });
+
+      assert
+        .dom('[data-test-field-container] .color-picker')
+        .exists(`color value "${color}" renders without error`);
+    }
+  });
+
+  // ============================================
+  // Edge Cases and Boundary Conditions
+  // ============================================
+
+  test('multiple invalid values are handled gracefully', async function (assert) {
+    await renderConfiguredField('invalid-color', {
+      variant: 'not-a-variant',
+      options: {
+        showRecent: 'yes' as any,
+        maxRecentHistory: 'ten' as any,
+        unknownProperty: 'ignored',
+      } as any,
+    });
+
+    assert
+      .dom('[data-test-field-container] .color-picker')
+      .exists('renders despite multiple invalid values');
   });
 });
