@@ -100,7 +100,6 @@ module('code patch correctness helpers', () => {
         attributes: {
           targetType: 'file',
           targetRef: summary.files[0].sourceUrl,
-          fileUrl: summary.files[0].sourceUrl,
           roomId: summary.roomId,
           targetEventId: summary.targetEventId,
           correctnessCheckAttempt: 1,
@@ -120,7 +119,6 @@ module('code patch correctness helpers', () => {
         attributes: {
           targetType: 'card',
           targetRef: 'http://localhost/cards/Profile/1',
-          cardId: 'http://localhost/cards/Profile/1',
           roomId: summary.roomId,
           targetEventId: summary.targetEventId,
           correctnessCheckAttempt: 1,

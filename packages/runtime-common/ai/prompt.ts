@@ -946,28 +946,12 @@ function describeCheckCorrectnessTarget(request?: CommandRequest) {
   if (!request) {
     return 'the requested target';
   }
-  let args = (request.arguments as Record<string, any>) ?? {};
-  let attributes = (args.attributes as Record<string, any>) ?? {};
-  let targetType =
-    attributes.targetType ??
-    args.targetType ??
-    attributes.target_type ??
-    args.target_type;
-  let targetRef =
-    attributes.targetRef ??
-    args.targetRef ??
-    attributes.fileUrl ??
-    args.fileUrl ??
-    attributes.cardId ??
-    args.cardId;
+  let attributes = ((request.arguments as Record<string, any>) ?? {})
+    .attributes as Record<string, any> | undefined ?? {};
+  let targetType = attributes.targetType;
+  let targetRef = attributes.targetRef;
   if (targetType && targetRef) {
     return `${targetType} "${targetRef}"`;
-  }
-  if (targetRef) {
-    return `"${targetRef}"`;
-  }
-  if (args.description) {
-    return args.description;
   }
   return 'the requested target';
 }
@@ -1111,36 +1095,14 @@ function extractCheckCorrectnessTargetParts(
   if (!request) {
     return {};
   }
-  let args = (request.arguments as Record<string, any>) ?? {};
-  let attributes = (args.attributes as Record<string, any>) ?? {};
-  let targetRef =
-    attributes.targetRef ??
-    args.targetRef ??
-    attributes.fileUrl ??
-    args.fileUrl ??
-    attributes.cardId ??
-    args.cardId;
+  let attributes = ((request.arguments as Record<string, any>) ?? {})
+    .attributes as Record<string, any> | undefined ?? {};
+  let targetRef = attributes.targetRef;
   if (!targetRef) {
     return {};
   }
-  let targetType =
-    attributes.targetType ??
-    args.targetType ??
-    attributes.target_type ??
-    args.target_type;
-  if (!targetType) {
-    if (attributes.cardId || args.cardId) {
-      targetType = 'card';
-    } else if (attributes.fileUrl || args.fileUrl) {
-      targetType = 'file';
-    }
-  }
-  let targetEventId =
-    attributes.targetEventId ??
-    args.targetEventId ??
-    attributes.target_event_id ??
-    args.target_event_id ??
-    undefined;
+  let targetType = attributes.targetType;
+  let targetEventId = attributes.targetEventId ?? undefined;
   return { targetRef, targetType, targetEventId };
 }
 
@@ -1165,12 +1127,9 @@ function getCorrectnessCheckAttemptFromRequest(
   if (!request) {
     return 0;
   }
-  let args = (request.arguments as Record<string, any>) ?? {};
-  let attributes = (args.attributes as Record<string, any>) ?? {};
-  let attempt =
-    attributes.correctnessCheckAttempt ??
-    args.correctnessCheckAttempt ??
-    undefined;
+  let attributes = ((request.arguments as Record<string, any>) ?? {})
+    .attributes as Record<string, any> | undefined ?? {};
+  let attempt = attributes.correctnessCheckAttempt;
   if (typeof attempt === 'number' && Number.isFinite(attempt)) {
     return attempt;
   }

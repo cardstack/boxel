@@ -4599,7 +4599,6 @@ new content
                 attributes: {
                   targetType: 'file',
                   targetRef,
-                  fileUrl: targetRef,
                   roomId,
                   correctnessCheckAttempt: index,
                 },
@@ -4762,7 +4761,6 @@ new content
                 attributes: {
                   targetType: 'file',
                   targetRef,
-                  fileUrl: targetRef,
                   roomId,
                   targetEventId: firstEventId,
                   correctnessCheckAttempt: 2,
@@ -4835,7 +4833,6 @@ new content
                 attributes: {
                   targetType: 'file',
                   targetRef,
-                  fileUrl: targetRef,
                   roomId,
                   targetEventId: secondEventId,
                   correctnessCheckAttempt: 1,
@@ -4972,7 +4969,6 @@ new
                 attributes: {
                   targetType: 'file',
                   targetRef: 'http://localhost/example.gts',
-                  fileUrl: 'http://localhost/example.gts',
                   roomId,
                 },
               }),

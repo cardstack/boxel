@@ -76,7 +76,6 @@ export function buildCheckCorrectnessCommandRequests(
         attributes: {
           targetType: 'file',
           targetRef: sourceRef,
-          fileUrl: sourceRef,
           roomId: summary.roomId,
           targetEventId: summary.targetEventId,
           correctnessCheckAttempt,
@@ -100,7 +99,6 @@ export function buildCheckCorrectnessCommandRequests(
         attributes: {
           targetType: 'card',
           targetRef: card.cardId,
-          cardId: card.cardId,
           roomId: summary.roomId,
           targetEventId: summary.targetEventId,
           correctnessCheckAttempt,
