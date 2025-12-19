@@ -205,7 +205,7 @@ jobs:
 
   boxel-ui-test:
     name: Boxel UI Tests
-    needs: [change-check, test-web-assets]
+    needs: [change-check]
     if: needs.change-check.outputs.boxel-ui == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
@@ -214,16 +214,12 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - uses: ./.github/actions/init
-      - name: Download test web assets
-        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
-        with:
-          name: ${{ needs.test-web-assets.outputs.artifact_name }}
-          path: .test-web-assets-artifact
-      - name: Restore test web assets into workspace
-        shell: bash
-        run: |
-          shopt -s dotglob
-          cp -a .test-web-assets-artifact/. ./
+      - name: Build boxel-icons
+        run: pnpm build
+        working-directory: packages/boxel-icons
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
       - name: Run test suite
         run: pnpm test
         working-directory: packages/boxel-ui/test-app
