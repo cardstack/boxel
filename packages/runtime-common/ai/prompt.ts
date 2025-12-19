@@ -1106,7 +1106,7 @@ function extractCheckCorrectnessTargetParts(
     return {};
   }
   let targetType = attributes.targetType;
-  let targetEventId = attributes.targetEventId ?? undefined;
+  let targetEventId = attributes.targetEventId;
   return { targetRef, targetType, targetEventId };
 }
 
