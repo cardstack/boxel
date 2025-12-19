@@ -33,6 +33,34 @@
     <meta data-boxel-head-end />
 
     <style scoped>
+      body[data-boxel-prerendered] #host-loading {
+        display: none;
+      }
+
+      #boxel-prerender-root {
+        display: none;
+        background-color: #686283;
+        min-height: 100vh;
+        align-items: stretch;
+        justify-content: center;
+      }
+
+      body[data-boxel-prerendered] #boxel-prerender-root {
+        display: flex;
+      }
+
+      #boxel-prerender-root [data-boxel-prerender-card] {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        padding: var(--boxel-sp, 16px);
+      }
+
+      #boxel-prerender-root [data-boxel-prerender-card] > * {
+        max-width: 50rem;
+        width: 100%;
+      }
+
       #host-loading {
         background-color: #686283;
         display: flex;
@@ -71,6 +99,10 @@
     </style>
   </head>
   <body>
+    <div id="boxel-prerender-root">
+      <div data-boxel-prerender-start></div>
+      <div data-boxel-prerender-end></div>
+    </div>
     <div id="host-loading">
       <div class="loading-container">
         <div class="loading-indicator">

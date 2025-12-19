@@ -311,10 +311,12 @@ export class RealmServer {
 
       this.headLog.debug(`Fetching head HTML for ${cardURL.href}`);
 
-      let [indexHTML, headHTML] = await Promise.all([
+      let [indexHTML, prerendered] = await Promise.all([
         this.retrieveIndexHTML(),
-        this.retrieveHeadHTML(cardURL),
+        this.retrievePrerenderedHTML(cardURL),
       ]);
+
+      let { headHTML, isolatedHTML, url: prerenderedURL } = prerendered;
 
       if (headHTML != null) {
         this.headLog.debug(
@@ -326,8 +328,27 @@ export class RealmServer {
         );
       }
 
-      ctxt.body =
+      if (isolatedHTML != null) {
+        this.headLog.debug(
+          `Injecting isolated HTML for ${cardURL.href} (length ${isolatedHTML.length})`,
+        );
+      } else {
+        this.headLog.debug(
+          `No isolated HTML found for ${cardURL.href}, serving base index.html`,
+        );
+      }
+
+      let htmlWithHead =
         headHTML != null ? this.injectHeadHTML(indexHTML, headHTML) : indexHTML;
+
+      ctxt.body =
+        isolatedHTML != null
+          ? this.injectIsolatedHTML(
+              htmlWithHead,
+              isolatedHTML,
+              prerenderedURL ?? cardURL.href,
+            )
+          : htmlWithHead;
       return;
     }
     return next();
@@ -384,7 +405,11 @@ export class RealmServer {
     return indexHTML;
   }
 
-  private async retrieveHeadHTML(cardURL: URL): Promise<string | null> {
+  private async retrievePrerenderedHTML(cardURL: URL): Promise<{
+    headHTML: string | null;
+    isolatedHTML: string | null;
+    url: string | null;
+  }> {
     let candidates = this.headURLCandidates(cardURL);
 
     this.headLog.debug(
@@ -393,7 +418,7 @@ export class RealmServer {
 
     if (candidates.length === 0) {
       this.headLog.debug(`No head candidates for ${cardURL.href}`);
-      return null;
+      return { headHTML: null, isolatedHTML: null, url: null };
     }
 
     // Proxying means the apparent request URL will be http but in the database it’s https
@@ -412,10 +437,10 @@ export class RealmServer {
       ) as Expression;
 
     let rows = await query(this.dbAdapter, [
-      `SELECT head_html, realm_version FROM boxel_index_working WHERE head_html IS NOT NULL AND`,
+      `SELECT url, head_html, isolated_html, realm_version FROM boxel_index_working WHERE (head_html IS NOT NULL OR isolated_html IS NOT NULL) AND`,
       ...candidateExpressions(),
       `UNION ALL
-       SELECT head_html, realm_version FROM boxel_index WHERE head_html IS NOT NULL AND`,
+       SELECT url, head_html, isolated_html, realm_version FROM boxel_index WHERE (head_html IS NOT NULL OR isolated_html IS NOT NULL) AND`,
       ...candidateExpressions(),
       `ORDER BY realm_version DESC
        LIMIT 1`,
@@ -424,7 +449,12 @@ export class RealmServer {
     this.headLog.debug('Head query result for %s', cardURL.href, rows);
 
     let headRow = rows[0] as
-      | { head_html?: string | null; realm_version?: string | number }
+      | {
+          url?: string | null;
+          head_html?: string | null;
+          isolated_html?: string | null;
+          realm_version?: string | number;
+        }
       | undefined;
 
     if (headRow?.head_html != null) {
@@ -436,7 +466,20 @@ export class RealmServer {
         `No head HTML returned from database for ${cardURL.href}`,
       );
     }
-    return headRow?.head_html ?? null;
+    if (headRow?.isolated_html != null) {
+      this.headLog.debug(
+        `Using isolated HTML from realm version ${headRow.realm_version} for ${cardURL.href}`,
+      );
+    } else {
+      this.headLog.debug(
+        `No isolated HTML returned from database for ${cardURL.href}`,
+      );
+    }
+    return {
+      headHTML: headRow?.head_html ?? null,
+      isolatedHTML: headRow?.isolated_html ?? null,
+      url: headRow?.url ?? null,
+    };
   }
 
   private stripProtocol(href: string): string {
@@ -462,6 +505,58 @@ export class RealmServer {
       /(<meta[^>]+data-boxel-head-start[^>]*>)([\s\S]*?)(<meta[^>]+data-boxel-head-end[^>]*>)/,
       `$1\n${headHTML}\n$3`,
     );
+  }
+
+  private injectIsolatedHTML(
+    indexHTML: string,
+    isolatedHTML: string,
+    cardURL: URL | string,
+  ): string {
+    let normalizedCardURL = this.normalizeCardURL(cardURL);
+    let content = `<div data-boxel-prerender-card data-card-url="${this.escapeAttribute(
+      normalizedCardURL,
+    )}">\n${isolatedHTML}\n</div>`;
+
+    let withMarkup = indexHTML.replace(
+      /(<div[^>]+data-boxel-prerender-start[^>]*>)([\s\S]*?)(<div[^>]+data-boxel-prerender-end[^>]*>)/,
+      `$1\n${content}\n$3`,
+    );
+
+    if (withMarkup === indexHTML) {
+      this.headLog.warn(
+        'Unable to inject isolated HTML because prerender markers were not found in index.html',
+      );
+      return indexHTML;
+    }
+
+    return this.markBodyPrerendered(withMarkup);
+  }
+
+  private markBodyPrerendered(indexHTML: string): string {
+    return indexHTML.replace(/<body([^>]*)>/i, (full, attrs) => {
+      if (/data-boxel-prerendered/i.test(full)) {
+        return full;
+      }
+      return `<body${attrs} data-boxel-prerendered>`;
+    });
+  }
+
+  private escapeAttribute(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/'/g, '&#39;');
+  }
+
+  private normalizeCardURL(cardURL: URL | string): string {
+    let href = typeof cardURL === 'string' ? cardURL : cardURL.href;
+    return href
+      .replace(/\?.*/, '')
+      .replace(/#.*$/, '')
+      .replace(/\.json$/, '')
+      .replace(/\/$/, '');
   }
 
   private serveFromRealm = async (ctxt: Koa.Context, _next: Koa.Next) => {

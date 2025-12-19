@@ -6,6 +6,7 @@ import config from '@cardstack/host/config/environment';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import PrerenderHydrationService from '@cardstack/host/services/prerender-hydration';
 
 interface PublishedRealmMetadata {
   urlString: string;
@@ -17,6 +18,7 @@ export default class HostModeService extends Service {
   @service declare hostModeStateService: HostModeStateService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare realm: RealmService;
+  @service declare prerenderHydration: PrerenderHydrationService;
 
   // increasing token to ignore stale async head fetches
   private headUpdateRequestId = 0;
@@ -26,11 +28,16 @@ export default class HostModeService extends Service {
       return true;
     }
 
-    return (
+    let active =
       !config.hostsOwnAssets &&
       this.isRealmServerDomain === false &&
-      this.originIsNotMatrixTests
-    );
+      this.originIsNotMatrixTests;
+
+    if (!active) {
+      this.prerenderHydration.discard();
+    }
+
+    return active;
   }
 
   get isRealmServerDomain() {

@@ -1,11 +1,13 @@
-import { on } from '@ember/modifier';
+import { modifier, on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
 import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
 
+import { service } from '@ember/service';
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import { getCard } from '@cardstack/host/resources/card-resource';
+import PrerenderHydrationService from '@cardstack/host/services/prerender-hydration';
 
 interface Signature {
   Element: HTMLElement;
@@ -17,6 +19,8 @@ interface Signature {
 }
 
 export default class HostModeCard extends Component<Signature> {
+  @service declare prerenderHydration: PrerenderHydrationService;
+
   @cached
   get cardResource() {
     if (!this.args.cardId) {
@@ -27,11 +31,17 @@ export default class HostModeCard extends Component<Signature> {
   }
 
   get card() {
-    return this.cardResource?.card;
+    let card = this.cardResource?.card;
+
+    if (card) {
+      this.prerenderHydration.discard();
+    }
+
+    return card;
   }
 
   get isError() {
-    return this.cardResource?.cardError;
+    return Boolean(this.cardError);
   }
 
   get isLoading() {
@@ -39,7 +49,13 @@ export default class HostModeCard extends Component<Signature> {
   }
 
   get cardError() {
-    return this.cardResource?.cardError;
+    let error = this.cardResource?.cardError;
+
+    if (error) {
+      this.prerenderHydration.discard();
+    }
+
+    return error;
   }
 
   get errorMessage() {
@@ -50,10 +66,37 @@ export default class HostModeCard extends Component<Signature> {
     return !this.args.cardId && !this.card && !this.isError && !this.isLoading;
   }
 
+  get normalizedCardId() {
+    return this.args.cardId
+      ?.replace(/\.json$/, '')
+      .replace(/#.*$/, '')
+      .replace(/\?.*$/, '')
+      .replace(/\/$/, '');
+  }
+
+  get hasPrerenderedCard() {
+    return this.prerenderHydration.hasMarkupFor(this.normalizedCardId);
+  }
+
+  hydratePrerender = modifier((element: HTMLElement) => {
+    if (this.prerenderHydration.consume(element, this.normalizedCardId)) {
+      return;
+    }
+
+    this.prerenderHydration.discard();
+  });
+
+  clearPrerender = modifier(() => {
+    if (!this.hasPrerenderedCard) {
+      this.prerenderHydration.discard();
+    }
+  });
+
   <template>
     <CardContainer
       class='host-mode-card'
       displayBoundaries={{@displayBoundaries}}
+      {{this.clearPrerender}}
       ...attributes
     >
       {{#if this.card}}
@@ -67,6 +110,12 @@ export default class HostModeCard extends Component<Signature> {
         <div class='message message--error' data-test-host-mode-error>
           <p>{{this.errorMessage}}</p>
         </div>
+      {{else if this.hasPrerenderedCard}}
+        <div
+          class='card card--prerender'
+          data-test-host-mode-card-prerender={{@cardId}}
+          {{this.hydratePrerender}}
+        ></div>
       {{else if this.isLoading}}
         <div class='message'>
           <p>Loading card…</p>
@@ -107,6 +156,16 @@ export default class HostModeCard extends Component<Signature> {
 
       .message--error {
         color: var(--boxel-error-100);
+      }
+
+      .card--prerender {
+        display: flex;
+        justify-content: center;
+        align-items: stretch;
+      }
+
+      .card--prerender [data-boxel-prerender-card] {
+        width: 100%;
       }
 
       .non-publishable-message {
