@@ -1,0 +1,1 @@
+export const MAX_CORRECTNESS_FIX_ATTEMPTS = 3;

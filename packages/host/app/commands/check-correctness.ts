@@ -55,17 +55,14 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     }
 
     let targetType = input.targetType;
-    let cardId = input.cardId;
-
+    let cardId = targetType === 'card' ? input.targetRef : undefined;
     // Sometimes AI will patch cards directly as files (with search/replace blocks) so we need to check
     // whether the file is actually a card instance
-    if (
-      targetType !== 'card' &&
-      !cardId &&
-      input.fileUrl &&
-      input.fileUrl.endsWith('.json')
-    ) {
-      let inferredCardId = await this.checkIfFileIsACardInstance(input.fileUrl);
+
+    if (targetType !== 'card' && input.targetRef.endsWith('.json')) {
+      let inferredCardId = await this.checkIfFileIsACardInstance(
+        input.targetRef,
+      );
       if (inferredCardId) {
         targetType = 'card';
         cardId = inferredCardId;
@@ -76,12 +73,11 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     const { CorrectnessResultCard } = commandModule;
     let errors: string[] = [];
 
-    let gtsFileUrl = input.fileUrl ?? input.targetRef;
-    if (gtsFileUrl && gtsFileUrl.endsWith('.gts')) {
-      errors = await this.collectModuleErrors(gtsFileUrl, roomId);
+    if (targetType === 'file' && input.targetRef.endsWith('.gts')) {
+      errors = await this.collectModuleErrors(input.targetRef, roomId);
     } else if (targetType === 'card') {
       if (!cardId) {
-        throw new Error('Card correctness checks require a cardId.');
+        throw new Error('Card correctness checks require a targetRef.');
       }
       errors = await this.collectCardErrors(cardId, roomId);
     }
@@ -136,13 +132,13 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
   }
 
   private async collectModuleErrors(
-    fileUrl: string,
+    targetRef: string,
     roomId: string,
   ): Promise<string[]> {
-    let moduleInfo = this.moduleInfoFromFile(fileUrl);
+    let moduleInfo = this.moduleInfoFromFile(targetRef);
     if (!moduleInfo) {
       return [
-        `${fileUrl}: Unable to determine module URL or realm for correctness check`,
+        `${targetRef}: Unable to determine module URL or realm for correctness check`,
       ];
     }
 
@@ -164,10 +160,10 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
   }
 
   private moduleInfoFromFile(
-    fileUrl: string,
+    targetRef: string,
   ): { moduleURL: URL; realmURL: URL; fileURL: URL } | undefined {
     try {
-      let fileURL = new URL(fileUrl);
+      let fileURL = new URL(targetRef);
       let realmURL = this.realm.realmOfURL(fileURL);
       if (!realmURL) {
         return undefined;
