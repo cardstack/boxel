@@ -157,18 +157,11 @@ jobs:
       cluster: ${{ inputs.environment }}
       service-name: "boxel-prerender-server-${{ inputs.environment }}"
       image: ${{ needs.build-prerender.outputs.image }}
-      wait-for-service-stability: false
-
-  post-deploy-prerender:
-    name: Wait for prerender
-    needs: [deploy-prerender]
-    runs-on: ubuntu-latest
-    steps:
-      - run: sleep 180
+      wait-for-service-stability: true
 
   deploy-prerender-manager:
     name: Deploy prerender manager
-    needs: [build-prerender-manager, post-deploy-prerender]
+    needs: [build-prerender-manager, deploy-prerender]
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
     with:
@@ -177,14 +170,7 @@ jobs:
       cluster: ${{ inputs.environment }}
       service-name: "boxel-prerender-manager-${{ inputs.environment }}"
       image: ${{ needs.build-prerender-manager.outputs.image }}
-      wait-for-service-stability: false
-
-  post-deploy-prerender-manager:
-    name: Wait for prerender manager
-    needs: [deploy-prerender-manager]
-    runs-on: ubuntu-latest
-    steps:
-      - run: sleep 180
+      wait-for-service-stability: true
 
   deploy-worker:
     name: Deploy worker
@@ -193,7 +179,7 @@ jobs:
         build-worker,
         deploy-host,
         post-migrate-db,
-        post-deploy-prerender-manager,
+        deploy-prerender-manager,
       ]
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
