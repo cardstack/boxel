@@ -37,7 +37,7 @@ done
 KEEP_FILES="cloudflare-image.gts index.json Spec/f869024a-cdec-4a73-afca-d8d32f258ead.json"
 for item in $KEEP_FILES; do
   if [ -f "$CATALOG_SRC_PATH/$item" ]; then
-    cp -a "$CATALOG_SRC_PATH/$item" "$CATALOG_TEMP_PATH/"
+    cp -a "$CATALOG_SRC_PATH/$item" "$CATALOG_TEMP_PATH/$item"
   else
     echo "ERROR: required catalog item not found: $item" >&2
     exit 1
