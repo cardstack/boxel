@@ -183,8 +183,8 @@ module('Integration | commands | upload-image', function (hooks) {
     );
     assert.strictEqual(
       (savedCard as any).url,
-      'https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/cloudflare-image-id/public',
-      'computed URL uses expected Cloudflare delivery format',
+      'https://i.boxel.site/cloudflare-image-id/public',
+      'computed URL uses expected Cloudflare delivery format with Boxel domain',
     );
   });
 
