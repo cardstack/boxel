@@ -4568,6 +4568,346 @@ new content
     );
   });
 
+  test('caps automated correctness fix attempts at three failures', async function () {
+    const roomId = '!room:localhost';
+    const targetRef = 'http://localhost/files/example.gts';
+
+    function buildAiMessage(index: number, requestId: string) {
+      return {
+        type: 'm.room.message',
+        event_id: `ai-message-${index}`,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        origin_server_ts: index * 10 + 2,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: `Attempt ${index}`,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: `check-${requestId}`,
+              name: 'checkCorrectness',
+              arguments: JSON.stringify({
+                description: `Check attempt ${index}`,
+                attributes: {
+                  targetType: 'file',
+                  targetRef,
+                  roomId,
+                  correctnessCheckAttempt: index,
+                },
+              }),
+            },
+          ],
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: `ai-message-${index}`,
+        },
+        status: EventStatus.SENT,
+      } as DiscreteMatrixEvent;
+    }
+
+    function buildCommandResult(
+      index: number,
+      requestId: string,
+      relatesToId: string,
+      errorText: string,
+    ): DiscreteMatrixEvent {
+      return {
+        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        event_id: `command-result-${index}`,
+        room_id: roomId,
+        sender: '@command:localhost',
+        origin_server_ts: index * 10 + 3,
+        content: {
+          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          commandRequestId: requestId,
+          'm.relates_to': {
+            event_id: relatesToId,
+            key: 'applied',
+            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          },
+          data: {
+            card: {
+              sourceUrl: `http://localhost/correctness/${index}.json`,
+              url: `http://localhost/correctness/${index}.json`,
+              name: `correctness-${index}.json`,
+              contentType: 'application/json',
+              content: JSON.stringify({
+                data: {
+                  attributes: {
+                    correct: false,
+                    errors: [errorText],
+                    warnings: [],
+                  },
+                },
+              }),
+            },
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: `command-result-${index}`,
+        },
+        status: EventStatus.SENT,
+      };
+    }
+
+    const eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: 'user-message',
+        room_id: roomId,
+        sender: '@user:localhost',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Please fix the file and run correctness checks.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'user-message',
+        },
+        status: EventStatus.SENT,
+      },
+      buildAiMessage(1, '1'),
+      buildCommandResult(1, 'check-1', 'ai-message-1', 'first failure'),
+      buildAiMessage(2, '2'),
+      buildCommandResult(2, 'check-2', 'ai-message-2', 'second failure'),
+      buildAiMessage(3, '3'),
+      buildCommandResult(3, 'check-3', 'ai-message-3', 'still failing'),
+    ];
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.ok(messages, 'Expected prompt messages to be constructed');
+
+    let userMessages =
+      messages?.filter((message) => message.role === 'user') ?? [];
+    let retryMessages = userMessages.filter((message) =>
+      (message.content as string).includes(
+        'Propose fixes for the above errors',
+      ),
+    );
+    assert.strictEqual(
+      retryMessages.length,
+      2,
+      'Only the first two failures should request more SEARCH/REPLACE fixes',
+    );
+
+    let finalUserMessage = userMessages[userMessages.length - 1];
+    assert.ok(
+      (finalUserMessage?.content as string).includes(
+        'Automated correctness fixes have already been attempted 3 times',
+      ),
+      'After three failures the prompt should ask to stop automated fixes',
+    );
+    assert.notOk(
+      (finalUserMessage?.content as string).includes(
+        'Propose fixes for the above errors',
+      ),
+      'The final prompt should not ask for another round of fixes',
+    );
+  });
+
+  test('correctness attempts reset when a new patch event starts for the same target', async function () {
+    const roomId = '!room:localhost';
+    const targetRef = 'http://localhost/files/example.gts';
+
+    const firstEventId = 'ai-message-1';
+    const secondEventId = 'ai-message-2';
+
+    const eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: firstEventId,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'First patch',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: 'check-first',
+              name: 'checkCorrectness',
+              arguments: JSON.stringify({
+                description: 'First correctness check',
+                attributes: {
+                  targetType: 'file',
+                  targetRef,
+                  roomId,
+                  targetEventId: firstEventId,
+                  correctnessCheckAttempt: 2,
+                },
+              }),
+            },
+          ],
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: { age: 0, transaction_id: firstEventId },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        event_id: 'command-result-1',
+        room_id: roomId,
+        sender: '@command:localhost',
+        origin_server_ts: 2,
+        content: {
+          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          commandRequestId: 'check-first',
+          'm.relates_to': {
+            event_id: firstEventId,
+            key: 'applied',
+            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          },
+          data: {
+            card: {
+              sourceUrl: `${targetRef}-first.json`,
+              url: `${targetRef}-first.json`,
+              name: 'correctness-first.json',
+              contentType: 'application/json',
+              content: JSON.stringify({
+                data: {
+                  attributes: {
+                    correct: false,
+                    errors: ['still broken'],
+                    warnings: [],
+                  },
+                },
+              }),
+            },
+          },
+        },
+        unsigned: { age: 0, transaction_id: 'command-result-1' },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: secondEventId,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        origin_server_ts: 3,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Second patch',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: 'check-second',
+              name: 'checkCorrectness',
+              arguments: JSON.stringify({
+                description: 'Second correctness check',
+                attributes: {
+                  targetType: 'file',
+                  targetRef,
+                  roomId,
+                  targetEventId: secondEventId,
+                  correctnessCheckAttempt: 1,
+                },
+              }),
+            },
+          ],
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: { age: 0, transaction_id: secondEventId },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        event_id: 'command-result-2',
+        room_id: roomId,
+        sender: '@command:localhost',
+        origin_server_ts: 4,
+        content: {
+          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          commandRequestId: 'check-second',
+          'm.relates_to': {
+            event_id: secondEventId,
+            key: 'applied',
+            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          },
+          data: {
+            card: {
+              sourceUrl: `${targetRef}-second.json`,
+              url: `${targetRef}-second.json`,
+              name: 'correctness-second.json',
+              contentType: 'application/json',
+              content: JSON.stringify({
+                data: {
+                  attributes: {
+                    correct: false,
+                    errors: ['new patch still failing'],
+                    warnings: [],
+                  },
+                },
+              }),
+            },
+          },
+        },
+        unsigned: { age: 0, transaction_id: 'command-result-2' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    let toolMessages =
+      messages?.filter((message) => message.role === 'tool') ?? [];
+
+    let secondToolMessage = toolMessages.find(
+      (message) => message.tool_call_id === 'check-second',
+    );
+    assert.ok(secondToolMessage, 'Second correctness result should be present');
+    assert.ok(
+      (secondToolMessage!.content as string).includes(
+        'attempts so far: 1 of 3',
+      ),
+      'Correctness attempts reset to the first attempt when a new patch event begins for the same target',
+    );
+  });
+
   test('getPromptParts toggles correctness summary and patch result prompts based on autoCorrectnessChecksEnabled option', async function () {
     const roomId = '!room:localhost';
     const aiMessageId = '$ai-msg';
@@ -4629,7 +4969,6 @@ new
                 attributes: {
                   targetType: 'file',
                   targetRef: 'http://localhost/example.gts',
-                  fileUrl: 'http://localhost/example.gts',
                   roomId,
                 },
               }),
