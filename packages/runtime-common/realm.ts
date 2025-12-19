@@ -125,6 +125,8 @@ import {
 } from './db-queries/session-room-queries';
 import {
   analyzeRealmPublishability,
+  type PublishabilityViolation,
+  type PublishabilityWarningType,
   type ResourceIndexEntry,
 } from './publishability';
 
@@ -2927,6 +2929,21 @@ export class Realm {
 
     let rootResources = Array.from(new Set(instanceRows.map((row) => row.url)));
 
+    let errorRows = (await query(this.#dbAdapter, [
+      `SELECT url, error_doc FROM boxel_index WHERE realm_url =`,
+      param(sourceRealmURL),
+      `AND type = 'error'`,
+      `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+    ])) as { url: string; error_doc: unknown | null }[];
+
+    let errorViolations: PublishabilityViolation[] = errorRows
+      .filter((row) => row.error_doc != null)
+      .map((row) => ({
+        kind: 'error-document',
+        resource: row.url,
+        errorDocUrl: row.url,
+      }));
+
     let queue: string[] = [...rootResources];
     let queued = new Set(queue);
 
@@ -3192,14 +3209,36 @@ export class Realm {
         isGloballyPublicDependency(resourceUrl),
     });
 
+    let privateDependencyViolations: PublishabilityViolation[] =
+      result.violations.filter(
+        (violation) => violation.kind === 'private-dependency',
+      );
+
+    let allViolations: PublishabilityViolation[] = [
+      ...privateDependencyViolations,
+      ...errorViolations,
+    ];
+
+    let warningTypes: PublishabilityWarningType[] = [];
+    if (privateDependencyViolations.length > 0) {
+      warningTypes.push('has-private-dependencies');
+    }
+    if (errorViolations.length > 0) {
+      warningTypes.push('has-error-card-documents');
+    }
+
+    let publishable =
+      privateDependencyViolations.length === 0 && errorViolations.length === 0;
+
     let doc = {
       data: {
-        type: 'has-private-dependencies',
+        type: 'realm-publishability',
         id: sourceRealmURL,
         attributes: {
-          publishable: result.publishable,
+          publishable,
           realmURL: sourceRealmURL,
-          violations: result.violations,
+          violations: allViolations,
+          warningTypes: warningTypes.length ? warningTypes : undefined,
         },
       },
     };

@@ -59,15 +59,33 @@ export interface PrivateDependencyReference {
   via?: string[];
 }
 
-export interface PrivateDependencyViolation {
+export type PublishabilityWarningType =
+  | 'has-private-dependencies'
+  | 'has-error-card-documents';
+
+export type PublishabilityViolation =
+  | PrivateDependencyViolation
+  | ErrorDocumentViolation;
+
+export interface BasePublishabilityViolation {
   resource: string;
+}
+
+export interface PrivateDependencyViolation extends BasePublishabilityViolation {
+  kind: 'private-dependency';
   externalDependencies: PrivateDependencyReference[];
+}
+
+export interface ErrorDocumentViolation extends BasePublishabilityViolation {
+  kind: 'error-document';
+  errorDocUrl?: string;
 }
 
 export interface RealmPrivateDependencyReport {
   publishable: boolean;
   realmURL: string;
-  violations: PrivateDependencyViolation[];
+  violations: PublishabilityViolation[];
+  warningTypes?: PublishabilityWarningType[];
 }
 
 type RealmInfoProperty =
@@ -394,7 +412,8 @@ class RealmResource {
         attributes: {
           publishable: boolean;
           realmURL: string;
-          violations: PrivateDependencyViolation[];
+          violations: PublishabilityViolation[];
+          warningTypes?: PublishabilityWarningType[];
         };
       };
     };
@@ -405,6 +424,7 @@ class RealmResource {
       publishable: attributes.publishable,
       realmURL: attributes.realmURL,
       violations: attributes.violations ?? [],
+      warningTypes: attributes.warningTypes ?? [],
     };
   }
 
