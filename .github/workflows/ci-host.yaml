@@ -27,7 +27,7 @@ permissions:
 jobs:
   test-web-assets:
     name: Build test web assets
-    uses: ./.github/workflows/test-web-assets.yml
+    uses: ./.github/workflows/test-web-assets.yaml
 
   host-test:
     name: Host Tests
