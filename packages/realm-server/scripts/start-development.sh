@@ -19,46 +19,10 @@ CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
 
 PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
 
-CATALOG_REALM_PATH='../catalog-realm'
-CATALOG_TEMP_PATH=''
-
-if [ -n "${START_CATALOG}" ] && [ -n "${CATALOG_KEEP_DIRS}${CATALOG_INDEX_SOURCE}" ]; then
-  CATALOG_SRC_PATH="$(cd "$SCRIPTS_DIR/../../catalog-realm" && pwd)"
-  CATALOG_TEMP_PATH="$(mktemp -d "${TMPDIR:-/tmp}/catalog-realm.XXXXXX")"
-
-  echo "Using reduced catalog realm for faster startup: $CATALOG_TEMP_PATH"
-
-  for f in ".realm.json" "package.json" "tsconfig.json" ".gitignore"; do
-    if [ -e "$CATALOG_SRC_PATH/$f" ]; then
-      cp -a "$CATALOG_SRC_PATH/$f" "$CATALOG_TEMP_PATH/"
-    fi
-  done
-
-  KEEP_DIRS="$(printf '%s' "$CATALOG_KEEP_DIRS" | tr ',' ' ')"
-  if [ -n "$KEEP_DIRS" ]; then
-    for d in $KEEP_DIRS; do
-      if [ -d "$CATALOG_SRC_PATH/$d" ] || [ -f "$CATALOG_SRC_PATH/$d" ]; then
-        cp -a "$CATALOG_SRC_PATH/$d" "$CATALOG_TEMP_PATH/"
-      else
-        echo "ERROR: CATALOG_KEEP_DIRS entry not found: $d" >&2
-        exit 1
-      fi
-    done
-  fi
-
-  if [ -n "$CATALOG_INDEX_SOURCE" ]; then
-    if [ ! -f "$CATALOG_SRC_PATH/$CATALOG_INDEX_SOURCE" ]; then
-      echo "ERROR: CATALOG_INDEX_SOURCE file not found: $CATALOG_INDEX_SOURCE" >&2
-      exit 1
-    fi
-    cp -a "$CATALOG_SRC_PATH/$CATALOG_INDEX_SOURCE" "$CATALOG_TEMP_PATH/index.json"
-  else
-    cp -a "$CATALOG_SRC_PATH/index.json" "$CATALOG_TEMP_PATH/index.json"
-  fi
-
-  CATALOG_REALM_PATH="$CATALOG_TEMP_PATH"
-  trap 'rm -rf "$CATALOG_TEMP_PATH"' EXIT INT TERM
-fi
+# This can be overridden from the environment to point to a different catalog
+# and is used in start-services-for-host-tests.sh to point to a trimmed down
+# version of the catalog-realm for faster startup.
+CATALOG_REALM_PATH="${CATALOG_REALM_PATH:-../catalog-realm}"
 
 
 NODE_ENV=development \
