@@ -19,7 +19,9 @@
         "startValue": 1970
       },
       "creativeNote": "He had the best rap career of all-time",
-      "sourceImageUrl": {}
+      "sourceImageUrl": {
+        "imageUrl": null
+      }
     },
     "relationships": {
       "cardInfo.theme": {

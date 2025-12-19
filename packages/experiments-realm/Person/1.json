@@ -1,27 +1,46 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Person",
+        "module": "../person"
+      }
+    },
     "type": "card",
     "attributes": {
-      "firstName": "Hassan",
-      "lastName": "Abdel-Rahman",
+      "trips": {},
       "isCool": false,
-      "isHuman": true,
       "address": {
-        "addressLine1": null,
         "city": null,
         "state": null,
+        "country": {
+          "code": null,
+          "name": null
+        },
         "postalCode": null,
         "poBoxNumber": null,
-        "country": null
+        "addressLine1": null,
+        "addressLine2": null
       },
-      "trips": {},
-      "description": null,
-      "thumbnailURL": null
+      "isHuman": true,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "lastName": "Abdel-Rahman",
+      "firstName": "Hassan"
     },
     "relationships": {
       "pet": {
         "links": {
           "self": "../Pet/2"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
         }
       },
       "trips.countriesVisited.0": {
@@ -33,12 +52,6 @@
         "links": {
           "self": "../Country/2"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../person",
-        "name": "Person"
       }
     }
   }

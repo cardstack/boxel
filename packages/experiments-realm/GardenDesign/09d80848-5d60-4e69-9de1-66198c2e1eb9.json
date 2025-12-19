@@ -1,21 +1,21 @@
 {
   "data": {
-    "type": "card",
     "meta": {
       "adoptsFrom": {
-        "module": "../garden-design",
-        "name": "GardenDesign"
+        "name": "GardenDesign",
+        "module": "../garden-design"
       }
     },
+    "type": "card",
     "attributes": {
       "rows": 10,
-      "columns": 9,
       "items": [],
+      "columns": 9,
       "cardInfo": {
+        "notes": null,
         "title": null,
         "description": null,
-        "thumbnailURL": null,
-        "notes": null
+        "thumbnailURL": null
       }
     },
     "relationships": {
