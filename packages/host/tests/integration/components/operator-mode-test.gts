@@ -54,7 +54,6 @@ module('Integration | operator-mode | basics', function (hooks) {
   });
 
   test('it renders a card with an error that has does not have a last known good state', async function (assert) {
-    assert.expect(12);
     ctx.setCardInOperatorModeState(`${testRealmURL}FriendWithCSS/missing-link`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -67,38 +66,12 @@ module('Integration | operator-mode | basics', function (hooks) {
     assert
       .dom('[data-test-boxel-card-header-title]')
       .includesText('Link Not Found', 'card error title is displayed');
-    let errorHeader = document.querySelector(
-      '[data-test-card-header].error-header',
-    );
-    let closeButton = document.querySelector(
-      '[data-test-close-button]',
-    ) as HTMLElement | null;
-    let moreOptionsButton = document.querySelector(
-      '[data-test-more-options-button]',
-    ) as HTMLElement | null;
-    assert.ok(errorHeader, 'error header is rendered');
-    assert.ok(closeButton, 'close button is rendered');
-    assert.ok(moreOptionsButton, 'more options button is rendered');
-    if (errorHeader && closeButton && moreOptionsButton) {
-      let headerColor = getComputedStyle(errorHeader).color;
-      let closeButtonColor = getComputedStyle(closeButton).color;
-      let moreOptionsButtonColor = getComputedStyle(moreOptionsButton).color;
-      assert.notStrictEqual(
-        closeButtonColor,
-        headerColor,
-        'close button does not inherit error header color',
-      );
-      assert.notStrictEqual(
-        moreOptionsButtonColor,
-        headerColor,
-        'more options button does not inherit error header color',
-      );
-    }
     assert
       .dom('[data-test-error-message]')
       .containsText(
         `missing file ${testRealmURL}FriendWithCSS/does-not-exist.json`,
       );
+    await percySnapshot(assert);
     await click('[data-test-toggle-details]');
     assert
       .dom('[data-test-error-details]')

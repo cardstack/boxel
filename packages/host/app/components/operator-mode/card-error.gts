@@ -109,13 +109,12 @@ export default class CardErrorComponent extends Component<Signature> {
         text-wrap: pretty;
       }
       .error-header {
-        color: var(--boxel-error-300);
         min-height: var(--boxel-form-control-height);
         background-color: var(--boxel-100);
         box-shadow: 0 1px 0 0 rgba(0 0 0 / 15%);
       }
-      .error-header :deep(.actions) {
-        color: var(--boxel-dark);
+      .error-header :deep(.card-type-display-name) {
+        color: var(--boxel-error-300);
       }
       .card-error-detail {
         position: absolute;
