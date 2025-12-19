@@ -279,13 +279,15 @@ export default class ThemeVarField extends FieldDef {
     description: describeColor('Base page background color.'),
   });
   @field foreground = contains(ColorField, {
-    description: describeColor('Primary foreground/text color.'),
+    description: describeColor('The main foreground/text color.'),
   });
   @field card = contains(ColorField, {
-    description: describeColor('Default card surface color.'),
+    description: describeColor(
+      'Nested card or box background-color. Do not use as foreground color.',
+    ),
   });
   @field cardForeground = contains(ColorField, {
-    description: describeColor('Text color used on card surfaces.'),
+    description: describeColor('Foreground text color used on card surfaces.'),
   });
   @field popover = contains(ColorField, {
     description: describeColor('Background color for popovers/overlays.'),
@@ -294,28 +296,38 @@ export default class ThemeVarField extends FieldDef {
     description: describeColor('Text color for popover content.'),
   });
   @field primary = contains(ColorField, {
-    description: describeColor('Primary brand/action color.'),
+    description: describeColor(
+      'Primary brand/action cta background-color. Do not use as foreground color.',
+    ),
   });
   @field primaryForeground = contains(ColorField, {
-    description: describeColor('Text/icon color on primary surfaces.'),
+    description: describeColor(
+      'Text/icon foreground color on primary surfaces.',
+    ),
   });
   @field secondary = contains(ColorField, {
-    description: describeColor('Secondary emphasis color.'),
+    description: describeColor(
+      'Secondary brand/action cta background-color. Do not use as foreground color.',
+    ),
   });
   @field secondaryForeground = contains(ColorField, {
-    description: describeColor('Text/icon color on secondary surfaces.'),
+    description: describeColor(
+      'Text/icon foreground color on secondary surfaces.',
+    ),
   });
   @field muted = contains(ColorField, {
     description: describeColor('Muted background color for subtle UI.'),
   });
   @field mutedForeground = contains(ColorField, {
-    description: describeColor('Foreground color on muted surfaces.'),
+    description: describeColor('Muted foreground color.'),
   });
   @field accent = contains(ColorField, {
-    description: describeColor('Accent/highlight color.'),
+    description: describeColor('Accent background-color.'),
   });
   @field accentForeground = contains(ColorField, {
-    description: describeColor('Text/icon color on accent surfaces.'),
+    description: describeColor(
+      'Text/icon foreground color on accent surfaces.',
+    ),
   });
   @field destructive = contains(ColorField, {
     description: describeColor('Destructive/error action color.'),
@@ -352,19 +364,23 @@ export default class ThemeVarField extends FieldDef {
 
   // sidebar color variables
   @field sidebar = contains(ColorField, {
-    description: describeColor('Sidebar background color.'),
+    description: describeColor('Sidebar background-color.'),
   });
   @field sidebarForeground = contains(ColorField, {
-    description: describeColor('Sidebar text/icon color.'),
+    description: describeColor('Sidebar text/icon foreground color.'),
   });
   @field sidebarPrimary = contains(ColorField, {
-    description: describeColor('Primary action color within sidebar.'),
+    description: describeColor(
+      'Primary action background-color within sidebar. Do not use as foreground color.',
+    ),
   });
   @field sidebarPrimaryForeground = contains(ColorField, {
-    description: describeColor('Text/icon color for sidebar primary actions.'),
+    description: describeColor('Text/icon color on sidebar primary surface.'),
   });
   @field sidebarAccent = contains(ColorField, {
-    description: describeColor('Accent color within sidebar.'),
+    description: describeColor(
+      'Accent background-color within sidebar. Do not use as foreground color.',
+    ),
   });
   @field sidebarAccentForeground = contains(ColorField, {
     description: describeColor('Text/icon color for sidebar accent surfaces.'),

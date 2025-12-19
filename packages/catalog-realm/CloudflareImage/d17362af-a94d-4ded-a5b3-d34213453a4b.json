@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cloudflareId": "aeb0cfab-6fee-4614-77f2-e19cad60a400",
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../cloudflare-image",
+        "name": "CloudflareImage"
+      }
+    }
+  }
+}

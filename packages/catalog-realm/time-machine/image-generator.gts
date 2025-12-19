@@ -8,15 +8,16 @@ import {
 import { Component } from 'https://cardstack.com/base/card-api';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
+import { on } from '@ember/modifier';
 import StringField from 'https://cardstack.com/base/string';
-import UrlField from 'https://cardstack.com/base/url';
+import BaseImageCard from 'https://cardstack.com/base/image';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
-import Base64ImageField from 'https://cardstack.com/base/base64-image';
 import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
+import { or, not } from '@cardstack/boxel-ui/helpers';
 
 import { PolaroidImage } from './polaroid-image';
+import ImageField from '../fields/image';
 import { GenerateImageCommand } from '../commands/generate-image-command';
-import { ImageUploadSection } from './image-upload-section';
 import { PolaroidScatter } from './polaroid-scatter';
 import {
   LightboxCarousel,
@@ -50,35 +51,11 @@ function buildPrompt({
   return prompt;
 }
 
-// SaveCardCommand detaches the instance from the store after persisting, so we
-// immediately fetch a fresh copy to maintain reactivity in the UI.
-async function persistAndHydrate<T extends CardDef>(
-  card: T,
-  commandContext: CommandContextForGenerateImage,
-  realmHref: string,
-  context?: CardContext,
-): Promise<T> {
-  await new SaveCardCommand(commandContext).execute({
-    card,
-    realm: realmHref,
-  });
-
-  if (context?.store && card.id) {
-    let rehydrated = (await context.store.get(card.id)) as T | undefined;
-    if (rehydrated) {
-      return rehydrated;
-    }
-  }
-
-  return card;
-}
-
 async function generateImage({
   polaroid,
   timePeriod,
   creativeNote,
   sourceImageUrl,
-  uploadedImageData,
   commandContext,
   context,
   realmHref,
@@ -87,7 +64,6 @@ async function generateImage({
   timePeriod: string;
   creativeNote?: string;
   sourceImageUrl: string;
-  uploadedImageData?: string;
   commandContext: CommandContextForGenerateImage;
   context?: CardContext;
   realmHref: string;
@@ -96,49 +72,61 @@ async function generateImage({
   let prompt = buildPrompt({ timePeriod: normalizedPeriod, creativeNote });
   let generateCommand = new GenerateImageCommand(commandContext);
 
-  let uploadedImageField = uploadedImageData
-    ? new Base64ImageField({
-        base64: uploadedImageData,
-      })
-    : undefined;
-
   let result = await generateCommand.execute({
     prompt,
-    uploadedImage: uploadedImageField,
     sourceImageUrl,
+    targetRealmUrl: realmHref,
   });
 
-  if (!result?.imageBase64) {
+  let generatedUrl = result?.url;
+  let hydratedImageCard: BaseImageCard | undefined;
+
+  if (!generatedUrl) {
     return polaroid;
   }
 
-  let imageData = new Base64ImageField({
-    base64: result.imageBase64,
-    altText: `Generated portrait for the ${normalizedPeriod}`,
-    size: 'contain',
-    height: 512,
-    width: 512,
+  let imageDataUrl = generatedUrl.startsWith('data:image/')
+    ? generatedUrl
+    : generatedUrl.startsWith('http')
+    ? generatedUrl
+    : `data:image/png;base64,${generatedUrl}`;
+
+  if (result?.cardId && context?.store?.get) {
+    try {
+      hydratedImageCard = (await context.store.get(
+        result.cardId,
+      )) as BaseImageCard;
+    } catch (error) {
+      // ignore hydrate failures, we'll fall back to data URL
+    }
+  }
+
+  if (!hydratedImageCard) {
+    hydratedImageCard = new BaseImageCard({ url: imageDataUrl });
+  }
+
+  let imageField = new ImageField({
+    imageCard: hydratedImageCard,
   });
 
   if (polaroid) {
-    polaroid.data = imageData;
+    polaroid.image = imageField;
     polaroid.caption = normalizedPeriod;
 
-    return persistAndHydrate(polaroid, commandContext, realmHref, context);
+    return polaroid;
   }
 
   let newPolaroid = new PolaroidImage({
     caption: normalizedPeriod,
-    data: imageData,
+    image: imageField,
   });
 
-  return persistAndHydrate(newPolaroid, commandContext, realmHref, context);
+  return newPolaroid;
 }
 
 export class TimeMachineImageGeneratorIsolated extends Component<
   typeof TimeMachineImageGenerator
 > {
-  @tracked uploadedImageData = '';
   @tracked isGenerating = false;
   @tracked isExporting = false;
   @tracked loadingPeriods: string[] = [];
@@ -165,7 +153,7 @@ export class TimeMachineImageGeneratorIsolated extends Component<
   }
 
   get sourceImageUrl() {
-    return this.args.model?.sourceImageUrl ?? '';
+    return this.args.model?.sourceImageUrl?.url ?? '';
   }
 
   get creativeNote() {
@@ -202,7 +190,7 @@ export class TimeMachineImageGeneratorIsolated extends Component<
 
   get lightboxItems(): LightboxItem[] {
     return this.polaroidImages
-      .filter((image) => Boolean(image?.data?.base64))
+      .filter((image) => Boolean(image?.image?.url))
       .map((image) => ({
         card: image,
         component: image.constructor.getComponent(image),
@@ -210,49 +198,18 @@ export class TimeMachineImageGeneratorIsolated extends Component<
   }
 
   @action
-  handleFileSelected(file: File) {
-    // TODO(feature-plan): extract to shared helper so uploads can be reused across cards.
-    if (!file) {
+  handleCreativeNoteChange(event: Event) {
+    if (!this.args.model) {
       return;
     }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result;
-      this.uploadedImageData = typeof result === 'string' ? result : '';
-      if (this.args.model) {
-        // Clear any existing URL when we move to base64 data.
-        this.args.model.sourceImageUrl = '';
-      }
-    };
-    reader.onerror = () => {
-      this.uploadedImageData = '';
-    };
-    reader.readAsDataURL(file);
-  }
-
-  @action
-  handleUrlChange(url: string) {
-    if (this.args.model) {
-      this.args.model.sourceImageUrl = url;
-    }
-    if (url) {
-      this.uploadedImageData = '';
-    }
-  }
-
-  @action
-  handleCreativeNoteChange(note: string) {
-    if (this.args.model) {
-      this.args.model.creativeNote = note;
-    }
+    let value = (event.target as HTMLTextAreaElement | null)?.value ?? '';
+    this.args.model.creativeNote = value;
   }
 
   @action
   handleClearSource() {
-    this.uploadedImageData = '';
     if (this.args.model) {
-      this.args.model.sourceImageUrl = '';
+      this.args.model.sourceImageUrl = undefined;
     }
   }
 
@@ -272,14 +229,8 @@ export class TimeMachineImageGeneratorIsolated extends Component<
     }
 
     let normalizedSourceUrl = this.sourceImageUrl.trim();
-    let trimmedUpload = this.uploadedImageData?.trim() ?? '';
-    let hasUploadedData = Boolean(trimmedUpload);
-    let hasSourceUrl = Boolean(normalizedSourceUrl);
-
-    if (!hasUploadedData && !hasSourceUrl) {
-      throw new Error(
-        'Please upload an image or provide an image URL before generating.',
-      );
+    if (!normalizedSourceUrl) {
+      throw new Error('Please provide an image before generating.');
     }
 
     let realmHref = model[realmURLSymbol]?.href;
@@ -308,7 +259,6 @@ export class TimeMachineImageGeneratorIsolated extends Component<
           timePeriod: period,
           creativeNote: this.creativeNote,
           sourceImageUrl: normalizedSourceUrl,
-          uploadedImageData: trimmedUpload,
           commandContext,
           context: this.args.context,
           realmHref,
@@ -349,7 +299,7 @@ export class TimeMachineImageGeneratorIsolated extends Component<
 
   @action
   handlePolaroidSelect(image: PolaroidImage) {
-    if (!image?.data?.base64) {
+    if (!image?.image?.url) {
       return;
     }
     let items = this.lightboxItems;
@@ -390,7 +340,7 @@ export class TimeMachineImageGeneratorIsolated extends Component<
     return (
       Array.isArray(this.args.model?.generatedImages) &&
       this.args.model.generatedImages.length > 0 &&
-      this.args.model.generatedImages.some((img) => img?.data?.base64)
+      this.args.model.generatedImages.some((img) => img?.image?.url)
     );
   }
 
@@ -409,7 +359,7 @@ export class TimeMachineImageGeneratorIsolated extends Component<
       );
     }
     let polaroids = (model.generatedImages ?? []).filter(
-      (img) => img?.data?.base64,
+      (img) => img?.image?.url,
     );
 
     this.isExporting = true;
@@ -424,20 +374,39 @@ export class TimeMachineImageGeneratorIsolated extends Component<
   <template>
     <div class='time-machine-image-generator'>
       <aside class='sidebar'>
-        <ImageUploadSection
-          @uploadedImageData={{this.uploadedImageData}}
-          @imageUrl={{this.sourceImageUrl}}
-          @creativeNote={{this.creativeNote}}
-          @isGenerating={{this.isGenerating}}
-          @isExporting={{this.isExporting}}
-          @canExportAlbum={{this.canExportAlbum}}
-          @onFileSelected={{this.handleFileSelected}}
-          @onUrlChange={{this.handleUrlChange}}
-          @onCreativeNoteChange={{this.handleCreativeNoteChange}}
-          @onGenerate={{this.handleGenerate}}
-          @onClear={{this.handleClearSource}}
-          @onExportAlbum={{this.handleExportAlbum}}
-        />
+        <div class='input-card'>
+          <h3>Source Image</h3>
+          <@fields.sourceImageUrl @format='edit' />
+
+          <div class='field-block'>
+            <label for='creative-note-input'>Creative note</label>
+            <textarea
+              id='creative-note-input'
+              value={{this.creativeNote}}
+              {{on 'input' this.handleCreativeNoteChange}}
+              placeholder='Add optional creative direction'
+            ></textarea>
+          </div>
+
+          <div class='actions'>
+            <button
+              class='primary'
+              type='button'
+              {{on 'click' this.handleGenerate}}
+              disabled={{this.isGenerating}}
+            >
+              {{if this.isGenerating 'Generating…' 'Generate'}}
+            </button>
+            <button
+              class='secondary'
+              type='button'
+              {{on 'click' this.handleExportAlbum}}
+              disabled={{or this.isExporting (not this.canExportAlbum)}}
+            >
+              {{if this.isExporting 'Exporting…' 'Export Album'}}
+            </button>
+          </div>
+        </div>
       </aside>
 
       <main class='gallery'>
@@ -473,6 +442,75 @@ export class TimeMachineImageGeneratorIsolated extends Component<
         gap: 1rem;
       }
 
+      .input-card {
+        background: var(--card, #fffdf8);
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        border-radius: 12px;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        box-shadow:
+          0 12px 24px rgba(0, 0, 0, 0.08),
+          0 0 0 1px rgba(0, 0, 0, 0.04);
+      }
+
+      .input-card h3 {
+        margin: 0;
+        font-size: 1.1rem;
+        font-weight: 700;
+      }
+
+      .field-block {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+
+      .field-block label {
+        font-weight: 600;
+        font-size: 0.95rem;
+      }
+
+      .field-block textarea {
+        min-height: 80px;
+        padding: 0.65rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        font: inherit;
+        resize: vertical;
+        background: #fff;
+      }
+
+      .actions {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+
+      .actions button {
+        border: none;
+        border-radius: 8px;
+        padding: 0.7rem 1rem;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .actions .primary {
+        background: #111827;
+        color: #f9fafb;
+      }
+
+      .actions .secondary {
+        background: #e5e7eb;
+        color: #111827;
+      }
+
+      .actions button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
       .gallery {
         display: flex;
         flex-direction: column;
@@ -500,7 +538,7 @@ export class TimeMachineImageGenerator extends CardDef {
   static displayName = 'Time Machine Image Generator';
   static prefersWideFormat = true;
 
-  @field sourceImageUrl = contains(UrlField);
+  @field sourceImageUrl = contains(ImageField);
   @field generatedImages = linksToMany(() => PolaroidImage);
   @field creativeNote = contains(StringField);
   @field yearRange = contains(YearRangeField);

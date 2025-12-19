@@ -59,13 +59,14 @@ export default class ShowCardCommand extends HostBaseCommand<
         throw new Error(`Card definition for ${input.cardId} not found.`);
       }
       if (
-        operatorModeStateService.codePathString?.startsWith(
+        !operatorModeStateService.codePathString?.startsWith(
           cardDefRef.module,
         ) ||
         operatorModeStateService.state.codeSelection !== cardDefRef.name
       ) {
         await operatorModeStateService.updateCodePath(
           new URL(cardDefRef.module + '.gts'),
+          'preview',
         );
       }
       this.playgroundPanelService.persistSelections(

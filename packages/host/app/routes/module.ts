@@ -42,6 +42,7 @@ import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
+import { registerBoxelTransitionTo } from '../utils/register-boxel-transition';
 import { ensureMessageIncludesUrl, stripSelfDeps } from '../utils/render-error';
 import {
   enableRenderTimerStub,
@@ -190,12 +191,7 @@ export async function buildModuleModel(
 ): Promise<Model> {
   let parsedOptions = renderOptions ?? {};
   let moduleURL = trimExecutableExtension(new URL(id));
-  // Make it easy for Puppeteer to do regular Ember transitions
-  (globalThis as any).boxelTransitionTo = (
-    ...args: Parameters<RouterService['transitionTo']>
-  ) => {
-    context.router.transitionTo(...args);
-  };
+  registerBoxelTransitionTo(context.router);
 
   if (parsedOptions.clearCache) {
     context.state.setTypesCache(

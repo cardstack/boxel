@@ -2,6 +2,7 @@ import type { VirtualNetwork } from '@cardstack/runtime-common';
 
 import * as AddFieldToCardDefinitionCommandModule from './add-field-to-card-definition';
 import * as UseAiAssistantCommandModule from './ai-assistant';
+import * as ApplyMarkdownEditCommandModule from './apply-markdown-edit';
 import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-block';
 import * as AskAiCommandModule from './ask-ai';
 import * as CheckCorrectnessCommandModule from './check-correctness';
@@ -24,6 +25,7 @@ import * as ListingCreateCommandModule from './listing-create';
 import * as ListingGenerateExampleCommandModule from './listing-generate-example';
 import * as ListingInstallCommandModule from './listing-install';
 import * as ListingRemixCommandModule from './listing-remix';
+import * as ListingUpdateSpecsCommandModule from './listing-update-specs';
 import * as ListingUseCommandModule from './listing-use';
 import * as OneShotLlmRequestCommandModule from './one-shot-llm-request';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
@@ -68,6 +70,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/ask-ai',
     AskAiCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/apply-markdown-edit',
+    ApplyMarkdownEditCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/apply-search-replace-block',
@@ -136,6 +142,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/listing-remix',
     ListingRemixCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/listing-update-specs',
+    ListingUpdateSpecsCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/listing-generate-example',
@@ -299,6 +309,7 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
 export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   AddFieldToCardDefinitionCommandModule.default,
   ApplySearchReplaceBlockCommandModule.default,
+  ApplyMarkdownEditCommandModule.default,
   AskAiCommandModule.default,
   CopyCardToRealmModule.default,
   CopyCardToStackCommandModule.default,
@@ -318,6 +329,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   ListingGenerateExampleCommandModule.default,
   ListingInstallCommandModule.default,
   ListingRemixCommandModule.default,
+  ListingUpdateSpecsCommandModule.default,
   ListingUseCommandModule.default,
   OneShotLlmRequestCommandModule.default,
   OpenAiAssistantRoomCommandModule.default,

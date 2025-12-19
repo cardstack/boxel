@@ -11,6 +11,7 @@ import { RenderRunner } from './render-runner';
 
 const log = logger('prerenderer');
 const boxelHostURL = process.env.BOXEL_HOST_URL ?? 'http://localhost:4200';
+const DEFAULT_REALM_IDLE_EVICT_MS = 12 * 60 * 60 * 1000;
 
 class AsyncSemaphore {
   #available: number;
@@ -47,6 +48,7 @@ export class Prerenderer {
   #pagePool: PagePool;
   #renderRunner: RenderRunner;
   #cleanupInterval: NodeJS.Timeout | undefined;
+  #realmIdleEvictMs: number;
   #semaphore: AsyncSemaphore;
 
   constructor(options: {
@@ -63,12 +65,17 @@ export class Prerenderer {
       silent,
       serverURL: options.serverURL,
       browserManager: this.#browserManager,
+      boxelHostURL,
     });
     this.#renderRunner = new RenderRunner({
       pagePool: this.#pagePool,
       boxelHostURL,
     });
+    this.#realmIdleEvictMs = this.#resolveRealmIdleEvictMs();
     this.#startCleanupLoop();
+    void this.#pagePool.warmStandbys().catch((e) => {
+      log.error('Failed to warm standby pages during prerenderer startup:', e);
+    });
   }
 
   getWarmRealms(): string[] {
@@ -276,28 +283,101 @@ export class Prerenderer {
       });
       releaseGlobal = await this.#semaphore.acquire();
 
-      try {
-        return await this.#renderRunner.prerenderModuleAttempt({
-          realm,
-          url,
-          auth,
-          opts,
-          renderOptions,
-        });
-      } catch (e) {
-        log.error(
-          `module prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
-          e,
+      let attemptOptions = renderOptions;
+      let lastResult:
+        | {
+            response: ModuleRenderResponse;
+            timings: { launchMs: number; renderMs: number };
+            pool: {
+              pageId: string;
+              realm: string;
+              reused: boolean;
+              evicted: boolean;
+              timedOut: boolean;
+            };
+          }
+        | undefined;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        let result: {
+          response: ModuleRenderResponse;
+          timings: { launchMs: number; renderMs: number };
+          pool: {
+            pageId: string;
+            realm: string;
+            reused: boolean;
+            evicted: boolean;
+            timedOut: boolean;
+          };
+        };
+        try {
+          result = await this.#renderRunner.prerenderModuleAttempt({
+            realm,
+            url,
+            auth,
+            opts,
+            renderOptions: attemptOptions,
+          });
+        } catch (e) {
+          log.error(
+            `module prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
+            e,
+          );
+          await this.#restartBrowser();
+          try {
+            result = await this.#renderRunner.prerenderModuleAttempt({
+              realm,
+              url,
+              auth,
+              opts,
+              renderOptions: attemptOptions,
+            });
+          } catch (e2) {
+            log.error(
+              `module prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
+              e2,
+            );
+            throw e2;
+          }
+        }
+        lastResult = result;
+
+        let retrySignature = this.#renderRunner.shouldRetryWithClearCache(
+          result.response,
         );
-        await this.#restartBrowser();
-        return await this.#renderRunner.prerenderModuleAttempt({
-          realm,
-          url,
-          auth,
-          opts,
-          renderOptions,
-        });
+        let isClearCacheAttempt = attemptOptions?.clearCache === true;
+
+        if (!isClearCacheAttempt && retrySignature) {
+          log.warn(
+            `retrying module prerender for ${url} with clearCache due to error signature: ${retrySignature.join(
+              ' | ',
+            )}`,
+          );
+          attemptOptions = {
+            ...(attemptOptions ?? {}),
+            clearCache: true,
+          };
+          continue;
+        }
+
+        if (isClearCacheAttempt && retrySignature && result.response.error) {
+          log.warn(
+            `module prerender retry with clearCache did not resolve error signature ${retrySignature.join(
+              ' | ',
+            )} for ${url}`,
+          );
+        }
+
+        return result;
       }
+      if (lastResult) {
+        if (lastResult.response.error) {
+          log.error(
+            `module prerender attempts exhausted for ${url} in realm ${realm}, returning last error response`,
+          );
+        }
+        return lastResult;
+      }
+      throw new Error(`module prerender attempts exhausted for ${url}`);
     } finally {
       try {
         releaseGlobal?.();
@@ -312,6 +392,22 @@ export class Prerenderer {
     log.warn('Restarting prerender browser');
     await this.#pagePool.closeAll();
     await this.#browserManager.restartBrowser();
+    await this.#pagePool.warmStandbys().catch((e) => {
+      log.error('Failed to warm standby pages after browser restart:', e);
+    });
+  }
+
+  #resolveRealmIdleEvictMs(): number {
+    let envIdle = process.env.PRERENDER_REALM_IDLE_EVICT_MS;
+    let idleMs =
+      envIdle !== undefined ? Number(envIdle) : DEFAULT_REALM_IDLE_EVICT_MS;
+    if (!Number.isFinite(idleMs) || idleMs <= 0) {
+      log.warn(
+        'PRERENDER_REALM_IDLE_EVICT_MS is invalid; defaulting to 12 hours',
+      );
+      idleMs = DEFAULT_REALM_IDLE_EVICT_MS;
+    }
+    return idleMs;
   }
 
   #startCleanupLoop(): void {
@@ -332,6 +428,16 @@ export class Prerenderer {
     }
     this.#cleanupInterval = setInterval(() => {
       void this.#browserManager.cleanupUserDataDirs();
+      void this.#pagePool
+        .evictIdleRealms(this.#realmIdleEvictMs)
+        .then((evictedRealms) => {
+          for (let realm of evictedRealms) {
+            this.#renderRunner.clearAuthCache(realm);
+          }
+        })
+        .catch((e) => {
+          log.warn('Error evicting idle prerender realms:', e);
+        });
     }, intervalMs);
     this.#cleanupInterval.unref?.();
   }

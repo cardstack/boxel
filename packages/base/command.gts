@@ -28,6 +28,14 @@ import { eq, gt } from '@cardstack/boxel-ui/helpers';
 
 export type CommandStatus = 'applied' | 'ready' | 'applying';
 
+export class ApplyMarkdownEditInput extends CardDef {
+  @field cardId = contains(StringField);
+  @field fieldPath = contains(StringField);
+  @field markdownDiff = contains(StringField); // The replacement/result text
+  @field instructions = contains(StringField);
+  @field currentContent = contains(StringField); // Optional focused section to transform
+}
+
 export class SaveCardInput extends CardDef {
   @field card = linksTo(CardDef);
   @field realm = contains(StringField);
@@ -339,6 +347,15 @@ export class ListingCreateInput extends CardDef {
 
 export class ListingCreateResult extends CardDef {
   @field listing = linksTo(CardDef);
+}
+
+export class ListingUpdateSpecsInput extends CardDef {
+  @field listing = linksTo(CardDef);
+}
+
+export class ListingUpdateSpecsResult extends CardDef {
+  @field listing = linksTo(CardDef);
+  @field specs = linksToMany(Spec);
 }
 
 export class VisitCardsInput extends CardDef {

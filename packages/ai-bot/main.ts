@@ -45,7 +45,7 @@ import { PgAdapter } from '@cardstack/postgres';
 import type { ChatCompletionMessageParam } from 'openai/resources';
 import type { OpenAIError } from 'openai/error';
 import type { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
-import { acquireLock, releaseLock } from './lib/queries';
+import { acquireRoomLock, releaseRoomLock } from './lib/queries';
 import { DebugLogger } from 'matrix-js-sdk/lib/logger';
 import { setupSignalHandlers } from './lib/signal-handlers';
 import { isShuttingDown, setActiveGenerations } from './lib/shutdown';
@@ -295,13 +295,18 @@ Common issues are:
           return;
         }
 
-        // Acquire a lock so that only one instance processes this event.
-        let eventLock = await profTime(eventId, 'lock:acquire', async () =>
-          acquireLock(assistant.pgAdapter, eventId, aiBotInstanceId),
+        // Acquire a lock so that only one instance processes events for this room at a time.
+        let roomLock = await profTime(eventId, 'lock:acquire', async () =>
+          acquireRoomLock(
+            assistant.pgAdapter,
+            room.roomId,
+            aiBotInstanceId,
+            eventId,
+          ),
         );
 
-        if (!eventLock) {
-          // Some other instance is already processing this event. Ignore it.
+        if (!roomLock) {
+          // Some other instance is already processing a recent event in this room. Ignore it.
           return;
         }
 
@@ -536,7 +541,7 @@ Common issues are:
           }
           return;
         } finally {
-          await releaseLock(assistant.pgAdapter, eventId);
+          await releaseRoomLock(assistant.pgAdapter, room.roomId);
         }
       } catch (e) {
         log.error(e);
