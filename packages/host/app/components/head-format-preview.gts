@@ -193,14 +193,8 @@ export default class HeadFormatPreview extends Component<Signature> {
 
     let lines = this.headMarkup.split('\n');
 
-    // Strip any shared indent, then remove any remaining leading whitespace
-    let indents = lines
-      .filter((line) => line.trim().length > 0)
-      .map((line) => line.match(/^\s*/)?.[0].length ?? 0);
-    let minIndent = indents.length ? Math.min(...indents) : 0;
-
     return lines
-      .map((line) => line.slice(minIndent).trimStart())
+      .map((line) => line.trimStart())
       .join('\n')
       .trim();
   }
