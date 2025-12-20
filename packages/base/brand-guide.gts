@@ -97,7 +97,7 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
                     <@fields.brandColorPalette class='brand-palette' />
                   {{/if}}
                   <h3>Functional Palette</h3>
-                  <@fields.functionalPalette />
+                  <@fields.functionalPalette class='functional-palette' />
                   <h3 class='color-system-title'>Color System</h3>
                   <div class='color-system-container'>
                     {{#if this.isDarkMode}}
@@ -262,6 +262,10 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         gap: var(--boxel-sp-xl) var(--boxel-sp);
         align-items: end;
         text-wrap: pretty;
+      }
+      .brand-palette :deep(.boxel-swatch-value),
+      .functional-palette :deep(.boxel-swatch-value) {
+        font-size: var(--boxel-font-size-xs);
       }
       .brand-palette + h3,
       .color-system-title {

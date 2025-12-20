@@ -232,7 +232,7 @@
       },
       "functionalPalette": {
         "dark": "var(--brand-dark, #0F0F0F)",
-        "light": "#F7F8FA",
+        "light": "var(--boxel-dove, #F7F8FA)",
         "accent": "var(--cardstack-lime)",
         "primary": "var(--boxel-teal)",
         "secondary": "var(--cardstack-purple)"

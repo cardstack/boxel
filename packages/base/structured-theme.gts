@@ -1,7 +1,7 @@
 import { tracked } from '@glimmer/tracking';
 import { get } from '@ember/object';
 
-import { BoxelContainer, GridContainer } from '@cardstack/boxel-ui/components';
+import { GridContainer } from '@cardstack/boxel-ui/components';
 import {
   eq,
   buildCssGroups,
