@@ -75,6 +75,7 @@ export interface PendingCodePatchCorrectnessCheck {
   context?: BoxelContext;
   files: CodePatchCorrectnessFile[];
   cards: CodePatchCorrectnessCard[];
+  attemptsByTargetKey?: Record<string, number>;
 }
 
 export class HistoryConstructionError extends Error {

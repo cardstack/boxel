@@ -15,7 +15,9 @@
         "thumbnailURL": null
       },
       "imageCount": 6,
-      "referenceImage": {},
+      "referenceImage": {
+        "imageUrl": null
+      },
       "productDescription": "a blue bottle"
     },
     "relationships": {
