@@ -3,7 +3,8 @@ export type RGB = { r: number; g: number; b: number };
 export type RGBA = RGB & { a: number };
 export type RichColorFormat = 'hex' | 'rgb' | 'hsl' | 'hsb' | 'css';
 export type HSV = { h: number; s: number; v: number };
-export type HSL = { h: number; l: number; s: number };
+// eslint-disable-next-line typescript-sort-keys/interface
+export type HSL = { h: number; s: number; l: number };
 
 // contrast ratio should be at least 4.5 for regular sized text based on WCAG guidelines
 export const targetContrast = 4.5;
@@ -309,17 +310,22 @@ export function detectColorFormat(input: string): RichColorFormat {
 }
 
 // -------------------- Contrast helpers --------------------
-// Calculate relative luminance from an RGB triple
+// calculates luminance from RGB
+// calculations are based on https://www.w3.org/TR/WCAG20-TECHS/G18.html
 export function calculateLuminance({ r, g, b }: RGB): number {
   const [red, green, blue] = [r, g, b].map((c) => {
+    // divide by 255 to get each color's value between 0 and 1
     const val = c / 255;
+    // apply gamma correction
     return val <= 0.03928 ? val / 12.92 : Math.pow((val + 0.055) / 1.055, 2.4);
   }) as [number, number, number];
 
+  // formula for relative luminance: L = 0.2126 * R + 0.7152 * G + 0.0722 * B
   return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 }
 
 // takes in luminance values to calculate contrast ratio
 export function calculateContrast(lum1: number, lum2: number): number {
+  // formula for contrast ratio: (L1 + 0.05) / (L2 + 0.05) where L1 is the lighter color
   return (Math.max(lum1, lum2) + 0.05) / (Math.min(lum1, lum2) + 0.05);
 }
