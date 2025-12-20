@@ -14,22 +14,22 @@
         "description": null,
         "thumbnailURL": null
       },
-      "colorWheel": "#0018ff",
+      "colorWheel": "rgb(68, 255, 0)",
       "imageAvatar": {
         "imageUrl": "https://i.boxel.site/upload-1764642749200/public"
       },
       "imageBrowse": {
         "imageUrl": "https://i.boxel.site/upload-1764642741446/public"
       },
-      "colorAdvanced": "rgb(221, 155, 21)",
+      "colorAdvanced": "#262695",
       "imageDropzone": {
         "imageUrl": "https://i.boxel.site/upload-1764642756898/public"
       },
       "playgroundDay": {
         "value": 2
       },
-      "colorSliderHsl": "hsl(139, 100%, 26%)",
-      "colorSliderRgb": "rgb(209, 255, 176)",
+      "colorSliderHsl": "hsl(321, 79%, 50%)",
+      "colorSliderRgb": "rgb(234, 173, 227)",
       "playgroundDate": "2025-11-20",
       "playgroundTime": {
         "value": "13:00"
@@ -40,7 +40,7 @@
       "playgroundYear": {
         "value": 2028
       },
-      "colorShowRecent": "#86C814",
+      "colorShowRecent": "#799150",
       "meetingTimeLong": {
         "value": "09:15"
       },
@@ -72,7 +72,7 @@
       },
       "playgroundNumber": 20,
       "playgroundRating": 4,
-      "colorShowContrast": "#c0bab5",
+      "colorShowContrast": "#38322e",
       "meetingTime24Hour": {
         "value": "14:30"
       },
@@ -105,7 +105,7 @@
         "month": null
       },
       "playgroundQuantity": 100,
-      "colorSwatchesPicker": "#39B1FF",
+      "colorSwatchesPicker": "#DEA6FF",
       "eventDateTimeCustom": null,
       "playgroundDateRange": {
         "end": null,

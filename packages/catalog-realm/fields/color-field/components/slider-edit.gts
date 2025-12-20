@@ -5,37 +5,44 @@ import { concat, fn } from '@ember/helper';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { htmlSafe } from '@ember/template';
+import type Owner from '@ember/owner';
 
-import type {
-  RGBA,
+import type { ColorFieldSignature } from '../util/color-field-signature';
+import {
+  parseCssColor,
   SliderColorFormat,
   SliderVariantConfiguration,
 } from '../util/color-utils';
 import {
   detectColorFormat,
-  parseCssColor,
-  rgbaToFormat,
-  rgbaToHslValues,
   hslToRgb,
-} from '../util/color-utils';
-import type { ColorFieldSignature } from '../util/color-field-signature';
+  rgbaToFormatString,
+  rgbaToHsl,
+  type HSL,
+  type RGB,
+  type RGBA,
+} from '@cardstack/boxel-ui/helpers';
 
 export default class SliderEdit extends Component<ColorFieldSignature> {
-  // ========== Properties ==========
   @tracked isDragging = false;
-  @tracked draftColor: string | null = null;
+  @tracked rgb: RGB = { r: 59, g: 130, b: 246 };
+  @tracked hsl: HSL = { h: 0, s: 0, l: 0 };
+  @tracked alpha = 1;
 
-  // Cache for parsed values to avoid recomputation
-  private cachedRgba: RGBA | null = null;
-  private cachedRgb: { r: number; g: number; b: number } | null = null;
-  private cachedHsl: { h: number; s: number; l: number } | null = null;
-  private lastComputedColor: string | null = null;
+  private pendingRgba: RGBA | null = null;
+  private lastSyncedModelColor: string | null = null;
+  private lastSavedColorValue: string | null = null;
+  private lastSavedHue: number | null = null;
+  private lastSavedSaturation: number | null = null;
+  private lastSavedLightness: number | null = null;
 
-  // ========== Getters ==========
+  constructor(owner: Owner, args: ColorFieldSignature['Args']) {
+    super(owner, args);
+    this.syncStateWithModel(this.currentColor);
+  }
+
   get currentColor(): string {
-    return this.isDragging && this.draftColor
-      ? this.draftColor
-      : this.args.model || '#3b82f6';
+    return this.args.model ?? '#3b82f6';
   }
 
   get availableFormats(): SliderColorFormat[] {
@@ -66,50 +73,92 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
     return 'rgb';
   }
 
-  get parsedRgba(): RGBA {
-    const color = this.currentColor;
-    // Cache to avoid recomputation on every access
-    if (this.lastComputedColor === color && this.cachedRgba) {
-      return this.cachedRgba;
-    }
-    this.lastComputedColor = color;
-    this.cachedRgba = parseCssColor(color);
-    // Invalidate other caches
-    this.cachedRgb = null;
-    this.cachedHsl = null;
-    return this.cachedRgba;
+  get displayRgb(): RGB {
+    this.ensureSyncedWithModel();
+    return this.rgb;
   }
 
-  get rgb() {
-    if (this.cachedRgb) {
-      return this.cachedRgb;
-    }
-    const { r, g, b } = this.parsedRgba;
-    this.cachedRgb = { r, g, b };
-    return this.cachedRgb;
+  get displayHsl(): HSL {
+    this.ensureSyncedWithModel();
+    return this.hsl;
   }
 
-  get hsl() {
-    if (this.cachedHsl) {
-      return this.cachedHsl;
+  private ensureSyncedWithModel(): void {
+    if (this.isDragging) {
+      return;
     }
-    this.cachedHsl = rgbaToHslValues(this.parsedRgba);
-    return this.cachedHsl;
+    if (this.currentColor !== this.lastSyncedModelColor) {
+      this.syncStateWithModel(this.currentColor);
+    }
   }
 
-  // ========== Gradient Getters ==========
+  private syncStateWithModel(color: string): void {
+    const parsed = parseCssColor(color);
+    const normalizedRgb: RGB = {
+      r: Math.round(parsed.r),
+      g: Math.round(parsed.g),
+      b: Math.round(parsed.b),
+    };
+    const parsedHsl = rgbaToHsl(parsed);
+    const shouldPreserveHsl =
+      this.lastSavedColorValue === color &&
+      Number.isFinite(this.lastSavedHue ?? NaN) &&
+      Number.isFinite(this.lastSavedSaturation ?? NaN) &&
+      Number.isFinite(this.lastSavedLightness ?? NaN);
+    this.rgb = normalizedRgb;
+    this.hsl = shouldPreserveHsl
+      ? {
+          h: this.lastSavedHue as number,
+          s: this.lastSavedSaturation as number,
+          l: this.lastSavedLightness as number,
+        }
+      : parsedHsl;
+    this.lastSavedHue = null;
+    this.lastSavedSaturation = null;
+    this.lastSavedLightness = null;
+    this.lastSavedColorValue = null;
+    this.alpha = parsed.a;
+    this.pendingRgba = parsed;
+    this.lastSyncedModelColor = color;
+  }
+
+  private buildRgbaFromRgb(rgb: RGB): RGBA {
+    return { ...rgb, a: this.alpha };
+  }
+
+  private updateDraftState(rgb: RGB, hsl: HSL, rgba: RGBA): void {
+    this.rgb = rgb;
+    this.hsl = hsl;
+    this.pendingRgba = rgba;
+  }
+
+  private formatColorForOutput(rgba: RGBA): string {
+    if (this.outputFormat === 'hsl') {
+      const roundedHue = Math.round(this.hsl.h);
+      const roundedSaturation = Math.round(this.hsl.s);
+      const roundedLightness = Math.round(this.hsl.l);
+      if (this.alpha < 1) {
+        return `hsla(${roundedHue}, ${roundedSaturation}%, ${roundedLightness}%, ${this.alpha.toFixed(
+          2,
+        )})`;
+      }
+      return `hsl(${roundedHue}, ${roundedSaturation}%, ${roundedLightness}%)`;
+    }
+    return rgbaToFormatString(rgba, this.outputFormat);
+  }
+
   get rGradient(): string {
-    const { g, b } = this.rgb;
+    const { g, b } = this.displayRgb;
     return `linear-gradient(to right, rgb(0, ${g}, ${b}), rgb(255, ${g}, ${b}))`;
   }
 
   get gGradient(): string {
-    const { r, b } = this.rgb;
+    const { r, b } = this.displayRgb;
     return `linear-gradient(to right, rgb(${r}, 0, ${b}), rgb(${r}, 255, ${b}))`;
   }
 
   get bGradient(): string {
-    const { r, g } = this.rgb;
+    const { r, g } = this.displayRgb;
     return `linear-gradient(to right, rgb(${r}, ${g}, 0), rgb(${r}, ${g}, 255))`;
   }
 
@@ -118,18 +167,19 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
   }
 
   get sGradient(): string {
-    const h = Math.round(this.hsl.h);
-    const l = Math.round(this.hsl.l);
-    return `linear-gradient(to right, hsl(${h}, 0%, ${l}%), hsl(${h}, 100%, ${l}%))`;
+    const { h, l } = this.displayHsl;
+    const roundedHue = Math.round(h);
+    const roundedLightness = Math.round(l);
+    return `linear-gradient(to right, hsl(${roundedHue}, 0%, ${roundedLightness}%), hsl(${roundedHue}, 100%, ${roundedLightness}%))`;
   }
 
   get lGradient(): string {
-    const h = Math.round(this.hsl.h);
-    const s = Math.round(this.hsl.s);
-    return `linear-gradient(to right, hsl(${h}, ${s}%, 0%), hsl(${h}, ${s}%, 50%), hsl(${h}, ${s}%, 100%))`;
+    const { h, s } = this.displayHsl;
+    const roundedHue = Math.round(h);
+    const roundedSaturation = Math.round(s);
+    return `linear-gradient(to right, hsl(${roundedHue}, ${roundedSaturation}%, 0%), hsl(${roundedHue}, ${roundedSaturation}%, 50%), hsl(${roundedHue}, ${roundedSaturation}%, 100%))`;
   }
 
-  // ========== Private Helper Methods ==========
   private isRgbaValid(rgba: RGBA): boolean {
     return (
       Number.isFinite(rgba.r) &&
@@ -143,30 +193,20 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
     if (!this.isRgbaValid(rgba)) {
       return;
     }
-    const colorValue = rgbaToFormat(rgba, this.outputFormat);
-    this.args.set?.(colorValue);
-    // Clear cache when saving
-    this.clearCache();
-  }
-
-  private clearCache() {
-    this.cachedRgba = null;
-    this.cachedRgb = null;
-    this.cachedHsl = null;
-    this.lastComputedColor = null;
-  }
-
-  private updateDraftColor(newRgba: RGBA) {
-    // Only update draftColor if it actually changed to avoid unnecessary re-renders
-    const newColor = rgbaToFormat(newRgba, this.outputFormat);
-    if (this.draftColor !== newColor) {
-      this.draftColor = newColor;
-      // Clear cache when draft changes
-      this.clearCache();
+    const colorValue = this.formatColorForOutput(rgba);
+    this.lastSavedColorValue = colorValue;
+    if (this.outputFormat === 'hsl') {
+      this.lastSavedHue = this.hsl.h;
+      this.lastSavedSaturation = this.hsl.s;
+      this.lastSavedLightness = this.hsl.l;
+    } else {
+      this.lastSavedHue = null;
+      this.lastSavedSaturation = null;
+      this.lastSavedLightness = null;
     }
+    this.args.set?.(colorValue);
   }
 
-  // ========== Action Methods ==========
   @action
   handleRgbInput(channel: 'r' | 'g' | 'b', value: string | number) {
     if (!this.args.canEdit) return;
@@ -174,13 +214,12 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
     const numericValue = Number(value);
     if (Number.isNaN(numericValue)) return;
 
-    if (!this.isDragging) {
-      this.isDragging = true;
-    }
-
     const clamped = Math.max(0, Math.min(255, numericValue));
-    const newRgba = { ...this.parsedRgba, [channel]: clamped };
-    this.updateDraftColor(newRgba);
+    const newRgb: RGB = { ...this.rgb, [channel]: clamped };
+    const newRgba = this.buildRgbaFromRgb(newRgb);
+    const newHsl = rgbaToHsl(newRgba);
+    this.updateDraftState(newRgb, newHsl, newRgba);
+    this.isDragging = true;
   }
 
   @action
@@ -190,29 +229,21 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
     const numericValue = Number(value);
     if (Number.isNaN(numericValue)) return;
 
-    if (!this.isDragging) {
-      this.isDragging = true;
-    }
-
     const limits = channel === 'h' ? [0, 360] : [0, 100];
     const clamped = Math.max(limits[0], Math.min(limits[1], numericValue));
-    const newHsl = { ...this.hsl, [channel]: clamped };
-    const rgb = hslToRgb(newHsl.h, newHsl.s, newHsl.l);
-    const newRgba = { ...rgb, a: this.parsedRgba.a };
-    this.updateDraftColor(newRgba);
+    const newHsl = { ...this.hsl, [channel]: clamped } as HSL;
+    const rgbFromHsl = hslToRgb(newHsl);
+    const newRgba = this.buildRgbaFromRgb(rgbFromHsl);
+    this.updateDraftState(rgbFromHsl, newHsl, newRgba);
+    this.isDragging = true;
   }
 
   @action
   handleSliderChange() {
-    if (!this.args.canEdit || !this.isDragging) return;
+    if (!this.args.canEdit || !this.pendingRgba) return;
 
-    const colorSource = this.draftColor ?? this.currentColor;
-    const rgba = parseCssColor(colorSource);
-    this.saveColor(rgba);
-
+    this.saveColor(this.pendingRgba);
     this.isDragging = false;
-    this.draftColor = null;
-    this.clearCache();
   }
 
   <template>
@@ -232,14 +263,14 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
               </svg>
               Red
             </label>
-            <span class='slider-value'>{{this.rgb.r}}</span>
+            <span class='slider-value'>{{this.displayRgb.r}}</span>
           </div>
           <div class='range-slider-container'>
             <BoxelInput
               @type='range'
               @min='0'
               @max='255'
-              @value={{this.rgb.r}}
+              @value={{this.displayRgb.r}}
               class='range-slider'
               style={{htmlSafe (concat 'background: ' this.rGradient)}}
               @onInput={{fn this.handleRgbInput 'r'}}
@@ -263,14 +294,14 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
               </svg>
               Green
             </label>
-            <span class='slider-value'>{{this.rgb.g}}</span>
+            <span class='slider-value'>{{this.displayRgb.g}}</span>
           </div>
           <div class='range-slider-container'>
             <BoxelInput
               @type='range'
               @min='0'
               @max='255'
-              @value={{this.rgb.g}}
+              @value={{this.displayRgb.g}}
               class='range-slider'
               style={{htmlSafe (concat 'background: ' this.gGradient)}}
               @onInput={{fn this.handleRgbInput 'g'}}
@@ -294,14 +325,14 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
               </svg>
               Blue
             </label>
-            <span class='slider-value'>{{this.rgb.b}}</span>
+            <span class='slider-value'>{{this.displayRgb.b}}</span>
           </div>
           <div class='range-slider-container'>
             <BoxelInput
               @type='range'
               @min='0'
               @max='255'
-              @value={{this.rgb.b}}
+              @value={{this.displayRgb.b}}
               class='range-slider'
               style={{htmlSafe (concat 'background: ' this.bGradient)}}
               @onInput={{fn this.handleRgbInput 'b'}}
@@ -326,14 +357,14 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
               </svg>
               Hue
             </label>
-            <span class='slider-value'>{{Math.round this.hsl.h}}°</span>
+            <span class='slider-value'>{{Math.round this.displayHsl.h}}°</span>
           </div>
           <div class='range-slider-container'>
             <BoxelInput
               @type='range'
               @min='0'
               @max='360'
-              @value={{Math.round this.hsl.h}}
+              @value={{Math.round this.displayHsl.h}}
               class='range-slider'
               style={{htmlSafe (concat 'background: ' this.hGradient)}}
               @onInput={{fn this.handleHslInput 'h'}}
@@ -358,14 +389,14 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
               </svg>
               Saturation
             </label>
-            <span class='slider-value'>{{Math.round this.hsl.s}}%</span>
+            <span class='slider-value'>{{Math.round this.displayHsl.s}}%</span>
           </div>
           <div class='range-slider-container'>
             <BoxelInput
               @type='range'
               @min='0'
               @max='100'
-              @value={{Math.round this.hsl.s}}
+              @value={{Math.round this.displayHsl.s}}
               class='range-slider'
               style={{htmlSafe (concat 'background: ' this.sGradient)}}
               @onInput={{fn this.handleHslInput 's'}}
@@ -392,14 +423,14 @@ export default class SliderEdit extends Component<ColorFieldSignature> {
               </svg>
               Lightness
             </label>
-            <span class='slider-value'>{{Math.round this.hsl.l}}%</span>
+            <span class='slider-value'>{{Math.round this.displayHsl.l}}%</span>
           </div>
           <div class='range-slider-container'>
             <BoxelInput
               @type='range'
               @min='0'
               @max='100'
-              @value={{Math.round this.hsl.l}}
+              @value={{Math.round this.displayHsl.l}}
               class='range-slider'
               style={{htmlSafe (concat 'background: ' this.lGradient)}}
               @onInput={{fn this.handleHslInput 'l'}}
