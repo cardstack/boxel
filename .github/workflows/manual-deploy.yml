@@ -157,6 +157,7 @@ jobs:
       cluster: ${{ inputs.environment }}
       service-name: "boxel-prerender-server-${{ inputs.environment }}"
       image: ${{ needs.build-prerender.outputs.image }}
+      timeout-minutes: 10
       wait-for-service-stability: true
 
   deploy-prerender-manager:
@@ -170,6 +171,7 @@ jobs:
       cluster: ${{ inputs.environment }}
       service-name: "boxel-prerender-manager-${{ inputs.environment }}"
       image: ${{ needs.build-prerender-manager.outputs.image }}
+      timeout-minutes: 10
       wait-for-service-stability: true
 
   deploy-worker:
