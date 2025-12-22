@@ -12,6 +12,7 @@ import {
   planModuleInstall,
   planInstanceInstall,
   PlanBuilder,
+  isCardCollectionDocument,
   isSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
@@ -23,6 +24,7 @@ import type { CopyInstanceMeta } from '@cardstack/runtime-common/catalog';
 import type { CopyModuleMeta } from '@cardstack/runtime-common/catalog';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import HostBaseCommand from '../lib/host-base-command';
 
@@ -65,6 +67,11 @@ export default class ListingInstallCommand extends HostBaseCommand<
     // this is intentionally to type because base command cannot interpret Listing type from catalog
     const listing = listingInput as Listing;
 
+    let examplesToInstall = listing.examples;
+    if (listing.examples?.length) {
+      examplesToInstall = await this.expandExampleInstances(listing.examples);
+    }
+
     // side-effects
     let exampleCardId: string | undefined;
     let selectedCodeRef: ResolvedCodeRef | undefined;
@@ -78,8 +85,8 @@ export default class ListingInstallCommand extends HostBaseCommand<
         selectedCodeRef = r.modulesCopy[0].targetCodeRef;
         return r;
       })
-      .addIf(listing.examples?.length > 0, (resolver: ListingPathResolver) => {
-        let r = planInstanceInstall(listing.examples, resolver);
+      .addIf(examplesToInstall?.length > 0, (resolver: ListingPathResolver) => {
+        let r = planInstanceInstall(examplesToInstall, resolver);
         let firstInstance = r.instancesCopy[0];
         exampleCardId = join(realmUrl, firstInstance.lid);
         selectedCodeRef = firstInstance.targetCodeRef;
@@ -151,5 +158,127 @@ export default class ListingInstallCommand extends HostBaseCommand<
       exampleCardId,
       skillCardId,
     });
+  }
+
+  private async expandExampleInstances(
+    examples: Array<{ id: string }>,
+  ): Promise<CardDef[]> {
+    let api = await this.cardService.getAPI();
+    let instancesById = new Map<string, CardDef>();
+    let visited = new Set<string>();
+    let queue: string[] = examples.map((example) => example.id);
+
+    while (queue.length > 0) {
+      let id = queue.shift();
+      if (!id || visited.has(id)) {
+        continue;
+      }
+      visited.add(id);
+
+      let doc = await this.cardService.fetchJSON(id);
+      if (!isSingleCardDocument(doc)) {
+        throw new Error(`Expected single document for ${id}`);
+      }
+      if (!doc.data.id) {
+        doc.data.id = id;
+      }
+      let instance = (await api.createFromSerialized(
+        doc.data,
+        doc,
+        new URL(doc.data.id),
+      )) as CardDef;
+      instancesById.set(instance.id ?? doc.data.id, instance);
+
+      let relationships = doc.data.relationships ?? {};
+      let entries = Object.entries(relationships);
+      log.debug(`Relationships for ${id}:`);
+      if (entries.length === 0) {
+        log.debug('[]');
+        continue;
+      }
+      let summary = entries.map(([field, rel]) => ({
+        field,
+        links: rel.links ?? null,
+        data: rel.data ?? null,
+      }));
+      log.debug(JSON.stringify(summary, null, 2));
+
+      for (let rel of Object.values(relationships)) {
+        let relatedIds = await this.collectRelationshipIds(
+          rel,
+          doc.data.id ?? id,
+        );
+        for (let relatedId of relatedIds) {
+          if (!visited.has(relatedId)) {
+            queue.push(relatedId);
+          }
+        }
+      }
+    }
+
+    return [...instancesById.values()];
+  }
+
+  private async collectRelationshipIds(
+    relationship: { links?: { self?: string | null; related?: string | null }; data?: unknown },
+    relativeTo: string,
+  ): Promise<string[]> {
+    let ids = this.extractRelationshipIds(relationship.data);
+    if (ids.length > 0) {
+      return ids;
+    }
+
+    let link = relationship.links?.related ?? relationship.links?.self;
+    if (!link) {
+      return ids;
+    }
+    let href = new URL(link, relativeTo).href;
+    let response = await this.cardService.fetchJSON(href);
+    if (!response) {
+      return ids;
+    }
+    if (isSingleCardDocument(response)) {
+      if (response.data.id) {
+        ids.push(response.data.id);
+      }
+      return ids;
+    }
+    if (isCardCollectionDocument(response)) {
+      for (let item of response.data) {
+        if (item.id) {
+          ids.push(item.id);
+        }
+      }
+      return ids;
+    }
+    if (typeof response === 'object' && response !== null && 'data' in response) {
+      ids.push(...this.extractRelationshipIds((response as { data?: unknown }).data));
+    }
+    return ids;
+  }
+
+  private extractRelationshipIds(data: unknown): string[] {
+    let ids: string[] = [];
+    if (!data || typeof data !== 'object') {
+      return ids;
+    }
+    if (Array.isArray(data)) {
+      for (let item of data) {
+        if (item && typeof item === 'object' && 'id' in item) {
+          let id = (item as { id?: string }).id;
+          if (typeof id === 'string') {
+            ids.push(id);
+          }
+        }
+      }
+      return ids;
+    }
+    if ('id' in data) {
+      let id = (data as { id?: string }).id;
+      if (typeof id === 'string') {
+        ids.push(id);
+      }
+    }
+    return ids;
   }
 }

@@ -54,6 +54,7 @@ const pirateSkillListingId = `${mockCatalogURL}SkillListing/pirate-skill`;
 const incompleteSkillListingId = `${mockCatalogURL}Listing/incomplete-skill`;
 const apiDocumentationStubListingId = `${mockCatalogURL}Listing/api-documentation-stub`;
 const themeListingId = `${mockCatalogURL}ThemeListing/cardstack-theme`;
+const blogPostListingId = `${mockCatalogURL}Listing/blog-post`;
 //license
 const mitLicenseId = `${mockCatalogURL}License/mit`;
 //category
@@ -104,7 +105,7 @@ const authorCardSource = `
 `;
 
 const blogPostCardSource = `
-  import { field, contains, CardDef, FieldDef } from 'https://cardstack.com/base/card-api';
+  import { field, contains, CardDef, linksTo } from 'https://cardstack.com/base/card-api';
   import StringField from 'https://cardstack.com/base/string';
   import { Author } from '../author/author';
 
@@ -112,7 +113,7 @@ const blogPostCardSource = `
     static displayName = 'BlogPost';
     @field title = contains(StringField);
     @field content = contains(StringField);
-    @field author = contains(Author);
+    @field author = linksTo(Author);
   }
 `;
 
@@ -434,6 +435,28 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
               publisher: {
                 links: {
                   self: publisherId,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${catalogRealmURL}catalog-app/listing/listing`,
+                name: 'CardListing',
+              },
+            },
+          },
+        },
+        'Listing/blog-post.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Blog Post',
+              title: 'Blog Post',
+            },
+            relationships: {
+              'examples.0': {
+                links: {
+                  self: `${mockCatalogURL}blog-post/BlogPost/example`,
                 },
               },
             },
@@ -2253,6 +2276,39 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         let examplePath = `${outerFolder}${listingName}/Author/example.json`;
         await openDir(assert, examplePath);
         await verifyFileInFileTree(assert, examplePath);
+      });
+
+      test('listing installs relationships of examples and its modules', async function (assert) {
+        const listingName = 'blog-post';
+
+        await executeCommand(
+          ListingInstallCommand,
+          blogPostListingId,
+          testDestinationRealmURL,
+        );
+        await visitOperatorMode({
+          submode: 'code',
+          fileView: 'browser',
+          codePath: `${testDestinationRealmURL}index`,
+        });
+
+        let outerFolder = await verifyFolderWithUUIDInFileTree(
+          assert,
+          listingName,
+        );
+        let blogPostModulePath = `${outerFolder}blog-post/blog-post.gts`;
+        let authorModulePath = `${outerFolder}author/author.gts`;
+        await openDir(assert, blogPostModulePath);
+        await verifyFileInFileTree(assert, blogPostModulePath);
+        await openDir(assert, authorModulePath);
+        await verifyFileInFileTree(assert, authorModulePath);
+
+        let blogPostExamplePath = `${outerFolder}blog-post/BlogPost/example.json`;
+        let authorExamplePath = `${outerFolder}author/Author/example.json`;
+        await openDir(assert, blogPostExamplePath);
+        await verifyFileInFileTree(assert, blogPostExamplePath);
+        await openDir(assert, authorExamplePath);
+        await verifyFileInFileTree(assert, authorExamplePath);
       });
 
       test('field listing', async function (assert) {
