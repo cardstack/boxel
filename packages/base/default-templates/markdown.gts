@@ -29,27 +29,33 @@ function wrapTablesHtml(html: string | null | undefined): string {
 export default class MarkDownTemplate extends GlimmerComponent<{
   Args: { content: string | null };
 }> {
-  @tracked _monacoContext: any = undefined;
+  @tracked monacoContextInternal: any = undefined;
   get monacoContext() {
-    if (!this._monacoContext) {
-      this.loadMonacoContextTask.perform();
+    if (!this.monacoContextInternal && this.prepareMonacoContextTask) {
+      this.prepareMonacoContextTask.perform();
     }
-    return this._monacoContext;
+    return this.monacoContextInternal;
   }
-  loadMonacoContextTask = task(async () => {
+  prepareMonacoContextTask = task({ drop: true }, async () => {
     let monacoContext = await (window as any).__loadMonacoForMarkdown();
-    await preloadMarkdownLanguages(this.args.content ?? '', monacoContext);
-    this._monacoContext = monacoContext;
+    await preloadMarkdownLanguages(this.args.content || '', monacoContext);
+    this.monacoContextInternal = monacoContext;
   });
   <template>
     <div class='markdown-content'>
-      {{sanitizedHtml
-        (wrapTablesHtml
-          (markdownToHtml
-            @content enableMonacoSyntaxHighlighting=true monaco=this.monacoContext
-          )
-        )
-      }}
+      {{#if this.monacoContext}}
+        <div class='markdown-content'>
+          {{sanitizedHtml
+            (wrapTablesHtml
+              (markdownToHtml
+                @content
+                enableMonacoSyntaxHighlighting=true
+                monaco=this.monacoContext
+              )
+            )
+          }}
+        </div>
+      {{/if}}
     </div>
     <style scoped>
       @layer baseComponent {

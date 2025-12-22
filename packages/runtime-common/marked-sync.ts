@@ -139,44 +139,195 @@ export function markdownToHtml(
  * @param {typeof import('monaco-editor')} monaco
  */
 export async function preloadMarkdownLanguages(md: string, monaco: MonacoSDK) {
-  // Collect language ids from ```lang fences
-  const langs = new Set();
+  // always preload TypeScript and JSON support
+  const langs = new Set(['typescript', 'json']);
+
+  // Collect additional languages to preload from ```lang fences
   const fenceRE = /```(\S+)?\s*[\r\n]/g;
-  let m;
-  while ((m = fenceRE.exec(md)) !== null) {
-    const lang = (m[1] || '').trim();
+  let match: RegExpExecArray | null;
+  while ((match = fenceRE.exec(md)) !== null) {
+    const lang = (match[1] || '').trim();
     if (lang) langs.add(lang.toLowerCase());
   }
-  if (!langs.size) return;
 
   const registered = monaco.languages.getLanguages();
 
   const languagePromises: Promise<unknown>[] = [];
   const seenLanguageIds = new Set<string>();
 
-  for (let lang of langs) {
-    // Try exact id first
+  const contributionLoaders: Record<string, () => Promise<unknown>> = {
+    json: () =>
+      import('monaco-editor/esm/vs/language/json/monaco.contribution.js'),
+    typescript: () =>
+      import('monaco-editor/esm/vs/language/typescript/monaco.contribution.js'),
+  };
+
+  for (const lang of langs) {
     let entry =
       registered.find((l) => l.id.toLowerCase() === lang) ||
       registered.find((l) =>
         (l.aliases || []).some((a: string) => a.toLowerCase() === lang),
       );
-    if (entry) {
-      if (seenLanguageIds.has(entry.id)) {
-        continue;
-      }
-      seenLanguageIds.add(entry.id);
-      languagePromises.push(
-        (async () => {
-          // Warm up using Monaco's async colorize, which waits for tokenization readiness internally.
-          // Without this, when we use colorizeLine later, the language may not be loaded and tokenization may fail.
-          if (typeof monaco.editor?.colorize === 'function') {
-            await monaco.editor.colorize('', entry.id, {});
-          }
-        })(),
-      );
+    if (!entry) {
+      continue;
     }
+    if (seenLanguageIds.has(entry.id)) {
+      continue;
+    }
+    seenLanguageIds.add(entry.id);
+    languagePromises.push(
+      (async () => {
+        if (contributionLoaders[lang]) {
+          await contributionLoaders[lang]!();
+        }
+        // If the language is lazily loaded, force the loader to run so tokenization is registered.
+        if (typeof (entry as any).loader === 'function') {
+          await (entry as any).loader();
+        }
+        // Wait for the language to finish activating (onLanguage fires after contribution setup).
+        await waitForLanguage(monaco, entry.id);
+        // Warm up using Monaco's async colorize, which waits for tokenization readiness internally.
+        // Without this, when we use the sync colorizeLine later, the language may not be loaded and tokenization may fallback to a no-op entry.
+        await warmUpColorize(monaco, entry.id);
+        // Create a model to force tokenization registration for synchronous colorizeModelLine usage.
+        warmUpModelTokenization(monaco, entry.id);
+        // Ensure tokenization is registered (TokenizationRegistry may lag after activation).
+        await waitForTokenizationSupport(monaco, entry.id);
+      })(),
+    );
   }
 
   await Promise.all(languagePromises);
+}
+
+function waitForLanguage(monaco: MonacoSDK, id: string): Promise<void> {
+  // getEncodedLanguageId returns 0 when unknown/unregistered
+  if (monaco.languages.getEncodedLanguageId(id) !== 0) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const disposable = monaco.languages.onLanguage(id, () => {
+      disposable.dispose();
+      resolve();
+    });
+  });
+}
+
+function waitForTokenizationSupport(
+  monaco: MonacoSDK,
+  id: string,
+): Promise<void> {
+  return getTokenizationRegistry(monaco).then(async (registry) => {
+    if (!registry) {
+      return;
+    }
+    // Resolve tokenization support via the registry's factory if present.
+    try {
+      const support = await registry.getOrCreate?.(id);
+      if (support) {
+        return;
+      }
+    } catch (err) {
+      console.error(
+        `[markdown preload] getOrCreate threw for "${id}": ${String(err)}`,
+      );
+    }
+    // Some Monaco builds never emit onDidChange; poll briefly instead.
+    const maxAttempts = 20;
+    const delayMs = 25;
+    for (let i = 0; i < maxAttempts; i++) {
+      if (registry.get(id)) {
+        // the tokenization support is now registered
+        return;
+      }
+      await sleep(delayMs);
+    }
+    console.error(
+      `[markdown preload] tokenization NOT found for "${id}" after polling`,
+    );
+  });
+}
+
+async function getTokenizationRegistry(monaco: MonacoSDK): Promise<{
+  get(id: string): unknown;
+  getOrCreate?(id: string | number): Promise<unknown>;
+  onDidChange(cb: (e: any) => void): { dispose(): void };
+} | null> {
+  let registry = (monaco.languages as any).TokenizationRegistry;
+  if (registry) {
+    return registry;
+  }
+  try {
+    let mod = await import('monaco-editor/esm/vs/editor/common/languages.js');
+    if (mod.TokenizationRegistry) {
+      // Wire it onto monaco.languages so subsequent lookups share the singleton.
+      (monaco.languages as any).TokenizationRegistry = mod.TokenizationRegistry;
+      registry = mod.TokenizationRegistry;
+      return registry;
+    }
+    return null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function warmUpColorize(monaco: MonacoSDK, id: string) {
+  if (typeof monaco.editor?.colorize !== 'function') {
+    return;
+  }
+  if (id === 'json') {
+    // Monaco's JSON colorizer chokes on empty input.
+    await monaco.editor.colorize(
+      `
+      \`\`\`json
+        { "foo": "bar" }
+      \`\`\``,
+      id,
+      {},
+    );
+    return;
+  }
+  if (id === 'typescript') {
+    // Monaco's TypeScript colorizer chokes on empty input.
+    await monaco.editor.colorize(
+      `
+      \`\`\`typescript
+        const x: number = 42;
+      \`\`\``,
+      id,
+      {},
+    );
+    return;
+  }
+  await monaco.editor.colorize('', id, {});
+}
+
+function warmUpModelTokenization(monaco: MonacoSDK, id: string) {
+  if (
+    typeof monaco.editor?.createModel !== 'function' ||
+    typeof monaco.editor?.colorizeModelLine !== 'function'
+  ) {
+    return;
+  }
+  let code = '';
+  if (id === 'json') {
+    code = '{ "foo": "bar" }';
+  } else if (id === 'typescript') {
+    code = 'const x: number = 42;';
+  }
+  if (!code) {
+    return;
+  }
+  let model = monaco.editor.createModel(code, id);
+  try {
+    monaco.editor.colorizeModelLine(model, 1, 2);
+  } catch (_error) {
+    // Ignore warmup failures; we fall back to plaintext.
+  } finally {
+    model.dispose();
+  }
 }
