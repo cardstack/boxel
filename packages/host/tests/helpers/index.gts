@@ -49,7 +49,7 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
 import { render as renderIntoElement } from '@cardstack/host/lib/isolated-render';
-import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
+import PgLiteAdapter from '@cardstack/host/lib/pglite-adapter';
 import type NetworkService from '@cardstack/host/services/network';
 import type { RealmServerTokenClaims } from '@cardstack/host/services/realm-server';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
@@ -157,12 +157,11 @@ export function cleanupMonacoEditorModels() {
 }
 
 export async function getDbAdapter() {
-  let dbAdapter = (globalThis as any).__sqliteAdapter as
-    | SQLiteAdapter
-    | undefined;
+  let dbAdapter = (globalThis as any).__pgAdapter as PgLiteAdapter | undefined;
   if (!dbAdapter) {
-    dbAdapter = new SQLiteAdapter(sqlSchema);
-    (globalThis as any).__sqliteAdapter = dbAdapter;
+    dbAdapter = new PgLiteAdapter();
+    await dbAdapter.setup();
+    (globalThis as any).__pgAdapter = dbAdapter;
   }
   return dbAdapter;
 }

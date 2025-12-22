@@ -66,6 +66,7 @@
     "@simple-dom/serializer": "catalog:",
     "@simple-dom/void-map": "catalog:",
     "@sqlite.org/sqlite-wasm": "catalog:",
+    "@electric-sql/pglite": "catalog:",
     "@types/flat": "catalog:",
     "@types/htmlbars-inline-precompile": "catalog:",
     "@types/indefinite": "catalog:",

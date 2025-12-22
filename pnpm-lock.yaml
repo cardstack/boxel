@@ -72,6 +72,9 @@ catalogs:
     '@cardstack/view-transitions':
       specifier: ^0.2.0
       version: 0.2.0
+    '@electric-sql/pglite':
+      specifier: ^0.3.14
+      version: 0.3.14
     '@ember/string':
       specifier: ^4.0.1
       version: 4.0.1
@@ -2092,6 +2095,9 @@ importers:
       '@cardstack/view-transitions':
         specifier: 'catalog:'
         version: 0.2.0(@babel/core@7.26.10)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))
+      '@electric-sql/pglite':
+        specifier: 'catalog:'
+        version: 0.3.14
       '@ember/optional-features':
         specifier: ^2.0.0
         version: 2.0.0
@@ -3932,6 +3938,9 @@ packages:
   '@csstools/css-tokenizer@3.0.3':
     resolution: {integrity: sha512-UJnjoFsmxfKUdNYdWgOB0mWUypuLvAfQPH1+pyvRJs6euowbFkFC6P13w1l8mJyi3vxYMxc9kld5jZEGRQs6bw==}
     engines: {node: '>=18'}
+
+  '@electric-sql/pglite@0.3.14':
+    resolution: {integrity: sha512-3DB258dhqdsArOI1fIt7cb9RpUOgcDg5hXWVgVHAeqVQ/qxtFy605QKs4gx6mFq3jWsSPqDN8TgSEsqC3OfV9Q==}
 
   '@ember-data/rfc395-data@0.0.4':
     resolution: {integrity: sha512-tGRdvgC9/QMQSuSuJV45xoyhI0Pzjm7A9o/MVVA3HakXIImJbbzx/k/6dO9CUEQXIyS2y0fW6C1XaYOG7rY0FQ==}
@@ -14519,6 +14528,8 @@ snapshots:
       '@csstools/css-tokenizer': 3.0.3
 
   '@csstools/css-tokenizer@3.0.3': {}
+
+  '@electric-sql/pglite@0.3.14': {}
 
   '@ember-data/rfc395-data@0.0.4': {}
 
