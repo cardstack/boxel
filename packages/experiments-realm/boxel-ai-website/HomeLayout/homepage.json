@@ -1,0 +1,47 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "HomeLayoutCard",
+        "module": "../boxel-home-layout"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Boxel Home",
+        "description": "Boxel AI Website Homepage",
+        "thumbnailURL": null
+      },
+      "sections": [
+        {},
+        {}
+      ],
+      "currentPageId": null,
+      "showDarkModeToggle": true
+    },
+    "relationships": {
+      "site": {
+        "links": {
+          "self": "../Site/boxel-site"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+        }
+      },
+      "sections.0.content": {
+        "links": {
+          "self": null
+        }
+      },
+      "sections.1.content": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

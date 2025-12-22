@@ -1,0 +1,44 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "module": "http://localhost:4201/experiments/boxel-ai-website/fields/page-section-field",
+        "name": "PageSectionField"
+      },
+      "specType": "field",
+      "containedExamples": [
+        {
+          "sectionId": null,
+          "sectionNumber": null,
+          "sectionLabel": null
+        }
+      ],
+      "title": "PageSectionField",
+      "description": null,
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../boxel-ai-website/fields/page-section-field",
+              "name": "PageSectionField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

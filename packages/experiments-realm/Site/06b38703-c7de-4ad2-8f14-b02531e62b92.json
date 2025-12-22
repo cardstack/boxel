@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "siteTitle": null,
+      "ctaPrimaryText": null,
+      "ctaPrimaryUrl": null,
+      "ctaSecondaryText": null,
+      "ctaSecondaryUrl": null,
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../boxel-ai-website/site-config",
+        "name": "Site"
+      }
+    }
+  }
+}
