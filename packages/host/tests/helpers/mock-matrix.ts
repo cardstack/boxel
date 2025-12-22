@@ -1,4 +1,3 @@
-/* eslint-disable import/order */
 import type Owner from '@ember/owner';
 
 import { getService } from '@universal-ember/test-support';
@@ -11,6 +10,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import { MockSDK } from './mock-matrix/_sdk';
 import { MockSlidingSync } from './mock-matrix/_sliding-sync';
 import { MockUtils, getRoomIdForRealmAndUser } from './mock-matrix/_utils';
+
 import { registerRealmAuthSessionRoomEnsurer } from './index';
 
 export const testRealmServerMatrixUsername = 'realm_server';
