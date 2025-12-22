@@ -123,7 +123,7 @@ class Isolated extends Component<typeof StyleReference> {
         margin-bottom: var(--boxel-sp-lg);
       }
       h2 {
-        margin-bottom: var(--boxel-sp);
+        margin-bottom: var(--boxel-sp-lg);
         border-bottom: 1px solid var(--dsr-border);
       }
       ul {
@@ -143,6 +143,7 @@ class Isolated extends Component<typeof StyleReference> {
         padding-inline: var(--boxel-sp-2xl);
         border-bottom: 1px solid var(--dsr-border);
         text-align: center;
+        text-wrap: pretty;
       }
       .style-header-description {
         max-width: 37.5rem;

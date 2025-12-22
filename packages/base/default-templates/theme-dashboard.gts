@@ -49,6 +49,7 @@ export class CssFieldEditor extends GlimmerComponent<{
 
   <template>
     <FieldContainer
+      class='css-field-editor'
       @vertical={{true}}
       @label={{if @label.length @label this.defaultLabel}}
       @tag='label'
@@ -67,6 +68,9 @@ export class CssFieldEditor extends GlimmerComponent<{
       />
     </FieldContainer>
     <style scoped>
+      .css-field-editor {
+        gap: var(--boxel-sp);
+      }
       .css-textarea {
         min-height: 15rem;
         background-color: var(--dsr-card);
@@ -577,8 +581,10 @@ export class ThemeVisualizer extends GlimmerComponent<{
         }
         .dsr-theme-visualizer-header {
           display: flex;
+          flex-wrap: wrap;
           justify-content: space-between;
           align-items: center;
+          gap: var(--boxel-sp-xs);
           margin-bottom: calc(var(--boxel-sp) * 2);
           padding-bottom: var(--boxel-sp);
           border-bottom: 2px solid var(--dsr-border);
@@ -709,10 +715,10 @@ export class ThemeDashboard extends GlimmerComponent<{
         }
 
         .dsr-header :deep(h1) {
-          font-size: var(--boxel-font-size-2xl);
+          font-size: var(--boxel-heading-font-size);
         }
         .dsr-header :deep(p) {
-          font-size: var(--boxel-font-size);
+          font-size: var(--boxel-body-font-size);
         }
 
         /* Content */

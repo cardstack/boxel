@@ -298,7 +298,7 @@ class FieldGrid extends GlimmerComponent<{
     <style scoped>
       .field-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr));
         gap: var(--boxel-sp-xs) var(--boxel-sp-2xs);
       }
     </style>

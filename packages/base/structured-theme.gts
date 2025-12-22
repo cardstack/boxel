@@ -1,7 +1,11 @@
 import { tracked } from '@glimmer/tracking';
 import { get } from '@ember/object';
 
-import { GridContainer } from '@cardstack/boxel-ui/components';
+import {
+  BoxelContainer,
+  GridContainer,
+  Swatch,
+} from '@cardstack/boxel-ui/components';
 import {
   eq,
   buildCssGroups,
@@ -126,6 +130,14 @@ class Isolated extends Component<typeof StructuredTheme> {
       @isDarkMode={{this.isDarkMode}}
       @version={{@model.version}}
     >
+      <:header>
+        <BoxelContainer @tag='header' @display='flex' class='theme-header'>
+          <h1><@fields.title /></h1>
+          <p class='theme-description'>
+            <@fields.description />
+          </p>
+        </BoxelContainer>
+      </:header>
       <:navBar>
         <SimpleNavBar @items={{@model.guideSections}} />
       </:navBar>
@@ -176,6 +188,23 @@ class Isolated extends Component<typeof StructuredTheme> {
 
     <style scoped>
       @layer baseComponent {
+        .theme-header {
+          min-height: 20vh;
+          flex-direction: column;
+          flex-wrap: nowrap;
+          justify-content: center;
+          padding: var(--boxel-sp-4xl) var(--boxel-sp-2xl);
+          gap: var(--boxel-sp-xs);
+          text-align: center;
+          text-wrap: pretty;
+          background-color: var(--dsr-card);
+          color: var(--dsr-card-fg);
+          border-bottom: 1px solid var(--dsr-border);
+        }
+        .theme-description {
+          max-width: 37.5rem;
+          color: var(--dsr-muted-fg);
+        }
         .structured-theme-grid {
           gap: var(--boxel-sp-2xl);
         }
@@ -250,4 +279,90 @@ export default class StructuredTheme extends Theme {
   };
 
   static isolated: BaseDefComponent = Isolated;
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <article class='structured-theme-embedded'>
+        <header class='structured-theme-embedded__header'>
+          <div>
+            <h3 class='structured-theme-embedded__title'>
+              <@fields.title />
+            </h3>
+            {{#if @model.description}}
+              <p class='structured-theme-embedded__description'>
+                <@fields.description />
+              </p>
+            {{/if}}
+          </div>
+          {{#if @model.version}}
+            <span class='structured-theme-embedded__version'>
+              v{{@model.version}}
+            </span>
+          {{/if}}
+        </header>
+
+        {{#if @model.rootVariables}}
+          <div class='structured-theme-embedded__swatches'>
+            <Swatch
+              class='structured-theme-embedded__swatch'
+              @label='Background'
+              @color={{@model.rootVariables.background}}
+            />
+            <Swatch
+              class='structured-theme-embedded__swatch'
+              @label='Foreground'
+              @color={{@model.rootVariables.foreground}}
+            />
+            <Swatch
+              class='structured-theme-embedded__swatch'
+              @label='Primary'
+              @color={{@model.rootVariables.primary}}
+            />
+          </div>
+        {{/if}}
+      </article>
+
+      <style scoped>
+        .structured-theme-embedded {
+          display: grid;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp-lg);
+          border: 1px solid var(--border, var(--boxel-border-color));
+          border-radius: var(--boxel-border-radius);
+          background-color: var(--background, var(--boxel-light));
+          color: var(--foreground, var(--boxel-dark));
+        }
+        .structured-theme-embedded__header {
+          display: flex;
+          justify-content: space-between;
+          gap: var(--boxel-sp);
+          align-items: flex-start;
+        }
+        .structured-theme-embedded__title {
+          margin: 0;
+          font-size: var(--boxel-font-size-lg);
+        }
+        .structured-theme-embedded__description {
+          margin: 0;
+          color: var(--muted-foreground, var(--boxel-500));
+        }
+        .structured-theme-embedded__version {
+          font-size: var(--boxel-font-size-sm);
+          color: var(--muted-foreground, var(--boxel-500));
+        }
+        .structured-theme-embedded__swatches {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+          gap: var(--boxel-sp-2xs);
+          align-items: stretch;
+        }
+        .structured-theme-embedded__swatch :deep(.boxel-swatch) {
+          width: 100%;
+        }
+        :deep(.boxel-swatch-value) {
+          font-size: var(--boxel-caption-font-size);
+        }
+      </style>
+    </template>
+  };
 }

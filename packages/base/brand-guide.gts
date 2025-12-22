@@ -232,7 +232,6 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       }
       .brand-guide-dashboard-header {
         position: relative;
-        padding-top: var(--boxel-sp);
         text-align: center;
       }
       .brand-guide-mode-toggle {
