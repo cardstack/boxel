@@ -246,6 +246,7 @@ export {
 export type { JWTPayload } from './realm-auth-client';
 export { sanitizeHtml } from './dompurify-runtime';
 export {
+  hasCodeBlocks,
   markedSync,
   markdownToHtml,
   preloadMarkdownLanguages,

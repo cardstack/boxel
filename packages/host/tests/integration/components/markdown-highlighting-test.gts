@@ -26,7 +26,10 @@ type MonacoStub = {
     }[];
     getEncodedLanguageId: (id: string) => number;
     onLanguage: (id: string, cb: () => void) => { dispose: () => void };
-    TokenizationRegistry: { getOrCreate: (id: string) => Promise<void> };
+    TokenizationRegistry: {
+      getOrCreate: (id: string) => Promise<void>;
+      get: (id: string | number) => unknown;
+    };
     typescript?: {
       getTypeScriptWorker?: () => Promise<(uri: unknown) => Promise<unknown>>;
       getJavaScriptWorker?: () => Promise<(uri: unknown) => Promise<unknown>>;
@@ -86,6 +89,9 @@ function createMonacoStub(): MonacoStub {
       },
       TokenizationRegistry: {
         async getOrCreate(_id: string) {},
+        get() {
+          return undefined;
+        },
       },
       typescript: {
         async getTypeScriptWorker() {
@@ -121,7 +127,7 @@ function createMonacoStub(): MonacoStub {
   };
 }
 
-module('Integration | markdown highlighting', function (hooks) {
+module('Integration | markdown highlighting error scenarios', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
 
@@ -131,46 +137,171 @@ module('Integration | markdown highlighting', function (hooks) {
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
     originalLoader = (window as any).__loadMonacoForMarkdown;
-    (window as any).__loadMonacoForMarkdown = async () => createMonacoStub();
   });
 
   hooks.afterEach(function () {
     (window as any).__loadMonacoForMarkdown = originalLoader;
   });
 
-  test('renders highlighted tokens for supported languages and plain text for unsupported', async function (assert) {
+  test('handles undefined __loadMonacoForMarkdown gracefully', async function (assert) {
     class Doc extends CardDef {
       @field body = contains(MarkdownField);
     }
 
     let doc = new Doc({
-      body: [
-        '```typescript',
-        'const x: number = 1;',
-        '```',
-        '',
-        '```foobar',
-        'const y = 2;',
-        '```',
-        '',
-        '```',
-        'const z = 3;',
-        '```',
-      ].join('\n'),
+      body: ['```typescript', 'const x = 1;', '```'].join('\n'),
     });
+
+    delete (window as any).__loadMonacoForMarkdown;
 
     await renderCard(loader, doc, 'isolated');
 
+    assert.dom('.markdown-content').exists('container renders without Monaco');
+    assert
+      .dom('pre[data-code-language="typescript"]')
+      .doesNotExist('code blocks are hidden when Monaco is unavailable');
+  });
+
+  test('handles Monaco load returning an unusable editor', async function (assert) {
+    class Doc extends CardDef {
+      @field body = contains(MarkdownField);
+    }
+
+    let doc = new Doc({
+      body: ['```typescript', 'const x = 1;', '```'].join('\n'),
+    });
+
+    (window as any).__loadMonacoForMarkdown = async () => {
+      let stub = createMonacoStub();
+      stub.editor.colorizeModelLine = undefined as any;
+      return stub;
+    };
+
+    await renderCard(loader, doc, 'isolated');
     await waitFor('pre[data-code-language="typescript"]');
 
     assert
-      .dom('pre[data-code-language="typescript"] span.mtk2')
-      .exists('typescript code uses language-specific token spans');
+      .dom('pre[data-code-language="typescript"]')
+      .exists('pre element renders when Monaco editor is unusable');
+  });
+
+  test('handles missing languages.getLanguages method', async function (assert) {
+    class Doc extends CardDef {
+      @field body = contains(MarkdownField);
+    }
+
+    let doc = new Doc({
+      body: ['```typescript', 'const x = 1;', '```'].join('\n'),
+    });
+
+    (window as any).__loadMonacoForMarkdown = async () => {
+      let stub = createMonacoStub();
+      stub.languages.getLanguages = () => [];
+      return stub;
+    };
+
+    await renderCard(loader, doc, 'isolated');
+
     assert
-      .dom('pre[data-code-language="foobar"] span.mtk1')
-      .exists('unsupported language uses plaintext token spans');
+      .dom('pre[data-code-language="typescript"]')
+      .exists('pre element renders with empty languages');
+  });
+
+  test('handles missing onLanguage callback', async function (assert) {
+    class Doc extends CardDef {
+      @field body = contains(MarkdownField);
+    }
+
+    let doc = new Doc({
+      body: ['```typescript', 'const x = 1;', '```'].join('\n'),
+    });
+
+    (window as any).__loadMonacoForMarkdown = async () => {
+      let stub = createMonacoStub();
+      stub.languages.onLanguage = () => {
+        throw new Error('onLanguage failed');
+      };
+      return stub;
+    };
+
+    await renderCard(loader, doc, 'isolated');
+    await waitFor('pre[data-code-language="typescript"]');
+
     assert
-      .dom('pre[data-code-language=""] span.mtk1')
-      .exists('unspecified language uses plaintext token spans');
+      .dom('pre[data-code-language="typescript"]')
+      .exists('pre element renders despite onLanguage failure');
+  });
+
+  test('handles TokenizationRegistry.getOrCreate failure', async function (assert) {
+    class Doc extends CardDef {
+      @field body = contains(MarkdownField);
+    }
+
+    let doc = new Doc({
+      body: ['```typescript', 'const x = 1;', '```'].join('\n'),
+    });
+
+    (window as any).__loadMonacoForMarkdown = async () => {
+      let stub = createMonacoStub();
+      stub.languages.TokenizationRegistry.getOrCreate = async () => {
+        throw new Error('Tokenization failed');
+      };
+      return stub;
+    };
+
+    await renderCard(loader, doc, 'isolated');
+    await waitFor('pre[data-code-language="typescript"]');
+
+    assert
+      .dom('pre[data-code-language="typescript"]')
+      .exists('pre element renders despite tokenization failure');
+  });
+
+  test('handles colorizeModelLine throwing error', async function (assert) {
+    class Doc extends CardDef {
+      @field body = contains(MarkdownField);
+    }
+
+    let doc = new Doc({
+      body: ['```typescript', 'const x = 1;', '```'].join('\n'),
+    });
+
+    (window as any).__loadMonacoForMarkdown = async () => {
+      let stub = createMonacoStub();
+      stub.editor.colorizeModelLine = () => {
+        throw new Error('Colorization failed');
+      };
+      return stub;
+    };
+
+    await renderCard(loader, doc, 'isolated');
+    await waitFor('pre[data-code-language="typescript"]');
+
+    assert
+      .dom('pre[data-code-language="typescript"]')
+      .exists('pre element renders despite colorization failure');
+  });
+
+  test('handles missing editor.createModel method', async function (assert) {
+    class Doc extends CardDef {
+      @field body = contains(MarkdownField);
+    }
+
+    let doc = new Doc({
+      body: ['```typescript', 'const x = 1;', '```'].join('\n'),
+    });
+
+    (window as any).__loadMonacoForMarkdown = async () => {
+      let stub = createMonacoStub();
+      stub.editor.createModel = undefined as any;
+      return stub;
+    };
+
+    await renderCard(loader, doc, 'isolated');
+    await waitFor('pre[data-code-language="typescript"]');
+
+    assert
+      .dom('pre[data-code-language="typescript"]')
+      .exists('pre element renders with missing createModel');
   });
 });

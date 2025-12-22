@@ -3,6 +3,7 @@ import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import {
+  hasCodeBlocks,
   markdownToHtml,
   preloadMarkdownLanguages,
 } from '@cardstack/runtime-common';
@@ -37,24 +38,40 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     return this.monacoContextInternal;
   }
   prepareMonacoContextTask = task({ drop: true }, async () => {
-    let monacoContext = await (window as any).__loadMonacoForMarkdown();
+    let loadMonacoForMarkdown = (window as any).__loadMonacoForMarkdown;
+    if (typeof loadMonacoForMarkdown !== 'function') {
+      // If Monaco loader is not available, skip loading and leave monacoContext undefined
+      return;
+    }
+    let monacoContext = await loadMonacoForMarkdown();
     await preloadMarkdownLanguages(this.args.content || '', monacoContext);
     this.monacoContextInternal = monacoContext;
   });
+  get hasCodeBlocks() {
+    return hasCodeBlocks(this.args.content);
+  }
   <template>
     <div class='markdown-content'>
-      {{#if this.monacoContext}}
-        <div class='markdown-content'>
-          {{sanitizedHtml
-            (wrapTablesHtml
-              (markdownToHtml
-                @content
-                enableMonacoSyntaxHighlighting=true
-                monaco=this.monacoContext
+      {{#if this.hasCodeBlocks}}
+        {{#if this.monacoContext}}
+          <div class='markdown-content'>
+            {{sanitizedHtml
+              (wrapTablesHtml
+                (markdownToHtml
+                  @content
+                  enableMonacoSyntaxHighlighting=true
+                  monaco=this.monacoContext
+                )
               )
-            )
-          }}
-        </div>
+            }}
+          </div>
+        {{/if}}
+      {{else}}
+        {{sanitizedHtml
+          (wrapTablesHtml
+            (markdownToHtml @content enableMonacoSyntaxHighlighting=false)
+          )
+        }}
       {{/if}}
     </div>
     <style scoped>

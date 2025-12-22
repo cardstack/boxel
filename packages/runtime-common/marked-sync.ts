@@ -13,6 +13,27 @@ const DEFAULT_MARKED_SYNC_OPTIONS = {
   enableMonacoSyntaxHighlighting: false,
 };
 
+/**
+ * Renders code with syntax highlighting using the Monaco editor SDK.
+ * 
+ * This function tokenizes code using Monaco's editor capabilities to generate
+ * HTML with syntax highlighting spans. Each line is colorized separately and
+ * combined into a pre/code block with Monaco token classes.
+ * 
+ * @param code - The source code string to highlight
+ * @param language - The programming language for syntax highlighting (e.g., 'typescript', 'javascript')
+ * @param opts - Configuration options
+ * @param opts.monaco - Optional Monaco SDK instance. Required for highlighting to occur
+ * @param opts.monacoTheme - Optional theme name to apply before colorizing (e.g., 'vs-dark', 'vs-light')
+ * @param opts.tabSize - Optional tab size for indentation rendering
+ * @param opts.enableMonacoSyntaxHighlighting - Flag to enable/disable Monaco syntax highlighting. If false, function returns null immediately
+ * 
+  let editor = monaco?.editor;
+  if (monaco === null || !editor?.createModel || !editor?.colorizeModelLine) {
+ * or an error occurs during colorization
+ * 
+ * @throws Does not throw; catches all errors and returns null instead
+ */
 function renderWithMonaco(
   code: string,
   language: string,
@@ -28,8 +49,8 @@ function renderWithMonaco(
   }
 
   let monaco = opts.monaco;
-  let editor = (monaco as MonacoSDK | undefined)?.editor;
-  if (!editor?.createModel || !editor?.colorizeModelLine) {
+  let editor = monaco?.editor;
+  if (monaco === null || !editor?.createModel || !editor?.colorizeModelLine) {
     return null;
   }
 
@@ -48,10 +69,11 @@ function renderWithMonaco(
       );
     }
 
-    return `<pre data-code-language="${language}"><code class="monaco-tokenized-source monaco-highlight">${highlightedLines.join(
+    return `<pre data-code-language="${escapeHtml(language)}"><code class="monaco-tokenized-source monaco-highlight">${highlightedLines.join(
       '\n',
     )}</code></pre>`;
-  } catch (_error) {
+  } catch (error) {
+    console.debug('[marked-sync] Monaco syntax highlighting failed:', error);
     return null;
   } finally {
     model?.dispose?.();
@@ -80,9 +102,9 @@ export function markedSync(
           }
 
           if (options.escapeHtmlInCodeBlocks) {
-            return `<pre data-code-language="${language}">${escapeHtml(code)}</pre>`;
+            return `<pre data-code-language="${escapeHtml(language)}">${escapeHtml(code)}</pre>`;
           } else {
-            return `<pre data-code-language="${language}">${code}</pre>`;
+            return `<pre data-code-language="${escapeHtml(language)}">${code}</pre>`;
           }
         },
       },
@@ -131,6 +153,14 @@ export function markdownToHtml(
     html = sanitizeHtml(html);
   }
   return html;
+}
+
+export function hasCodeBlocks(markdown: string | null | undefined): boolean {
+  if (!markdown) {
+    return false;
+  }
+  const fenceRE = /```(\S+)?\s*[\r\n]/g;
+  return fenceRE.test(markdown);
 }
 
 /**
@@ -186,9 +216,6 @@ export async function preloadMarkdownLanguages(md: string, monaco: MonacoSDK) {
         }
         // Wait for the language to finish activating (onLanguage fires after contribution setup).
         await waitForLanguage(monaco, entry.id);
-        // Warm up using Monaco's async colorize, which waits for tokenization readiness internally.
-        // Without this, when we use the sync colorizeLine later, the language may not be loaded and tokenization may fallback to a no-op entry.
-        await warmUpColorize(monaco, entry.id);
         // Create a model to force tokenization registration for synchronous colorizeModelLine usage.
         warmUpModelTokenization(monaco, entry.id);
         // Ensure tokenization is registered (TokenizationRegistry may lag after activation).
@@ -258,6 +285,7 @@ async function getTokenizationRegistry(monaco: MonacoSDK): Promise<{
     return registry;
   }
   try {
+    // @ts-expect-error -- dynamic import of untyped module
     let mod = await import('monaco-editor/esm/vs/editor/common/languages.js');
     if (mod.TokenizationRegistry) {
       // Wire it onto monaco.languages so subsequent lookups share the singleton.
@@ -273,37 +301,6 @@ async function getTokenizationRegistry(monaco: MonacoSDK): Promise<{
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function warmUpColorize(monaco: MonacoSDK, id: string) {
-  if (typeof monaco.editor?.colorize !== 'function') {
-    return;
-  }
-  if (id === 'json') {
-    // Monaco's JSON colorizer chokes on empty input.
-    await monaco.editor.colorize(
-      `
-      \`\`\`json
-        { "foo": "bar" }
-      \`\`\``,
-      id,
-      {},
-    );
-    return;
-  }
-  if (id === 'typescript') {
-    // Monaco's TypeScript colorizer chokes on empty input.
-    await monaco.editor.colorize(
-      `
-      \`\`\`typescript
-        const x: number = 42;
-      \`\`\``,
-      id,
-      {},
-    );
-    return;
-  }
-  await monaco.editor.colorize('', id, {});
 }
 
 function warmUpModelTokenization(monaco: MonacoSDK, id: string) {
