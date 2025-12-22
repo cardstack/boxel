@@ -1,23 +1,31 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Category",
+        "module": "../catalog-app/listing/category"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Research & Knowledge",
-      "description": "Academic research, knowledge bases, information gathering, reference materials, and research project management.",
-      "color": "#0891b2",
-      "order": 2
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": "Academic research, knowledge bases, information gathering, reference materials, and research project management.",
+        "thumbnailURL": null
+      }
     },
     "relationships": {
       "sphere": {
         "links": {
           "self": "../Sphere/67ffc7a9-70d6-4cd3-93f0-b32a8fbbd34e"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/category",
-        "name": "Category"
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }
