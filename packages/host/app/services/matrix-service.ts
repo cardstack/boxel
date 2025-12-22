@@ -363,7 +363,6 @@ export default class MatrixService extends Service {
         async (e) => {
           switch (e.event.type) {
             case APP_BOXEL_REALMS_EVENT_TYPE:
-              console.log('Realms event', e.event);
               await this.realmServer.setAvailableRealmURLs(
                 e.event.content.realms,
               );
