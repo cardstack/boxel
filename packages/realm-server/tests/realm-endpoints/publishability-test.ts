@@ -207,9 +207,8 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
         'Includes an error-document violation for the broken instance',
       );
 
-      let warningTypes = response.body.data.attributes.warningTypes ?? [];
       assert.deepEqual(
-        warningTypes,
+        (response.body.data.attributes.warningTypes ?? []).sort(),
         ['has-error-card-documents'],
         'warningTypes includes has-error-card-documents',
       );
@@ -318,9 +317,8 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           1,
           'one violating resource is reported',
         );
-        let warningTypes = response.body.data.attributes.warningTypes ?? [];
         assert.deepEqual(
-          warningTypes,
+          response.body.data.attributes.warningTypes ?? [],
           ['has-private-dependencies'],
           'warningTypes includes has-private-dependencies',
         );
