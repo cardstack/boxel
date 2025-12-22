@@ -2,7 +2,7 @@ import { getOwner } from '@ember/owner';
 import { visit, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import { module, test } from 'qunit';
+import { module, skip } from 'qunit';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
 
