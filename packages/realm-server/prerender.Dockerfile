@@ -75,4 +75,7 @@ USER pptruser
 
 EXPOSE 4221
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD curl --fail --silent --show-error --max-time 5 --output /dev/null http://localhost:4221/ || exit 1
+
 CMD pnpm --filter "./packages/realm-server" $prerender_script
