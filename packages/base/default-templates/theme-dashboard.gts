@@ -419,6 +419,7 @@ export class ModeToggle extends GlimmerComponent<{
       @kind='primary'
       @size='small'
       {{on 'click' @toggleDarkMode}}
+      data-test-mode={{if @isDarkMode 'toggle-light' 'toggle-dark'}}
       ...attributes
     >
       {{#if @isDarkMode}}

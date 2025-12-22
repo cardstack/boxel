@@ -2234,7 +2234,11 @@ export class CSSField extends TextAreaField {
         {{#if @model.length}}
           <CopyButton class='css-field-copy-button' @textToCopy={{@model}} />
         {{/if}}
-        <pre class='css-field'>{{if @model @model '/* No CSS defined */'}}</pre>
+        <pre class='css-field' data-test-css-field>{{if
+            @model
+            @model
+            '/* No CSS defined */'
+          }}</pre>
       </div>
       <style scoped>
         .css-field-container {

@@ -137,9 +137,9 @@ class Isolated extends Component<typeof StructuredTheme> {
           >
             <:colorPalette>
               {{#if this.isDarkMode}}
-                <@fields.darkModeVariables />
+                <@fields.darkModeVariables data-test-dark-vars />
               {{else}}
-                <@fields.rootVariables />
+                <@fields.rootVariables data-test-root-vars />
               {{/if}}
             </:colorPalette>
             <:typography>

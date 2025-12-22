@@ -217,10 +217,15 @@ class ThemeSwatch extends GlimmerComponent<{
     value: string;
     label?: string;
   };
+  Element: HTMLElement;
 }> {
   <template>
     {{#if @value.length}}
-      <div class='theme-swatch-display'>
+      <div
+        class='theme-swatch-display'
+        data-test-var-value={{@label}}
+        ...attributes
+      >
         <Swatch class='theme-swatch' @color={{@value}} @label={{@label}} />
         <CopyButton
           @width='16px'
@@ -230,7 +235,7 @@ class ThemeSwatch extends GlimmerComponent<{
         />
       </div>
     {{else if @label.length}}
-      <div>
+      <div data-test-var-value={{@label}}>
         <div class='empty-field-name'>{{@label}}</div>
         <code class='empty-value'>/* not set */</code>
       </div>
