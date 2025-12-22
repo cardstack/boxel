@@ -177,12 +177,7 @@ jobs:
   deploy-worker:
     name: Deploy worker
     needs:
-      [
-        build-worker,
-        deploy-host,
-        post-migrate-db,
-        deploy-prerender-manager,
-      ]
+      [build-worker, deploy-host, post-migrate-db, deploy-prerender-manager]
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
     with:
@@ -215,6 +210,7 @@ jobs:
       cluster: ${{ inputs.environment }}
       service-name: "boxel-realm-server-${{ inputs.environment }}"
       image: ${{ needs.build-realm-server.outputs.image }}
+      timeout-minutes: 10
       wait-for-service-stability: true
 
   post-deploy-realm-server:
