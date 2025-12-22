@@ -15,10 +15,63 @@
         "thumbnailURL": null
       },
       "sections": [
-        {},
-        {}
+        {
+          "sectionId": null,
+          "sectionNumber": "001",
+          "sectionLabel": "Overview"
+        },
+        {
+          "sectionId": null,
+          "sectionNumber": "002",
+          "sectionLabel": "Demo"
+        },
+        {
+          "sectionId": null,
+          "sectionNumber": "002",
+          "sectionLabel": "AI-Native Workspace"
+        },
+        {
+          "sectionId": null,
+          "sectionNumber": "003",
+          "sectionLabel": "AI-Native Stack"
+        },
+        {
+          "sectionId": null,
+          "sectionNumber": "004",
+          "sectionLabel": "AI-Native Composition"
+        },
+        {
+          "sectionId": null,
+          "sectionNumber": "005",
+          "sectionLabel": "AI Extensibility"
+        },
+        {
+          "sectionId": null,
+          "sectionNumber": "005",
+          "sectionLabel": "Model Sources"
+        },
+        {
+          "sectionId": null,
+          "sectionNumber": "006",
+          "sectionLabel": "AI-Searchable Catalog"
+        },
+        {
+          "sectionId": null,
+          "sectionNumber": "007",
+          "sectionLabel": "Builder Economy"
+        },
+        {
+          "sectionId": null,
+          "sectionNumber": "008",
+          "sectionLabel": "Join the Builders"
+        },
+        {
+          "sectionId": null,
+          "sectionNumber": null,
+          "sectionLabel": null
+        }
       ],
-      "currentPageId": null,
+      "currentPageId": "home",
       "showDarkModeToggle": true
     },
     "relationships": {
@@ -34,12 +87,57 @@
       },
       "sections.0.content": {
         "links": {
-          "self": null
+          "self": "../sections/HeroSection/compose-hero"
         }
       },
       "sections.1.content": {
         "links": {
-          "self": null
+          "self": "../sections/VideoDemoSection/video-demo"
+        }
+      },
+      "sections.2.content": {
+        "links": {
+          "self": "../sections/ThreeModesSection/workspace-modes"
+        }
+      },
+      "sections.3.content": {
+        "links": {
+          "self": "../sections/StackArchitectureSection/stack-architecture"
+        }
+      },
+      "sections.4.content": {
+        "links": {
+          "self": "../sections/SoftwareMediaSection/software-media"
+        }
+      },
+      "sections.5.content": {
+        "links": {
+          "self": "../sections/SkillsSection/skills"
+        }
+      },
+      "sections.6.content": {
+        "links": {
+          "self": "../sections/ModelsSection/models"
+        }
+      },
+      "sections.7.content": {
+        "links": {
+          "self": "../sections/CatalogSection/catalog"
+        }
+      },
+      "sections.8.content": {
+        "links": {
+          "self": "../sections/BuilderEconomySection/builder-economy"
+        }
+      },
+      "sections.9.content": {
+        "links": {
+          "self": "../sections/CtaSection/cta"
+        }
+      },
+      "sections.10.content": {
+        "links": {
+          "self": "../sections/FooterSection/footer"
         }
       }
     }

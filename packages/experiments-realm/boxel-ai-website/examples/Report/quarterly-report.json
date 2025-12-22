@@ -1,0 +1,29 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Report",
+        "module": "../report"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Quarterly Report",
+        "description": "Q2 performance summary",
+        "thumbnailURL": null
+      },
+      "reportTitle": "Quarterly Report",
+      "summary": "Q2 performance summary",
+      "period": "Q2 2024"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

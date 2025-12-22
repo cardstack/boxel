@@ -4,7 +4,7 @@ import {
   field,
   contains,
   linksTo,
-} from 'https://cardstack.com/base/card-api'; // ¹
+} from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import { SectionCard } from '../sections/section-card';
@@ -13,21 +13,9 @@ import { SectionCard } from '../sections/section-card';
 export class PageSectionField extends FieldDef {
   static displayName = 'Page Section';
 
-  @field sectionId = contains(StringField, {
-    computeVia: function (this: PageSectionField) {
-      return this.content?.sectionId;
-    },
-  });
-  @field sectionNumber = contains(StringField, {
-    computeVia: function (this: PageSectionField) {
-      return this.content?.sectionNumber;
-    },
-  });
-  @field sectionLabel = contains(StringField, {
-    computeVia: function (this: PageSectionField) {
-      return this.content?.sectionLabel;
-    },
-  });
+  @field sectionId = contains(StringField);
+  @field sectionNumber = contains(StringField);
+  @field sectionLabel = contains(StringField);
   @field showInNav = contains(BooleanField, {
     computeVia: function () {
       return true;

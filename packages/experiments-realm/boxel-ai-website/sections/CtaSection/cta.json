@@ -1,0 +1,35 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CtaSection",
+        "module": "../cta-section"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "CTA",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "sectionNumber": "008",
+      "sectionLabel": "Join the Builders",
+      "headline": "What will you build?",
+      "body": null,
+      "actions": [],
+      "primaryCtaText": null,
+      "primaryCtaUrl": null,
+      "secondaryCtaText": null,
+      "secondaryCtaUrl": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

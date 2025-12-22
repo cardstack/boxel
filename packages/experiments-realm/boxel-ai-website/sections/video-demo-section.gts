@@ -14,7 +14,9 @@ export class VideoDemoSection extends SectionCard {
 
   @field title = contains(StringField);
   @field description = contains(StringField);
-  @field badge = contains(enumField(StringField, { options: ['video', 'demo', 'tutorial'] })),
+  @field badge = contains(
+    enumField(StringField, { options: ['video', 'demo', 'tutorial'] }),
+  );
   @field videoUrl = contains(URLField);
   @field posterUrl = contains(URLField);
   @field duration = contains(StringField);

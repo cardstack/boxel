@@ -1,0 +1,31 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "StackArchitectureSection",
+        "module": "../stack-architecture-section"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tiles": [],
+      "cardInfo": {
+        "notes": null,
+        "title": "Stack Architecture",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "headline": "Legacy stacks weren't built for AI.",
+      "subheadline": null,
+      "sectionLabel": "AI-Native Stack",
+      "sectionNumber": "003"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

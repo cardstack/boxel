@@ -2,33 +2,26 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "Site",
-        "module": "../site-config"
+        "name": "DocsLayoutCard",
+        "module": "../boxel-docs-layout"
       }
     },
     "type": "card",
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": "Boxel",
+        "title": "Docs Page",
         "description": null,
         "thumbnailURL": null
       },
-      "siteTitle": "Boxel",
-      "ctaPrimaryUrl": "https://app.boxel.ai",
-      "ctaPrimaryText": "Open App",
-      "ctaSecondaryUrl": "https://app.boxel.ai/signin",
-      "ctaSecondaryText": "Sign In"
+      "sections": [],
+      "showSidebar": true,
+      "currentPageId": "docs"
     },
     "relationships": {
-      "pages": {
+      "site": {
         "links": {
-          "self": null
-        }
-      },
-      "brandGuide": {
-        "links": {
-          "self": null
+          "self": "../Site/boxel-site"
         }
       },
       "cardInfo.theme": {

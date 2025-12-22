@@ -1,0 +1,41 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "BuilderEconomySection",
+        "module": "../builder-economy-section"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Builder Economy",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "sectionNumber": "007",
+      "sectionLabel": "Builder Economy",
+      "headline": "Don't pay AI companies—pay each other.",
+      "subheadline": null,
+      "oldWayHeadline": null,
+      "oldWayBody": null,
+      "newWayHeadline": null,
+      "newWayBody": null,
+      "newWayBullets": [],
+      "generateCostRange": null,
+      "remixCostRange": null,
+      "sellableTypes": [],
+      "publishingSteps": [],
+      "footerHeadline": null,
+      "footerBody": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

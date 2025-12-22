@@ -1,0 +1,31 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SoftwareMediaSection",
+        "module": "../software-media-section"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tabs": [],
+      "cardInfo": {
+        "notes": null,
+        "title": "Software as Media",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "headline": "Software that behaves like media.",
+      "subheadline": null,
+      "sectionLabel": "AI-Native Composition",
+      "sectionNumber": "004"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

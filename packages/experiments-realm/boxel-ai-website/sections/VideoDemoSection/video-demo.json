@@ -1,0 +1,34 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "VideoDemoSection",
+        "module": "../video-demo-section"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "badge": "video",
+      "title": "The Complete Workflow",
+      "cardInfo": {
+        "notes": null,
+        "title": "Video Demo",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "duration": null,
+      "videoUrl": null,
+      "posterUrl": null,
+      "description": null,
+      "sectionLabel": "Demo",
+      "sectionNumber": "002"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

@@ -1,5 +1,4 @@
 import {
-  // Component,
   FieldDef,
   field,
   contains,
@@ -9,9 +8,7 @@ import StringField from 'https://cardstack.com/base/string';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import ColorField from 'https://cardstack.com/base/color';
 
-import { SectionCard } from './section-card';
-
-class FlowStepField extends FieldDef {
+export class FlowStepField extends FieldDef {
   static displayName = 'Flow Step';
 
   @field stepIcon = contains(StringField);
@@ -20,7 +17,7 @@ class FlowStepField extends FieldDef {
   @field isAiAction = contains(BooleanField);
 }
 
-class FlowTabField extends FieldDef {
+export class FlowTabField extends FieldDef {
   static displayName = 'Flow Tab';
 
   @field tabIcon = contains(StringField);
@@ -32,19 +29,4 @@ class FlowTabField extends FieldDef {
   @field flowSteps = containsMany(FlowStepField);
   @field footerNote = contains(StringField);
   @field accentColor = contains(ColorField);
-}
-
-export class SoftwareMediaSection extends SectionCard {
-  static displayName = 'Software as Media';
-
-  @field headline = contains(StringField);
-  @field subheadline = contains(StringField);
-  @field tabs = containsMany(FlowTabField);
-
-  /** Template Features:
-   * Video player with play button overlay
-   * Optional scroll-scrub interaction
-   * Progress bar
-   * Info overlay at bottom
-   */
 }

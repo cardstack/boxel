@@ -1,0 +1,30 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Task",
+        "module": "../task"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Design Review",
+        "description": "Review new dashboard mockups",
+        "thumbnailURL": null
+      },
+      "taskName": "Design Review",
+      "description": "Review new dashboard mockups and provide feedback",
+      "assignee": "Avery",
+      "status": "blocked"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}
