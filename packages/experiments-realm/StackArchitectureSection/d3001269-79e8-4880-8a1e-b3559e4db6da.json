@@ -1,0 +1,43 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "StackArchitectureSection",
+        "module": "../boxel-ai-website/sections/stack-architecture-section"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tiles": [
+        {
+          "tileNumber": "01",
+          "headline": "One File. Full Stack.",
+          "body": null,
+          "accentColor": null
+        }
+      ],
+      "cardInfo": {
+        "notes": null,
+        "title": "Legacy stacks weren't built for AI.",
+        "description": "AI excels at reading and writing files. So we built an architecture where one file type defines your entire application—schema, templates, relationships, and commands.",
+        "thumbnailURL": null
+      },
+      "headline": "Legacy stacks weren't built for AI.",
+      "subheadline": "AI excels at reading and writing files. So we built an architecture where one file type defines your entire application—schema, templates, relationships, and commands.",
+      "sectionLabel": "AI-Native Stack",
+      "sectionNumber": "003"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "tiles.0.linkedCard": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
