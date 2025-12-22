@@ -71,7 +71,6 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { getRoomIdForRealmAndUser } from '../helpers/mock-matrix/_utils';
 import { setupApplicationTest } from '../helpers/setup';
-import { find } from '@ember/test-helpers';
 
 const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
 const skillsRealmURL = ensureTrailingSlash(ENV.resolvedSkillsRealmURL);
@@ -672,11 +671,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let roomState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
     assert.strictEqual(roomState.model, llmIdToChangeTo);
-    assert.strictEqual(
-      roomState.selectionSource,
-      'user',
-      'LLM selection from the menu is marked as user-selected',
-    );
   });
 
   test('active LLM event includes metadata when switching models', async function (assert) {
@@ -842,73 +836,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
     assert.dom('[data-test-llm-select-selected]').hasText(interactFallbackName);
-    await click('[data-test-close-ai-assistant]');
-  });
-
-  test('user-selected LLM persists across submode switches', async function (assert) {
-    await visitOperatorMode({
-      stacks: [
-        [
-          {
-            id: `${testRealmURL}index`,
-            format: 'isolated',
-          },
-        ],
-      ],
-    });
-
-    await click('[data-test-open-ai-assistant]');
-    await waitFor('[data-room-settled]');
-
-    // Record the default model in interact mode
-    let initialModelText = find(
-      '[data-test-llm-select-selected]',
-    )?.textContent?.trim()!;
-
-    // Switch to a non-default LLM via the selector
-    await click('[data-test-llm-select-selected]');
-    await click('[data-test-llm-select-item="openai/gpt-4o-mini"] button');
-    await click('[data-test-llm-select-selected]');
-
-    await waitUntil(() => {
-      let state = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
-      return state.model === 'openai/gpt-4o-mini';
-    });
-
-    let selectedState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
-    assert.strictEqual(
-      selectedState.selectionSource,
-      'user',
-      'Manual selection is recorded as user-selected',
-    );
-
-    // Switch to Code mode; user-selected LLM should remain active
-    await click('[data-test-submode-switcher] button');
-    await click('[data-test-boxel-menu-item-text="Code"]');
-    assert
-      .dom('[data-test-llm-select-selected]')
-      .hasText(
-        modelNameFor('openai/gpt-4o-mini'),
-        'User-selected LLM persists when switching to code mode',
-      );
-
-    // Switch back to Interact mode; still should be the same user-selected LLM
-    await click('[data-test-submode-switcher] button');
-    await click('[data-test-boxel-menu-item-text="Interact"]');
-    assert
-      .dom('[data-test-llm-select-selected]')
-      .hasText(
-        modelNameFor('openai/gpt-4o-mini'),
-        'User-selected LLM persists when switching back to interact mode',
-      );
-
-    // Sanity check: the user-selected model differs from the initial default
-    assert.notStrictEqual(
-      initialModelText,
-      modelNameFor('openai/gpt-4o-mini'),
-      'Test actually switched away from the default model',
-    );
-
     await click('[data-test-close-ai-assistant]');
   });
 

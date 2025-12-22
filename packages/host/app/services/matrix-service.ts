@@ -54,8 +54,6 @@ import {
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
-  DEFAULT_CODING_LLM,
-  DEFAULT_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
@@ -1527,11 +1525,7 @@ export default class MatrixService extends Service {
     return this.timelineLoadingState.get(this.currentRoomId) ?? false;
   }
 
-  async sendActiveLLMEvent(
-    roomId: string,
-    model: string,
-    selectionSource: 'system' | 'user' = 'system',
-  ) {
+  async sendActiveLLMEvent(roomId: string, model: string) {
     let modelConfiguration = this.systemCard?.modelConfigurations?.find(
       (configuration) => configuration.modelId === model,
     );
@@ -1540,7 +1534,6 @@ export default class MatrixService extends Service {
       model,
       toolsSupported: modelConfiguration?.toolsSupported,
       reasoningEffort: modelConfiguration?.reasoningEffort,
-      selectionSource,
     });
   }
 
@@ -1872,51 +1865,6 @@ export default class MatrixService extends Service {
       roomId: this.currentRoomId,
       skillCardIdsToActivate: defaultSkills.map((s) => s.id),
     });
-  }
-
-  private getPreferredDefaultModelForCodeMode(): string {
-    return (
-      this.systemCard?.defaultModelConfiguration?.modelId ??
-      this.systemCard?.modelConfigurations?.[0]?.modelId ??
-      DEFAULT_CODING_LLM
-    );
-  }
-
-  private getPreferredDefaultModelForInteractMode(): string {
-    return (
-      this.systemCard?.defaultModelConfiguration?.modelId ??
-      this.systemCard?.modelConfigurations?.[0]?.modelId ??
-      DEFAULT_LLM
-    );
-  }
-
-  async setLLMForCodeMode() {
-    return this.applyDefaultLLMForSubmode('code');
-  }
-
-  async setLLMForInteractMode() {
-    return this.applyDefaultLLMForSubmode('interact');
-  }
-
-  private async applyDefaultLLMForSubmode(submode: 'code' | 'interact') {
-    if (!this.currentRoomId) {
-      return;
-    }
-    let roomResource = this.roomResources.get(this.currentRoomId);
-    if (!roomResource) {
-      return;
-    }
-    if (roomResource.hasUserSelectedLLM) {
-      return;
-    }
-    let preferredModel =
-      submode === 'code'
-        ? this.getPreferredDefaultModelForCodeMode()
-        : this.getPreferredDefaultModelForInteractMode();
-    if (roomResource.activeLLM === preferredModel) {
-      return;
-    }
-    return roomResource.activateLLMTask.perform(preferredModel, 'system');
   }
 
   loadMoreAIRooms() {

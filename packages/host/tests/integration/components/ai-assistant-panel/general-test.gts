@@ -1419,7 +1419,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     await getService('matrix-service').sendActiveLLMEvent(
       roomId,
       'non-standard-llm-1',
-      'system',
     );
     await waitUntil(() =>
       find(`[data-test-llm-select-selected]`)?.textContent?.includes(
@@ -1429,7 +1428,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     await getService('matrix-service').sendActiveLLMEvent(
       roomId,
       'non-standard-llm-2',
-      'system',
     );
     await waitUntil(() =>
       find(`[data-test-llm-select-selected]`)?.textContent?.includes(
