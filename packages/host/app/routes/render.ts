@@ -837,10 +837,58 @@ export default class RenderRoute extends Route<Model> {
       }
       return;
     }
-    if (transition) {
-      this.intermediateTransitionTo('render.error');
+
+    // If we hit an error before the model hook runs, base params are not yet set.
+    // Create the prerender markers manually so the prerenderer can capture the error
+    // without trying to transition and triggering a router param error. We've given up
+    // on Ember's routing here, so mark the result as unusable to force eviction.
+    let params = transition?.to?.params as
+      | { id?: string; nonce?: string; options?: string }
+      | undefined;
+    let { container, errorElement } = this.#ensurePrerenderElements();
+    let reason = this.renderErrorState.reason ?? '';
+    let parsedReason: any;
+    try {
+      parsedReason = JSON.parse(reason);
+    } catch {
+      parsedReason = undefined;
+    }
+    if (parsedReason && typeof parsedReason === 'object') {
+      parsedReason.evict = true;
+      reason = JSON.stringify(parsedReason, null, 2);
     } else {
-      join(() => this.router.transitionTo('render.error'));
+      reason = JSON.stringify(
+        {
+          type: 'error',
+          error: {
+            status: 500,
+            title: 'Render failed',
+            message: reason || 'Render failed before model hook',
+            additionalErrors: null,
+          },
+          evict: true,
+        },
+        null,
+        2,
+      );
+    }
+    if (container) {
+      container.dataset.prerenderStatus = 'unusable';
+      if (params?.id) {
+        container.dataset.prerenderId = this.#normalizeCardId(params.id);
+      }
+      if (params?.nonce) {
+        container.dataset.prerenderNonce = params.nonce;
+      }
+    }
+    if (errorElement) {
+      if (params?.id) {
+        errorElement.dataset.prerenderId = this.#normalizeCardId(params.id);
+      }
+      if (params?.nonce) {
+        errorElement.dataset.prerenderNonce = params.nonce;
+      }
+      this.#writePrerenderError(errorElement, reason);
     }
   }
 }

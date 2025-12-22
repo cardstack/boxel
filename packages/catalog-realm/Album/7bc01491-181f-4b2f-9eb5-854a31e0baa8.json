@@ -1,12 +1,18 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Album",
+        "module": "../time-machine/album"
+      }
+    },
     "type": "card",
     "attributes": {
       "cardInfo": {
+        "notes": null,
         "title": null,
         "description": null,
-        "thumbnailURL": null,
-        "notes": null
+        "thumbnailURL": null
       }
     },
     "relationships": {
@@ -39,12 +45,11 @@
         "links": {
           "self": "../PolaroidImage/13453a4b-cf53-4796-a29a-2a96be626ef0"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../time-machine/album",
-        "name": "Album"
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

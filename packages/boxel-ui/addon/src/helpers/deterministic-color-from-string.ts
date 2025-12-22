@@ -2,7 +2,7 @@ import {
   calculateContrast,
   calculateLuminance,
   hslToRgb,
-  rgbToHex,
+  rgbToHexString,
   targetContrast,
 } from './color-tools.ts';
 
@@ -23,7 +23,7 @@ export function deterministicColorFromString(str?: string | null): string {
   const saturation = 65 + (hash % 15); // 65-80% for better contrast
 
   let lightness = 50; // Starting lightness value
-  let rgb = hslToRgb(hue, saturation, lightness);
+  let rgb = hslToRgb({ h: hue, s: saturation, l: lightness });
 
   // Adjust lightness to ensure target contrast ratio or above
   while (lightness <= 100) {
@@ -38,8 +38,8 @@ export function deterministicColorFromString(str?: string | null): string {
       break;
     }
     lightness++;
-    rgb = hslToRgb(hue, saturation, lightness);
+    rgb = hslToRgb({ h: hue, s: saturation, l: lightness });
   }
 
-  return rgbToHex(rgb);
+  return rgbToHexString(rgb);
 }

@@ -219,8 +219,6 @@ export class PatchCodeInput extends CardDef {
 export class CheckCorrectnessInput extends CardDef {
   @field targetType = contains(StringField);
   @field targetRef = contains(StringField);
-  @field fileUrl = contains(StringField);
-  @field cardId = contains(StringField);
   @field roomId = contains(StringField);
 }
 

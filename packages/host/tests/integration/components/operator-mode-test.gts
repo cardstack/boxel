@@ -71,6 +71,7 @@ module('Integration | operator-mode | basics', function (hooks) {
       .containsText(
         `missing file ${testRealmURL}FriendWithCSS/does-not-exist.json`,
       );
+    await percySnapshot(assert);
     await click('[data-test-toggle-details]');
     assert
       .dom('[data-test-error-details]')

@@ -10,7 +10,7 @@
     "attributes": {
       "ref": {
         "name": "default",
-        "module": "http://localhost:4201/catalog/fields/color-field"
+        "module": "http://localhost:4201/catalog/fields/color"
       },
       "title": "Color Field",
       "readMe": "",
