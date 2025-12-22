@@ -97,11 +97,8 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
         [],
         'No violations reported',
       );
-      assert.deepEqual(
-        response.body.data.attributes.warningTypes ?? [],
-        [],
-        'No warning types reported',
-      );
+      let warningTypes = response.body.data.attributes.warningTypes ?? [];
+      assert.deepEqual(warningTypes, [], 'No warning types reported');
     });
   });
 
@@ -317,8 +314,9 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           1,
           'one violating resource is reported',
         );
+        let warningTypes = response.body.data.attributes.warningTypes ?? [];
         assert.deepEqual(
-          response.body.data.attributes.warningTypes ?? [],
+          warningTypes,
           ['has-private-dependencies'],
           'warningTypes includes has-private-dependencies',
         );

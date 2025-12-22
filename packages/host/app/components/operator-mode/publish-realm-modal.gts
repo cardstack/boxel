@@ -85,9 +85,8 @@ export default class PublishRealmModal extends Component<Signature> {
   @tracked private privateDependencyViolations:
     | PrivateDependencyViolation[]
     | null = null;
-  @tracked private errorDocumentViolations:
-    | ErrorDocumentViolation[]
-    | null = null;
+  @tracked private errorDocumentViolations: ErrorDocumentViolation[] | null =
+    null;
   @tracked private warningTypes: string[] | null = null;
 
   @tracked private initialSelectionsSet = false;
@@ -107,8 +106,7 @@ export default class PublishRealmModal extends Component<Signature> {
     return (
       !this.hasSelectedPublishedRealmURLs ||
       this.isUnpublishingAnyRealms ||
-      this.isPublishing ||
-      this.hasBlockingPublishabilityWarnings
+      this.isPublishing
     );
   }
 
@@ -680,10 +678,7 @@ export default class PublishRealmModal extends Component<Signature> {
           </div>
         {{else}}
           {{#if this.shouldShowPrivateDependencyWarning}}
-            <div
-              class='publish-warning'
-              data-test-private-dependency-warning
-            >
+            <div class='publish-warning' data-test-private-dependency-warning>
               <div>
                 This workspace will have rendering errors when published because
                 of private external dependencies.
