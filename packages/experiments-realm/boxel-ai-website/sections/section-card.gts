@@ -1,6 +1,6 @@
 import {
-  CardDef,
   Component,
+  CardDef,
   field,
   contains,
 } from 'https://cardstack.com/base/card-api';
@@ -30,13 +30,13 @@ export class SectionCard extends CardDef {
   });
 
   // Subclasses override with their own isolated template
-  // static isolated = class Isolated extends Component<typeof this> {
-  //   <template>
-  //     <section id={{@model.sectionId}} class='section'>
-  //       <div class='section-content'>
-  //         {{! Override in subclass }}
-  //       </div>
-  //     </section>
-  //   </template>
-  // };
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <section id={{@model.sectionId}} class='section'>
+        <div class='section-content'>
+          {{! Override in subclass }}
+        </div>
+      </section>
+    </template>
+  };
 }

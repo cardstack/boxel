@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../footer-section",
+        "name": "FooterSection"
+      }
+    },
+    "attributes": {
+      "leftHeadline": "Build the software you actually use.",
+      "primaryCtaText": null,
+      "primaryCtaUrl": null,
+      "linkColumns": [],
+      "copyrightText": "© Boxel",
+      "versionText": "v1.0",
+      "sectionNumber": null,
+      "sectionLabel": null,
+      "cardInfo": {
+        "title": "Footer",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "brandGuide": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

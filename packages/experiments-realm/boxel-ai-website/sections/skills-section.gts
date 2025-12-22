@@ -1,11 +1,11 @@
 import {
-  // Component,
   FieldDef,
   field,
   contains,
   containsMany,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
+import ColorField from 'https://cardstack.com/base/color';
 import enumField from 'https://cardstack.com/base/enum';
 
 import { SectionCard } from './section-card';
@@ -20,7 +20,7 @@ class SkillItemField extends FieldDef {
   );
   @field skillDescription = contains(StringField);
   @field skillSections = containsMany(StringField);
-  @field accentColor = contains(StringField);
+  @field accentColor = contains(ColorField);
 }
 
 export class SkillsSection extends SectionCard {

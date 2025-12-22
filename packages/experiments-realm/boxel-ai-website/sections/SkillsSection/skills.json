@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SkillsSection",
+        "module": "../skills-section"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "body": null,
+      "skills": [],
+      "bullets": [],
+      "cardInfo": {
+        "notes": null,
+        "title": "Skills",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "headline": "Choose your model. Own your prompts.",
+      "footerNote": null,
+      "sectionLabel": "AI Extensibility",
+      "sectionNumber": "005"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

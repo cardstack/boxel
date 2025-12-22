@@ -1,0 +1,31 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "ThreeModesSection",
+        "module": "../three-modes-section"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Workspace Modes",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "sectionNumber": "002",
+      "sectionLabel": "AI-Native Workspace",
+      "headline": "Pick the mode that matches your flow.",
+      "subheadline": null,
+      "modes": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

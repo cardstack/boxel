@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CatalogSection",
+        "module": "../catalog-section"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Catalog",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "headline": "Skip generation. Remix proven solutions.",
+      "categories": [],
+      "subheadline": null,
+      "catalogItems": [],
+      "sectionLabel": "AI-Searchable Catalog",
+      "sectionNumber": "006",
+      "themeSwatches": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

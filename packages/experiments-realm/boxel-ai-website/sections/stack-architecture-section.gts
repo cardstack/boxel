@@ -1,26 +1,12 @@
 import {
-  // Component,
-  CardDef,
-  FieldDef,
   field,
   contains,
   containsMany,
-  linksTo,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
-import ColorField from 'https://cardstack.com/base/color';
 
+import { FeatureTileField } from '../fields/feature-tile-field';
 import { SectionCard } from './section-card';
-
-class FeatureTileField extends FieldDef {
-  static displayName = 'Feature Tile';
-
-  @field tileNumber = contains(StringField);
-  @field headline = contains(StringField);
-  @field body = contains(StringField);
-  @field linkedCard = linksTo(() => CardDef);
-  @field accentColor = contains(ColorField);
-}
 
 export class StackArchitectureSection extends SectionCard {
   static displayName = 'Stack Architecture';
