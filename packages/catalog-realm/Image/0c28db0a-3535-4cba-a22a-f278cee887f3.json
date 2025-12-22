@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "url": "https://i.boxel.site/ca5b7364-5de1-4d82-7fc4-61427778b600/public",
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/image",
+        "name": "default"
+      }
+    }
+  }
+}

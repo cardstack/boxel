@@ -54,45 +54,115 @@
       },
       "specs.2": {
         "links": {
-          "self": "../Spec/aaa928ff-b1d3-49f6-a4fb-d39e736c0d7f"
+          "self": "../Spec/16320d37-fac6-417c-ae20-c583ea0c8a2e"
         }
       },
       "specs.3": {
         "links": {
-          "self": "../Spec/1baaa928-ffb1-43c9-b624-fbd39e736c0d"
+          "self": "../Spec/c3a0d4d5-c206-4a1d-a501-cbbcdf610180"
         }
       },
       "specs.4": {
         "links": {
-          "self": "../Spec/0fa0bb69-4d39-4bea-b46f-2b184fecfd3c"
+          "self": "../Spec/d4d5c206-7a1d-4501-8bbc-df6101800772"
         }
       },
       "specs.5": {
         "links": {
-          "self": "../Spec/06cc5cce-ff21-49e6-a438-7626f71e5b3c"
+          "self": "../Spec/067a1da5-01cb-4cdf-a101-8007720f10d0"
         }
       },
       "specs.6": {
         "links": {
-          "self": "../Spec/48a563be-eac1-4550-8c21-d9ea0f16ee22"
+          "self": "../Spec/d5c2067a-1da5-41cb-bcdf-61018007720f"
         }
       },
       "specs.7": {
         "links": {
-          "self": "../Spec/ceff2109-e6e4-4876-a6f7-1e5b3cbdb165"
+          "self": "../Spec/cbbcdf61-0180-4772-8f10-d0792517ea38"
         }
       },
       "specs.8": {
         "links": {
-          "self": "../Spec/e80009b7-c737-4933-87c1-3ab3347782b9"
+          "self": "../Spec/7a1da501-cbbc-4f61-8180-07720f10d079"
         }
       },
       "specs.9": {
         "links": {
-          "self": "../Spec/2109e6e4-3876-46f7-9e5b-3cbdb1653e87"
+          "self": "../Spec/c2067a1d-a501-4bbc-9f61-018007720f10"
         }
       },
       "specs.10": {
+        "links": {
+          "self": "../Spec/1da501cb-bcdf-4101-8007-720f10d07925"
+        }
+      },
+      "specs.11": {
+        "links": {
+          "self": "../Spec/63beeac1-b550-4c21-99ea-0f16ee228250"
+        }
+      },
+      "specs.12": {
+        "links": {
+          "self": "../Spec/20f75ed6-f7d4-4806-98cf-71a2b3471688"
+        }
+      },
+      "specs.13": {
+        "links": {
+          "self": "../Spec/f75ed6f7-d438-4698-8f71-a2b3471688bf"
+        }
+      },
+      "specs.14": {
+        "links": {
+          "self": "../Spec/4a63774c-c4e7-4e37-927c-4185efb2dd0c"
+        }
+      },
+      "specs.15": {
+        "links": {
+          "self": "../Spec/527c4185-efb2-4d0c-ab59-881ec9d51570"
+        }
+      },
+      "specs.16": {
+        "links": {
+          "self": "../Spec/01800772-0f10-4079-a517-ea38f3ba43d5"
+        }
+      },
+      "specs.17": {
+        "links": {
+          "self": "../Spec/61018007-720f-40d0-b925-17ea38f3ba43"
+        }
+      },
+      "specs.18": {
+        "links": {
+          "self": "../Spec/2517ea38-f3ba-43d5-920a-fb1936279570"
+        }
+      },
+      "specs.19": {
+        "links": {
+          "self": "../Spec/aaa928ff-b1d3-49f6-a4fb-d39e736c0d7f"
+        }
+      },
+      "specs.20": {
+        "links": {
+          "self": "../Spec/1baaa928-ffb1-43c9-b624-fbd39e736c0d"
+        }
+      },
+      "specs.21": {
+        "links": {
+          "self": "../Spec/0fa0bb69-4d39-4bea-b46f-2b184fecfd3c"
+        }
+      },
+      "specs.22": {
+        "links": {
+          "self": "../Spec/06cc5cce-ff21-49e6-a438-7626f71e5b3c"
+        }
+      },
+      "specs.23": {
+        "links": {
+          "self": "../Spec/2109e6e4-3876-46f7-9e5b-3cbdb1653e87"
+        }
+      },
+      "specs.24": {
         "links": {
           "self": "../Spec/09e6e438-7626-471e-9b3c-bdb1653e8778"
         }
@@ -100,6 +170,16 @@
       "publisher": {
         "links": {
           "self": "../Publisher/5f27bc69-6e15-4027-bff5-5c893a2642d9"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/e-commerce-online-sales"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/product-catalogs"
         }
       },
       "examples.0": {
@@ -137,14 +217,34 @@
           "self": "../ProductRotationImage/6ede2552-217c-420e-babc-ce1b7475afec"
         }
       },
-      "categories.0": {
+      "examples.7": {
         "links": {
-          "self": "../Category/e-commerce-online-sales"
+          "self": "../CloudflareImage/201e70b6-8cf3-451d-8682-d5589ee39b85"
         }
       },
-      "categories.1": {
+      "examples.8": {
         "links": {
-          "self": "../Category/product-catalogs"
+          "self": "../CloudflareImage/cd5fb423-355e-4df1-a01e-70b68cf3f51d"
+        }
+      },
+      "examples.9": {
+        "links": {
+          "self": "../CloudflareImage/355e0df1-201e-40b6-8cf3-f51d8682d558"
+        }
+      },
+      "examples.10": {
+        "links": {
+          "self": "../CloudflareImage/b423355e-0df1-401e-b0b6-8cf3f51d8682"
+        }
+      },
+      "examples.11": {
+        "links": {
+          "self": "../CloudflareImage/0df1201e-70b6-4cf3-b51d-8682d5589ee3"
+        }
+      },
+      "examples.12": {
+        "links": {
+          "self": "../CloudflareImage/70b68cf3-f51d-4682-9558-9ee39b850a4a"
         }
       },
       "cardInfo.theme": {

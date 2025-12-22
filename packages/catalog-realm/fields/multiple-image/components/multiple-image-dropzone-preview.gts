@@ -12,20 +12,7 @@ import {
   SortableItemModifier as sortableItem,
 } from '@cardstack/boxel-ui/modifiers';
 
-type UploadStatus = 'idle' | 'pending' | 'success' | 'error';
-
-interface UploadEntry {
-  id: string;
-  file: File;
-  preview: string;
-  uploadedImageUrl?: string;
-  selected?: boolean;
-  readProgress?: number;
-  isReading?: boolean;
-  isUploading?: boolean;
-  uploadStatus?: UploadStatus;
-  uploadError?: string;
-}
+import type { UploadEntry } from '../image-upload-types';
 
 interface MultipleImageDropzonePreviewArgs {
   Args: {
@@ -93,11 +80,7 @@ export default class MultipleImageDropzonePreview extends GlimmerComponent<Multi
       {{else}}
         <div class='image-wrapper'>
           <img
-            src={{if
-              @entry.uploadedImageUrl
-              @entry.uploadedImageUrl
-              @entry.preview
-            }}
+            src={{if @entry.url @entry.url @entry.preview}}
             alt=''
             class='list-image'
           />
@@ -124,11 +107,11 @@ export default class MultipleImageDropzonePreview extends GlimmerComponent<Multi
 
       <div class='list-info'>
         <div class='list-name'>{{if
-            @entry.uploadedImageUrl
-            @entry.uploadedImageUrl
+            @entry.url
+            @entry.url
             @entry.file.name
           }}</div>
-        {{#unless @entry.uploadedImageUrl}}
+        {{#unless @entry.url}}
           <div class='list-size'>{{@formatSize @entry.file.size}}</div>
         {{/unless}}
         {{#if @entry.uploadError}}

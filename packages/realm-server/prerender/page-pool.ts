@@ -63,6 +63,25 @@ export class PagePool {
     await this.#ensureStandbyPool();
   }
 
+  async evictIdleRealms(maxIdleMs: number): Promise<string[]> {
+    if (!Number.isFinite(maxIdleMs) || maxIdleMs <= 0) {
+      return [];
+    }
+    let now = Date.now();
+    let evicted: string[] = [];
+    for (let [realm, entry] of [...this.#realmPages.entries()]) {
+      if (entry.type !== 'pool') {
+        continue;
+      }
+      if (now - entry.lastUsedAt < maxIdleMs) {
+        continue;
+      }
+      await this.disposeRealm(realm);
+      evicted.push(realm);
+    }
+    return evicted;
+  }
+
   async getPage(realm: string): Promise<{
     page: Page;
     reused: boolean;

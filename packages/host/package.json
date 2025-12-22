@@ -43,6 +43,7 @@
     "@cardstack/local-types": "workspace:*",
     "@cardstack/requirejs-monaco-ember-polyfill": "catalog:",
     "@cardstack/runtime-common": "workspace:*",
+    "@cardstack/view-transitions": "catalog:",
     "@ember/optional-features": "^2.0.0",
     "@ember/string": "^3.1.1",
     "@ember/test-helpers": "^3.3.1",

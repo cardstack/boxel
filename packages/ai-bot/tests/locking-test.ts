@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { PgAdapter } from '@cardstack/postgres';
-import { acquireLock, releaseLock } from '../lib/queries';
+import { acquireRoomLock, releaseRoomLock } from '../lib/queries';
 import { Client } from 'pg';
 
 function prepareTestDB() {
@@ -44,62 +44,107 @@ module('AI Bot Locking', (hooks) => {
     previousDatabase = undefined;
   });
 
-  test('acquireLock creates a pending lock row and blocks concurrent acquisition', async (assert) => {
-    assert.expect(4);
-    let eventId = 'event-pending-lock';
+  test('room lock serializes processing within a room', async (assert) => {
+    assert.expect(5);
+    let roomId = '!room:example';
+    let firstEventId = 'event-pending-lock';
 
-    let acquired = await acquireLock(pgAdapter, eventId, 'instance-a');
+    let acquired = await acquireRoomLock(
+      pgAdapter,
+      roomId,
+      'instance-a',
+      firstEventId,
+    );
     assert.true(acquired, 'first acquisition should succeed');
 
     let rows = await pgAdapter.execute(
-      'SELECT completed_at FROM ai_bot_event_processing WHERE event_id_being_processed = $1',
-      { bind: [eventId] },
+      'SELECT event_id_being_processed, completed_at FROM ai_bot_event_processing WHERE room_id = $1',
+      { bind: [roomId] },
     );
     assert.strictEqual(rows.length, 1, 'lock row should be inserted');
+    assert.strictEqual(
+      rows[0].event_id_being_processed,
+      firstEventId,
+      'event id should be recorded for the pending lock',
+    );
     assert.strictEqual(
       rows[0].completed_at,
       null,
       'lock row should be pending',
     );
 
-    let concurrentAcquire = await acquireLock(pgAdapter, eventId, 'instance-b');
+    let concurrentAcquire = await acquireRoomLock(
+      pgAdapter,
+      roomId,
+      'instance-b',
+      'event-forced-concurrent',
+    );
     assert.false(
       concurrentAcquire,
       'second acquisition should fail while pending',
     );
 
-    await releaseLock(pgAdapter, eventId);
+    await releaseRoomLock(pgAdapter, roomId);
   });
 
-  test('releaseLock timestamps the row and prevents replayed events', async (assert) => {
-    assert.expect(4);
-    let eventId = 'event-complete-lock';
+  test('lock can be reacquired for the same room after completion', async (assert) => {
+    assert.expect(6);
+    let roomId = '!room:example';
+    let firstEventId = 'event-complete-lock';
+    let secondEventId = 'event-next-lock';
 
-    await acquireLock(pgAdapter, eventId, 'instance-a');
-    await releaseLock(pgAdapter, eventId);
+    await acquireRoomLock(pgAdapter, roomId, 'instance-a', firstEventId);
+    await releaseRoomLock(pgAdapter, roomId);
 
-    let rows = await pgAdapter.execute(
-      'SELECT completed_at FROM ai_bot_event_processing WHERE event_id_being_processed = $1',
-      { bind: [eventId] },
+    let completedRows = await pgAdapter.execute(
+      'SELECT completed_at FROM ai_bot_event_processing WHERE room_id = $1',
+      { bind: [roomId] },
     );
-    assert.strictEqual(rows.length, 1, 'completed lock row should still exist');
+    assert.strictEqual(
+      completedRows.length,
+      1,
+      'completed lock row should still exist',
+    );
     assert.ok(
-      rows[0].completed_at,
+      completedRows[0].completed_at,
       'completed_at should be populated after release',
     );
 
-    let replayAcquire = await acquireLock(pgAdapter, eventId, 'instance-b');
-    assert.false(
-      replayAcquire,
-      'replayed events should be ignored once completed',
+    let reacquire = await acquireRoomLock(
+      pgAdapter,
+      roomId,
+      'instance-b',
+      secondEventId,
+    );
+    assert.true(reacquire, 'room lock should be reusable after completion');
+
+    let activeRows = await pgAdapter.execute(
+      'SELECT event_id_being_processed, completed_at FROM ai_bot_event_processing WHERE room_id = $1',
+      { bind: [roomId] },
+    );
+    assert.strictEqual(
+      activeRows[0].event_id_being_processed,
+      secondEventId,
+      'lock reuse should update the active event id',
+    );
+    assert.strictEqual(
+      activeRows[0].completed_at,
+      null,
+      'reacquired lock should be pending again',
     );
 
-    let freshAcquire = await acquireLock(
+    let differentRoomAcquire = await acquireRoomLock(
       pgAdapter,
-      'different-event',
+      '!different:example',
       'instance-c',
+      'event-different-room',
     );
-    assert.true(freshAcquire, 'new events should still acquire a lock');
-    await releaseLock(pgAdapter, 'different-event');
+    assert.true(
+      differentRoomAcquire,
+      'locks in different rooms should not block each other',
+    );
+
+    await releaseRoomLock(pgAdapter, roomId);
+    await releaseRoomLock(pgAdapter, '!different:example');
   });
 });

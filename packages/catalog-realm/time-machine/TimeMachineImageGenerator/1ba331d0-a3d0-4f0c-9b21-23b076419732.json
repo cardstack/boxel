@@ -19,12 +19,49 @@
         "startValue": 1970
       },
       "creativeNote": "He had the best rap career of all-time",
-      "sourceImageUrl": "https://tse4.mm.bing.net/th/id/OIP.LIMg7oWe_QOyQdlZJZqm4wHaJi?cb=12&w=474&h=474&c=7&p=0"
+      "sourceImageUrl": {
+        "imageUrl": null
+      }
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
           "self": null
+        }
+      },
+      "generatedImages.0": {
+        "links": {
+          "self": "../../PolaroidImage/914de3ac-5fa3-4497-97a3-b390e3dae99d"
+        }
+      },
+      "generatedImages.1": {
+        "links": {
+          "self": "../../PolaroidImage/cf539796-e29a-4a96-be62-6ef095fcd847"
+        }
+      },
+      "generatedImages.2": {
+        "links": {
+          "self": "../../PolaroidImage/65b3d342-1345-4a4b-8f53-9796e29a2a96"
+        }
+      },
+      "generatedImages.3": {
+        "links": {
+          "self": "../../PolaroidImage/e29a2a96-be62-4ef0-95fc-d847e3851c21"
+        }
+      },
+      "generatedImages.4": {
+        "links": {
+          "self": "../../PolaroidImage/fe2c79f8-d173-42af-a94d-5ded65b3d342"
+        }
+      },
+      "generatedImages.5": {
+        "links": {
+          "self": "../../PolaroidImage/13453a4b-cf53-4796-a29a-2a96be626ef0"
+        }
+      },
+      "sourceImageUrl.imageCard": {
+        "links": {
+          "self": "../../Image/0c28db0a-3535-4cba-a22a-f278cee887f3"
         }
       }
     }

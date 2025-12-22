@@ -4,7 +4,7 @@ import supertest from 'supertest';
 import { join, basename } from 'path';
 import type { Server } from 'http';
 import type { DirResult } from 'tmp';
-import { existsSync, readJSONSync } from 'fs-extra';
+import { existsSync, readJSONSync, statSync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   isSingleCardDocument,
@@ -1816,6 +1816,61 @@ module(basename(__filename), function () {
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           assert.strictEqual(response.body.data.length, 1, 'found one card');
+        });
+
+        test('no-op patch returns existing lastModified and does not rewrite file', async function (assert) {
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'person-1.json',
+          );
+          let initialStat = statSync(cardFile);
+
+          let initialResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            initialResponse.status,
+            200,
+            'initial GET succeeds',
+          );
+          let initialLastModified = initialResponse.body.data.meta.lastModified;
+          assert.ok(initialLastModified, 'initial lastModified exists');
+
+          let response = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: './person',
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.body.data.meta.lastModified,
+            initialLastModified,
+            'lastModified remains unchanged after no-op patch',
+          );
+          assert.strictEqual(
+            response.body.data.attributes?.firstName,
+            'Mango',
+            'card remains unchanged',
+          );
+          let afterStat = statSync(cardFile);
+          assert.strictEqual(
+            afterStat.mtimeMs,
+            initialStat.mtimeMs,
+            'card file not rewritten for no-op patch',
+          );
         });
 
         test('patches card when index entry is an error using pristine doc', async function (assert) {

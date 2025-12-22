@@ -60,6 +60,7 @@ import { visitModuleDeps } from './code-ref';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
+import isEqual from 'lodash/isEqual';
 import { z } from 'zod';
 import type { CardFields } from './resource-types';
 import {
@@ -714,6 +715,8 @@ export class Realm {
         this.#adapter.openFile(p),
       );
       if (existingFile?.content === content) {
+        results.push({ path, lastModified: existingFile.lastModified });
+        fileMetaRows.push({ path });
         continue;
       }
       if (lastWriteType === 'module' && currentWriteType === 'instance') {
@@ -2192,16 +2195,17 @@ export class Realm {
         }
       }
     }
-    let originalClone = cloneDeep(
+    let original = cloneDeep(
       indexEntry.instance ?? {
         type: 'card',
         meta: { adoptsFrom: patch.meta.adoptsFrom },
       },
     ) as CardResource;
-    originalClone.meta ??= { adoptsFrom: patch.meta.adoptsFrom };
-    originalClone.meta.adoptsFrom =
-      originalClone.meta.adoptsFrom ?? patch.meta.adoptsFrom;
-    delete originalClone.meta.lastModified;
+    original.meta ??= { adoptsFrom: patch.meta.adoptsFrom };
+    original.meta.adoptsFrom =
+      original.meta.adoptsFrom ?? patch.meta.adoptsFrom;
+    delete original.meta.lastModified;
+    let originalClone = cloneDeep(original);
 
     if (
       originalClone.meta?.adoptsFrom &&
@@ -2247,6 +2251,39 @@ export class Realm {
 
       if (merged && Object.keys(merged).length !== 0) {
         primaryResource.relationships = merged;
+      }
+    }
+
+    // If the patch makes no semantic changes and doesn't include side-loaded
+    // resources, short-circuit to avoid touching the file (and changing mtime).
+    if (included.length === 0 && isEqual(primaryResource, original)) {
+      let entry = await this.#realmIndexQueryEngine.cardDocument(
+        new URL(instanceURL),
+        { loadLinks: true },
+      );
+      if (entry && entry.type !== 'error') {
+        let existingDoc = merge({}, entry.doc, {
+          data: {
+            links: { self: instanceURL },
+            meta: { lastModified: entry.doc.data.meta.lastModified },
+          },
+        });
+        let createdAt = await this.getCreatedTime(
+          this.paths.local(url) + '.json',
+        );
+        return createResponse({
+          body: JSON.stringify(existingDoc, null, 2),
+          init: {
+            headers: {
+              'content-type': SupportedMimeType.CardJson,
+              ...lastModifiedHeader(existingDoc),
+              ...(createdAt != null
+                ? { 'x-created': formatRFC7231(createdAt * 1000) }
+                : {}),
+            },
+          },
+          requestContext,
+        });
       }
     }
 

@@ -4,12 +4,12 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../image-card",
+        "module": "http://localhost:4201/catalog/fields/image/components/card-presentation",
         "name": "default"
       },
-      "specType": "card",
+      "specType": "component",
       "containedExamples": [],
-      "title": "ImageCard",
+      "title": "default",
       "description": null,
       "cardInfo": {
         "title": null,

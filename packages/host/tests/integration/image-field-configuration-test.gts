@@ -58,7 +58,7 @@ module('Integration | image field configuration', function (hooks) {
 
     // Create proper ImageField instance
     const imageField =
-      value.uploadedImageUrl || value.uploadUrl
+      value.url || value.uploadUrl
         ? new CatalogImageFieldClass(value)
         : new CatalogImageFieldClass();
 
@@ -139,7 +139,7 @@ module('Integration | image field configuration', function (hooks) {
   // ImageField Presentation Tests
   test('image presentation renders image presentation component', async function (assert) {
     await renderConfiguredField(
-      { uploadedImageUrl: 'https://example.com/image.jpg' },
+      { imageUrl: 'https://example.com/image.jpg' },
       {
         variant: 'browse',
         presentation: 'image',
@@ -154,7 +154,7 @@ module('Integration | image field configuration', function (hooks) {
 
   test('inline presentation renders inline presentation component', async function (assert) {
     await renderConfiguredField(
-      { uploadedImageUrl: 'https://example.com/image.jpg' },
+      { imageUrl: 'https://example.com/image.jpg' },
       {
         variant: 'browse',
         presentation: 'inline',
@@ -169,7 +169,7 @@ module('Integration | image field configuration', function (hooks) {
 
   test('card presentation renders card presentation component', async function (assert) {
     await renderConfiguredField(
-      { uploadedImageUrl: 'https://example.com/image.jpg' },
+      { imageUrl: 'https://example.com/image.jpg' },
       {
         variant: 'browse',
         presentation: 'card',
@@ -184,7 +184,7 @@ module('Integration | image field configuration', function (hooks) {
 
   test('invalid presentation falls back to default image', async function (assert) {
     await renderConfiguredField(
-      { uploadedImageUrl: 'https://example.com/image.jpg' },
+      { imageUrl: 'https://example.com/image.jpg' },
       {
         variant: 'browse',
         presentation: 'invalid-presentation',
@@ -203,7 +203,7 @@ module('Integration | image field configuration', function (hooks) {
   // ImageField Options Tests
   test('showImageModal option is ignored for avatar variant', async function (assert) {
     await renderConfiguredField(
-      { uploadedImageUrl: 'https://example.com/image.jpg' },
+      { imageUrl: 'https://example.com/image.jpg' },
       {
         variant: 'avatar',
         options: {
@@ -258,7 +258,7 @@ module('Integration | image field configuration', function (hooks) {
 
   test('image field embedded view falls back to default image presentation when config is missing', async function (assert) {
     await renderConfiguredField(
-      { uploadedImageUrl: 'https://example.com/image.jpg' },
+      { imageUrl: 'https://example.com/image.jpg' },
       {},
       'embedded',
     );

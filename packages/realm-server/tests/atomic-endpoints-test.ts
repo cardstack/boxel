@@ -707,8 +707,8 @@ module(basename(__filename), function () {
             );
             assert.strictEqual(
               updateResponse.body['atomic:results'].length,
-              0,
-              'no results when no writes occur',
+              1,
+              'one result entry is returned even when no writes occur',
             );
             assert.strictEqual(
               writeCalls,

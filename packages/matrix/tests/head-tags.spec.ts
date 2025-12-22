@@ -86,12 +86,6 @@ test.describe('Head tags', () => {
       'content',
       '1New Workspace',
     );
-
-    // TODO: restore in CS-9805
-    // await expect(page.locator('meta[property="og:url"]')).toHaveAttribute(
-    //   'content',
-    //   publishedRealmURLString,
-    // );
   });
 
   test('host mode updates head tags when navigating between cards', async ({
@@ -164,16 +158,9 @@ test.describe('Head tags', () => {
         @field title = contains(StringField);
 
         static head = class Head extends Component<typeof this> {
-          get url() {
-            return this.args.model?.id;
-          }
-
           <template>
             <meta name='custom-head-flag' content='custom-head' />
             <meta property='og:title' content='Custom Head Title' />
-            {{#if this.url}}
-              <meta property='og:url' content={{this.url}} />
-            {{/if}}
           </template>
         };
 

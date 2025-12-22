@@ -1,0 +1,56 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Album",
+        "module": "../time-machine/album"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "images.0": {
+        "links": {
+          "self": "../PolaroidImage/914de3ac-5fa3-4497-97a3-b390e3dae99d"
+        }
+      },
+      "images.1": {
+        "links": {
+          "self": "../PolaroidImage/cf539796-e29a-4a96-be62-6ef095fcd847"
+        }
+      },
+      "images.2": {
+        "links": {
+          "self": "../PolaroidImage/65b3d342-1345-4a4b-8f53-9796e29a2a96"
+        }
+      },
+      "images.3": {
+        "links": {
+          "self": "../PolaroidImage/e29a2a96-be62-4ef0-95fc-d847e3851c21"
+        }
+      },
+      "images.4": {
+        "links": {
+          "self": "../PolaroidImage/fe2c79f8-d173-42af-a94d-5ded65b3d342"
+        }
+      },
+      "images.5": {
+        "links": {
+          "self": "../PolaroidImage/13453a4b-cf53-4796-a29a-2a96be626ef0"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
