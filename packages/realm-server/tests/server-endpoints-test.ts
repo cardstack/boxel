@@ -66,6 +66,35 @@ import { monitoringAuthToken } from '../utils/monitoring';
 
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 
+async function createRealmServerSession(
+  matrixClient: MatrixClient,
+  request: SuperTest<Test>,
+) {
+  let openIdToken = await matrixClient.getOpenIdToken();
+  if (!openIdToken) {
+    throw new Error('matrixClient did not return an OpenID token');
+  }
+  let response = await request
+    .post('/_server-session')
+    .send(JSON.stringify(openIdToken))
+    .set('Accept', 'application/json')
+    .set('Content-Type', 'application/json');
+
+  let jwt = response.header['authorization'];
+  if (!jwt) {
+    throw new Error('Realm server did not send Authorization header');
+  }
+  let payload = JSON.parse(
+    Buffer.from(jwt.split('.')[1], 'base64').toString('utf8'),
+  ) as { sessionRoom: string };
+
+  return {
+    sessionRoom: payload.sessionRoom,
+    jwt,
+    status: response.status,
+  };
+}
+
 module(basename(__filename), function () {
   module(
     'Realm Server Endpoints (not specific to one realm)',
@@ -1714,32 +1743,18 @@ module(basename(__filename), function () {
             seed: realmSecretSeed,
           });
           await matrixClient.login();
-          let userId = matrixClient.getUserId();
-
-          let response = await request
-            .post('/_server-session')
-            .send(JSON.stringify({ user: userId }))
-            .set('Accept', 'application/json')
-            .set('Content-Type', 'application/json');
-          let json = response.body;
+          let { sessionRoom } = await createRealmServerSession(
+            matrixClient,
+            request,
+          );
 
           let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
 
-          if (!rooms.includes(json.room)) {
-            await matrixClient.joinRoom(json.room);
+          if (!rooms.includes(sessionRoom)) {
+            await matrixClient.joinRoom(sessionRoom);
           }
 
-          await matrixClient.sendEvent(json.room, 'm.room.message', {
-            body: `auth-response: ${json.challenge}`,
-            msgtype: 'm.text',
-          });
-
-          response = await request
-            .post('/_server-session')
-            .send(JSON.stringify({ user: userId, challenge: json.challenge }))
-            .set('Accept', 'application/json')
-            .set('Content-Type', 'application/json');
-          roomId = json.room;
+          roomId = sessionRoom;
         });
 
         hooks.afterEach(async function () {
@@ -2303,33 +2318,18 @@ module(basename(__filename), function () {
             seed: realmSecretSeed,
           });
           await matrixClient.login();
-          let userId = matrixClient.getUserId();
-
-          let response = await request
-            .post('/_server-session')
-            .send(JSON.stringify({ user: userId }))
-            .set('Accept', 'application/json')
-            .set('Content-Type', 'application/json');
-          let json = response.body;
+          let { sessionRoom, jwt } = await createRealmServerSession(
+            matrixClient,
+            request,
+          );
 
           let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
 
-          if (!rooms.includes(json.room)) {
-            await matrixClient.joinRoom(json.room);
+          if (!rooms.includes(sessionRoom)) {
+            await matrixClient.joinRoom(sessionRoom);
           }
 
-          await matrixClient.sendEvent(json.room, 'm.room.message', {
-            body: `auth-response: ${json.challenge}`,
-            msgtype: 'm.text',
-          });
-
-          response = await request
-            .post('/_server-session')
-            .send(JSON.stringify({ user: userId, challenge: json.challenge }))
-            .set('Accept', 'application/json')
-            .set('Content-Type', 'application/json');
-
-          jwtToken = response.headers['authorization'];
+          jwtToken = jwt;
         });
 
         hooks.afterEach(async function () {
@@ -2885,33 +2885,12 @@ module(basename(__filename), function () {
       await matrixClient.login();
       let userId = matrixClient.getUserId();
 
-      let response = await request
-        .post('/_server-session')
-        .send(JSON.stringify({ user: userId }))
-        .set('Accept', 'application/json')
-        .set('Content-Type', 'application/json');
+      let { jwt: token, status } = await createRealmServerSession(
+        matrixClient,
+        request,
+      );
 
-      assert.strictEqual(response.status, 401, 'HTTP 401 status');
-      let json = response.body;
-
-      let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
-
-      if (!rooms.includes(json.room)) {
-        await matrixClient.joinRoom(json.room);
-      }
-
-      await matrixClient.sendEvent(json.room, 'm.room.message', {
-        body: `auth-response: ${json.challenge}`,
-        msgtype: 'm.text',
-      });
-
-      response = await request
-        .post('/_server-session')
-        .send(JSON.stringify({ user: userId, challenge: json.challenge }))
-        .set('Accept', 'application/json')
-        .set('Content-Type', 'application/json');
-      assert.strictEqual(response.status, 201, 'HTTP 201 status');
-      let token = response.headers['authorization'];
+      assert.strictEqual(status, 201, 'HTTP 201 status');
       let decoded = jwt.verify(token, realmSecretSeed) as RealmServerTokenClaim;
       assert.strictEqual(decoded.user, userId);
       assert.notStrictEqual(

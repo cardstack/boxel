@@ -742,38 +742,39 @@ export function setupMatrixRoom(
     let userId = matrixClient.getUserId()!;
 
     let realmSetup = getRealmSetup();
+    let openIdToken = await matrixClient.getOpenIdToken();
+    if (!openIdToken) {
+      throw new Error('matrixClient did not return an OpenID token');
+    }
+
     let response = await realmSetup.request
       .post('/_server-session')
-      .send(JSON.stringify({ user: userId }))
+      .send(JSON.stringify(openIdToken))
       .set('Accept', 'application/json')
       .set('Content-Type', 'application/json');
 
-    let json = response.body;
+    let jwt = response.header['authorization'];
+    if (!jwt) {
+      throw new Error('Realm server did not send Authorization header');
+    }
+
+    let payload = JSON.parse(
+      Buffer.from(jwt.split('.')[1], 'base64').toString('utf8'),
+    ) as { sessionRoom: string };
 
     let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
 
-    if (!rooms.includes(json.room)) {
-      await matrixClient.joinRoom(json.room);
+    if (!rooms.includes(payload.sessionRoom)) {
+      await matrixClient.joinRoom(payload.sessionRoom);
     }
 
-    await matrixClient.sendEvent(json.room, 'm.room.message', {
-      body: `auth-response: ${json.challenge}`,
-      msgtype: 'm.text',
-    });
-
-    response = await realmSetup.request
-      .post('/_server-session')
-      .send(JSON.stringify({ user: userId, challenge: json.challenge }))
-      .set('Accept', 'application/json')
-      .set('Content-Type', 'application/json');
-
-    testAuthRoomId = json.room;
+    testAuthRoomId = payload.sessionRoom;
 
     await upsertSessionRoom(
       realmSetup.dbAdapter,
       realmSetup.testRealm.url,
       userId,
-      json.room,
+      payload.sessionRoom,
     );
   });
 

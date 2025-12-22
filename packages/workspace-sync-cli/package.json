@@ -1,6 +1,6 @@
 {
   "name": "@cardstack/workspace-sync-cli",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "license": "MIT",
   "description": "CLI tools for syncing files between local directories and Boxel workspaces",
   "main": "./dist/index.js",
