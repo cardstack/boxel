@@ -15,6 +15,7 @@ import type { SaveType } from '@cardstack/host/services/card-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
@@ -136,6 +137,7 @@ class _FileResource extends Resource<Args> {
   @service declare private cardService: CardService;
   @service declare private recentFilesService: RecentFilesService;
   @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private store: StoreService;
 
   constructor(owner: Owner) {
     super(owner);
@@ -341,6 +343,9 @@ class _FileResource extends Resource<Args> {
           clientRequestId: opts?.clientRequestId,
         },
       );
+      if (opts?.flushLoader) {
+        this.store.refreshReferencesForCodeChange('file write');
+      }
       if (this.innerState.state === 'not-found') {
         // TODO think about the "unauthorized" scenario
         throw new Error(
