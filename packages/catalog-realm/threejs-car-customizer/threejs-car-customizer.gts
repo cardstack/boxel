@@ -49,6 +49,7 @@ class ThreeCanvasModifier extends Modifier<ThreeCanvasModifierSignature> {
 export class ThreejsCarCustomizer extends CardDef {
   // ⁴ Main card definition
   static displayName = 'Threejs Car Customizer';
+  static prefersWideFormat = true;
 
   @field title = contains(StringField, {
     computeVia: function (this: ThreejsCarCustomizer) {
@@ -61,8 +62,6 @@ export class ThreejsCarCustomizer extends CardDef {
       variant: 'advanced',
       options: {
         defaultFormat: 'hex',
-        showRecent: true,
-        showContrastChecker: false,
       },
     },
   }); // ⁵ Customization colors with advanced picker
@@ -71,7 +70,6 @@ export class ThreejsCarCustomizer extends CardDef {
       variant: 'advanced',
       options: {
         defaultFormat: 'hex',
-        showRecent: true,
       },
     },
   });
@@ -80,7 +78,6 @@ export class ThreejsCarCustomizer extends CardDef {
       variant: 'advanced',
       options: {
         defaultFormat: 'hex',
-        showRecent: true,
       },
     },
   });
@@ -89,7 +86,6 @@ export class ThreejsCarCustomizer extends CardDef {
       variant: 'advanced',
       options: {
         defaultFormat: 'hex',
-        showRecent: true,
       },
     },
   });

@@ -19,29 +19,9 @@
       "description": null
     },
     "relationships": {
-      "statements.0": {
+      "statements": {
         "links": {
-          "self": "../Statement/boxel-ui-forms"
-        }
-      },
-      "statements.1": {
-        "links": {
-          "self": "../Statement/enum-field-config"
-        }
-      },
-      "statements.2": {
-        "links": {
-          "self": "../Statement/theming-system"
-        }
-      },
-      "statements.3": {
-        "links": {
-          "self": "../Statement/catalog-field-selection"
-        }
-      },
-      "statements.4": {
-        "links": {
-          "self": "../Statement/catalog-field-usage"
+          "self": null
         }
       },
       "cardInfo.theme": {
