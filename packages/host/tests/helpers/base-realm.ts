@@ -13,6 +13,7 @@ import type * as DatetimeFieldModule from 'https://cardstack.com/base/datetime';
 import type * as EmailFieldModule from 'https://cardstack.com/base/email';
 import type * as EnumModule from 'https://cardstack.com/base/enum';
 import type * as EthereumAddressModule from 'https://cardstack.com/base/ethereum-address';
+import type * as FileApiModule from 'https://cardstack.com/base/file-api';
 import type * as MarkdownFieldModule from 'https://cardstack.com/base/markdown';
 import type * as NumberFieldModule from 'https://cardstack.com/base/number';
 import type * as PhoneNumberFieldModule from 'https://cardstack.com/base/phone-number';
@@ -78,6 +79,9 @@ let ModelConfiguration: ModelConfiguration;
 
 type SystemCard = (typeof SystemCardModule)['SystemCard'];
 let SystemCard: SystemCard;
+
+type FileDef = (typeof FileApiModule)['FileDef'];
+let FileDef: FileDef;
 
 let cardAPI: typeof CardAPIModule;
 let field: (typeof CardAPIModule)['field'];
@@ -194,6 +198,10 @@ async function initialize() {
     await loader.import<typeof SystemCardModule>(`${baseRealm.url}system-card`)
   ).SystemCard;
 
+  FileDef = (
+    await loader.import<typeof FileApiModule>(`${baseRealm.url}file-api`)
+  ).FileDef;
+
   cardAPI = await loader.import<typeof CardAPIModule>(
     `${baseRealm.url}card-api`,
   );
@@ -260,6 +268,7 @@ export {
   CardsGrid,
   SystemCard,
   ModelConfiguration,
+  FileDef,
   field,
   CardDef,
   Component,
