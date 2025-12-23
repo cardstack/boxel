@@ -9,12 +9,12 @@
         "links": {
           "self": "./does-not-exist"
         }
-      },
-      "meta": {
-        "adoptsFrom": {
-          "module": "./friend.gts",
-          "name": "Friend"
-        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./friend.gts",
+        "name": "Friend"
       }
     }
   }
