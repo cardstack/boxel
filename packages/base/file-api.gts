@@ -44,6 +44,12 @@ export type SerializedFile = {
   contentHash?: string;
 };
 
+export type ByteStream = ReadableStream<Uint8Array>;
+
+export class FileTypeMismatchError extends Error {
+  name = 'FileTypeMismatchError';
+}
+
 export class FileDef extends BaseDef {
   static displayName = 'File';
   static icon = FileIcon;
@@ -60,6 +66,10 @@ export class FileDef extends BaseDef {
   static isolated: BaseDefComponent = View;
   static atom: BaseDefComponent = View;
   static edit: BaseDefComponent = Edit;
+
+  static async extractAttributes(_url: string, _stream: ByteStream) {
+    return {};
+  }
 
   serialize() {
     return {

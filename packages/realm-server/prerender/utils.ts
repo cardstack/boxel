@@ -348,10 +348,7 @@ export async function captureResult(
       let expectingRender = path.includes('/render/');
       let targetId = expectedId;
       let targetNonce = expectedNonce;
-      if (!expectingRender) {
-        targetId = null;
-        targetNonce = null;
-      } else if (!targetId || !targetNonce) {
+      if (expectingRender && (!targetId || !targetNonce)) {
         try {
           let segments = path.split('/').filter(Boolean);
           let renderIdx = segments.indexOf('render');

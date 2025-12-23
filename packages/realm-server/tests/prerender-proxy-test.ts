@@ -33,12 +33,13 @@ module(basename(__filename), function () {
 
     function makePrerenderer() {
       let renderCalls: Array<{
-        kind: 'card' | 'module';
+        kind: 'card' | 'module' | 'file-meta';
         args: {
           realm: string;
           url: string;
           auth: string;
           renderOptions?: RenderRouteOptions;
+          fileDef?: { module: string; name: string };
         };
       }> = [];
 
@@ -70,6 +71,16 @@ module(basename(__filename), function () {
             createdAt: Date.now(),
             deps: [],
             definitions: {},
+          };
+        },
+        async prerenderFileMeta(args) {
+          renderCalls.push({ kind: 'file-meta', args });
+          return {
+            serialized: null,
+            searchDoc: { url: args.url, title: 'file-meta through proxy' },
+            displayNames: ['Proxy File'],
+            deps: [],
+            types: [],
           };
         },
       };
@@ -170,6 +181,83 @@ module(basename(__filename), function () {
         tokenClaims.realm,
         realm,
         'encodes realm in prerender auth',
+      );
+    });
+
+    test('proxies file meta requests to the configured prerenderer', async function (assert) {
+      let { prerenderer, renderCalls } = makePrerenderer();
+      let dbAdapter = makeDbAdapter([
+        {
+          username: '@someone:localhost',
+          read: true,
+          write: true,
+          realm_owner: false,
+        },
+      ]);
+      let app = new Koa();
+      let router = new Router();
+      router.post(
+        '/_prerender-file-meta',
+        jwtMiddleware(realmSecretSeed),
+        handlePrerenderProxy({
+          kind: 'file-meta',
+          prerenderer,
+          dbAdapter,
+          createPrerenderAuth,
+        }),
+      );
+      app.use(router.routes());
+
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+      let fileURL = 'http://example/file.txt';
+      let realm = 'http://example/';
+      let payload = {
+        data: {
+          attributes: {
+            realm,
+            url: fileURL,
+            fileDef: { module: 'https://cardstack.com/base/file-api', name: 'FileDef' },
+          },
+        },
+      };
+
+      let response = await supertest(app.callback())
+        .post('/_prerender-file-meta')
+        .set('Authorization', `Bearer ${token}`)
+        .send(payload)
+        .expect(201);
+
+      assert.deepEqual(
+        response.body,
+        {
+          data: {
+            type: 'prerender-file-meta-result',
+            id: fileURL,
+            attributes: {
+              serialized: null,
+              searchDoc: { url: fileURL, title: 'file-meta through proxy' },
+              displayNames: ['Proxy File'],
+              deps: [],
+              types: [],
+            },
+          },
+        },
+        'returns file meta response body',
+      );
+      assert.deepEqual(renderCalls.length, 1, 'invokes prerenderer once');
+      assert.strictEqual(renderCalls[0]?.kind, 'file-meta');
+      assert.deepEqual(
+        renderCalls[0]?.args,
+        {
+          realm,
+          url: fileURL,
+          auth: renderCalls[0]?.args.auth,
+          fileDef: payload.data.attributes.fileDef,
+        },
+        'forwards request to prerenderer with derived realm and url',
       );
     });
 

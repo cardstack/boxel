@@ -77,6 +77,7 @@ export function buildPrerenderApp(options: {
     url: string;
     auth: string;
     renderOptions: RenderRouteOptions;
+    fileDef?: { module: string; name: string };
   };
 
   type PrerenderExecResult<R> = {
@@ -100,6 +101,7 @@ export function buildPrerenderApp(options: {
       warnTimeoutMessage: (url: string) => string;
       errorContext: string;
       execute: (args: PrerenderArgs) => Promise<PrerenderExecResult<R>>;
+      requireFileDef?: boolean;
       afterResponse?: (url: string, response: R) => void;
       drainingPromise?: Promise<void>;
     },
@@ -148,6 +150,16 @@ export function buildPrerenderApp(options: {
           { value: rawRealm, name: 'realm' },
           { value: rawAuth, name: 'auth' },
         ]);
+        if (options.requireFileDef) {
+          let fileDef = attrs.fileDef;
+          if (
+            !fileDef ||
+            typeof fileDef.module !== 'string' ||
+            typeof fileDef.name !== 'string'
+          ) {
+            missing.push('fileDef');
+          }
+        }
 
         log.debug(
           `received ${options.requestDescription} ${rawUrl}: realm=${rawRealm} options=${JSON.stringify(renderOptions)}`,
@@ -166,8 +178,9 @@ export function buildPrerenderApp(options: {
             errors: [
               {
                 status: 400,
-                message:
-                  'Missing or invalid required attributes: url, auth, realm',
+                message: `Missing or invalid required attributes: ${missing.join(
+                  ', ',
+                )}`,
               },
             ],
           };
@@ -185,6 +198,7 @@ export function buildPrerenderApp(options: {
             url,
             auth,
             renderOptions,
+            fileDef: attrs.fileDef,
           })
           .then((result) => ({ result }));
         let drainPromise = options.drainingPromise
@@ -311,6 +325,17 @@ export function buildPrerenderApp(options: {
         );
       }
     },
+  });
+
+  registerPrerenderRoute('/prerender-file-meta', {
+    requestDescription: 'file meta prerender request',
+    responseType: 'prerender-file-meta-result',
+    infoLabel: 'file meta prerendered',
+    warnTimeoutMessage: (url) => `file meta render of ${url} timed out`,
+    errorContext: '/prerender-file-meta',
+    execute: (args) => prerenderer.prerenderFileMeta(args),
+    drainingPromise: options.drainingPromise,
+    requireFileDef: true,
   });
 
   app

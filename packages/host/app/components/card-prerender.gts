@@ -21,6 +21,7 @@ import {
   type RenderResponse,
   type RenderError,
   type ModuleRenderResponse,
+  type FilePrerenderMeta,
   type Prerenderer,
   type Format,
   type PrerenderMeta,
@@ -37,6 +38,10 @@ import {
   type ModuleModelState,
   type ModuleTypesCache,
 } from '../routes/module';
+import {
+  buildFileMetaModel,
+  type FileMetaModelContext,
+} from '../routes/file-meta';
 
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
 import {
@@ -53,6 +58,7 @@ import {
 } from '../utils/render-timer-stub';
 
 import type LoaderService from '../services/loader-service';
+import type CardService from '../services/card-service';
 import type LocalIndexer from '../services/local-indexer';
 import type NetworkService from '../services/network';
 import type RenderService from '../services/render-service';
@@ -66,6 +72,7 @@ export default class CardPrerender extends Component {
   @service private declare renderService: RenderService;
   @service private declare localIndexer: LocalIndexer;
   @service private declare loaderService: LoaderService;
+  @service private declare cardService: CardService;
   #nonce = 0;
   #shouldClearCacheForNextRender = true;
   #prerendererDelegate!: Prerenderer;
@@ -91,6 +98,7 @@ export default class CardPrerender extends Component {
     this.#prerendererDelegate = {
       prerenderCard: this.prerender.bind(this),
       prerenderModule: this.prerenderModule.bind(this),
+      prerenderFileMeta: this.prerenderFileMeta.bind(this),
     };
     this.localIndexer.setup(this.#prerendererDelegate);
     window.addEventListener('boxel-render-error', this.#handleRenderErrorEvent);
@@ -165,6 +173,39 @@ export default class CardPrerender extends Component {
       }
       throw new Error(
         `card-prerender component is missing or being destroyed before module prerender of url ${url} was completed`,
+      );
+    });
+  }
+
+  private async prerenderFileMeta({
+    url,
+    fileDef,
+    realm: _realm,
+    auth: _auth,
+    renderOptions: _renderOptions,
+  }: {
+    realm: string;
+    url: string;
+    auth: string;
+    fileDef: { module: string; name: string };
+    renderOptions?: RenderRouteOptions;
+  }): Promise<FilePrerenderMeta> {
+    return await withRenderContext(async () => {
+      try {
+        let run = () =>
+          this.fileMetaPrerenderTask.perform({
+            url,
+            fileDef,
+          });
+        let result = isTesting() ? await run() : await withTimersBlocked(run);
+        return result.payload;
+      } catch (e: any) {
+        if (!didCancel(e)) {
+          throw e;
+        }
+      }
+      throw new Error(
+        `card-prerender component is missing or being destroyed before file meta prerender of url ${url} was completed`,
       );
     });
   }
@@ -335,6 +376,27 @@ export default class CardPrerender extends Component {
     },
   );
 
+  private fileMetaPrerenderTask = enqueueTask(
+    async ({
+      url,
+      fileDef,
+    }: {
+      url: string;
+      fileDef: { module: string; name: string };
+    }): Promise<{ payload: FilePrerenderMeta }> => {
+      this.#nonce++;
+      let result = await buildFileMetaModel(
+        {
+          id: url,
+          nonce: String(this.#nonce),
+          options: JSON.stringify({ fileDef }),
+        },
+        this.#fileMetaModelContext(),
+      );
+      return { payload: result.payload };
+    },
+  );
+
   #moduleModelContext(): ModuleModelContext {
     return {
       router: this.router,
@@ -354,6 +416,15 @@ export default class CardPrerender extends Component {
       setLastStoreResetKey: (key) => {
         this.#moduleLastStoreResetKey = key;
       },
+    };
+  }
+
+  #fileMetaModelContext(): FileMetaModelContext {
+    return {
+      router: this.router,
+      loaderService: this.loaderService,
+      cardService: this.cardService,
+      network: this.network,
     };
   }
 

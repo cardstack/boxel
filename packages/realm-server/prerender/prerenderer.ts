@@ -2,6 +2,7 @@ import {
   type RenderRouteOptions,
   type RenderResponse,
   type ModuleRenderResponse,
+  type FilePrerenderMeta,
   Deferred,
   logger,
 } from '@cardstack/runtime-common';
@@ -372,6 +373,93 @@ export class Prerenderer {
         return lastResult;
       }
       throw new Error(`module prerender attempts exhausted for ${url}`);
+    } finally {
+      try {
+        releaseGlobal?.();
+      } catch (_e) {
+        // best-effort release; avoids blocking future renders
+      }
+      deferred.fulfill();
+    }
+  }
+
+  async prerenderFileMeta({
+    realm,
+    url,
+    auth,
+    fileDef,
+    opts,
+    renderOptions: _renderOptions,
+  }: {
+    realm: string;
+    url: string;
+    auth: string;
+    fileDef: { module: string; name: string };
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    renderOptions?: RenderRouteOptions;
+  }): Promise<{
+    response: FilePrerenderMeta;
+    timings: { launchMs: number; renderMs: number };
+    pool: {
+      pageId: string;
+      realm: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    };
+  }> {
+    if (this.#stopped) {
+      throw new Error('Prerenderer has been stopped and cannot be used');
+    }
+    let prev = this.#pendingByRealm.get(realm) ?? Promise.resolve();
+    let deferred = new Deferred<void>();
+    this.#pendingByRealm.set(
+      realm,
+      prev.then(() => deferred.promise),
+    );
+
+    let releaseGlobal: (() => void) | undefined;
+    try {
+      await prev.catch((e) => {
+        log.debug('Previous prerender in chain failed (continuing):', e);
+      });
+      releaseGlobal = await this.#semaphore.acquire();
+
+      let result: {
+        response: FilePrerenderMeta;
+        timings: { launchMs: number; renderMs: number };
+        pool: {
+          pageId: string;
+          realm: string;
+          reused: boolean;
+          evicted: boolean;
+          timedOut: boolean;
+        };
+      };
+      try {
+        result = await this.#renderRunner.prerenderFileMetaAttempt({
+          realm,
+          url,
+          auth,
+          fileDef,
+          opts,
+        });
+      } catch (e) {
+        log.error(
+          `file meta prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
+          e,
+        );
+        await this.#restartBrowser();
+        result = await this.#renderRunner.prerenderFileMetaAttempt({
+          realm,
+          url,
+          auth,
+          fileDef,
+          opts,
+        });
+      }
+
+      return result;
     } finally {
       try {
         releaseGlobal?.();

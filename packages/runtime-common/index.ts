@@ -29,6 +29,17 @@ export interface PrerenderMeta {
   types: string[] | null;
 }
 
+export interface FileExtractionError {
+  message: string;
+  name?: string;
+  stack?: string;
+  isMismatch?: boolean;
+}
+
+export interface FilePrerenderMeta extends PrerenderMeta {
+  error?: FileExtractionError;
+}
+
 export interface RenderResponse extends PrerenderMeta {
   isolatedHTML: string | null;
   headHTML: string | null;
@@ -72,10 +83,14 @@ export type ModulePrerenderArgs = {
 };
 
 export type PrerenderCardArgs = ModulePrerenderArgs;
+export type PrerenderFileMetaArgs = ModulePrerenderArgs & {
+  fileDef: ResolvedCodeRef;
+};
 
 export interface Prerenderer {
   prerenderCard(args: PrerenderCardArgs): Promise<RenderResponse>;
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
+  prerenderFileMeta(args: PrerenderFileMetaArgs): Promise<FilePrerenderMeta>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
