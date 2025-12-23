@@ -7,32 +7,40 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import BooleanField from 'https://cardstack.com/base/boolean';
+
+import { dasherize } from '@cardstack/boxel-ui/helpers';
+
 import { SectionCard } from '../sections/section-card';
 
 // Wraps section cards with metadata for layout orchestrator
 export class PageSectionField extends FieldDef {
   static displayName = 'Page Section';
 
-  @field sectionId = contains(StringField);
-  @field sectionNumber = contains(StringField);
-  @field sectionLabel = contains(StringField);
-  @field showInNav = contains(BooleanField, {
-    computeVia: function () {
-      return true;
+  @field sectionId = contains(StringField, {
+    description: 'Used as anchor link id',
+    computeVia: function (this: PageSectionField) {
+      return [this.sectionNumber, this.sectionLabel]
+        .filter(Boolean)
+        .map(dasherize)
+        .join('-');
     },
+  });
+  @field sectionNumber = contains(StringField, {
+    description: 'For dropdown display',
+  });
+  @field sectionLabel = contains(StringField, {
+    description: 'For dropdown display',
+  });
+  @field showInNav = contains(BooleanField, {
+    description: 'Whether page should appear in section dropdown in nav item',
   });
   @field content = linksTo(SectionCard); // Polymorphic section card
 
-  // Embedded template delegates to section's isolated format
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      {{#if @model.sectionId}}
-        <div class='page-section-wrapper' id={{@model.sectionId}}>
-          {{#if @model.content}}
-            <@fields.content @format='isolated' />
-          {{/if}}
-        </div>
-      {{/if}}
+      <div class='page-section-wrapper' id={{@model.sectionId}}>
+        <@fields.content @format='isolated' />
+      </div>
     </template>
   };
 }

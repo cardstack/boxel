@@ -8,8 +8,14 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import UrlField from 'https://cardstack.com/base/url';
+import enumField from 'https://cardstack.com/base/enum';
 
-import { Button } from '@cardstack/boxel-ui/components';
+import DiscordIcon from '@cardstack/boxel-icons/brand-discord';
+import GithubIcon from '@cardstack/boxel-icons/brand-github';
+import Check from '@cardstack/boxel-icons/check';
+
+import { Button, Pill } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { SectionCard } from './section-card';
 import { AnimatedGrid } from '../animated-grid';
@@ -17,9 +23,44 @@ import { AnimatedGrid } from '../animated-grid';
 class BadgeField extends FieldDef {
   static displayName = 'Badge';
 
-  @field icon = contains(StringField);
+  @field icon = contains(
+    enumField(StringField, { options: ['checkmark', 'github', 'discord'] }),
+  );
   @field label = contains(StringField);
   @field url = contains(UrlField);
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <Pill
+        class='badge-field'
+        @variant='muted'
+        @kind={{if @model.url.length 'button'}}
+      >
+        <:iconLeft>
+          {{#if @model.icon}}
+            {{#if (eq @model.icon 'checkmark')}}
+              <Check width='14' height='14' />
+            {{else if (eq @model.icon 'github')}}
+              <GithubIcon width='14' height='14' />
+            {{else}}
+              <DiscordIcon width='14' height='14' />
+            {{/if}}
+          {{/if}}
+        </:iconLeft>
+        <:default>
+          <@fields.label />
+        </:default>
+      </Pill>
+      <style scoped>
+        button {
+          transition: none;
+        }
+        button:hover {
+          color: var(--secondary, var(--boxel-highlight));
+        }
+      </style>
+    </template>
+  };
 }
 
 export class HeroSection extends SectionCard {
@@ -43,7 +84,7 @@ export class HeroSection extends SectionCard {
    * Frosted glass effect on text container
    * Open source badge strip
    */
-  // Isolated template - hero presentation
+
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <section id={{@model.sectionId}} class='hero-section'>
@@ -74,7 +115,11 @@ export class HeroSection extends SectionCard {
           {{/if}}
 
           {{#if @model.description}}
-            <p class='hero-description'>{{@model.description}}</p>
+            <p class='hero-description'><@fields.description /></p>
+          {{/if}}
+
+          {{#if @model.badges.length}}
+            <@fields.badges class='hero-badges' />
           {{/if}}
 
           <div class='hero-actions'>
@@ -125,6 +170,10 @@ export class HeroSection extends SectionCard {
             var(--background) 0%,
             var(--muted) 100%
           );
+        }
+
+        p {
+          text-wrap: pretty;
         }
 
         .background-layer {
@@ -189,6 +238,16 @@ export class HeroSection extends SectionCard {
           max-width: 37.5rem;
         }
 
+        .hero-badges {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-3xs);
+        }
+        .hero-badges :deep(.containsMany-item),
+        .hero-badges :deep(.compound-field.embedded-format) {
+          display: contents;
+        }
+
         .hero-actions {
           display: flex;
           gap: var(--boxel-sp);
@@ -199,12 +258,22 @@ export class HeroSection extends SectionCard {
 
         .hero-button-primary {
           transition:
+            color var(--boxel-transition),
+            background-color var(--boxel-transition),
             transform var(--boxel-transition),
             opacity var(--boxel-transition);
         }
         .hero-button-primary:hover {
+          background-color: var(--accent);
+          color: var(--accent-foreground);
           opacity: 0.9;
           transform: translateY(-2px);
+        }
+        .hero-button-secondary {
+          transition: color var(--boxel-transition);
+        }
+        .hero-button-secondary:hover {
+          color: var(--secondary);
         }
 
         @media (max-width: 768px) {

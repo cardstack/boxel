@@ -1,4 +1,3 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 import {
   CardDef,
   field,
@@ -18,9 +17,15 @@ export class PageCard extends CardDef {
   @field pageId = contains(StringField);
   @field pageLabel = contains(StringField);
   @field pageUrl = contains(UrlField);
-  @field showInNav = contains(BooleanField);
-  @field navOrder = contains(NumberField);
-  @field hasDropdown = contains(BooleanField);
+  @field showInNav = contains(BooleanField, {
+    description: 'Whether page should appear in navbar',
+  });
+  @field navOrder = contains(NumberField, {
+    description: 'Order in navbar (1, 2, 3, 4, 5)',
+  });
+  @field hasDropdown = contains(BooleanField, {
+    description: 'Whether the page has dropdown menu for section jump',
+  });
 }
 
 // Site configuration - central registry for all pages

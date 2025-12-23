@@ -1,3 +1,6 @@
+import { tracked } from '@glimmer/tracking';
+import { on } from '@ember/modifier';
+
 import {
   CardDef,
   Component,
@@ -8,11 +11,16 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import BooleanField from 'https://cardstack.com/base/boolean';
-import { cn } from '@cardstack/boxel-ui/helpers';
-import { Site } from './site-config';
+
+import {
+  cn,
+  extractCssVariables,
+  sanitizeHtmlSafe,
+} from '@cardstack/boxel-ui/helpers';
+
 import { PageSectionField } from './fields/page-section-field';
-import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
+import { SiteNavbar } from './components/site-navbar';
+import { Site } from './site-config';
 
 class Isolated extends Component<typeof HomeLayoutCard> {
   @tracked isDarkMode = false;
@@ -21,9 +29,28 @@ class Isolated extends Component<typeof HomeLayoutCard> {
     this.isDarkMode = !this.isDarkMode;
   };
 
+  private get themeStyles() {
+    let css = this.args.model?.cardInfo?.theme?.cssVariables;
+    let selector = this.isDarkMode ? '.dark' : ':root';
+    return sanitizeHtmlSafe(extractCssVariables(css, selector));
+  }
+
   <template>
-    <div class={{cn 'home-layout' dark-mode=this.isDarkMode}}>
-      {{! Main sections container }}
+    <div
+      style={{this.themeStyles}}
+      class={{cn 'home-layout' dark-mode=this.isDarkMode}}
+    >
+      <SiteNavbar
+        @site={{@model.site}}
+        @currentPageId={{@model.currentPageId}}
+      />
+
+      {{#if @model.showDarkModeToggle}}
+        <button class='dark-mode-toggle' {{on 'click' this.toggleDarkMode}}>
+          {{if this.isDarkMode '☀️' '🌙'}}
+        </button>
+      {{/if}}
+
       <main class='sections-container'>
         {{#if @model.sections.length}}
           {{#each @fields.sections as |Section|}}
@@ -33,32 +60,29 @@ class Isolated extends Component<typeof HomeLayoutCard> {
           <div class='empty-state'>No sections configured</div>
         {{/if}}
       </main>
-
-      {{#if @model.showDarkModeToggle}}
-        <button class='dark-mode-toggle' {{on 'click' this.toggleDarkMode}}>
-          {{if this.isDarkMode '☀️' '🌙'}}
-        </button>
-      {{/if}}
     </div>
 
     <style scoped>
       /* Layout styles */
       .home-layout {
+        --home-background: var(--background, var(--boxel-light));
+        --home-foreground: var(--foreground, var(--boxel-dark));
+
         min-height: 100vh;
-        background: var(--background, #ffffff);
-        color: var(--foreground, #000000);
+        background: var(--background);
+        color: var(--foreground);
       }
 
       .home-layout.dark-mode {
-        background: var(--background, #1a1a1a);
-        color: var(--foreground, #ffffff);
+        --home-background: var(--background, #1a1a1a);
+        --home-foreground: var(--foreground, var(--boxel-light));
       }
 
       /* CSS API for sections */
       .sections-container {
         --section-padding-block: clamp(3rem, 8vw, 6rem);
         --section-padding-inline: clamp(1.5rem, 5vw, 3rem);
-        --section-max-width: 1400px;
+        --section-max-width: 87.5rem;
         --section-gap: clamp(2rem, 6vw, 4rem);
         --hero-padding-block: clamp(5rem, 12vw, 10rem);
         --footer-padding-block: clamp(2rem, 5vw, 3rem);
@@ -106,11 +130,14 @@ export class HomeLayoutCard extends CardDef {
   static displayName = 'Home Layout';
   static prefersWideFormat = true;
 
-  @field site = linksTo(() => Site);
-  @field currentPageId = contains(StringField);
+  @field site = linksTo(() => Site, {
+    description: 'Links to site configuration',
+  });
+  @field currentPageId = contains(StringField, {
+    description: 'Identifies current page',
+  });
   @field showDarkModeToggle = contains(BooleanField);
   @field sections = containsMany(PageSectionField);
 
-  // Isolated template - main layout orchestrator
   static isolated = Isolated;
 }
