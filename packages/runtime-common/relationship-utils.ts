@@ -61,7 +61,10 @@ export function normalizeRelationships(
   return normalized;
 }
 
-function parseRelationshipKey(key: string): { fieldName: string; index?: number } {
+function parseRelationshipKey(key: string): {
+  fieldName: string;
+  index?: number;
+} {
   let parts = key.split('.');
   let last = parts[parts.length - 1];
   if (parts.length > 1 && /^\d+$/.test(last)) {

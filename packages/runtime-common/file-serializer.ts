@@ -97,7 +97,9 @@ export default function serialize({
   result.data.type = 'card';
 
   if (result.data.relationships) {
-    for (let { relationship } of relationshipEntries(result.data.relationships)) {
+    for (let { relationship } of relationshipEntries(
+      result.data.relationships,
+    )) {
       delete relationship.data;
     }
   }
