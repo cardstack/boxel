@@ -1633,11 +1633,10 @@ class LinksToMany<FieldT extends CardDefConstructor>
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
         }
-        //links.self is used to tell the consumer of this payload how to get the resource via HTTP. data.id is used to tell the
-        //consumer of this payload how to get the resource from the side loaded included bucket. we need to strictly only
-        //consider data.id when calling the resourceFrom() function (which actually loads the resource out of the included
-        //bucket). we should never used links.self as part of that consideration. If there is a missing data.id in the resource entity
-        //that means that the serialization is incorrect and is not JSON-API compliant.
+        // links.self is used to tell the consumer of this payload how to get the resource via HTTP.
+        // data.id is used to tell the consumer how to find the resource in the included bucket.
+        // Prefer data.id for resourceFrom(), but fall back to links.self when data.id is missing
+        // (the array-style linksToMany format omits data.id).
         let resourceId =
           value.data && 'id' in value.data ? value.data?.id : undefined;
         if (!resourceId) {
