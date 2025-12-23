@@ -22,10 +22,20 @@ export default class Application extends Route {
     if (typeof globalThis !== 'undefined') {
       // This global function allows the markdown field to asynchronously
       // load monaco context for syntax highlighting.
+      let route = this;
       (globalThis as any).__loadMonacoForMarkdown ??= async () => {
-        let monacoContext = await this.monacoService.getMonacoContext();
-        return monacoContext;
+        if (route.isDestroying || route.isDestroyed) {
+          return undefined;
+        }
+        return await route.monacoService.getMonacoContext();
       };
+    }
+  }
+
+  willDestroy(): void {
+    super.willDestroy?.();
+    if (typeof globalThis !== 'undefined') {
+      delete (globalThis as any).__loadMonacoForMarkdown;
     }
   }
 }
