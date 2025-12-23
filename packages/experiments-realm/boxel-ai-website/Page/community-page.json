@@ -3,28 +3,28 @@
     "meta": {
       "adoptsFrom": {
         "name": "PageCard",
-        "module": "../boxel-ai-website/site-config"
+        "module": "../site-config"
       }
     },
     "type": "card",
     "attributes": {
-      "pageId": "product",
-      "pageUrl": null,
       "cardInfo": {
         "notes": null,
-        "title": "Product",
-        "description": null,
+        "title": "Community Page",
+        "description": "Community landing page",
         "thumbnailURL": null
       },
-      "navOrder": 1,
-      "pageLabel": "Product",
+      "pageId": "community",
+      "pageLabel": "Community",
+      "pageUrl": "/community",
       "showInNav": true,
-      "hasDropdown": false
+      "navOrder": 5,
+      "hasDropdown": true
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": null
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
         }
       }
     }

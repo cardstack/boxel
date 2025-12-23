@@ -16,59 +16,59 @@
       },
       "sections": [
         {
-          "sectionId": null,
           "sectionNumber": "001",
-          "sectionLabel": "Overview"
+          "sectionLabel": "Overview",
+          "showInNav": true
         },
         {
-          "sectionId": null,
           "sectionNumber": "002",
-          "sectionLabel": "Demo"
+          "sectionLabel": "Demo",
+          "showInNav": true
         },
         {
-          "sectionId": null,
           "sectionNumber": "002",
-          "sectionLabel": "AI-Native Workspace"
+          "sectionLabel": "AI-Native Workspace",
+          "showInNav": true
         },
         {
-          "sectionId": null,
           "sectionNumber": "003",
-          "sectionLabel": "AI-Native Stack"
+          "sectionLabel": "AI-Native Stack",
+          "showInNav": true
         },
         {
-          "sectionId": null,
           "sectionNumber": "004",
-          "sectionLabel": "AI-Native Composition"
+          "sectionLabel": "AI-Native Composition",
+          "showInNav": true
         },
         {
-          "sectionId": null,
           "sectionNumber": "005",
-          "sectionLabel": "AI Extensibility"
+          "sectionLabel": "AI Extensibility",
+          "showInNav": true
         },
         {
-          "sectionId": null,
           "sectionNumber": "005",
-          "sectionLabel": "Model Sources"
+          "sectionLabel": "Model Sources",
+          "showInNav": true
         },
         {
-          "sectionId": null,
           "sectionNumber": "006",
-          "sectionLabel": "AI-Searchable Catalog"
+          "sectionLabel": "AI-Searchable Catalog",
+          "showInNav": true
         },
         {
-          "sectionId": null,
           "sectionNumber": "007",
-          "sectionLabel": "Builder Economy"
+          "sectionLabel": "Builder Economy",
+          "showInNav": true
         },
         {
-          "sectionId": null,
           "sectionNumber": "008",
-          "sectionLabel": "Join the Builders"
+          "sectionLabel": "Join the Builders",
+          "showInNav": true
         },
         {
-          "sectionId": null,
           "sectionNumber": null,
-          "sectionLabel": null
+          "sectionLabel": null,
+          "showInNav": false
         }
       ],
       "currentPageId": "home",

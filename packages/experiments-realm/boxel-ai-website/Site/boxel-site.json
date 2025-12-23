@@ -21,14 +21,14 @@
       "ctaSecondaryText": "Sign In"
     },
     "relationships": {
-      "pages": {
+      "pages.0": {
         "links": {
-          "self": null
+          "self": "../Page/docs-page"
         }
       },
       "brandGuide": {
         "links": {
-          "self": null
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
         }
       },
       "cardInfo.theme": {

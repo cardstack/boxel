@@ -1,26 +1,27 @@
 import Component from '@glimmer/component';
+
+import { Button } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
-import { Site } from '../site-config';
+import type { Site } from '../site-config';
 
 export interface SiteNavbarSignature {
   Args: {
-    site: Site;
-    currentPageId: string | null;
+    site?: Site;
+    currentPageId?: string | null;
   };
 }
 
+// TODO: add dropdown nav
 export class SiteNavbar extends Component<SiteNavbarSignature> {
-  get sortedPages() {
-    return (this.args.site.pages || []).slice().sort((a, b) => {
-      let orderA = a.navOrder ?? 0;
-      let orderB = b.navOrder ?? 0;
-      return orderA - orderB;
-    });
-  }
-
-  isActive(pageId: string | null | undefined) {
-    return Boolean(pageId) && pageId === this.args.currentPageId;
+  private get sortedNavPages() {
+    return this.args.site?.pages
+      ?.filter((p) => p.showInNav)
+      ?.sort((a, b) => {
+        let orderA = a.navOrder ?? 0;
+        let orderB = b.navOrder ?? 0;
+        return orderA - orderB;
+      });
   }
 
   <template>
@@ -28,31 +29,36 @@ export class SiteNavbar extends Component<SiteNavbarSignature> {
       <div class='logo'>{{@site.siteTitle}}</div>
 
       <div class='nav-links'>
-        {{#each this.sortedPages as |page|}}
-          {{#if
-            (if page.showInNav page.showInNav (eq page.showInNav undefined))
-          }}
-            <a
-              href={{page.pageUrl}}
-              class={{cn 'nav-link' active=(this.isActive page.pageId)}}
-            >
-              {{page.pageLabel}}
-            </a>
-          {{/if}}
+        {{#each this.sortedNavPages as |page|}}
+          <a
+            href={{page.pageUrl}}
+            class={{cn 'nav-link' is-active=(eq page.pageId @currentPageId)}}
+          >
+            {{page.pageLabel}}
+          </a>
         {{/each}}
       </div>
 
       <div class='nav-actions'>
         {{#if @site.ctaSecondaryText}}
-          <a class='secondary' href={{@site.ctaSecondaryUrl}}>
-            {{@site.ctaSecondaryText}}
-          </a>
+          <Button
+            class='site-navbar-cta-secondary'
+            @as='anchor'
+            @href={{@site.ctaSecondaryUrl}}
+            @kind='muted'
+            @size='small'
+          >{{@site.ctaSecondaryText}}</Button>
         {{/if}}
         {{#if @site.ctaPrimaryText}}
-          <a class='primary' href={{@site.ctaPrimaryUrl}}>
-            {{@site.ctaPrimaryText}}
-          </a>
+          <Button
+            class='site-navbar-cta-primary'
+            @as='anchor'
+            @href={{@site.ctaPrimaryUrl}}
+            @kind='primary'
+            @size='small'
+          >{{@site.ctaPrimaryText}}</Button>
         {{/if}}
+
       </div>
     </nav>
 
@@ -102,7 +108,7 @@ export class SiteNavbar extends Component<SiteNavbarSignature> {
         background: var(--muted, #f6f6f6);
       }
 
-      .nav-link.active {
+      .nav-link.is-active {
         color: var(--foreground, #111);
         background: var(--brand-muted, rgba(0, 0, 0, 0.05));
         font-weight: 600;
@@ -111,26 +117,26 @@ export class SiteNavbar extends Component<SiteNavbarSignature> {
       .nav-actions {
         display: flex;
         align-items: center;
-        gap: 0.75rem;
+        gap: var(--boxel-sp-2xs);
       }
-
-      .nav-actions a {
-        text-decoration: none;
-        padding: 0.5rem 0.9rem;
-        border-radius: 0.75rem;
-        font-weight: 600;
-        border: 1px solid var(--border, #e5e5e5);
+      .site-navbar-cta-primary {
+        transition:
+          color var(--boxel-transition),
+          background-color var(--boxel-transition),
+          transform var(--boxel-transition),
+          opacity var(--boxel-transition);
       }
-
-      .nav-actions .secondary {
-        color: var(--foreground, #111);
-        background: var(--card, #fff);
+      .site-navbar-cta-primary:hover {
+        background-color: var(--accent);
+        color: var(--accent-foreground);
+        opacity: 0.9;
+        transform: translateY(-2px);
       }
-
-      .nav-actions .primary {
-        color: var(--card, #fff);
-        background: var(--brand-primary, #111);
-        border-color: var(--brand-primary, #111);
+      .site-navbar-cta-secondary {
+        transition: color var(--boxel-transition);
+      }
+      .site-navbar-cta-secondary:hover {
+        color: var(--secondary);
       }
 
       @media (max-width: 900px) {

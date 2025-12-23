@@ -8,13 +8,44 @@
     },
     "type": "card",
     "attributes": {
-      "badges": [],
+      "badges": [
+        {
+          "icon": "github",
+          "label": "100% Open Source",
+          "url": null
+        },
+        {
+          "icon": "checkmark",
+          "label": "MIT License",
+          "url": null
+        },
+        {
+          "icon": "checkmark",
+          "label": "Contribute",
+          "url": null
+        },
+        {
+          "icon": null,
+          "label": "GitHub",
+          "url": "https://github.com/cardstack/boxel"
+        },
+        {
+          "icon": null,
+          "label": "Docs",
+          "url": null
+        },
+        {
+          "icon": "discord",
+          "label": "Discord",
+          "url": null
+        }
+      ],
       "eyebrow": "001 — Overview",
       "tagline": "Build what you use. Use what you build.",
       "cardInfo": {
         "notes": null,
         "title": "Home",
-        "description": "Boxel is an AI-native development environment where cards are the building blocks. Create, compose, and share reusable components that work together seamlessly.",
+        "description": "",
         "thumbnailURL": null
       },
       "description": "Boxel is an AI-native development environment where cards are the building blocks. Create, compose, and share reusable components that work together seamlessly.",
