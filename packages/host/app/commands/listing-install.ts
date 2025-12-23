@@ -12,8 +12,10 @@ import {
   planModuleInstall,
   planInstanceInstall,
   PlanBuilder,
-  isCardCollectionDocument,
+  extractRelationshipIds,
+  isCardInstance,
   isSingleCardDocument,
+  type Relationship,
 } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
 import type {
@@ -30,6 +32,7 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import type CardService from '../services/card-service';
 import type RealmServerService from '../services/realm-server';
+import type StoreService from '../services/store';
 import type { Listing } from '@cardstack/catalog/listing/listing';
 
 const log = logger('catalog:install');
@@ -40,6 +43,7 @@ export default class ListingInstallCommand extends HostBaseCommand<
 > {
   @service declare private realmServer: RealmServerService;
   @service declare private cardService: CardService;
+  @service declare private store: StoreService;
 
   description =
     'Install catalog listing with bringing them to code mode, and then remixing them via AI';
@@ -69,7 +73,7 @@ export default class ListingInstallCommand extends HostBaseCommand<
 
     let examplesToInstall = listing.examples;
     if (listing.examples?.length) {
-      examplesToInstall = await this.expandExampleInstances(listing.examples);
+      examplesToInstall = await this.expandInstances(listing.examples);
     }
 
     // side-effects
@@ -160,14 +164,17 @@ export default class ListingInstallCommand extends HostBaseCommand<
     });
   }
 
-  private async expandExampleInstances(
-    examples: Array<{ id: string }>,
-  ): Promise<CardDef[]> {
-    let api = await this.cardService.getAPI();
+  // Walk relationships by fetching linked cards and enqueueing their ids.
+  private async expandInstances(instances: CardDef[]): Promise<CardDef[]> {
     let instancesById = new Map<string, CardDef>();
     let visited = new Set<string>();
-    let queue: string[] = examples.map((example) => example.id);
+    let queue: string[] = instances
+      .map((instance) => instance.id)
+      .filter((id): id is string => typeof id === 'string');
 
+    // - Queue of ids to traverse; visited prevents duplicate relationship ids.
+    // - Each loop extracts relationship ids and enqueues them, so we descend
+    //   through the relationship graph breadth-first.
     while (queue.length > 0) {
       let id = queue.shift();
       if (!id || visited.has(id)) {
@@ -175,21 +182,24 @@ export default class ListingInstallCommand extends HostBaseCommand<
       }
       visited.add(id);
 
-      let doc = await this.cardService.fetchJSON(id);
-      if (!isSingleCardDocument(doc)) {
-        throw new Error(`Expected single document for ${id}`);
+      let cachedInstance = this.store.peek(id);
+      let relationships: Record<string, Relationship> = {};
+      let baseUrl = id;
+      let instance = isCardInstance(cachedInstance)
+        ? cachedInstance
+        : await this.store.get(id);
+      if (!isCardInstance(instance)) {
+        throw new Error(`Expected card instance for ${id}`);
       }
-      if (!doc.data.id) {
-        doc.data.id = id;
+      instancesById.set(instance.id ?? id, instance);
+      let serialized = await this.cardService.serializeCard(instance, {
+        omitQueryFields: true,
+      });
+      if (serialized.data.id) {
+        baseUrl = serialized.data.id;
       }
-      let instance = (await api.createFromSerialized(
-        doc.data,
-        doc,
-        new URL(doc.data.id),
-      )) as CardDef;
-      instancesById.set(instance.id ?? doc.data.id, instance);
+      relationships = serialized.data.relationships ?? {};
 
-      let relationships = doc.data.relationships ?? {};
       let entries = Object.entries(relationships);
       log.debug(`Relationships for ${id}:`);
       if (entries.length === 0) {
@@ -204,10 +214,7 @@ export default class ListingInstallCommand extends HostBaseCommand<
       log.debug(JSON.stringify(summary, null, 2));
 
       for (let rel of Object.values(relationships)) {
-        let relatedIds = await this.collectRelationshipIds(
-          rel,
-          doc.data.id ?? id,
-        );
+        let relatedIds = extractRelationshipIds(rel, baseUrl);
         for (let relatedId of relatedIds) {
           if (!visited.has(relatedId)) {
             queue.push(relatedId);
@@ -217,77 +224,5 @@ export default class ListingInstallCommand extends HostBaseCommand<
     }
 
     return [...instancesById.values()];
-  }
-
-  private async collectRelationshipIds(
-    relationship: {
-      links?: { self?: string | null; related?: string | null };
-      data?: unknown;
-    },
-    relativeTo: string,
-  ): Promise<string[]> {
-    let ids = this.extractRelationshipIds(relationship.data);
-    if (ids.length > 0) {
-      return ids;
-    }
-
-    let link = relationship.links?.related ?? relationship.links?.self;
-    if (!link) {
-      return ids;
-    }
-    let href = new URL(link, relativeTo).href;
-    let response = await this.cardService.fetchJSON(href);
-    if (!response) {
-      return ids;
-    }
-    if (isSingleCardDocument(response)) {
-      if (response.data.id) {
-        ids.push(response.data.id);
-      }
-      return ids;
-    }
-    if (isCardCollectionDocument(response)) {
-      for (let item of response.data) {
-        if (item.id) {
-          ids.push(item.id);
-        }
-      }
-      return ids;
-    }
-    if (
-      typeof response === 'object' &&
-      response !== null &&
-      'data' in response
-    ) {
-      ids.push(
-        ...this.extractRelationshipIds((response as { data?: unknown }).data),
-      );
-    }
-    return ids;
-  }
-
-  private extractRelationshipIds(data: unknown): string[] {
-    let ids: string[] = [];
-    if (!data || typeof data !== 'object') {
-      return ids;
-    }
-    if (Array.isArray(data)) {
-      for (let item of data) {
-        if (item && typeof item === 'object' && 'id' in item) {
-          let id = (item as { id?: string }).id;
-          if (typeof id === 'string') {
-            ids.push(id);
-          }
-        }
-      }
-      return ids;
-    }
-    if ('id' in data) {
-      let id = (data as { id?: string }).id;
-      if (typeof id === 'string') {
-        ids.push(id);
-      }
-    }
-    return ids;
   }
 }

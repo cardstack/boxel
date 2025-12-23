@@ -76,13 +76,14 @@ const unknownSpecId = `${mockCatalogURL}Spec/unknown-no-type`;
 
 //examples
 const authorExampleId = `${mockCatalogURL}author/Author/example`;
+const authorCompanyExampleId = `${mockCatalogURL}author/AuthorCompany/example`;
 
 const authorCardSource = `
-  import { field, contains, CardDef, FieldDef } from 'https://cardstack.com/base/card-api';
+  import { field, contains, linksTo, CardDef } from 'https://cardstack.com/base/card-api';
   import StringField from 'https://cardstack.com/base/string';
 
 
-  export class AuthorCompany extends FieldDef {
+  export class AuthorCompany extends CardDef {
     static displayName = 'AuthorCompany';
     @field name = contains(StringField);
     @field address = contains(StringField);
@@ -100,7 +101,7 @@ const authorCardSource = `
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
     });
-    @field company = contains(AuthorCompany);
+    @field company = linksTo(AuthorCompany);
   }
 `;
 
@@ -277,10 +278,35 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
               lastName: 'Dane',
               summary: 'Author',
             },
+            relationships: {
+              company: {
+                links: {
+                  self: authorCompanyExampleId,
+                },
+              },
+            },
             meta: {
               adoptsFrom: {
                 module: `${mockCatalogURL}author/author`,
                 name: 'Author',
+              },
+            },
+          },
+        },
+        'author/AuthorCompany/example.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Cardstack Labs',
+              address: '123 Main St',
+              city: 'Portland',
+              state: 'OR',
+              zip: '97205',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${mockCatalogURL}author/author`,
+                name: 'AuthorCompany',
               },
             },
           },
@@ -2305,10 +2331,13 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
 
         let blogPostExamplePath = `${outerFolder}blog-post/BlogPost/example.json`;
         let authorExamplePath = `${outerFolder}author/Author/example.json`;
+        let authorCompanyExamplePath = `${outerFolder}author/AuthorCompany/example.json`;
         await openDir(assert, blogPostExamplePath);
         await verifyFileInFileTree(assert, blogPostExamplePath);
         await openDir(assert, authorExamplePath);
         await verifyFileInFileTree(assert, authorExamplePath);
+        await openDir(assert, authorCompanyExamplePath);
+        await verifyFileInFileTree(assert, authorCompanyExamplePath);
       });
 
       test('field listing', async function (assert) {
