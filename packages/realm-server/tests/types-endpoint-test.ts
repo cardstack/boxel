@@ -156,7 +156,7 @@ module(basename(__filename), function () {
           id: `${testRealm.url}friend/Friend`,
           attributes: {
             displayName: 'Friend',
-            total: 2,
+            total: 3,
             iconHTML,
           },
         },
