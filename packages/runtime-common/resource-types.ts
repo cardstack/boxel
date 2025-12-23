@@ -63,7 +63,7 @@ export interface CardResource<Identity extends Unsaved = Saved> {
   type: 'card';
   attributes?: Record<string, any>;
   relationships?: {
-    [fieldName: string]: Relationship;
+    [fieldName: string]: Relationship | Relationship[];
   };
   meta: CardResourceMeta;
   links?: {
@@ -129,7 +129,11 @@ export function isCardResource(resource: any): resource is CardResource {
       if (typeof fieldName !== 'string') {
         return false;
       }
-      if (!isRelationship(relationship)) {
+      if (Array.isArray(relationship)) {
+        if (relationship.some((entry) => !isRelationship(entry))) {
+          return false;
+        }
+      } else if (!isRelationship(relationship)) {
         return false;
       }
     }

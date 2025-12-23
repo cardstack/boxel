@@ -2,6 +2,8 @@ import type { Definition, FieldDefinition } from './index';
 import {
   type LooseSingleCardDocument,
   type CardResource,
+  type Relationship,
+  relationshipEntries,
   isCodeRef,
 } from './index';
 import type { CardFields, Meta } from './resource-types';
@@ -95,10 +97,8 @@ export default function serialize({
   result.data.type = 'card';
 
   if (result.data.relationships) {
-    for (let relationship of Object.values(result.data.relationships)) {
-      if ('data' in relationship) {
-        delete relationship.data;
-      }
+    for (let { relationship } of relationshipEntries(result.data.relationships)) {
+      delete relationship.data;
     }
   }
 
@@ -210,19 +210,8 @@ function processRelationships({
 }): NonNullable<CardResource['relationships']> | undefined {
   const result: NonNullable<CardResource['relationships']> = {};
 
-  for (const [relationshipKey, value] of Object.entries(relationships)) {
-    const baseFieldPath = parseRelationshipKey(relationshipKey);
-    const fieldDefinition = getFieldDefinition(
-      baseFieldPath,
-      definition,
-      customFieldDefinitions,
-    );
-
-    if (!fieldDefinition || fieldDefinition.isComputed) {
-      continue;
-    }
-
-    const processedValue = { ...value };
+  const normalizeRelationship = (relationship: Relationship): Relationship => {
+    const processedValue = { ...relationship };
 
     if (processedValue.links && 'self' in processedValue.links) {
       // Handle both truthy and null values for links.self
@@ -265,6 +254,30 @@ function processRelationships({
     }
 
     delete processedValue.data;
+
+    return processedValue;
+  };
+
+  for (const [relationshipKey, value] of Object.entries(relationships)) {
+    const baseFieldPath = parseRelationshipKey(relationshipKey);
+    const fieldDefinition = getFieldDefinition(
+      baseFieldPath,
+      definition,
+      customFieldDefinitions,
+    );
+
+    if (!fieldDefinition || fieldDefinition.isComputed) {
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      result[relationshipKey] = value.map((entry) =>
+        normalizeRelationship(entry),
+      );
+      continue;
+    }
+
+    const processedValue = normalizeRelationship(value);
 
     if (
       fieldDefinition.type === 'linksToMany' &&

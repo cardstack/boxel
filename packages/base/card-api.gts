@@ -1626,7 +1626,8 @@ class LinksToMany<FieldT extends CardDefConstructor>
         if (reference == null) {
           return null;
         }
-        let cachedInstance = store.get(new URL(reference, relativeTo).href);
+        let normalizedReference = new URL(reference, relativeTo).href;
+        let cachedInstance = store.get(normalizedReference);
 
         if (cachedInstance) {
           cachedInstance[isSavedInstance] = true;
@@ -1639,6 +1640,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
         //that means that the serialization is incorrect and is not JSON-API compliant.
         let resourceId =
           value.data && 'id' in value.data ? value.data?.id : undefined;
+        if (!resourceId) {
+          resourceId = normalizedReference;
+        }
         if (loadedValues && Array.isArray(loadedValues)) {
           let loadedValue = loadedValues.find(
             (v) => isCardOrField(v) && 'id' in v && v.id === resourceId,
@@ -1648,6 +1652,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
           }
         }
         let resource = resourceFrom(doc, resourceId);
+        if (!resource && reference !== normalizedReference) {
+          resource = resourceFrom(doc, reference);
+        }
         if (!resource) {
           return {
             type: 'not-loaded',
