@@ -77,6 +77,7 @@ import {
   AuthorizationError,
   Router,
   SupportedMimeType,
+  extractSupportedMimeType,
   lookupRouteTable,
 } from './router';
 import { InvalidQueryError, assertQuery, parseQuery } from './query';
@@ -165,6 +166,28 @@ const CACHE_HIT_VALUE = 'hit';
 const CACHE_MISS_VALUE = 'miss';
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
+const DEFAULT_FILE_CONTENT_TYPE = 'application/octet-stream';
+const FILE_DEF_CODE_REF: ResolvedCodeRef = {
+  module: `${baseRealm.url}file-api`,
+  name: 'FileDef',
+};
+const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
+  '.json': 'application/json',
+  '.md': 'text/markdown',
+  '.txt': 'text/plain',
+  '.csv': 'text/csv',
+  '.tsv': 'text/tab-separated-values',
+  '.ts': 'text/typescript',
+  '.js': 'text/javascript',
+  '.gts': 'text/x-gts',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
+  '.pdf': 'application/pdf',
+};
 
 type CachedSourceFileEntry = {
   type: 'file';
@@ -213,6 +236,15 @@ function buildEtag(
   }
   let base = String(lastModified);
   return variant ? `${base}:${variant}` : base;
+}
+
+function inferContentType(filename: string): string {
+  let extensionIndex = filename.lastIndexOf('.');
+  if (extensionIndex === -1) {
+    return DEFAULT_FILE_CONTENT_TYPE;
+  }
+  let extension = filename.slice(extensionIndex).toLowerCase();
+  return CONTENT_TYPE_BY_EXTENSION[extension] ?? DEFAULT_FILE_CONTENT_TYPE;
 }
 
 export interface TokenClaims {
@@ -1354,6 +1386,16 @@ export class Realm {
         }
         await this.checkPermission(request, requestContext, requiredPermission);
       }
+      let acceptedMimeType = extractSupportedMimeType(
+        request.headers.get('Accept') as unknown as null | string | [string],
+      );
+      if (
+        acceptedMimeType === SupportedMimeType.CardJson &&
+        ['POST', 'PATCH', 'PUT', 'DELETE'].includes(request.method) &&
+        (await this.openFileForCardJson(localPath))
+      ) {
+        return methodNotAllowed(request, requestContext);
+      }
       if (!this.#realmIndexQueryEngine) {
         return systemError({
           requestContext,
@@ -2016,10 +2058,74 @@ export class Realm {
     }
   }
 
+  private async openFileForCardJson(
+    localPath: LocalPath,
+  ): Promise<FileRef | undefined> {
+    if (!localPath || localPath.startsWith('_')) {
+      return undefined;
+    }
+    if (localPath.endsWith('.json')) {
+      return undefined;
+    }
+    return this.#adapter.openFile(localPath);
+  }
+
+  private async fileCardDocument(
+    requestContext: RequestContext,
+    localPath: LocalPath,
+  ): Promise<Response | undefined> {
+    let fileRef = await this.openFileForCardJson(localPath);
+    if (!fileRef) {
+      return undefined;
+    }
+    let fileURL = this.paths.fileURL(localPath).href;
+    let name = localPath.split('/').pop() ?? localPath;
+    let contentType = inferContentType(name);
+    let createdAt = await this.getCreatedTime(localPath);
+    let realmInfo = await this.parseRealmInfo();
+    let doc: LooseSingleCardDocument = {
+      data: {
+        type: 'card',
+        id: fileURL,
+        attributes: {
+          name,
+          url: fileURL,
+          sourceUrl: fileURL,
+          contentType,
+        },
+        meta: {
+          adoptsFrom: FILE_DEF_CODE_REF,
+          lastModified: fileRef.lastModified,
+          realmInfo,
+          realmURL: this.url,
+          resourceCreatedAt: createdAt ?? fileRef.lastModified,
+        },
+        links: { self: fileURL },
+      },
+    };
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: {
+          'content-type': SupportedMimeType.CardJson,
+          ...lastModifiedHeader(doc),
+          ...(createdAt != null
+            ? { 'x-created': formatRFC7231(createdAt * 1000) }
+            : {}),
+        },
+      },
+      requestContext,
+    });
+  }
+
   private async createCard(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    let localPath = this.paths.local(new URL(request.url));
+    if (await this.openFileForCardJson(localPath)) {
+      return methodNotAllowed(request, requestContext);
+    }
     let body = await request.text();
     let json;
     try {
@@ -2160,6 +2266,9 @@ export class Realm {
     let primarySerialization: LooseSingleCardDocument | undefined;
     let localPath = this.paths.local(new URL(request.url));
     if (localPath.startsWith('_')) {
+      return methodNotAllowed(request, requestContext);
+    }
+    if (await this.openFileForCardJson(localPath)) {
       return methodNotAllowed(request, requestContext);
     }
 
@@ -2418,6 +2527,13 @@ export class Realm {
     let start = Date.now();
     try {
       if (!maybeError) {
+        let fileResponse = await this.fileCardDocument(
+          requestContext,
+          localPath,
+        );
+        if (fileResponse) {
+          return fileResponse;
+        }
         return notFound(request, requestContext);
       }
       if (maybeError.type === 'error') {
@@ -2486,6 +2602,10 @@ export class Realm {
     let reqURL = request.url.replace(/\.json$/, '');
     // strip off query params
     let url = new URL(new URL(reqURL).pathname, reqURL);
+    let localPath = this.paths.local(url);
+    if (await this.openFileForCardJson(localPath)) {
+      return methodNotAllowed(request, requestContext);
+    }
     let result = await this.#realmIndexQueryEngine.cardDocument(url);
     if (!result) {
       return notFound(request, requestContext);
