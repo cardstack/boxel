@@ -508,15 +508,15 @@ module(basename(__filename), function () {
           cleanWhiteSpace(`<h1> Mango $</h1>`),
           'pre-rendered isolated format html is correct',
         );
-        assert.strictEqual(
-          trimCardContainer(
-            stripScopedCSSAttributes(
-              entry!.embeddedHtml![`${testRealm}person/Person`],
-            ),
+      assert.strictEqual(
+        trimCardContainer(
+          stripScopedCSSAttributes(
+            entry!.embeddedHtml![`${testRealm}person/Person`],
           ),
-          cleanWhiteSpace(`<h1> Embedded Card Person: Mango </h1>`),
-          'pre-rendered embedded format html is correct',
-        );
+        ),
+        cleanWhiteSpace(`<h1> Embedded Card Person: Mango </h1>`),
+        'pre-rendered embedded format html is correct',
+      );
 
         assert.ok(entry.headHtml, 'pre-rendered head format html is present');
 
@@ -908,6 +908,31 @@ module(basename(__filename), function () {
         realm.realmIndexUpdater.stats.instancesIndexed,
         1,
         'indexed updated instance',
+      );
+    });
+
+    test('indexes file metadata for non-json files', async function (assert) {
+      let entry = await getInstance(
+        realm,
+        new URL(`${testRealm}random-file.txt`),
+      );
+      assert.ok(entry, 'file entry is indexed');
+      assert.strictEqual(
+        entry!.instance.attributes?.name,
+        'random-file.txt',
+        'indexes file name',
+      );
+      assert.ok(
+        entry!.instance.attributes?.contentType?.includes('text/plain'),
+        'indexes file content type',
+      );
+      assert.deepEqual(
+        entry!.instance.meta?.adoptsFrom,
+        {
+          module: 'https://cardstack.com/base/file-api',
+          name: 'FileDef',
+        },
+        'indexes FileDef adoptsFrom',
       );
     });
 

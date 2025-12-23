@@ -23,7 +23,7 @@ export default function handlePrerenderProxy({
   dbAdapter,
   createPrerenderAuth,
 }: {
-  kind: 'card' | 'module';
+  kind: 'card' | 'module' | 'file-meta';
   prerenderer?: Prerenderer;
   dbAdapter: DBAdapter;
   createPrerenderAuth: (
@@ -79,6 +79,19 @@ export default function handlePrerenderProxy({
       await sendResponseForBadRequest(ctxt, 'Missing realm in attributes');
       return;
     }
+    if (kind === 'file-meta') {
+      if (
+        !attrs.fileDef ||
+        typeof attrs.fileDef.module !== 'string' ||
+        typeof attrs.fileDef.name !== 'string'
+      ) {
+        await sendResponseForBadRequest(
+          ctxt,
+          'Missing or invalid fileDef in attributes',
+        );
+        return;
+      }
+    }
 
     let permissionsByUser = await fetchRealmPermissions(
       dbAdapter,
@@ -110,12 +123,19 @@ export default function handlePrerenderProxy({
               auth,
               renderOptions: attrs.renderOptions,
             })
-          : await prerenderer.prerenderModule({
-              realm: attrs.realm,
-              url: attrs.url,
-              auth,
-              renderOptions: attrs.renderOptions,
-            });
+          : kind === 'module'
+            ? await prerenderer.prerenderModule({
+                realm: attrs.realm,
+                url: attrs.url,
+                auth,
+                renderOptions: attrs.renderOptions,
+              })
+            : await prerenderer.prerenderFileMeta({
+                realm: attrs.realm,
+                url: attrs.url,
+                auth,
+                fileDef: attrs.fileDef,
+              });
     } catch (err) {
       await sendResponseForSystemError(
         ctxt,
@@ -124,7 +144,12 @@ export default function handlePrerenderProxy({
       return;
     }
 
-    let type = kind === 'card' ? 'prerender-result' : 'prerender-module-result';
+    let type =
+      kind === 'card'
+        ? 'prerender-result'
+        : kind === 'module'
+          ? 'prerender-module-result'
+          : 'prerender-file-meta-result';
 
     await setContextResponse(
       ctxt,
