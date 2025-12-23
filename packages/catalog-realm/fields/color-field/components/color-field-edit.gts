@@ -62,7 +62,9 @@ export default class ColorFieldEdit extends Component<ColorFieldSignature> {
 
   // At class level, add this private helper
   private get baseOptions(): ColorFieldBaseOptions | undefined {
-    const configuration = this.args.configuration as ColorFieldConfiguration | undefined;
+    const configuration = this.args.configuration as
+      | ColorFieldConfiguration
+      | undefined;
     if (!configuration) {
       return undefined;
     }

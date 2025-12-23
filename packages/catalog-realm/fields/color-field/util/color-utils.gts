@@ -31,6 +31,34 @@ export interface ColorFieldBaseOptions {
    * Defaults to 8 if not specified.
    */
   maxRecentHistory?: number;
+  /**
+   * Color to check contrast against when showContrastChecker is true.
+   * Used to determine if the selected color (foreground or background) meets WCAG contrast requirements.
+   * Defaults to '#ffffff' (white) if not specified.
+   *
+   * For dynamic contrast checking based on another field, use a configuration function:
+   *
+   * @example
+   * // Static color
+   * configuration: {
+   *   options: {
+   *     showContrastChecker: true,
+   *     oppositeColor: '#000000'
+   *   }
+   * }
+   *
+   * @example
+   * // Dynamic color from another field (using configuration function)
+   * configuration: function (this: MyCard) {
+   *   return {
+   *     options: {
+   *       showContrastChecker: true,
+   *       oppositeColor: this.footerBgColor ?? '#f9fafb'
+   *     }
+   *   };
+   * }
+   */
+  oppositeColor?: string;
 }
 
 export interface ColorFieldPaletteOptions {
