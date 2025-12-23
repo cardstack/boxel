@@ -20,7 +20,7 @@ class Edit extends Component<typeof FileDef> {
   <template>
     <div class='filedef-edit-unavailable' data-test-filedef-edit-unavailable>
       This file
-      {{if (concat '(' @model.id ')') ''}}
+      {{if @model.id (concat ' (' @model.id ')')}}
       is not editable via this interface. Replace it via file upload.
     </div>
     <style scoped>
