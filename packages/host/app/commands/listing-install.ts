@@ -23,8 +23,8 @@ import type {
 import type { CopyInstanceMeta } from '@cardstack/runtime-common/catalog';
 import type { CopyModuleMeta } from '@cardstack/runtime-common/catalog';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
@@ -220,7 +220,10 @@ export default class ListingInstallCommand extends HostBaseCommand<
   }
 
   private async collectRelationshipIds(
-    relationship: { links?: { self?: string | null; related?: string | null }; data?: unknown },
+    relationship: {
+      links?: { self?: string | null; related?: string | null };
+      data?: unknown;
+    },
     relativeTo: string,
   ): Promise<string[]> {
     let ids = this.extractRelationshipIds(relationship.data);
@@ -251,8 +254,14 @@ export default class ListingInstallCommand extends HostBaseCommand<
       }
       return ids;
     }
-    if (typeof response === 'object' && response !== null && 'data' in response) {
-      ids.push(...this.extractRelationshipIds((response as { data?: unknown }).data));
+    if (
+      typeof response === 'object' &&
+      response !== null &&
+      'data' in response
+    ) {
+      ids.push(
+        ...this.extractRelationshipIds((response as { data?: unknown }).data),
+      );
     }
     return ids;
   }
