@@ -56,7 +56,7 @@ export default class Card extends Route {
 
   didMatrixServiceStart = false;
 
-  // WARNING! Mke sure we are _very_ careful with our async in this model. This
+  // WARNING! Make sure we are _very_ careful with our async in this model. This
   // model hook is called _every_  time
   // OperatorModeStateService.schedulePersist() is called (due to the fact we
   // care about the back button, see note at bottom). Because of that make sure

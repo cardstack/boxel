@@ -45,7 +45,6 @@ import {
 import type { RealmEventContent } from './matrix-event';
 import { Spec } from './spec';
 import StringField from './string';
-import _ from 'lodash';
 
 const [_CardView, StripView, GridView] = VIEW_OPTIONS;
 
