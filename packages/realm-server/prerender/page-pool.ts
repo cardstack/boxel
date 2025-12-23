@@ -397,15 +397,15 @@ export class PagePool {
     switch (type) {
       case 'assert':
       case 'error':
-        return chromeLog.error.bind(log);
+        return chromeLog.error.bind(chromeLog);
       case 'warn':
-        return chromeLog.warn.bind(log);
+        return chromeLog.warn.bind(chromeLog);
       case 'info':
-        return chromeLog.info.bind(log);
+        return chromeLog.info.bind(chromeLog);
       case 'debug':
-        return chromeLog.debug.bind(log);
+        return chromeLog.debug.bind(chromeLog);
       default:
-        return chromeLog.info.bind(log);
+        return chromeLog.info.bind(chromeLog);
     }
   }
 
