@@ -44,6 +44,8 @@ export default class MonacoService extends Service {
   }
 
   private loadMonacoSDK = task(async () => {
+    // @ts-expect-error: dynamic import without types
+    await import('@cardstack/requirejs-monaco-ember-polyfill');
     const monaco = await import('monaco-editor');
     monaco.languages.typescript.javascriptDefaults.setCompilerOptions(
       this.defaultCompilerOptions(monaco),
