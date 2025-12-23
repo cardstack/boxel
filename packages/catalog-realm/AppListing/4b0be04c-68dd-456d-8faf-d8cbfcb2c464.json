@@ -145,87 +145,17 @@
       },
       "examples.6": {
         "links": {
-          "self": "../gaming-platform/GamingPlatform/steam-platform"
+          "self": "../game-record/GameRecord/zlata-cyberpunk"
         }
       },
       "examples.7": {
         "links": {
-          "self": "../gaming-platform/GamingPlatform/steam-platform"
+          "self": "../game-record/GameRecord/zlata-hollow-knight"
         }
       },
       "examples.8": {
         "links": {
-          "self": "../gaming-platform/GamingPlatform/xbox-live"
-        }
-      },
-      "examples.9": {
-        "links": {
-          "self": "../game-record/GameRecord/zlata-cyberpunk"
-        }
-      },
-      "examples.10": {
-        "links": {
-          "self": "../game-record/GameRecord/zlata-hollow-knight"
-        }
-      },
-      "examples.11": {
-        "links": {
           "self": "../game-record/GameRecord/zlata-valorant"
-        }
-      },
-      "examples.12": {
-        "links": {
-          "self": "../tournament/Tournament/street-fighter-evo"
-        }
-      },
-      "examples.13": {
-        "links": {
-          "self": "../tournament/Tournament/valorant-championship"
-        }
-      },
-      "examples.14": {
-        "links": {
-          "self": "../video-game/VideoGame/cyberpunk-2077"
-        }
-      },
-      "examples.15": {
-        "links": {
-          "self": "../video-game/VideoGame/hollow-knight"
-        }
-      },
-      "examples.16": {
-        "links": {
-          "self": "../video-game/VideoGame/valorant"
-        }
-      },
-      "examples.17": {
-        "links": {
-          "self": "../gaming-player/GamingPlayer/alex-shadowblade"
-        }
-      },
-      "examples.18": {
-        "links": {
-          "self": "../gaming-player/GamingPlayer/diego-stratmaxx"
-        }
-      },
-      "examples.19": {
-        "links": {
-          "self": "../gaming-player/GamingPlayer/kai-thunderstrike"
-        }
-      },
-      "examples.20": {
-        "links": {
-          "self": "../gaming-player/GamingPlayer/maya-phoenixrise"
-        }
-      },
-      "examples.21": {
-        "links": {
-          "self": "../gaming-player/GamingPlayer/ravi-cosmicrift"
-        }
-      },
-      "examples.22": {
-        "links": {
-          "self": "../gaming-player/GamingPlayer/zlata-voidwalker"
         }
       },
       "categories.0": {
