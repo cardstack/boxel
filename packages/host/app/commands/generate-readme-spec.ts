@@ -5,7 +5,7 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import type { SpecType } from 'https://cardstack.com/base/spec';
 
 import HostBaseCommand from '../lib/host-base-command';
-import { skillCardURL } from '../lib/utils';
+import { devSkillId } from '../lib/utils';
 
 import OneShotLlmRequestCommand from './one-shot-llm-request';
 import PatchCardInstanceCommand from './patch-card-instance';
@@ -27,11 +27,11 @@ export default class GenerateReadmeSpecCommand extends HostBaseCommand<
   ) {
     return `Generate README documentation for a spec of type ${specType} that has code ref of (name:${ref.name}, module:${ref.module}). Show how to import and use it in inside a consuming card.`;
   }
-  private static SYSTEM_PROMPT = `YOU ARE a bot responsible to Github README documentation for specs/code. 
+  private static SYSTEM_PROMPT = `YOU ARE a bot responsible to Github README documentation for specs/code.
 
 Reference the Spec Documentation inside boxel-development skill for understanding spec types, but focus ONLY on crafting usage documentation. Based upon specType, create documentation with these 4 sections:
 
-• **Summary**: Brief summary of what the spec does 
+• **Summary**: Brief summary of what the spec does
 • **Import**: Show the ES6 import statmenet of the spec. Omit .gts extension.
 • **Usage as a Field**: Show how to use the spec as a field within a consuming card/field. Only display this section for card or field.
 • **Template Usage**: Show how to invoke the spec inside a template within a consuming card/field
@@ -77,7 +77,7 @@ Requirements:
       userPrompt,
       systemPrompt,
       llmModel: 'anthropic/claude-3-haiku',
-      skillCardIds: [skillCardURL('boxel-development')],
+      skillCardIds: [devSkillId],
     });
 
     // Patch the spec's readMe field
