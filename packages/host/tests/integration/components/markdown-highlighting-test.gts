@@ -136,11 +136,11 @@ module('Integration | markdown highlighting error scenarios', function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
-    originalLoader = (window as any).__loadMonacoForMarkdown;
+    originalLoader = (globalThis as any).__loadMonacoForMarkdown;
   });
 
   hooks.afterEach(function () {
-    (window as any).__loadMonacoForMarkdown = originalLoader;
+    (globalThis as any).__loadMonacoForMarkdown = originalLoader;
   });
 
   test('handles undefined __loadMonacoForMarkdown gracefully', async function (assert) {
@@ -152,14 +152,14 @@ module('Integration | markdown highlighting error scenarios', function (hooks) {
       body: ['```typescript', 'const x = 1;', '```'].join('\n'),
     });
 
-    delete (window as any).__loadMonacoForMarkdown;
+    delete (globalThis as any).__loadMonacoForMarkdown;
 
     await renderCard(loader, doc, 'isolated');
 
     assert.dom('.markdown-content').exists('container renders without Monaco');
     assert
       .dom('pre[data-code-language="typescript"]')
-      .doesNotExist('code blocks are hidden when Monaco is unavailable');
+      .exists('code blocks render without Monaco highlighting');
   });
 
   test('handles Monaco load returning an unusable editor', async function (assert) {
@@ -171,7 +171,7 @@ module('Integration | markdown highlighting error scenarios', function (hooks) {
       body: ['```typescript', 'const x = 1;', '```'].join('\n'),
     });
 
-    (window as any).__loadMonacoForMarkdown = async () => {
+    (globalThis as any).__loadMonacoForMarkdown = async () => {
       let stub = createMonacoStub();
       stub.editor.colorizeModelLine = undefined as any;
       return stub;
@@ -194,7 +194,7 @@ module('Integration | markdown highlighting error scenarios', function (hooks) {
       body: ['```typescript', 'const x = 1;', '```'].join('\n'),
     });
 
-    (window as any).__loadMonacoForMarkdown = async () => {
+    (globalThis as any).__loadMonacoForMarkdown = async () => {
       let stub = createMonacoStub();
       stub.languages.getLanguages = () => [];
       return stub;
@@ -216,7 +216,7 @@ module('Integration | markdown highlighting error scenarios', function (hooks) {
       body: ['```typescript', 'const x = 1;', '```'].join('\n'),
     });
 
-    (window as any).__loadMonacoForMarkdown = async () => {
+    (globalThis as any).__loadMonacoForMarkdown = async () => {
       let stub = createMonacoStub();
       stub.languages.onLanguage = () => {
         throw new Error('onLanguage failed');
@@ -241,7 +241,7 @@ module('Integration | markdown highlighting error scenarios', function (hooks) {
       body: ['```typescript', 'const x = 1;', '```'].join('\n'),
     });
 
-    (window as any).__loadMonacoForMarkdown = async () => {
+    (globalThis as any).__loadMonacoForMarkdown = async () => {
       let stub = createMonacoStub();
       stub.languages.TokenizationRegistry.getOrCreate = async () => {
         throw new Error('Tokenization failed');
@@ -266,7 +266,7 @@ module('Integration | markdown highlighting error scenarios', function (hooks) {
       body: ['```typescript', 'const x = 1;', '```'].join('\n'),
     });
 
-    (window as any).__loadMonacoForMarkdown = async () => {
+    (globalThis as any).__loadMonacoForMarkdown = async () => {
       let stub = createMonacoStub();
       stub.editor.colorizeModelLine = () => {
         throw new Error('Colorization failed');
@@ -291,7 +291,7 @@ module('Integration | markdown highlighting error scenarios', function (hooks) {
       body: ['```typescript', 'const x = 1;', '```'].join('\n'),
     });
 
-    (window as any).__loadMonacoForMarkdown = async () => {
+    (globalThis as any).__loadMonacoForMarkdown = async () => {
       let stub = createMonacoStub();
       stub.editor.createModel = undefined as any;
       return stub;

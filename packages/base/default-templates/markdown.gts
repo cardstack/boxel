@@ -1,6 +1,7 @@
 import { task } from 'ember-concurrency';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { and } from '@cardstack/boxel-ui/helpers';
 
 import {
   hasCodeBlocks,
@@ -38,7 +39,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     return this.monacoContextInternal;
   }
   prepareMonacoContextTask = task({ drop: true }, async () => {
-    let loadMonacoForMarkdown = (window as any).__loadMonacoForMarkdown;
+    let loadMonacoForMarkdown = (globalThis as any).__loadMonacoForMarkdown;
     if (typeof loadMonacoForMarkdown !== 'function') {
       // If Monaco loader is not available, skip loading and leave monacoContext undefined
       return;
@@ -52,27 +53,17 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   }
   <template>
     <div class='markdown-content'>
-      {{#if this.hasCodeBlocks}}
-        {{#if this.monacoContext}}
-          <div class='markdown-content'>
-            {{sanitizedHtml
-              (wrapTablesHtml
-                (markdownToHtml
-                  @content
-                  enableMonacoSyntaxHighlighting=true
-                  monaco=this.monacoContext
-                )
-              )
-            }}
-          </div>
-        {{/if}}
-      {{else}}
-        {{sanitizedHtml
-          (wrapTablesHtml
-            (markdownToHtml @content enableMonacoSyntaxHighlighting=false)
+      {{sanitizedHtml
+        (wrapTablesHtml
+          (markdownToHtml
+            @content
+            enableMonacoSyntaxHighlighting=(and
+              this.hasCodeBlocks this.monacoContext
+            )
+            monaco=this.monacoContext
           )
-        }}
-      {{/if}}
+        )
+      }}
     </div>
     <style scoped>
       @layer baseComponent {
