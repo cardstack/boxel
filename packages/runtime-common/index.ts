@@ -245,7 +245,12 @@ export {
 
 export type { JWTPayload } from './realm-auth-client';
 export { sanitizeHtml } from './dompurify-runtime';
-export { markedSync, markdownToHtml } from './marked-sync';
+export {
+  hasCodeBlocks,
+  markedSync,
+  markdownToHtml,
+  preloadMarkdownLanguages,
+} from './marked-sync';
 export { getPlural } from './pluralize-runtime';
 
 import type {

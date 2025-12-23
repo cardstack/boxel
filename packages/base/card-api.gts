@@ -2276,6 +2276,7 @@ export class MarkdownField extends StringField {
         @value={{@model}}
         @onInput={{@set}}
         @disabled={{not @canEdit}}
+        @readonly={{not @canEdit}}
       />
     </template>
   };
