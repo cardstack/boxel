@@ -62,6 +62,7 @@ import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
 import isEqual from 'lodash/isEqual';
 import { z } from 'zod';
+import { lookup as lookupMimeType } from 'mime-types';
 import type { CardFields } from './resource-types';
 import {
   fileContentToText,
@@ -171,22 +172,8 @@ const FILE_DEF_CODE_REF: ResolvedCodeRef = {
   module: `${baseRealm.url}file-api`,
   name: 'FileDef',
 };
-const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
-  '.json': 'application/json',
-  '.md': 'text/markdown',
-  '.txt': 'text/plain',
-  '.csv': 'text/csv',
-  '.tsv': 'text/tab-separated-values',
-  '.ts': 'text/typescript',
-  '.js': 'text/javascript',
-  '.gts': 'text/x-gts',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.svg': 'image/svg+xml',
-  '.webp': 'image/webp',
-  '.pdf': 'application/pdf',
+const CONTENT_TYPE_OVERRIDES: Record<string, string> = {
+  '.gts': 'text/typescript+glimmer',
 };
 
 type CachedSourceFileEntry = {
@@ -244,7 +231,12 @@ function inferContentType(filename: string): string {
     return DEFAULT_FILE_CONTENT_TYPE;
   }
   let extension = filename.slice(extensionIndex).toLowerCase();
-  return CONTENT_TYPE_BY_EXTENSION[extension] ?? DEFAULT_FILE_CONTENT_TYPE;
+  let overrideContentType = CONTENT_TYPE_OVERRIDES[extension];
+  if (overrideContentType) {
+    return overrideContentType;
+  }
+  let mimeType = lookupMimeType(filename);
+  return mimeType ? mimeType : DEFAULT_FILE_CONTENT_TYPE;
 }
 
 export interface TokenClaims {
