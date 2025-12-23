@@ -318,7 +318,6 @@ export type RequestContext = { realm: Realm; permissions: RealmPermissions };
 export class Realm {
   #startedUp = new Deferred<void>();
   #matrixClient: MatrixClient;
-  #realmServerMatrixClient: MatrixClient;
   #realmIndexUpdater: RealmIndexUpdater;
   #realmIndexQueryEngine: RealmIndexQueryEngine;
   #adapter: RealmAdapter;
@@ -332,7 +331,6 @@ export class Realm {
   #disableModuleCaching = false;
   #fullIndexOnStartup = false;
   #fromScratchIndexPriority = systemInitiatedPriority;
-  #realmServerMatrixUserId: string;
   #definitionLookup: DefinitionLookup;
   #copiedFromRealm: URL | undefined;
   #sourceCache = new AliasCache<SourceCacheEntry>();
@@ -366,28 +364,25 @@ export class Realm {
     {
       url,
       adapter,
-      matrix,
       secretSeed,
       dbAdapter,
       queue,
       virtualNetwork,
-      realmServerMatrixClient,
+      matrixClient,
       definitionLookup,
     }: {
       url: string;
       adapter: RealmAdapter;
-      matrix: MatrixConfig;
       secretSeed: string;
       dbAdapter: DBAdapter;
       queue: QueuePublisher;
       virtualNetwork: VirtualNetwork;
-      realmServerMatrixClient: MatrixClient;
+      matrixClient: MatrixClient;
       definitionLookup: DefinitionLookup;
     },
     opts?: Options,
   ) {
     this.paths = new RealmPaths(new URL(url));
-    let { username, url: matrixURL } = matrix;
     this.#realmSecretSeed = secretSeed;
     this.#dbAdapter = dbAdapter;
     this.#adapter = adapter;
@@ -395,16 +390,7 @@ export class Realm {
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
     this.#fromScratchIndexPriority =
       opts?.fromScratchIndexPriority ?? systemInitiatedPriority;
-    this.#realmServerMatrixClient = realmServerMatrixClient;
-    this.#realmServerMatrixUserId = userIdFromUsername(
-      realmServerMatrixClient.username,
-      realmServerMatrixClient.matrixURL.href,
-    );
-    this.#matrixClient = new MatrixClient({
-      matrixURL,
-      username,
-      seed: secretSeed,
-    });
+    this.#matrixClient = matrixClient;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
     this.#copiedFromRealm = opts?.copiedFromRealm;
     let owner: string | undefined;
@@ -434,7 +420,7 @@ export class Realm {
         // server so that we can assume user that owns this realm. refactor this
         // back to using the realm's own matrix client after running cards in
         // headless chrome lands.
-        new RealmAuthDataSource(this.#realmServerMatrixClient, () => _fetch),
+        new RealmAuthDataSource(this.#matrixClient, () => _fetch),
       ),
     ]);
 
@@ -578,18 +564,25 @@ export class Realm {
   }
 
   async ensureSessionRoom(matrixUserId: string): Promise<string> {
+    console.log('realm.ts - Ensuring session room for user:', matrixUserId);
     let sessionRoom = await fetchSessionRoom(
       this.#dbAdapter,
-      this.url,
+      this.#matrixClient.getUserId(),
       matrixUserId,
     );
+    console.log('Fetched session room from DB:', sessionRoom);
 
     if (!sessionRoom) {
+      console.log('No session room, creating one for user:', matrixUserId);
       await this.#matrixClient.login();
+      console.log(
+        'Logged into matrix as realm server user',
+        this.#matrixClient.getUserId(),
+      );
       sessionRoom = await this.#matrixClient.createDM(matrixUserId);
       await upsertSessionRoom(
         this.#dbAdapter,
-        this.url,
+        this.#matrixClient.getUserId(),
         matrixUserId,
         sessionRoom,
       );
@@ -1306,7 +1299,12 @@ export class Realm {
         ensureSessionRoom: async (userId: string) =>
           this.ensureSessionRoom(userId),
         setSessionRoom: (userId: string, roomId: string) =>
-          upsertSessionRoom(this.#dbAdapter, this.url, userId, roomId),
+          upsertSessionRoom(
+            this.#dbAdapter,
+            this.#matrixClient.getUserId(),
+            userId,
+            roomId,
+          ),
       } as Utils,
     );
 
@@ -3751,7 +3749,7 @@ export class Realm {
 
   private async createRequestContext(): Promise<RequestContext> {
     let permissions = {
-      [this.#realmServerMatrixUserId]: ['assume-user'] as RealmAction[],
+      [this.#matrixClient.getUserId()]: ['assume-user'] as RealmAction[],
       ...(await fetchRealmPermissions(this.#dbAdapter, new URL(this.url))),
     };
     return {

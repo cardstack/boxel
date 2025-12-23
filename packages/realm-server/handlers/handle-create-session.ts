@@ -1,7 +1,6 @@
 import {
   fetchSessionRoom,
   logger,
-  REALM_SERVER_REALM,
   SupportedMimeType,
   upsertSessionRoom,
 } from '@cardstack/runtime-common';
@@ -42,17 +41,26 @@ export default function handleCreateSessionRequest({
       createJWT: async (user: string, sessionRoom: string) =>
         createJWT({ user, sessionRoom }, realmSecretSeed),
       ensureSessionRoom: async (userId: string) => {
+        const realmServerUserId = matrixClient.getUserId();
+        if (!realmServerUserId) {
+          throw new Error(
+            'Realm server Matrix user ID is not available, unable to create session room',
+          );
+        }
+        console.log('Realm server user ID:', realmServerUserId);
         let sessionRoom = await fetchSessionRoom(
           dbAdapter,
-          REALM_SERVER_REALM,
+          realmServerUserId,
           userId,
         );
+        console.log('Fetched session room from DB:', sessionRoom);
 
         if (!sessionRoom) {
+          console.log('No session room???', userId);
           sessionRoom = await matrixClient.createDM(userId);
           await upsertSessionRoom(
             dbAdapter,
-            REALM_SERVER_REALM,
+            realmServerUserId,
             userId,
             sessionRoom,
           );

@@ -1810,6 +1810,7 @@ export default class MatrixService extends Service {
       event.type === 'm.room.message' &&
       event.content?.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE
     ) {
+      console.log('Received realm server event', event);
       await this.realmServer.handleEvent(event);
     } else if (
       event.type === APP_BOXEL_REALM_EVENT_TYPE &&
@@ -1831,14 +1832,16 @@ export default class MatrixService extends Service {
       let realmResourceForEvent = this.realm.realmForSessionRoomId(
         event.room_id!,
       );
+      console.log('Trying to figure out realm for event', {
+        event,
+        realmResourceForEvent,
+      });
       if (!realmResourceForEvent) {
-        realmEventsLogger.debug(
-          'Ignoring realm event because no realm found',
-          event,
-        );
+        console.log('Ignoring realm event because no realm found', event);
       } else {
+        // TODO: CHECK THAT THE SENDER IS THE REALM SERVER?
         if (realmResourceForEvent.info?.realmUserId !== event.sender) {
-          realmEventsLogger.warn(
+          console.log(
             `Realm event sender ${event.sender} is not the realm user ${realmResourceForEvent.info?.realmUserId}`,
             event,
           );

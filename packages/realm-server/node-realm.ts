@@ -234,7 +234,7 @@ export class NodeAdapter implements RealmAdapter {
     dbAdapter: DBAdapter,
   ): Promise<void> {
     realmEventsLog.debug('Broadcasting realm event', event);
-
+    let realmUserId;
     if (dbAdapter.isClosed) {
       realmEventsLog.warn(
         `Database adapter is closed, skipping sending realm event`,
@@ -243,12 +243,25 @@ export class NodeAdapter implements RealmAdapter {
     }
     try {
       await matrixClient.login();
+      realmUserId = matrixClient.getUserId();
+      if (!realmUserId) {
+        realmEventsLog.error(
+          'Matrix client has no user ID after login, unable to broadcast realm event',
+          event,
+        );
+        return;
+      }
     } catch (e) {
       realmEventsLog.error('Error logging into matrix. Skipping broadcast', e);
       return;
     }
 
-    let dmRooms = await this.waitForSessionRooms(dbAdapter, realmUrl);
+    let dmRooms = await this.waitForSessionRooms(
+      dbAdapter,
+      realmUrl,
+      realmUserId,
+    );
+    console.log('Dm rooms for realm: ', realmUrl, dmRooms);
 
     realmEventsLog.debug('Sending to dm rooms', Object.values(dmRooms));
 
@@ -269,6 +282,7 @@ export class NodeAdapter implements RealmAdapter {
   private async waitForSessionRooms(
     dbAdapter: DBAdapter,
     realmUrl: string,
+    realmUserId: string,
     attempts = 3,
     delayMs = 50,
   ): Promise<Record<string, string>> {
@@ -278,7 +292,7 @@ export class NodeAdapter implements RealmAdapter {
 
     let dmRooms: Record<string, string> = {};
     try {
-      dmRooms = await fetchAllSessionRooms(dbAdapter, realmUrl);
+      dmRooms = await fetchAllSessionRooms(dbAdapter, realmUrl, realmUserId);
     } catch (e) {
       realmEventsLog.error('Error getting account data', e);
       return {}; // bail immediately on errors instead of retrying
@@ -296,6 +310,7 @@ export class NodeAdapter implements RealmAdapter {
     return await this.waitForSessionRooms(
       dbAdapter,
       realmUrl,
+      realmUserId,
       attempts - 1,
       delayMs,
     );

@@ -50,6 +50,12 @@ export default function handleRealmAuth({
       }
 
       try {
+        console.log(
+          'Realm auth creating session for realm:',
+          realmUrl,
+          'and user:',
+          matrixUserId,
+        );
         let sessionRoom = await realm.ensureSessionRoom(matrixUserId);
         sessions[realmUrl] = createJWT(
           {
