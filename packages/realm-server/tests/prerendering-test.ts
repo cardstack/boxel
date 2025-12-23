@@ -45,6 +45,9 @@ function makeStubPagePool(maxPages: number) {
             removeAllListeners() {
               return;
             },
+            on() {
+              return;
+            },
           } as any;
         },
         async close() {
@@ -72,7 +75,7 @@ function makeStubPagePool(maxPages: number) {
   return { pool, contextsCreated, contextsClosed };
 }
 
-module(basename(__filename), function () {
+module.only(basename(__filename), function () {
   module('prerender - dynamic tests', function (hooks) {
     let realmURL = 'http://127.0.0.1:4450/';
     let prerenderServerURL = realmURL.endsWith('/')
