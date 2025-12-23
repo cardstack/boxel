@@ -26,7 +26,6 @@ import {
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_MESSAGE_MSGTYPE,
-  DEFAULT_LLM,
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -738,39 +737,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
   });
 
-  test('defaults to anthropic/claude-sonnet-4.5 in code mode', async function (assert) {
-    let defaultCodeLLMId = 'anthropic/claude-sonnet-4.5';
-    let defaultCodeLLMName = modelNameFor(defaultCodeLLMId);
-
-    await visitOperatorMode({
-      stacks: [
-        [
-          {
-            id: `${testRealmURL}index`,
-            format: 'isolated',
-          },
-        ],
-      ],
-    });
-
-    await click('[data-test-open-ai-assistant]');
-    await waitFor(`[data-room-settled]`);
-    await click('[data-test-submode-switcher] button');
-    await click('[data-test-boxel-menu-item-text="Code"]');
-    assert.dom('[data-test-llm-select-selected]').hasText(defaultCodeLLMName);
-
-    createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test-2',
-    });
-
-    await click('[data-test-past-sessions-button]');
-    await waitFor("[data-test-enter-room='mock_room_1']");
-    await click('[data-test-enter-room="mock_room_1"]');
-    assert.dom('[data-test-llm-select-selected]').hasText(defaultCodeLLMName);
-  });
-
-  test('defaults to the system card default in interact mode', async function (assert) {
+  test('defaults to the system card default regardless of submode', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -794,48 +761,11 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     assert.dom('[data-test-llm-select-selected]').hasText(expectedName);
 
-    assert.strictEqual(
-      defaultSystemModelId,
-      'anthropic/claude-sonnet-4.5',
-      'sonnet 4.5 remains the leading option',
-    );
-
-    await click('[data-test-close-ai-assistant]');
-  });
-
-  test('switching back to interact mode uses the system default model', async function (assert) {
-    let interactFallbackName = modelNameFor(DEFAULT_LLM);
-
-    await visitOperatorMode({
-      stacks: [
-        [
-          {
-            id: `${testRealmURL}index`,
-            format: 'isolated',
-          },
-        ],
-      ],
-    });
-
-    await click('[data-test-open-ai-assistant]');
-    await waitFor(`[data-room-settled]`);
-
-    // Initial interact mode defaults to the system card default
-    assert
-      .dom('[data-test-llm-select-selected]')
-      .hasText(modelNameFor('anthropic/claude-sonnet-4.5'));
-
-    // Switch to Code mode and confirm coding default is applied
+    // Switching submodes should not change the active LLM
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    assert
-      .dom('[data-test-llm-select-selected]')
-      .hasText(modelNameFor('anthropic/claude-sonnet-4.5'));
+    assert.dom('[data-test-llm-select-selected]').hasText(expectedName);
 
-    // Switch back to Interact mode and ensure we fall back to the default
-    await click('[data-test-submode-switcher] button');
-    await click('[data-test-boxel-menu-item-text="Interact"]');
-    assert.dom('[data-test-llm-select-selected]').hasText(interactFallbackName);
     await click('[data-test-close-ai-assistant]');
   });
 

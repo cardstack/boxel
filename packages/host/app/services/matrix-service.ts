@@ -54,8 +54,6 @@ import {
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
-  DEFAULT_CODING_LLM,
-  DEFAULT_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
@@ -1871,34 +1869,6 @@ export default class MatrixService extends Service {
       roomId: this.currentRoomId,
       skillCardIdsToActivate: defaultSkills.map((s) => s.id),
     });
-  }
-
-  async setLLMForCodeMode() {
-    let preferredModel =
-      this.systemCard?.defaultModelConfiguration?.modelId ??
-      this.systemCard?.modelConfigurations?.[0]?.modelId ??
-      DEFAULT_CODING_LLM;
-    return this.setLLMModel(preferredModel);
-  }
-
-  async setLLMForInteractMode() {
-    let preferredModel =
-      this.systemCard?.defaultModelConfiguration?.modelId ??
-      this.systemCard?.modelConfigurations?.[0]?.modelId ??
-      DEFAULT_LLM;
-
-    return this.setLLMModel(preferredModel);
-  }
-
-  private async setLLMModel(model: string) {
-    if (!this.currentRoomId) {
-      return;
-    }
-    let roomResource = this.roomResources.get(this.currentRoomId);
-    if (!roomResource) {
-      return;
-    }
-    return roomResource.activateLLMTask.perform(model);
   }
 
   loadMoreAIRooms() {
