@@ -22,6 +22,7 @@ type StandbyEntry = {
 type Entry = PoolEntry | StandbyEntry;
 
 const log = logger('prerenderer');
+const chromeLog = logger('prerenderer-chrome');
 const STANDBY_CREATION_RETRIES = 3;
 const STANDBY_BACKOFF_MS = 500;
 const STANDBY_BACKOFF_CAP_MS = 4000;
@@ -31,7 +32,6 @@ export class PagePool {
   #standbys = new Set<StandbyEntry>();
   #lru = new Set<string>();
   #maxPages: number;
-  #silent: boolean;
   #serverURL: string;
   #browserManager: BrowserManager;
   #boxelHostURL: string;
@@ -41,14 +41,12 @@ export class PagePool {
 
   constructor(options: {
     maxPages: number;
-    silent: boolean;
     serverURL: string;
     browserManager: BrowserManager;
     boxelHostURL: string;
     standbyTimeoutMs?: number;
   }) {
     this.#maxPages = options.maxPages;
-    this.#silent = options.silent;
     this.#serverURL = options.serverURL;
     this.#browserManager = options.browserManager;
     this.#boxelHostURL = options.boxelHostURL;
@@ -105,9 +103,7 @@ export class PagePool {
       entry.type = 'pool';
       entry.realm = realm;
       standby.page.removeAllListeners('console');
-      if (!this.#silent) {
-        this.#attachPageConsole(standby.page, realm, standby.pageId);
-      }
+      this.#attachPageConsole(standby.page, realm, standby.pageId);
       this.#realmPages.set(realm, entry);
       reused = false;
     } else {
@@ -262,9 +258,7 @@ export class PagePool {
       context = await browser.createBrowserContext();
       let page = await context.newPage();
       let pageId = uuidv4();
-      if (!this.#silent) {
-        this.#attachPageConsole(page, 'standby', pageId);
-      }
+      this.#attachPageConsole(page, 'standby', pageId);
       await this.#loadStandbyPage(page, pageId);
       let entry: StandbyEntry = {
         type: 'standby',
@@ -403,15 +397,15 @@ export class PagePool {
     switch (type) {
       case 'assert':
       case 'error':
-        return log.error.bind(log);
+        return chromeLog.error.bind(log);
       case 'warn':
-        return log.warn.bind(log);
+        return chromeLog.warn.bind(log);
       case 'info':
-        return log.info.bind(log);
+        return chromeLog.info.bind(log);
       case 'debug':
-        return log.debug.bind(log);
+        return chromeLog.debug.bind(log);
       default:
-        return log.info.bind(log);
+        return chromeLog.info.bind(log);
     }
   }
 
