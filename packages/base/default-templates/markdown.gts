@@ -32,13 +32,22 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   Args: { content: string | null };
 }> {
   @tracked monacoContextInternal: any = undefined;
+  get isPrerenderContext() {
+    return Boolean((globalThis as any).__boxelRenderContext);
+  }
   get monacoContext() {
+    if (this.isPrerenderContext) {
+      return undefined;
+    }
     if (!this.monacoContextInternal && this.prepareMonacoContextTask) {
       this.prepareMonacoContextTask.perform();
     }
     return this.monacoContextInternal;
   }
   prepareMonacoContextTask = task({ drop: true }, async () => {
+    if (this.isPrerenderContext) {
+      return;
+    }
     let loadMonacoForMarkdown = (globalThis as any).__loadMonacoForMarkdown;
     if (typeof loadMonacoForMarkdown !== 'function') {
       // If Monaco loader is not available, skip loading and leave monacoContext undefined
