@@ -1176,9 +1176,16 @@ function assertIndexEntry<T>(obj: T): Omit<
     !('resource_created_at' in obj) ||
     typeof obj.resource_created_at !== 'string'
   ) {
-    throw new Error(
-      `expected index entry to have "resource_created_at" property`,
-    );
+    if (
+      'resource_created_at' in obj &&
+      typeof obj.resource_created_at == 'number'
+    ) {
+      obj.resource_created_at = obj.resource_created_at.toString();
+    } else {
+      throw new Error(
+        `expected index entry to have "resource_created_at" property`,
+      );
+    }
   }
   return obj as Omit<T, 'source' | 'last_modified' | 'resource_created_at'> & {
     last_modified: string;
