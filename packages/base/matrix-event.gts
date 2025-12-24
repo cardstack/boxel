@@ -372,9 +372,12 @@ export interface RealmEvent extends BaseMatrixEvent {
   content: RealmEventContent;
 }
 
-export type RealmEventContent =
+export type RealmEventContent = (
   | IndexRealmEventContent
-  | UpdateRealmEventContent;
+  | UpdateRealmEventContent
+) & {
+  realmURL?: string;
+};
 
 export type IndexRealmEventContent =
   | IncrementalIndexEventContent

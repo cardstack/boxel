@@ -937,6 +937,7 @@ module(basename(__filename), function () {
         eventName: 'index',
         indexType: 'incremental-index-initiation',
         updatedFile: `${newCardId}.json`,
+        realmURL: testRealmHref,
       });
 
       assert.deepEqual(incrementalEvent?.content, {
@@ -944,6 +945,7 @@ module(basename(__filename), function () {
         indexType: 'incremental',
         invalidations: [newCardId],
         clientRequestId: null,
+        realmURL: testRealmHref,
       });
 
       {
@@ -1101,12 +1103,14 @@ module(basename(__filename), function () {
         eventName: 'index',
         indexType: 'incremental-index-initiation',
         updatedFile: `${testRealmHref}person-1.json`,
+        realmURL: testRealmHref,
       });
 
       assert.deepEqual(incrementalEvent?.content, {
         eventName: 'index',
         indexType: 'incremental',
         invalidations: [`${testRealmHref}person-1`],
+        realmURL: testRealmHref,
       });
 
       {

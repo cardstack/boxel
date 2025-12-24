@@ -882,6 +882,7 @@ module(basename(__filename), function () {
                 eventName: 'index',
                 indexType: 'incremental-index-initiation',
                 updatedFile: `${testRealmURL}test-card.gts`,
+                realmURL: testRealmURL,
               },
             },
             {
@@ -891,6 +892,7 @@ module(basename(__filename), function () {
                 indexType: 'incremental',
                 invalidations: [`${testRealmURL}test-card.gts`],
                 clientRequestId: null,
+                realmURL: testRealmURL,
               },
             },
             {
@@ -899,6 +901,7 @@ module(basename(__filename), function () {
                 eventName: 'index',
                 indexType: 'incremental-index-initiation',
                 updatedFile: `${testRealmURL}test-card.gts`,
+                realmURL: testRealmURL,
               },
             },
             {
@@ -908,6 +911,7 @@ module(basename(__filename), function () {
                 indexType: 'incremental',
                 invalidations: [`${testRealmURL}test-card.gts`, id],
                 clientRequestId: null,
+                realmURL: testRealmURL,
               },
             },
             {
@@ -916,6 +920,7 @@ module(basename(__filename), function () {
                 eventName: 'index',
                 indexType: 'incremental-index-initiation',
                 updatedFile: `${id}.json`,
+                realmURL: testRealmURL,
               },
             },
             {
@@ -925,6 +930,7 @@ module(basename(__filename), function () {
                 indexType: 'incremental',
                 invalidations: [id],
                 clientRequestId: null,
+                realmURL: testRealmURL,
               },
             },
           ];

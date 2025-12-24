@@ -1829,30 +1829,17 @@ export default class MatrixService extends Service {
         return;
       }
 
-      let realmResourceForEvent = this.realm.realmForSessionRoomId(
-        event.room_id!,
-      );
-      console.log('Trying to figure out realm for event', {
-        event,
-        realmResourceForEvent,
-      });
-      if (!realmResourceForEvent) {
-        console.log('Ignoring realm event because no realm found', event);
-      } else {
-        // TODO: CHECK THAT THE SENDER IS THE REALM SERVER?
-        if (realmResourceForEvent.info?.realmUserId !== event.sender) {
-          console.log(
-            `Realm event sender ${event.sender} is not the realm user ${realmResourceForEvent.info?.realmUserId}`,
-            event,
-          );
-        }
-
-        (event.content as any).origin_server_ts = event.origin_server_ts;
-        this.messageService.relayRealmEvent(
-          realmResourceForEvent.url,
-          event.content as RealmEventContent,
+      const content = event.content as RealmEventContent;
+      if (!content.realmURL) {
+        realmEventsLogger.debug(
+          'Ignoring realm event because no realm URL was provided',
+          event,
         );
+        return;
       }
+
+      (content as any).origin_server_ts = event.origin_server_ts;
+      this.messageService.relayRealmEvent(content);
     }
   }
 

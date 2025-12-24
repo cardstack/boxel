@@ -234,6 +234,10 @@ export class NodeAdapter implements RealmAdapter {
     dbAdapter: DBAdapter,
   ): Promise<void> {
     realmEventsLog.debug('Broadcasting realm event', event);
+    const eventWithRealmURL: RealmEventContent = {
+      ...event,
+      realmURL: realmUrl,
+    };
     let realmUserId;
     if (dbAdapter.isClosed) {
       realmEventsLog.warn(
@@ -268,7 +272,11 @@ export class NodeAdapter implements RealmAdapter {
     for (let userId of Object.keys(dmRooms)) {
       let roomId = dmRooms[userId];
       try {
-        await matrixClient.sendEvent(roomId, APP_BOXEL_REALM_EVENT_TYPE, event);
+        await matrixClient.sendEvent(
+          roomId,
+          APP_BOXEL_REALM_EVENT_TYPE,
+          eventWithRealmURL,
+        );
       } catch (e) {
         realmEventsLog.error(
           `Unable to send event in room ${roomId} for user ${userId}`,
