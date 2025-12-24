@@ -8,7 +8,6 @@
     },
     "type": "card",
     "attributes": {
-      "body": null,
       "skills": [],
       "bullets": [],
       "cardInfo": {
@@ -19,13 +18,14 @@
       },
       "headline": "Choose your model. Own your prompts.",
       "footerNote": null,
+      "subheadline": "Everything the AI does—vibe coding, workspace orchestration, assistant behavior—is powered by skill cards you can inspect, modify, or replace.",
       "sectionLabel": "AI Extensibility",
       "sectionNumber": "005"
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+          "self": null
         }
       }
     }

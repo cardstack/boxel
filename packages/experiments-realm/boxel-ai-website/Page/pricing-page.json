@@ -8,17 +8,17 @@
     },
     "type": "card",
     "attributes": {
+      "pageId": "pricing",
+      "pageUrl": "/pricing",
       "cardInfo": {
         "notes": null,
         "title": "Pricing Page",
         "description": "Pricing landing page",
         "thumbnailURL": null
       },
-      "pageId": "pricing",
-      "pageLabel": "Pricing",
-      "pageUrl": "/pricing",
-      "showInNav": true,
       "navOrder": 3,
+      "pageLabel": "Pricing",
+      "showInNav": true,
       "hasDropdown": false
     },
     "relationships": {

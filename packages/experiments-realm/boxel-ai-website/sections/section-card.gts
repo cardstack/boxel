@@ -9,16 +9,15 @@ import BooleanField from 'https://cardstack.com/base/boolean';
 
 import { dasherize } from '@cardstack/boxel-ui/helpers';
 
+import { Section } from '../components/section';
+
 // Base class for all section cards
 export class SectionCard extends CardDef {
   static displayName = 'Section';
 
   @field sectionId = contains(StringField, {
     computeVia: function (this: SectionCard) {
-      return [this.sectionNumber, this.sectionLabel]
-        .filter(Boolean)
-        .map(dasherize)
-        .join('-');
+      return dasherize(this.headerLabel?.replace(' - ', ' '));
     },
   });
   @field sectionNumber = contains(StringField);
@@ -28,15 +27,22 @@ export class SectionCard extends CardDef {
       return true;
     },
   });
+  @field headerLabel = contains(StringField, {
+    computeVia: function (this: SectionCard) {
+      return [this.sectionNumber, this.sectionLabel]
+        .filter(Boolean)
+        .join(' - ');
+    },
+  });
 
   // Subclasses override with their own isolated template
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <section id={{@model.sectionId}} class='section'>
+      <Section class='section'>
         <div class='section-content'>
           {{! Override in subclass }}
         </div>
-      </section>
+      </Section>
     </template>
   };
 }

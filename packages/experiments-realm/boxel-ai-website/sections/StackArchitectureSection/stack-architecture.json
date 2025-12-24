@@ -16,14 +16,14 @@
         "thumbnailURL": null
       },
       "headline": "Legacy stacks weren't built for AI.",
-      "subheadline": null,
+      "subheadline": "AI excels at reading and writing files. So we built an architecture where one file type defines your entire application—schema, templates, relationships, and commands.",
       "sectionLabel": "AI-Native Stack",
       "sectionNumber": "003"
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+          "self": null
         }
       }
     }

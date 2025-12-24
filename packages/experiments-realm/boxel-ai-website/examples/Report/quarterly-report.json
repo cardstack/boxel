@@ -8,15 +8,15 @@
     },
     "type": "card",
     "attributes": {
+      "period": "Q2 2024",
+      "summary": "Q2 performance summary",
       "cardInfo": {
         "notes": null,
         "title": "Quarterly Report",
         "description": "Q2 performance summary",
         "thumbnailURL": null
       },
-      "reportTitle": "Quarterly Report",
-      "summary": "Q2 performance summary",
-      "period": "Q2 2024"
+      "reportTitle": "Quarterly Report"
     },
     "relationships": {
       "cardInfo.theme": {

@@ -8,16 +8,16 @@
     },
     "type": "card",
     "attributes": {
+      "amount": 1200,
+      "status": "pending",
       "cardInfo": {
         "notes": null,
         "title": "Product Invoice",
         "description": "Product sale invoice",
         "thumbnailURL": null
       },
-      "invoiceNumber": "INV-2024-010",
       "clientName": "Northwind",
-      "amount": 1200,
-      "status": "pending"
+      "invoiceNumber": "INV-2024-010"
     },
     "relationships": {
       "cardInfo.theme": {

@@ -1,4 +1,5 @@
 import {
+  Component,
   FieldDef,
   field,
   contains,
@@ -8,6 +9,7 @@ import StringField from 'https://cardstack.com/base/string';
 import ColorField from 'https://cardstack.com/base/color';
 import enumField from 'https://cardstack.com/base/enum';
 
+import { Section, SectionHeader } from '../components/section';
 import { SectionCard } from './section-card';
 
 class SkillItemField extends FieldDef {
@@ -26,10 +28,8 @@ class SkillItemField extends FieldDef {
 export class SkillsSection extends SectionCard {
   static displayName = 'Skills Section';
 
-  @field sectionNumber = contains(StringField);
-  @field sectionLabel = contains(StringField);
   @field headline = contains(StringField);
-  @field body = contains(StringField);
+  @field subheadline = contains(StringField);
   @field bullets = containsMany(StringField);
   @field skills = containsMany(SkillItemField);
   @field footerNote = contains(StringField);
@@ -40,4 +40,16 @@ export class SkillsSection extends SectionCard {
    * Skill type color coding
    * "Prompt to Skill" evolution diagram
    */
+
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <Section>
+        <SectionHeader
+          @headline={{@model.headline}}
+          @subheadline={{@model.subheadline}}
+          @label={{@model.headerLabel}}
+        />
+      </Section>
+    </template>
+  };
 }

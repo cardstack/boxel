@@ -46,11 +46,6 @@
           "showInNav": true
         },
         {
-          "sectionNumber": "005",
-          "sectionLabel": "Model Sources",
-          "showInNav": true
-        },
-        {
           "sectionNumber": "006",
           "sectionLabel": "AI-Searchable Catalog",
           "showInNav": true
@@ -117,25 +112,20 @@
       },
       "sections.6.content": {
         "links": {
-          "self": "../sections/ModelsSection/models"
+          "self": "../sections/CatalogSection/catalog"
         }
       },
       "sections.7.content": {
         "links": {
-          "self": "../sections/CatalogSection/catalog"
+          "self": "../sections/BuilderEconomySection/builder-economy"
         }
       },
       "sections.8.content": {
         "links": {
-          "self": "../sections/BuilderEconomySection/builder-economy"
-        }
-      },
-      "sections.9.content": {
-        "links": {
           "self": "../sections/CtaSection/cta"
         }
       },
-      "sections.10.content": {
+      "sections.9.content": {
         "links": {
           "self": "../sections/FooterSection/footer"
         }

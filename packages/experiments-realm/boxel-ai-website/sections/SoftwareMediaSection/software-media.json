@@ -16,14 +16,14 @@
         "thumbnailURL": null
       },
       "headline": "Software that behaves like media.",
-      "subheadline": null,
+      "subheadline": "Every Card is a file AI can attach, inspect, and transform, just like you attach a JPG to an email. Cards carry their own meaning wherever they go.",
       "sectionLabel": "AI-Native Composition",
       "sectionNumber": "004"
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+          "self": null
         }
       }
     }

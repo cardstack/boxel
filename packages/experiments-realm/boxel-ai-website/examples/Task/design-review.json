@@ -8,6 +8,8 @@
     },
     "type": "card",
     "attributes": {
+      "status": "blocked",
+      "assignee": "Avery",
       "cardInfo": {
         "notes": null,
         "title": "Design Review",
@@ -15,9 +17,7 @@
         "thumbnailURL": null
       },
       "taskName": "Design Review",
-      "description": "Review new dashboard mockups and provide feedback",
-      "assignee": "Avery",
-      "status": "blocked"
+      "description": "Review new dashboard mockups and provide feedback"
     },
     "relationships": {
       "cardInfo.theme": {

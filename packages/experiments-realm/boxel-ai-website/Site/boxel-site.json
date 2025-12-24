@@ -23,7 +23,27 @@
     "relationships": {
       "pages.0": {
         "links": {
+          "self": "../Page/product-page"
+        }
+      },
+      "pages.1": {
+        "links": {
           "self": "../Page/docs-page"
+        }
+      },
+      "pages.2": {
+        "links": {
+          "self": "../Page/pricing-page"
+        }
+      },
+      "pages.3": {
+        "links": {
+          "self": "../Page/blog-page"
+        }
+      },
+      "pages.4": {
+        "links": {
+          "self": "../Page/community-page"
         }
       },
       "brandGuide": {

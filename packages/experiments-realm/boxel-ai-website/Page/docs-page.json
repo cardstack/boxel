@@ -8,17 +8,17 @@
     },
     "type": "card",
     "attributes": {
+      "pageId": "docs",
+      "pageUrl": "/docs",
       "cardInfo": {
         "notes": null,
         "title": "Docs Page",
         "description": "Documentation landing page",
         "thumbnailURL": null
       },
-      "pageId": "docs",
-      "pageLabel": "Docs",
-      "pageUrl": "/docs",
-      "showInNav": true,
       "navOrder": 2,
+      "pageLabel": "Docs",
+      "showInNav": true,
       "hasDropdown": true
     },
     "relationships": {

@@ -1,4 +1,5 @@
 import {
+  Component,
   field,
   contains,
   containsMany,
@@ -6,6 +7,7 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 
 import { FeatureTileField } from '../fields/feature-tile-field';
+import { Section, SectionHeader } from '../components/section';
 import { SectionCard } from './section-card';
 
 export class StackArchitectureSection extends SectionCard {
@@ -21,4 +23,16 @@ export class StackArchitectureSection extends SectionCard {
    * Accent glow on hover
    * Bullet points with colored dots
    */
+
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <Section>
+        <SectionHeader
+          @headline={{@model.headline}}
+          @subheadline={{@model.subheadline}}
+          @label={{@model.headerLabel}}
+        />
+      </Section>
+    </template>
+  };
 }

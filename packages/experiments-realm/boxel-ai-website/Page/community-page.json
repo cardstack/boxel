@@ -8,17 +8,17 @@
     },
     "type": "card",
     "attributes": {
+      "pageId": "community",
+      "pageUrl": "/community",
       "cardInfo": {
         "notes": null,
         "title": "Community Page",
         "description": "Community landing page",
         "thumbnailURL": null
       },
-      "pageId": "community",
-      "pageLabel": "Community",
-      "pageUrl": "/community",
-      "showInNav": true,
       "navOrder": 5,
+      "pageLabel": "Community",
+      "showInNav": true,
       "hasDropdown": true
     },
     "relationships": {

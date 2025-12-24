@@ -14,7 +14,13 @@
         "description": null,
         "thumbnailURL": null
       },
-      "sections": [],
+      "sections": [
+        {
+          "sectionNumber": null,
+          "sectionLabel": null,
+          "showInNav": false
+        }
+      ],
       "showSidebar": true,
       "currentPageId": "docs"
     },
@@ -27,6 +33,11 @@
       "cardInfo.theme": {
         "links": {
           "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+        }
+      },
+      "sections.0.content": {
+        "links": {
+          "self": "../sections/HeroSection/compose-hero"
         }
       }
     }

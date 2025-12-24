@@ -8,16 +8,16 @@
     },
     "type": "card",
     "attributes": {
+      "amount": 5000,
+      "status": "paid",
       "cardInfo": {
         "notes": null,
         "title": "Consulting Invoice",
         "description": "Consulting work for Acme Corp",
         "thumbnailURL": null
       },
-      "invoiceNumber": "INV-2024-001",
       "clientName": "Acme Corp",
-      "amount": 5000,
-      "status": "paid"
+      "invoiceNumber": "INV-2024-001"
     },
     "relationships": {
       "cardInfo.theme": {

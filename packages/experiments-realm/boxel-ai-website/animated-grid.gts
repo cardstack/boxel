@@ -9,6 +9,8 @@ import NumberField from 'https://cardstack.com/base/number';
 import ColorField from 'https://cardstack.com/base/color';
 import enumField from 'https://cardstack.com/base/enum';
 
+import { cssVar } from '@cardstack/boxel-ui/helpers';
+
 export class AnimatedGrid extends CardDef {
   static displayName = 'Animated Grid';
 
@@ -40,12 +42,12 @@ export class AnimatedGrid extends CardDef {
     <template>
       <div
         class='animated-grid'
-        style='
-        --grid-columns: {{@model.gridColumns}};
-        --grid-rows: {{@model.gridRows}};
-        --card-opacity: {{@model.cardOpacity}};
-        --accent-color: {{@model.accentColor}};
-      '
+        style={{cssVar
+          grid-columns=@model.gridColumns
+          grid-rows=@model.gridRows
+          card-opacity=@model.cardOpacity
+          accent-color=@model.accentColor
+        }}
       >
         {{#each this.cellArray as |index|}}
           <div class='grid-cell' data-index={{index}}></div>

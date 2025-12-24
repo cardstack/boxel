@@ -8,17 +8,17 @@
     },
     "type": "card",
     "attributes": {
+      "pageId": "blog",
+      "pageUrl": "/blog",
       "cardInfo": {
         "notes": null,
         "title": "Blog Page",
         "description": "Blog landing page",
         "thumbnailURL": null
       },
-      "pageId": "blog",
-      "pageLabel": "Blog",
-      "pageUrl": "/blog",
-      "showInNav": true,
       "navOrder": 4,
+      "pageLabel": "Blog",
+      "showInNav": true,
       "hasDropdown": false
     },
     "relationships": {

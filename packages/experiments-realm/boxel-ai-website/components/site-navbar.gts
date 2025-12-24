@@ -1,4 +1,5 @@
 import Component from '@glimmer/component';
+import { on } from '@ember/modifier';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
@@ -9,6 +10,7 @@ export interface SiteNavbarSignature {
   Args: {
     site?: Site;
     currentPageId?: string | null;
+    toggleMode?: () => void;
   };
 }
 
@@ -40,6 +42,31 @@ export class SiteNavbar extends Component<SiteNavbarSignature> {
       </div>
 
       <div class='nav-actions'>
+        {{#if @toggleMode}}
+          <button
+            class='dark-mode-toggle'
+            id='darkModeToggle'
+            aria-label='Toggle dark mode'
+            {{on 'click' @toggleMode}}
+          >
+            <svg
+              class='icon-sun'
+              viewBox='0 0 24 24'
+              fill='none'
+              stroke='currentColor'
+              stroke-width='2'
+            >
+              <circle cx='12' cy='12' r='5'></circle>
+              <path
+                d='M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42'
+              ></path>
+            </svg>
+            <svg class='icon-moon' viewBox='0 0 24 24' fill='currentColor'>
+              <path d='M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z'></path>
+            </svg>
+          </button>
+        {{/if}}
+
         {{#if @site.ctaSecondaryText}}
           <Button
             class='site-navbar-cta-secondary'
@@ -84,6 +111,50 @@ export class SiteNavbar extends Component<SiteNavbarSignature> {
       .logo {
         font-weight: 700;
         letter-spacing: -0.01em;
+      }
+
+      .dark-mode-toggle {
+        width: 44px;
+        height: 24px;
+        background: var(--border-light);
+        border-radius: 100px;
+        position: relative;
+        cursor: pointer;
+        transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        border: none;
+        padding: 0;
+      }
+      .dark-mode-toggle::before {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 20px;
+        height: 20px;
+        background: white;
+        border-radius: 50%;
+        transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+      }
+      .dark-mode-toggle svg {
+        fill: var(--boxel-slate);
+      }
+      .dark-mode-toggle .icon-sun,
+      .dark-mode-toggle .icon-moon {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 12px;
+        height: 12px;
+        transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .dark-mode-toggle .icon-sun {
+        left: 6px;
+        opacity: 1;
+      }
+      .dark-mode-toggle .icon-moon {
+        right: 6px;
+        opacity: 0.4;
       }
 
       .nav-links {

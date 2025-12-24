@@ -8,17 +8,17 @@
     },
     "type": "card",
     "attributes": {
+      "pageId": "product",
+      "pageUrl": "/",
       "cardInfo": {
         "notes": null,
         "title": "Product Page",
         "description": "Product landing page",
         "thumbnailURL": null
       },
-      "pageId": "product",
-      "pageLabel": "Product",
-      "pageUrl": "/",
-      "showInNav": true,
       "navOrder": 1,
+      "pageLabel": "Product",
+      "showInNav": true,
       "hasDropdown": true
     },
     "relationships": {
