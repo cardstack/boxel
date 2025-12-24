@@ -1,5 +1,5 @@
 import {
-  // Component,
+  Component,
   FieldDef,
   field,
   contains,
@@ -7,6 +7,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 
+import { SectionHeader } from '../components/section';
 import { SectionCard } from './section-card';
 
 class SellableTypeField extends FieldDef {
@@ -29,8 +30,6 @@ class PublishingStepField extends FieldDef {
 export class BuilderEconomySection extends SectionCard {
   static displayName = 'Builder Economy Section';
 
-  @field sectionNumber = contains(StringField);
-  @field sectionLabel = contains(StringField);
   @field headline = contains(StringField);
   @field subheadline = contains(StringField);
   @field oldWayHeadline = contains(StringField);
@@ -50,4 +49,14 @@ export class BuilderEconomySection extends SectionCard {
    * Cost comparison with red/green styling
    * Two-way economy card with sellable types + publishing flow
    */
+
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <SectionHeader
+        @headline={{@model.headline}}
+        @subheadline={{@model.subheadline}}
+        @label={{@model.headerLabel}}
+      />
+    </template>
+  };
 }

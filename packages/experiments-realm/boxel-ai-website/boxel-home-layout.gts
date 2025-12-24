@@ -87,9 +87,11 @@ class Isolated extends Component<typeof HomeLayoutCard> {
         --hero-padding-block: clamp(5rem, 12vw, 10rem);
         --footer-padding-block: clamp(2rem, 5vw, 3rem);
 
-        display: flex;
-        flex-direction: column;
-        gap: 0;
+        display: grid;
+        gap: 8rem;
+        max-width: var(--section-max-width);
+        margin: 0 auto;
+        padding: 8rem 4rem 6rem;
       }
 
       .empty-state {

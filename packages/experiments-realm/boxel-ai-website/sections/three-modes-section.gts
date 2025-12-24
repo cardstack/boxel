@@ -1,5 +1,5 @@
 import {
-  // Component,
+  Component,
   FieldDef,
   field,
   contains,
@@ -9,6 +9,7 @@ import StringField from 'https://cardstack.com/base/string';
 import ColorField from 'https://cardstack.com/base/color';
 import URLField from 'https://cardstack.com/base/url';
 
+import { Section, SectionHeader } from '../components/section';
 import { SectionCard } from './section-card';
 
 class ModeCardField extends FieldDef {
@@ -38,4 +39,16 @@ export class ThreeModesSection extends SectionCard {
    * Color-coded mode indicators
    * Staggered grid layout
    * */
+
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <Section>
+        <SectionHeader
+          @headline={{@model.headline}}
+          @subheadline={{@model.subheadline}}
+          @label={{@model.headerLabel}}
+        />
+      </Section>
+    </template>
+  };
 }

@@ -14,26 +14,26 @@
         "description": null,
         "thumbnailURL": null
       },
-      "sectionNumber": "007",
-      "sectionLabel": "Builder Economy",
       "headline": "Don't pay AI companies—pay each other.",
-      "subheadline": null,
-      "oldWayHeadline": null,
-      "oldWayBody": null,
-      "newWayHeadline": null,
+      "footerBody": null,
       "newWayBody": null,
+      "oldWayBody": null,
+      "subheadline": "The Creator Economy for Software. Everyone pays the same AI companies to generate the same things over and over. Boxel shifts value from AI compute to human creativity.",
+      "sectionLabel": "Builder Economy",
       "newWayBullets": [],
-      "generateCostRange": null,
-      "remixCostRange": null,
+      "sectionNumber": "007",
       "sellableTypes": [],
-      "publishingSteps": [],
       "footerHeadline": null,
-      "footerBody": null
+      "newWayHeadline": null,
+      "oldWayHeadline": null,
+      "remixCostRange": null,
+      "publishingSteps": [],
+      "generateCostRange": null
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+          "self": null
         }
       }
     }

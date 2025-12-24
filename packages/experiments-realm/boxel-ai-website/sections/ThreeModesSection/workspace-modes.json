@@ -8,22 +8,22 @@
     },
     "type": "card",
     "attributes": {
+      "modes": [],
       "cardInfo": {
         "notes": null,
         "title": "Workspace Modes",
         "description": null,
         "thumbnailURL": null
       },
-      "sectionNumber": "002",
+      "headline": "One environment that unifies how you create, build, and share anything.",
+      "subheadline": "Boxel unifies chat, code editing, vibe coding, and hosting into one self-contained environment. Same files, same data, same system—just different lenses for different type of work. Switch modes, not apps.",
       "sectionLabel": "AI-Native Workspace",
-      "headline": "Pick the mode that matches your flow.",
-      "subheadline": null,
-      "modes": []
+      "sectionNumber": "002"
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+          "self": null
         }
       }
     }

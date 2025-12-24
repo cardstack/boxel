@@ -1,4 +1,5 @@
 import {
+  Component,
   FieldDef,
   field,
   contains,
@@ -6,6 +7,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 
+import { SectionHeader } from '../components/section';
 import { SectionCard } from './section-card';
 
 class ModelChipField extends FieldDef {
@@ -39,4 +41,14 @@ export class ModelsSection extends SectionCard {
    * Chips with model counts
    * Category cards with accent colors
    */
+
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <SectionHeader
+        @headline={{@model.headline}}
+        @subheadline={{@model.subheadline}}
+        @label={{@model.headerLabel}}
+      />
+    </template>
+  };
 }

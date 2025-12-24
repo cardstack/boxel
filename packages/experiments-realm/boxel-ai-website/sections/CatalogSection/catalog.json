@@ -16,7 +16,7 @@
       },
       "headline": "Skip generation. Remix proven solutions.",
       "categories": [],
-      "subheadline": null,
+      "subheadline": "Your AI searches the catalog before generating from scratch. Need a CRM? It finds proven templates that match. Browse what the community has built, or let AI find it for you—either way, you get full source to customize.",
       "catalogItems": [],
       "sectionLabel": "AI-Searchable Catalog",
       "sectionNumber": "006",
@@ -25,7 +25,7 @@
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+          "self": null
         }
       }
     }

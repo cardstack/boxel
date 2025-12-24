@@ -10,6 +10,7 @@ import BooleanField from 'https://cardstack.com/base/boolean';
 
 import { dasherize } from '@cardstack/boxel-ui/helpers';
 
+import { Section } from '../components/section';
 import { SectionCard } from '../sections/section-card';
 
 // Wraps section cards with metadata for layout orchestrator
@@ -38,9 +39,9 @@ export class PageSectionField extends FieldDef {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class='page-section-wrapper' id={{@model.sectionId}}>
-        <@fields.content @format='isolated' />
-      </div>
+      <Section id={{@model.sectionId}}>
+        <@fields.content @format='isolated' @displayContainer={{false}} />
+      </Section>
     </template>
   };
 }

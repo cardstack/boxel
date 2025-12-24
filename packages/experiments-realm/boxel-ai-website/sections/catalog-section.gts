@@ -1,10 +1,12 @@
 import {
+  Component,
   field,
   contains,
   containsMany,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 
+import { SectionHeader } from '../components/section';
 import { SectionCard } from './section-card';
 import {
   CatalogItemField,
@@ -14,8 +16,6 @@ import {
 export class CatalogSection extends SectionCard {
   static displayName = 'Catalog Section';
 
-  @field sectionNumber = contains(StringField);
-  @field sectionLabel = contains(StringField);
   @field headline = contains(StringField);
   @field subheadline = contains(StringField);
   @field categories = containsMany(CategoryPillField);
@@ -29,4 +29,14 @@ export class CatalogSection extends SectionCard {
    * Hover overlay with "Remix" and "Preview" buttons
    * Theme chooser strip at bottom
    */
+
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <SectionHeader
+        @headline={{@model.headline}}
+        @subheadline={{@model.subheadline}}
+        @label={{@model.headerLabel}}
+      />
+    </template>
+  };
 }

@@ -8,26 +8,26 @@
     },
     "type": "card",
     "attributes": {
+      "actions": [],
       "cardInfo": {
         "notes": null,
         "title": "CTA",
         "description": null,
         "thumbnailURL": null
       },
-      "sectionNumber": "008",
-      "sectionLabel": "Join the Builders",
       "headline": "What will you build?",
-      "body": null,
-      "actions": [],
-      "primaryCtaText": null,
+      "subheadline": "The transition from human-written to AI-generated software will be one of the most significant shifts in technology history. The constraint isn't architecture anymore. It's imagination.",
+      "sectionLabel": "Join the Builders",
       "primaryCtaUrl": null,
-      "secondaryCtaText": null,
-      "secondaryCtaUrl": null
+      "sectionNumber": "008",
+      "primaryCtaText": null,
+      "secondaryCtaUrl": null,
+      "secondaryCtaText": null
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+          "self": null
         }
       }
     }

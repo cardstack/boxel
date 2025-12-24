@@ -1,10 +1,12 @@
 import {
+  Component,
   field,
   contains,
   containsMany,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 
+import { SectionHeader } from '../components/section';
 import { FlowTabField } from '../fields/flow-step-field';
 import { SectionCard } from './section-card';
 
@@ -21,4 +23,14 @@ export class SoftwareMediaSection extends SectionCard {
    * Progress bar
    * Info overlay at bottom
    */
+
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <SectionHeader
+        @headline={{@model.headline}}
+        @subheadline={{@model.subheadline}}
+        @label={{@model.headerLabel}}
+      />
+    </template>
+  };
 }
