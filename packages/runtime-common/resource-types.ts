@@ -245,6 +245,42 @@ export function isRelationship(
   return true;
 }
 
+export function extractRelationshipIds(
+  relationship: Relationship,
+  baseUrl: string | URL,
+): string[] {
+  let ids: string[] = [];
+  let data = relationship.data;
+  if (!data || typeof data !== 'object') {
+    return ids;
+  }
+  let resolveId = (id: string) => {
+    try {
+      return new URL(id, baseUrl).href;
+    } catch {
+      return id;
+    }
+  };
+  if (Array.isArray(data)) {
+    for (let item of data) {
+      if (item && typeof item === 'object' && 'id' in item) {
+        let id = (item as { id?: string }).id;
+        if (typeof id === 'string') {
+          ids.push(resolveId(id));
+        }
+      }
+    }
+    return ids;
+  }
+  if ('id' in data) {
+    let id = (data as { id?: string }).id;
+    if (typeof id === 'string') {
+      ids.push(resolveId(id));
+    }
+  }
+  return ids;
+}
+
 //validation - prerendered cards
 export function isPrerenderedCardResource(
   resource: any,

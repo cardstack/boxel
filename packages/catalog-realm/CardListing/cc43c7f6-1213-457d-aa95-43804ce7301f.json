@@ -52,16 +52,6 @@
           "self": "../sparkling-water-catalog/SparklingWaterCatalog/ceff0cf4-90b1-44c9-9fea-667fd947a1bd"
         }
       },
-      "examples.1": {
-        "links": {
-          "self": "../sparkling-water-catalog/SparkleFlavor/3c092f66-ae79-4f6b-bfa8-bcd448b2c6e7"
-        }
-      },
-      "examples.2": {
-        "links": {
-          "self": "../sparkling-water-catalog/SparkleFlavor/d47d3c09-2f66-4e79-bf6b-ffa8bcd448b2"
-        }
-      },
       "categories.0": {
         "links": {
           "self": "../Category/shopping-consumer"

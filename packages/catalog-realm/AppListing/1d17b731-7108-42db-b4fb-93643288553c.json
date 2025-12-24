@@ -114,11 +114,6 @@
       },
       "examples.1": {
         "links": {
-          "self": "../sprint-planner/Project/f379cb36-a323-4213-8477-572a31d5d21d"
-        }
-      },
-      "examples.2": {
-        "links": {
           "self": "../sprint-planner/SprintTask/f81ea9a1-0b94-4e12-8e2e-c84fba78c551"
         }
       },
