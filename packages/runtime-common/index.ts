@@ -170,6 +170,7 @@ export * from './authorization-middleware';
 export * from './resource-types';
 export * from './query';
 export * from './query-field-utils';
+export * from './relationship-utils';
 export * from './formats';
 export { getCreatedTime } from './file-meta';
 export { mergeRelationships } from './merge-relationships';

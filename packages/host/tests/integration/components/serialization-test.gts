@@ -12,6 +12,7 @@ import { module, test } from 'qunit';
 import type {
   LooseCardResource,
   LooseSingleCardDocument,
+  Relationship,
   Permissions,
 } from '@cardstack/runtime-common';
 import {
@@ -75,6 +76,18 @@ import { setupRenderingTest } from '../../helpers/setup';
 import type { Captain } from '../../cards/captain';
 
 let loader: Loader;
+
+function assertSingularRelationship(
+  assert: Assert,
+  relationship: Relationship | Relationship[] | undefined,
+  label: string,
+): asserts relationship is Relationship {
+  assert.ok(relationship, `${label} relationship exists`);
+  assert.ok(
+    !Array.isArray(relationship),
+    `${label} relationship is not an array`,
+  );
+}
 
 module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
@@ -4090,7 +4103,7 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('query-backed relationships include canonical search links in serialized payloads', async function (assert) {
-    assert.expect(18);
+    assert.expect(23);
 
     class Person extends CardDef {
       @field title = contains(StringField);
@@ -4174,8 +4187,8 @@ module('Integration | serialization', function (hooks) {
       return;
     }
     let doc = rawDoc;
-    let favoriteRelationship = doc.data.relationships!.favorite;
-    assert.ok(favoriteRelationship, 'favorite relationship exists');
+    let favoriteRelationship = doc.data.relationships?.favorite;
+    assertSingularRelationship(assert, favoriteRelationship, 'favorite');
     let favoriteSearchLink = favoriteRelationship.links?.search;
     assert.ok(favoriteSearchLink, 'favorite relationship exposes links.search');
     let favoriteSearchURL = new URL(favoriteSearchLink!);
@@ -4198,8 +4211,8 @@ module('Integration | serialization', function (hooks) {
       'favorite relationship retains resolved data entry',
     );
 
-    let matchesRelationship = doc.data.relationships!.matches;
-    assert.ok(matchesRelationship, 'matches relationship exists');
+    let matchesRelationship = doc.data.relationships?.matches;
+    assertSingularRelationship(assert, matchesRelationship, 'matches');
     assert.deepEqual(
       matchesRelationship.data,
       [{ type: 'card', id: `${testRealmURL}Person/target` }],
@@ -4226,15 +4239,20 @@ module('Integration | serialization', function (hooks) {
       'Target',
       'matches search link encodes interpolated filter',
     );
-    let firstChild = doc.data.relationships!['matches.0'];
+    let firstChild = doc.data.relationships?.['matches.0'];
+    assertSingularRelationship(assert, firstChild, 'matches.0');
     assert.strictEqual(
       firstChild?.links?.self,
       `./Person/target`,
       'matches indexed relationship retains links to result resource',
     );
 
-    let emptyMatchesRelationship = doc.data.relationships!.emptyMatches;
-    assert.ok(emptyMatchesRelationship, 'emptyMatches relationship exists');
+    let emptyMatchesRelationship = doc.data.relationships?.emptyMatches;
+    assertSingularRelationship(
+      assert,
+      emptyMatchesRelationship,
+      'emptyMatches',
+    );
     assert.deepEqual(
       emptyMatchesRelationship.data,
       [],
@@ -4688,6 +4706,116 @@ module('Integration | serialization', function (hooks) {
               type: 'card',
             },
           },
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Listing',
+          },
+        },
+      },
+      included: [
+        {
+          id: `${testRealmURL}DrumKitCard/kit`,
+          type: 'card',
+          attributes: {
+            name: '808 Analog Kit',
+            cardInfo: {},
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}test-cards`,
+              name: 'DrumKitCard',
+            },
+          },
+        },
+        {
+          id: `${testRealmURL}BeatMakerCard/app`,
+          type: 'card',
+          attributes: {
+            title: 'Beat Maker Studio',
+            cardInfo: {},
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}test-cards`,
+              name: 'BeatMakerCard',
+            },
+          },
+        },
+      ],
+    };
+
+    let listing = await createFromSerialized<typeof Listing>(
+      doc.data,
+      doc,
+      undefined,
+    );
+
+    assert.ok(listing instanceof Listing, 'listing deserialized');
+    assert.strictEqual(listing.examples.length, 2, 'both examples loaded');
+    assert.ok(
+      listing.examples[0] instanceof DrumKitCard,
+      'first entry is DrumKitCard instance',
+    );
+    assert.ok(
+      listing.examples[1] instanceof BeatMakerCard,
+      'second entry is BeatMakerCard instance',
+    );
+  });
+
+  test('can deserialize a heterogenous polymorphic linksToMany relationship targeting CardDef from array format', async function (assert) {
+    class DrumKitCard extends CardDef {
+      @field name = contains(StringField);
+    }
+
+    class BeatMakerCard extends CardDef {
+      @field title = contains(StringField);
+    }
+
+    class Listing extends CardDef {
+      @field examples = linksToMany(() => CardDef);
+    }
+
+    let listingFields = getFields(Listing);
+    assert.strictEqual(
+      listingFields.examples.card.name,
+      'CardDef',
+      'Listing examples field still targets CardDef before serialization',
+    );
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Listing, DrumKitCard, BeatMakerCard },
+      },
+    });
+
+    assert.strictEqual(
+      getFields(Listing).examples.card.name,
+      'CardDef',
+      'Listing examples field still targets CardDef after realm setup',
+    );
+
+    let doc: LooseSingleCardDocument = {
+      data: {
+        type: 'card',
+        attributes: {
+          cardInfo: {},
+        },
+        relationships: {
+          examples: [
+            {
+              links: {
+                self: `${testRealmURL}DrumKitCard/kit`,
+              },
+            },
+            {
+              links: {
+                self: `${testRealmURL}BeatMakerCard/app`,
+              },
+            },
+          ],
         },
         meta: {
           adoptsFrom: {
@@ -5859,7 +5987,126 @@ module('Integration | serialization', function (hooks) {
       }
     });
 
-    test('can serialize a linkstoMany relationship with nested linksTo field', async function (assert) {
+    test('can deserialize a linksToMany relationship from array format', async function (assert) {
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pets = linksToMany(Pet);
+      }
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'test-cards.gts': { Person, Pet },
+        },
+      });
+      let doc: LooseSingleCardDocument = {
+        data: {
+          type: 'card',
+          attributes: {
+            description: null,
+            firstName: 'Hassan',
+            thumbnailURL: null,
+            cardInfo: {},
+          },
+          relationships: {
+            pets: [
+              {
+                links: {
+                  self: `${testRealmURL}Pet/mango`,
+                },
+              },
+              {
+                links: {
+                  self: `${testRealmURL}Pet/vanGogh`,
+                },
+              },
+            ],
+          },
+          meta: {
+            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+          },
+        },
+        included: [
+          {
+            id: `${testRealmURL}Pet/mango`,
+            type: 'card',
+            attributes: {
+              description: null,
+              firstName: 'Mango',
+              thumbnailURL: null,
+              cardInfo: {},
+            },
+            meta: {
+              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+            },
+          },
+          {
+            id: `${testRealmURL}Pet/vanGogh`,
+            type: 'card',
+            attributes: {
+              description: null,
+              firstName: 'Van Gogh',
+              thumbnailURL: null,
+              cardInfo: {},
+            },
+            meta: {
+              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+            },
+          },
+        ],
+      };
+      let card = await createFromSerialized<typeof Person>(
+        doc.data,
+        doc,
+        undefined,
+      );
+
+      assert.ok(card instanceof Person, 'card is an instance of person');
+      assert.strictEqual(card.firstName, 'Hassan');
+
+      let { pets } = card;
+      assert.ok(Array.isArray(pets), 'pets is an array');
+      assert.strictEqual(pets.length, 2, 'pets has 2 items');
+      let [mango, vanGogh] = pets;
+      if (mango instanceof Pet) {
+        assert.true(isSaved(mango), 'Pet[0] card is saved');
+        assert.strictEqual(mango.firstName, 'Mango');
+      } else {
+        assert.ok(false, '"pets[0]" is not an instance of Pet');
+      }
+      if (vanGogh instanceof Pet) {
+        assert.true(isSaved(vanGogh), 'Pet[1] card is saved');
+        assert.strictEqual(vanGogh.firstName, 'Van Gogh');
+      } else {
+        assert.ok(false, '"pets[1]" is not an instance of Pet');
+      }
+
+      let relationships = relationshipMeta(card, 'pets');
+      if (relationships !== undefined && Array.isArray(relationships)) {
+        let [mangoRelationship, vanGoghRelationship] = relationships;
+
+        if (mangoRelationship?.type === 'loaded') {
+          let relatedCard = mangoRelationship.card;
+          assert.true(relatedCard instanceof Pet, 'related card is a Pet');
+          assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/mango`);
+        } else {
+          assert.ok(false, 'relationship type was not "loaded" for mango');
+        }
+        if (vanGoghRelationship?.type === 'loaded') {
+          let relatedCard = vanGoghRelationship.card;
+          assert.true(relatedCard instanceof Pet, 'related card is a Pet');
+          assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/vanGogh`);
+        } else {
+          assert.ok(false, 'relationship type was not "loaded" for vanGogh');
+        }
+      } else {
+        assert.ok(false, 'relationshipMeta returned an unexpected value');
+      }
+    });
+
+    test('can serialize a linksToMany relationship with nested linksTo field', async function (assert) {
       class Toy extends CardDef {
         @field description = contains(StringField);
         @field title = contains(StringField, {

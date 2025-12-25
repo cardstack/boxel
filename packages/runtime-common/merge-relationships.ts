@@ -1,4 +1,5 @@
 import type { LooseCardResource, Relationship } from './index';
+import { relationshipEntries } from './relationship-utils';
 import mergeWith from 'lodash/mergeWith';
 
 export function mergeRelationships(
@@ -21,15 +22,14 @@ function _formatForMerge(
 ): Record<string, Relationship | Relationship[]> {
   let data: Record<string, Relationship | Relationship[]> = {};
 
-  for (let [key, value] of Object.entries(resource ?? {})) {
-    let keys = key.split('.');
-    if (keys.length > 1 && keys[keys.length - 1].match(/^\d+$/)) {
-      keys.pop();
-      let name = keys.join('.');
-      data[name] = Array.isArray(data[name]) ? data[name] : [];
-      (data[name] as Relationship[]).push(value);
+  for (let entry of relationshipEntries(resource)) {
+    if (entry.isPlural) {
+      data[entry.fieldName] = Array.isArray(data[entry.fieldName])
+        ? data[entry.fieldName]
+        : [];
+      (data[entry.fieldName] as Relationship[]).push(entry.relationship);
     } else {
-      data[key] = value;
+      data[entry.fieldName] = entry.relationship;
     }
   }
   return data;

@@ -11,6 +11,7 @@ import {
   identifyCard,
   internalKeyFor,
   maybeRelativeURL,
+  relationshipEntries,
   realmURL,
   type SingleCardDocument,
   type PrerenderMeta,
@@ -64,8 +65,8 @@ export default class RenderMetaRoute extends Route<Model> {
           instance[realmURL],
         ),
     }) as SingleCardDocument;
-    for (let relationship of Object.values(
-      serialized.data.relationships ?? {},
+    for (let { relationship } of relationshipEntries(
+      serialized.data.relationships,
     )) {
       // we want to emulate the file serialization here
       delete relationship.data;
