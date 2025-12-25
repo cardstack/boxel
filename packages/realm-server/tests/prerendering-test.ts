@@ -45,6 +45,9 @@ function makeStubPagePool(maxPages: number) {
             removeAllListeners() {
               return;
             },
+            on() {
+              return;
+            },
           } as any;
         },
         async close() {
@@ -64,7 +67,6 @@ function makeStubPagePool(maxPages: number) {
   };
   let pool = new PagePool({
     maxPages,
-    silent: true,
     serverURL: 'http://localhost',
     browserManager: browserManager as any,
     boxelHostURL: 'http://localhost:4200',
@@ -1843,7 +1845,6 @@ module(basename(__filename), function () {
 
           localPrerenderer = new Prerenderer({
             maxPages: 1,
-            silent: true,
             serverURL: 'http://127.0.0.1:4225',
           });
 
@@ -2077,7 +2078,6 @@ module(basename(__filename), function () {
 
         prerenderer = new Prerenderer({
           maxPages: 1,
-          silent: true,
           serverURL: 'http://127.0.0.1:4225',
         });
 
@@ -2175,7 +2175,6 @@ module(basename(__filename), function () {
 
         prerenderer = new Prerenderer({
           maxPages: 1,
-          silent: true,
           serverURL: 'http://127.0.0.1:4225',
         });
 
