@@ -28,6 +28,7 @@ import {
   type SingleCardDocument,
   type CardCollectionDocument,
 } from './document-types';
+import { relationshipEntries } from './relationship-utils';
 import type { CardResource, Saved } from './resource-types';
 import type { FieldDefinition } from './definitions';
 import {
@@ -572,16 +573,15 @@ export class RealmIndexQueryEngine {
     let realmPath = new RealmPaths(realmURL);
     let processedRelationships = new Set<string>();
     let processRelationships = async () => {
-      for (let [fieldName, relationship] of Object.entries(
-        resource.relationships ?? {},
-      )) {
-        if (processedRelationships.has(fieldName)) {
+      for (let entry of relationshipEntries(resource.relationships)) {
+        let { relationship, key } = entry;
+        if (processedRelationships.has(key)) {
           continue;
         }
         if (!relationship.links?.self) {
           continue;
         }
-        processedRelationships.add(fieldName);
+        processedRelationships.add(key);
         let linkURL = new URL(
           relationship.links.self,
           resource.id ? new URL(resource.id) : realmURL,
@@ -610,10 +610,17 @@ export class RealmIndexQueryEngine {
             throw new Error(
               `instance ${
                 linkURL.href
-              } is not a card document. it is: ${JSON.stringify(json, null, 2)}`,
+              } is not a card document. it is: ${JSON.stringify(
+                json,
+                null,
+                2,
+              )}`,
             );
           }
-          linkResource = { ...json.data, ...{ links: { self: json.data.id } } };
+          linkResource = {
+            ...json.data,
+            ...{ links: { self: json.data.id } },
+          };
         }
         let foundLinks = false;
         // TODO stop using maxLinkDepth. we should save the JSON-API doc in the
@@ -662,7 +669,7 @@ export class RealmIndexQueryEngine {
           omit.includes(relationshipId.href) ||
           included.find((i) => i.id === relationshipId!.href)
         ) {
-          resource.relationships![fieldName].data = {
+          relationship.data = {
             type: 'card',
             id: relationshipId.href,
           };

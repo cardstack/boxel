@@ -79,6 +79,7 @@
     "concurrently": "catalog:",
     "dompurify": "catalog:",
     "ember-cli-htmlbars": "^6.3.0",
+    "monaco-editor": "catalog:",
     "statuses": "catalog:"
   },
   "peerDependencies": {

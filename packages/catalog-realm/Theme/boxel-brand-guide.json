@@ -1,0 +1,247 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/brand-guide"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "spacing": "0.25rem",
+      "version": "7.0",
+      "cardInfo": {
+        "notes": "v7.0 - Dense Modularity (UI Optimized)",
+        "title": "Boxel Brand Guide",
+        "description": "A high-density design system based on the 'Boxel' unit. Optimized for complex UI and information architecture while retaining a tactile, accessible feel.",
+        "thumbnailURL": null
+      },
+      "markUsage": {
+        "primaryMark1": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/5de76ce4-d7f6-4203-1b22-009031a0bc00/public",
+        "primaryMark2": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/2c5dc51c-7269-4e7b-538e-9d9f5202b400/public",
+        "secondaryMark1": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/47b743a2-3a61-4c85-5277-39d764fea100/public",
+        "secondaryMark2": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/2842930b-f3df-44f9-e78d-40aaa0d2f200/public",
+        "primaryMarkMinHeight": "20px",
+        "primaryMarkGreyscale1": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/20fe9504-5b42-4cbe-6402-0872ba33b000/public",
+        "primaryMarkGreyscale2": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/cb8e09b0-d55f-421c-8a46-a9d7da935a00/public",
+        "secondaryMarkMinHeight": "32px",
+        "socialMediaProfileIcon": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/96e9cc96-484c-4dd4-ea9f-5a6d1fad6a00/public",
+        "secondaryMarkGreyscale1": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/83edd48e-7d26-4038-3452-777ee713e000/public",
+        "secondaryMarkGreyscale2": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/eae47388-af68-4ba7-1f88-7a05f08ed100/public",
+        "primaryMarkClearanceRatio": "1.5",
+        "secondaryMarkClearanceRatio": "1.25"
+      },
+      "styleName": "Box Element System",
+      "visualDNA": "# The Box Element\n\n**Every interface is a conversation between containers.**\n\nAt the heart of Boxel lives a singular unit: the **Box Element**—a composable rectangle that snaps to an 8px grid and carries meaning through structure. Not ornament. Not decoration. Structure.\n\nWhile the broader design ecosystem swings toward borderless fluidity, Boxel embraces the opposite truth: **borders create clarity**. Each Box Element is a bounded context, a data payload, a functional unit. Stack them. Nest them. Connect them. The system emerges from their composition.\n\n## Three Qualities Define the Box\n\n**1. Density as Signal**  \nTight spacing communicates capability. A Box Element wastes no pixel on performance theater—every 8px increment serves information architecture. Yet density without breathing room becomes noise. Hence the `0.625rem` corner radius: soft enough to invite interaction, sharp enough to respect the grid.\n\n**2. Borders as Vocabulary**  \nA 1px hairline isn't merely separation—it's syntax. In light mode, borders whisper (#E0E0E0). In dark mode, they glow subtly brighter than their container (#333333). This inversion ensures the Box Element remains legible across contexts while maintaining its fundamental promise: **you always know where one thing ends and another begins.**\n\n**3. Modularity as Philosophy**  \nBox Elements compose like functions. A Panel contains Cards. A Card contains Badges. Each nesting level maintains its structural identity. No element floats ambiguously. The hierarchy is always visible, always parseable—by humans and machines alike.",
+      "cssImports": [],
+      "typography": {
+        "body": {
+          "fontSize": "0.875rem",
+          "fontFamily": "IBM Plex Sans",
+          "fontWeight": "400",
+          "lineHeight": "1.5",
+          "sampleText": "Efficient data density is key to the Boxel philosophy."
+        },
+        "caption": {
+          "fontSize": "0.75rem",
+          "fontFamily": "IBM Plex Mono",
+          "fontWeight": "500",
+          "lineHeight": "1.2",
+          "sampleText": "ID: BXL-04 [ACTIVE]"
+        },
+        "heading": {
+          "fontSize": "2.5rem",
+          "fontFamily": "IBM Plex Sans",
+          "fontWeight": "700",
+          "lineHeight": "1.2",
+          "sampleText": "Build."
+        },
+        "subheading": {
+          "fontSize": "1.25rem",
+          "fontFamily": "IBM Plex Sans",
+          "fontWeight": "500",
+          "lineHeight": "1.4",
+          "sampleText": "Modular systems for complex workflows."
+        },
+        "sectionHeading": {
+          "fontSize": "0.75rem",
+          "fontFamily": "IBM Plex Mono",
+          "fontWeight": "700",
+          "lineHeight": "1",
+          "sampleText": "MODULE 01"
+        }
+      },
+      "colorPalette": "# Functional Color Architecture\n\n**Color as status, not decoration.**\n\nOur palette rejects the arbitrary. Each hue maps to a system state or interaction primitive.\n\n## Canvas Strategy\n\n**Light Mode Foundation**  \n- **Surface:** `#F7F8FA` — Boxel Paper. A cool, high-luminosity neutral that reduces eye strain while letting white Box Elements pop with crisp contrast.\n- **Box Element:** `#FFFFFF` — Pure white. The atomic unit. Unmistakable.\n- **Border:** `#E2E8F0` — Detail Grey. Visible at a glance, invisible to distraction.\n\n**Dark Mode Inversion**  \n- **Surface:** `#0F0F0F` — Near-void black. The negative space that makes light elements sing.\n- **Box Element:** `#1E1E1E` — Elevated slate. Slightly brighter than the void.\n- **Border:** `#333333` — Reflective edge. Lighter than the box, maintaining readability through luminance contrast.\n\n## Interaction Accents\n\n**Boxel Teal** (`#00ffba`)  \nThe cursor of intent. Deployed for selection states and primary actions. When something is Teal, it's either chosen or choosable. (Fun fact: this wavelength sits at the precise intersection of attention-grabbing and easy-on-retinas.)\n\n**Cardstack Lime** (`#C3FC33`)  \nSuccess echo. Used for positive confirmation states and data visualization peaks. Think \"transaction complete\" or \"metric exceeded threshold.\" Lime doesn't appear unless something good just happened.\n\n**Cardstack Purple** (`#6638FF`)  \nSecondary depth. Provides visual hierarchy when Teal would be too dominant. Often used for supporting actions or complementary data series in charts.",
+      "contentVoice": "# Writing for Box Elements\n\n**Precision. Clarity. Zero fluff.**\n\nBoxel's content voice mirrors its visual language: **high signal-to-noise ratio**. We write like system architects who respect the reader's intelligence and time.\n\n## Vocabulary Choices\n\nWe use the language of builders:  \n✓ **Deploy** (not \"publish\")  \n✓ **Stack** (not \"combine\")  \n✓ **Nest** (not \"organize\")  \n✓ **Render** (not \"display\")  \n✓ **State** (not \"status\")  \n✓ **Compose** (not \"create\")\n\nThese terms come from programming and architecture. They communicate that Boxel users aren't just clicking buttons—they're constructing systems.\n\n## Tone Spectrum\n\n**For Features (Technical):**  \n\"Composable unit. Scale infinite.\"  \nShort declarative phrases. No marketing hyperbole. The product speaks through capability, not adjectives.\n\n**For Value (Aspirational):**  \n\"Every workflow is a series of boxes waiting to be connected.\"  \nShift to metaphor and possibility. Still grounded, but now we're talking about *why*, not just *what*.\n\n**For Errors (Helpful):**  \n\"This box requires authentication. Connect your account to proceed.\"  \nNever blame the user. Explain state, suggest action, maintain calm.\n\n## The \"We\" Convention\n\nWe use **\"we\"** to imply a collective movement. Not \"our platform\" but \"we're building.\" Not \"you can\" but \"we enable.\" This positions Boxel as a tool for a community of makers, not a product being sold to consumers.\n\n**Voice truth:** If you wouldn't say it in a code comment, don't say it in marketing copy. Developers can smell BS from orbit.",
+      "cornerRadius": "0.625rem",
+      "inspirations": [
+        "Financial terminals — data density without cognitive overload",
+        "Modular synthesizers — distinct units, infinite combinations",
+        "Code editors (VS Code, Zed) — syntax as visual language",
+        "Japanese stationery — precision, texture, purposeful restraint",
+        "Brutalist architecture — honest materials, visible structure"
+      ],
+      "designMindset": "# The Box Element Philosophy\n\n**Four principles that make everything else make sense.**\n\n## 1. Transparency Over Mystery\n\n**No black boxes.** If something is a container, show its borders. If there are layers, make them visible. If there's a grid, let users see it (even if faintly).\n\nThis isn't just aesthetic—it's **cognitive relief**. When users can see the structure, they can understand it. When they understand it, they trust it. When they trust it, they use it powerfully.\n\n## 2. Density As Luxury\n\n**Whitespace is cheap. Information architecture is expensive.**\n\nBoxel rejects the \"generous padding\" trend in favor of efficient spatial usage. This isn't about cramming—it's about respecting that users came here to *do something*, not to admire margins.\n\nYet density requires discipline. Every pixel must earn its place. The 8px grid prevents arbitrary spacing. The `0.5rem` radius prevents sharpness from becoming hostility. The Mono labels prevent density from becoming noise.\n\n**Density done right feels like capability, not clutter.**\n\n## 3. Data Is the Decoration\n\n**We don't use stock photos. We don't use abstract shapes \"for visual interest.\"**\n\nOur decorative layer is *the interface itself*: code snippets as hero graphics, node graphs as background patterns, syntax highlighting as color theory, server logs as texture.\n\nThis creates interfaces that celebrate what they do. A file manager shows files. A database UI shows schema. There's honesty in this approach—and beauty, too.\n\n## 4. The Grid Is the Playground\n\n**Structure doesn't constrain creativity—it enables it.**\n\nEvery Box Element follows the same rules: 8px grid, 1px borders, `0.5rem` radius. Yet within these constraints, infinite compositions emerge. Nest boxes within boxes. Stagger them. Split them. Color one Lime while the rest stay neutral.\n\nThe rules create a shared language. Once users learn it (which takes seconds), they can read any Boxel interface intuitively. That's not rigidity—that's **compounding design value**.\n\n---\n\n**The whimsy arrives when you realize:** The box isn't a limitation. The box is permission to think structurally, build systematically, and compose infinitely.\n\nEvery interface is a conversation between containers. Make yours eloquent.",
+      "rootVariables": {
+        "card": "var(--boxel-light, #FFFFFF)",
+        "ring": "var(--boxel-teal, #00FFBA)",
+        "input": "var(--boxel-light, #FFFFFF)",
+        "muted": "#F5F5F5",
+        "accent": "var(--cardstack-lime, #C3FC33)",
+        "border": "#E2E8F0",
+        "chart1": "var(--cardstack-magenta, #AC00FF)",
+        "chart2": "var(--cardstack-purple, #6638FF)",
+        "chart3": "var(--cardstack-lime, #C3FC33)",
+        "chart4": "var(--boxel-teal, #00FFBA)",
+        "chart5": "var(--boxel-green, #37EB77)",
+        "radius": "0.625rem",
+        "shadow": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+        "popover": "var(--boxel-light, #FFFFFF)",
+        "primary": "var(--boxel-teal, #00FFBA)",
+        "sidebar": "#F0F2F5",
+        "spacing": "0.25rem",
+        "fontMono": "'IBM Plex Mono', 'Menlo', 'Courier New', Courier, ui-monospace, monospace",
+        "fontSans": "'IBM Plex Sans', 'Helvetica Neue', Arial, ui-sans-serif, sans-serif, system-ui",
+        "shadowLg": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
+        "shadowMd": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+        "shadowSm": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+        "shadowXl": "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
+        "shadowXs": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+        "fontSerif": "'IBM Plex Serif', 'Georgia', Times, serif",
+        "secondary": "var(--cardstack-purple, #6638FF)",
+        "shadow2xl": "0 25px 50px -12px rgb(0 0 0 / 0.25)",
+        "shadow2xs": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+        "background": "var(--boxel-dove, #F7F8FA)",
+        "foreground": "#0F172A",
+        "destructive": "var(--cardstack-red, #FF5050)",
+        "sidebarRing": "var(--boxel-teal, #00FFBA)",
+        "sidebarAccent": "var(--cardstack-lime, #C3FC33)",
+        "sidebarBorder": "#E2E8F0",
+        "cardForeground": "#111111",
+        "sidebarPrimary": "var(--boxel-teal, #00FFBA)",
+        "trackingNormal": "0.01em",
+        "mutedForeground": "#64748B",
+        "accentForeground": "#0F172A",
+        "popoverForeground": "#111111",
+        "primaryForeground": "#0F172A",
+        "sidebarForeground": "#0F172A",
+        "secondaryForeground": "var(--boxel-light, #FFFFFF)",
+        "destructiveForeground": "#F8FAFC",
+        "sidebarAccentForeground": "#0F172A",
+        "sidebarPrimaryForeground": "#0F172A"
+      },
+      "motionLanguage": "# Animation Physics: Mass Without Bounce\n\n**Elements have weight. Transitions have purpose.**\n\nWhile playful brands embrace elastic easing and overshoot, Box Elements move with industrial precision. Think heavy machinery that's perfectly calibrated—smooth motion, hard stops, no wobble.\n\n## Motion Principles\n\n**1. Parallax Scrolling**  \nAs content scrolls, the background grid moves at 0.5x speed while foreground boxes move at 1x. This subtle depth cue makes flat UI feel spatially aware without requiring shadow-heavy 3D effects.\n\n**2. The Curtain Wipe**  \nPage transitions use solid color blocks (Teal or Lime) that slide up to cover the entire viewport before revealing new content. It's like a film cut, not a fade. This reinforces the Box Element's \"bounded space\" metaphor—the screen itself is just another box.\n\n**3. No Bounce, Ever**  \nEasing functions use `cubic-bezier(0.2, 0, 0.2, 1)` (smooth deceleration to hard stop). No spring physics. No elastic snapback. When a Box Element arrives, it *arrives*. This communicates stability and precision.\n\n**4. Stagger Reveals**  \nWhen multiple boxes appear (e.g., loading a dashboard), they cascade in with 40ms delays between each. Not simultaneous. Not random. Ordered and predictable—like watching a terminal compile output.\n\n**The whimsy:** Motion isn't decoration. It's information about system state. A drawer that slides open tells you where it came from. A box that fades in tells you nothing. Be opinionated about physics.",
+      "technicalSpecs": "# Implementation Standards\n\n**How Box Elements get built.**\n\n## Border System\n\n- **Width:** Always `1px`. Never 2px. Never 0.5px.\n- **Color (Light):** `#E2E8F0` (nearly invisible)\n- **Color (Dark):** `#333333` (slightly brighter than container)\n- **Style:** Solid. No dashed, dotted, or gradient borders.\n\n## Border Radius\n\n- **Standard:** `0.625rem` (10px)\n- **Override:** Only for specific micro-components like Data Pills, which may use proportional radius at smaller scales\n- **Sharp corners:** Reserved for deliberate \"raw code\" contexts (e.g., syntax highlighting blocks)\n\n## Grid System\n\n- **Column count:** 12 (fluid)\n- **Gutter:** 24px (3× base spacing unit)\n- **Visible grid:** Optional background pattern at `opacity: 0.1`—2px dots with 20px spacing\n- **Breakpoints:** 640px · 768px · 1024px · 1280px · 1536px\n\n## Glassmorphism Effects\n\nFor floating elements that need to maintain context:\n\n```css\nbackdrop-filter: blur(12px);\nbackground: rgba(255, 255, 255, 0.8); /* light mode */\nbackground: rgba(30, 30, 30, 0.8); /* dark mode */\n```\n\nUse sparingly. Primarily for sticky headers and modal overlays where seeing the grid beneath adds clarity.\n\n## Z-Index Hierarchy\n\n- **Base grid:** 0\n- **Box Elements:** 1\n- **Interactive elements (hover):** 2\n- **Floating panels:** 10\n- **Tooltips:** 100\n- **Modals:** 1000\n\nNo arbitrary values. If you need a new layer, define it in the system.\n\n## Shadow Protocol\n\n**Light mode:**  \nMinimal shadows for separation: `0 1px 2px 0 rgb(0 0 0 / 0.05)`\n\n**Dark mode:**  \nAlmost no shadows—rely on luminance contrast instead. If shadow is needed: `0 1px 2px 0 rgb(0 0 0 / 0.5)`\n\n**Spec truth:** If implementation requires documentation longer than the code itself, simplify the system.",
+      "wallpaperImages": [],
+      "compositionRules": "# Layout Patterns for Box Element Composition\n\n**Great interfaces aren't designed—they're architected.**\n\n## The Split-Screen Protocol\n\n50% structured content (white background) | 50% visual or data (slate background)\n\nThis asymmetric split creates natural reading rhythm. Text lives in the bright half, visuals breathe in the dark half. The vertical divider becomes a visual anchor that guides scanning patterns.\n\n## The Mega-Header\n\nStart pages with type that touches browser edges. No timid centering—claim the full viewport width. This establishes hierarchy immediately: if it's edge-to-edge, it's primary.\n\n## Corner Label Notation\n\nEvery Box Element carries a tiny Mono label in its top-left corner:\n\n```\n┌─ MODULE 01 ──────────────┐\n│ [box content here]       │\n└──────────────────────────┘\n```\n\nThese labels aren't just decorative—they're **wayfinding metadata**. When a user screenshots your interface, they should be able to reference specific boxes by their label. It's documentation disguised as design.\n\n## Acid Interruptions\n\nA grid of neutral grey text should be interrupted by a **single cell** filled with Lime (`#C3FC33`). This focal point guides the eye to the CTA or key metric. One bright spot in a sea of neutral = impossible to miss, yet the grid's structure prevents it from feeling chaotic.\n\n**Composition truth:** If every element screams for attention, nothing gets heard. Strategic density + strategic brightness = effective hierarchy.",
+      "qualityStandards": "# Execution Checklist\n\n**How to know if you're doing it right.**\n\n## Typography Audit\n\n✓ **Extreme size contrast:** Headlines should be 3× body size minimum  \n✓ **No middle sizes:** If it's not Display, Body, or Mono, question it  \n✓ **Tight kerning on Display:** Headlines should feel like single words, not letter collections  \n✓ **Mono for metadata only:** System font should never be used for marketing copy  \n\n## Spatial Audit\n\n✓ **8px alignment:** Every element snaps to grid (use browser DevTools to verify)  \n✓ **Visible borders:** Every Box Element has a 1px frame  \n✓ **Corner labels present:** Boxes should be identifiable at a glance  \n✓ **No floating elements:** Everything lives inside a container  \n\n## Color Audit\n\n✓ **Teal = action/selection only:** Never use for decoration  \n✓ **Lime = success/highlight only:** Should be rare—that's what makes it effective  \n✓ **No gradients on backgrounds:** Solid fills only (gradients OK for accent graphics)  \n✓ **High contrast:** WCAG AA minimum (4.5:1 for body text, 3:1 for large text)  \n\n## Motion Audit\n\n✓ **No bounce:** All easing curves end in hard stop  \n✓ **Directional transitions:** Slides, not fades (shows where things come from/go to)  \n✓ **Stagger timing consistent:** 40ms intervals between sequential animations  \n✓ **Purposeful motion:** Every animation communicates state change  \n\n**Quality truth:** If you can't explain why a design decision was made in one sentence, it probably wasn't intentional. Boxel is opinionated on purpose.",
+      "typographySystem": "# The Three-Voice Type System\n\n**Every font has a function. Every weight has a reason.**\n\nBoxel's typographic architecture mirrors its data model: clear hierarchy, no ambiguity, zero decorative elements.\n\n## Voice 1: The Statement (Display)\n**IBM Plex Sans Bold**  \nWhen you need to say something once and have it stick. Used for primary headlines, hero statements, and any text that should feel like a terminal command about to execute. Tight kerning creates word-level cohesion—these aren't letters, they're *declarations*.\n\n## Voice 2: The Narrative (Body)\n**IBM Plex Sans Regular / IBM Plex Serif**  \nWhere humans talk to humans. Sans for UI explanations and product descriptions. Serif for testimonials and case studies—adding just enough warmth to signal \"a person said this.\" Maintains readability from 14px up to 18px without losing personality.\n\n## Voice 3: The Machine (System)\n**IBM Plex Mono Medium**  \nThe voice of state. Used for labels, metadata, technical annotations, and any UI element that represents system information. Always uppercase when functioning as a label (`STATUS: ACTIVE`, `MODULE 01`). The monospaced rhythm creates scannable consistency—your eye can parse twenty Mono labels faster than twenty Sans labels because character width becomes predictable.\n\n**Typography Truth:** If your interface has more than three font sizes visible simultaneously, you're not building hierarchy—you're building noise. Boxel uses extreme contrast instead: massive Display, comfortable Body, compact Mono. The gaps between them do the work.",
+      "brandColorPalette": [
+        {
+          "name": "Boxel Teal",
+          "value": "#00FFBA"
+        },
+        {
+          "name": "Boxel Cyan",
+          "value": "#00EBE5"
+        },
+        {
+          "name": "Boxel Slate",
+          "value": "#272330"
+        },
+        {
+          "name": "Boxel Light",
+          "value": "#FFFFFF"
+        },
+        {
+          "name": "Boxel Black",
+          "value": "#000000"
+        },
+        {
+          "name": "Boxel Dove",
+          "value": "#F8F7FA"
+        },
+        {
+          "name": "Cardstack Red",
+          "value": "#FF5050"
+        },
+        {
+          "name": "Cardstack Lime",
+          "value": "#C3FC33"
+        },
+        {
+          "name": "Cardstack Magenta",
+          "value": "#AC00FF"
+        },
+        {
+          "name": "Cardstack Purple",
+          "value": "#6638FF"
+        },
+        {
+          "name": "Cardstack Dark Blue",
+          "value": "#281E78"
+        }
+      ],
+      "darkModeVariables": {
+        "card": "#1E1E1E",
+        "ring": "var(--boxel-teal, #00FFBA)",
+        "input": "#27272A",
+        "muted": "#27272A",
+        "accent": "var(--cardstack-lime, #C3FC33)",
+        "border": "#333333",
+        "chart1": "var(--cardstack-magenta, #AC00FF)",
+        "chart2": "var(--cardstack-purple, #6638FF)",
+        "chart3": "var(--cardstack-lime, #C3FC33)",
+        "chart4": "var(--boxel-teal, #00FFBA)",
+        "chart5": "var(--boxel-green, #37EB77)",
+        "radius": "0.625rem",
+        "shadow": "0 1px 2px 0 rgb(0 0 0 / 0.5)",
+        "popover": "#1E1E1E",
+        "primary": "var(--boxel-teal, #00FFBA)",
+        "sidebar": "#18181B",
+        "spacing": "0.25rem",
+        "fontMono": "'IBM Plex Mono', 'Menlo', 'Courier New', Courier, ui-monospace, monospace",
+        "fontSans": "'IBM Plex Sans', 'Helvetica Neue', Arial, ui-sans-serif, sans-serif, system-ui",
+        "shadowLg": "0 10px 15px -3px rgb(0 0 0 / 0.5)",
+        "shadowMd": "0 4px 6px -1px rgb(0 0 0 / 0.5)",
+        "shadowSm": "0 1px 2px 0 rgb(0 0 0 / 0.5)",
+        "shadowXl": "0 20px 25px -5px rgb(0 0 0 / 0.5)",
+        "shadowXs": "0 1px 2px 0 rgb(0 0 0 / 0.5)",
+        "fontSerif": "'IBM Plex Serif', 'Georgia', Times, serif",
+        "secondary": "var(--cardstack-purple, #6638FF)",
+        "shadow2xl": "0 25px 50px -12px rgb(0 0 0 / 0.5)",
+        "shadow2xs": "0 1px 2px 0 rgb(0 0 0 / 0.5)",
+        "background": "var(--brand-dark, #0F0F0F)",
+        "foreground": "var(--boxel-light, #FFFFFF)",
+        "destructive": "var(--cardstack-red, #FF5050)",
+        "sidebarRing": "var(--boxel-teal, #00FFBA)",
+        "sidebarAccent": "oklch(0.9338 0.1913 122.52)",
+        "sidebarBorder": "#333333",
+        "cardForeground": "var(--boxel-light, #FFFFFF)",
+        "sidebarPrimary": "var(--boxel-teal, #00FFBA)",
+        "trackingNormal": "0.01em",
+        "mutedForeground": "#A1A1AA",
+        "accentForeground": "#0F172A",
+        "popoverForeground": "var(--boxel-light, #FFFFFF)",
+        "primaryForeground": "#0F172A",
+        "sidebarForeground": "var(--boxel-light, #FFFFFF)",
+        "secondaryForeground": "var(--boxel-light, #FFFFFF)",
+        "destructiveForeground": "var(--boxel-light, #FFFFFF)",
+        "sidebarAccentForeground": "#0F172A",
+        "sidebarPrimaryForeground": "#0F172A"
+      },
+      "functionalPalette": {
+        "dark": "var(--brand-dark, #0F0F0F)",
+        "light": "var(--boxel-dove, #F7F8FA)",
+        "accent": "var(--cardstack-lime)",
+        "primary": "var(--boxel-teal)",
+        "secondary": "var(--cardstack-purple)"
+      },
+      "geometricLanguage": "# Grid, Radius, and the 8px Law\n\n**Everything snaps. Nothing floats.**\n\n## The Quantum Grid\n\nBoxel's spatial logic operates in 8px increments (our base `--spacing: 0.25rem` × 4). This isn't aesthetic dogma—it's **cognitive load reduction**. When every measurement is a multiple of 8, designers make decisions faster, developers write cleaner code, and the compiled interface has mathematical harmony that users *feel* but don't consciously notice.\n\n**Spacing Scale:**  \n`0.25rem` (4px) · `0.5rem` (8px) · `1rem` (16px) · `2rem` (32px) · `4rem` (64px)\n\nNo `0.375rem`. No `1.3rem`. If it's not on the scale, it's not in the system.\n\n## The 0.625rem Corner Radius\n\nThis specific measurement—**10px rounded corners**—exists at the Goldilocks intersection of contradictory goals:\n\n- **Not too soft:** Maintains the Box Element's structural identity. These are containers, not pills.\n- **Not too hard:** Removes the hostile edge of pure 90° angles. Software should feel built, not sharp.\n- **Touch-friendly:** Gives tap targets visual breathing room without sacrificing information density.\n\nIt's the difference between \"precision tool\" and \"kid's toy.\" We're building for adults who respect clean geometry.\n\n## Nested Hierarchy Through Borders\n\nWhile contemporary design often uses shadow and elevation to show depth, Box Elements rely on **border logic**. A Panel (with border) contains a Card (with border) contains a Badge (with border). Each level maintains its frame. The nesting is structural, not implied.\n\nThink of it like JSON: you can always trace the bracket pairs back to the root. That's how our boxes work too.",
+      "historicalContext": null,
+      "materialVocabulary": "# Materiality Without Skeuomorphism\n\n**Digital materials that feel real—not realistic.**\n\nBoxel's material language draws from high-end productivity tools: the textured matte of a Leica camera, the precision of a Muji notebook, the honest surfaces of a ThinkPad keyboard.\n\n## Light Mode: Precision Paper\n\nIn light mode, Box Elements exist on a subtle grey surface (`#F7F8FA`) that mimics premium bond paper under soft office lighting. Shadows are minimal—just enough to separate the white box from the neutral canvas. We're not simulating physical paper; we're capturing the *feeling* of working with quality materials.\n\n**Shadow strategy:** `0 1px 2px 0 rgb(0 0 0 / 0.05)`  \nBarely there. A whisper of separation.\n\n## Dark Mode: Matte Carbon\n\nIn dark mode, we embrace the flat dashboard aesthetic. No heavy shadows—instead, we use **luminance contrast** to define layers. A `#1E1E1E` box on a `#0F0F0F` surface creates separation through brightness, not through simulated lighting.\n\nBorders become slightly *brighter* than their containers (`#333333` on `#1E1E1E`), creating a subtle glow effect that maintains the Box Element's structural legibility in low-light conditions.\n\n**The whimsy:** Dark mode isn't just inverted light mode. It's a different material state—like switching from paper to carbon fiber. Same structural logic, different tactile presence.",
+      "componentVocabulary": "# Standard Box Element Patterns\n\n**Reusable primitives for interface composition.**\n\n## The Mini-Card\n\nA compact Box Element (typically 240×120px) that displays a single data entity: a file, a transaction, a user, a metric. Contains:\n\n- **Corner label** (Mono, uppercase): Entity type or ID\n- **Primary content** (Sans, medium): The key value or name\n- **Metadata strip** (Mono, muted): Timestamp, status, or secondary info\n\nUse case: Dashboard tiles, file browsers, transaction logs.\n\n## The Toolbar\n\nA horizontal strip of square interaction boxes (32×32px minimum). Each button is its own Box Element with a 1px border. No background fill on default state—fill with Teal on hover, Lime on active.\n\nButtons sit edge-to-edge with no gap, creating a continuous bar. Think: the ribbon interface from Office, but with personality.\n\n## The Data Pill\n\nA tiny rounded tag (height: 20px, padding: 4px 8px) using Mono font. Border radius matches the base `0.5rem` but at smaller scale looks more pill-like. Used for status indicators (`ACTIVE`, `PENDING`), categories, or filter chips.\n\nKey distinction: Pills are *inline* elements. They live within other boxes, not as standalone containers.\n\n## The Splitter\n\nA draggable 1px border between two Box Elements that lets users resize their workspace. On hover, expands to 3px and shifts to Teal. Cursor becomes `col-resize` or `row-resize`.\n\nThis component makes the Box Element's promise literal: users can reshape the boundaries of their interface.\n\n**Component truth:** Every UI element should be composable. If you can't nest it or arrange it in a grid, it's not a Box Element—it's an exception. Minimize exceptions.",
+      "applicationScenarios": "# Context-Specific Box Element Usage\n\n**Same primitives, different densities.**\n\n## Complex Dashboards\n\n**Goal:** Display hundreds of data points without overwhelming cognition.\n\n**Strategy:**  \n- Use Mini-Cards in masonry grids (irregular heights OK, but snap to 8px grid)\n- Mono font for all metadata—creates scannable rhythm\n- Compact spacing (`0.5rem` gaps between boxes)\n- Corner labels for quick entity identification\n- Color only for status (Teal = selected, Lime = success, Red = error)\n\n**Result:** Information density that feels organized, not chaotic. Think Bloomberg Terminal meets Apple Notes.\n\n## Code/Logic Editors\n\n**Goal:** Make complex logic visually parseable.\n\n**Strategy:**  \n- Dark mode default (reduces eye strain during long sessions)\n- Syntax highlighting using brand colors: Teal for functions, Lime for strings, Purple for keywords\n- Visible 1px borders between code blocks\n- Line numbers in Mono font along left gutter\n- Box Elements for each function/class definition\n\n**Result:** Code becomes modular and visual. New developers can understand structure at a glance.\n\n## Mobile Interfaces\n\n**Goal:** Maintain Box Element logic on small screens.\n\n**Strategy:**  \n- Collapse multi-column grids to single column\n- Maintain 1px borders and `0.625rem` radius (looks great even at phone scale)\n- Full-width Box Elements (edge-to-edge within safe area)\n- Increase tap target size to 44px minimum while keeping visual element compact inside\n- Stackable panels with Splitters for user-controlled density\n\n**Result:** Mobile doesn't feel like a compromised desktop. It feels like a *touch-optimized Box Element system*.\n\n**Scenario truth:** If your design system breaks when you change screen size or use case, it's not a system—it's a collection of one-off solutions. Box Elements scale because their rules scale."
+    }
+  }
+}

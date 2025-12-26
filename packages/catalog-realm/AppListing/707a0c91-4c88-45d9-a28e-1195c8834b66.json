@@ -108,136 +108,6 @@
           "self": "../study-hub/StudyHub/my-study-hub"
         }
       },
-      "examples.1": {
-        "links": {
-          "self": "../annotation/AnnotationCard/dsa-textbook-annotations"
-        }
-      },
-      "examples.2": {
-        "links": {
-          "self": "../calendar/CalendarCard/2c3c78cd-fa4f-4988-b098-c8d099557fba"
-        }
-      },
-      "examples.3": {
-        "links": {
-          "self": "../calendar/CalendarEvent/61c055c6-d258-4283-af57-0a61b5afc2a0"
-        }
-      },
-      "examples.4": {
-        "links": {
-          "self": "../calendar/CalendarEvent/374c08c6-211e-4306-b6f8-3b8aa4a21356"
-        }
-      },
-      "examples.5": {
-        "links": {
-          "self": "../calendar/CalendarEvent/biology-exam-review-sept12"
-        }
-      },
-      "examples.6": {
-        "links": {
-          "self": "../calendar/CalendarEvent/calculus-study-group-sept2"
-        }
-      },
-      "examples.7": {
-        "links": {
-          "self": "../calendar/CalendarEvent/chemistry-lab-prep-sept3"
-        }
-      },
-      "examples.8": {
-        "links": {
-          "self": "../calendar/CalendarEvent/cs-project-meeting-sept10"
-        }
-      },
-      "examples.9": {
-        "links": {
-          "self": "../calendar/CalendarEvent/literature-discussion-sept9"
-        }
-      },
-      "examples.10": {
-        "links": {
-          "self": "../calendar/CalendarEvent/physics-tutoring-sept5"
-        }
-      },
-      "examples.11": {
-        "links": {
-          "self": "../flashcard/FlashcardCard/binary-search-complexity"
-        }
-      },
-      "examples.12": {
-        "links": {
-          "self": "../flashcard/FlashcardCard/eigenvalues-definition"
-        }
-      },
-      "examples.13": {
-        "links": {
-          "self": "../focus-timer/FocusTimerCard/algorithm-study-timer"
-        }
-      },
-      "examples.14": {
-        "links": {
-          "self": "../practice-quiz/PracticeQuizCard/data-structures-quiz"
-        }
-      },
-      "examples.15": {
-        "links": {
-          "self": "../study-goal/StudyGoal/algebra-review"
-        }
-      },
-      "examples.16": {
-        "links": {
-          "self": "../study-goal/StudyGoal/complete-textbook"
-        }
-      },
-      "examples.17": {
-        "links": {
-          "self": "../study-goal/StudyGoal/daily-coding"
-        }
-      },
-      "examples.18": {
-        "links": {
-          "self": "../study-note/StudyNoteCard/big-o-notation-summary"
-        }
-      },
-      "examples.19": {
-        "links": {
-          "self": "../study-note/StudyNoteCard/matrix-operations-notes"
-        }
-      },
-      "examples.20": {
-        "links": {
-          "self": "../study-session/StudySession/algorithm-analysis"
-        }
-      },
-      "examples.21": {
-        "links": {
-          "self": "../study-resource/StudyResource/dsa-textbook"
-        }
-      },
-      "examples.22": {
-        "links": {
-          "self": "../study-resource/StudyResource/linear-algebra"
-        }
-      },
-      "examples.23": {
-        "links": {
-          "self": "../study-resource/StudyResource/ml-course"
-        }
-      },
-      "examples.24": {
-        "links": {
-          "self": "../study-session/StudySession/algorithm-analysis"
-        }
-      },
-      "examples.25": {
-        "links": {
-          "self": "../study-session/StudySession/coding-prep"
-        }
-      },
-      "examples.26": {
-        "links": {
-          "self": "../study-session/StudySession/math-problems"
-        }
-      },
       "categories.0": {
         "links": {
           "self": "../Category/education-courses"
@@ -251,6 +121,11 @@
       "categories.2": {
         "links": {
           "self": "../Category/skills-training"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
         }
       }
     }

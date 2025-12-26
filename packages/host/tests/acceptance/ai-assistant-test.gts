@@ -16,12 +16,7 @@ import stringify from 'safe-stable-stringify';
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
-import {
-  Deferred,
-  baseRealm,
-  ensureTrailingSlash,
-  skillCardRef,
-} from '@cardstack/runtime-common';
+import { Deferred, baseRealm, skillCardRef } from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_ACTIVE_LLM,
@@ -29,7 +24,6 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import ENV from '@cardstack/host/config/environment';
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { AiAssistantMessageDrafts } from '@cardstack/host/utils/local-storage-keys';
@@ -50,6 +44,9 @@ import {
   type TestContextWithSave,
   delay,
   getMonacoContent,
+  envSkillId,
+  catalogRealm,
+  skillsRealm,
 } from '../helpers';
 
 import {
@@ -70,9 +67,6 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { getRoomIdForRealmAndUser } from '../helpers/mock-matrix/_utils';
 import { setupApplicationTest } from '../helpers/setup';
-
-const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
-const skillsRealmURL = ensureTrailingSlash(ENV.resolvedSkillsRealmURL);
 
 async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-attach-button]');
@@ -1996,12 +1990,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         {
           name: 'Cardstack Catalog',
           type: 'catalog-workspace',
-          url: catalogRealmURL,
+          url: catalogRealm.url,
         },
         {
           name: 'Boxel Skills',
           type: 'catalog-workspace',
-          url: skillsRealmURL,
+          url: skillsRealm.url,
         },
       ],
       'Context sent with message contains correct workspaces',
@@ -2718,9 +2712,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .dom('[data-test-skill-menu] [data-test-attached-card]')
       .exists({ count: 1 });
     assert
-      .dom(
-        `[data-test-skill-menu] [data-test-attached-card="${skillsRealmURL}Skill/boxel-environment"]`,
-      )
+      .dom(`[data-test-skill-menu] [data-test-attached-card="${envSkillId}"]`)
       .exists();
   });
 

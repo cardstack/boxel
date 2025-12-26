@@ -107,7 +107,7 @@ import UpdateRoomSkillsCommand from '../commands/update-room-skills';
 import { addPatchTools } from '../commands/utils';
 import { getUniqueValidCommandDefinitions } from '../lib/command-definitions';
 import { isSkillCard } from '../lib/file-def-manager';
-import { skillCardURL } from '../lib/utils';
+import { skillCardURL, devSkillId, envSkillId } from '../lib/utils';
 import { importResource } from '../resources/import';
 
 import { getRoom } from '../resources/room';
@@ -1191,11 +1191,11 @@ export default class MatrixService extends Service {
   }
 
   async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [skillCardURL('boxel-environment')];
+    let interactModeDefaultSkills = [envSkillId];
 
     let codeModeDefaultSkills = [
-      skillCardURL('boxel-environment'),
-      skillCardURL('boxel-development'),
+      devSkillId,
+      envSkillId,
       skillCardURL('source-code-editing'),
     ];
 

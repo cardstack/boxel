@@ -8,6 +8,7 @@
     },
     "type": "card",
     "attributes": {
+      "version": null,
       "cardInfo": {
         "notes": "Perfect for applications that want to evoke wonder, magic, and a deep connection to nature. The color palette balances earthiness with ethereal gold accents, while typography flows like ancient forest spells.",
         "title": "Forest Fairy",
@@ -19,6 +20,43 @@
       "cssImports": [
         "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Crimson+Text:wght@400;600&display=swap"
       ],
+      "typography": {
+        "body": {
+          "fontSize": "1rem",
+          "fontFamily": "Inter, sans-serif",
+          "fontWeight": "400",
+          "lineHeight": "1.6",
+          "sampleText": "Deep in the ancient woodland, where sunlight filters through emerald canopy and moss covers forgotten stones, the fairy folk dance among dewdrops and wildflowers."
+        },
+        "caption": {
+          "fontSize": "0.875rem",
+          "fontFamily": "Inter, sans-serif",
+          "fontWeight": "400",
+          "lineHeight": "1.5",
+          "sampleText": "Whispered secrets of the forest realm"
+        },
+        "heading": {
+          "fontSize": "2.5rem",
+          "fontFamily": "Crimson Text, serif",
+          "fontWeight": "600",
+          "lineHeight": "1.2",
+          "sampleText": "Whispers of the Enchanted Forest"
+        },
+        "subheading": {
+          "fontSize": "1.25rem",
+          "fontFamily": "Inter, sans-serif",
+          "fontWeight": "500",
+          "lineHeight": "1.4",
+          "sampleText": "Where magic dwells among the ferns"
+        },
+        "sectionHeading": {
+          "fontSize": "1.875rem",
+          "fontFamily": "Crimson Text, serif",
+          "fontWeight": "600",
+          "lineHeight": "1.3",
+          "sampleText": "Moonlit Woodland Paths"
+        }
+      },
       "inspirations": [
         "Miyazaki Studio Ghibli films",
         "Enchanted forest photography",

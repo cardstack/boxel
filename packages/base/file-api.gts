@@ -1,8 +1,10 @@
+import { concat } from '@ember/helper';
 import FileIcon from '@cardstack/boxel-icons/file';
 import {
   BaseDef,
   BaseDefComponent,
   Component,
+  ReadOnlyField,
   StringField,
   contains,
   field,
@@ -11,6 +13,26 @@ import {
 class View extends Component<typeof FileDef> {
   <template>
     {{@model.name}}
+  </template>
+}
+
+class Edit extends Component<typeof FileDef> {
+  <template>
+    <div class='filedef-edit-unavailable' data-test-filedef-edit-unavailable>
+      This file
+      {{if @model.id (concat ' (' @model.id ')')}}
+      is not editable via this interface. Replace it via file upload.
+    </div>
+    <style scoped>
+      .filedef-edit-unavailable {
+        background: var(--boxel-light);
+        border: 1px solid var(--boxel-200);
+        border-radius: var(--boxel-radius-sm);
+        color: var(--boxel-700);
+        font-size: var(--boxel-font-sm);
+        padding: var(--boxel-sp-md);
+      }
+    </style>
   </template>
 }
 
@@ -26,6 +48,7 @@ export class FileDef extends BaseDef {
   static displayName = 'File';
   static icon = FileIcon;
 
+  @field id = contains(ReadOnlyField);
   @field sourceUrl = contains(StringField);
   @field url = contains(StringField);
   @field name = contains(StringField);
@@ -36,6 +59,7 @@ export class FileDef extends BaseDef {
   static fitted: BaseDefComponent = View;
   static isolated: BaseDefComponent = View;
   static atom: BaseDefComponent = View;
+  static edit: BaseDefComponent = Edit;
 
   serialize() {
     return {
