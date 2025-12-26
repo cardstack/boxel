@@ -243,6 +243,22 @@ export function setupInteractSubmodeTests(
       static displayName = 'Personnel';
     }
 
+    class FocusTest extends CardDef {
+      static displayName = 'Focus test';
+      @field names = containsMany(StringField);
+    }
+
+    class FocusNestedItem extends FieldDef {
+      static displayName = 'Focus nested item';
+      @field label = contains(StringField);
+      @field pets = linksToMany(Pet);
+    }
+
+    class FocusNested extends CardDef {
+      static displayName = 'Focus nested';
+      @field items = containsMany(FocusNestedItem);
+    }
+
     let generateSpec = (
       fileName: string,
       title: string,
@@ -272,6 +288,8 @@ export function setupInteractSubmodeTests(
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'address.gts': { Address },
+        'focus-test.gts': { FocusTest },
+        'focus-nested.gts': { FocusNested, FocusNestedItem },
         'person.gts': { Person },
         'personnel.gts': { Personnel },
         'pet.gts': { Pet, Puppy },
@@ -307,6 +325,13 @@ export function setupInteractSubmodeTests(
         }),
         'Pet/mango.json': mangoPet,
         'Pet/vangogh.json': new Pet({ name: 'Van Gogh' }),
+        'FocusTest/1.json': new FocusTest({ names: [] }),
+        'FocusNested/1.json': new FocusNested({
+          items: [
+            new FocusNestedItem({ label: 'Plain', pets: [] }),
+            new FocusNestedItem({ label: 'With Pet', pets: [mangoPet] }),
+          ],
+        }),
         'Person/fadhlan.json': new Person({
           firstName: 'Fadhlan',
           address: new Address({

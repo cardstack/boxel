@@ -3,6 +3,7 @@ import {
   click,
   fillIn,
   find,
+  typeIn,
   triggerKeyEvent,
   settled,
 } from '@ember/test-helpers';
@@ -979,6 +980,184 @@ module('Acceptance | interact submode tests', function (hooks) {
         3,
         'select is preserved',
       );
+    });
+
+    test('containsMany string field preserves focus while typing', async function (assert) {
+      const receivedEventDeferred = new Deferred<void>();
+      const messageService = getService('message-service');
+      const typedText = 'Ada';
+      const inputSelector =
+        '[data-test-contains-many="names"] [data-test-item="0"] input';
+
+      messageService.listenerCallbacks.get(testRealmURL)!.push((e) => {
+        if (
+          e.eventName === 'index' &&
+          e.indexType === 'incremental-index-initiation'
+        ) {
+          return; // ignore the index initiation event
+        }
+        receivedEventDeferred.fulfill();
+      });
+
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}FocusTest/1`,
+              format: 'edit',
+            },
+          ],
+        ],
+      });
+
+      await click('[data-test-contains-many="names"] [data-test-add-new]');
+      let inputElement = find(inputSelector) as HTMLInputElement;
+
+      let focusStates: boolean[] = [];
+      let inputEventCount = 0;
+      const handleInputEvent = (event: Event) => {
+        let target = event.target;
+        if (!(target instanceof HTMLInputElement)) {
+          return;
+        }
+        if (!target.matches(inputSelector)) {
+          return;
+        }
+        inputEventCount += 1;
+        focusStates.push(document.activeElement === target);
+      };
+
+      document.addEventListener('input', handleInputEvent, true);
+      try {
+        inputElement.focus();
+        await typeIn(inputSelector, typedText);
+      } finally {
+        document.removeEventListener('input', handleInputEvent, true);
+      }
+
+      await receivedEventDeferred.promise;
+      await settled();
+
+      assert.strictEqual(
+        inputEventCount,
+        typedText.length,
+        'input events are triggered for each keystroke',
+      );
+      assert.true(
+        focusStates.every(Boolean),
+        'focus is preserved on the input element during typing',
+      );
+      inputElement = find(inputSelector) as HTMLInputElement;
+      assert.strictEqual(
+        document.activeElement,
+        inputElement,
+        'focus is preserved on the input element after typing',
+      );
+      assert.dom(inputSelector).hasValue(typedText);
+    });
+
+    test('containsMany field def preserves focus while typing', async function (assert) {
+      const messageService = getService('message-service');
+      const typedText = 'Ada';
+      const withoutLinksSelector =
+        '[data-test-contains-many="items"] [data-test-item="0"] [data-test-field="label"] input';
+      const withLinksSelector =
+        '[data-test-contains-many="items"] [data-test-item="1"] [data-test-field="label"] input';
+
+      const waitForIndexEvent = () => {
+        const receivedEventDeferred = new Deferred<void>();
+        const callbacks = messageService.listenerCallbacks.get(testRealmURL)!;
+        const callback = (e: RealmEventContent) => {
+          if (
+            e.eventName === 'index' &&
+            e.indexType === 'incremental-index-initiation'
+          ) {
+            return; // ignore the index initiation event
+          }
+          const index = callbacks.indexOf(callback);
+          if (index !== -1) {
+            callbacks.splice(index, 1);
+          }
+          receivedEventDeferred.fulfill();
+        };
+        callbacks.push(callback);
+        return receivedEventDeferred;
+      };
+
+      const assertFocusPreserved = async (
+        selector: string,
+        expectedValue: string,
+      ) => {
+        const receivedEventDeferred = waitForIndexEvent();
+        let inputElement = find(selector) as HTMLInputElement;
+        let focusStates: boolean[] = [];
+        let inputEventCount = 0;
+        const handleInputEvent = (event: Event) => {
+          let target = event.target;
+          if (!(target instanceof HTMLInputElement)) {
+            return;
+          }
+          if (!target.matches(selector)) {
+            return;
+          }
+          inputEventCount += 1;
+          focusStates.push(document.activeElement === target);
+        };
+
+        document.addEventListener('input', handleInputEvent, true);
+        try {
+          inputElement.focus();
+          inputElement.setSelectionRange(
+            inputElement.value.length,
+            inputElement.value.length,
+          );
+          await typeIn(selector, typedText);
+        } finally {
+          document.removeEventListener('input', handleInputEvent, true);
+        }
+
+        await receivedEventDeferred.promise;
+        await settled();
+
+        assert.strictEqual(
+          inputEventCount,
+          typedText.length,
+          'input events are triggered for each keystroke',
+        );
+        assert.true(
+          focusStates.every(Boolean),
+          'focus is preserved on the input element during typing',
+        );
+        inputElement = find(selector) as HTMLInputElement;
+        assert.strictEqual(
+          document.activeElement,
+          inputElement,
+          'focus is preserved on the input element after typing',
+        );
+        assert.dom(selector).hasValue(expectedValue);
+      };
+
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}FocusNested/1`,
+              format: 'edit',
+            },
+          ],
+        ],
+      });
+
+      assert.dom(withoutLinksSelector).hasValue('Plain');
+      await assertFocusPreserved(withoutLinksSelector, `Plain${typedText}`);
+
+      assert
+        .dom(
+          '[data-test-contains-many="items"] [data-test-item="1"] [data-test-links-to-many="pets"] [data-test-pill-item="0"]',
+        )
+        .exists('linksToMany field has a linked card');
+      assert.dom(withLinksSelector).hasValue('With Pet');
+      await assertFocusPreserved(withLinksSelector, `With Pet${typedText}`);
     });
   });
 });
