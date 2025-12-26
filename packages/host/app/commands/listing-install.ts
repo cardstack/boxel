@@ -183,7 +183,7 @@ export default class ListingInstallCommand extends HostBaseCommand<
       visited.add(id);
 
       let cachedInstance = this.store.peek(id);
-      let relationships: Record<string, Relationship> = {};
+      let relationships: Record<string, Relationship | Relationship[]> = {};
       let baseUrl = id;
       let instance = isCardInstance(cachedInstance)
         ? cachedInstance
@@ -206,18 +206,26 @@ export default class ListingInstallCommand extends HostBaseCommand<
         log.debug('[]');
         continue;
       }
-      let summary = entries.map(([field, rel]) => ({
-        field,
-        links: rel.links ?? null,
-        data: rel.data ?? null,
-      }));
+      let summary = entries.map(([field, rel]) => {
+        let rels = Array.isArray(rel) ? rel : [rel];
+        return {
+          field,
+          relationships: rels.map((relationship) => ({
+            links: relationship.links ?? null,
+            data: relationship.data ?? null,
+          })),
+        };
+      });
       log.debug(JSON.stringify(summary, null, 2));
 
       for (let rel of Object.values(relationships)) {
-        let relatedIds = extractRelationshipIds(rel, baseUrl);
-        for (let relatedId of relatedIds) {
-          if (!visited.has(relatedId)) {
-            queue.push(relatedId);
+        let rels = Array.isArray(rel) ? rel : [rel];
+        for (let relationship of rels) {
+          let relatedIds = extractRelationshipIds(relationship, baseUrl);
+          for (let relatedId of relatedIds) {
+            if (!visited.has(relatedId)) {
+              queue.push(relatedId);
+            }
           }
         }
       }
