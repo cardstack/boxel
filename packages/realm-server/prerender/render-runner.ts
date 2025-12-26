@@ -1,5 +1,6 @@
 import {
   type PrerenderMeta,
+  type FilePrerenderMeta,
   type RenderError,
   type RenderResponse,
   type ModuleRenderResponse,
@@ -510,6 +511,115 @@ export class RenderRunner {
           deps: renderError.error.deps ?? [],
           definitions: {},
           error: renderError,
+        };
+      }
+    }
+
+    return {
+      response,
+      timings: { launchMs, renderMs: Date.now() - renderStart },
+      pool: poolInfo,
+    };
+  }
+
+  async prerenderFileMetaAttempt({
+    realm,
+    url,
+    auth,
+    fileDef,
+    opts,
+  }: {
+    realm: string;
+    url: string;
+    auth: string;
+    fileDef: { module: string; name: string };
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+  }): Promise<{
+    response: FilePrerenderMeta;
+    timings: { launchMs: number; renderMs: number };
+    pool: {
+      pageId: string;
+      realm: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    };
+  }> {
+    this.#nonce++;
+    log.info(
+      `file meta prerendering url ${url}, nonce=${this.#nonce} realm=${realm}`,
+    );
+
+    const { page, reused, launchMs, pageId } = await this.#getPageForRealm(
+      realm,
+      auth,
+    );
+    const poolInfo = {
+      pageId: pageId ?? 'unknown',
+      realm,
+      reused,
+      evicted: false,
+      timedOut: false,
+    };
+    const markTimeout = (err?: RenderError) => {
+      if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
+        poolInfo.timedOut = true;
+      }
+    };
+
+    await page.evaluate((sessionAuth) => {
+      localStorage.setItem('boxel-session', sessionAuth);
+    }, auth);
+
+    let renderStart = Date.now();
+    const captureOptions: CaptureOptions = {
+      expectedId: url,
+      expectedNonce: String(this.#nonce),
+      simulateTimeoutMs: opts?.simulateTimeoutMs,
+    };
+    let options = JSON.stringify({ fileDef });
+
+    let capture = await withTimeout(
+      page,
+      async () => {
+        await transitionTo(page, 'file-meta', url, String(this.#nonce), options);
+        return await captureResult(page, 'textContent', captureOptions);
+      },
+      opts?.timeoutMs,
+    );
+
+    let response: FilePrerenderMeta;
+    if (isRenderError(capture)) {
+      let renderError = capture as RenderError;
+      markTimeout(renderError);
+      if (await this.#maybeEvict(realm, 'file meta render', renderError)) {
+        poolInfo.evicted = true;
+      }
+      response = {
+        serialized: null,
+        searchDoc: null,
+        displayNames: null,
+        deps: null,
+        types: null,
+        error: {
+          message: renderError.error.message,
+          name: renderError.error.title,
+        },
+      };
+    } else {
+      let result = capture as RenderCapture;
+      try {
+        response = JSON.parse(result.value) as FilePrerenderMeta;
+      } catch (_e) {
+        response = {
+          serialized: null,
+          searchDoc: null,
+          displayNames: null,
+          deps: null,
+          types: null,
+          error: {
+            message: `file meta prerender returned invalid payload: ${result.value}`,
+          },
         };
       }
     }

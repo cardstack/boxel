@@ -145,6 +145,16 @@ export function createRoutes(args: CreateRoutesArgs) {
     }),
   );
   router.post(
+    '/_prerender-file-meta',
+    jwtMiddleware(args.realmSecretSeed),
+    handlePrerenderProxy({
+      kind: 'file-meta',
+      prerenderer: args.prerenderer,
+      dbAdapter: args.dbAdapter,
+      createPrerenderAuth,
+    }),
+  );
+  router.post(
     '/_publish-realm',
     jwtMiddleware(args.realmSecretSeed),
     handlePublishRealm(args),

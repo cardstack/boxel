@@ -3,6 +3,7 @@ import {
   type RenderResponse,
   type ModuleRenderResponse,
   type RenderRouteOptions,
+  type FilePrerenderMeta,
   logger,
 } from '@cardstack/runtime-common';
 import {
@@ -59,6 +60,7 @@ export function createRemotePrerenderer(
       url: string;
       auth: string;
       renderOptions?: RenderRouteOptions;
+      fileDef?: { module: string; name: string };
     },
   ): Promise<T> {
     validatePrerenderAttributes(type, attributes);
@@ -175,6 +177,18 @@ export function createRemotePrerenderer(
         },
       );
     },
+    async prerenderFileMeta({ realm, url, auth, fileDef, renderOptions: _ }) {
+      return await requestWithRetry<FilePrerenderMeta>(
+        'prerender-file-meta',
+        'prerender-file-meta-request',
+        {
+          realm,
+          url,
+          auth,
+          fileDef,
+        },
+      );
+    },
   };
 }
 
@@ -196,6 +210,15 @@ function validatePrerenderAttributes(
   }
   if (typeof attrs.auth !== 'string' || attrs.auth.trim().length === 0) {
     missing.push('auth');
+  }
+  if (requestType === 'prerender-file-meta-request') {
+    if (
+      !attrs.fileDef ||
+      typeof attrs.fileDef.module !== 'string' ||
+      typeof attrs.fileDef.name !== 'string'
+    ) {
+      missing.push('fileDef');
+    }
   }
 
   if (missing.length > 0) {

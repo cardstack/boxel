@@ -9,6 +9,7 @@ import {
   isCardResource,
   hasExecutableExtension,
   SupportedMimeType,
+  baseRealm,
   unixTime,
   jobIdentity,
   modulesConsumedInMeta,
@@ -30,6 +31,7 @@ import {
   type LastModifiedTimes,
   type JobInfo,
   type Prerenderer,
+  type FilePrerenderMeta,
   type RenderRouteOptions,
   type LocalPath,
   type Reader,
@@ -415,11 +417,106 @@ export class IndexRunner {
             resource,
           });
         }
+      } else {
+        if (lastModified == null) {
+          this.#log.warn(
+            `${jobIdentity(this.#jobInfo)} No lastModified date available for ${url.href}, using current time`,
+          );
+          lastModified = unixTime(Date.now());
+        }
+        await this.indexFile({ url, lastModified, resourceCreatedAt });
       }
     }
     this.#log.debug(
       `${jobIdentity(this.#jobInfo)} completed visiting file ${url.href} in ${Date.now() - start}ms`,
     );
+  }
+
+  private defaultFileDef() {
+    return { module: `${baseRealm.url}file-api`, name: 'FileDef' } as const;
+  }
+
+  private resolveFileDef(_url: URL) {
+    // TODO: use extension-to-filedef mapping with realm configuration.
+    return this.defaultFileDef();
+  }
+
+  private async prerenderFileMetaWithFallback(
+    url: URL,
+  ): Promise<FilePrerenderMeta | undefined> {
+    let primary = this.resolveFileDef(url);
+    let response = await this.#prerenderer.prerenderFileMeta({
+      realm: this.#realmURL.href,
+      url: url.href,
+      auth: this.#auth,
+      fileDef: primary,
+    });
+    let defaultFileDef = this.defaultFileDef();
+    let isDefault =
+      primary.module === defaultFileDef.module &&
+      primary.name === defaultFileDef.name;
+    if (response.error && !isDefault) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} file metadata extraction failed for ${url.href} with ${primary.module}#${primary.name}, falling back to FileDef: ${response.error.message}`,
+      );
+      response = await this.#prerenderer.prerenderFileMeta({
+        realm: this.#realmURL.href,
+        url: url.href,
+        auth: this.#auth,
+        fileDef: defaultFileDef,
+      });
+    } else if (response.error && isDefault) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} file metadata extraction failed for ${url.href}: ${response.error.message}`,
+      );
+    }
+    return response;
+  }
+
+  private async indexFile({
+    url,
+    lastModified,
+    resourceCreatedAt,
+  }: {
+    url: URL;
+    lastModified: number;
+    resourceCreatedAt: number;
+  }): Promise<void> {
+    let result = await this.prerenderFileMetaWithFallback(url);
+    if (!result?.serialized || !result.searchDoc) {
+      return;
+    }
+
+    if (!this.#realmInfo) {
+      let realmInfoResponse = await this.#fetch(`${this.realmURL}_info`, {
+        headers: { Accept: SupportedMimeType.RealmInfo },
+      });
+      this.#realmInfo = (await realmInfoResponse.json())?.data?.attributes;
+    }
+
+    let serialized = result.serialized;
+    merge(serialized, {
+      data: {
+        meta: {
+          lastModified,
+          resourceCreatedAt,
+          realmInfo: { ...this.#realmInfo },
+          realmURL: this.realmURL.href,
+        },
+      },
+    });
+
+    let resource = serialized.data as CardResource;
+    await this.updateEntry(url, {
+      type: 'instance',
+      resource,
+      searchData: result.searchDoc,
+      deps: new Set(result.deps ?? []),
+      types: result.types ?? [],
+      displayNames: result.displayNames ?? [],
+      lastModified,
+      resourceCreatedAt,
+    });
   }
 
   private async indexModule(url: URL): Promise<void> {
