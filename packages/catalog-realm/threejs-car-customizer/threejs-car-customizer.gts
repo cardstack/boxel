@@ -150,7 +150,7 @@ class ThreejsCarCustomizerIsolated extends Component<
 > {
   // ⁶ Isolated format
   @tracked private errorMessage = '';
-  @tracked private selectedRegion: 'body' | 'face' | 'eyes' | 'outfit' = 'body';
+  @tracked private selectedRegion: 'body' | 'face' | 'eyes' = 'body';
   @tracked private bodyColor = this.args.model?.bodyColor || '#9CA3AF';
   @tracked private faceColor = this.args.model?.faceColor || '#F3F4F6';
   @tracked private eyesColor = this.args.model?.eyesColor || '#1F2937';
@@ -363,6 +363,13 @@ class ThreejsCarCustomizerIsolated extends Component<
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       this.renderer.shadowMap.enabled = true;
       this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      if ('outputColorSpace' in this.renderer) {
+        this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+      } else {
+        this.renderer.outputEncoding = THREE.sRGBEncoding;
+      }
+      this.renderer.toneMapping = THREE.NoToneMapping;
+      this.renderer.toneMappingExposure = 1.0;
 
       // Add resize observer for dynamic fitting
       this.resizeObserver = new (window as any).ResizeObserver(() => {
@@ -371,17 +378,25 @@ class ThreejsCarCustomizerIsolated extends Component<
       this.resizeObserver.observe(this.canvasElement);
 
       // ¹³ Lighting
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
       this.scene.add(ambientLight);
 
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      const hemisphereLight = new THREE.HemisphereLight(
+        0xffffff,
+        0xcccccc,
+        0.6,
+      );
+      hemisphereLight.position.set(0, 1, 0);
+      this.scene.add(hemisphereLight);
+
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
       directionalLight.position.set(5, 10, 5);
       directionalLight.castShadow = true;
       directionalLight.shadow.mapSize.width = 2048;
       directionalLight.shadow.mapSize.height = 2048;
       this.scene.add(directionalLight);
 
-      const fillLight = new THREE.DirectionalLight(0x6366f1, 0.3);
+      const fillLight = new THREE.DirectionalLight(0xffffff, 0.45);
       fillLight.position.set(-5, 5, -5);
       this.scene.add(fillLight);
 
@@ -416,8 +431,8 @@ class ThreejsCarCustomizerIsolated extends Component<
     const bodyMaterial = new THREE.MeshStandardMaterial({
       color: this.bodyColor,
       flatShading: true,
-      roughness: 0.4,
-      metalness: 0.6,
+      roughness: 0.2,
+      metalness: 0,
     });
     this.bodyMesh = new THREE.Mesh(bodyGeometry, bodyMaterial);
     this.bodyMesh.position.y = 0.4;
@@ -430,8 +445,8 @@ class ThreejsCarCustomizerIsolated extends Component<
     const roofMaterial = new THREE.MeshStandardMaterial({
       color: this.faceColor,
       flatShading: true,
-      roughness: 0.3,
-      metalness: 0.2,
+      roughness: 0.25,
+      metalness: 0,
     });
     this.faceMesh = new THREE.Mesh(roofGeometry, roofMaterial);
     this.faceMesh.position.set(0, 0.85, 0);
@@ -583,7 +598,7 @@ class ThreejsCarCustomizerIsolated extends Component<
 
   // ²⁶ Region selection
   @action
-  selectRegion(region: 'body' | 'face' | 'eyes' | 'outfit') {
+  selectRegion(region: 'body' | 'face' | 'eyes') {
     this.selectedRegion = region;
   }
 
@@ -594,13 +609,21 @@ class ThreejsCarCustomizerIsolated extends Component<
     this.applyColorToRegion(color);
   }
 
+  private updateMaterialColor(material: any, color: string) {
+    if (!material) {
+      return;
+    }
+    material.color.set(color);
+    material.needsUpdate = true;
+  }
+
   // Update colors when model changes
   // Watch for model color changes and update 3D meshes
   get modelBodyColor() {
     const color = this.args.model?.bodyColor || '#9CA3AF';
     if (this.bodyMesh && color !== this.bodyColor) {
       this.bodyColor = color;
-      this.bodyMesh.material.color.setStyle(color);
+      this.updateMaterialColor(this.bodyMesh.material, color);
     }
     return color;
   }
@@ -609,7 +632,7 @@ class ThreejsCarCustomizerIsolated extends Component<
     const color = this.args.model?.faceColor || '#F3F4F6';
     if (this.faceMesh && color !== this.faceColor) {
       this.faceColor = color;
-      this.faceMesh.material.color.setStyle(color);
+      this.updateMaterialColor(this.faceMesh.material, color);
     }
     return color;
   }
@@ -620,8 +643,7 @@ class ThreejsCarCustomizerIsolated extends Component<
       this.eyesColor = color;
       this.eyesMesh.children.forEach((wheel: any) => {
         if (wheel.material) {
-          wheel.material.color.setStyle(color);
-          wheel.material.needsUpdate = true;
+          this.updateMaterialColor(wheel.material, color);
         }
       });
     }
@@ -632,11 +654,11 @@ class ThreejsCarCustomizerIsolated extends Component<
     const color = this.args.model?.outfitColor || '#6366F1';
     if (this.outfitMesh && color !== this.outfitColor) {
       this.outfitColor = color;
-      this.outfitMesh.material.color.setStyle(color);
+      this.updateMaterialColor(this.outfitMesh.material, color);
       // Also update rear lights
       this.car?.children.forEach((child: any) => {
         if (child.material === this.outfitMesh?.material) {
-          child.material.color.setStyle(color);
+          this.updateMaterialColor(child.material, color);
         }
       });
     }
@@ -779,12 +801,14 @@ class ThreejsCarCustomizerIsolated extends Component<
     switch (this.selectedRegion) {
       case 'body':
         this.bodyColor = color;
-        if (this.bodyMesh) this.bodyMesh.material.color.setStyle(color);
+        if (this.bodyMesh)
+          this.updateMaterialColor(this.bodyMesh.material, color);
         if (this.args.model) this.args.model.bodyColor = color;
         break;
       case 'face':
         this.faceColor = color;
-        if (this.faceMesh) this.faceMesh.material.color.setStyle(color);
+        if (this.faceMesh)
+          this.updateMaterialColor(this.faceMesh.material, color);
         if (this.args.model) this.args.model.faceColor = color;
         break;
       case 'eyes':
@@ -792,17 +816,11 @@ class ThreejsCarCustomizerIsolated extends Component<
         if (this.eyesMesh) {
           this.eyesMesh.children.forEach((wheel: any) => {
             if (wheel.material) {
-              wheel.material.color.setStyle(color);
-              wheel.material.needsUpdate = true;
+              this.updateMaterialColor(wheel.material, color);
             }
           });
         }
         if (this.args.model) this.args.model.eyesColor = color;
-        break;
-      case 'outfit':
-        this.outfitColor = color;
-        if (this.outfitMesh) this.outfitMesh.material.color.setStyle(color);
-        if (this.args.model) this.args.model.outfitColor = color;
         break;
     }
   }
@@ -823,9 +841,7 @@ class ThreejsCarCustomizerIsolated extends Component<
         ? this.bodyColor
         : this.selectedRegion === 'face'
         ? this.faceColor
-        : this.selectedRegion === 'eyes'
-        ? this.eyesColor
-        : this.outfitColor;
+        : this.eyesColor;
 
     if (this.colorFormat === 'rgb') {
       const rgb = this.hexToRgb(color);
@@ -875,14 +891,19 @@ class ThreejsCarCustomizerIsolated extends Component<
     this.eyesColor = colors.eyes;
     this.outfitColor = colors.outfit;
 
-    if (this.bodyMesh) this.bodyMesh.material.color.setStyle(colors.body);
-    if (this.faceMesh) this.faceMesh.material.color.setStyle(colors.face);
+    if (this.bodyMesh)
+      this.updateMaterialColor(this.bodyMesh.material, colors.body);
+    if (this.faceMesh)
+      this.updateMaterialColor(this.faceMesh.material, colors.face);
     if (this.eyesMesh) {
       this.eyesMesh.children.forEach((eye: any) => {
-        eye.material.color.setStyle(colors.eyes);
+        if (eye.material) {
+          this.updateMaterialColor(eye.material, colors.eyes);
+        }
       });
     }
-    if (this.outfitMesh) this.outfitMesh.material.color.setStyle(colors.outfit);
+    if (this.outfitMesh)
+      this.updateMaterialColor(this.outfitMesh.material, colors.outfit);
 
     if (this.args.model) {
       this.args.model.bodyColor = colors.body;
@@ -1068,13 +1089,6 @@ class ThreejsCarCustomizerIsolated extends Component<
             >
               Wheels
             </button>
-            <button
-              class='region-btn
-                {{if (eq this.selectedRegion "outfit") "active"}}'
-              {{on 'click' (fn this.selectRegion 'outfit')}}
-            >
-              Lights/Details
-            </button>
           </div>
 
           <div class='color-picker-section'>
@@ -1094,11 +1108,6 @@ class ThreejsCarCustomizerIsolated extends Component<
               <div class='field-group'>
                 <label>Wheels Color</label>
                 <@fields.eyesColor @format='edit' />
-              </div>
-            {{else if (eq this.selectedRegion 'outfit')}}
-              <div class='field-group'>
-                <label>Lights/Details Color</label>
-                <@fields.outfitColor @format='edit' />
               </div>
             {{/if}}
           </div>
