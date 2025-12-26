@@ -26,7 +26,7 @@ import {
 import type { ColorFieldSignature } from '../util/color-field-signature';
 import { setupElement } from '../modifiers/setup-element-modifier';
 
-export default class AdvancedEdit extends Component<ColorFieldSignature> {
+export default class AdvancedColorPicker extends Component<ColorFieldSignature> {
   // ========== Properties ==========
   @tracked h: number = 0;
   @tracked s: number = 100;
