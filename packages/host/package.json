@@ -189,7 +189,8 @@
   },
   "dependencies": {
     "ember-modify-based-class-resource": "catalog:",
-    "reactiveweb": "catalog:"
+    "reactiveweb": "catalog:",
+    "unique-names-generator": "^4.7.1"
   },
   "engines": {
     "node": ">= 20"

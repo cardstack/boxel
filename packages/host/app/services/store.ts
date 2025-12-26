@@ -182,6 +182,13 @@ export default class StoreService extends Service implements StoreInterface {
     this.store = this.createCardStore();
   }
 
+  refreshReferencesForCodeChange(reason?: string) {
+    let reasonSuffix = reason ? ` (${reason})` : '';
+    storeLogger.debug(`resetting store for code change${reasonSuffix}`);
+    this.store.reset();
+    this.reestablishReferences.perform();
+  }
+
   dropReference(id: string | undefined) {
     if (!id) {
       return;

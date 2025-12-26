@@ -23,7 +23,7 @@ import {
   type RGBA,
 } from '@cardstack/boxel-ui/helpers';
 
-export default class SliderEdit extends Component<ColorFieldSignature> {
+export default class SliderPicker extends Component<ColorFieldSignature> {
   @tracked isDragging = false;
   @tracked rgb: RGB = { r: 59, g: 130, b: 246 };
   @tracked hsl: HSL = { h: 0, s: 0, l: 0 };

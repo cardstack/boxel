@@ -16,35 +16,32 @@ import ms from 'ms';
 
 import { validate as uuidValidate } from 'uuid';
 
-import type {
-  RealmAdapter,
-  LooseSingleCardDocument,
-  RealmPermissions,
-  RealmAction,
-} from '@cardstack/runtime-common';
 import {
   baseRealm,
-  Worker,
-  IndexWriter,
-  type RealmInfo,
-  type TokenClaims,
-  type Prerenderer,
-  insertPermissions,
-  unixTime,
-  type RenderError,
-  type DefinitionLookup,
   CachingDefinitionLookup,
-} from '@cardstack/runtime-common';
-import { getCreatedTime } from '@cardstack/runtime-common/file-meta';
-import {
+  ensureTrailingSlash,
+  getCreatedTime,
+  IndexWriter,
+  insertPermissions,
+  Loader,
+  MatrixClient,
+  Realm,
   testHostModeRealmURL,
   testRealmInfo,
   testRealmURL,
   testRealmURLToUsername,
-} from '@cardstack/runtime-common/helpers/const';
-import { Loader } from '@cardstack/runtime-common/loader';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import { Realm } from '@cardstack/runtime-common/realm';
+  unixTime,
+  Worker,
+  type DefinitionLookup,
+  type LooseSingleCardDocument,
+  type Prerenderer,
+  type RealmAction,
+  type RealmAdapter,
+  type RealmInfo,
+  type RealmPermissions,
+  type RenderError,
+  type TokenClaims,
+} from '@cardstack/runtime-common';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
@@ -86,6 +83,14 @@ export * from '@cardstack/runtime-common/helpers';
 export * from './indexer';
 
 export const testModuleRealm = 'http://localhost:4202/test/';
+
+export {
+  catalogRealm,
+  skillsRealm,
+  skillCardURL,
+  devSkillId,
+  envSkillId,
+} from '@cardstack/host/lib/utils';
 
 const { sqlSchema } = ENV;
 
@@ -958,10 +963,6 @@ function deriveTestUserPermissions(
     return firstEntry as RealmAction[];
   }
   return ['read', 'write'];
-}
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
 }
 
 export function setupUserSubscription() {

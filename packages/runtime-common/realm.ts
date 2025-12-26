@@ -4,7 +4,8 @@ import {
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
 } from './document-types';
-import { isMeta, type CardResource } from './resource-types';
+import { isMeta, type CardResource, type Relationship } from './resource-types';
+import { normalizeRelationships } from './relationship-utils';
 import type { LocalPath } from './paths';
 import { RealmPaths, ensureTrailingSlash, join } from './paths';
 import { persistFileMeta, removeFileMeta, getCreatedTime } from './file-meta';
@@ -125,6 +126,8 @@ import {
 } from './db-queries/session-room-queries';
 import {
   analyzeRealmPublishability,
+  type PublishabilityViolation,
+  type PublishabilityWarningType,
   type ResourceIndexEntry,
 } from './publishability';
 
@@ -2926,6 +2929,21 @@ export class Realm {
 
     let rootResources = Array.from(new Set(instanceRows.map((row) => row.url)));
 
+    let errorRows = (await query(this.#dbAdapter, [
+      `SELECT url, error_doc FROM boxel_index WHERE realm_url =`,
+      param(sourceRealmURL),
+      `AND type = 'error'`,
+      `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+    ])) as { url: string; error_doc: unknown | null }[];
+
+    let errorViolations: PublishabilityViolation[] = errorRows
+      .filter((row) => row.error_doc != null)
+      .map((row) => ({
+        kind: 'error-document',
+        resource: row.url,
+        errorDocUrl: row.url,
+      }));
+
     let queue: string[] = [...rootResources];
     let queued = new Set(queue);
 
@@ -3191,14 +3209,36 @@ export class Realm {
         isGloballyPublicDependency(resourceUrl),
     });
 
+    let privateDependencyViolations: PublishabilityViolation[] =
+      result.violations.filter(
+        (violation) => violation.kind === 'private-dependency',
+      );
+
+    let allViolations: PublishabilityViolation[] = [
+      ...privateDependencyViolations,
+      ...errorViolations,
+    ];
+
+    let warningTypes: PublishabilityWarningType[] = [];
+    if (privateDependencyViolations.length > 0) {
+      warningTypes.push('has-private-dependencies');
+    }
+    if (errorViolations.length > 0) {
+      warningTypes.push('has-error-card-documents');
+    }
+
+    let publishable =
+      privateDependencyViolations.length === 0 && errorViolations.length === 0;
+
     let doc = {
       data: {
-        type: 'has-private-dependencies',
+        type: 'realm-publishability',
         id: sourceRealmURL,
         attributes: {
-          publishable: result.publishable,
+          publishable,
           realmURL: sourceRealmURL,
-          violations: result.violations,
+          violations: allViolations,
+          warningTypes: warningTypes.length ? warningTypes : undefined,
         },
       },
     };
@@ -3920,9 +3960,9 @@ function promoteLocalIdsToRemoteIds({
   if (!resource.relationships) {
     return;
   }
-  let relationships = resource.relationships;
+  let normalizedRelationships = normalizeRelationships(resource.relationships);
 
-  function makeSelfLink(field: string, lid: string) {
+  function setSelfLink(relationship: Relationship, lid: string) {
     let sideLoadedResource = included.find((i) => i.lid === lid);
     if (!sideLoadedResource) {
       throw new Error(`Could not find local id ${lid} in "included" resources`);
@@ -3934,23 +3974,33 @@ function promoteLocalIdsToRemoteIds({
       return;
     }
     let name = getCardDirectoryName(sideLoadedResource.meta?.adoptsFrom, paths);
-    relationships[field].links = {
+    relationship.links = {
       self: paths.fileURL(`${name}/${lid}`).href,
     };
   }
 
   let paths = new RealmPaths(realmURL);
-  for (let [fieldName, value] of Object.entries(resource.relationships)) {
-    if ('data' in value && value.data) {
-      if (Array.isArray(value.data)) {
-        for (let [i, item] of value.data.entries()) {
-          if ('lid' in item) {
-            makeSelfLink(`${fieldName}.${i}`, item.lid);
+  for (let [fieldName, relationship] of Object.entries(
+    normalizedRelationships,
+  )) {
+    if (relationship.data && Array.isArray(relationship.data)) {
+      for (let [index, item] of relationship.data.entries()) {
+        if ('lid' in item) {
+          let indexedRelationship =
+            normalizedRelationships[`${fieldName}.${index}`];
+          if (indexedRelationship) {
+            setSelfLink(indexedRelationship, item.lid);
           }
         }
-      } else if ('lid' in value.data) {
-        makeSelfLink(fieldName, value.data.lid);
       }
+      continue;
+    }
+    if (
+      relationship.data &&
+      !Array.isArray(relationship.data) &&
+      'lid' in relationship.data
+    ) {
+      setSelfLink(relationship, relationship.data.lid);
     }
   }
 }

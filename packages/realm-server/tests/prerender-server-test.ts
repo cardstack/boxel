@@ -287,7 +287,6 @@ module(basename(__filename), function () {
         serverURL: 'http://127.0.0.1:4222',
         isDraining: () => localDraining,
         drainingPromise: drainingDeferred.promise,
-        silent: true,
       });
       let localRequest = supertest(built.app.callback());
 
@@ -361,7 +360,6 @@ module(basename(__filename), function () {
           serverURL: 'http://127.0.0.1:4223',
           isDraining: () => true,
           drainingPromise: Promise.resolve(),
-          silent: true,
         });
         let localRequest = supertest(built.app.callback());
         let originalPrerender = (built.prerenderer as any).prerenderCard;

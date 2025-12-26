@@ -35,6 +35,44 @@ export default class BrandTypography extends ThemeTypographyField {
         </FieldContainer>
       </GridContainer>
 
+      <section class='theme-typography'>
+        <h1>
+          {{#if @model.heading.sampleText}}
+            {{@model.heading.sampleText}}
+          {{else}}
+            Sample Heading (H1)
+          {{/if}}
+        </h1>
+        <h2>
+          {{#if @model.sectionHeading.sampleText}}
+            {{@model.sectionHeading.sampleText}}
+          {{else}}
+            Sample Section Heading (H2)
+          {{/if}}
+        </h2>
+        <h3>
+          {{#if @model.subheading.sampleText}}
+            {{@model.subheading.sampleText}}
+          {{else}}
+            Sample Subheading (H3)
+          {{/if}}
+        </h3>
+        <p>
+          {{#if @model.body.sampleText}}
+            {{@model.body.sampleText}}
+          {{else}}
+            Sample body text.
+          {{/if}}
+        </p>
+        <small>
+          {{#if @model.caption.sampleText}}
+            {{@model.caption.sampleText}}
+          {{else}}
+            Small text
+          {{/if}}
+        </small>
+      </section>
+
       <style scoped>
         .preview-grid {
           display: grid;
@@ -62,6 +100,21 @@ export default class BrandTypography extends ThemeTypographyField {
           border-radius: var(--boxel-border-radius);
           text-align: center;
           overflow: hidden;
+        }
+        .theme-typography {
+          margin-top: var(--boxel-sp-3xl);
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp);
+        }
+        .theme-typography h1,
+        .theme-typography h2,
+        .theme-typography h3,
+        .theme-typography h4,
+        .theme-typography h5,
+        .theme-typography h6,
+        .theme-typography p {
+          margin: 0;
         }
       </style>
     </template>

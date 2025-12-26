@@ -13,9 +13,13 @@ import { module, test } from 'qunit';
 
 import {
   baseRealm,
+  hasExecutableExtension,
   trimJsonExtension,
   type Realm,
 } from '@cardstack/runtime-common';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import {
   percySnapshot,
@@ -1079,6 +1083,68 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .dom('[data-test-post-title]')
         .containsText('Hello Mad As a Hatter');
       assert.dom('[data-test-byline]').containsText('Jane Doe');
+    });
+
+    test('playground edit format refreshes even if code invalidations are ignored', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}person.gts`,
+      });
+
+      let loaderService = getService('loader-service') as LoaderService;
+      let resetCount = 0;
+      let originalResetLoader = loaderService.resetLoader.bind(loaderService);
+      loaderService.resetLoader = (options) => {
+        resetCount += 1;
+        return originalResetLoader(options);
+      };
+
+      let store = getService('store') as StoreService;
+      let originalHandleInvalidations = (store as any).handleInvalidations.bind(
+        store,
+      );
+      (store as any).handleInvalidations = (event: any) => {
+        if (
+          event?.eventName === 'index' &&
+          event?.indexType === 'incremental' &&
+          Array.isArray(event?.invalidations) &&
+          event.invalidations.some(hasExecutableExtension)
+        ) {
+          return;
+        }
+        return originalHandleInvalidations(event);
+      };
+
+      try {
+        await click('[data-test-module-inspector-view="preview"]');
+        await waitFor('[data-test-instance-chooser]');
+        await click('[data-test-instance-chooser]');
+        await click('[data-option-index="0"]');
+        await click('[data-test-edit-button]');
+        await waitFor('[data-test-card-format="edit"]');
+
+        await click('[data-test-module-inspector-view="schema"]');
+        await waitFor('[data-test-add-field-button]');
+        await click('[data-test-add-field-button]');
+        await fillIn('[data-test-field-name-input]', 'nickname');
+        await click('[data-test-save-field-button]');
+        await waitFor(
+          '[data-test-card-schema="Person"] [data-test-field-name="nickname"]',
+        );
+        await waitUntil(() => resetCount > 0);
+
+        await click('[data-test-module-inspector-view="preview"]');
+        await waitFor('[data-test-instance-chooser]');
+        await waitFor(
+          '[data-test-card-format="edit"] [data-test-field="nickname"]',
+        );
+        assert
+          .dom('[data-test-card-format="edit"] [data-test-field="nickname"]')
+          .exists();
+      } finally {
+        loaderService.resetLoader = originalResetLoader;
+        (store as any).handleInvalidations = originalHandleInvalidations;
+      }
     });
 
     test('can remember playground selections and format choices via local storage', async function (assert) {

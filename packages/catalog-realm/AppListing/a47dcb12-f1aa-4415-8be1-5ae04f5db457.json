@@ -66,21 +66,6 @@
           "self": "../playlist/PlaylistCard/focus-flow"
         }
       },
-      "examples.2": {
-        "links": {
-          "self": "../song/SongCard/funky-suspense"
-        }
-      },
-      "examples.3": {
-        "links": {
-          "self": "../song/SongCard/carefree"
-        }
-      },
-      "examples.4": {
-        "links": {
-          "self": "../song/SongCard/monkeys-spinning-monkeys"
-        }
-      },
       "categories.0": {
         "links": {
           "self": "../Category/content-creation"

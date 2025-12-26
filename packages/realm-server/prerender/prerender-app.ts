@@ -30,7 +30,6 @@ const defaultPrerenderServerPort = 4221;
 export function buildPrerenderApp(options: {
   serverURL: string;
   maxPages?: number;
-  silent?: boolean;
   isDraining?: () => boolean;
   drainingPromise?: Promise<void>;
 }): {
@@ -41,10 +40,8 @@ export function buildPrerenderApp(options: {
   let router = new Router();
   let maxPages =
     options?.maxPages ?? Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 4);
-  let silent = options?.silent || process.env.PRERENDER_SILENT === 'true';
   let prerenderer = new Prerenderer({
     maxPages,
-    silent,
     serverURL: options.serverURL,
   });
 
@@ -395,11 +392,9 @@ export function createPrerenderHttpServer(options?: {
   let heartbeatTimer: NodeJS.Timeout | undefined;
   let isClosing = false;
   let fatalExitInProgress = false;
-  let silent = options?.silent || process.env.PRERENDER_SILENT === 'true';
   let serverURL = resolvePrerenderServerURL(options?.port);
   let { app, prerenderer } = buildPrerenderApp({
     maxPages: options?.maxPages,
-    silent,
     serverURL,
     isDraining: () => draining,
     drainingPromise: drainingDeferred.promise,

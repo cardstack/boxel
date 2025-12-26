@@ -1,4 +1,5 @@
 import type { LooseCardResource } from './index';
+import { relationshipEntries } from './relationship-utils';
 import { RealmPaths } from './paths';
 
 export function maybeURL(
@@ -92,7 +93,7 @@ export function visitInstanceURLs(
   }
   let relationships = resourceJson.relationships;
   if (relationships) {
-    for (let relationship of Object.values(relationships)) {
+    for (let { relationship } of relationshipEntries(relationships)) {
       let links = relationship.links;
       if (links && links.self) {
         visit(links.self, (newURL) => {

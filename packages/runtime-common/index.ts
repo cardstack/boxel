@@ -146,6 +146,7 @@ export * from './definitions';
 export * from './catalog';
 export * from './commands';
 export * from './constants';
+export * from './helpers/const';
 export * from './document';
 export * from './matrix-constants';
 export * from './matrix-client';
@@ -169,7 +170,9 @@ export * from './authorization-middleware';
 export * from './resource-types';
 export * from './query';
 export * from './query-field-utils';
+export * from './relationship-utils';
 export * from './formats';
+export { getCreatedTime } from './file-meta';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
 export { Loader };
@@ -245,7 +248,12 @@ export {
 
 export type { JWTPayload } from './realm-auth-client';
 export { sanitizeHtml } from './dompurify-runtime';
-export { markedSync, markdownToHtml } from './marked-sync';
+export {
+  hasCodeBlocks,
+  markedSync,
+  markdownToHtml,
+  preloadMarkdownLanguages,
+} from './marked-sync';
 export { getPlural } from './pluralize-runtime';
 
 import type {

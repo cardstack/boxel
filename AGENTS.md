@@ -107,3 +107,72 @@
 ## Base realm imports
 
 - Only card definitions (files run through the card loader) can use static ESM imports from `https://cardstack.com/base/*`. Host-side modules must load the module at runtime via `loader.import(`${baseRealm.url}...`)`. Static value imports from the HTTPS specifier inside host code trigger build-time `webpackMissingModule` failures. Type imports are OK using static ESM syntax.
+
+## Linear Ticket Process (Reusable)
+
+This end-to-end workflow can be used as a template for future tickets.
+
+## 1) Pull ticket details
+
+- Find the project/issue in Linear.
+- Read the issue description and confirm scope.
+- Read the project overview for context.
+- If needed, note assumptions or unknowns to validate early.
+
+## 2) Update Linear state
+
+- Assign the issue to yourself.
+- Move the issue to **In Progress**.
+
+## 3) Create an implementation plan doc
+
+- Create a short plan in `docs/` named after the issue, e.g.
+  - `docs/cs-<id>-<short-title>-plan.md`
+- Include: goals, assumptions, steps, target files, testing notes.
+- Ask the user to review the doc before proceeding.
+
+## 4) Implement changes
+
+- Modify code per the plan.
+- Keep changes small and focused.
+- Add minimal UI copy that clarifies behavior (e.g., read-only messaging).
+
+## 5) Add focused tests
+
+- Add a narrow test that exercises the new behavior.
+- Prefer existing test files in the most relevant suite.
+- Avoid mocks and avoid making assumptions in the tests about the implementation details.
+- Run tests and confirm it passes.
+
+## 6) Prompt for user review
+
+- Summarize the work and ask the user to review
+- Once the user is happy ask them to stage the changes they want committed.
+
+## 7) Check working tree
+
+- Confirm what’s staged and what’s not:
+  - `git status --short`
+- **If unrelated files appear**, stop and clarify how to proceed.
+
+## 8) Create branch and commit
+
+- Branch name: `cs-<id>-<short-title>`
+- Commit message: `<short description>`
+
+## 9) Push and open PR
+
+- Push branch: `git push -u origin <branch>`
+- Open PR with short summary
+
+## 10) Share PR link
+
+- Post the PR URL and confirm any remaining uncommitted files are not part of the PR.
+
+## Suggested PR body template
+
+```
+## Summary
+- <bullet 1>
+- <bullet 2>
+```

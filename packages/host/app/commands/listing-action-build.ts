@@ -5,7 +5,7 @@ import { DEFAULT_CODING_LLM } from '@cardstack/runtime-common/matrix-constants';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
-import { skillCardURL } from '../lib/utils';
+import { devSkillId, skillCardURL } from '../lib/utils';
 
 import CreateAiAssistantRoomCommand from './create-ai-assistant-room';
 import OpenAiAssistantRoomCommand from './open-ai-assistant-room';
@@ -49,7 +49,7 @@ export default class ListingActionBuildCommand extends HostBaseCommand<
     });
 
     const defaultSkills = [
-      skillCardURL('boxel-development'),
+      devSkillId,
       skillCardURL('catalog-listing'),
       skillCardURL('source-code-editing'),
     ];

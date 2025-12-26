@@ -13,6 +13,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   getField,
+  getSingularRelationship,
   identifyCard,
   THIS_INTERPOLATION_PREFIX,
   THIS_REALM_TOKEN,
@@ -255,8 +256,8 @@ export function captureQueryFieldSeedData(
     queryFieldState.set(fieldName, fieldState);
   }
   fieldState.seedRecords = value;
-  fieldState.seedSearchURL =
-    resource.relationships?.[fieldName]?.links?.search ?? null;
+  let relationship = getSingularRelationship(resource.relationships, fieldName);
+  fieldState.seedSearchURL = relationship?.links?.search ?? null;
   fieldState.seedRealms = fieldState.seedSearchURL
     ? [parseSearchURL(new URL(fieldState.seedSearchURL)).realm.href]
     : [];
