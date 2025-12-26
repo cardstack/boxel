@@ -5092,6 +5092,176 @@ new
     );
   });
 
+  test('getPromptParts omits automated summary when correctness has errors', async function () {
+    const roomId = '!room:localhost';
+    const aiMessageId = '$ai-msg';
+    const eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '$user-msg',
+        room_id: roomId,
+        sender: '@user:localhost',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Please fix the file and run correctness checks.',
+          format: 'org.matrix.custom.html',
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+          isStreamingFinished: true,
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: '$user-msg',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: aiMessageId,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        origin_server_ts: 2,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: `Applying patch...
+http://localhost/example.gts
+╔═══ SEARCH ════╗
+old
+╠═══════════════╣
+new
+╚═══ REPLACE ═══╝
+`,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: 'check-1',
+              name: 'checkCorrectness',
+              arguments: JSON.stringify({
+                description: 'Check file correctness',
+                attributes: {
+                  targetType: 'file',
+                  targetRef: 'http://localhost/example.gts',
+                  fileUrl: 'http://localhost/example.gts',
+                  roomId,
+                },
+              }),
+            },
+          ],
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: aiMessageId,
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+        event_id: '$patch-result',
+        room_id: roomId,
+        sender: '@user:localhost',
+        origin_server_ts: 3,
+        content: {
+          msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+          codeBlockIndex: 0,
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+          },
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+              submode: 'code',
+            },
+            attachedFiles: [],
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: '$patch-result',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        event_id: '$command-result',
+        room_id: roomId,
+        sender: '@command:localhost',
+        origin_server_ts: 4,
+        content: {
+          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          commandRequestId: 'check-1',
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          },
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+            attachedFiles: [],
+            card: {
+              content: JSON.stringify({
+                data: {
+                  attributes: {
+                    correct: false,
+                    errors: ['http://localhost/example.gts failed'],
+                    warnings: [],
+                  },
+                },
+              }),
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: '$command-result',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const summaryMessage =
+      'The automated correctness checks have finished. Summarize their results for me based on the tool output above.';
+
+    const promptParts = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+      { autoCorrectnessChecksEnabled: true },
+    );
+    let userMessages =
+      promptParts.messages?.filter((message) => message.role === 'user') ?? [];
+
+    assert.false(
+      userMessages.some((message) => message.content === summaryMessage),
+      'When errors are present the automated summary should be omitted',
+    );
+    assert.true(
+      userMessages.some((message) =>
+        (message.content as string).includes(
+          'Propose fixes for the above errors',
+        ),
+      ),
+      'When errors are present the fix instruction should be included',
+    );
+  });
+
   test('system message parts include cache_control directive on last part', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
