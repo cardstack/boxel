@@ -1,0 +1,30 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "ThreejsCarCustomizer",
+        "module": "../threejs-car-customizer"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "bodyColor": "#F59E0B",
+      "eyesColor": "#78350F",
+      "faceColor": "#FEF3C7",
+      "outfitColor": "#EF4444"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

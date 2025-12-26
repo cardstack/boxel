@@ -20,7 +20,7 @@ import {
 import type { ColorFieldSignature } from '../util/color-field-signature';
 import { setupElement } from '../modifiers/setup-element-modifier';
 
-export default class ColorWheelEdit extends Component<ColorFieldSignature> {
+export default class ColorWheelPicker extends Component<ColorFieldSignature> {
   // ========== Properties ==========
   @tracked h: number = 0;
   @tracked isDragging = false;

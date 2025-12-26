@@ -13,10 +13,10 @@ import type {
 } from '../util/color-utils';
 import { normalizeColorForHistory } from '../util/color-utils';
 import type { ColorFieldSignature } from '../util/color-field-signature';
-import AdvancedEdit from './advanced-edit';
-import SwatchesPickerEdit from './swatches-picker-edit';
-import SliderEdit from './slider-edit';
-import ColorWheelEdit from './color-wheel-edit';
+import AdvancedColorPicker from './advanced-color-picker';
+import SwatchesPicker from './swatches-picker';
+import SliderPicker from './slider-picker';
+import ColorWheelPicker from './color-wheel-picker';
 import RecentColorsAddon from './recent-colors-addon';
 import ContrastCheckerAddon from './contrast-checker-addon';
 
@@ -27,7 +27,7 @@ const recentColorsStorage = new WeakMap<
   string[]
 >();
 
-export default class ColorFieldEdit extends Component<ColorFieldSignature> {
+export default class ColorPickerField extends Component<ColorFieldSignature> {
   @tracked recentColors: string[] = [];
 
   private debouncedSetColor = debounce((color: string | null) => {
@@ -62,7 +62,9 @@ export default class ColorFieldEdit extends Component<ColorFieldSignature> {
 
   // At class level, add this private helper
   private get baseOptions(): ColorFieldBaseOptions | undefined {
-    const configuration = this.args.configuration as ColorFieldConfiguration | undefined;
+    const configuration = this.args.configuration as
+      | ColorFieldConfiguration
+      | undefined;
     if (!configuration) {
       return undefined;
     }
@@ -142,28 +144,28 @@ export default class ColorFieldEdit extends Component<ColorFieldSignature> {
     <div class='color-field-editor'>
       <div class='variant-section'>
         {{#if (eq this.variant 'advanced')}}
-          <AdvancedEdit
+          <AdvancedColorPicker
             @model={{@model}}
             @set={{this.handleColorChangeImmediate}}
             @canEdit={{@canEdit}}
             @configuration={{@configuration}}
           />
         {{else if (eq this.variant 'swatches-picker')}}
-          <SwatchesPickerEdit
+          <SwatchesPicker
             @model={{@model}}
             @set={{this.handleColorChange}}
             @canEdit={{@canEdit}}
             @configuration={{@configuration}}
           />
         {{else if (eq this.variant 'slider')}}
-          <SliderEdit
+          <SliderPicker
             @model={{@model}}
             @set={{this.handleColorChange}}
             @canEdit={{@canEdit}}
             @configuration={{@configuration}}
           />
         {{else if (eq this.variant 'wheel')}}
-          <ColorWheelEdit
+          <ColorWheelPicker
             @model={{@model}}
             @set={{this.handleColorChange}}
             @canEdit={{@canEdit}}
