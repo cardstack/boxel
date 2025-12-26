@@ -265,6 +265,9 @@ export interface CardContext<T extends CardDef = CardDef> {
   getCards: getCards;
   getCardCollection: getCardCollection;
   store: Store;
+  // Optional runtime mode/submode hints used by cards that render differently per context.
+  mode?: 'host' | 'operator';
+  submode?: 'interact' | 'code' | 'host';
 }
 
 export interface FieldConstructor<T> {

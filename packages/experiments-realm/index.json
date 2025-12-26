@@ -1,36 +1,30 @@
 {
   "data": {
-    "type": "card",
-    "attributes": {
-      "description": null,
-      "thumbnailURL": null
-    },
-    "relationships": {
-      "starred.0": {
-        "links": {
-          "self": "./Author/alice-enwunder"
-        }
-      },
-      "starred.1": {
-        "links": {
-          "self": "./Representative/880c1d41-2563-43da-999d-ef577fa3eac9"
-        }
-      },
-      "starred.2": {
-        "links": {
-          "self": "./PlantInfo/911bdcc8-5495-479e-9718-f734309d8dd7"
-        }
-      },
-      "starred.3": {
-        "links": {
-          "self": "./Spec/blog-post"
-        }
-      }
-    },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/cards-grid",
-        "name": "CardsGrid"
+        "name": "IndexCard",
+        "module": "https://cardstack.com/base/index"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardsGrid": {
+        "links": {
+          "self": "./cards-grid"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

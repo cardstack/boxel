@@ -195,6 +195,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
           { fieldType: 'linksToMany' },
         ],
         'or',
+        // the only linksTo field with isolated format is in the index card,
+        // we don't want to show overlays for those cards here
+        { exclude: [{ fieldType: 'linksTo', format: 'isolated' }] },
       )
       .map((entry) => ({
         ...entry,

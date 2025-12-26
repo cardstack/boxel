@@ -140,6 +140,10 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       store: this.store,
       commandContext: this.commandContext,
       prerenderedCardSearchComponent: PrerenderedCardSearch,
+      mode: this.hostModeService.isActive ? 'host' : 'operator',
+      submode: this.hostModeService.isActive
+        ? 'host'
+        : this.operatorModeStateService.state?.submode,
     };
   }
 

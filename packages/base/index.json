@@ -1,11 +1,30 @@
 {
   "data": {
-    "type": "card",
-    "attributes": {},
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/cards-grid",
-        "name": "CardsGrid"
+        "name": "IndexCard",
+        "module": "./index"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardsGrid": {
+        "links": {
+          "self": "./cards-grid"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }
