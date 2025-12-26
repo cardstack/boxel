@@ -239,12 +239,6 @@ function shouldPromptCheckCorrectnessSummary(
   if (!isCheckCorrectnessCommandResultEvent(lastEvent, history)) {
     return false;
   }
-  let resultCard = extractCorrectnessResultCard(
-    lastEvent as CommandResultEvent,
-  );
-  if (resultCard && (!resultCard.correct || resultCard.errors.length > 0)) {
-    return false;
-  }
   let lastNonResultIndex = findLastIndex(
     history,
     (event) => !isCommandOrCodePatchResult(event),
