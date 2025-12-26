@@ -360,7 +360,12 @@ export default class AdvancedEdit extends Component<ColorFieldSignature> {
   handleFormatSelect(option: { label: string; value: RichColorFormat } | null) {
     if (!option) return;
     // Just update format - DON'T save color
+    if (this.selectedFormat === option.value) {
+      return;
+    }
     this.selectedFormat = option.value;
+    // Persist the current color using the newly selected format
+    this.saveColor(this.rgba);
     // Update input value to show new format
     this.syncInputValues();
   }
