@@ -533,11 +533,12 @@ Common issues are:
           }
 
           if (shouldSetRoomTitle(eventList, aiBotUserId, event)) {
-            return await assistant.setTitle(
-              room.roomId,
-              promptParts.history,
-              event,
-            );
+            // Intentionally do not await setTitle - let it run async so that
+            // the room lock gets released asap after finalizing the response.
+            // This is important because tool call results may arrive
+            // immediately after responder.finalize(), and we need to make sure
+            // the room lock is released.
+            return assistant.setTitle(room.roomId, promptParts.history, event);
           }
           return;
         } finally {
