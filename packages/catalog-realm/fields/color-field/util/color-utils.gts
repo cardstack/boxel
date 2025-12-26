@@ -43,7 +43,7 @@ export interface ColorFieldBaseOptions {
    * configuration: {
    *   options: {
    *     showContrastChecker: true,
-   *     oppositeColor: '#000000'
+   *     contrastColor: '#000000'
    *   }
    * }
    *
@@ -53,12 +53,12 @@ export interface ColorFieldBaseOptions {
    *   return {
    *     options: {
    *       showContrastChecker: true,
-   *       oppositeColor: this.footerBgColor ?? '#f9fafb'
+   *       contrastColor: this.footerBgColor ?? '#f9fafb'
    *     }
    *   };
    * }
    */
-  oppositeColor?: string;
+  contrastColor?: string;
 }
 
 export interface ColorFieldPaletteOptions {

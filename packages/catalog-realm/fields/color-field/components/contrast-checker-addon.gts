@@ -13,14 +13,14 @@ import type { ColorFieldConfiguration } from '../util/color-utils';
 type LevelToken = 'aaa' | 'aa' | 'fail';
 
 export default class ContrastCheckerAddon extends Component<ColorFieldSignature> {
-  get oppositeColor(): string {
+  get contrastColor(): string {
     const configuration = this.args.configuration as
       | ColorFieldConfiguration
       | undefined;
     const options = configuration?.options;
 
-    if (options && 'oppositeColor' in options && options.oppositeColor) {
-      return options.oppositeColor;
+    if (options && 'contrastColor' in options && options.contrastColor) {
+      return options.contrastColor;
     }
 
     return '#ffffff';
@@ -30,7 +30,7 @@ export default class ContrastCheckerAddon extends Component<ColorFieldSignature>
     if (!this.args.model) return null;
     const ratio = this.computeContrastRatio(
       this.args.model,
-      this.oppositeColor,
+      this.contrastColor,
     );
     return Number(ratio.toFixed(2));
   }
@@ -118,7 +118,7 @@ export default class ContrastCheckerAddon extends Component<ColorFieldSignature>
               <div
                 class='preview-text'
                 style={{htmlSafe
-                  (concat 'color:' @model ';background:' this.oppositeColor)
+                  (concat 'color:' @model ';background:' this.contrastColor)
                 }}
               >
                 Sample text

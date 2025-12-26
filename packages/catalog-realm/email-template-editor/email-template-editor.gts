@@ -1200,7 +1200,7 @@ export class EmailTemplateEditor extends CardDef {
         options: {
           paletteColors: EmailTemplateEditor.paletteColors,
           showContrastChecker: true,
-          oppositeColor: this.backgroundColor ?? '#ffffff', // Default header background color
+          contrastColor: this.backgroundColor ?? '#ffffff', // Default header background color
         },
       };
     },
@@ -1222,7 +1222,7 @@ export class EmailTemplateEditor extends CardDef {
         options: {
           paletteColors: EmailTemplateEditor.paletteColors,
           showContrastChecker: true,
-          oppositeColor: this.headerBgColor ?? '#6366f1', // Default header background color
+          contrastColor: this.headerBgColor ?? '#6366f1', // Default header background color
         },
       };
     },
@@ -1244,7 +1244,7 @@ export class EmailTemplateEditor extends CardDef {
         options: {
           paletteColors: EmailTemplateEditor.paletteColors,
           showContrastChecker: true,
-          oppositeColor: this.footerBgColor ?? '#6366f1', // Default footer background color
+          contrastColor: this.footerBgColor ?? '#6366f1', // Default footer background color
         },
       };
     },
