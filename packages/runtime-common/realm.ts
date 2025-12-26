@@ -1539,6 +1539,7 @@ export class Realm {
     }
 
     let fileRef = maybeFileRef;
+    let canonicalPath = this.paths.fileURL(fileRef.path).href;
     if (!hasExecutableExtension(fileRef.path)) {
       return {
         kind: 'non-module',
@@ -1551,7 +1552,7 @@ export class Realm {
         requestContext,
         init: {
           headers: {
-            'X-Boxel-Canonical-Path': fileRef.path,
+            'X-Boxel-Canonical-Path': canonicalPath,
           },
         },
       }) as ResponseWithNodeStream;
@@ -1569,7 +1570,7 @@ export class Realm {
       if (fileRef.lastModified != null) {
         headers['last-modified'] = formatRFC7231(fileRef.lastModified * 1000);
       }
-      headers['X-Boxel-Canonical-Path'] = fileRef.path;
+      headers['X-Boxel-Canonical-Path'] = canonicalPath;
       return {
         kind: 'not-modified',
         canonicalPath: fileRef.path,
@@ -1604,7 +1605,7 @@ export class Realm {
     if (fileRef.lastModified != null) {
       headers['last-modified'] = formatRFC7231(fileRef.lastModified * 1000);
     }
-    headers['X-Boxel-Canonical-Path'] = fileRef.path;
+    headers['X-Boxel-Canonical-Path'] = canonicalPath;
 
     return {
       kind: 'module',
