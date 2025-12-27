@@ -37,6 +37,7 @@ module.exports = function (environment) {
     serverEchoDebounceMs: 5000,
     loginMessageTimeoutMs: 1000,
     minSaveTaskDurationMs: 1000,
+    aiAssistantToastTimeoutMs: 3000,
     cardRenderTimeout: Number(
       process.env.RENDER_TIMEOUT_MS ?? DEFAULT_CARD_RENDER_TIMEOUT_MS,
     ),
@@ -89,6 +90,7 @@ module.exports = function (environment) {
     ENV.serverEchoDebounceMs = 0;
     ENV.loginMessageTimeoutMs = 0;
     ENV.minSaveTaskDurationMs = 0;
+    ENV.aiAssistantToastTimeoutMs = 0;
     ENV.sqlSchema = sqlSchema;
     ENV.featureFlags = {
       SHOW_ASK_AI: true,
