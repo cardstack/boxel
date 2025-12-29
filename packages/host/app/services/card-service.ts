@@ -123,23 +123,22 @@ export default class CardService extends Service {
         (headers as Record<string, string>)?.['X-HTTP-Method-Override'] ===
           'QUERY');
 
+    let requestHeaders = new Headers(headers ?? {});
     if (!isReadOperation) {
       let clientRequestId = providedClientRequestId ?? `instance:${uuidv4()}`;
       this.clientRequestIds.add(clientRequestId);
-      headers = { ...headers, 'X-Boxel-Client-Request-Id': clientRequestId };
+      requestHeaders.set('X-Boxel-Client-Request-Id', clientRequestId);
     }
-
-    headers = { ...headers, Accept: SupportedMimeType.CardJson };
+    if (!requestHeaders.has('Accept')) {
+      requestHeaders.set('Accept', this.inferAcceptHeader(url));
+    }
     let requestInit = {
-      headers,
+      headers: requestHeaders,
       ...argsExceptHeaders,
     } as RequestInit;
     if (requestInit.method === 'QUERY') {
       requestInit.method = 'POST';
-      requestInit.headers = {
-        ...requestInit.headers,
-        'X-HTTP-Method-Override': 'QUERY',
-      };
+      requestHeaders.set('X-HTTP-Method-Override', 'QUERY');
     }
     let response = await this.network.authedFetch(url, requestInit);
     if (!response.ok) {
@@ -159,6 +158,19 @@ export default class CardService extends Service {
       return await response.json();
     }
     return;
+  }
+
+  private inferAcceptHeader(url: string | URL): SupportedMimeType {
+    try {
+      let requestUrl = typeof url === 'string' ? new URL(url) : url;
+      let lastSegment = requestUrl.pathname.split('/').pop() ?? '';
+      if (lastSegment.includes('.') && !lastSegment.endsWith('.json')) {
+        return SupportedMimeType.FileMeta;
+      }
+    } catch {
+      // Fall back to card JSON when URL parsing fails.
+    }
+    return SupportedMimeType.CardJson;
   }
 
   async serializeCard(

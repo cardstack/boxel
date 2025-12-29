@@ -569,6 +569,11 @@ export class Realm {
         SupportedMimeType.CardSource,
         this.upsertCardSource.bind(this),
       )
+      .get(
+        '/.*',
+        SupportedMimeType.FileMeta,
+        this.getFileMeta.bind(this),
+      )
       .head(
         '/.*',
         SupportedMimeType.CardSource,
@@ -2069,6 +2074,7 @@ export class Realm {
   private async fileCardDocument(
     requestContext: RequestContext,
     localPath: LocalPath,
+    contentType: SupportedMimeType = SupportedMimeType.CardJson,
   ): Promise<Response | undefined> {
     let fileRef = await this.openFileForCardJson(localPath);
     if (!fileRef) {
@@ -2076,7 +2082,7 @@ export class Realm {
     }
     let fileURL = this.paths.fileURL(localPath).href;
     let name = localPath.split('/').pop() ?? localPath;
-    let contentType = inferContentType(name);
+    let inferredContentType = inferContentType(name);
     let createdAt = await this.getCreatedTime(localPath);
     let realmInfo = await this.parseRealmInfo();
     let doc: LooseSingleCardDocument = {
@@ -2087,7 +2093,7 @@ export class Realm {
           name,
           url: fileURL,
           sourceUrl: fileURL,
-          contentType,
+          contentType: inferredContentType,
         },
         meta: {
           adoptsFrom: FILE_DEF_CODE_REF,
@@ -2103,7 +2109,7 @@ export class Realm {
       body: JSON.stringify(doc, null, 2),
       init: {
         headers: {
-          'content-type': SupportedMimeType.CardJson,
+          'content-type': contentType,
           ...lastModifiedHeader(doc),
           ...(createdAt != null
             ? { 'x-created': formatRFC7231(createdAt * 1000) }
@@ -2112,6 +2118,25 @@ export class Realm {
       },
       requestContext,
     });
+  }
+
+  private async getFileMeta(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let localPath = this.paths.local(new URL(request.url));
+    if (localPath === '') {
+      localPath = 'index';
+    }
+    let fileResponse = await this.fileCardDocument(
+      requestContext,
+      localPath,
+      SupportedMimeType.FileMeta,
+    );
+    if (fileResponse) {
+      return fileResponse;
+    }
+    return notFound(request, requestContext);
   }
 
   private async createCard(
