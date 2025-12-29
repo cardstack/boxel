@@ -53,6 +53,10 @@ import {
 } from '@cardstack/postgres';
 import type { Server } from 'http';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import {
+  Prerenderer as LocalPrerenderer,
+  type Prerenderer as TestPrerenderer,
+} from '../../prerender';
 
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
@@ -139,6 +143,11 @@ export const testCreatePrerenderAuth =
 
 let prerenderServer: Server | undefined;
 let prerenderServerStart: Promise<void> | undefined;
+const trackedServers = new Set<Server>();
+const trackedPrerenderers = new Set<TestPrerenderer>();
+const trackedDbAdapters = new Set<PgAdapter>();
+const trackedQueuePublishers = new Set<QueuePublisher>();
+const trackedQueueRunners = new Set<QueueRunner>();
 
 const basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
 
@@ -163,6 +172,70 @@ export async function closeServer(server: Server) {
   await new Promise<void>((r) => (server ? server.close(() => r()) : r()));
 }
 
+function trackServer(server: Server): Server {
+  trackedServers.add(server);
+  server.once('close', () => trackedServers.delete(server));
+  return server;
+}
+
+export async function closeTrackedServers(): Promise<void> {
+  let servers = [...trackedServers].filter((server) => server.listening);
+  await Promise.all(servers.map((server) => closeServer(server)));
+}
+
+export function trackPrerenderer(prerenderer: TestPrerenderer): void {
+  trackedPrerenderers.add(prerenderer);
+}
+
+export function getPrerendererForTesting(options: {
+  serverURL: string;
+  maxPages?: number;
+}): TestPrerenderer {
+  let prerenderer = new LocalPrerenderer(options);
+  trackPrerenderer(prerenderer);
+  return prerenderer;
+}
+
+export async function stopTrackedPrerenderers(): Promise<void> {
+  let prerenderers = [...trackedPrerenderers];
+  trackedPrerenderers.clear();
+  await Promise.all(
+    prerenderers.map(async (prerenderer) => {
+      try {
+        await prerenderer.stop();
+      } catch {
+        // best-effort cleanup
+      }
+    }),
+  );
+}
+
+export async function closeTrackedDbAdapters(): Promise<void> {
+  let adapters = [...trackedDbAdapters];
+  trackedDbAdapters.clear();
+  for (let adapter of adapters) {
+    if (!adapter.isClosed) {
+      await adapter.close();
+    }
+  }
+}
+
+export async function destroyTrackedQueuePublishers(): Promise<void> {
+  let publishers = [...trackedQueuePublishers];
+  trackedQueuePublishers.clear();
+  for (let publisher of publishers) {
+    await publisher.destroy();
+  }
+}
+
+export async function destroyTrackedQueueRunners(): Promise<void> {
+  let runners = [...trackedQueueRunners];
+  trackedQueueRunners.clear();
+  for (let runner of runners) {
+    await runner.destroy();
+  }
+}
+
 async function startTestPrerenderServer(): Promise<string> {
   if (prerenderServer?.listening) {
     return testPrerenderURL;
@@ -175,6 +248,7 @@ async function startTestPrerenderServer(): Promise<string> {
     silent: Boolean(process.env.SILENT_PRERENDERER),
   });
   prerenderServer = server;
+  trackServer(server);
   prerenderServerStart = new Promise<void>((resolve, reject) => {
     let onError = (error: Error) => {
       server.off('error', onError);
@@ -232,17 +306,29 @@ export function setupDB(
   const runBeforeHook = async () => {
     prepareTestDB();
     dbAdapter = new PgAdapter({ autoMigrate: true });
+    trackedDbAdapters.add(dbAdapter);
     publisher = new PgQueuePublisher(dbAdapter);
+    trackedQueuePublishers.add(publisher);
     runner = new PgQueueRunner({ adapter: dbAdapter, workerId: 'test-worker' });
+    trackedQueueRunners.add(runner);
   };
 
   const runAfterHook = async () => {
     await publisher?.destroy();
+    if (publisher) {
+      trackedQueuePublishers.delete(publisher);
+    }
     await runner?.destroy();
+    if (runner) {
+      trackedQueueRunners.delete(runner);
+    }
     if (dbAdapter) {
       await clearSessionRooms(dbAdapter);
     }
     await dbAdapter?.close();
+    if (dbAdapter) {
+      trackedDbAdapters.delete(dbAdapter);
+    }
     await stopTestPrerenderServer();
   };
 
@@ -465,7 +551,8 @@ export async function runBaseRealmServer(
     definitionLookup,
     prerenderer,
   });
-  return testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
+  let server = testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
+  return trackServer(server);
 }
 
 export async function runTestRealmServer({
@@ -565,6 +652,7 @@ export async function runTestRealmServer({
     prerenderer,
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
+  trackServer(testRealmHttpServer);
   await testRealmServer.start();
   return {
     testRealmDir,
