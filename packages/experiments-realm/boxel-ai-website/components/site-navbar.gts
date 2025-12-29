@@ -56,11 +56,16 @@ export class ModeToggle extends Component<ModeToggleSignature> {
     <style scoped>
       .switch-container {
         --icon-size: 1.375rem;
+        --mode-toggle-highlight: 0 1px 3px rgba(0, 0, 0, 0.2);
+
         position: relative;
         display: flex;
         align-items: center;
         width: calc(var(--icon-size) * 2);
         height: var(--icon-size);
+      }
+      .switch-dark {
+        --mode-toggle-highlight: 0 1px 3px rgba(255, 255, 255, 0.2);
       }
       .mode-icon {
         position: absolute;
@@ -115,7 +120,7 @@ export class SiteNavbar extends Component<SiteNavbarSignature> {
   }
 
   <template>
-    <nav class='site-navbar' ...attributes>
+    <nav class={{cn 'site-navbar' site-navbar--dark=@isDarkMode}} ...attributes>
       {{#if @logoUrl.length}}
         <div class='logo' style={{setBackgroundImage @logoUrl}} />
       {{/if}}
@@ -163,33 +168,47 @@ export class SiteNavbar extends Component<SiteNavbarSignature> {
 
     <style scoped>
       .site-navbar {
-        min-width: 32rem;
+        --nav-bg: rgba(255, 255, 255, 0.4);
+        --nav-border: rgba(255, 255, 255, 0.6);
+        --nav-box-shadow:
+          0 8px 32px rgba(102, 56, 255, 0.12), 0 4px 16px rgba(0, 0, 0, 0.04),
+          inset 0 1px 0 rgba(255, 255, 255, 0.8);
+        --nav-secondary-cta-fg: var(--secondary);
+
+        max-width: 100%;
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-xs) var(--boxel-sp);
-        max-width: 100%;
-        background: var(--toolbar-bg);
+        gap: 0.5rem 2rem;
+        background: var(--nav-bg);
         color: var(--foreground);
         backdrop-filter: blur(24px) saturate(200%);
         -webkit-backdrop-filter: blur(24px) saturate(200%);
-        border: 1px solid var(--toolbar-border);
+        border: 1px solid var(--nav-border);
         border-radius: 100px;
         padding: 0.75rem 3rem;
         white-space: nowrap;
-        box-shadow: var(--toolbar-box-shadow);
+        box-shadow: var(--nav-box-shadow);
         overflow: hidden;
+      }
+      .site-navbar--dark {
+        --nav-bg: rgba(50, 45, 60, 0.85);
+        --nav-border: rgba(100, 95, 115, 0.4);
+        --nav-box-shadow:
+          0 8px 32px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.2),
+          inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        --nav-secondary-cta-fg: var(--foreground);
       }
       .nav-links {
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: var(--boxel-sp);
+        gap: 1rem;
         flex: 1;
       }
       .nav-actions {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-2xs);
+        gap: 0.25rem;
         margin-left: auto;
         padding-left: 1.5rem;
         border-left: 1px solid var(--border);
@@ -197,8 +216,8 @@ export class SiteNavbar extends Component<SiteNavbarSignature> {
 
       .logo {
         flex-shrink: 0;
-        width: 9rem;
-        height: 2.75rem;
+        width: var(--nav-logo-width, 9rem);
+        height: var(--nav-logo-height, 2.75rem);
         min-height: var(--brand-primary-mark-min-height);
         background-size: contain;
         background-repeat: no-repeat;
@@ -206,7 +225,7 @@ export class SiteNavbar extends Component<SiteNavbarSignature> {
 
       .nav-link {
         min-width: unset;
-        padding: var(--boxel-sp-4xs);
+        padding: 0.25rem 0.5rem;
         background: none;
         font-weight: 500;
       }
@@ -225,14 +244,14 @@ export class SiteNavbar extends Component<SiteNavbarSignature> {
         background-color: var(--accent);
         color: var(--accent-foreground);
         opacity: 0.9;
-        transform: translateY(-2px);
+        transform: translateY(-1px);
       }
       .site-navbar-cta-secondary {
         background: none;
         transition: color var(--boxel-transition);
       }
       .site-navbar-cta-secondary:hover {
-        color: var(--secondary);
+        color: var(--nav-secondary-cta-fg);
       }
 
       @container navbar (inline-size <= 900px) {

@@ -32,11 +32,7 @@ class BadgeField extends FieldDef {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <Pill
-        class='badge-field'
-        @variant='muted'
-        @kind={{if @model.url.length 'button'}}
-      >
+      <Pill class='badge-field' @kind={{if @model.url.length 'button'}}>
         <:iconLeft>
           {{#if @model.icon}}
             {{#if (eq @model.icon 'checkmark')}}
@@ -58,6 +54,12 @@ class BadgeField extends FieldDef {
         }
         button:hover {
           color: var(--secondary, var(--boxel-highlight));
+        }
+        .badge-field {
+          background: none;
+          border: none;
+          font-family: var(--font-mono, var(--boxel-monospace-font-family));
+          font-weight: 400;
         }
       </style>
     </template>
@@ -148,32 +150,19 @@ export class HeroSection extends SectionCard {
 
       <style scoped>
         .hero-section {
-          --hero-heading-font-size: clamp(
-            var(--boxel-heading-font-size),
-            8vw,
-            5rem
-          );
-          --hero-subheading-font-size: clamp(
-            var(--boxel-subheading-font-size),
-            2.5vw,
-            1.5rem
-          );
+          --hero-heading-font-size: clamp(4.5rem, 14vw, 9rem);
+          --hero-subheading-font-size: clamp(1.35rem, 2.5vw, 1.5rem);
+          --hero-description-font-size: 1.125rem;
 
           position: relative;
-          padding-block: var(
-            --hero-padding-block,
-            var(--section-padding-block, 6rem)
-          );
-          padding-inline: var(--section-padding-inline, 1.5rem);
+          padding-block: clamp(5rem, 12vw, 10rem);
+          padding-inline: clamp(1.5rem, 5vw, 3rem);
           overflow: hidden;
           background: linear-gradient(
             135deg,
             var(--background) 0%,
             var(--muted) 100%
           );
-        }
-
-        p {
           text-wrap: pretty;
         }
 
@@ -187,11 +176,11 @@ export class HeroSection extends SectionCard {
         .hero-content {
           position: relative;
           z-index: 1;
-          max-width: var(--section-max-width, 87.5rem);
           margin-inline: auto;
           display: flex;
           flex-direction: column;
           gap: 1.5rem;
+          backdrop-filter: blur(24px) saturate(200%);
         }
 
         .hero-eyebrow {
@@ -209,15 +198,15 @@ export class HeroSection extends SectionCard {
         .hero-headline {
           font-size: var(--hero-heading-font-size);
           font-weight: 800;
-          line-height: 1.1;
-          letter-spacing: -0.02em;
+          line-height: 0.85;
+          letter-spacing: -0.05em;
         }
 
         .hero-headline .word-1 {
           background: linear-gradient(
             135deg,
-            var(--brand-secondary) 0%,
-            var(--brand-primary) 100%
+            var(--boxel-teal) 0%,
+            var(--boxel-cyan) 100%
           );
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
@@ -225,22 +214,26 @@ export class HeroSection extends SectionCard {
         }
 
         .hero-tagline {
+          margin-top: 1.5rem;
           font-size: var(--hero-subheading-font-size);
           font-weight: 500;
-          color: var(--muted-foreground);
         }
 
         .hero-description {
-          font-size: 1.125rem;
-          line-height: 1.6;
+          font-size: var(--hero-description-font-size);
+          line-height: 1.7;
           color: var(--muted-foreground);
-          max-width: 37.5rem;
+          max-width: 32.5rem;
         }
 
         .hero-badges {
           display: flex;
           flex-wrap: wrap;
           gap: var(--boxel-sp-3xs);
+          margin-top: var(--boxel-sp);
+          padding: var(--boxel-sp) 0;
+          border-top: 1px solid var(--border);
+          border-bottom: 1px solid var(--border);
         }
         .hero-badges :deep(.containsMany-item),
         .hero-badges :deep(.compound-field.embedded-format) {
@@ -269,6 +262,7 @@ export class HeroSection extends SectionCard {
           transform: translateY(-2px);
         }
         .hero-button-secondary {
+          background: none;
           transition: color var(--boxel-transition);
         }
         .hero-button-secondary:hover {
