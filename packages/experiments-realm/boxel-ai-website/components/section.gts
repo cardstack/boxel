@@ -1,7 +1,7 @@
 import Component from '@glimmer/component';
 
-// import { Button } from '@cardstack/boxel-ui/components';
-// import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { CardContainer, Pill } from '@cardstack/boxel-ui/components';
+import { cssVar, sanitizeHtml } from '@cardstack/boxel-ui/helpers';
 
 export interface SectionSignature {
   Args: {};
@@ -37,6 +37,7 @@ export class SectionHeader extends Component<SectionHeaderSignature> {
         display: flex;
         flex-direction: column;
         justify-content: center;
+        color: var(--foreground);
       }
       .section-number {
         font-family: 'IBM Plex Mono', monospace;
@@ -44,7 +45,6 @@ export class SectionHeader extends Component<SectionHeaderSignature> {
         font-weight: 600;
         letter-spacing: 0.1em;
         text-transform: uppercase;
-        color: var(--boxel-slate);
         margin-bottom: 0.75rem;
         display: block;
       }
@@ -54,14 +54,100 @@ export class SectionHeader extends Component<SectionHeaderSignature> {
         line-height: 1.05;
         letter-spacing: -0.03em;
         margin: 0 0 1.25rem 0;
-        color: var(--boxel-slate);
       }
       .section-subtitle {
+        max-width: 32.5rem;
+        color: var(--muted-foreground);
         font-size: 1.125rem;
         font-weight: 400;
-        color: var(--text-muted);
-        max-width: 520px;
         line-height: 1.7;
+      }
+    </style>
+  </template>
+}
+
+interface SectionCardComponentSignature {
+  Args: {
+    accentColor?: string;
+    badgeLabel?: string;
+    title?: string;
+    text?: string;
+    linkColor?: string;
+    linkText?: string;
+    linkUrl?: string;
+  };
+}
+
+export class SectionCardComponent extends Component<SectionCardComponentSignature> {
+  <template>
+    <CardContainer class='highlight-card'>
+      {{#if @badgeLabel}}
+        <Pill class='highlight-card-badge'>{{@badgeLabel}}</Pill>
+      {{/if}}
+      <hr
+        class='highlight-card-indicator'
+        style={{cssVar indicator-color=@accentColor}}
+      />
+      <h3 class='highlight-card-title'>{{@title}}</h3>
+      <p class='highlight-card-text'>{{@text}}</p>
+      <a
+        href={{if @linkUrl.length (sanitizeHtml @linkUrl) '/'}}
+        class='highlight-card-link'
+        style={{cssVar link-color=@linkColor}}
+      >
+        {{@linkText}}
+      </a>
+    </CardContainer>
+
+    <style scoped>
+      .highlight-card {
+        --card-shadow:
+          0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        position: relative;
+        background: var(--card);
+        color: var(--card-foreground);
+        border: 1px solid var(--border);
+        padding: 2rem;
+        box-shadow: var(--card-shadow);
+      }
+      .highlight-card-badge {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        padding: 0.35rem 0.75rem;
+        background-color: var(--brand-dark, var(--boxel-dark));
+        color: var(--brand-primary, var(--boxel-highlight));
+        font-family: var(--boxel-caption-font-family);
+        font-size: var(--boxel-caption-font-size);
+        font-weight: var(--boxel-caption-font-weight);
+        line-height: var(--boxel-caption-line-height);
+        letter-spacing: var(--boxel-lsp-xl);
+        border-radius: var(--boxel-border-radius-xs);
+      }
+      .highlight-card-indicator {
+        width: 4rem;
+        height: 0.375rem;
+        border: none;
+        border-radius: 3px;
+        margin-top: 0;
+        margin-inline: 0;
+        margin-bottom: 1.25rem;
+        background-color: var(--indicator-color, var(--boxel-highlight));
+      }
+      .highlight-card-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 0.75rem;
+      }
+      .highlight-card-text {
+        color: var(--muted-foreground);
+      }
+      .highlight-card-link {
+        display: block;
+        margin-top: var(--boxel-sp);
+        color: var(--link-color);
+        font-family: var(--boxel-caption-font-family);
+        text-decoration: none;
       }
     </style>
   </template>
@@ -69,13 +155,16 @@ export class SectionHeader extends Component<SectionHeaderSignature> {
 
 export class Section extends Component<SectionSignature> {
   <template>
-    <div class='section' ...attributes>
+    <div class='section-template' ...attributes>
       {{yield}}
     </div>
 
     <style scoped>
-      .section {
-        text-wrap: pretty;
+      @layer {
+        .section-template {
+          padding: var(--boxel-sp);
+          text-wrap: pretty;
+        }
       }
     </style>
   </template>

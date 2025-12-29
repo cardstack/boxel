@@ -38,8 +38,8 @@ export class SectionCard extends CardDef {
   // Subclasses override with their own isolated template
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <Section class='section'>
-        <div class='section-content'>
+      <Section class='section-card'>
+        <div class='section-card-content'>
           {{! Override in subclass }}
         </div>
       </Section>

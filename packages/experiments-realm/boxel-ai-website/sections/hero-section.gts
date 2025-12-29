@@ -180,7 +180,6 @@ export class HeroSection extends SectionCard {
           display: flex;
           flex-direction: column;
           gap: 1.5rem;
-          backdrop-filter: blur(24px) saturate(200%);
         }
 
         .hero-eyebrow {
