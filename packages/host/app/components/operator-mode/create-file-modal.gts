@@ -22,7 +22,7 @@ import {
   Pill,
   RealmIcon,
 } from '@cardstack/boxel-ui/components';
-import { not, eq, or } from '@cardstack/boxel-ui/helpers';
+import { not, eq, or, and } from '@cardstack/boxel-ui/helpers';
 import {
   type Icon,
   CardDefinition,
@@ -172,10 +172,10 @@ export default class CreateFileModal extends Component<Signature> {
                     @onSelect={{this.onSelectRealm}}
                   />
                 </FieldContainer>
-                {{#unless
-                  (or
-                    (eq this.fileType.id 'duplicate-instance')
-                    (eq this.fileType.id 'text-file')
+                {{#if
+                  (and
+                    (not (eq this.fileType.id 'duplicate-instance'))
+                    (not (eq this.fileType.id 'text-file'))
                   )
                 }}
                   <FieldContainer
@@ -208,13 +208,9 @@ export default class CreateFileModal extends Component<Signature> {
                       {{/if}}
                     </div>
                   </FieldContainer>
-                {{/unless}}
+                {{/if}}
                 {{#if (eq this.fileType.id 'text-file')}}
-                  <FieldContainer
-                    @label='File Name'
-                    @tag='label'
-                    class='field'
-                  >
+                  <FieldContainer @label='File Name' @tag='label' class='field'>
                     <BoxelInput
                       data-test-text-file-name-field
                       placeholder='notes'
@@ -224,11 +220,7 @@ export default class CreateFileModal extends Component<Signature> {
                       @onInput={{this.setFileName}}
                     />
                   </FieldContainer>
-                  <FieldContainer
-                    @label='Extension'
-                    @tag='label'
-                    class='field'
-                  >
+                  <FieldContainer @label='Extension' @tag='label' class='field'>
                     <BoxelSelect
                       @options={{this.textFileExtensionOptions}}
                       @selected={{this.selectedTextFileExtension}}
@@ -699,9 +691,7 @@ export default class CreateFileModal extends Component<Signature> {
 
   private get isCreateTextFileButtonDisabled() {
     return (
-      !this.selectedRealmURL ||
-      !this.fileName ||
-      this.createTextFile.isRunning
+      !this.selectedRealmURL || !this.fileName || this.createTextFile.isRunning
     );
   }
 
