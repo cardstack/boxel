@@ -115,27 +115,32 @@ export default function handlePrerenderProxy({
     let prerenderResponse;
 
     try {
-      prerenderResponse =
-        kind === 'card'
-          ? await prerenderer.prerenderCard({
-              realm: attrs.realm,
-              url: attrs.url,
-              auth,
-              renderOptions: attrs.renderOptions,
-            })
-          : kind === 'module'
-            ? await prerenderer.prerenderModule({
-                realm: attrs.realm,
-                url: attrs.url,
-                auth,
-                renderOptions: attrs.renderOptions,
-              })
-            : await prerenderer.prerenderFileMeta({
-                realm: attrs.realm,
-                url: attrs.url,
-                auth,
-                fileDef: attrs.fileDef,
-              });
+      switch (kind) {
+        case 'card':
+          prerenderResponse = await prerenderer.prerenderCard({
+            realm: attrs.realm,
+            url: attrs.url,
+            auth,
+            renderOptions: attrs.renderOptions,
+          });
+          break;
+        case 'module':
+          prerenderResponse = await prerenderer.prerenderModule({
+            realm: attrs.realm,
+            url: attrs.url,
+            auth,
+            renderOptions: attrs.renderOptions,
+          });
+          break;
+        case 'file-meta':
+          prerenderResponse = await prerenderer.prerenderFileMeta({
+            realm: attrs.realm,
+            url: attrs.url,
+            auth,
+            fileDef: attrs.fileDef,
+          });
+          break;
+      }
     } catch (err) {
       await sendResponseForSystemError(
         ctxt,
@@ -144,12 +149,18 @@ export default function handlePrerenderProxy({
       return;
     }
 
-    let type =
-      kind === 'card'
-        ? 'prerender-result'
-        : kind === 'module'
-          ? 'prerender-module-result'
-          : 'prerender-file-meta-result';
+    let type: string;
+    switch (kind) {
+      case 'card':
+        type = 'prerender-result';
+        break;
+      case 'module':
+        type = 'prerender-module-result';
+        break;
+      case 'file-meta':
+        type = 'prerender-file-meta-result';
+        break;
+    }
 
     await setContextResponse(
       ctxt,
