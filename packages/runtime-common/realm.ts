@@ -1388,7 +1388,7 @@ export class Realm {
       if (
         acceptedMimeType === SupportedMimeType.CardJson &&
         ['POST', 'PATCH', 'PUT', 'DELETE'].includes(request.method) &&
-        (await this.openFileForCardJson(localPath))
+        (await this.openFileForMetadata(localPath))
       ) {
         return methodNotAllowed(request, requestContext);
       }
@@ -2055,7 +2055,7 @@ export class Realm {
     }
   }
 
-  private async openFileForCardJson(
+  private async openFileForMetadata(
     localPath: LocalPath,
   ): Promise<FileRef | undefined> {
     if (!localPath || localPath.startsWith('_')) {
@@ -2072,7 +2072,7 @@ export class Realm {
     localPath: LocalPath,
     contentType: SupportedMimeType = SupportedMimeType.CardJson,
   ): Promise<Response | undefined> {
-    let fileRef = await this.openFileForCardJson(localPath);
+    let fileRef = await this.openFileForMetadata(localPath);
     if (!fileRef) {
       return undefined;
     }
@@ -2140,7 +2140,7 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<Response> {
     let localPath = this.paths.local(new URL(request.url));
-    if (await this.openFileForCardJson(localPath)) {
+    if (await this.openFileForMetadata(localPath)) {
       return methodNotAllowed(request, requestContext);
     }
     let body = await request.text();
@@ -2285,7 +2285,7 @@ export class Realm {
     if (localPath.startsWith('_')) {
       return methodNotAllowed(request, requestContext);
     }
-    if (await this.openFileForCardJson(localPath)) {
+    if (await this.openFileForMetadata(localPath)) {
       return methodNotAllowed(request, requestContext);
     }
 
@@ -2613,7 +2613,7 @@ export class Realm {
     // strip off query params
     let url = new URL(new URL(reqURL).pathname, reqURL);
     let localPath = this.paths.local(url);
-    if (await this.openFileForCardJson(localPath)) {
+    if (await this.openFileForMetadata(localPath)) {
       return methodNotAllowed(request, requestContext);
     }
     let result = await this.#realmIndexQueryEngine.cardDocument(url);
