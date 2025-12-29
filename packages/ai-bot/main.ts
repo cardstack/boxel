@@ -538,7 +538,19 @@ Common issues are:
             // This is important because tool call results may arrive
             // immediately after responder.finalize(), and we need to make sure
             // the room lock is released.
-            return assistant.setTitle(room.roomId, promptParts.history, event);
+            assistant
+              .setTitle(room.roomId, promptParts.history, event)
+              .catch((error) => {
+                log.error(`[${eventId}] Error setting room title`);
+                log.error(error);
+                Sentry.captureException(error, {
+                  extra: {
+                    roomId: room.roomId,
+                    eventId,
+                    eventType: event.getType(),
+                  },
+                });
+              });
           }
           return;
         } finally {
