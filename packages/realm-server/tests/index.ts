@@ -105,6 +105,9 @@ QUnit.done(() => {
         // best-effort cleanup
       }
     }
+  }).catch((error) => {
+    // eslint-disable-next-line no-console
+    console.error('QUnit.done cleanup failed:', error);
   });
 });
 

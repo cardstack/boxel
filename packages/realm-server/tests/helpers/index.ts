@@ -215,7 +215,11 @@ export async function closeTrackedDbAdapters(): Promise<void> {
   trackedDbAdapters.clear();
   for (let adapter of adapters) {
     if (!adapter.isClosed) {
-      await adapter.close();
+      try {
+        await adapter.close();
+      } catch {
+        // best-effort cleanup
+      }
     }
   }
 }
@@ -224,7 +228,11 @@ export async function destroyTrackedQueuePublishers(): Promise<void> {
   let publishers = [...trackedQueuePublishers];
   trackedQueuePublishers.clear();
   for (let publisher of publishers) {
-    await publisher.destroy();
+    try {
+      await publisher.destroy();
+    } catch {
+      // best-effort cleanup
+    }
   }
 }
 
@@ -232,7 +240,11 @@ export async function destroyTrackedQueueRunners(): Promise<void> {
   let runners = [...trackedQueueRunners];
   trackedQueueRunners.clear();
   for (let runner of runners) {
-    await runner.destroy();
+    try {
+      await runner.destroy();
+    } catch {
+      // best-effort cleanup
+    }
   }
 }
 
