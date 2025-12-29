@@ -165,7 +165,11 @@ This end-to-end workflow can be used as a template for future tickets.
 - Push branch: `git push -u origin <branch>`
 - Open PR with short summary
 
-## 10) Share PR link
+## 10) Save plan doc on Linear issue
+
+- Post the contents of the plan .md doc as a comment om the Linear issue
+
+## 11) Share PR link
 
 - Post the PR URL and confirm any remaining uncommitted files are not part of the PR.
 
