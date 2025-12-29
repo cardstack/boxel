@@ -691,7 +691,9 @@ export default class CreateFileModal extends Component<Signature> {
 
   private get isCreateTextFileButtonDisabled() {
     return (
-      !this.selectedRealmURL || !this.fileName || this.createTextFile.isRunning
+      !this.selectedRealmURL ||
+      !this.fileName?.trim() ||
+      this.createTextFile.isRunning
     );
   }
 
