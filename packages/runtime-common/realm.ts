@@ -569,6 +569,7 @@ export class Realm {
         SupportedMimeType.CardSource,
         this.upsertCardSource.bind(this),
       )
+      .get('/.*', SupportedMimeType.FileMeta, this.getFileMeta.bind(this))
       .head(
         '/.*',
         SupportedMimeType.CardSource,
@@ -1387,7 +1388,7 @@ export class Realm {
       if (
         acceptedMimeType === SupportedMimeType.CardJson &&
         ['POST', 'PATCH', 'PUT', 'DELETE'].includes(request.method) &&
-        (await this.openFileForCardJson(localPath))
+        (await this.openFileForMetadata(localPath))
       ) {
         return methodNotAllowed(request, requestContext);
       }
@@ -2054,7 +2055,7 @@ export class Realm {
     }
   }
 
-  private async openFileForCardJson(
+  private async openFileForMetadata(
     localPath: LocalPath,
   ): Promise<FileRef | undefined> {
     if (!localPath || localPath.startsWith('_')) {
@@ -2069,14 +2070,15 @@ export class Realm {
   private async fileCardDocument(
     requestContext: RequestContext,
     localPath: LocalPath,
+    contentType: SupportedMimeType = SupportedMimeType.CardJson,
   ): Promise<Response | undefined> {
-    let fileRef = await this.openFileForCardJson(localPath);
+    let fileRef = await this.openFileForMetadata(localPath);
     if (!fileRef) {
       return undefined;
     }
     let fileURL = this.paths.fileURL(localPath).href;
     let name = localPath.split('/').pop() ?? localPath;
-    let contentType = inferContentType(name);
+    let inferredContentType = inferContentType(name);
     let createdAt = await this.getCreatedTime(localPath);
     let realmInfo = await this.parseRealmInfo();
     let doc: LooseSingleCardDocument = {
@@ -2087,7 +2089,7 @@ export class Realm {
           name,
           url: fileURL,
           sourceUrl: fileURL,
-          contentType,
+          contentType: inferredContentType,
         },
         meta: {
           adoptsFrom: FILE_DEF_CODE_REF,
@@ -2103,7 +2105,7 @@ export class Realm {
       body: JSON.stringify(doc, null, 2),
       init: {
         headers: {
-          'content-type': SupportedMimeType.CardJson,
+          'content-type': contentType,
           ...lastModifiedHeader(doc),
           ...(createdAt != null
             ? { 'x-created': formatRFC7231(createdAt * 1000) }
@@ -2114,12 +2116,31 @@ export class Realm {
     });
   }
 
+  private async getFileMeta(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let localPath = this.paths.local(new URL(request.url));
+    if (localPath === '') {
+      localPath = 'index';
+    }
+    let fileResponse = await this.fileCardDocument(
+      requestContext,
+      localPath,
+      SupportedMimeType.FileMeta,
+    );
+    if (fileResponse) {
+      return fileResponse;
+    }
+    return notFound(request, requestContext);
+  }
+
   private async createCard(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
     let localPath = this.paths.local(new URL(request.url));
-    if (await this.openFileForCardJson(localPath)) {
+    if (await this.openFileForMetadata(localPath)) {
       return methodNotAllowed(request, requestContext);
     }
     let body = await request.text();
@@ -2264,7 +2285,7 @@ export class Realm {
     if (localPath.startsWith('_')) {
       return methodNotAllowed(request, requestContext);
     }
-    if (await this.openFileForCardJson(localPath)) {
+    if (await this.openFileForMetadata(localPath)) {
       return methodNotAllowed(request, requestContext);
     }
 
@@ -2523,13 +2544,6 @@ export class Realm {
     let start = Date.now();
     try {
       if (!maybeError) {
-        let fileResponse = await this.fileCardDocument(
-          requestContext,
-          localPath,
-        );
-        if (fileResponse) {
-          return fileResponse;
-        }
         return notFound(request, requestContext);
       }
       if (maybeError.type === 'error') {
@@ -2599,7 +2613,7 @@ export class Realm {
     // strip off query params
     let url = new URL(new URL(reqURL).pathname, reqURL);
     let localPath = this.paths.local(url);
-    if (await this.openFileForCardJson(localPath)) {
+    if (await this.openFileForMetadata(localPath)) {
       return methodNotAllowed(request, requestContext);
     }
     let result = await this.#realmIndexQueryEngine.cardDocument(url);

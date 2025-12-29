@@ -22,6 +22,7 @@ export type Method = 'GET' | 'QUERY' | 'POST' | 'PATCH' | 'DELETE' | 'HEAD';
 export enum SupportedMimeType {
   CardJson = 'application/vnd.card+json',
   CardSource = 'application/vnd.card+source',
+  FileMeta = 'application/vnd.card.file-meta+json',
   DirectoryListing = 'application/vnd.api+json',
   RealmInfo = 'application/vnd.api+json',
   Mtimes = 'application/vnd.api+json',

@@ -123,23 +123,22 @@ export default class CardService extends Service {
         (headers as Record<string, string>)?.['X-HTTP-Method-Override'] ===
           'QUERY');
 
+    let requestHeaders = new Headers(headers ?? {});
     if (!isReadOperation) {
       let clientRequestId = providedClientRequestId ?? `instance:${uuidv4()}`;
       this.clientRequestIds.add(clientRequestId);
-      headers = { ...headers, 'X-Boxel-Client-Request-Id': clientRequestId };
+      requestHeaders.set('X-Boxel-Client-Request-Id', clientRequestId);
     }
-
-    headers = { ...headers, Accept: SupportedMimeType.CardJson };
+    if (!requestHeaders.has('Accept')) {
+      requestHeaders.set('Accept', SupportedMimeType.CardJson);
+    }
     let requestInit = {
-      headers,
+      headers: requestHeaders,
       ...argsExceptHeaders,
     } as RequestInit;
     if (requestInit.method === 'QUERY') {
       requestInit.method = 'POST';
-      requestInit.headers = {
-        ...requestInit.headers,
-        'X-HTTP-Method-Override': 'QUERY',
-      };
+      requestHeaders.set('X-HTTP-Method-Override', 'QUERY');
     }
     let response = await this.network.authedFetch(url, requestInit);
     if (!response.ok) {
