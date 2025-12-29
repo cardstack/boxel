@@ -8,6 +8,8 @@ import {
 } from '@cardstack/runtime-common';
 import { serializableError } from '@cardstack/runtime-common/error';
 
+import { appendRenderTimerSummaryToStack } from '../utils/render-timer-stub';
+
 export function windowErrorHandler({
   event,
   setStatusToUnusable,
@@ -82,6 +84,15 @@ export function windowErrorHandler({
       type: 'error',
       error: new CardError('indexing failed', { status: 500, id }),
     };
+  }
+
+  if ('stack' in errorPayload.error) {
+    let updatedStack = appendRenderTimerSummaryToStack(
+      errorPayload.error.stack ?? undefined,
+    );
+    if (updatedStack !== undefined) {
+      errorPayload.error.stack = updatedStack;
+    }
   }
 
   setError(JSON.stringify(errorPayload));
