@@ -130,7 +130,7 @@ export default class CardService extends Service {
       requestHeaders.set('X-Boxel-Client-Request-Id', clientRequestId);
     }
     if (!requestHeaders.has('Accept')) {
-      requestHeaders.set('Accept', this.inferAcceptHeader(url));
+      requestHeaders.set('Accept', SupportedMimeType.CardJson);
     }
     let requestInit = {
       headers: requestHeaders,
@@ -158,19 +158,6 @@ export default class CardService extends Service {
       return await response.json();
     }
     return;
-  }
-
-  private inferAcceptHeader(url: string | URL): SupportedMimeType {
-    try {
-      let requestUrl = typeof url === 'string' ? new URL(url) : url;
-      let lastSegment = requestUrl.pathname.split('/').pop() ?? '';
-      if (lastSegment.includes('.') && !lastSegment.endsWith('.json')) {
-        return SupportedMimeType.FileMeta;
-      }
-    } catch {
-      // Fall back to card JSON when URL parsing fails.
-    }
-    return SupportedMimeType.CardJson;
   }
 
   async serializeCard(
