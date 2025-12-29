@@ -2548,13 +2548,6 @@ export class Realm {
     let start = Date.now();
     try {
       if (!maybeError) {
-        let fileResponse = await this.fileCardDocument(
-          requestContext,
-          localPath,
-        );
-        if (fileResponse) {
-          return fileResponse;
-        }
         return notFound(request, requestContext);
       }
       if (maybeError.type === 'error') {
