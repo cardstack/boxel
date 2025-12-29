@@ -42,73 +42,75 @@ QUnit.done(() => {
     destroyTrackedQueuePublishers?: () => Promise<void>;
     closeTrackedDbAdapters?: () => Promise<void>;
   };
-  Promise.resolve().then(async () => {
-    await helpers.stopTrackedPrerenderers?.();
-    await helpers.closeTrackedServers?.();
-    await helpers.destroyTrackedQueueRunners?.();
-    await helpers.destroyTrackedQueuePublishers?.();
-    await helpers.closeTrackedDbAdapters?.();
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const undici = require('undici') as {
-        getGlobalDispatcher?: () => { close?: () => Promise<void> };
-      };
-      await undici.getGlobalDispatcher?.()?.close?.();
-    } catch {
-      // best-effort cleanup
-    }
-    let handles = (process as any)._getActiveHandles?.() ?? [];
-    for (let handle of handles) {
-      if (
-        handle &&
-        typeof handle.kill === 'function' &&
-        typeof handle.spawnfile === 'string' &&
-        /chrome|chromium/i.test(handle.spawnfile)
-      ) {
-        try {
-          handle.kill('SIGKILL');
-          handle.unref?.();
-        } catch {
-          // best-effort cleanup
+  Promise.resolve()
+    .then(async () => {
+      await helpers.stopTrackedPrerenderers?.();
+      await helpers.closeTrackedServers?.();
+      await helpers.destroyTrackedQueueRunners?.();
+      await helpers.destroyTrackedQueuePublishers?.();
+      await helpers.closeTrackedDbAdapters?.();
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const undici = require('undici') as {
+          getGlobalDispatcher?: () => { close?: () => Promise<void> };
+        };
+        await undici.getGlobalDispatcher?.()?.close?.();
+      } catch {
+        // best-effort cleanup
+      }
+      let handles = (process as any)._getActiveHandles?.() ?? [];
+      for (let handle of handles) {
+        if (
+          handle &&
+          typeof handle.kill === 'function' &&
+          typeof handle.spawnfile === 'string' &&
+          /chrome|chromium/i.test(handle.spawnfile)
+        ) {
+          try {
+            handle.kill('SIGKILL');
+            handle.unref?.();
+          } catch {
+            // best-effort cleanup
+          }
         }
       }
-    }
-    handles = (process as any)._getActiveHandles?.() ?? [];
-    for (let handle of handles) {
-      if (!handle || typeof handle.destroy !== 'function') {
-        continue;
+      handles = (process as any)._getActiveHandles?.() ?? [];
+      for (let handle of handles) {
+        if (!handle || typeof handle.destroy !== 'function') {
+          continue;
+        }
+        let websocketSymbol = Object.getOwnPropertySymbols(handle).find(
+          (symbol) => symbol.description === 'websocket',
+        );
+        if (websocketSymbol) {
+          try {
+            handle[websocketSymbol]?.terminate?.();
+            handle.destroy();
+          } catch {
+            // best-effort cleanup
+          }
+        }
       }
-      let websocketSymbol = Object.getOwnPropertySymbols(handle).find(
-        (symbol) => symbol.description === 'websocket',
-      );
-      if (websocketSymbol) {
+      handles = (process as any)._getActiveHandles?.() ?? [];
+      for (let handle of handles) {
+        if (!handle || typeof handle.destroy !== 'function') {
+          continue;
+        }
+        if ((handle as any)._isStdio || (handle as any)._type === 'pipe') {
+          continue;
+        }
         try {
-          handle[websocketSymbol]?.terminate?.();
+          handle.unref?.();
           handle.destroy();
         } catch {
           // best-effort cleanup
         }
       }
-    }
-    handles = (process as any)._getActiveHandles?.() ?? [];
-    for (let handle of handles) {
-      if (!handle || typeof handle.destroy !== 'function') {
-        continue;
-      }
-      if ((handle as any)._isStdio || (handle as any)._type === 'pipe') {
-        continue;
-      }
-      try {
-        handle.unref?.();
-        handle.destroy();
-      } catch {
-        // best-effort cleanup
-      }
-    }
-  }).catch((error) => {
-    // eslint-disable-next-line no-console
-    console.error('QUnit.done cleanup failed:', error);
-  });
+    })
+    .catch((error) => {
+      // eslint-disable-next-line no-console
+      console.error('QUnit.done cleanup failed:', error);
+    });
 });
 
 import 'decorator-transforms/globals';
