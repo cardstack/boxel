@@ -191,8 +191,6 @@ export class HeroSection extends SectionCard {
           margin-inline: auto;
           display: flex;
           flex-direction: column;
-          align-items: center;
-          text-align: center;
           gap: 1.5rem;
         }
 

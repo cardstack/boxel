@@ -1,8 +1,12 @@
 import Component from '@glimmer/component';
-import { on } from '@ember/modifier';
 
-import { Button } from '@cardstack/boxel-ui/components';
+import { Button, Switch } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
+
+import Sun from '@cardstack/boxel-icons/sun';
+import Moon from '@cardstack/boxel-icons/moon';
+
+import setBackgroundImage from 'https://cardstack.com/base/helpers/set-background-image';
 
 import type { Site } from '../site-config';
 
@@ -10,8 +14,92 @@ export interface SiteNavbarSignature {
   Args: {
     site?: Site;
     currentPageId?: string | null;
+    logoUrl?: string | null;
     toggleMode?: () => void;
+    isDarkMode?: boolean;
   };
+  Element: HTMLElement;
+}
+
+interface ModeToggleSignature {
+  Args: {
+    onToggle?: () => void;
+    isDarkMode?: boolean;
+  };
+  Element: HTMLElement;
+}
+
+export class ModeToggle extends Component<ModeToggleSignature> {
+  <template>
+    <div
+      class='switch-container {{if @isDarkMode "switch-dark" "switch-light"}}'
+      ...attributes
+    >
+      <Switch
+        class='switch-toggle'
+        @onChange={{@onToggle}}
+        @isEnabled={{@isDarkMode}}
+      />
+      <Sun
+        class='mode-icon light-mode-icon'
+        width='14'
+        height='14'
+        role='presentation'
+      />
+      <Moon
+        class='mode-icon dark-mode-icon'
+        width='14'
+        height='14'
+        role='presentation'
+      />
+    </div>
+    <style scoped>
+      .switch-container {
+        --icon-size: 1.375rem;
+        position: relative;
+        display: flex;
+        align-items: center;
+        width: calc(var(--icon-size) * 2);
+        height: var(--icon-size);
+      }
+      .mode-icon {
+        position: absolute;
+        top: 0;
+        width: var(--icon-size);
+        height: var(--icon-size);
+        padding: 0.25rem;
+        pointer-events: none;
+      }
+      .light-mode-icon {
+        left: 0;
+      }
+      .dark-mode-icon {
+        right: 0;
+      }
+      .switch-dark .light-mode-icon,
+      .switch-light .dark-mode-icon {
+        color: var(--muted-foreground);
+        opacity: 0.8;
+      }
+      .switch-toggle {
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: color-mix(
+          in oklab,
+          var(--muted-foreground) 20%,
+          transparent
+        );
+        padding: 0;
+        transition: none;
+      }
+      .switch-toggle :deep(.switch-input) {
+        background: var(--background);
+        box-shadow: var(--mode-toggle-highlight);
+      }
+    </style>
+  </template>
 }
 
 // TODO: add dropdown nav
@@ -27,44 +115,28 @@ export class SiteNavbar extends Component<SiteNavbarSignature> {
   }
 
   <template>
-    <nav class='site-navbar'>
-      <div class='logo'>{{@site.siteTitle}}</div>
+    <nav class='site-navbar' ...attributes>
+      {{#if @logoUrl.length}}
+        <div class='logo' style={{setBackgroundImage @logoUrl}} />
+      {{/if}}
 
       <div class='nav-links'>
         {{#each this.sortedNavPages as |page|}}
-          <a
-            href={{page.pageUrl}}
+          <Button
+            @as='anchor'
+            @href={{page.pageUrl}}
+            @kind='muted'
+            @size='small'
             class={{cn 'nav-link' is-active=(eq page.pageId @currentPageId)}}
           >
             {{page.pageLabel}}
-          </a>
+          </Button>
         {{/each}}
       </div>
 
       <div class='nav-actions'>
         {{#if @toggleMode}}
-          <button
-            class='dark-mode-toggle'
-            id='darkModeToggle'
-            aria-label='Toggle dark mode'
-            {{on 'click' @toggleMode}}
-          >
-            <svg
-              class='icon-sun'
-              viewBox='0 0 24 24'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='2'
-            >
-              <circle cx='12' cy='12' r='5'></circle>
-              <path
-                d='M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42'
-              ></path>
-            </svg>
-            <svg class='icon-moon' viewBox='0 0 24 24' fill='currentColor'>
-              <path d='M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z'></path>
-            </svg>
-          </button>
+          <ModeToggle @onToggle={{@toggleMode}} @isDarkMode={{@isDarkMode}} />
         {{/if}}
 
         {{#if @site.ctaSecondaryText}}
@@ -91,105 +163,57 @@ export class SiteNavbar extends Component<SiteNavbarSignature> {
 
     <style scoped>
       .site-navbar {
+        min-width: 32rem;
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 1.5rem;
-        padding: 1rem 1.5rem;
-        position: sticky;
-        top: 0;
-        backdrop-filter: blur(10px);
-        background: color-mix(
-          in srgb,
-          var(--background, #fff) 75%,
-          transparent
-        );
-        border-bottom: 1px solid var(--border, #e5e5e5);
-        z-index: 1000;
-      }
-
-      .logo {
-        font-weight: 700;
-        letter-spacing: -0.01em;
-      }
-
-      .dark-mode-toggle {
-        width: 44px;
-        height: 24px;
-        background: var(--border-light);
+        gap: var(--boxel-sp-xs) var(--boxel-sp);
+        max-width: 100%;
+        background: var(--toolbar-bg);
+        color: var(--foreground);
+        backdrop-filter: blur(24px) saturate(200%);
+        -webkit-backdrop-filter: blur(24px) saturate(200%);
+        border: 1px solid var(--toolbar-border);
         border-radius: 100px;
-        position: relative;
-        cursor: pointer;
-        transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-        border: none;
-        padding: 0;
+        padding: 0.75rem 3rem;
+        white-space: nowrap;
+        box-shadow: var(--toolbar-box-shadow);
+        overflow: hidden;
       }
-      .dark-mode-toggle::before {
-        content: '';
-        position: absolute;
-        top: 2px;
-        left: 2px;
-        width: 20px;
-        height: 20px;
-        background: white;
-        border-radius: 50%;
-        transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-      }
-      .dark-mode-toggle svg {
-        fill: var(--boxel-slate);
-      }
-      .dark-mode-toggle .icon-sun,
-      .dark-mode-toggle .icon-moon {
-        position: absolute;
-        top: 50%;
-        transform: translateY(-50%);
-        width: 12px;
-        height: 12px;
-        transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-      }
-      .dark-mode-toggle .icon-sun {
-        left: 6px;
-        opacity: 1;
-      }
-      .dark-mode-toggle .icon-moon {
-        right: 6px;
-        opacity: 0.4;
-      }
-
       .nav-links {
         display: flex;
-        gap: 1rem;
         align-items: center;
+        justify-content: center;
+        gap: var(--boxel-sp);
         flex: 1;
       }
-
-      .nav-link {
-        color: var(--muted-foreground, #666);
-        text-decoration: none;
-        padding: 0.5rem 0.75rem;
-        border-radius: 999px;
-        transition:
-          color 150ms ease,
-          background 150ms ease;
-      }
-
-      .nav-link:hover {
-        color: var(--foreground, #111);
-        background: var(--muted, #f6f6f6);
-      }
-
-      .nav-link.is-active {
-        color: var(--foreground, #111);
-        background: var(--brand-muted, rgba(0, 0, 0, 0.05));
-        font-weight: 600;
-      }
-
       .nav-actions {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-2xs);
+        margin-left: auto;
+        padding-left: 1.5rem;
+        border-left: 1px solid var(--border);
       }
+
+      .logo {
+        flex-shrink: 0;
+        width: 9rem;
+        height: 2.75rem;
+        min-height: var(--brand-primary-mark-min-height);
+        background-size: contain;
+        background-repeat: no-repeat;
+      }
+
+      .nav-link {
+        min-width: unset;
+        padding: var(--boxel-sp-4xs);
+        background: none;
+        font-weight: 500;
+      }
+      .nav-link:hover {
+        color: var(--foreground);
+      }
+
       .site-navbar-cta-primary {
         transition:
           color var(--boxel-transition),
@@ -204,27 +228,24 @@ export class SiteNavbar extends Component<SiteNavbarSignature> {
         transform: translateY(-2px);
       }
       .site-navbar-cta-secondary {
+        background: none;
         transition: color var(--boxel-transition);
       }
       .site-navbar-cta-secondary:hover {
         color: var(--secondary);
       }
 
-      @media (max-width: 900px) {
+      @container navbar (inline-size <= 900px) {
         .site-navbar {
           flex-wrap: wrap;
         }
-
         .nav-links {
           order: 3;
           width: 100%;
           justify-content: flex-start;
-          flex-wrap: wrap;
         }
-
         .nav-actions {
           order: 2;
-          width: 100%;
           justify-content: flex-end;
         }
       }

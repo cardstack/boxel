@@ -75,7 +75,6 @@ export class Section extends Component<SectionSignature> {
 
     <style scoped>
       .section {
-        padding: 2rem;
         text-wrap: pretty;
       }
     </style>
