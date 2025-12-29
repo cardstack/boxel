@@ -41,6 +41,7 @@ export interface GetCardMenuItemParams {
     | 'code-mode-playground';
   commandContext: CommandContext;
   format?: Format;
+  currentRealmURL?: string;
 }
 
 export function getDefaultCardMenuItems(
@@ -95,7 +96,7 @@ export function getDefaultCardMenuItems(
       );
     }
   }
-  if (params.menuContext === 'ai-assistant') {
+  if (params.menuContext === 'ai-assistant' && params.canEdit) {
     menuItems.push({
       label: 'Copy to Workspace',
       action: async () => {
@@ -103,6 +104,7 @@ export function getDefaultCardMenuItems(
           params.commandContext,
         ).execute({
           sourceCard: card,
+          targetRealm: params.currentRealmURL,
         });
 
         let showCardCommand = new ShowCardCommand(params.commandContext);

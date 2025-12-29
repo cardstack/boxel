@@ -57,7 +57,26 @@ module('Unit | card-menu-items', function (hooks) {
     assert.ok(texts.includes('Delete'), 'contains Delete');
   });
 
-  test('ai-assistant context contains Copy to Workspace', function (assert: Assert) {
+  test('ai-assistant context contains Copy to Workspace when editable', function (assert: Assert) {
+    let card = new DummyCard(
+      'https://example.com/realm/card-2',
+      'Two',
+    ) as unknown as CardDef;
+    let items = getDefaultCardMenuItems(card, {
+      canEdit: true,
+      cardCrudFunctions: {},
+      menuContext: 'ai-assistant',
+      commandContext: {} as any,
+    });
+
+    let texts = items.map((i: MenuItemOptions) => i.label);
+    assert.ok(
+      texts.includes('Copy to Workspace'),
+      'contains Copy to Workspace',
+    );
+  });
+
+  test('ai-assistant context omits Copy to Workspace when not editable', function (assert: Assert) {
     let card = new DummyCard(
       'https://example.com/realm/card-2',
       'Two',
@@ -70,9 +89,9 @@ module('Unit | card-menu-items', function (hooks) {
     });
 
     let texts = items.map((i: MenuItemOptions) => i.label);
-    assert.ok(
+    assert.notOk(
       texts.includes('Copy to Workspace'),
-      'contains Copy to Workspace',
+      'does not include Copy to Workspace',
     );
   });
 
