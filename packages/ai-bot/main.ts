@@ -533,11 +533,24 @@ Common issues are:
           }
 
           if (shouldSetRoomTitle(eventList, aiBotUserId, event)) {
-            return await assistant.setTitle(
-              room.roomId,
-              promptParts.history,
-              event,
-            );
+            // Intentionally do not await setTitle - let it run async so that
+            // the room lock gets released asap after finalizing the response.
+            // This is important because tool call results may arrive
+            // immediately after responder.finalize(), and we need to make sure
+            // the room lock is released.
+            assistant
+              .setTitle(room.roomId, promptParts.history, event)
+              .catch((error) => {
+                log.error(`[${eventId}] Error setting room title`);
+                log.error(error);
+                Sentry.captureException(error, {
+                  extra: {
+                    roomId: room.roomId,
+                    eventId,
+                    eventType: event.getType(),
+                  },
+                });
+              });
           }
           return;
         } finally {
