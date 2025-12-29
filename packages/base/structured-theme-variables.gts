@@ -272,6 +272,7 @@ class ThemeSwatch extends GlimmerComponent<{
         }
         :deep(.boxel-swatch-value) {
           font-size: var(--boxel-font-size-xs);
+          text-transform: lowercase;
         }
         .empty-value {
           padding: var(--boxel-sp-4xs);
