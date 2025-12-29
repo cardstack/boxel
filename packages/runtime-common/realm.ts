@@ -569,11 +569,7 @@ export class Realm {
         SupportedMimeType.CardSource,
         this.upsertCardSource.bind(this),
       )
-      .get(
-        '/.*',
-        SupportedMimeType.FileMeta,
-        this.getFileMeta.bind(this),
-      )
+      .get('/.*', SupportedMimeType.FileMeta, this.getFileMeta.bind(this))
       .head(
         '/.*',
         SupportedMimeType.CardSource,
