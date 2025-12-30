@@ -5,8 +5,8 @@ import { cssVar, sanitizeHtml } from '@cardstack/boxel-ui/helpers';
 
 export interface SectionSignature {
   Args: {};
-  Blocks: { default: [] };
   Element: HTMLElement;
+  Blocks: { default: [] };
 }
 
 export interface SectionHeaderSignature {
@@ -15,17 +15,18 @@ export interface SectionHeaderSignature {
     subheadline?: string;
     label?: string;
   };
+  Element: HTMLElement;
   Blocks: { default: [] };
 }
 
 export class SectionHeader extends Component<SectionHeaderSignature> {
   <template>
-    <div class='section-header'>
-      {{#if @label}}
+    <div class='section-header' ...attributes>
+      {{#if @label.length}}
         <span class='section-label'>{{@label}}</span>
       {{/if}}
       <h2 class='section-title'>{{@headline}}</h2>
-      {{#if @subheadline}}
+      {{#if @subheadline.length}}
         <p class='section-subtitle'>{{@subheadline}}</p>
       {{/if}}
 
@@ -37,6 +38,7 @@ export class SectionHeader extends Component<SectionHeaderSignature> {
         display: flex;
         flex-direction: column;
         justify-content: center;
+        gap: var(--boxel-sp);
       }
       .section-title {
         font-family: var(--boxel-heading-font-family);
@@ -55,7 +57,6 @@ export class SectionHeader extends Component<SectionHeaderSignature> {
         line-height: var(--boxel-section-heading-line-height);
         letter-spacing: var(--boxel-lsp-xxl);
         text-transform: uppercase;
-        margin: 0 0 0.75rem 0;
       }
       .section-subtitle {
         max-width: 32.5rem;

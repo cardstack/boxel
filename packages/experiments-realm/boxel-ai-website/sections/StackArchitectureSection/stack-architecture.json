@@ -8,6 +8,7 @@
     },
     "type": "card",
     "attributes": {
+      "body": "> &gt; <strong>Two file types:</strong>\nJSON for data, TypeScript for logic<br />\n&gt; <strong>AI-native formats:</strong>\nBoth are in every LLM's training corpus<br />\n&gt; <strong>One file, all layers:</strong>\nSchema, UI, and logic live together",
       "tiles": [
         {
           "tileNumber": "01",
@@ -34,6 +35,14 @@
           "accentColor": null
         }
       ],
+      "diagram": {
+        "body": "Five traditional layers—frontend, backend, API, database, orchestration—compressed into TypeScript + JSON.",
+        "headline": "One File. Full Stack.",
+        "markdown": "<p style=\"margin-top: 0\"><code>.gts — TypeScript Definitions</code></p>\n<p><code class='diagram-box'>.json — Data Instances</code></p>\n<p style=\"text-align:center; font-family: 'IBM Plex Mono'; color: var(--boxel-purple); font-weight: 500;\">↓ AI reads one file ↓</p>",
+        "tileLabel": "Diagram",
+        "tileNumber": null,
+        "accentColor": null
+      },
       "cardInfo": {
         "notes": null,
         "title": "Stack Architecture",
@@ -51,6 +60,11 @@
           "self": null
         }
       },
+      "diagram.linkedCard": {
+        "links": {
+          "self": null
+        }
+      },
       "tiles.0.linkedCard": {
         "links": {
           "self": null
@@ -62,11 +76,6 @@
         }
       },
       "tiles.2.linkedCard": {
-        "links": {
-          "self": null
-        }
-      },
-      "tiles.3.linkedCard": {
         "links": {
           "self": null
         }
