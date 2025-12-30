@@ -96,6 +96,10 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 
 You can also use `start:development` if you want the functionality of `start:all`, but without running the test realms. `start:development` will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /experiments realm. In order to use `start:development` you must also make sure to run `start:worker-development` in order to start the workers (which are normally started in `start:all`.
 
+Optional environment variables for `start:development`:
+
+- `USE_EXTERNAL_CATALOG=1` to load `/catalog` from `packages/catalog/contents` (cloned from the `boxel-catalog` repo). 
+
 ### Card Pre-rendering
 
 Boxel supports server-side rendering of cards via a lightweight prerender service and an optional manager that coordinates multiple services.
