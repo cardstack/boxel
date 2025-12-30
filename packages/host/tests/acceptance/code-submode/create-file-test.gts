@@ -247,7 +247,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       });
     });
 
-    test('new file button has options to create card def, field def, and card instance files', async function (assert) {
+    test('new file button has options to create card def, field def, card instance, and text files', async function (assert) {
       await visitOperatorMode();
       await waitFor('[data-test-code-mode][data-test-save-idle]');
       await waitFor('[data-test-new-file-button]');
@@ -257,7 +257,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         .dom(
           '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text]',
         )
-        .exists({ count: 3 });
+        .exists({ count: 4 });
       assert
         .dom(
           '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text="Card Definition"]',
@@ -273,6 +273,42 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
           '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text="Card Instance"]',
         )
         .exists();
+      assert
+        .dom(
+          '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text="Text File"]',
+        )
+        .exists();
+    });
+
+    test<TestContextWithSave>('can create text files with txt and md extensions', async function (assert) {
+      assert.expect(4);
+      await visitOperatorMode();
+      let deferred = new Deferred<void>();
+      let savedUrls: string[] = [];
+
+      this.onSave(async (url, content) => {
+        savedUrls.push(url.href);
+        assert.strictEqual(content, '', 'text file is created empty');
+        if (savedUrls.length === 2) {
+          deferred.fulfill();
+        }
+      });
+
+      await openNewFileModal('Text File');
+      await fillIn('[data-test-text-file-name-field]', 'notes');
+      await click('[data-test-create-text-file]');
+      await waitFor('[data-test-create-file-modal]', { count: 0 });
+
+      await openNewFileModal('Text File');
+      await fillIn('[data-test-text-file-name-field]', 'readme');
+      await click('[data-test-text-file-extension-select]');
+      await click('[data-test-text-file-extension-option=".md"]');
+      await click('[data-test-create-text-file]');
+      await waitFor('[data-test-create-file-modal]', { count: 0 });
+
+      await deferred.promise;
+      assert.ok(savedUrls.some((url) => url.endsWith('notes.txt')));
+      assert.ok(savedUrls.some((url) => url.endsWith('readme.md')));
     });
 
     test('filename is auto-populated from display name', async function (assert) {
