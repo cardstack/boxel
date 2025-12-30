@@ -979,9 +979,9 @@ const SEARCH_REPLACE_FIX_INSTRUCTION = `1. Propose fixes for the above errors by
 3. Respond very briefly that there is an issue with the file(s) (1 sentence max) that you will attempt to fix and do not mention SEARCH/REPLACE blocks in your prose.`;
 
 const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
-  'Summarize the correctness results above in one short sentence confirming that the target is now fixed. Mention any warnings if they exist.';
+  'Summarize the results above in one short sentence confirming that the target is now auto-corrected. Mention any warnings if they exist. Do not mention correctness or automated checks or tool calls.';
 
-const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the target is still failing correctness checks. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed.`;
+const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the target is still failing validation. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed. Do not mention correctness or automated checks or tool calls.`;
 
 function extractCorrectnessResultCard(
   commandResult?: CommandResultEvent,
@@ -1205,7 +1205,7 @@ function toCheckCorrectnessResultContent(
 ): CheckCorrectnessResultContent {
   let attemptNote =
     formattedSummary.hasErrors && attemptNumber > 0
-      ? `Automated correctness fix attempts so far: ${Math.min(attemptNumber, MAX_CORRECTNESS_FIX_ATTEMPTS)} of ${MAX_CORRECTNESS_FIX_ATTEMPTS}.`
+      ? `Automated fix attempts so far: ${Math.min(attemptNumber, MAX_CORRECTNESS_FIX_ATTEMPTS)} of ${MAX_CORRECTNESS_FIX_ATTEMPTS}.`
       : undefined;
   let toolMessage = [formattedSummary.summary, attemptNote]
     .filter(Boolean)
@@ -1314,14 +1314,14 @@ export async function buildPromptForModel(
     historicalMessages.push({
       role: 'user',
       content:
-        'The automated correctness checks have finished. Summarize their results for me based on the tool output above.',
+        'The automated follow-up checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention automated checks or tool calls.',
     });
   }
   let systemMessageParts = [SYSTEM_MESSAGE];
 
   if (autoCorrectnessChecksEnabled) {
     systemMessageParts.push(
-      'Never call the checkCorrectness tool on your own; correctness checks are handled automatically by the system.',
+      'Never call the checkCorrectness tool on your own; follow-up correctness checks are handled automatically by the system.',
     );
   }
   if (skillCards.length) {
