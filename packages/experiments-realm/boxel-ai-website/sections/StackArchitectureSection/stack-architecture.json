@@ -8,7 +8,32 @@
     },
     "type": "card",
     "attributes": {
-      "tiles": [],
+      "tiles": [
+        {
+          "tileNumber": "01",
+          "tileLabel": "Memory",
+          "headline": "Workspace memory that persists.",
+          "body": "In other tools, chat IS your project. Lose the chat, lose the work. Boxel inverts this: the workspace remembers, sessions are disposable helpers you summon and discard.",
+          "markdown": "<code>\n            <div style=\"display: flex; justify-content: space-around; gap: 0.5rem\">\n              <span>🧠 Model (frozen)</span>\n              <span>💬 Chat (volatile)</span>\n              <span style=\"color: var(--cardstack-purple); font-weight: 600;\">🗄️ Workspace (persists)</span>\n            </div>\n</code>",
+          "accentColor": null
+        },
+        {
+          "tileNumber": "02",
+          "tileLabel": "Database",
+          "headline": "The database that builds itself.",
+          "body": "Data is just JSON. AI outputs JSON, we index it automatically into a queryable database. No Supabase, no migrations, no SQL.",
+          "markdown": "<code>\ncontact.json → 🗄️ Indexed → Queryable!\n</code>",
+          "accentColor": null
+        },
+        {
+          "tileNumber": "03",
+          "tileLabel": "Context",
+          "headline": "AI that understands your app.",
+          "body": "Current AI tools are \"brains in a jar\"—floating outside your actual data. Boxel's assistant reads your schema, inspects your Cards, and accesses code when needed.",
+          "markdown": "<code>📝 Schema + 📄 Cards + ⚙️ Code → 🤖 AI</code>",
+          "accentColor": null
+        }
+      ],
       "cardInfo": {
         "notes": null,
         "title": "Stack Architecture",
@@ -22,6 +47,21 @@
     },
     "relationships": {
       "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "tiles.0.linkedCard": {
+        "links": {
+          "self": null
+        }
+      },
+      "tiles.1.linkedCard": {
+        "links": {
+          "self": null
+        }
+      },
+      "tiles.2.linkedCard": {
         "links": {
           "self": null
         }

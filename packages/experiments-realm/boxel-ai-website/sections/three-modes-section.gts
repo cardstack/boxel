@@ -9,6 +9,8 @@ import StringField from 'https://cardstack.com/base/string';
 import ColorField from 'https://cardstack.com/base/color';
 import URLField from 'https://cardstack.com/base/url';
 
+import { cssVar } from '@cardstack/boxel-ui/helpers';
+
 import {
   Section,
   SectionHeader,
@@ -43,11 +45,31 @@ class ModeCardField extends FieldDef {
         @accentColor={{@model.accentColor}}
         @badgeLabel={{this.badgeLabel}}
         @title={{@model.headline}}
-        @text={{@model.subheadline}}
+        @text={{@model.body}}
         @linkText={{@model.linkText}}
         @linkUrl={{@model.linkUrl}}
         @linkColor={{@model.linkColor}}
-      />
+      >
+        <hr
+          class='mode-indicator'
+          style={{cssVar indicator-color=@model.accentColor}}
+        />
+      </SectionCardComponent>
+      <style scoped>
+        .mode-indicator {
+          position: absolute;
+          top: 2rem;
+          left: 2rem;
+          width: 4rem;
+          height: 0.375rem;
+          margin-top: 0;
+          margin-inline: 0;
+          margin-bottom: 1.25rem;
+          border: none;
+          border-radius: 3px;
+          background-color: var(--indicator-color, var(--boxel-highlight));
+        }
+      </style>
     </template>
   };
 
@@ -76,7 +98,9 @@ export class ThreeModesSection extends SectionCard {
           @subheadline={{@model.subheadline}}
           @label={{@model.headerLabel}}
         />
-        <@fields.modes class='section-grid' @format='fitted' />
+        {{#if @model.modes.length}}
+          <@fields.modes class='section-grid' @format='fitted' />
+        {{/if}}
       </Section>
       <style scoped>
         .section-grid {

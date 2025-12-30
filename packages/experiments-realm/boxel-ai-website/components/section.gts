@@ -76,20 +76,21 @@ interface SectionCardComponentSignature {
     linkText?: string;
     linkUrl?: string;
   };
+  Element: HTMLElement;
+  Blocks: { default: [] };
 }
 
 export class SectionCardComponent extends Component<SectionCardComponentSignature> {
   <template>
-    <CardContainer class='highlight-card'>
+    <CardContainer class='highlight-card' ...attributes>
       {{#if @badgeLabel}}
         <Pill class='highlight-card-badge'>{{@badgeLabel}}</Pill>
       {{/if}}
-      <hr
-        class='highlight-card-indicator'
-        style={{cssVar indicator-color=@accentColor}}
-      />
       <h3 class='highlight-card-title'>{{@title}}</h3>
       <p class='highlight-card-text'>{{@text}}</p>
+
+      {{yield}}
+
       <a
         href={{if @linkUrl.length (sanitizeHtml @linkUrl) '/'}}
         class='highlight-card-link'
@@ -115,6 +116,7 @@ export class SectionCardComponent extends Component<SectionCardComponentSignatur
         top: 1rem;
         right: 1rem;
         padding: 0.35rem 0.75rem;
+        border-radius: var(--boxel-border-radius-xs);
         background-color: var(--brand-dark, var(--boxel-dark));
         color: var(--brand-primary, var(--boxel-highlight));
         font-family: var(--boxel-caption-font-family);
@@ -122,17 +124,10 @@ export class SectionCardComponent extends Component<SectionCardComponentSignatur
         font-weight: var(--boxel-caption-font-weight);
         line-height: var(--boxel-caption-line-height);
         letter-spacing: var(--boxel-lsp-xl);
-        border-radius: var(--boxel-border-radius-xs);
+        text-transform: uppercase;
       }
-      .highlight-card-indicator {
-        width: 4rem;
-        height: 0.375rem;
-        border: none;
-        border-radius: 3px;
-        margin-top: 0;
-        margin-inline: 0;
-        margin-bottom: 1.25rem;
-        background-color: var(--indicator-color, var(--boxel-highlight));
+      .highlight-card-badge + .highlight-card-title {
+        margin-top: 1.25rem;
       }
       .highlight-card-title {
         font-size: 1.5rem;

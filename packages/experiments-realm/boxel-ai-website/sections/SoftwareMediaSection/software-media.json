@@ -8,7 +8,41 @@
     },
     "type": "card",
     "attributes": {
-      "tabs": [],
+      "tabs": [
+        {
+          "tabIcon": "📄",
+          "tabLabel": "Creative",
+          "methodBadge": null,
+          "headline": "Creative Pipeline",
+          "body": "Document → Mockup → Image → Blog. A white paper gets AI-summarized, annotated, then AI generates a hero image. The blog post embeds all of it.",
+          "bullets": [],
+          "flowSteps": [],
+          "footerNote": "🤖 AI summarizes → AI generates → AI parses",
+          "accentColor": null
+        },
+        {
+          "tabIcon": "💳",
+          "tabLabel": "Commerce",
+          "methodBadge": null,
+          "headline": "Cross-Org Commerce",
+          "body": "Invoice → Adoption → Payment → Settlement. Vendor's AI drafts invoice, Client's AI validates against budget, auto-reconciles both ledgers.",
+          "bullets": [],
+          "flowSteps": [],
+          "footerNote": "🤖 Sender AI drafts → Recipient AI validates",
+          "accentColor": "var(--accent)"
+        },
+        {
+          "tabIcon": "🛒",
+          "tabLabel": "Lifecycle",
+          "methodBadge": null,
+          "headline": "Product Lifecycle",
+          "body": "Product → Store → Proposal → PO. AI generates descriptions, buyer's AI compares specs, seller's AI drafts proposals, procurement AI validates.",
+          "bullets": [],
+          "flowSteps": [],
+          "footerNote": "🤖 Full lineage: every AI traces provenance",
+          "accentColor": null
+        }
+      ],
       "cardInfo": {
         "notes": null,
         "title": "Software as Media",
