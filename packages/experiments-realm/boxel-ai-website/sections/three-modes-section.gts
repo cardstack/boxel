@@ -98,15 +98,17 @@ export class ThreeModesSection extends SectionCard {
           @subheadline={{@model.subheadline}}
           @label={{@model.headerLabel}}
         />
+
         {{#if @model.modes.length}}
           <@fields.modes class='section-grid' @format='fitted' />
         {{/if}}
       </Section>
+
       <style scoped>
         .section-grid {
           margin-top: 3rem;
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
+          grid-template-columns: repeat(auto-fit, minmax(16.875rem, 1fr));
           gap: 2rem;
         }
         .section-grid :deep(.compound-field) {

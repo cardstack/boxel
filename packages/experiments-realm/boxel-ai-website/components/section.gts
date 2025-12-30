@@ -22,7 +22,7 @@ export class SectionHeader extends Component<SectionHeaderSignature> {
   <template>
     <div class='section-header'>
       {{#if @label}}
-        <span class='section-number'>{{@label}}</span>
+        <span class='section-label'>{{@label}}</span>
       {{/if}}
       <h2 class='section-title'>{{@headline}}</h2>
       {{#if @subheadline}}
@@ -37,29 +37,31 @@ export class SectionHeader extends Component<SectionHeaderSignature> {
         display: flex;
         flex-direction: column;
         justify-content: center;
-        color: var(--foreground);
-      }
-      .section-number {
-        font-family: 'IBM Plex Mono', monospace;
-        font-size: 0.75rem;
-        font-weight: 600;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        margin-bottom: 0.75rem;
-        display: block;
       }
       .section-title {
-        font-size: clamp(2.5rem, 6vw, 4rem);
-        font-weight: 700;
-        line-height: 1.05;
+        font-family: var(--boxel-heading-font-family);
+        font-size: var(--boxel-heading-font-size);
+        font-weight: var(--boxel-heading-font-weight);
+        line-height: var(--boxel-heading-line-height);
         letter-spacing: -0.03em;
         margin: 0 0 1.25rem 0;
+      }
+      .section-label {
+        display: block;
+        color: var(--muted-foreground);
+        font-family: var(--boxel-section-heading-font-family);
+        font-size: var(--boxel-section-heading-font-size);
+        font-weight: var(--boxel-section-heading-font-weight);
+        line-height: var(--boxel-section-heading-line-height);
+        letter-spacing: var(--boxel-lsp-xxl);
+        text-transform: uppercase;
+        margin: 0 0 0.75rem 0;
       }
       .section-subtitle {
         max-width: 32.5rem;
         color: var(--muted-foreground);
         font-size: 1.125rem;
-        font-weight: 400;
+        font-weight: var(--boxel-body-font-weight);
         line-height: 1.7;
       }
     </style>
@@ -101,6 +103,11 @@ export class SectionCardComponent extends Component<SectionCardComponentSignatur
     </CardContainer>
 
     <style scoped>
+      a {
+        font-family: var(--font-mono, var(--boxel-monospace-font-family));
+        font-size: 0.8rem;
+        text-decoration: none;
+      }
       .highlight-card {
         --card-shadow:
           0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
@@ -141,8 +148,6 @@ export class SectionCardComponent extends Component<SectionCardComponentSignatur
         display: block;
         margin-top: var(--boxel-sp);
         color: var(--link-color);
-        font-family: var(--boxel-caption-font-family);
-        text-decoration: none;
       }
     </style>
   </template>
@@ -155,11 +160,9 @@ export class Section extends Component<SectionSignature> {
     </div>
 
     <style scoped>
-      @layer {
-        .section-template {
-          padding: var(--boxel-sp);
-          text-wrap: pretty;
-        }
+      .section-template {
+        padding: var(--boxel-sp);
+        text-wrap: pretty;
       }
     </style>
   </template>

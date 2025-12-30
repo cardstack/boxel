@@ -79,9 +79,12 @@ class Isolated extends Component<typeof HomeLayoutCard> {
       .home-layout {
         --home-background: var(--background, var(--boxel-light));
         --home-foreground: var(--foreground, var(--boxel-dark));
+        --home-muted: var(--muted, #f5f5f5);
         --home-grid-line: rgba(226, 232, 240, 0.6);
         --home-content-max-width: 87.5rem;
         --home-content-padding: 0 6rem;
+        --diagram-background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+        --diagram-foreground: var(--home-foreground);
 
         position: relative;
         min-height: 100vh;
@@ -92,6 +95,15 @@ class Isolated extends Component<typeof HomeLayoutCard> {
         --home-background: var(--background, var(--boxel-700));
         --home-foreground: var(--foreground, var(--boxel-light));
         --home-grid-line: rgba(120, 115, 135, 0.25);
+        --diagram-background: linear-gradient(
+          180deg,
+          var(--home-background) 0%,
+          var(--home-muted) 100%
+        );
+      }
+      :deep(code) {
+        background: var(--diagram-background, var(--home-muted));
+        color: var(--diagram-foreground, var(--home-foreground));
       }
       .grid-background {
         position: absolute;

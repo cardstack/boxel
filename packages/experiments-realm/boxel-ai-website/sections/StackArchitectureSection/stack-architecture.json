@@ -14,7 +14,7 @@
           "tileLabel": "Memory",
           "headline": "Workspace memory that persists.",
           "body": "In other tools, chat IS your project. Lose the chat, lose the work. Boxel inverts this: the workspace remembers, sessions are disposable helpers you summon and discard.",
-          "markdown": "<code>\n            <div style=\"display: flex; justify-content: space-around; gap: 0.5rem\">\n              <span>🧠 Model (frozen)</span>\n              <span>💬 Chat (volatile)</span>\n              <span style=\"color: var(--cardstack-purple); font-weight: 600;\">🗄️ Workspace (persists)</span>\n            </div>\n</code>",
+          "markdown": "<div class=\"markdown-content\" data-scopedcss-84a0dd53c9-3d62c95e78=\"\">\n      <code>\n            <div style=\"display: flex;justify-content: space-around;gap: 0.5rem;flex-wrap: wrap;\">\n              <span>🧠 Model (frozen)</span>\n              <span>💬 Chat (volatile)</span>\n              <span style=\"color: var(--cardstack-purple); font-weight: 600;\">🗄️ Workspace (persists)</span>\n            </div>\n</code>\n    </div>",
           "accentColor": null
         },
         {
@@ -62,6 +62,11 @@
         }
       },
       "tiles.2.linkedCard": {
+        "links": {
+          "self": null
+        }
+      },
+      "tiles.3.linkedCard": {
         "links": {
           "self": null
         }

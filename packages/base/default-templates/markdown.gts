@@ -79,7 +79,12 @@ export default class MarkDownTemplate extends GlimmerComponent<{
         .markdown-content {
           --md-border: var(--border, var(--boxel-border-color));
           --md-muted: var(--muted, var(--boxel-100));
+          --md-mono: var(
+            --markdown-code-font-family,
+            var(--font-mono, var(--boxel-monospace-font-family))
+          );
           --vscode-editor-background: var(--boxel-dark);
+          --vscode-editor-foreground: var(--boxel-light);
           --vscode-editorCodeLens-lineHeight: 15px;
           --vscode-editorCodeLens-fontSize: 10px;
           --vscode-editorCodeLens-fontFeatureSettings: 'liga' off, 'calt' off;
@@ -201,19 +206,24 @@ export default class MarkDownTemplate extends GlimmerComponent<{
 
         /* Code */
         .markdown-content :deep(code) {
-          font-family: var(--markdown-code-font-family, monospace);
+          font-family: var(--md-mono);
+          background-color: var(--md-muted);
+          color: var(--foreground);
         }
 
         /* Code Block */
         .markdown-content :deep(pre) {
           white-space: var(--boxel-markdown-field-pre-wrap, pre-wrap);
-          background-color: var(--vscode-editor-background);
+          background-color: var(--vscode-editor-background, var(--md-muted));
+          color: var(--vscode-editor-foreground, var(--foreground));
+          font-family: var(--md-mono);
           border-radius: var(--boxel-border-radius-xl);
           padding: var(--boxel-sp-lg);
         }
 
         .markdown-content :deep(pre code) {
-          background-color: var(--vscode-editor-background);
+          background-color: var(--vscode-editor-background, var(--md-muted));
+          color: var(--vscode-editor-foreground, var(--foreground));
         }
 
         /* Link */

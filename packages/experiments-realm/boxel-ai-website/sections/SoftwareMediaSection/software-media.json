@@ -29,7 +29,7 @@
           "bullets": [],
           "flowSteps": [],
           "footerNote": "🤖 Sender AI drafts → Recipient AI validates",
-          "accentColor": "var(--accent)"
+          "accentColor": "#C3FC33"
         },
         {
           "tabIcon": "🛒",

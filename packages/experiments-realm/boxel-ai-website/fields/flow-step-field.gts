@@ -9,7 +9,7 @@ import StringField from 'https://cardstack.com/base/string';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import ColorField from 'https://cardstack.com/base/color';
 
-import { cssVar } from '@cardstack/boxel-ui/helpers';
+import { cssVar, getContrastColor } from '@cardstack/boxel-ui/helpers';
 
 import { SectionCardComponent } from '../components/section';
 
@@ -46,7 +46,12 @@ export class FlowTabField extends FieldDef {
     <template>
       <SectionCardComponent
         class='flow-tab'
-        style={{cssVar tab-background=@model.accentColor}}
+        style={{cssVar
+          tab-background=@model.accentColor
+          tab-foreground=(getContrastColor
+            @model.accentColor 'var(--brand-dark)' 'var(--brand-light)'
+          )
+        }}
         @accentColor={{@model.accentColor}}
         @badgeLabel={{this.badgeLabel}}
         @title={{@model.headline}}
@@ -54,7 +59,9 @@ export class FlowTabField extends FieldDef {
       >
         {{#if @model.footerNote.length}}
           <footer class='footer-note'>
-            <@fields.footerNote />
+            <small>
+              <@fields.footerNote />
+            </small>
           </footer>
         {{/if}}
       </SectionCardComponent>
@@ -62,10 +69,13 @@ export class FlowTabField extends FieldDef {
       <style scoped>
         .flow-tab {
           background-color: var(--tab-background, var(--card));
+          color: var(--tab-foreground, var(--card-foreground));
+        }
+        .flow-tab :deep(p) {
+          color: color-mix(in oklab, currentColor 80%, transparent);
         }
         .footer-note {
           margin-top: var(--boxel-sp);
-          font-size: var(--boxel-font-size-xs);
         }
       </style>
     </template>

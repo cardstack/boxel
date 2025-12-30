@@ -44,14 +44,11 @@ export class FeatureTileField extends FieldDef {
         }
         :deep(code) {
           display: block;
-          background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
-          color: var(--brand-dark, var(--boxel-dark));
           border: 1px solid var(--border);
           border-radius: var(--boxel-border-radius-sm);
-          font-size: var(--boxel-font-size-xs);
+          font-size: var(--boxel-caption-font-size);
           padding: 1.25rem;
           text-align: center;
-          margin-bottom: 0.75rem;
         }
       </style>
     </template>
