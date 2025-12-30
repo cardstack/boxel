@@ -20,6 +20,7 @@ import { Deferred, baseRealm, skillCardRef } from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_LLM_MODE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -2714,6 +2715,56 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert
       .dom(`[data-test-skill-menu] [data-test-attached-card="${envSkillId}"]`)
       .exists();
+  });
+
+  test('new session inherits llm mode from current room', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+
+    await click('[data-test-llm-mode-option="act"]');
+    assert
+      .dom('[data-test-llm-mode-option="act"]')
+      .hasClass('selected', 'LLM mode is set to act');
+
+    await fillIn(
+      '[data-test-message-field]',
+      'Enable create new session button',
+    );
+    await click('[data-test-send-message-btn]');
+
+    let roomsBeforeNewSession = getRoomIds();
+    await waitFor('[data-test-create-room-btn]:not([disabled])');
+    await click('[data-test-create-room-btn]');
+    await waitFor('[data-room-settled]');
+
+    let roomsAfterNewSession = getRoomIds();
+    let newlyCreatedRoomId = roomsAfterNewSession.find(
+      (roomId) => !roomsBeforeNewSession.includes(roomId),
+    );
+    assert.ok(newlyCreatedRoomId, 'Creating a new session creates a new room');
+    if (newlyCreatedRoomId) {
+      let llmModeState = getRoomState(
+        newlyCreatedRoomId,
+        APP_BOXEL_LLM_MODE,
+        '',
+      );
+      assert.strictEqual(
+        llmModeState?.mode,
+        'act',
+        'New session inherits LLM mode from current room',
+      );
+    }
   });
 
   test('copies file history when creating new session with option checked', async function (assert) {
