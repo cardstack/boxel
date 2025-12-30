@@ -8,7 +8,7 @@ import type {
   ModuleRenderResponse,
   RenderRouteOptions,
 } from '@cardstack/runtime-common';
-import { Prerenderer } from '../prerender/index';
+import type { Prerenderer } from '../prerender/index';
 import { PagePool } from '../prerender/page-pool';
 import { RenderRunner } from '../prerender/render-runner';
 
@@ -18,6 +18,7 @@ import {
   matrixURL,
   cleanWhiteSpace,
   testCreatePrerenderAuth,
+  getPrerendererForTesting,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import {
@@ -89,7 +90,7 @@ module(basename(__filename), function () {
     let auth = () => testCreatePrerenderAuth(testUserId, permissions);
 
     hooks.before(async () => {
-      prerenderer = new Prerenderer({
+      prerenderer = getPrerendererForTesting({
         maxPages: 2,
         serverURL: prerenderServerURL,
       });
@@ -730,7 +731,7 @@ module(basename(__filename), function () {
     let auth = () => testCreatePrerenderAuth(testUserId, permissions);
 
     hooks.before(async () => {
-      prerenderer = new Prerenderer({
+      prerenderer = getPrerendererForTesting({
         maxPages: 2,
         serverURL: prerenderServerURL,
       });
@@ -964,7 +965,7 @@ module(basename(__filename), function () {
     };
 
     hooks.before(async function () {
-      prerenderer = new Prerenderer({
+      prerenderer = getPrerendererForTesting({
         maxPages: 2,
         serverURL: prerenderServerURL,
       });
@@ -1974,7 +1975,7 @@ module(basename(__filename), function () {
             };
           };
 
-          localPrerenderer = new Prerenderer({
+          localPrerenderer = getPrerendererForTesting({
             maxPages: 1,
             serverURL: 'http://127.0.0.1:4225',
           });
@@ -2207,7 +2208,7 @@ module(basename(__filename), function () {
           };
         };
 
-        prerenderer = new Prerenderer({
+        prerenderer = getPrerendererForTesting({
           maxPages: 1,
           serverURL: 'http://127.0.0.1:4225',
         });
@@ -2304,7 +2305,7 @@ module(basename(__filename), function () {
           };
         };
 
-        prerenderer = new Prerenderer({
+        prerenderer = getPrerendererForTesting({
           maxPages: 1,
           serverURL: 'http://127.0.0.1:4225',
         });
