@@ -19,7 +19,6 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { SectionCard } from './section-card';
 import { AnimatedGrid } from '../animated-grid';
-import { Section } from '../components/section';
 
 class BadgeField extends FieldDef {
   static displayName = 'Badge';
@@ -90,7 +89,7 @@ export class HeroSection extends SectionCard {
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <Section class='hero-section'>
+      <div class='hero-section'>
         {{! Background layer - composited card }}
         {{#if @model.backgroundGrid}}
           <div class='background-layer'>
@@ -146,7 +145,7 @@ export class HeroSection extends SectionCard {
             {{/if}}
           </div>
         </div>
-      </Section>
+      </div>
 
       <style scoped>
         .hero-section {

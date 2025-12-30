@@ -11,11 +11,7 @@ import URLField from 'https://cardstack.com/base/url';
 
 import { cssVar } from '@cardstack/boxel-ui/helpers';
 
-import {
-  Section,
-  SectionHeader,
-  SectionCardComponent,
-} from '../components/section';
+import { Section, SectionCardComponent } from '../components/section';
 import { SectionCard } from './section-card';
 
 class ModeCardField extends FieldDef {
@@ -92,29 +88,18 @@ export class ThreeModesSection extends SectionCard {
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <Section class='section-isolated'>
-        <SectionHeader
+      <Section class='section-isolated' as |s|>
+        <s.Header
+          class='section-layout-row'
           @headline={{@model.headline}}
           @subheadline={{@model.subheadline}}
           @label={{@model.headerLabel}}
         />
 
         {{#if @model.modes.length}}
-          <@fields.modes class='section-grid' @format='fitted' />
+          <@fields.modes class='section-cards-grid' @format='fitted' />
         {{/if}}
       </Section>
-
-      <style scoped>
-        .section-grid {
-          margin-top: 3rem;
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(16.875rem, 1fr));
-          gap: 2rem;
-        }
-        .section-grid :deep(.compound-field) {
-          height: 100%;
-        }
-      </style>
     </template>
   };
 }

@@ -10,7 +10,7 @@ import MarkdownField from 'https://cardstack.com/base/markdown';
 import { not, cn } from '@cardstack/boxel-ui/helpers';
 
 import { FeatureTileField } from '../fields/feature-tile-field';
-import { Section, SectionHeader } from '../components/section';
+import { Section } from '../components/section';
 import { SectionCard } from './section-card';
 
 export class StackArchitectureSection extends SectionCard {
@@ -31,12 +31,13 @@ export class StackArchitectureSection extends SectionCard {
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <Section class='section-layout'>
-        {{#if @model.diagram}}
+      <Section as |s|>
+        {{#if @model.diagram.headline}}
           <@fields.diagram />
         {{/if}}
-        <SectionHeader
-          class={{cn layout-row=(not @model.diagram)}}
+
+        <s.Header
+          class={{cn section-layout-row=(not @model.diagram.headline)}}
           @headline={{@model.headline}}
           @subheadline={{@model.subheadline}}
           @label={{@model.headerLabel}}
@@ -44,51 +45,12 @@ export class StackArchitectureSection extends SectionCard {
           {{#if @model.body.length}}
             <@fields.body />
           {{/if}}
-        </SectionHeader>
+        </s.Header>
 
         {{#if @model.tiles.length}}
-          <@fields.tiles class='layout-row section-grid' @format='fitted' />
+          <@fields.tiles class='section-cards-grid' @format='fitted' />
         {{/if}}
       </Section>
-
-      <style scoped>
-        .section-layout {
-          --card-width: 16.875rem;
-          display: grid;
-          grid-template-columns: repeat(
-            auto-fit,
-            minmax(var(--card-width), 1fr)
-          );
-          gap: 3rem 4rem;
-        }
-        .layout-row {
-          grid-column: -1 / 1;
-        }
-        .section-layout :deep(blockquote) {
-          border-right: none;
-          border-left: 2px solid var(--primary, var(--boxel-highlight));
-        }
-        .section-layout :deep(blockquote p) {
-          margin: 0;
-          padding-left: var(--boxel-sp);
-          color: var(--muted-foreground);
-          font-family: var(--boxel-caption-font-family);
-          font-size: 0.8rem;
-          font-style: normal;
-          line-height: 1.8;
-        }
-        .section-grid {
-          display: grid;
-          grid-template-columns: repeat(
-            auto-fit,
-            minmax(var(--card-width), 1fr)
-          );
-          gap: 2rem;
-        }
-        .section-grid :deep(.compound-field) {
-          height: 100%;
-        }
-      </style>
     </template>
   };
 }

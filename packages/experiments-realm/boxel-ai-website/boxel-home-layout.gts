@@ -66,9 +66,7 @@ class Isolated extends Component<typeof HomeLayoutCard> {
 
       <main class='sections-container'>
         {{#if @model.sections.length}}
-          {{#each @fields.sections as |SectionField|}}
-            <SectionField @format='embedded' />
-          {{/each}}
+          <@fields.sections class='sections-grid' @format='embedded' />
         {{else}}
           <div class='empty-state'>No sections configured</div>
         {{/if}}
@@ -137,7 +135,8 @@ class Isolated extends Component<typeof HomeLayoutCard> {
       .sections-container {
         position: relative;
         z-index: 0;
-        display: grid;
+      }
+      .sections-grid {
         gap: 8rem;
       }
       .empty-state {
