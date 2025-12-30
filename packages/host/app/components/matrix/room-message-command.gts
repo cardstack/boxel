@@ -159,21 +159,24 @@ export default class RoomMessageCommand extends Component<Signature> {
   private get moreOptionsMenuItems() {
     let menuItems =
       this.commandResultCard.card?.[getCardMenuItems]?.({
-        canEdit: this.canCopyToWorkspace,
+        canEdit: false,
         cardCrudFunctions: {},
         menuContext: 'ai-assistant',
+        menuContextParams: {
+          activeRealmURL: this.activeRealmURL,
+          canEditActiveRealm: this.canEditActiveRealm,
+        },
         commandContext: this.commandService.commandContext,
-        currentRealmURL: this.currentRealmURL,
       }) ?? [];
     return toMenuItems(menuItems);
   }
 
-  private get canCopyToWorkspace() {
-    let currentRealmURL = this.currentRealmURL;
-    return currentRealmURL ? this.realm.canWrite(currentRealmURL) : false;
+  private get canEditActiveRealm() {
+    let activeRealmURL = this.activeRealmURL;
+    return activeRealmURL ? this.realm.canWrite(activeRealmURL) : false;
   }
 
-  private get currentRealmURL() {
+  private get activeRealmURL() {
     return this.operatorModeStateService.realmURL?.href;
   }
 

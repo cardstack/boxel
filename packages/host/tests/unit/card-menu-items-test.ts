@@ -3,7 +3,11 @@ import { module, test } from 'qunit';
 
 import type { MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  testRealmURL,
+  type Loader,
+} from '@cardstack/runtime-common';
 
 import type {
   CardDef,
@@ -63,9 +67,13 @@ module('Unit | card-menu-items', function (hooks) {
       'Two',
     ) as unknown as CardDef;
     let items = getDefaultCardMenuItems(card, {
-      canEdit: true,
+      canEdit: false,
       cardCrudFunctions: {},
       menuContext: 'ai-assistant',
+      menuContextParams: {
+        canEditActiveRealm: true,
+        activeRealmURL: testRealmURL,
+      },
       commandContext: {} as any,
     });
 
@@ -85,6 +93,10 @@ module('Unit | card-menu-items', function (hooks) {
       canEdit: false,
       cardCrudFunctions: {},
       menuContext: 'ai-assistant',
+      menuContextParams: {
+        canEditActiveRealm: false,
+        activeRealmURL: testRealmURL,
+      },
       commandContext: {} as any,
     });
 
@@ -128,7 +140,7 @@ module('Unit | card-menu-items', function (hooks) {
       'Four',
     ) as unknown as CardDef;
     let items = getDefaultCardMenuItems(card, {
-      canEdit: false,
+      canEdit: true,
       cardCrudFunctions: {},
       menuContext: 'code-mode-preview',
       commandContext: {} as any,

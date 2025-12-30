@@ -31,18 +31,24 @@ import Wand from '@cardstack/boxel-icons/wand';
 
 const GENERATED_EXAMPLE_COUNT = 3;
 
-export interface GetCardMenuItemParams {
+type MenuContext =
+  | {
+      menuContext: 'interact' | 'code-mode-preview' | 'code-mode-playground';
+    }
+  | {
+      menuContext: 'ai-assistant';
+      menuContextParams: {
+        canEditActiveRealm: boolean;
+        activeRealmURL: string;
+      };
+    };
+
+export type GetCardMenuItemParams = {
   canEdit: boolean;
   cardCrudFunctions: Partial<CardCrudFunctions>;
-  menuContext:
-    | 'interact'
-    | 'ai-assistant'
-    | 'code-mode-preview'
-    | 'code-mode-playground';
   commandContext: CommandContext;
   format?: Format;
-  currentRealmURL?: string;
-}
+} & MenuContext;
 
 export function getDefaultCardMenuItems(
   card: CardDef,
@@ -96,7 +102,10 @@ export function getDefaultCardMenuItems(
       );
     }
   }
-  if (params.menuContext === 'ai-assistant' && params.canEdit) {
+  if (
+    params.menuContext === 'ai-assistant' &&
+    params.menuContextParams.canEditActiveRealm
+  ) {
     menuItems.push({
       label: 'Copy to Workspace',
       action: async () => {
@@ -104,7 +113,7 @@ export function getDefaultCardMenuItems(
           params.commandContext,
         ).execute({
           sourceCard: card,
-          targetRealm: params.currentRealmURL,
+          targetRealm: params.menuContextParams.activeRealmURL,
         });
 
         let showCardCommand = new ShowCardCommand(params.commandContext);
