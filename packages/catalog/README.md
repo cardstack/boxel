@@ -6,7 +6,7 @@ The Catalog Realm is a specialized realm in the Boxel system that hosts the cata
 
 - **Catalog Source**: Content is stored in the [boxel-catalog](https://github.com/cardstack/boxel-catalog) repository
 - **Local Development**: Catalog content is cloned into `packages/catalog/contents/` for local editing
-- **Deployment Pipeline**: Changes flow from local development -> boxel-catalog repo -> staging -> production
+- **Deployment Pipeline**: Changes flow from local development → boxel-catalog repo → staging → production
 
 ## Setup
 
