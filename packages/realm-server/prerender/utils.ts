@@ -667,6 +667,20 @@ export async function withTimeout<T>(
         return null;
       }
     });
+    let timerSummary: string | null = await page.evaluate(() => {
+      try {
+        let summary = (globalThis as any).__boxelRenderTimerSummary;
+        if (typeof summary === 'function') {
+          return summary();
+        }
+        if (typeof summary === 'string') {
+          return summary;
+        }
+      } catch {
+        return null;
+      }
+      return null;
+    });
     log.warn(
       `render of ${id} timed out with DOM:\n${dom?.trim()}\nDocs in flight: ${docsInFlight}`,
     );
@@ -681,6 +695,9 @@ export async function withTimeout<T>(
       },
       evict: true,
     };
+    if (typeof timerSummary === 'string' && timerSummary.trim()) {
+      timeoutError.error.stack = timerSummary.trim();
+    }
     (timeoutError as any).capturedDom = dom ?? null;
     (timeoutError as any).docsInFlight = docsInFlight ?? null;
     return timeoutError;
