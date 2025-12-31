@@ -523,6 +523,28 @@ export function internalKeyFor(
   }
 }
 
+export function codeRefFromInternalKey(
+  internalKey: string | null | undefined,
+): ResolvedCodeRef | undefined {
+  if (!internalKey) {
+    return;
+  }
+  if (internalKey.includes('/fields/')) {
+    return;
+  }
+  if (internalKey.endsWith('/ancestor')) {
+    return;
+  }
+  let lastSlash = internalKey.lastIndexOf('/');
+  if (lastSlash <= 0 || lastSlash === internalKey.length - 1) {
+    return;
+  }
+  return {
+    module: internalKey.slice(0, lastSlash),
+    name: internalKey.slice(lastSlash + 1),
+  };
+}
+
 export function loaderFor(cardOrField: CardDef | FieldDef) {
   let clazz = Reflect.getPrototypeOf(cardOrField)!.constructor;
   let loader = Loader.getLoaderFor(clazz);

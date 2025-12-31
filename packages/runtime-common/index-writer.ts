@@ -434,8 +434,17 @@ export class Batch {
           WHERE`,
       ...every([
         ['i.realm_url =', param(this.realmURL.href)],
-        ['i.type = ', param('instance')],
+        any([
+          ['i.type = ', param('instance')],
+          ['i.type = ', param('error')],
+        ]),
         ['i.types IS NOT NULL'],
+        [
+          dbExpression({
+            pg: `(i.types->>0) IS NOT NULL`,
+            sqlite: `json_extract(i.types, '$[0]') IS NOT NULL`,
+          }),
+        ],
         any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
       ]),
       `GROUP BY i.display_names->>0, i.types->>0`,

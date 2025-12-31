@@ -20,6 +20,7 @@ import {
   isCardInstance,
   SupportedMimeType,
   subscribeToRealm,
+  codeRefFromInternalKey,
   type Query,
   CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
@@ -313,19 +314,19 @@ class Isolated extends Component<typeof CardsGrid> {
     this.cardTypeFilters.splice(0, this.cardTypeFilters.length);
 
     cardTypeSummaries.forEach((summary) => {
-      if (excludedCardTypeIds.includes(summary.id)) {
+      if (!summary.id || excludedCardTypeIds.includes(summary.id)) {
         return;
       }
-      const lastIndex = summary.id.lastIndexOf('/');
+      let codeRef = codeRefFromInternalKey(summary.id);
+      if (!codeRef) {
+        return;
+      }
       this.cardTypeFilters.push({
-        displayName: summary.attributes.displayName,
+        displayName: summary.attributes.displayName ?? codeRef.name,
         icon: summary.attributes.iconHTML ?? Captions,
         query: {
           filter: {
-            type: {
-              module: summary.id.substring(0, lastIndex),
-              name: summary.id.substring(lastIndex + 1),
-            },
+            type: codeRef,
           },
         },
       });
