@@ -27,11 +27,7 @@ interface Signature {
 
 const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
   <div
-    class={{cn
-      'state-indicator'
-      @state
-      compact=@isCompact
-    }}
+    class={{cn 'state-indicator' @state compact=@isCompact}}
     data-test-apply-state={{@state}}
     ...attributes
   >
