@@ -443,7 +443,6 @@ module(basename(__filename), function () {
   module('indexing (read only)', function (hooks) {
     let realm: Realm;
     let testRealmServer: TestRealmServerResult | undefined;
-    let adapter: RealmAdapter;
 
     async function getInstance(
       realm: Realm,
@@ -467,7 +466,6 @@ module(basename(__filename), function () {
           runner,
         });
         realm = testRealmServer.testRealm;
-        adapter = testRealmServer.testRealmAdapter;
       },
       after: async () => {
         await stopTestRealm(testRealmServer);
@@ -870,7 +868,7 @@ module(basename(__filename), function () {
       // Mutate the index row so we can validate that the response must come from the index,
       // not from filesystem metadata.
       await testDbAdapter.execute(
-        `UPDATE boxel_index SET search_doc = '{\"name\":\"from-index.txt\",\"contentType\":\"application/x-index-test\"}'::jsonb WHERE url = '${testRealm}random-file.txt'`,
+        `UPDATE boxel_index SET search_doc = '{"name":"from-index.txt","contentType":"application/x-index-test"}'::jsonb WHERE url = '${testRealm}random-file.txt'`,
       );
       let response = await fetch(`${testRealm}random-file.txt`, {
         headers: { Accept: SupportedMimeType.FileMeta },

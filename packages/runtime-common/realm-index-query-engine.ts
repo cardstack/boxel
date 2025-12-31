@@ -242,10 +242,7 @@ export class RealmIndexQueryEngine {
     return await this.#indexQueryEngine.getInstance(url, opts);
   }
 
-  async file(
-    url: URL,
-    opts?: QueryOptions,
-  ): Promise<IndexedFile | undefined> {
+  async file(url: URL, opts?: QueryOptions): Promise<IndexedFile | undefined> {
     return await this.#indexQueryEngine.getFile(url, opts);
   }
 
