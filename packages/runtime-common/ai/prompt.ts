@@ -1314,7 +1314,7 @@ export async function buildPromptForModel(
     historicalMessages.push({
       role: 'user',
       content:
-        'The automated follow-up correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls.',
+        'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls.',
     });
   }
   let systemMessageParts = [SYSTEM_MESSAGE];
