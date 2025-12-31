@@ -8,8 +8,20 @@
     },
     "type": "card",
     "attributes": {
+      "models": {
+        "body": "Your skills work with any model. 300+ LLMs via OpenRouter. 200+ image, video, audio & utility models via Replicate.",
+        "headline": "Pick your brains.",
+        "markdown": null,
+        "tileLabel": "Models",
+        "tileNumber": null,
+        "accentColor": null
+      },
       "skills": [],
-      "bullets": [],
+      "bullets": [
+        "Vertical skills: Brand guides, policy manuals",
+        "Domain skills: Legal review, financial analysis",
+        "Behavior skills: How the assistant responds"
+      ],
       "cardInfo": {
         "notes": null,
         "title": "Skills",
@@ -17,6 +29,14 @@
         "thumbnailURL": null
       },
       "headline": "Choose your model. Own your prompts.",
+      "skillFlow": {
+        "body": "Prompts become skills. Skills become capabilities. Capabilities compound across every conversation.",
+        "headline": "From Prompt to Skill",
+        "markdown": null,
+        "tileLabel": "Skill Flow",
+        "tileNumber": null,
+        "accentColor": null
+      },
       "footerNote": null,
       "subheadline": "Everything the AI does—vibe coding, workspace orchestration, assistant behavior—is powered by skill cards you can inspect, modify, or replace.",
       "sectionLabel": "AI Extensibility",
@@ -24,6 +44,16 @@
     },
     "relationships": {
       "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "models.linkedCard": {
+        "links": {
+          "self": null
+        }
+      },
+      "skillFlow.linkedCard": {
         "links": {
           "self": null
         }

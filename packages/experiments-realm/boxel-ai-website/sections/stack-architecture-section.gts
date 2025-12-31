@@ -5,12 +5,11 @@ import {
   containsMany,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
-import MarkdownField from 'https://cardstack.com/base/markdown';
 
 import { not, cn } from '@cardstack/boxel-ui/helpers';
 
 import { FeatureTileField } from '../fields/feature-tile-field';
-import { Section } from '../components/section';
+import { Section, SectionBullet } from '../components/section';
 import { SectionCard } from './section-card';
 
 export class StackArchitectureSection extends SectionCard {
@@ -18,7 +17,7 @@ export class StackArchitectureSection extends SectionCard {
 
   @field headline = contains(StringField);
   @field subheadline = contains(StringField);
-  @field body = contains(MarkdownField);
+  @field bullets = containsMany(StringField);
   @field diagram = contains(FeatureTileField);
   @field tiles = containsMany(FeatureTileField);
 
@@ -42,8 +41,11 @@ export class StackArchitectureSection extends SectionCard {
           @subheadline={{@model.subheadline}}
           @label={{@model.headerLabel}}
         >
-          {{#if @model.body.length}}
-            <@fields.body />
+          {{#if @model.bullets.length}}
+            <SectionBullet
+              @bullets={{@model.bullets}}
+              @accentColor='var(--primary)'
+            />
           {{/if}}
         </s.Header>
 

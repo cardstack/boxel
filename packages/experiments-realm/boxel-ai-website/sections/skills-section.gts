@@ -9,7 +9,8 @@ import StringField from 'https://cardstack.com/base/string';
 import ColorField from 'https://cardstack.com/base/color';
 import enumField from 'https://cardstack.com/base/enum';
 
-import { Section, SectionHeader } from '../components/section';
+import { Section, SectionBullet } from '../components/section';
+import { FeatureTileField } from '../fields/feature-tile-field';
 import { SectionCard } from './section-card';
 
 class SkillItemField extends FieldDef {
@@ -32,6 +33,8 @@ export class SkillsSection extends SectionCard {
   @field subheadline = contains(StringField);
   @field bullets = containsMany(StringField);
   @field skills = containsMany(SkillItemField);
+  @field skillFlow = contains(FeatureTileField);
+  @field models = contains(FeatureTileField);
   @field footerNote = contains(StringField);
 
   /** Template Features:
@@ -43,12 +46,21 @@ export class SkillsSection extends SectionCard {
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <Section>
-        <SectionHeader
+      <Section as |s|>
+        <@fields.skillFlow />
+        <s.Header
           @headline={{@model.headline}}
           @subheadline={{@model.subheadline}}
           @label={{@model.headerLabel}}
-        />
+        >
+          <SectionBullet
+            @bullets={{@model.bullets}}
+            @accentColor='var(--secondary)'
+          />
+        </s.Header>
+        <s.Row>
+          <@fields.models />
+        </s.Row>
       </Section>
     </template>
   };

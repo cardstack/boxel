@@ -8,7 +8,6 @@
     },
     "type": "card",
     "attributes": {
-      "body": "> &gt; <strong>Two file types:</strong>\nJSON for data, TypeScript for logic<br />\n&gt; <strong>AI-native formats:</strong>\nBoth are in every LLM's training corpus<br />\n&gt; <strong>One file, all layers:</strong>\nSchema, UI, and logic live together",
       "tiles": [
         {
           "tileNumber": "01",
@@ -34,6 +33,11 @@
           "markdown": "<code>📝 Schema + 📄 Cards + ⚙️ Code → 🤖 AI</code>",
           "accentColor": null
         }
+      ],
+      "bullets": [
+        "Two file types: JSON for data, TypeScript for logic",
+        "AI-native formats: Both are in every LLM's training corpus",
+        "One file, all layers: Schema, UI, and logic live together"
       ],
       "diagram": {
         "body": "Five traditional layers—frontend, backend, API, database, orchestration—compressed into TypeScript + JSON.",

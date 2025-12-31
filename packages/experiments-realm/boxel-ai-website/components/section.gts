@@ -3,7 +3,11 @@ import type { ComponentLike } from '@glint/template';
 import { hash } from '@ember/helper';
 
 import { CardContainer, Pill } from '@cardstack/boxel-ui/components';
-import { cssVar, sanitizeHtml } from '@cardstack/boxel-ui/helpers';
+import {
+  cssVar,
+  sanitizeHtml,
+  sanitizeHtmlSafe,
+} from '@cardstack/boxel-ui/helpers';
 
 export interface SectionSignature {
   Args: {};
@@ -73,6 +77,49 @@ export class SectionHeader extends Component<SectionHeaderSignature> {
         font-size: 1.125rem;
         font-weight: var(--boxel-body-font-weight);
         line-height: 1.7;
+      }
+    </style>
+  </template>
+}
+
+const formatBulletItem = (str?: string) => {
+  let item = str?.trim();
+  if (!item) {
+    return;
+  }
+  let [title, desc] = item.split(':');
+  if (title && desc) {
+    return sanitizeHtmlSafe(`<strong>${title}:</strong> ${desc}`);
+  }
+
+  return title ?? desc;
+};
+
+export class SectionBullet extends Component<{
+  Args: { bullets?: string[] | null; accentColor?: string };
+}> {
+  <template>
+    {{#if @bullets.length}}
+      <ul class='bullets' style={{cssVar accent-border=@accentColor}}>
+        {{#each @bullets as |bullet|}}
+          <li>{{formatBulletItem bullet}}</li>
+        {{/each}}
+      </ul>
+    {{else}}
+      <p><em>No items</em></p>
+    {{/if}}
+
+    <style scoped>
+      .bullets {
+        list-style-type: '> ';
+        list-style-position: inside;
+        margin-block: 1.5rem 1rem;
+        padding-left: 1rem;
+        border-left: 2px solid var(--accent-border, var(--boxel-border-color));
+        color: var(--muted-foreground, var(--boxel-500));
+        font-family: var(--font-mono, var(--boxel-monospace-font-family));
+        font-size: 0.9em;
+        line-height: 1.8;
       }
     </style>
   </template>
@@ -213,20 +260,6 @@ export class Section extends Component<SectionSignature> {
       }
       :deep(.section-cards-grid .compound-field) {
         height: 100%;
-      }
-      /* markdown */
-      .section-layout :deep(blockquote) {
-        border-right: none;
-        border-left: 2px solid var(--primary, var(--boxel-highlight));
-      }
-      .section-layout :deep(blockquote p) {
-        margin: 0;
-        padding-left: var(--boxel-sp);
-        color: var(--muted-foreground, var(--boxel-450));
-        font-family: var(--font-mono, var(--boxel-monospace-font-family));
-        font-size: 0.8rem;
-        font-style: normal;
-        line-height: 1.8;
       }
     </style>
   </template>
