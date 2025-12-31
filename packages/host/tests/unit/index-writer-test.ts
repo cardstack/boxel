@@ -43,6 +43,60 @@ const testRealmInfo: RealmInfo = {
   publishable: null,
   lastPublishedAt: null,
 };
+const testRealmURLObject = new URL(testRealmURL);
+
+type RealmMetaValue = {
+  code_ref: string;
+  display_name: string;
+  icon_html: string;
+  total: number;
+};
+
+const internalKeysFor = (...refs: { module: string; name: string }[]) =>
+  refs.map((ref) => internalKeyFor(ref, testRealmURLObject));
+
+const makeCardResource = (
+  id: string,
+  name: string,
+  adoptsFrom: { module: string; name: string },
+): CardResource => ({
+  id: `${testRealmURL}${id}`,
+  type: 'card',
+  attributes: {
+    name,
+  },
+  meta: {
+    adoptsFrom,
+  },
+});
+
+const makeCardTypeSummary = (
+  codeRef: string,
+  displayName: string,
+  iconHTML: string,
+  total: number,
+): RealmMetaValue => ({
+  total,
+  code_ref: codeRef,
+  display_name: displayName,
+  icon_html: iconHTML,
+});
+
+const fetchRealmMetaRows = async (adapter: SQLiteAdapter) =>
+  adapter.execute(`SELECT value FROM realm_meta r WHERE r.realm_url = $1`, {
+    bind: [testRealmURL],
+    coerceTypes: {
+      value: 'JSON',
+    },
+  });
+
+const fetchRealmMeta = async (adapter: SQLiteAdapter) => {
+  let rows = await fetchRealmMetaRows(adapter);
+  return {
+    rows,
+    value: (rows[0]?.value ?? []) as RealmMetaValue[],
+  };
+};
 
 module('Unit | index-writer', function (hooks) {
   let adapter: SQLiteAdapter;
@@ -1330,6 +1384,20 @@ module('Unit | index-writer', function (hooks) {
 
   test('update realm meta when indexing is done', async function (assert) {
     let iconHTML = '<svg>test icon</svg>';
+    let personTypes = internalKeysFor(
+      { module: './person', name: 'Person' },
+      baseCardRef,
+    );
+    let fancyPersonTypes = internalKeysFor(
+      { module: './fancy-person', name: 'FancyPerson' },
+      { module: './person', name: 'Person' },
+      baseCardRef,
+    );
+    let petTypes = internalKeysFor(
+      { module: './pet', name: 'Pet' },
+      { module: './card-api', name: 'CardDef' },
+      baseCardRef,
+    );
     await setupIndex(
       adapter,
       [{ realm_url: testRealmURL, current_version: 1 }],
@@ -1354,85 +1422,47 @@ module('Unit | index-writer', function (hooks) {
           search_doc: { name: 'Mango' },
           display_names: [`Person`],
           deps: [`${testRealmURL}person`],
-          types: [{ module: `./person`, name: 'Person' }, baseCardRef].map(
-            (i) => internalKeyFor(i, new URL(testRealmURL)),
-          ),
+          types: personTypes,
           icon_html: iconHTML,
         },
       ],
     );
 
-    let resource2: CardResource = {
-      id: `${testRealmURL}2`,
-      type: 'card',
-      attributes: {
-        name: 'Van Gogh',
-      },
-      meta: {
-        adoptsFrom: {
-          module: `./fancy-person`,
-          name: 'FancyPerson',
-        },
-      },
-    };
+    let resource2 = makeCardResource('2', 'Van Gogh', {
+      module: './fancy-person',
+      name: 'FancyPerson',
+    });
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
     await batch.invalidate([new URL(`${testRealmURL}2.json`)]);
+    let timestamp = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}2.json`), {
       type: 'instance',
       resource: resource2,
-      lastModified: Date.now(),
-      resourceCreatedAt: Date.now(),
+      lastModified: timestamp,
+      resourceCreatedAt: timestamp,
       searchData: { name: 'Van Gogh' },
       deps: new Set([`${testRealmURL}fancy-person`]),
       displayNames: ['Fancy Person', 'Person', 'Card'],
-      types: [
-        { module: `./fancy-person`, name: 'FancyPerson' },
-        { module: `./person`, name: 'Person' },
-        baseCardRef,
-      ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
+      types: fancyPersonTypes,
       iconHTML,
     });
 
-    let results = await adapter.execute(
-      `SELECT value FROM realm_meta r WHERE r.realm_url = $1`,
-      {
-        bind: [testRealmURL],
-        coerceTypes: {
-          value: 'JSON',
-        },
-      },
-    );
+    let realmMeta = await fetchRealmMeta(adapter);
     assert.strictEqual(
-      results.length,
+      realmMeta.rows.length,
       0,
       'correct length of query result before indexing is done',
     );
 
     await batch.done();
 
-    results = await adapter.execute(
-      `SELECT value FROM realm_meta r WHERE r.realm_url = $1`,
-      {
-        bind: [testRealmURL],
-        coerceTypes: {
-          value: 'JSON',
-        },
-      },
-    );
-
+    realmMeta = await fetchRealmMeta(adapter);
     assert.strictEqual(
-      results.length,
+      realmMeta.rows.length,
       1,
       'correct length of query result after indexing is done',
     );
-    let value = results[0].value as [
-      {
-        code_ref: string;
-        display_name: string;
-        icon_html: string;
-        total: number;
-      },
-    ];
+    let value = realmMeta.value;
     assert.strictEqual(
       value.length,
       2,
@@ -1441,105 +1471,66 @@ module('Unit | index-writer', function (hooks) {
     assert.deepEqual(
       value,
       [
-        {
-          total: 1,
-          code_ref: `${testRealmURL}fancy-person/FancyPerson`,
-          display_name: 'Fancy Person',
-          icon_html: iconHTML,
-        },
-        {
-          total: 1,
-          code_ref: `${testRealmURL}person/Person`,
-          display_name: 'Person',
-          icon_html: iconHTML,
-        },
+        makeCardTypeSummary(
+          `${testRealmURL}fancy-person/FancyPerson`,
+          'Fancy Person',
+          iconHTML,
+          1,
+        ),
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          1,
+        ),
       ],
       'correct card type summary after indexing is done',
     );
 
     batch = await indexWriter.createBatch(new URL(testRealmURL));
-    let resource3: CardResource = {
-      id: `${testRealmURL}3`,
-      type: 'card',
-      attributes: {
-        name: 'Van Gogh2',
-      },
-      meta: {
-        adoptsFrom: {
-          module: `./fancy-person`,
-          name: 'FancyPerson',
-        },
-      },
-    };
+    let resource3 = makeCardResource('3', 'Van Gogh2', {
+      module: './fancy-person',
+      name: 'FancyPerson',
+    });
     await batch.invalidate([new URL(`${testRealmURL}3.json`)]);
+    timestamp = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}3.json`), {
       type: 'instance',
       resource: resource3,
-      lastModified: Date.now(),
-      resourceCreatedAt: Date.now(),
+      lastModified: timestamp,
+      resourceCreatedAt: timestamp,
       searchData: { name: 'Van Gogh2' },
       deps: new Set([`${testRealmURL}fancy-person`]),
       displayNames: ['Fancy Person', 'Person', 'Card'],
-      types: [
-        { module: `./fancy-person`, name: 'FancyPerson' },
-        { module: `./person`, name: 'Person' },
-        baseCardRef,
-      ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
+      types: fancyPersonTypes,
       iconHTML,
     });
-    let resource4: CardResource = {
-      id: `${testRealmURL}4`,
-      type: 'card',
-      attributes: {
-        name: 'Mango',
-      },
-      meta: {
-        adoptsFrom: {
-          module: `./pet`,
-          name: 'Pet',
-        },
-      },
-    };
+    let resource4 = makeCardResource('4', 'Mango', {
+      module: './pet',
+      name: 'Pet',
+    });
     await batch.invalidate([new URL(`${testRealmURL}4.json`)]);
+    timestamp = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}4.json`), {
       type: 'instance',
       resource: resource4,
-      lastModified: Date.now(),
-      resourceCreatedAt: Date.now(),
+      lastModified: timestamp,
+      resourceCreatedAt: timestamp,
       searchData: { name: 'Mango' },
       deps: new Set([`${testRealmURL}pet`]),
       displayNames: ['Pet', 'Card'],
-      types: [
-        { module: `./pet`, name: 'Pet' },
-        { module: `./card-api`, name: 'CardDef' },
-        baseCardRef,
-      ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
+      types: petTypes,
       iconHTML,
     });
     await batch.done();
 
-    results = await adapter.execute(
-      `SELECT value FROM realm_meta r WHERE r.realm_url = $1`,
-      {
-        bind: [testRealmURL],
-        coerceTypes: {
-          value: 'JSON',
-        },
-      },
-    );
+    realmMeta = await fetchRealmMeta(adapter);
     assert.strictEqual(
-      results.length,
+      realmMeta.rows.length,
       1,
       'correct length of query result after indexing is done',
     );
-    value = results[0].value as [
-      {
-        code_ref: string;
-        display_name: string;
-        total: number;
-        icon_html: string;
-      },
-    ];
+    value = realmMeta.value;
     assert.strictEqual(
       value.length,
       3,
@@ -1549,26 +1540,82 @@ module('Unit | index-writer', function (hooks) {
     assert.deepEqual(
       value,
       [
+        makeCardTypeSummary(
+          `${testRealmURL}fancy-person/FancyPerson`,
+          'Fancy Person',
+          iconHTML,
+          2,
+        ),
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          1,
+        ),
+        makeCardTypeSummary(`${testRealmURL}pet/Pet`, 'Pet', iconHTML, 1),
+      ],
+      'correct card type summary after indexing is done',
+    );
+  });
+
+  test('update realm meta includes error entries with last known good state', async function (assert) {
+    let iconHTML = '<svg>test icon</svg>';
+    let personTypes = internalKeysFor(
+      { module: './person', name: 'Person' },
+      baseCardRef,
+    );
+    let personResource = makeCardResource('1', 'Mango', {
+      module: './person',
+      name: 'Person',
+    });
+
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [
         {
-          total: 2,
-          code_ref: `${testRealmURL}fancy-person/FancyPerson`,
-          display_name: 'Fancy Person',
-          icon_html: iconHTML,
-        },
-        {
-          total: 1,
-          code_ref: `${testRealmURL}person/Person`,
-          display_name: 'Person',
-          icon_html: iconHTML,
-        },
-        {
-          total: 1,
-          code_ref: `${testRealmURL}pet/Pet`,
-          display_name: 'Pet',
+          url: `${testRealmURL}1.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          pristine_doc: personResource as LooseCardResource,
+          search_doc: { name: 'Mango' },
+          display_names: [`Person`],
+          deps: [`${testRealmURL}person`],
+          types: personTypes,
           icon_html: iconHTML,
         },
       ],
-      'correct card type summary after indexing is done',
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+      type: 'error',
+      error: {
+        message: 'test error',
+        status: 500,
+        additionalErrors: [],
+      },
+    });
+    await batch.done();
+
+    let realmMeta = await fetchRealmMeta(adapter);
+    assert.strictEqual(
+      realmMeta.rows.length,
+      1,
+      'card type summary includes error entries',
+    );
+    let value = realmMeta.value;
+    assert.deepEqual(
+      value,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          1,
+        ),
+      ],
+      'card type summary uses last known good card type data',
     );
   });
 });
