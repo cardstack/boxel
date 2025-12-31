@@ -31,6 +31,7 @@ import {
   getPlaygroundSelections,
   assertCardExists,
   selectDeclaration,
+  removeSpecSelection,
 } from '../../helpers/playground';
 import { getRecentFiles } from '../../helpers/recent-files-cards';
 
@@ -288,6 +289,7 @@ module('Acceptance | Spec preview', function (hooks) {
     });
     setupUserSubscription();
     setupAuthEndpoints();
+    removeSpecSelection();
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader

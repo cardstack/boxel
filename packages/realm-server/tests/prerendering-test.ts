@@ -8,7 +8,7 @@ import type {
   ModuleRenderResponse,
   RenderRouteOptions,
 } from '@cardstack/runtime-common';
-import { Prerenderer } from '../prerender/index';
+import type { Prerenderer } from '../prerender/index';
 import { PagePool } from '../prerender/page-pool';
 import { RenderRunner } from '../prerender/render-runner';
 
@@ -18,6 +18,7 @@ import {
   matrixURL,
   cleanWhiteSpace,
   testCreatePrerenderAuth,
+  getPrerendererForTesting,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import {
@@ -89,7 +90,7 @@ module(basename(__filename), function () {
     let auth = () => testCreatePrerenderAuth(testUserId, permissions);
 
     hooks.before(async () => {
-      prerenderer = new Prerenderer({
+      prerenderer = getPrerendererForTesting({
         maxPages: 2,
         serverURL: prerenderServerURL,
       });
@@ -730,7 +731,7 @@ module(basename(__filename), function () {
     let auth = () => testCreatePrerenderAuth(testUserId, permissions);
 
     hooks.before(async () => {
-      prerenderer = new Prerenderer({
+      prerenderer = getPrerendererForTesting({
         maxPages: 2,
         serverURL: prerenderServerURL,
       });
@@ -964,7 +965,7 @@ module(basename(__filename), function () {
     };
 
     hooks.before(async function () {
-      prerenderer = new Prerenderer({
+      prerenderer = getPrerendererForTesting({
         maxPages: 2,
         serverURL: prerenderServerURL,
       });
@@ -1155,6 +1156,66 @@ module(basename(__filename), function () {
                   adoptsFrom: {
                     module: './intentional-error',
                     name: 'IntentionalError',
+                  },
+                },
+              },
+            },
+            'timer-error-card.gts': `
+              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+              import { Component } from 'https://cardstack.com/base/card-api';
+              export class TimerError extends CardDef {
+                @field name = contains(StringField);
+                static displayName = "Timer Error";
+                static isolated = class extends Component {
+                  get message() {
+                    setTimeout(() => {}, 0);
+                    setInterval(() => {}, 5);
+                    throw new Error('timer error during render');
+                  }
+                  <template>{{this.message}}</template>
+                }
+              }
+            `,
+            'timer-error.json': {
+              data: {
+                attributes: {
+                  name: 'Timer Error',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './timer-error-card',
+                    name: 'TimerError',
+                  },
+                },
+              },
+            },
+            'timer-timeout-card.gts': `
+              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+              import { Component } from 'https://cardstack.com/base/card-api';
+              setTimeout(() => {}, 0);
+              setInterval(() => {}, 5);
+              export class TimerTimeout extends CardDef {
+                @field name = contains(StringField);
+                static displayName = "Timer Timeout";
+                static isolated = class extends Component {
+                  get message() {
+                    setTimeout(() => {}, 0);
+                    setInterval(() => {}, 5);
+                    return this.args.model.name;
+                  }
+                  <template>{{this.message}}</template>
+                }
+              }
+            `,
+            'timer-timeout.json': {
+              data: {
+                attributes: {
+                  name: 'Timer Timeout',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './timer-timeout-card',
+                    name: 'TimerTimeout',
                   },
                 },
               },
@@ -1444,6 +1505,77 @@ module(basename(__filename), function () {
           iconHTML: null,
           isolatedHTML: null,
         });
+      });
+
+      test('error includes blocked timer summary when timers fire', async function (assert) {
+        const testCardURL = `${realmURL2}timer-error`;
+        let { response } = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          auth: auth(),
+        });
+
+        assert.ok(response.error, 'error present for timer error');
+        let message = response.error?.error.message ?? '';
+        assert.ok(
+          message.includes('timer error during render'),
+          `error message includes original error text, got: ${message}`,
+        );
+        let stack = response.error?.error.stack ?? '';
+        assert.ok(
+          stack.includes('Timers blocked during prerender'),
+          'timer summary appended to stack',
+        );
+        let timeoutMatch = stack.match(/setTimeout:\s+(\d+)/);
+        assert.ok(timeoutMatch, 'setTimeout count included');
+        assert.ok(
+          Number(timeoutMatch?.[1]) >= 1,
+          `expected at least one setTimeout, got: ${timeoutMatch?.[1]}`,
+        );
+        let intervalMatch = stack.match(/setInterval:\s+(\d+)/);
+        assert.ok(intervalMatch, 'setInterval count included');
+        assert.ok(
+          Number(intervalMatch?.[1]) >= 1,
+          `expected at least one setInterval, got: ${intervalMatch?.[1]}`,
+        );
+        assert.ok(
+          stack.includes('at get message'),
+          'timer summary includes a call stack',
+        );
+      });
+
+      test('timeout includes blocked timer summary in stack', async function (assert) {
+        const testCardURL = `${realmURL2}timer-timeout`;
+        await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          auth: auth(),
+        });
+        let { response } = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          auth: auth(),
+          opts: { timeoutMs: 1000, simulateTimeoutMs: 2000 },
+        });
+
+        assert.strictEqual(
+          response.error?.error.title,
+          'Render timeout',
+          'timeout surfaced',
+        );
+        let stack = response.error?.error.stack ?? '';
+        assert.ok(
+          stack.includes('Timers blocked during prerender'),
+          'timer summary appended to timeout stack',
+        );
+        assert.ok(
+          /setTimeout:\s+\d+/.test(stack),
+          'timeout stack includes setTimeout count',
+        );
+        assert.ok(
+          /setInterval:\s+\d+/.test(stack),
+          'timeout stack includes setInterval count',
+        );
       });
 
       test('missing link surfaces 404 without eviction', async function (assert) {
@@ -1843,7 +1975,7 @@ module(basename(__filename), function () {
             };
           };
 
-          localPrerenderer = new Prerenderer({
+          localPrerenderer = getPrerendererForTesting({
             maxPages: 1,
             serverURL: 'http://127.0.0.1:4225',
           });
@@ -2076,7 +2208,7 @@ module(basename(__filename), function () {
           };
         };
 
-        prerenderer = new Prerenderer({
+        prerenderer = getPrerendererForTesting({
           maxPages: 1,
           serverURL: 'http://127.0.0.1:4225',
         });
@@ -2173,7 +2305,7 @@ module(basename(__filename), function () {
           };
         };
 
-        prerenderer = new Prerenderer({
+        prerenderer = getPrerendererForTesting({
           maxPages: 1,
           serverURL: 'http://127.0.0.1:4225',
         });

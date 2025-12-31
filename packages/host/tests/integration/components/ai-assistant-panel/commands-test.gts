@@ -49,6 +49,8 @@ import { setupRenderingTest } from '../../../helpers/setup';
 
 module('Integration | ai-assistant-panel | commands', function (hooks) {
   const realmName = 'Operator Mode Workspace';
+  const readOnlyRealmName = 'Read Only Workspace';
+  const readOnlyRealmURL = 'http://test-realm/read-only/';
   let loader: Loader;
   let operatorModeStateService: OperatorModeStateService;
 
@@ -69,7 +71,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
-    activeRealms: [testRealmURL],
+    activeRealms: [testRealmURL, readOnlyRealmURL],
+    realmPermissions: {
+      [testRealmURL]: ['read', 'write'],
+      [readOnlyRealmURL]: ['read'],
+    },
     autostart: true,
     now: (() => {
       // deterministic clock so that, for example, screenshots
@@ -196,6 +202,68 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         'Person/buck.json': new Person({ firstName: 'Buck' }),
         'Person/hassan.json': new Person({ firstName: 'Hassan' }),
         '.realm.json': `{ "name": "${realmName}" }`,
+      },
+    });
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      realmURL: readOnlyRealmURL,
+      contents: {
+        'pet.gts': `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          export class Pet extends CardDef {
+            static displayName = 'Pet';
+            @field name = contains(StringField);
+          }
+        `,
+        'person.gts': `
+          import { contains, field, linksTo, CardDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import { Pet } from "./pet";
+          export class Person extends CardDef {
+            static displayName = 'Person';
+            @field firstName = contains(StringField);
+            @field pet = linksTo(Pet);
+          }
+        `,
+        'Person/ian.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Ian',
+            },
+            relationships: {
+              pet: {
+                data: {
+                  type: 'card',
+                  id: `${readOnlyRealmURL}Pet/rose`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person',
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'Pet/rose.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Rose',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './pet',
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        '.realm.json': `{ "name": "${readOnlyRealmName}" }`,
       },
     });
   });
@@ -877,6 +945,88 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert.dom(`${resultListItem}:nth-child(1)`).containsText('Buck');
     assert.dom(`${resultListItem}:nth-child(6)`).containsText('Justin');
     assert.dom(`${resultListItem}:nth-child(8)`).containsText('Mickey');
+  });
+
+  test('copy to workspace menu item is shown for writable realm', async function (assert) {
+    const id = `${testRealmURL}Person/fadhlan`;
+    const roomId = await renderAiAssistantPanel(`${id}.json`);
+    const toolArgs = {
+      description: 'Search for Person cards',
+      attributes: {
+        type: {
+          module: `${testRealmURL}person`,
+          name: 'Person',
+        },
+      },
+    };
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Search for the following card',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '9a5b7422-87de-4a93-9f07-9b7c40b75b1e',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
+          arguments: JSON.stringify(toolArgs),
+        },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+    await settled();
+
+    await click(
+      '[data-test-command-result-container] [data-test-more-options-button]',
+    );
+    assert.dom('[data-test-boxel-menu-item-text="Copy to Workspace"]').exists();
+  });
+
+  test('copy to workspace menu item is hidden for read-only realm', async function (assert) {
+    const id = `${readOnlyRealmURL}Person/ian`;
+    const roomId = await renderAiAssistantPanel(`${id}.json`);
+    const toolArgs = {
+      description: 'Search for Person cards',
+      attributes: {
+        type: {
+          module: `${testRealmURL}person`,
+          name: 'Person',
+        },
+      },
+    };
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Search for the following card',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '6c6e2d73-8e09-4b44-a0d9-688f36b73be8',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
+          arguments: JSON.stringify(toolArgs),
+        },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+    await settled();
+
+    assert
+      .dom(
+        '[data-test-command-result-container] [data-test-more-options-button]',
+      )
+      .doesNotExist();
+    assert
+      .dom('[data-test-boxel-menu-item-text="Copy to Workspace"]')
+      .doesNotExist();
   });
 
   test('it can copy search results card to workspace (no cards in stack)', async function (assert) {

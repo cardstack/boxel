@@ -1883,6 +1883,8 @@ importers:
         specifier: 'catalog:'
         version: 5.99.6
 
+  packages/catalog: {}
+
   packages/catalog-realm:
     dependencies:
       ember-modify-based-class-resource:

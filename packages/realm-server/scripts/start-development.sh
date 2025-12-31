@@ -15,6 +15,13 @@ START_EXPERIMENTS=$(if [ -z "$SKIP_EXPERIMENTS" ]; then echo "true"; else echo "
 
 DEFAULT_CATALOG_REALM_URL='http://localhost:4201/catalog/'
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
+CATALOG_REALM_PATH='../catalog-realm'
+
+if [ -n "$USE_EXTERNAL_CATALOG" ]; then
+  pnpm --dir=../catalog catalog:setup
+  pnpm --dir=../catalog catalog:update
+  CATALOG_REALM_PATH='../catalog/contents'
+fi
 
 PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
 
@@ -44,7 +51,7 @@ NODE_ENV=development \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='http://localhost:4201/base/' \
   \
-  --path='../catalog-realm' \
+  --path="${CATALOG_REALM_PATH}" \
   --username='catalog_realm' \
   --fromUrl="${CATALOG_REALM_URL}" \
   --toUrl="${CATALOG_REALM_URL}" \

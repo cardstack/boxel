@@ -44,6 +44,8 @@ import {
 import {
   enableRenderTimerStub,
   beginTimerBlock,
+  appendRenderTimerSummaryToStack,
+  resetRenderTimerStats,
 } from '../utils/render-timer-stub';
 
 import type LoaderService from '../services/loader-service';
@@ -151,6 +153,7 @@ export default class RenderRoute extends Route<Model> {
 
   async beforeModel(transition: Transition) {
     await super.beforeModel?.(transition);
+    resetRenderTimerStats();
     if (!isTesting()) {
       // tests have their own way of dealing with window level errors in card-prerender.gts
       this.#attachWindowErrorListeners();
@@ -609,7 +612,12 @@ export default class RenderRoute extends Route<Model> {
         normalizationContext,
       );
       let withType = withCardType(normalized, cardType);
-      return JSON.stringify(this.#stripLastKnownGoodHtml(withType), null, 2);
+      let withTimerSummary = this.#appendTimerSummary(withType);
+      return JSON.stringify(
+        this.#stripLastKnownGoodHtml(withTimerSummary),
+        null,
+        2,
+      );
     }
     let current: Transition['to'] | null = transition?.to;
     let id: string | undefined;
@@ -628,7 +636,12 @@ export default class RenderRoute extends Route<Model> {
         normalizationContext,
       );
       let withType = withCardType(normalized, cardType);
-      return JSON.stringify(this.#stripLastKnownGoodHtml(withType), null, 2);
+      let withTimerSummary = this.#appendTimerSummary(withType);
+      return JSON.stringify(
+        this.#stripLastKnownGoodHtml(withTimerSummary),
+        null,
+        2,
+      );
     }
     let errorJSONAPI = formattedError(id, error).errors[0];
     let errorPayload = normalizeRenderError(
@@ -637,11 +650,32 @@ export default class RenderRoute extends Route<Model> {
     );
     return JSON.stringify(
       this.#stripLastKnownGoodHtml(
-        withCardType(errorPayload as RenderError, cardType),
+        this.#appendTimerSummary(
+          withCardType(errorPayload as RenderError, cardType),
+        ),
       ),
       null,
       2,
     );
+  }
+
+  #appendTimerSummary(renderError: RenderError): RenderError {
+    let updatedStack = appendRenderTimerSummaryToStack(
+      renderError?.error?.stack ?? undefined,
+    );
+    if (
+      updatedStack === undefined ||
+      updatedStack === renderError.error.stack
+    ) {
+      return renderError;
+    }
+    return {
+      ...renderError,
+      error: {
+        ...renderError.error,
+        stack: updatedStack,
+      },
+    };
   }
 
   #stripLastKnownGoodHtml<T>(value: T): T {

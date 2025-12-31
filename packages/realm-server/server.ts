@@ -563,6 +563,24 @@ export class RealmServer {
         type: 'card',
         meta: {
           adoptsFrom: {
+            module: 'https://cardstack.com/base/index',
+            name: 'IndexCard',
+          },
+        },
+        relationships: {
+          cardsGrid: {
+            links: {
+              self: './cards-grid',
+            },
+          },
+        },
+      },
+    });
+    writeJSONSync(join(realmPath, 'cards-grid.json'), {
+      data: {
+        type: 'card',
+        meta: {
+          adoptsFrom: {
             module: 'https://cardstack.com/base/cards-grid',
             name: 'CardsGrid',
           },

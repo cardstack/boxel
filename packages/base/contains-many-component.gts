@@ -275,6 +275,11 @@ function coalesce<T>(arg1: T | undefined, arg2: T): T {
   return arg1 ?? arg2;
 }
 
+const componentCache = initSharedState(
+  'containsManyComponentCache',
+  () => new WeakMap<Box<BaseDef[]>, { component: BoxComponent }>(),
+);
+
 const overridesCache = initSharedState(
   'overridesCache',
   () => new WeakMap<CardDef, Map<string, typeof BaseDef>>(),
@@ -305,6 +310,10 @@ export function getContainsManyComponent({
     overrides?: () => Map<string, typeof BaseDef> | undefined,
   ): typeof BaseDef;
 }): BoxComponent {
+  let stable = componentCache.get(arrayField);
+  if (stable) {
+    return stable.component;
+  }
   // Wrap the the components in a function so that the template is reactive
   // to changes in the model (this is essentially a helper)
   let getComponents = () =>
@@ -399,7 +408,7 @@ export function getContainsManyComponent({
       </style>
     </template>
   };
-  return new Proxy(containsManyComponent, {
+  let proxy = new Proxy(containsManyComponent, {
     get(target, property, received) {
       // proxying the bare minimum of an Array in order to render within a
       // template. add more getters as necessary...
@@ -424,6 +433,12 @@ export function getContainsManyComponent({
       return containsManyComponent;
     },
   });
+  stable = {
+    component: proxy as unknown as BoxComponent,
+  };
+
+  componentCache.set(arrayField, stable);
+  return stable.component;
 }
 
 function myLoader(): Loader {

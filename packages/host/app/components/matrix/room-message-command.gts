@@ -33,6 +33,7 @@ import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -61,6 +62,7 @@ export default class RoomMessageCommand extends Component<Signature> {
   @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
   @service private declare realm: RealmService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
 
   private get previewCommandCode() {
     let { name, arguments: payload } = this.args.messageCommand;
@@ -161,9 +163,22 @@ export default class RoomMessageCommand extends Component<Signature> {
         canEdit: false,
         cardCrudFunctions: {},
         menuContext: 'ai-assistant',
+        menuContextParams: {
+          activeRealmURL: this.activeRealmURL,
+          canEditActiveRealm: this.canEditActiveRealm,
+        },
         commandContext: this.commandService.commandContext,
       }) ?? [];
     return toMenuItems(menuItems);
+  }
+
+  private get canEditActiveRealm() {
+    let activeRealmURL = this.activeRealmURL;
+    return activeRealmURL ? this.realm.canWrite(activeRealmURL) : false;
+  }
+
+  private get activeRealmURL() {
+    return this.operatorModeStateService.realmURL?.href;
   }
 
   private get commandResultCardForRendering(): CardDef {

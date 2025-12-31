@@ -10,6 +10,7 @@ import { timeout } from 'ember-concurrency';
 import window from 'ember-window-mock';
 
 import { isCardInstance } from '@cardstack/runtime-common';
+import type { LLMMode } from '@cardstack/runtime-common/matrix-constants';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import type * as CommandModule from 'https://cardstack.com/base/command';
@@ -304,6 +305,21 @@ export default class AiAssistantPanelService extends Service {
     return { enabledSkills, disabledSkills };
   }
 
+  private getPreferredLLMMode(): LLMMode | undefined {
+    let currentMode = this.currentRoomResource?.activeLLMMode;
+    if (currentMode) {
+      return currentMode;
+    }
+
+    let latestRoom = this.latestRoom;
+    if (!latestRoom) {
+      return undefined;
+    }
+
+    return this.matrixService.roomResources.get(latestRoom.roomId)
+      ?.activeLLMMode;
+  }
+
   private collectFileHistory(roomId: string): {
     attachedFiles: FileDef[];
     attachedCards: CardDef[];
@@ -369,6 +385,10 @@ export default class AiAssistantPanelService extends Service {
         );
 
         let input: any = { name };
+        let llmMode = this.getPreferredLLMMode();
+        if (llmMode) {
+          input.llmMode = llmMode;
+        }
         let enabledSkills: SkillCard[] = [];
         let disabledSkills: SkillCard[] = [];
 
