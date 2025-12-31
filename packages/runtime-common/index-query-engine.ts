@@ -69,6 +69,20 @@ interface IndexedModule {
   deps: string[] | null;
 }
 
+export interface IndexedFile {
+  type: 'file';
+  canonicalURL: string;
+  lastModified: number | null;
+  resourceCreatedAt: number | null;
+  searchDoc: Record<string, any> | null;
+  types: string[] | null;
+  displayNames: string[] | null;
+  deps: string[] | null;
+  realmVersion: number;
+  realmURL: string;
+  indexedAt: number | null;
+}
+
 export interface IndexedInstance {
   type: 'instance';
   instance: CardResource;
@@ -307,6 +321,57 @@ export class IndexQueryEngine {
           ? parseInt(instanceEntry.last_modified)
           : null,
       resourceCreatedAt: parseInt(instanceEntry.resource_created_at),
+    };
+  }
+
+  async getFile(
+    url: URL,
+    opts?: GetEntryOptions,
+  ): Promise<IndexedFile | undefined> {
+    let result = (await this.#query([
+      `SELECT i.*`,
+      `FROM ${tableFromOpts(opts)} as i
+       WHERE`,
+      ...every([
+        any([
+          [`i.url =`, param(url.href)],
+          [`i.file_alias =`, param(url.href)],
+        ]),
+        ['i.type =', param('file')],
+      ]),
+    ] as Expression)) as unknown as BoxelIndexTable[];
+    let maybeResult: BoxelIndexTable | undefined = result[0];
+    if (!maybeResult) {
+      return undefined;
+    }
+    if (maybeResult.is_deleted) {
+      return undefined;
+    }
+    let {
+      url: canonicalURL,
+      search_doc: searchDoc,
+      realm_version: realmVersion,
+      realm_url: realmURL,
+      indexed_at: indexedAt,
+      last_modified: lastModified,
+      resource_created_at: resourceCreatedAt,
+      deps,
+      types,
+      display_names: displayNames,
+    } = maybeResult;
+    return {
+      type: 'file',
+      canonicalURL,
+      searchDoc,
+      types,
+      displayNames,
+      deps,
+      lastModified: lastModified != null ? parseInt(lastModified) : null,
+      resourceCreatedAt:
+        resourceCreatedAt != null ? parseInt(resourceCreatedAt) : null,
+      realmVersion,
+      realmURL,
+      indexedAt: indexedAt != null ? parseInt(indexedAt) : null,
     };
   }
 

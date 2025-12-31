@@ -35,6 +35,7 @@ import {
   type Reader,
   type Stats,
 } from './index';
+import { inferContentType } from './infer-content-type';
 import { CardError, isCardError, serializableError } from './error';
 
 function canonicalURL(url: string, relativeTo?: string): string {
@@ -310,12 +311,6 @@ export class IndexRunner {
     let invalidationList: string[] = [];
     let skipList: string[] = [];
     for (let [url, lastModified] of Object.entries(filesystemMtimes)) {
-      if (!url.endsWith('.json') && !hasExecutableExtension(url)) {
-        // Only allow json and executable files to be invalidated so that we
-        // don't end up with invalidated files that weren't meant to be indexed
-        // (images, etc)
-        continue;
-      }
       let indexEntry = indexMtimes.get(url);
 
       if (
@@ -414,8 +409,21 @@ export class IndexRunner {
             resourceCreatedAt,
             resource,
           });
+          return;
         }
       }
+
+      if (lastModified == null) {
+        this.#log.warn(
+          `${jobIdentity(this.#jobInfo)} No lastModified date available for ${url.href}, using current time`,
+        );
+        lastModified = unixTime(Date.now());
+      }
+      await this.indexFile({
+        path: localPath,
+        lastModified,
+        resourceCreatedAt,
+      });
     }
     this.#log.debug(
       `${jobIdentity(this.#jobInfo)} completed visiting file ${url.href} in ${Date.now() - start}ms`,
@@ -667,6 +675,35 @@ export class IndexRunner {
       deferred?.fulfill();
       this.reportStatus('finish', fileURL, resource);
     }
+  }
+
+  private async indexFile({
+    path,
+    lastModified,
+    resourceCreatedAt,
+  }: {
+    path: LocalPath;
+    lastModified: number;
+    resourceCreatedAt: number;
+  }): Promise<void> {
+    let fileURL = this.#realmPaths.fileURL(path).href;
+    let name = path.split('/').pop() ?? path;
+    let contentType = inferContentType(name);
+    await this.batch.updateEntry(new URL(fileURL), {
+      // Temporary: will be replaced once FileDef extractors populate richer metadata.
+      type: 'file',
+      lastModified,
+      resourceCreatedAt,
+      deps: new Set(),
+      searchData: {
+        url: fileURL,
+        sourceUrl: fileURL,
+        name,
+        contentType,
+      },
+      types: [],
+      displayNames: [],
+    });
   }
 
   private async updateEntry(
