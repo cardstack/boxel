@@ -16,7 +16,40 @@
         "tileNumber": null,
         "accentColor": null
       },
-      "skills": [],
+      "skills": [
+        {
+          "skillIcon": "💬",
+          "skillName": "Prompt",
+          "skillType": null,
+          "skillDescription": "Write in our brand voice...",
+          "skillSections": [],
+          "accentColor": null
+        },
+        {
+          "skillIcon": "📋",
+          "skillName": "Capture",
+          "skillType": null,
+          "skillDescription": "Session Report",
+          "skillSections": [],
+          "accentColor": null
+        },
+        {
+          "skillIcon": "📦",
+          "skillName": "Package",
+          "skillType": null,
+          "skillDescription": "Skill Card",
+          "skillSections": [],
+          "accentColor": "var(--boxel-teal)"
+        },
+        {
+          "skillIcon": "🏛️",
+          "skillName": "Activate",
+          "skillType": null,
+          "skillDescription": "Active Skills",
+          "skillSections": [],
+          "accentColor": null
+        }
+      ],
       "bullets": [
         "Vertical skills: Brand guides, policy manuals",
         "Domain skills: Legal review, financial analysis",

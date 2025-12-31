@@ -99,10 +99,7 @@ class Isolated extends Component<typeof HomeLayoutCard> {
           var(--home-muted) 100%
         );
       }
-      :deep(code) {
-        background: var(--diagram-background, var(--home-muted));
-        color: var(--diagram-foreground, var(--home-foreground));
-      }
+
       .grid-background {
         position: absolute;
         top: 0;

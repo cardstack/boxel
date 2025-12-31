@@ -136,7 +136,7 @@ interface SectionCardComponentSignature {
     linkUrl?: string;
   };
   Element: HTMLElement;
-  Blocks: { default: [] };
+  Blocks: { before: []; default: [] };
 }
 
 export class SectionCardComponent extends Component<SectionCardComponentSignature> {
@@ -145,20 +145,35 @@ export class SectionCardComponent extends Component<SectionCardComponentSignatur
       {{#if @badgeLabel}}
         <Pill class='highlight-card-badge'>{{@badgeLabel}}</Pill>
       {{/if}}
-      <h3 class='highlight-card-title'>{{@title}}</h3>
-      {{#if @text}}
-        <p class='highlight-card-text'>{{@text}}</p>
+
+      {{#if (has-block 'before')}}
+        <div>
+          {{yield to='before'}}
+        </div>
       {{/if}}
 
-      {{yield}}
+      <header>
+        <h3 class='highlight-card-title'>{{@title}}</h3>
+        {{#if @text}}
+          <p class='highlight-card-text'>{{@text}}</p>
+        {{/if}}
+      </header>
 
-      <a
-        href={{if @linkUrl (sanitizeHtml @linkUrl) '/'}}
-        class='highlight-card-link'
-        style={{cssVar link-color=@linkColor}}
-      >
-        {{@linkText}}
-      </a>
+      {{#if (has-block)}}
+        <div>
+          {{yield}}
+        </div>
+      {{/if}}
+
+      <footer>
+        <a
+          href={{if @linkUrl (sanitizeHtml @linkUrl) '/'}}
+          class='highlight-card-link'
+          style={{cssVar link-color=@linkColor}}
+        >
+          {{@linkText}}
+        </a>
+      </footer>
     </CardContainer>
 
     <style scoped>
@@ -171,6 +186,10 @@ export class SectionCardComponent extends Component<SectionCardComponentSignatur
         --card-shadow:
           0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
         position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1.5rem;
         background: var(--card);
         color: var(--card-foreground);
         border: 1px solid var(--border);
@@ -191,6 +210,7 @@ export class SectionCardComponent extends Component<SectionCardComponentSignatur
         line-height: var(--boxel-caption-line-height);
         letter-spacing: var(--boxel-lsp-xl);
         text-transform: uppercase;
+        z-index: 1;
       }
       .highlight-card-badge + .highlight-card-title {
         margin-top: 1.25rem;
@@ -259,6 +279,11 @@ export class Section extends Component<SectionSignature> {
         gap: 2rem;
       }
       :deep(.section-cards-grid .compound-field) {
+        height: 100%;
+        word-break: initial;
+      }
+      :deep(.section-cards-grid .compound-field > *) {
+        width: 100%;
         height: 100%;
       }
     </style>

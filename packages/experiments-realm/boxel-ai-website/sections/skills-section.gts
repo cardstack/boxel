@@ -9,7 +9,12 @@ import StringField from 'https://cardstack.com/base/string';
 import ColorField from 'https://cardstack.com/base/color';
 import enumField from 'https://cardstack.com/base/enum';
 
-import { Section, SectionBullet } from '../components/section';
+import {
+  Section,
+  SectionBullet,
+  SectionCardComponent,
+} from '../components/section';
+import { SkillFlowStep } from '../components/skill-flow-step';
 import { FeatureTileField } from '../fields/feature-tile-field';
 import { SectionCard } from './section-card';
 
@@ -24,6 +29,24 @@ class SkillItemField extends FieldDef {
   @field skillDescription = contains(StringField);
   @field skillSections = containsMany(StringField);
   @field accentColor = contains(ColorField);
+
+  static fitted = class Fitted extends Component<typeof this> {
+    <template>
+      <SkillFlowStep
+        class='skill-flow-step-fitted'
+        @icon={{@model.skillIcon}}
+        @title={{@model.skillName}}
+        @description={{@model.skillDescription}}
+      />
+
+      <style scoped>
+        .skill-flow-step-fitted {
+          min-width: 6.25rem; /* 100px */
+          min-height: 8.625rem; /* 138px */
+        }
+      </style>
+    </template>
+  };
 }
 
 export class SkillsSection extends SectionCard {
@@ -47,7 +70,18 @@ export class SkillsSection extends SectionCard {
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <Section as |s|>
-        <@fields.skillFlow />
+        <SectionCardComponent
+          @badgeLabel='Skill Flow'
+          @title='From Prompt to Skill'
+          @text='Prompts become skills. Skills become capabilities. Capabilities compound across every conversation.'
+        >
+          <:before>
+            <@fields.skills
+              class='section-cards-grid skill-flow-grid'
+              @format='fitted'
+            />
+          </:before>
+        </SectionCardComponent>
         <s.Header
           @headline={{@model.headline}}
           @subheadline={{@model.subheadline}}
@@ -62,6 +96,13 @@ export class SkillsSection extends SectionCard {
           <@fields.models />
         </s.Row>
       </Section>
+
+      <style scoped>
+        .skill-flow-grid {
+          --card-width: 6.25rem;
+          gap: 0.75rem;
+        }
+      </style>
     </template>
   };
 }

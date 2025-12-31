@@ -6,7 +6,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 
-import { Section, SectionHeader } from '../components/section';
+import { Section } from '../components/section';
 import { SectionCard } from './section-card';
 import {
   CatalogItemField,
@@ -32,8 +32,9 @@ export class CatalogSection extends SectionCard {
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <Section>
-        <SectionHeader
+      <Section as |s|>
+        <s.Header
+          class='section-layout-row'
           @headline={{@model.headline}}
           @subheadline={{@model.subheadline}}
           @label={{@model.headerLabel}}
