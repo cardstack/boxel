@@ -331,127 +331,15 @@ export default class AiAssistantMessage extends Component<Signature> {
       .ai-assistant-message > * + * {
         margin-top: var(--boxel-sp-xs);
       }
-
-      /* The purpose of the CSS that targets code patch correctness commands and
-      overrides the styling of the command component is that we want the
-      correctness commands to be styled in a way where they appear as if they
-      are a part of the previous message and not as a new message. */
-
-      .ai-assistant-message.code-patch-correctness :deep(.command-code-block) {
-        background-color: transparent;
-        border: 0;
-        border-radius: 0;
-      }
-      .ai-assistant-message.code-patch-correctness :deep(.code-block-header) {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxxs);
-        min-height: auto;
-        padding: 2px 0;
-        background-color: transparent;
-      }
-      .ai-assistant-message.code-patch-correctness
-        :deep(.code-block-header .actions) {
-        display: contents;
-      }
-      .ai-assistant-message.code-patch-correctness
-        :deep(.code-block-header .command-action) {
-        order: 1;
-        flex-shrink: 0;
-      }
-      .ai-assistant-message.code-patch-correctness
-        :deep(.code-block-header .command-action.state-indicator) {
-        width: 1rem;
-        height: 1rem;
-        min-width: 1rem;
-        min-height: 1rem;
-        padding: 0;
-        aspect-ratio: 1;
-      }
-      .ai-assistant-message.code-patch-correctness
-        :deep(.code-block-header .command-action.state-indicator.applying) {
-        border-radius: 50%;
-        overflow: hidden;
-      }
-      .ai-assistant-message.code-patch-correctness
-        :deep(.code-block-header .command-action.state-indicator svg) {
-        width: 10px;
-        height: 10px;
-      }
-
-      .ai-assistant-message.code-patch-correctness
-        :deep(
-          .room-message-command[data-test-command-id^='check-']
-            .command-action.state-indicator.ready
-        ) {
-        width: 1.5rem;
-        height: 1.5rem;
-        min-width: 1.5rem;
-        min-height: 1.5rem;
-        padding: 0;
-        border-radius: 50%;
-        visibility: hidden;
-        pointer-events: none;
-      }
-      .ai-assistant-message.code-patch-correctness
-        :deep(.code-block-header .command-action.state-indicator.applied svg) {
-        margin-left: -1px;
-      }
-      .ai-assistant-message.code-patch-correctness
-        :deep(
-          .code-block-header
-            .command-action.state-indicator.applied-with-error
-            svg
-        ) {
-        margin-top: -1px;
-      }
-      .ai-assistant-message.code-patch-correctness
-        :deep(.code-block-header .command-description) {
-        order: 2;
-        flex: 1;
-        min-width: 0;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        opacity: 0.8;
-      }
-      .ai-assistant-message.code-patch-correctness
-        :deep(.code-block-header .hide-info-button) {
-        order: 3;
-        flex-shrink: 0;
-        margin-left: auto;
-      }
-      .ai-assistant-message.code-patch-correctness
-        :deep(.code-block-header .trigger) {
-        order: 3;
-        flex-shrink: 0;
-      }
-      .ai-assistant-message.code-patch-correctness
-        :deep(.code-block-header .view-info-button) {
-        --boxel-icon-button-width: 1.5rem;
-        --boxel-icon-button-height: 1.5rem;
-      }
-      .ai-assistant-message.code-patch-correctness
-        :deep(.code-block-header .view-info-button .svg-icon) {
-        width: 16px;
-        height: 16px;
-      }
-      .ai-assistant-message.code-patch-correctness
-        :deep(.code-block-header .trigger:last-of-type) {
-        margin-left: auto;
-      }
       .content {
         overflow: hidden;
       }
       .content > :deep(* + *) {
         margin-top: var(--boxel-sp-sm);
       }
-      .ai-assistant-message.code-patch-correctness .content {
-        display: flex;
-        flex-direction: column;
-        gap: 0;
-      }
-      .ai-assistant-message.code-patch-correctness .content > :deep(* + *) {
+      .ai-assistant-message.code-patch-correctness
+        .content
+        > :deep(.room-message-command.compact + .room-message-command.compact) {
         margin-top: 0;
       }
       :deep(pre) {
@@ -603,7 +491,7 @@ const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSign
         margin-top: var(--boxel-sp-xs);
       }
       .ai-assistant-conversation > :deep(* + .code-patch-correctness) {
-        margin-top: var(--boxel-sp-xs);
+        margin-top: var(--boxel-sp-xxs);
       }
     </style>
   </template>;

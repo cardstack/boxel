@@ -51,6 +51,7 @@ interface Signature {
     runCommand: () => void;
     isError?: boolean;
     isPending?: boolean;
+    isCompact?: boolean;
     isStreaming: boolean;
     monacoSDK: MonacoSDK;
   };
@@ -204,13 +205,14 @@ export default class RoomMessageCommand extends Component<Signature> {
         is-pending=@isPending
         is-error=@isError
         is-failed=(bool this.hasFailedState)
+        compact=@isCompact
       }}
       data-test-command-id={{@messageCommand.commandRequest.id}}
       ...attributes
     >
       {{#if @isStreaming}}
         <CodeBlock
-          class='command-code-block'
+          class={{cn 'command-code-block' compact=@isCompact}}
           @monacoSDK={{@monacoSDK}}
           @codeData={{hash code=this.previewCommandCode language='json'}}
           data-test-command-card-idle={{not
@@ -223,12 +225,13 @@ export default class RoomMessageCommand extends Component<Signature> {
             @action={{@runCommand}}
             @actionVerb={{@messageCommand.actionVerb}}
             @code={{this.previewCommandCode}}
+            @isCompact={{@isCompact}}
             @commandState='preparing'
           />
         </CodeBlock>
       {{else}}
         <CodeBlock
-          class='command-code-block'
+          class={{cn 'command-code-block' compact=@isCompact}}
           {{this.scrollBottomIntoView}}
           @monacoSDK={{@monacoSDK}}
           @codeData={{hash code=this.previewCommandCode language='json'}}
@@ -243,6 +246,7 @@ export default class RoomMessageCommand extends Component<Signature> {
             @actionVerb={{@messageCommand.actionVerb}}
             @code={{this.previewCommandCode}}
             @commandState={{this.applyButtonState}}
+            @isCompact={{@isCompact}}
             @isDisplayingCode={{this.isDisplayingCode}}
             @toggleCode={{this.toggleViewCode}}
           />

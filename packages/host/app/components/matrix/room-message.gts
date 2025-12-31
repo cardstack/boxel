@@ -219,6 +219,7 @@ export default class RoomMessage extends Component<Signature> {
             @runCommand={{fn (perform this.run) command}}
             @roomId={{@roomId}}
             @isPending={{@isPending}}
+            @isCompact={{this.message.isCodePatchCorrectness}}
             @monacoSDK={{@monacoSDK}}
             @isError={{bool this.errorMessage}}
             @isStreaming={{@isStreaming}}
