@@ -13,6 +13,7 @@ import {
   type QueryOptions,
   type IndexedModuleOrError,
   type InstanceOrError,
+  type IndexedFile,
   type DefinitionLookup,
   visitInstanceURLs,
   maybeRelativeURL,
@@ -239,6 +240,10 @@ export class RealmIndexQueryEngine {
     opts?: QueryOptions,
   ): Promise<InstanceOrError | undefined> {
     return await this.#indexQueryEngine.getInstance(url, opts);
+  }
+
+  async file(url: URL, opts?: QueryOptions): Promise<IndexedFile | undefined> {
+    return await this.#indexQueryEngine.getFile(url, opts);
   }
 
   private async populateQueryFields(

@@ -60,7 +60,7 @@ export class IndexWriter {
   }
 }
 
-export type IndexEntry = InstanceEntry | ModuleEntry | ErrorEntry;
+export type IndexEntry = InstanceEntry | ModuleEntry | ErrorEntry | FileEntry;
 export type LastModifiedTimes = Map<
   string,
   { type: string; lastModified: number | null }
@@ -96,6 +96,16 @@ interface ModuleEntry {
   lastModified: number;
   resourceCreatedAt: number;
   deps: Set<string>;
+}
+
+export interface FileEntry {
+  type: 'file';
+  lastModified: number;
+  resourceCreatedAt: number;
+  deps: Set<string>;
+  searchData?: Record<string, any>;
+  types?: string[];
+  displayNames?: string[];
 }
 
 export class Batch {
@@ -256,6 +266,63 @@ export class Batch {
         : undefined;
     let href = url.href;
     this.#invalidations.add(url.href);
+    let entryPayload;
+    switch (entry.type) {
+      case 'instance':
+        entryPayload = {
+          // TODO in followup PR we need to alter the SearchEntry type to use
+          // a document instead of a resource
+          type: 'instance',
+          pristine_doc: entry.resource,
+          search_doc: entry.searchData,
+          isolated_html: entry.isolatedHtml,
+          head_html: entry.headHtml ?? null,
+          embedded_html: entry.embeddedHtml,
+          fitted_html: entry.fittedHtml,
+          atom_html: entry.atomHtml,
+          icon_html: entry.iconHTML,
+          deps: [...entry.deps],
+          types: entry.types,
+          display_names: entry.displayNames,
+          last_modified: entry.lastModified,
+          resource_created_at: entry.resourceCreatedAt,
+          error_doc: null,
+        };
+        break;
+      case 'module':
+        entryPayload = {
+          type: 'module',
+          deps: [...entry.deps],
+          last_modified: entry.lastModified,
+          resource_created_at: entry.resourceCreatedAt,
+          error_doc: null,
+        };
+        break;
+      case 'file':
+        entryPayload = {
+          type: 'file',
+          deps: [...entry.deps],
+          search_doc: entry.searchData ?? null,
+          types: entry.types ?? null,
+          display_names: entry.displayNames ?? null,
+          last_modified: entry.lastModified,
+          resource_created_at: entry.resourceCreatedAt,
+          error_doc: null,
+        };
+        break;
+      case 'error':
+        entryPayload = {
+          types: entry.types,
+          search_doc: entry.searchData,
+          // favor the last known good types over the types derived from the error state
+          ...((await this.getProductionVersion(url)) ?? {}),
+          type: 'error',
+          error_doc: errorEntry?.error ?? entry.error,
+        };
+        break;
+      default:
+        throw new Error(`Unsupported index entry type`);
+    }
     let preparedEntry = {
       url: href,
       file_alias: trimExecutableExtension(url).href.replace(/\.json$/, ''),
@@ -263,42 +330,7 @@ export class Batch {
       realm_url: this.realmURL.href,
       is_deleted: false,
       indexed_at: Date.now(),
-      ...(entry.type === 'instance'
-        ? {
-            // TODO in followup PR we need to alter the SearchEntry type to use
-            // a document instead of a resource
-            type: 'instance',
-            pristine_doc: entry.resource,
-            search_doc: entry.searchData,
-            isolated_html: entry.isolatedHtml,
-            head_html: entry.headHtml ?? null,
-            embedded_html: entry.embeddedHtml,
-            fitted_html: entry.fittedHtml,
-            atom_html: entry.atomHtml,
-            icon_html: entry.iconHTML,
-            deps: [...entry.deps],
-            types: entry.types,
-            display_names: entry.displayNames,
-            last_modified: entry.lastModified,
-            resource_created_at: entry.resourceCreatedAt,
-            error_doc: null,
-          }
-        : entry.type === 'module'
-          ? {
-              type: 'module',
-              deps: [...entry.deps],
-              last_modified: entry.lastModified,
-              resource_created_at: entry.resourceCreatedAt,
-              error_doc: null,
-            }
-          : {
-              types: entry.types,
-              search_doc: entry.searchData,
-              // favor the last known good types over the types derived from the error state
-              ...((await this.getProductionVersion(url)) ?? {}),
-              type: 'error',
-              error_doc: errorEntry?.error ?? entry.error,
-            }),
+      ...entryPayload,
     } as Omit<BoxelIndexTable, 'last_modified' | 'indexed_at'> & {
       // we do this because pg automatically casts big ints into strings, so
       // we unwind that to accurately type the structure that we want to pass
@@ -527,7 +559,11 @@ export class Batch {
       [
         id,
         trimExecutableExtension(new URL(id)).href,
-        hasExecutableExtension(id) ? 'module' : 'instance',
+        hasExecutableExtension(id)
+          ? 'module'
+          : id.endsWith('.json')
+            ? 'instance'
+            : 'file',
         this.realmVersion,
         this.realmURL.href,
         true,

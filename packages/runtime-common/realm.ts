@@ -33,6 +33,7 @@ import {
   maybeHandleScopedCSSRequest,
   authorizationMiddleware,
   internalKeyFor,
+  unixTime,
   query,
   param,
   isValidPrerenderedHtmlFormat,
@@ -56,6 +57,7 @@ import {
   userIdFromUsername,
   isCardDocumentString,
   isBrowserTestEnv,
+  type IndexedFile,
 } from './index';
 import { visitModuleDeps } from './code-ref';
 import merge from 'lodash/merge';
@@ -63,7 +65,7 @@ import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
 import isEqual from 'lodash/isEqual';
 import { z } from 'zod';
-import { lookup as lookupMimeType } from 'mime-types';
+import { inferContentType } from './infer-content-type';
 import type { CardFields } from './resource-types';
 import {
   fileContentToText,
@@ -170,13 +172,9 @@ const CACHE_HIT_VALUE = 'hit';
 const CACHE_MISS_VALUE = 'miss';
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
-const DEFAULT_FILE_CONTENT_TYPE = 'application/octet-stream';
 const FILE_DEF_CODE_REF: ResolvedCodeRef = {
   module: `${baseRealm.url}file-api`,
   name: 'FileDef',
-};
-const CONTENT_TYPE_OVERRIDES: Record<string, string> = {
-  '.gts': 'text/typescript+glimmer',
 };
 
 type CachedSourceFileEntry = {
@@ -226,20 +224,6 @@ function buildEtag(
   }
   let base = String(lastModified);
   return variant ? `${base}:${variant}` : base;
-}
-
-function inferContentType(filename: string): string {
-  let extensionIndex = filename.lastIndexOf('.');
-  if (extensionIndex === -1) {
-    return DEFAULT_FILE_CONTENT_TYPE;
-  }
-  let extension = filename.slice(extensionIndex).toLowerCase();
-  let overrideContentType = CONTENT_TYPE_OVERRIDES[extension];
-  if (overrideContentType) {
-    return overrideContentType;
-  }
-  let mimeType = lookupMimeType(filename);
-  return mimeType ? mimeType : DEFAULT_FILE_CONTENT_TYPE;
 }
 
 export interface TokenClaims {
@@ -2116,6 +2100,53 @@ export class Realm {
     });
   }
 
+  private async fileCardDocumentFromIndex(
+    requestContext: RequestContext,
+    localPath: LocalPath,
+    fileEntry: IndexedFile,
+    contentType: SupportedMimeType = SupportedMimeType.CardJson,
+  ): Promise<Response> {
+    let fileURL = this.paths.fileURL(localPath).href;
+    let name = localPath.split('/').pop() ?? localPath;
+    let inferredContentType = inferContentType(name);
+    let createdAt = fileEntry.resourceCreatedAt ?? fileEntry.lastModified;
+    let realmInfo = await this.parseRealmInfo();
+    let searchDoc = fileEntry.searchDoc ?? {};
+    let doc: LooseSingleCardDocument = {
+      data: {
+        type: 'card',
+        id: fileURL,
+        attributes: {
+          name: searchDoc.name ?? name,
+          url: searchDoc.url ?? fileURL,
+          sourceUrl: searchDoc.sourceUrl ?? fileURL,
+          contentType: searchDoc.contentType ?? inferredContentType,
+        },
+        meta: {
+          adoptsFrom: FILE_DEF_CODE_REF,
+          lastModified: fileEntry.lastModified ?? unixTime(Date.now()),
+          realmInfo,
+          realmURL: this.url,
+          resourceCreatedAt: createdAt ?? unixTime(Date.now()),
+        },
+        links: { self: fileURL },
+      },
+    };
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: {
+          'content-type': contentType,
+          ...lastModifiedHeader(doc),
+          ...(createdAt != null
+            ? { 'x-created': formatRFC7231(createdAt * 1000) }
+            : {}),
+        },
+      },
+      requestContext,
+    });
+  }
+
   private async getFileMeta(
     request: Request,
     requestContext: RequestContext,
@@ -2123,6 +2154,17 @@ export class Realm {
     let localPath = this.paths.local(new URL(request.url));
     if (localPath === '') {
       localPath = 'index';
+    }
+    let fileEntry = await this.#realmIndexQueryEngine.file(
+      this.paths.fileURL(localPath),
+    );
+    if (fileEntry) {
+      return await this.fileCardDocumentFromIndex(
+        requestContext,
+        localPath,
+        fileEntry,
+        SupportedMimeType.FileMeta,
+      );
     }
     let fileResponse = await this.fileCardDocument(
       requestContext,

@@ -1,5 +1,6 @@
 import { module, test } from 'qunit';
 import { dirSync } from 'tmp';
+import { SupportedMimeType } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
   LooseSingleCardDocument,
@@ -852,6 +853,43 @@ module(basename(__filename), function () {
       ['random-file.txt', 'random-image.png', '.DS_Store'].forEach((file) => {
         assert.notOk(deletedEntryUrls.includes(file));
       });
+    });
+
+    test('indexes non-card files as file entries', async function (assert) {
+      let rows = (await testDbAdapter.execute(
+        `SELECT url, type, last_modified FROM boxel_index WHERE url = '${testRealm}random-file.txt'`,
+      )) as { url: string; type: string; last_modified: string | null }[];
+      assert.strictEqual(rows.length, 1, 'file entry is in the index');
+      assert.strictEqual(rows[0].type, 'file', 'file entry type is file');
+      assert.ok(rows[0].last_modified, 'file entry has last_modified');
+    });
+
+    test('serves FileMeta from index entries', async function (assert) {
+      // Mutate the index row so we can validate that the response must come from the index,
+      // not from filesystem metadata.
+      await testDbAdapter.execute(
+        `UPDATE boxel_index SET search_doc = '{"name":"from-index.txt","contentType":"application/x-index-test"}'::jsonb WHERE url = '${testRealm}random-file.txt'`,
+      );
+      let response = await fetch(`${testRealm}random-file.txt`, {
+        headers: { Accept: SupportedMimeType.FileMeta },
+      });
+      assert.strictEqual(response.status, 200, 'file meta response is ok');
+      let doc = (await response.json()) as LooseSingleCardDocument;
+      assert.strictEqual(doc.data.id, `${testRealm}random-file.txt`);
+      assert.strictEqual(
+        doc.data.attributes?.name,
+        'from-index.txt',
+        'name sourced from index',
+      );
+      assert.strictEqual(
+        doc.data.attributes?.contentType,
+        'application/x-index-test',
+        'contentType sourced from index',
+      );
+      assert.ok(
+        response.headers.get('last-modified'),
+        'response includes last-modified',
+      );
     });
   });
 
