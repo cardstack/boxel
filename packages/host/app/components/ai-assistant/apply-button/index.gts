@@ -175,18 +175,23 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       overflow: hidden;
     }
 
-    .state-indicator:not(.applying):not(.preparing):not(.ready) {
+    .state-indicator:not(.applying):not(.preparing):not(.ready):not(.compact) {
       width: 1.5rem;
       aspect-ratio: 1;
       border-radius: 50%;
     }
-    .state-indicator.compact:not(.applying):not(.preparing):not(.ready) {
+    .state-indicator.compact {
       width: 1rem;
       height: 1rem;
       min-width: 1rem;
       min-height: 1rem;
       padding: 0;
       aspect-ratio: 1;
+      border-radius: 50%;
+    }
+    .state-indicator.compact.ready {
+      visibility: hidden;
+      pointer-events: none;
     }
     .state-indicator.compact svg {
       width: 10px;
@@ -197,16 +202,6 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
     }
     .state-indicator.compact.applied-with-error svg {
       margin-top: -1px;
-    }
-    .state-indicator.compact.ready {
-      width: 1.5rem;
-      height: 1.5rem;
-      min-width: 1.5rem;
-      min-height: 1.5rem;
-      padding: 0;
-      border-radius: 50%;
-      visibility: hidden;
-      pointer-events: none;
     }
     .state-indicator.failed {
       --icon-color: var(--boxel-light);
