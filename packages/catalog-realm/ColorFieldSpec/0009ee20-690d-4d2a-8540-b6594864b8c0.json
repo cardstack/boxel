@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": null,
+      "specType": null,
+      "containedExamples": [],
+      "title": null,
+      "description": null,
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../color-field-spec",
+        "name": "ColorFieldSpec"
+      }
+    }
+  }
+}

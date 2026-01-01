@@ -1,16 +1,16 @@
 {
   "data": {
-    "meta": {
-      "adoptsFrom": {
-        "name": "Spec",
-        "module": "https://cardstack.com/base/spec"
-      }
-    },
+      "meta": {
+        "adoptsFrom": {
+          "name": "ColorFieldSpec",
+          "module": "../color-field-spec"
+        }
+      },
     "type": "card",
     "attributes": {
       "ref": {
         "name": "default",
-        "module": "http://localhost:4201/catalog/fields/color"
+        "module": "../fields/color"
       },
       "title": "Color Field",
       "readMe": "",

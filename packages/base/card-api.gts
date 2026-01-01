@@ -3433,6 +3433,94 @@ export function getComponent(
   return boxComponent;
 }
 
+export function getFieldComponent(
+  fieldDef: typeof BaseDef,
+  specInstance: BaseDef,
+  fieldName: string,
+  configuration?: FieldConfiguration,
+  opts?: { componentCodeRef?: CodeRef },
+): BoxComponent | undefined {
+  // Check if fieldDef is actually a FieldDef
+  const isFieldDef =
+    'fieldType' in (fieldDef as any).prototype ||
+    (fieldDef as any).prototype?.constructor?.name?.endsWith('Field');
+
+  if (!isFieldDef) {
+    return undefined;
+  }
+
+  // Get the empty value for the field
+  const isPrimitiveField = primitive in fieldDef;
+  let fieldValue: any;
+  if (isPrimitiveField) {
+    const staticEmptyValue = (fieldDef as any)[emptyValue];
+    fieldValue = staticEmptyValue !== undefined ? staticEmptyValue : '';
+  } else {
+    fieldValue = new fieldDef();
+  }
+
+  // Initialize value in data bucket for proper reactivity
+  const deserialized = getDataBucket(specInstance);
+  if (!deserialized.has(fieldName)) {
+    deserialized.set(fieldName, fieldValue);
+  }
+
+  // Set up property descriptor to intercept sets and update data bucket
+  // This allows normal box.set behavior to work
+  if (!Object.getOwnPropertyDescriptor(specInstance, fieldName)) {
+    Object.defineProperty(specInstance, fieldName, {
+      get: () => {
+        const bucket = getDataBucket(specInstance);
+        return bucket.has(fieldName) ? bucket.get(fieldName) : fieldValue;
+      },
+      set: (value: any) => {
+        const bucket = getDataBucket(specInstance);
+        bucket.set(fieldName, value);
+        notifyCardTracking(specInstance);
+      },
+      enumerable: true,
+      configurable: true,
+    });
+  }
+
+  // Create box from parent instance for proper configuration resolution
+  const parentBox = Box.create(specInstance);
+  const box = parentBox.field(fieldName as any);
+
+  // Create synthetic field with configuration
+  const syntheticField: Field = {
+    card: fieldDef as any,
+    name: fieldName,
+    fieldType: 'contains',
+    computeVia: undefined,
+    configuration: configuration,
+    isUsed: undefined,
+    isPolymorphic: undefined,
+    getter: (instance) => {
+      const bucket = getDataBucket(instance);
+      return bucket.has(fieldName) ? bucket.get(fieldName) : fieldValue;
+    },
+    queryableValue: () => null,
+    serialize: () => ({ type: 'card', id: '', attributes: {} }),
+    deserialize: async () => {
+      const bucket = getDataBucket(specInstance);
+      return bucket.get(fieldName) ?? fieldValue;
+    },
+    emptyValue: () => fieldValue,
+    validate: () => {},
+    component: () => (() => {}) as any,
+  } as Field;
+
+  // No need to override box.set - the property descriptor handles it
+
+  return getBoxComponent(
+    fieldDef as BaseDefConstructor,
+    box,
+    syntheticField,
+    opts,
+  );
+}
+
 export class Box<T> {
   static create<T>(model: T): Box<T> {
     return new Box({ type: 'root', model });

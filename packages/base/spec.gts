@@ -10,6 +10,8 @@ import {
   getCardMeta,
   type CardOrFieldTypeIcon,
   BaseDef,
+  type FieldConfiguration,
+  getFieldComponent as getFieldComponentFromAPI,
 } from './card-api';
 import StringField from './string';
 import BooleanField from './boolean';
@@ -35,8 +37,9 @@ import {
   type CommandContext,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import { eq, type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
+import { and, eq, type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 import { AiBw as AiBwIcon } from '@cardstack/boxel-ui/icons';
+import { getBoxComponent, type BoxComponent } from './field-component';
 
 import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
@@ -187,6 +190,34 @@ class Isolated extends Component<typeof Spec> {
     return getCardMeta(this.args.model as CardDef, 'realmInfo');
   }
 
+  get fieldConfigurations() {
+    return (
+      (this.args.model.constructor as typeof Spec).fieldConfigurations || {}
+    );
+  }
+
+  get hasFieldConfigurations() {
+    const configs = this.fieldConfigurations;
+    return configs && Object.keys(configs).length > 0;
+  }
+
+  getFieldComponent = (
+    fieldName: string,
+    configuration?: FieldConfiguration,
+  ): BoxComponent | undefined => {
+    if (!this.cardDef) {
+      return undefined;
+    }
+
+    // Use the getFieldComponent function from card-api
+    return getFieldComponentFromAPI(
+      this.cardDef, // type of BaseDef - ColorField - from loadCardDef value (module)
+      this.args.model, // type of Spec - ColorFieldSpec  - the current spec
+      fieldName, //the field name - colorwheel, colorstandard ...etc
+      configuration, // the configuration
+    );
+  };
+
   <template>
     <article class='container'>
       <header class='header' aria-labelledby='title'>
@@ -237,6 +268,42 @@ class Isolated extends Component<typeof Spec> {
           <@fields.linkedExamples />
         {{/if}}
       </section>
+      {{#if (and (eq @model.specType 'field') this.hasFieldConfigurations)}}
+        <section
+          class='configurations section'
+          data-test-configurations-section
+        >
+          <header class='row-header' aria-labelledby='configurations'>
+            <div class='row-header-left'>
+              <LayersSubtract width='20' height='20' role='presentation' />
+              <h2 id='configurations'>Configurations</h2>
+            </div>
+          </header>
+          <div class='configurations-content'>
+            {{#each-in this.fieldConfigurations as |fieldName config|}}
+              {{#let
+                (this.getFieldComponent fieldName config)
+                as |FieldComponent|
+              }}
+                {{#if FieldComponent}}
+                  <div
+                    class='configuration-item'
+                    data-test-configuration-item={{fieldName}}
+                  >
+                    <FieldContainer
+                      @label={{fieldName}}
+                      @vertical={{true}}
+                      @labelFontSize='small'
+                    >
+                      <FieldComponent @format='edit' />
+                    </FieldContainer>
+                  </div>
+                {{/if}}
+              {{/let}}
+            {{/each-in}}
+          </div>
+        </section>
+      {{/if}}
       <section class='module section'>
         <header class='row-header' aria-labelledby='module'>
           <GitBranch width='20' height='20' role='presentation' />
@@ -398,6 +465,17 @@ class Isolated extends Component<typeof Spec> {
         font-weight: 500;
         margin-block: 0;
       }
+      .configurations-content {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp);
+      }
+      .configuration-item {
+        padding: var(--boxel-sp-xs);
+        background-color: var(--boxel-light);
+        border: var(--boxel-border);
+        border-radius: var(--boxel-border-radius);
+      }
     </style>
   </template>
 }
@@ -551,6 +629,34 @@ class Edit extends Component<typeof Spec> {
     return getCardMeta(this.args.model as CardDef, 'realmInfo');
   }
 
+  get fieldConfigurations() {
+    return (
+      (this.args.model.constructor as typeof Spec).fieldConfigurations || {}
+    );
+  }
+
+  get hasFieldConfigurations() {
+    const configs = this.fieldConfigurations;
+    return configs && Object.keys(configs).length > 0;
+  }
+
+  getFieldComponent = (
+    fieldName: string,
+    configuration?: FieldConfiguration,
+  ): BoxComponent | undefined => {
+    if (!this.cardDef) {
+      return undefined;
+    }
+
+    // Use the getFieldComponent function from card-api
+    return getFieldComponentFromAPI(
+      this.cardDef,
+      this.args.model,
+      fieldName,
+      configuration,
+    );
+  };
+
   <template>
     <article class='container'>
       <header class='header' aria-labelledby='title'>
@@ -621,6 +727,42 @@ class Edit extends Component<typeof Spec> {
           <@fields.linkedExamples @typeConstraint={{this.absoluteRef}} />
         {{/if}}
       </section>
+      {{#if (and (eq @model.specType 'field') this.hasFieldConfigurations)}}
+        <section
+          class='configurations section'
+          data-test-configurations-section
+        >
+          <header class='row-header' aria-labelledby='configurations'>
+            <div class='row-header-left'>
+              <LayersSubtract width='20' height='20' role='presentation' />
+              <h2 id='configurations'>Configurations</h2>
+            </div>
+          </header>
+          <div class='configurations-content'>
+            {{#each-in this.fieldConfigurations as |fieldName config|}}
+              {{#let
+                (this.getFieldComponent fieldName config)
+                as |FieldComponent|
+              }}
+                {{#if FieldComponent}}
+                  <div
+                    class='configuration-item'
+                    data-test-configuration-item={{fieldName}}
+                  >
+                    <FieldContainer
+                      @label={{fieldName}}
+                      @vertical={{true}}
+                      @labelFontSize='small'
+                    >
+                      <FieldComponent @format='edit' />
+                    </FieldContainer>
+                  </div>
+                {{/if}}
+              {{/let}}
+            {{/each-in}}
+          </div>
+        </section>
+      {{/if}}
       <section class='module section'>
         <header class='row-header' aria-labelledby='module'>
           <div class='row-header-left'>
@@ -775,6 +917,17 @@ class Edit extends Component<typeof Spec> {
         font-weight: 500;
         margin-block: 0;
       }
+      .configurations-content {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp);
+      }
+      .configuration-item {
+        padding: var(--boxel-sp-xs);
+        background-color: var(--boxel-light);
+        border: var(--boxel-border);
+        border-radius: var(--boxel-border-radius);
+      }
       :deep(.add-new) {
         border: 1px solid var(--border, var(--boxel-border-color));
       }
@@ -854,6 +1007,7 @@ class SpecDescriptionField extends StringField {
 export class Spec extends CardDef {
   static displayName = 'Spec';
   static icon = BoxModel;
+  static fieldConfigurations?: Record<string, FieldConfiguration | undefined>;
   @field readMe = contains(MarkdownField);
 
   @field ref = contains(CodeRef);
