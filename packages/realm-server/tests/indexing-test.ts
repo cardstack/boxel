@@ -397,7 +397,20 @@ function makeTestRealmFileSystem(): Record<
         },
       },
     },
+    'filedef-mismatch.gts': `
+      import {
+        FileDef as BaseFileDef,
+        FileSignatureMismatchError,
+      } from "https://cardstack.com/base/file-api";
+
+      export class FileDef extends BaseFileDef {
+        static async extractAttributes() {
+          throw new FileSignatureMismatchError('signature mismatch');
+        }
+      }
+    `,
     'random-file.txt': 'hello',
+    'random-file.mismatch': 'mismatch content',
     'random-image.png': 'i am an image',
     '.DS_Store':
       'In  macOS, .DS_Store is a file that stores custom attributes of its containing folder',
@@ -862,6 +875,91 @@ module(basename(__filename), function () {
       assert.strictEqual(rows.length, 1, 'file entry is in the index');
       assert.strictEqual(rows[0].type, 'file', 'file entry type is file');
       assert.ok(rows[0].last_modified, 'file entry has last_modified');
+    });
+
+    test('indexes executable files as file entries too', async function (assert) {
+      let entry = await realm.realmIndexQueryEngine.file(
+        new URL(`${testRealm}person.gts`),
+      );
+      assert.ok(entry, 'file entry exists for executable file');
+      assert.strictEqual(
+        entry?.searchDoc?.name,
+        'person.gts',
+        'file entry includes name',
+      );
+      assert.strictEqual(
+        entry?.searchDoc?.contentType,
+        'text/typescript+glimmer',
+        'file entry includes contentType',
+      );
+    });
+
+    test('indexes card json resources as file entries too', async function (assert) {
+      let entry = await realm.realmIndexQueryEngine.file(
+        new URL(`${testRealm}mango.json`),
+      );
+      assert.ok(entry, 'file entry exists for card json resource');
+      assert.strictEqual(
+        entry?.searchDoc?.name,
+        'mango.json',
+        'file entry includes name',
+      );
+      assert.ok(entry?.searchDoc?.contentHash, 'file entry includes contentHash');
+    });
+
+    test('file extractor populates search_doc', async function (assert) {
+      let rows = (await testDbAdapter.execute(
+        `SELECT search_doc FROM boxel_index WHERE url = '${testRealm}random-file.txt'`,
+      )) as { search_doc: Record<string, unknown> | string | null }[];
+      let raw = rows[0]?.search_doc;
+      let searchDoc = typeof raw === 'string' ? JSON.parse(raw) : (raw ?? {});
+      assert.strictEqual(
+        searchDoc.name,
+        'random-file.txt',
+        'search_doc includes name',
+      );
+      assert.strictEqual(
+        searchDoc.contentType,
+        'text/plain',
+        'search_doc includes contentType',
+      );
+      assert.ok(searchDoc.contentHash, 'search_doc includes contentHash');
+    });
+
+    test('file extractor mismatch falls back to base extractor', async function (assert) {
+      let rows = (await testDbAdapter.execute(
+        `SELECT search_doc, deps FROM boxel_index WHERE url = '${testRealm}random-file.mismatch'`,
+      )) as {
+        search_doc: Record<string, unknown> | string | null;
+        deps: string[] | string | null;
+      }[];
+      let rawDoc = rows[0]?.search_doc;
+      let searchDoc =
+        typeof rawDoc === 'string' ? JSON.parse(rawDoc) : (rawDoc ?? {});
+      assert.strictEqual(
+        searchDoc.name,
+        'random-file.mismatch',
+        'fallback search_doc includes name',
+      );
+      assert.ok(
+        searchDoc.contentHash,
+        'fallback search_doc includes contentHash',
+      );
+
+      let rawDeps = rows[0]?.deps ?? [];
+      let deps = Array.isArray(rawDeps)
+        ? rawDeps
+        : typeof rawDeps === 'string'
+          ? JSON.parse(rawDeps)
+          : [];
+      assert.ok(
+        deps.includes(`${testRealm}filedef-mismatch`),
+        'deps include mismatch extractor module',
+      );
+      assert.ok(
+        deps.includes('https://cardstack.com/base/file-api'),
+        'deps include base file-api for fallback',
+      );
     });
 
     test('serves FileMeta from index entries', async function (assert) {

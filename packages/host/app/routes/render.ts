@@ -196,9 +196,51 @@ export default class RenderRoute extends Route<Model> {
     // hook fire twice per prerender step: every format capture goes through a
     // parent transition (render), then to the actual child route, so the parent
     // model executes twice per prerender, hence the need to share the work.
-    let promise = this.#buildModel({ id, nonce }, parsedOptions);
+    let promise = parsedOptions.fileExtract
+      ? this.#buildFileExtractModel({ id, nonce }, parsedOptions)
+      : this.#buildModel({ id, nonce }, parsedOptions);
     this.#modelPromises.set(key, promise);
     return await promise;
+  }
+
+  async #buildFileExtractModel(
+    { id, nonce }: { id: string; nonce: string },
+    parsedOptions: ReturnType<typeof parseRenderRouteOptions>,
+  ): Promise<Model> {
+    if (parsedOptions.clearCache) {
+      this.loaderService.resetLoader({
+        clearFetchCache: true,
+        reason: 'render-route clearCache',
+      });
+      let resetKey = `${id}:${nonce}`;
+      if (this.lastStoreResetKey !== resetKey) {
+        this.store.resetCache();
+        this.lastStoreResetKey = resetKey;
+      }
+    }
+    let state = new TrackedMap<string, unknown>();
+    state.set('status', 'ready');
+    let readyDeferred = new Deferred<void>();
+    readyDeferred.fulfill();
+    let model: Model = {
+      instance: undefined,
+      nonce,
+      cardId: this.#normalizeCardId(id),
+      get status(): RenderStatus {
+        return (state.get('status') as RenderStatus) ?? 'loading';
+      },
+      get ready(): boolean {
+        return (state.get('status') as RenderStatus) === 'ready';
+      },
+      readyPromise: readyDeferred.promise,
+    };
+    this.#modelStates.set(model, {
+      state,
+      readyDeferred,
+      isReady: true,
+    });
+    this.currentTransition = undefined;
+    return model;
   }
 
   async #buildModel(

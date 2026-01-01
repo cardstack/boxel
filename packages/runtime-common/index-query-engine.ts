@@ -10,6 +10,7 @@ import {
   isResolvedCodeRef,
   baseRealm,
   getSerializer,
+  fileIndexURL,
 } from './index';
 import type { DBSpecificExpression, Param } from './expression';
 import {
@@ -334,6 +335,7 @@ export class IndexQueryEngine {
     url: URL,
     opts?: GetEntryOptions,
   ): Promise<IndexedFile | undefined> {
+    let fileIndexHref = fileIndexURL(url).href;
     let result = (await this.#query([
       `SELECT i.*`,
       `FROM ${tableFromOpts(opts)} as i
@@ -341,7 +343,9 @@ export class IndexQueryEngine {
       ...every([
         any([
           [`i.url =`, param(url.href)],
+          [`i.url =`, param(fileIndexHref)],
           [`i.file_alias =`, param(url.href)],
+          [`i.file_alias =`, param(fileIndexHref)],
         ]),
         ['i.type =', param('file')],
         any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),

@@ -40,6 +40,13 @@ export interface ModuleCapture {
   nonce?: string;
 }
 
+export interface FileExtractCapture {
+  status: 'ready' | 'error';
+  value: string;
+  id?: string;
+  nonce?: string;
+}
+
 export async function transitionTo(
   page: Page,
   routeName: string,
@@ -312,6 +319,126 @@ export async function captureModule(
   }
 
   return capture;
+}
+
+export async function captureFileExtract(
+  page: Page,
+  opts?: CaptureOptions,
+): Promise<FileExtractCapture | RenderError> {
+  try {
+    await page.waitForFunction(
+      (expectedId: string | null, expectedNonce: string | null) => {
+        let container = document.querySelector(
+          '[data-prerender-file-extract]',
+        ) as HTMLElement | null;
+        if (!container) {
+          return false;
+        }
+        let status = container.dataset.prerenderFileExtractStatus ?? '';
+        let id = container.dataset.prerenderFileExtractId ?? null;
+        let nonce = container.dataset.prerenderFileExtractNonce ?? null;
+        if (expectedId && id !== expectedId) {
+          return false;
+        }
+        if (expectedNonce && nonce !== expectedNonce) {
+          return false;
+        }
+        if (!status) {
+          return false;
+        }
+        if (!id || !nonce) {
+          return false;
+        }
+        let pre = container.querySelector('pre');
+        let value = pre?.textContent ?? '';
+        return value.trim().length > 0;
+      },
+      { timeout: cardRenderTimeout },
+      opts?.expectedId ?? null,
+      opts?.expectedNonce ?? null,
+    );
+  } catch (_e) {
+    return buildInvalidFileExtractResponseError(
+      page,
+      'file extract timed out waiting for output',
+      { title: 'File extract capture timeout', evict: true },
+    );
+  }
+
+  let capture = await page.evaluate(() => {
+    let container = document.querySelector(
+      '[data-prerender-file-extract]',
+    ) as HTMLElement | null;
+    if (!container) {
+      return null;
+    }
+    let pre = container.querySelector('pre');
+    let value = pre?.textContent ?? '';
+    let status = (container.dataset.prerenderFileExtractStatus ?? 'ready') as
+      | 'ready'
+      | 'error';
+    return {
+      status,
+      value,
+      id: container.dataset.prerenderFileExtractId ?? undefined,
+      nonce: container.dataset.prerenderFileExtractNonce ?? undefined,
+    } satisfies FileExtractCapture;
+  });
+
+  if (!capture) {
+    return buildInvalidFileExtractResponseError(
+      page,
+      'file extract did not produce output',
+      { title: 'Invalid file extract response' },
+    );
+  }
+
+  if (opts?.expectedId && capture.id !== opts.expectedId) {
+    return buildInvalidFileExtractResponseError(
+      page,
+      `file extract captured stale output for ${capture.id ?? 'unknown id'} (expected ${opts.expectedId})`,
+      { title: 'Stale file extract response', evict: true },
+    );
+  }
+  if (opts?.expectedNonce && capture.nonce !== opts.expectedNonce) {
+    return buildInvalidFileExtractResponseError(
+      page,
+      `file extract captured stale nonce ${capture.nonce ?? 'unknown'} (expected ${opts.expectedNonce})`,
+      { title: 'Stale file extract response', evict: true },
+    );
+  }
+
+  if (opts?.simulateTimeoutMs) {
+    await delay(opts.simulateTimeoutMs);
+  }
+
+  return capture;
+}
+
+export function buildInvalidFileExtractResponseError(
+  page: Page,
+  message: string,
+  options?: { title?: string; evict?: boolean },
+): RenderError {
+  let id: string | null = null;
+  try {
+    let pathname = new URL(page.url()).pathname;
+    let match = /\/render\/([^/]+)\//.exec(pathname);
+    id = match?.[1] ? decodeURIComponent(match[1]) : null;
+  } catch {
+    id = null;
+  }
+  return {
+    type: 'error',
+    error: {
+      id,
+      status: 500,
+      title: options?.title ?? 'Invalid file extract response',
+      message,
+      additionalErrors: null,
+    },
+    ...(options?.evict ? { evict: true } : {}),
+  };
 }
 
 // captureResult is only used by card prerenders. Cards surface their id/nonce

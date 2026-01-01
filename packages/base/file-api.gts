@@ -1,5 +1,7 @@
 import { concat } from '@ember/helper';
 import FileIcon from '@cardstack/boxel-icons/file';
+import { byteStreamToUint8Array, inferContentType } from '@cardstack/runtime-common';
+import { md5 } from 'super-fast-md5';
 import {
   BaseDef,
   BaseDefComponent,
@@ -44,6 +46,12 @@ export type SerializedFile = {
   contentHash?: string;
 };
 
+export type ByteStream = ReadableStream<Uint8Array> | Uint8Array;
+
+export class FileSignatureMismatchError extends Error {
+  name = 'FileSignatureMismatchError';
+}
+
 export class FileDef extends BaseDef {
   static displayName = 'File';
   static icon = FileIcon;
@@ -60,6 +68,30 @@ export class FileDef extends BaseDef {
   static isolated: BaseDefComponent = View;
   static atom: BaseDefComponent = View;
   static edit: BaseDefComponent = Edit;
+
+  static async extractAttributes(
+    url: string,
+    stream: ByteStream,
+  ): Promise<SerializedFile> {
+    let parsed = new URL(url);
+    let name = parsed.pathname.split('/').pop() ?? parsed.pathname;
+    let contentType = inferContentType(name);
+    let bytes = await byteStreamToUint8Array(stream);
+    let contentHash: string | undefined;
+    try {
+      contentHash = md5(bytes as unknown as Uint8Array);
+    } catch {
+      contentHash = md5(new TextDecoder().decode(bytes));
+    }
+
+    return {
+      sourceUrl: url,
+      url,
+      name,
+      contentType,
+      contentHash,
+    };
+  }
 
   serialize() {
     return {

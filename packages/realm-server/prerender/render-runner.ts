@@ -3,6 +3,7 @@ import {
   type RenderError,
   type RenderResponse,
   type ModuleRenderResponse,
+  type FileExtractResponse,
   type RenderRouteOptions,
   serializeRenderRouteOptions,
   logger,
@@ -11,6 +12,7 @@ import type { PagePool } from './page-pool';
 import {
   captureResult,
   captureModule,
+  captureFileExtract,
   isRenderError,
   renderAncestors,
   renderHTML,
@@ -19,9 +21,11 @@ import {
   type RenderCapture,
   type CaptureOptions,
   type ModuleCapture,
+  type FileExtractCapture,
   withTimeout,
   transitionTo,
   buildInvalidModuleResponseError,
+  buildInvalidFileExtractResponseError,
 } from './utils';
 
 const log = logger('prerenderer');
@@ -510,6 +514,150 @@ export class RenderRunner {
           createdAt: 0,
           deps: renderError.error.deps ?? [],
           definitions: {},
+          error: renderError,
+        };
+      }
+    }
+
+    return {
+      response,
+      timings: { launchMs, renderMs: Date.now() - renderStart },
+      pool: poolInfo,
+    };
+  }
+
+  async prerenderFileExtractAttempt({
+    realm,
+    url,
+    auth,
+    opts,
+    renderOptions,
+  }: {
+    realm: string;
+    url: string;
+    auth: string;
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    renderOptions?: RenderRouteOptions;
+  }): Promise<{
+    response: FileExtractResponse;
+    timings: { launchMs: number; renderMs: number };
+    pool: {
+      pageId: string;
+      realm: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    };
+  }> {
+    this.#nonce++;
+    log.info(
+      `file extract prerendering url ${url}, nonce=${this.#nonce} realm=${realm}`,
+    );
+
+    const { page, reused, launchMs, pageId } = await this.#getPageForRealm(
+      realm,
+      auth,
+    );
+    const poolInfo = {
+      pageId: pageId ?? 'unknown',
+      realm,
+      reused,
+      evicted: false,
+      timedOut: false,
+    };
+    const markTimeout = (err?: RenderError) => {
+      if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
+        poolInfo.timedOut = true;
+      }
+    };
+
+    await page.evaluate((sessionAuth) => {
+      localStorage.setItem('boxel-session', sessionAuth);
+    }, auth);
+
+    let renderStart = Date.now();
+    let options = renderOptions ?? {};
+    let serializedOptions = serializeRenderRouteOptions(options);
+    const captureOptions: CaptureOptions = {
+      expectedId: url,
+      expectedNonce: String(this.#nonce),
+      simulateTimeoutMs: opts?.simulateTimeoutMs,
+    };
+
+    let capture = await withTimeout(
+      page,
+      async () => {
+        await transitionTo(
+          page,
+          'render.file-extract',
+          url,
+          String(this.#nonce),
+          serializedOptions,
+        );
+        return await captureFileExtract(page, captureOptions);
+      },
+      opts?.timeoutMs,
+    );
+
+    let response: FileExtractResponse;
+    if (isRenderError(capture)) {
+      let renderError = capture as RenderError;
+      markTimeout(renderError);
+      if (await this.#maybeEvict(realm, 'file extract render', renderError)) {
+        poolInfo.evicted = true;
+      }
+      response = {
+        id: url,
+        nonce: String(this.#nonce),
+        status: 'error',
+        searchDoc: null,
+        deps: renderError.error.deps ?? [],
+        error: renderError,
+      };
+    } else {
+      let fileCapture = capture as FileExtractCapture;
+      try {
+        response = JSON.parse(fileCapture.value) as FileExtractResponse;
+        if (response.status !== fileCapture.status) {
+          let renderError = buildInvalidFileExtractResponseError(
+            page,
+            `file extract status mismatch (${fileCapture.status} vs ${response.status})`,
+            { title: 'Invalid file extract response', evict: true },
+          );
+          markTimeout(renderError);
+          if (
+            await this.#maybeEvict(realm, 'file extract render', renderError)
+          ) {
+            poolInfo.evicted = true;
+          }
+          response = {
+            id: url,
+            nonce: fileCapture.nonce ?? String(this.#nonce),
+            status: 'error',
+            searchDoc: null,
+            deps: renderError.error.deps ?? [],
+            error: {
+              type: 'error',
+              error: renderError.error,
+            },
+          };
+        }
+      } catch (_e) {
+        let renderError = buildInvalidFileExtractResponseError(
+          page,
+          `file extract returned invalid payload: ${fileCapture.value}`,
+          { title: 'Invalid file extract response' },
+        );
+        markTimeout(renderError);
+        if (await this.#maybeEvict(realm, 'file extract render', renderError)) {
+          poolInfo.evicted = true;
+        }
+        response = {
+          id: url,
+          nonce: fileCapture.nonce ?? String(this.#nonce),
+          status: 'error',
+          searchDoc: null,
+          deps: renderError.error.deps ?? [],
           error: renderError,
         };
       }

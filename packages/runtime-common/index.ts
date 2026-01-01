@@ -43,6 +43,16 @@ export interface RenderError extends ErrorEntry {
   evict?: boolean;
 }
 
+export interface FileExtractResponse {
+  id: string;
+  nonce: string;
+  status: 'ready' | 'error';
+  searchDoc: Record<string, any> | null;
+  deps: string[];
+  error?: RenderError;
+  mismatch?: true;
+}
+
 export interface ModuleDefinitionResult {
   type: 'definition';
   moduleURL: string; // node resolution w/o extension
@@ -76,6 +86,7 @@ export type PrerenderCardArgs = ModulePrerenderArgs;
 export interface Prerenderer {
   prerenderCard(args: PrerenderCardArgs): Promise<RenderResponse>;
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
+  prerenderFileExtract(args: ModulePrerenderArgs): Promise<FileExtractResponse>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
@@ -152,6 +163,7 @@ export * from './matrix-constants';
 export * from './matrix-client';
 export * from './queue';
 export * from './expression';
+export * from './infer-content-type';
 export * from './index-query-engine';
 export * from './index-writer';
 export * from './definitions';
@@ -188,6 +200,7 @@ export * from './render-route-options';
 export * from './publishability';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
+export const FILE_INDEX_QUERY_PARAM = '__file__';
 export { createResponse } from './create-response';
 
 export * from './db-queries/db-types';
@@ -510,6 +523,12 @@ export function trimExecutableExtension(url: URL): URL {
     }
   }
   return url;
+}
+
+export function fileIndexURL(url: URL): URL {
+  let fileURL = new URL(url.href);
+  fileURL.searchParams.set(FILE_INDEX_QUERY_PARAM, '1');
+  return fileURL;
 }
 
 export function internalKeyFor(
