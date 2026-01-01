@@ -315,7 +315,7 @@ export class IndexRunner {
 
       if (
         !indexEntry ||
-        indexEntry.type === 'error' ||
+        indexEntry.type.endsWith('-error') ||
         indexEntry.lastModified == null ||
         lastModified !== indexEntry.lastModified
       ) {
@@ -449,7 +449,7 @@ export class IndexRunner {
         `${jobIdentity(this.#jobInfo)} encountered error rendering module "${url.href}": ${err.message}`,
       );
       await this.batch.updateEntry(url, {
-        type: 'error',
+        type: 'module-error',
         error: {
           status: err.status ?? 500,
           message: `encountered error rendering module "${url.href}": ${err.message}`,
@@ -469,7 +469,7 @@ export class IndexRunner {
 
     if (error) {
       this.stats.moduleErrors++;
-      await this.batch.updateEntry(url, error);
+      await this.batch.updateEntry(url, { ...error, type: 'module-error' });
       return;
     }
 
@@ -595,14 +595,14 @@ export class IndexRunner {
             });
           }
           if (isCardError(err)) {
-            return { type: 'error', error: serializableError(err) };
+            return { type: 'instance-error', error: serializableError(err) };
           }
           let fallback = new CardError(
             (err as Error)?.message ?? 'unknown render error',
             { status: 500 },
           );
           fallback.stack = (err as Error)?.stack;
-          return { type: 'error', error: serializableError(fallback) };
+          return { type: 'instance-error', error: serializableError(fallback) };
         };
 
         renderError = normalizeToErrorEntry(renderError, uncaughtError);

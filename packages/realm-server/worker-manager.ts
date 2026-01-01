@@ -8,6 +8,7 @@ import {
   param,
   separatedByCommas,
   IndexWriter,
+  hasExecutableExtension,
   type Expression,
   type StatusArgs,
 } from '@cardstack/runtime-common';
@@ -319,8 +320,14 @@ async function markFailedIndexEntry({
   await batch.invalidate([new URL(url)]);
   let invalidations = batch.invalidations;
   for (let file of [url, ...invalidations]) {
+    let entryType: 'module-error' | 'instance-error' | 'file-error' =
+      hasExecutableExtension(file)
+        ? 'module-error'
+        : file.endsWith('.json')
+          ? 'instance-error'
+          : 'file-error';
     await batch.updateEntry(new URL(file), {
-      type: 'error',
+      type: entryType,
       error: {
         message,
         status: 500,

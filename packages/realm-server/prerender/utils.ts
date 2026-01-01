@@ -167,7 +167,7 @@ function buildInvalidRenderResponseError(
     id = null;
   }
   return {
-    type: 'error',
+    type: 'instance-error',
     error: {
       id,
       status: 500,
@@ -193,7 +193,7 @@ export function buildInvalidModuleResponseError(
     id = null;
   }
   return {
-    type: 'error',
+    type: 'module-error',
     error: {
       id,
       status: 500,
@@ -594,7 +594,7 @@ export async function captureResult(
           return {
             status: 'error',
             value: JSON.stringify({
-              type: 'error',
+              type: 'instance-error',
               error: {
                 id: resolvedElement.dataset.prerenderId ?? null,
                 status: 500,
@@ -685,7 +685,7 @@ export async function withTimeout<T>(
       `render of ${id} timed out with DOM:\n${dom?.trim()}\nDocs in flight: ${docsInFlight}`,
     );
     let timeoutError: RenderError = {
-      type: 'error',
+      type: 'instance-error',
       error: {
         id,
         status: 504,

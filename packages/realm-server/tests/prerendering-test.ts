@@ -2180,7 +2180,7 @@ module(basename(__filename), function () {
                   ...baseResponse,
                   status: 'error',
                   error: {
-                    type: 'error',
+                    type: 'module-error',
                     error: {
                       message: `Failed to execute 'removeChild' on 'Node': NotFoundError`,
                       status: 500,
@@ -2280,7 +2280,7 @@ module(basename(__filename), function () {
               ? {
                   ...baseResponse,
                   error: {
-                    type: 'error',
+                    type: 'instance-error',
                     error: {
                       message: `Failed to execute 'removeChild' on 'Node': NotFoundError`,
                       status: 500,

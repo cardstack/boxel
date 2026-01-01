@@ -630,7 +630,7 @@ export default class RenderRoute extends Route<Model> {
     if (isCardError(error)) {
       let normalized = normalizeRenderError(
         {
-          type: 'error',
+          type: 'instance-error',
           error: serializableError(error),
         },
         normalizationContext,
@@ -893,7 +893,7 @@ export default class RenderRoute extends Route<Model> {
     } else {
       reason = JSON.stringify(
         {
-          type: 'error',
+          type: 'instance-error',
           error: {
             status: 500,
             title: 'Render failed',

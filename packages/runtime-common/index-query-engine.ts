@@ -102,7 +102,7 @@ export interface IndexedInstance {
   indexedAt: number | null;
 }
 interface IndexedError {
-  type: 'error';
+  type: 'module-error';
   error: SerializedError;
 }
 
@@ -118,7 +118,7 @@ interface InstanceError
       | 'resourceCreatedAt'
     >
   > {
-  type: 'error';
+  type: 'instance-error';
   error: SerializedError;
   realmVersion: number;
   realmURL: string;
@@ -207,8 +207,9 @@ export class IndexQueryEngine {
         ]),
         any([
           ['i.type =', param('module')],
-          ['i.type =', param('error')],
+          ['i.type =', param('module-error')],
         ]),
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
       ]),
     ] as Expression)) as unknown as BoxelIndexTable[];
     let maybeResult: BoxelIndexTable | undefined = rows[0];
@@ -219,8 +220,8 @@ export class IndexQueryEngine {
       return undefined;
     }
     let result = maybeResult;
-    if (result.type === 'error') {
-      return { type: 'error', error: result.error_doc! };
+    if (result.type === 'module-error') {
+      return { type: 'module-error', error: result.error_doc! };
     }
     let moduleEntry = assertIndexEntry(result);
     let {
@@ -252,8 +253,9 @@ export class IndexQueryEngine {
         ]),
         any([
           ['i.type =', param('instance')],
-          ['i.type =', param('error')],
+          ['i.type =', param('instance-error')],
         ]),
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
       ]),
     ] as Expression)) as unknown as (BoxelIndexTable & {
       default_embedded_html: string | null;
@@ -302,7 +304,11 @@ export class IndexQueryEngine {
     };
 
     if (maybeResult.error_doc) {
-      return { ...baseResult, type: 'error', error: maybeResult.error_doc };
+      return {
+        ...baseResult,
+        type: 'instance-error',
+        error: maybeResult.error_doc,
+      };
     }
     let instanceEntry = assertIndexEntry(maybeResult);
     if (!instance) {
@@ -338,6 +344,7 @@ export class IndexQueryEngine {
           [`i.file_alias =`, param(url.href)],
         ]),
         ['i.type =', param('file')],
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
       ]),
     ] as Expression)) as unknown as BoxelIndexTable[];
     let maybeResult: BoxelIndexTable | undefined = result[0];
@@ -408,7 +415,7 @@ export class IndexQueryEngine {
           any([
             ['i.type =', param('instance')],
             every([
-              ['i.type =', param('error')],
+              ['i.type =', param('instance-error')],
               ['i.url ILIKE', param('%.json')],
             ]),
           ]),
@@ -606,7 +613,7 @@ export class IndexQueryEngine {
         url: card.url!,
         html: card.html,
         ...(usedRenderType ? { usedRenderType } : {}),
-        ...(card.type === 'error' ? { isError: true as const } : {}),
+        ...(card.type === 'instance-error' ? { isError: true as const } : {}),
       };
     });
 

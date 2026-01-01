@@ -109,10 +109,10 @@ module(`Integration | realm indexing`, function (hooks) {
     url: URL,
   ): Promise<IndexedInstance | undefined> {
     let maybeInstance = await realm.realmIndexQueryEngine.instance(url);
-    if (maybeInstance?.type === 'error') {
+    if (maybeInstance?.type === 'instance-error') {
       return undefined;
     }
-    return maybeInstance;
+    return maybeInstance as IndexedInstance | undefined;
   }
 
   test('full indexing discovers card instances', async function (assert) {

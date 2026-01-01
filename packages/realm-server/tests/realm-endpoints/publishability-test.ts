@@ -168,7 +168,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
       for (let table of ['boxel_index', 'boxel_index_working']) {
         await dbAdapter.execute(
           `UPDATE ${table}
-           SET type = 'error', error_doc = $1::jsonb
+           SET type = 'instance-error', error_doc = $1::jsonb
            WHERE url = $2`,
           {
             bind: [JSON.stringify(errorDoc), cardURL],

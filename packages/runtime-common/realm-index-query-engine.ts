@@ -191,7 +191,7 @@ export class RealmIndexQueryEngine {
     if (!instance) {
       return undefined;
     }
-    if (instance.type === 'error') {
+    if (instance.type === 'instance-error') {
       let scopedCssUrls = (instance.deps ?? []).filter(isScopedCSSRequest);
       return {
         type: 'error',
