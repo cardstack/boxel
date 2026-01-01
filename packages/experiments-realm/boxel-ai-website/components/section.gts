@@ -3,11 +3,7 @@ import type { ComponentLike } from '@glint/template';
 import { hash } from '@ember/helper';
 
 import { CardContainer, Pill } from '@cardstack/boxel-ui/components';
-import {
-  cssVar,
-  sanitizeHtml,
-  sanitizeHtmlSafe,
-} from '@cardstack/boxel-ui/helpers';
+import { cn, cssVar, eq, sanitizeHtmlSafe } from '@cardstack/boxel-ui/helpers';
 
 export interface SectionSignature {
   Args: {};
@@ -17,6 +13,7 @@ export interface SectionSignature {
       {
         Header: ComponentLike<SectionHeaderSignature>;
         Row: ComponentLike<SectionRowSignature>;
+        Grid: ComponentLike<SectionRowSignature>;
       },
     ];
   };
@@ -27,6 +24,7 @@ export interface SectionHeaderSignature {
     headline?: string;
     subheadline?: string;
     label?: string;
+    type?: 'tile' | 'row';
   };
   Element: HTMLElement;
   Blocks: { default: [] };
@@ -34,7 +32,10 @@ export interface SectionHeaderSignature {
 
 export class SectionHeader extends Component<SectionHeaderSignature> {
   <template>
-    <div class='section-header' ...attributes>
+    <div
+      class={{cn 'section-header' section-header--row=(eq @type 'row')}}
+      ...attributes
+    >
       {{#if @label}}
         <span class='section-label'>{{@label}}</span>
       {{/if}}
@@ -52,6 +53,9 @@ export class SectionHeader extends Component<SectionHeaderSignature> {
         flex-direction: column;
         justify-content: center;
         gap: var(--boxel-sp);
+      }
+      .section-header--row {
+        grid-column: -1 / 1;
       }
       .section-title {
         font-family: var(--boxel-heading-font-family);
@@ -136,7 +140,7 @@ interface SectionCardComponentSignature {
     linkUrl?: string;
   };
   Element: HTMLElement;
-  Blocks: { before: []; default: [] };
+  Blocks: { before: []; default: []; footer: [] };
 }
 
 export class SectionCardComponent extends Component<SectionCardComponentSignature> {
@@ -165,23 +169,14 @@ export class SectionCardComponent extends Component<SectionCardComponentSignatur
         </div>
       {{/if}}
 
-      <footer>
-        <a
-          href={{if @linkUrl (sanitizeHtml @linkUrl) '/'}}
-          class='highlight-card-link'
-          style={{cssVar link-color=@linkColor}}
-        >
-          {{@linkText}}
-        </a>
-      </footer>
+      {{#if (has-block 'footer')}}
+        <footer>
+          {{yield to='footer'}}
+        </footer>
+      {{/if}}
     </CardContainer>
 
     <style scoped>
-      a {
-        font-family: var(--font-mono, var(--boxel-monospace-font-family));
-        font-size: 0.8rem;
-        text-decoration: none;
-      }
       .highlight-card {
         --card-shadow:
           0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
@@ -212,9 +207,6 @@ export class SectionCardComponent extends Component<SectionCardComponentSignatur
         text-transform: uppercase;
         z-index: 1;
       }
-      .highlight-card-badge + .highlight-card-title {
-        margin-top: 1.25rem;
-      }
       .highlight-card-title {
         font-size: 1.5rem;
         font-weight: 700;
@@ -222,11 +214,6 @@ export class SectionCardComponent extends Component<SectionCardComponentSignatur
       }
       .highlight-card-text {
         color: var(--muted-foreground);
-      }
-      .highlight-card-link {
-        display: block;
-        margin-top: var(--boxel-sp);
-        color: var(--link-color);
       }
     </style>
   </template>
@@ -251,18 +238,72 @@ export class SectionRow extends Component<SectionRowSignature> {
   </template>
 }
 
+interface PluralFieldGridSignature {
+  Args: {
+    gridColWidth?: string;
+    gridGap?: string;
+  };
+  Element: HTMLElement;
+  Blocks: { default: [] };
+}
+
+// To be used with plural compound fields ie. containsMany compound field
+export class PluralFieldGrid extends Component<PluralFieldGridSignature> {
+  private get gridColWidth() {
+    return this.args.gridColWidth ?? '16.875rem';
+  }
+
+  private get gap() {
+    return this.args.gridGap ?? '2rem';
+  }
+
+  <template>
+    <div
+      class='section-cards-grid'
+      style={{cssVar grid-col-width=this.gridColWidth grid-gap=this.gap}}
+      ...attributes
+    >
+      {{yield}}
+    </div>
+
+    <style scoped>
+      .section-cards-grid {
+        grid-column: -1 / 1;
+      }
+      .section-cards-grid :deep(.containsMany-field) {
+        display: grid;
+        grid-template-columns: repeat(
+          auto-fit,
+          minmax(var(--grid-col-width), 1fr)
+        );
+        gap: var(--grid-gap, 2rem);
+      }
+      .section-cards-grid :deep(.compound-field) {
+        height: 100%;
+        word-break: initial;
+      }
+      .section-cards-grid :deep(.compound-field > *) {
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </template>
+}
+
 export class Section extends Component<SectionSignature> {
   <template>
     <div class='section-layout' ...attributes>
       {{yield
-        (hash Header=(component SectionHeader) Row=(component SectionRow))
+        (hash
+          Header=(component SectionHeader)
+          Row=(component SectionRow)
+          Grid=(component PluralFieldGrid)
+        )
       }}
     </div>
 
     <style scoped>
       .section-layout {
-        --card-width: 16.875rem;
-
         display: grid;
         grid-template-columns: repeat(2, 1fr);
         gap: 3rem 4rem;
@@ -271,20 +312,6 @@ export class Section extends Component<SectionSignature> {
       }
       :deep(.section-layout-row) {
         grid-column: -1 / 1;
-      }
-      :deep(.section-cards-grid) {
-        grid-column: -1 / 1;
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(var(--card-width), 1fr));
-        gap: 2rem;
-      }
-      :deep(.section-cards-grid .compound-field) {
-        height: 100%;
-        word-break: initial;
-      }
-      :deep(.section-cards-grid .compound-field > *) {
-        width: 100%;
-        height: 100%;
       }
     </style>
   </template>

@@ -28,14 +28,16 @@ export class SoftwareMediaSection extends SectionCard {
     <template>
       <Section as |s|>
         <s.Header
-          class='section-layout-row'
+          @type='row'
           @headline={{@model.headline}}
           @subheadline={{@model.subheadline}}
           @label={{@model.headerLabel}}
         />
 
         {{#if @model.tabs.length}}
-          <@fields.tabs class='section-cards-grid' @format='fitted' />
+          <s.Grid>
+            <@fields.tabs />
+          </s.Grid>
         {{/if}}
       </Section>
     </template>

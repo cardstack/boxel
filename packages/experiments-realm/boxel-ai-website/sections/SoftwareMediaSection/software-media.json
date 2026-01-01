@@ -18,7 +18,8 @@
           "bullets": [],
           "flowSteps": [],
           "footerNote": "🤖 AI summarizes → AI generates → AI parses",
-          "accentColor": null
+          "isHighlighted": false,
+          "accentColor": "var(--boxel-purple)"
         },
         {
           "tabIcon": "💳",
@@ -29,7 +30,8 @@
           "bullets": [],
           "flowSteps": [],
           "footerNote": "🤖 Sender AI drafts → Recipient AI validates",
-          "accentColor": "#C3FC33"
+          "isHighlighted": true,
+          "accentColor": null
         },
         {
           "tabIcon": "🛒",
@@ -40,7 +42,8 @@
           "bullets": [],
           "flowSteps": [],
           "footerNote": "🤖 Full lineage: every AI traces provenance",
-          "accentColor": null
+          "isHighlighted": false,
+          "accentColor": "var(--boxel-purple)"
         }
       ],
       "cardInfo": {

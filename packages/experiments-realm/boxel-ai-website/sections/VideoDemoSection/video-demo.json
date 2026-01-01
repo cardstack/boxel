@@ -16,10 +16,10 @@
         "description": null,
         "thumbnailURL": null
       },
-      "duration": null,
-      "videoUrl": null,
+      "duration": "00:45",
+      "videoUrl": "#",
       "posterUrl": null,
-      "description": null,
+      "description": "From idea to deployed app in 45 seconds. Watch how Boxel unifies chat, code, and hosting into one seamless experience.",
       "sectionLabel": "Demo",
       "sectionNumber": "002"
     },

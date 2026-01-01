@@ -10,7 +10,10 @@ import StringField from 'https://cardstack.com/base/string';
 import ColorField from 'https://cardstack.com/base/color';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 
+import { cn, cssVar } from '@cardstack/boxel-ui/helpers';
+
 import { SectionCardComponent } from '../components/section';
+import { DiagramBox } from '../components/diagram-box';
 
 export class FeatureTileField extends FieldDef {
   static displayName = 'Feature Tile';
@@ -19,7 +22,7 @@ export class FeatureTileField extends FieldDef {
   @field tileLabel = contains(StringField);
   @field headline = contains(StringField);
   @field body = contains(StringField);
-  @field markdown = contains(MarkdownField);
+  @field content = contains(MarkdownField);
   @field linkedCard = linksTo(() => CardDef);
   @field accentColor = contains(ColorField);
 
@@ -31,24 +34,30 @@ export class FeatureTileField extends FieldDef {
         @title={{@model.headline}}
         @text={{@model.body}}
       >
-        {{#if @model.markdown.length}}
-          <div class='tile-markdown'>
-            <@fields.markdown />
-          </div>
+        {{#if @model.content}}
+          <DiagramBox
+            @highlightOnHover={{true}}
+            class='diagram-content'
+            style={{cssVar accent-color=@model.accentColor}}
+          >
+            <@fields.content />
+          </DiagramBox>
         {{/if}}
       </SectionCardComponent>
 
       <style scoped>
-        .tile-markdown {
-          margin-top: var(--boxel-sp);
+        .diagram-content :deep(ul) {
+          list-style-type: none;
+          margin: 0;
+          padding: 0;
+          display: flex;
+          justify-content: space-around;
+          gap: 0.5rem;
+          flex-wrap: wrap;
         }
-        :deep(code) {
-          display: block;
-          border: 1px solid var(--border);
-          border-radius: var(--boxel-border-radius-sm);
-          font-size: var(--boxel-caption-font-size);
-          padding: 1.25rem;
-          text-align: center;
+        .diagram-content :deep(li strong) {
+          color: var(--accent-color);
+          font-weight: 500;
         }
       </style>
     </template>

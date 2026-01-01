@@ -18,8 +18,8 @@
           "screenshotUrl": null,
           "linkText": "Learn about Interact Mode →",
           "linkUrl": null,
-          "linkColor": null,
-          "accentColor": null
+          "isHighlighted": false,
+          "accentColor": "var(--boxel-teal)"
         },
         {
           "modeNumber": "02",
@@ -30,7 +30,7 @@
           "screenshotUrl": null,
           "linkText": "Learn about Code Mode →",
           "linkUrl": null,
-          "linkColor": "var(--boxel-purple)",
+          "isHighlighted": true,
           "accentColor": "var(--boxel-purple)"
         },
         {
@@ -42,7 +42,7 @@
           "screenshotUrl": null,
           "linkText": "Learn about Host Mode →",
           "linkUrl": null,
-          "linkColor": null,
+          "isHighlighted": false,
           "accentColor": "var(--boxel-cyan)"
         }
       ],

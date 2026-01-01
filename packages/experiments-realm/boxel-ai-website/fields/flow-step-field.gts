@@ -9,9 +9,10 @@ import StringField from 'https://cardstack.com/base/string';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import ColorField from 'https://cardstack.com/base/color';
 
-import { cssVar, getContrastColor } from '@cardstack/boxel-ui/helpers';
+import { cn, cssVar } from '@cardstack/boxel-ui/helpers';
 
 import { SectionCardComponent } from '../components/section';
+import { SkillFlowStep } from '../components/skill-flow-step';
 
 export class FlowStepField extends FieldDef {
   static displayName = 'Flow Step';
@@ -20,6 +21,18 @@ export class FlowStepField extends FieldDef {
   @field stepLabel = contains(StringField);
   @field stepDetail = contains(StringField);
   @field isAiAction = contains(BooleanField);
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <SkillFlowStep
+        @icon={{@model.stepIcon}}
+        @title={{@model.stepLabel}}
+        @description={{@model.stepDetail}}
+      />
+    </template>
+  };
+
+  static fitted = this.embedded;
 }
 
 export class FlowTabField extends FieldDef {
@@ -33,6 +46,7 @@ export class FlowTabField extends FieldDef {
   @field bullets = containsMany(StringField);
   @field flowSteps = containsMany(FlowStepField);
   @field footerNote = contains(StringField);
+  @field isHighlighted = contains(BooleanField);
   @field accentColor = contains(ColorField);
 
   static embedded = class Embedded extends Component<typeof this> {
@@ -45,37 +59,31 @@ export class FlowTabField extends FieldDef {
 
     <template>
       <SectionCardComponent
-        class='flow-tab'
-        style={{cssVar
-          tab-background=@model.accentColor
-          tab-foreground=(getContrastColor
-            @model.accentColor 'var(--brand-dark)' 'var(--brand-light)'
-          )
-        }}
+        class={{cn 'flow-tab' flow-tab--accent=@model.isHighlighted}}
         @accentColor={{@model.accentColor}}
         @badgeLabel={{this.badgeLabel}}
         @title={{@model.headline}}
         @text={{@model.body}}
       >
-        {{#if @model.footerNote.length}}
-          <footer class='footer-note'>
-            <small>
+        <:footer>
+          {{#if @model.footerNote}}
+            <small
+              class='footer-note'
+              style={{cssVar footer-color=@model.accentColor}}
+            >
               <@fields.footerNote />
             </small>
-          </footer>
-        {{/if}}
+          {{/if}}
+        </:footer>
       </SectionCardComponent>
 
       <style scoped>
-        .flow-tab {
-          background-color: var(--tab-background, var(--card));
-          color: var(--tab-foreground, var(--card-foreground));
+        .flow-tab--accent {
+          background-color: var(--accent);
+          color: var(--accent-foreground);
         }
-        .flow-tab :deep(p) {
-          color: color-mix(in oklab, currentColor 80%, transparent);
-        }
-        .footer-note {
-          margin-top: var(--boxel-sp);
+        :not(.flow-tab--accent) .footer-note {
+          color: var(--footer-color);
         }
       </style>
     </template>

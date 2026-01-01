@@ -3,6 +3,7 @@ import {
   CardDef,
   field,
   contains,
+  type BaseDefComponent,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import BooleanField from 'https://cardstack.com/base/boolean';
@@ -36,7 +37,9 @@ export class SectionCard extends CardDef {
   });
 
   // Subclasses override with their own isolated template
-  static isolated = class Isolated extends Component<typeof this> {
+  static isolated: BaseDefComponent = class Isolated extends Component<
+    typeof this
+  > {
     <template>
       <Section class='section-card'>
         <div class='section-card-content'>

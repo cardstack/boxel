@@ -9,12 +9,85 @@
     "type": "card",
     "attributes": {
       "models": {
-        "body": "Your skills work with any model. 300+ LLMs via OpenRouter. 200+ image, video, audio & utility models via Replicate.",
         "headline": "Pick your brains.",
-        "markdown": null,
-        "tileLabel": "Models",
-        "tileNumber": null,
-        "accentColor": null
+        "footerNote": "🔓 True multi-model freedom. Switch providers mid-conversation. No vendor lock-in.",
+        "subheadline": "Your skills work with any model. 300+ LLMs via OpenRouter. 200+ image, video, audio & utility models via Replicate.",
+        "openRouterModels": [
+          {
+            "chipIcon": "⚡",
+            "chipName": "GPT-4o"
+          },
+          {
+            "chipIcon": "🅰️",
+            "chipName": "Claude 3.5"
+          },
+          {
+            "chipIcon": "🔷",
+            "chipName": "Gemini 2.5"
+          },
+          {
+            "chipIcon": "🦙",
+            "chipName": "Llama 3.1"
+          },
+          {
+            "chipIcon": "🌟",
+            "chipName": "Qwen"
+          },
+          {
+            "chipIcon": "💎",
+            "chipName": "DeepSeek"
+          }
+        ],
+        "replicateCategories": [
+          {
+            "categoryIcon": "🎨",
+            "categoryLabel": "Image & Video",
+            "models": [
+              {
+                "chipIcon": "🎨",
+                "chipName": "Flux Pro"
+              },
+              {
+                "chipIcon": "🎬",
+                "chipName": "WAN 2.5"
+              }
+            ],
+            "modelCount": "200+ models",
+            "accentColor": "var(--cardstack-purple)"
+          },
+          {
+            "categoryIcon": "🔊",
+            "categoryLabel": "Audio & Speech",
+            "models": [
+              {
+                "chipIcon": "🎵",
+                "chipName": "Lyria 2"
+              },
+              {
+                "chipIcon": "🔊",
+                "chipName": "Speech"
+              }
+            ],
+            "modelCount": "80+ models",
+            "accentColor": "var(--boxel-teal)"
+          },
+          {
+            "categoryIcon": "🛠️",
+            "categoryLabel": "Utilities",
+            "models": [
+              {
+                "chipIcon": "📍",
+                "chipName": "Geocoding"
+              },
+              {
+                "chipIcon": "🔎",
+                "chipName": "Search"
+              }
+            ],
+            "modelCount": "Tools & APIs",
+            "accentColor": "var(--cardstack-lime)"
+          }
+        ]
       },
       "skills": [
         {
@@ -23,6 +96,7 @@
           "skillType": null,
           "skillDescription": "Write in our brand voice...",
           "skillSections": [],
+          "isHighlighted": false,
           "accentColor": null
         },
         {
@@ -31,6 +105,7 @@
           "skillType": null,
           "skillDescription": "Session Report",
           "skillSections": [],
+          "isHighlighted": false,
           "accentColor": null
         },
         {
@@ -39,6 +114,7 @@
           "skillType": null,
           "skillDescription": "Skill Card",
           "skillSections": [],
+          "isHighlighted": true,
           "accentColor": "var(--boxel-teal)"
         },
         {
@@ -47,6 +123,7 @@
           "skillType": null,
           "skillDescription": "Active Skills",
           "skillSections": [],
+          "isHighlighted": false,
           "accentColor": null
         }
       ],
@@ -62,14 +139,6 @@
         "thumbnailURL": null
       },
       "headline": "Choose your model. Own your prompts.",
-      "skillFlow": {
-        "body": "Prompts become skills. Skills become capabilities. Capabilities compound across every conversation.",
-        "headline": "From Prompt to Skill",
-        "markdown": null,
-        "tileLabel": "Skill Flow",
-        "tileNumber": null,
-        "accentColor": null
-      },
       "footerNote": null,
       "subheadline": "Everything the AI does—vibe coding, workspace orchestration, assistant behavior—is powered by skill cards you can inspect, modify, or replace.",
       "sectionLabel": "AI Extensibility",
@@ -77,16 +146,6 @@
     },
     "relationships": {
       "cardInfo.theme": {
-        "links": {
-          "self": null
-        }
-      },
-      "models.linkedCard": {
-        "links": {
-          "self": null
-        }
-      },
-      "skillFlow.linkedCard": {
         "links": {
           "self": null
         }

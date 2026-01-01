@@ -1,32 +1,110 @@
 {
   "data": {
-    "type": "card",
     "meta": {
       "adoptsFrom": {
-        "module": "../footer-section",
-        "name": "FooterSection"
+        "name": "FooterSection",
+        "module": "../footer-section"
       }
     },
+    "type": "card",
     "attributes": {
-      "leftHeadline": "Build the software you actually use.",
-      "primaryCtaText": null,
-      "primaryCtaUrl": null,
-      "linkColumns": [],
-      "copyrightText": "© Boxel",
-      "versionText": "v1.0",
-      "sectionNumber": null,
-      "sectionLabel": null,
       "cardInfo": {
+        "notes": null,
         "title": "Footer",
         "description": null,
-        "thumbnailURL": null,
-        "notes": null
-      }
+        "thumbnailURL": null
+      },
+      "legalLinks": [
+        {
+          "linkText": "Privacy",
+          "linkUrl": "#"
+        },
+        {
+          "linkText": "Terms",
+          "linkUrl": "#"
+        },
+        {
+          "linkText": "MIT License",
+          "linkUrl": "#"
+        }
+      ],
+      "linkColumns": [
+        {
+          "columnTitle": "Product",
+          "links": [
+            {
+              "linkText": "How It Works",
+              "linkUrl": "#"
+            },
+            {
+              "linkText": "Pricing",
+              "linkUrl": "#"
+            },
+            {
+              "linkText": "Catalog",
+              "linkUrl": "#"
+            },
+            {
+              "linkText": "Skills",
+              "linkUrl": "#"
+            }
+          ]
+        },
+        {
+          "columnTitle": "Resources",
+          "links": [
+            {
+              "linkText": "Documentation",
+              "linkUrl": "#"
+            },
+            {
+              "linkText": "GitHub",
+              "linkUrl": "https://github.com/cardstack/boxel"
+            },
+            {
+              "linkText": "Discord",
+              "linkUrl": "https://discord.gg/cardstack"
+            },
+            {
+              "linkText": "Changelog",
+              "linkUrl": "#"
+            },
+            {
+              "linkText": "Status",
+              "linkUrl": "#"
+            }
+          ]
+        },
+        {
+          "columnTitle": "Company",
+          "links": [
+            {
+              "linkText": "About",
+              "linkUrl": "#"
+            },
+            {
+              "linkText": "Blog",
+              "linkUrl": "#"
+            },
+            {
+              "linkText": "Careers",
+              "linkUrl": "#"
+            }
+          ]
+        }
+      ],
+      "versionText": "v1.0",
+      "leftHeadline": "Build the software you actually use.",
+      "sectionLabel": null,
+      "copyrightText": "© 2025 Cardstack Inc.",
+      "primaryCtaUrl": "https://app.boxel.ai",
+      "sectionNumber": null,
+      "primaryCtaText": "Open App"
     },
     "relationships": {
       "brandGuide": {
         "links": {
-          "self": null
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
         }
       },
       "cardInfo.theme": {

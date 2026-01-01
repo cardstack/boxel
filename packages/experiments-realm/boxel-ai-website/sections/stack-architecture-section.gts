@@ -9,7 +9,12 @@ import StringField from 'https://cardstack.com/base/string';
 import { not, cn } from '@cardstack/boxel-ui/helpers';
 
 import { FeatureTileField } from '../fields/feature-tile-field';
-import { Section, SectionBullet } from '../components/section';
+import {
+  Section,
+  SectionBullet,
+  SectionCardComponent,
+} from '../components/section';
+import { DiagramBox } from '../components/diagram-box';
 import { SectionCard } from './section-card';
 
 export class StackArchitectureSection extends SectionCard {
@@ -18,7 +23,6 @@ export class StackArchitectureSection extends SectionCard {
   @field headline = contains(StringField);
   @field subheadline = contains(StringField);
   @field bullets = containsMany(StringField);
-  @field diagram = contains(FeatureTileField);
   @field tiles = containsMany(FeatureTileField);
 
   /** Template Features:
@@ -31,12 +35,17 @@ export class StackArchitectureSection extends SectionCard {
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <Section as |s|>
-        {{#if @model.diagram.headline}}
-          <@fields.diagram />
-        {{/if}}
+        <SectionCardComponent
+          @badgeLabel='Diagram'
+          @title='One File. Full Stack.'
+          @text='Five traditional layers—frontend, backend, API, database, orchestration—compressed into TypeScript + JSON.'
+        >
+          <DiagramBox>.gts — TypeScript Definitions</DiagramBox>
+          <DiagramBox>.json — Data Instances</DiagramBox>
+          <DiagramBox class='diagram-plain'>↓ AI reads one file ↓</DiagramBox>
+        </SectionCardComponent>
 
         <s.Header
-          class={{cn section-layout-row=(not @model.diagram.headline)}}
           @headline={{@model.headline}}
           @subheadline={{@model.subheadline}}
           @label={{@model.headerLabel}}
@@ -50,9 +59,20 @@ export class StackArchitectureSection extends SectionCard {
         </s.Header>
 
         {{#if @model.tiles.length}}
-          <@fields.tiles class='section-cards-grid' @format='fitted' />
+          <s.Grid>
+            <@fields.tiles />
+          </s.Grid>
         {{/if}}
       </Section>
+
+      <style scoped>
+        .diagram-plain {
+          color: var(--secondary);
+          font-weight: 500;
+          background: none;
+          border: none;
+        }
+      </style>
     </template>
   };
 }
