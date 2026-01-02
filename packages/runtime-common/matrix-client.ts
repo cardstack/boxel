@@ -4,6 +4,10 @@ import { REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME } from './realm';
 import { Deferred } from './deferred';
 import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
+type JoinedRoomsResponse = { joined_rooms: string[] };
+
+const joinedRoomsRequests = new WeakMap<object, Promise<JoinedRoomsResponse>>();
+
 export interface MatrixAccess {
   accessToken: string;
   deviceId: string;
@@ -124,9 +128,22 @@ export class MatrixClient {
   }
 
   async getJoinedRooms() {
-    let response = await this.request('_matrix/client/v3/joined_rooms');
-
-    return (await response.json()) as { joined_rooms: string[] };
+    let existing = joinedRoomsRequests.get(this);
+    if (existing) {
+      return await existing;
+    }
+    let request = (async () => {
+      let response = await this.request('_matrix/client/v3/joined_rooms');
+      return (await response.json()) as JoinedRoomsResponse;
+    })();
+    joinedRoomsRequests.set(this, request);
+    try {
+      return await request;
+    } finally {
+      if (joinedRoomsRequests.get(this) === request) {
+        joinedRoomsRequests.delete(this);
+      }
+    }
   }
 
   async joinRoom(roomId: string) {
