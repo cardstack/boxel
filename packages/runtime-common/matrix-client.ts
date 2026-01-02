@@ -130,7 +130,7 @@ export class MatrixClient {
   async getJoinedRooms() {
     let existing = joinedRoomsRequests.get(this);
     if (existing) {
-      return await existing;
+      return existing;
     }
     let request = (async () => {
       let response = await this.request('_matrix/client/v3/joined_rooms');
