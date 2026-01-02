@@ -431,7 +431,16 @@ export class Batch {
           WHERE`,
       ...every([
         ['i.realm_url =', param(this.realmURL.href)],
-        ['i.type != ', param('error')],
+        [
+          'i.type NOT IN',
+          ...addExplicitParens(
+            separatedByCommas(
+              ['instance-error', 'module-error', 'file-error'].map((type) => [
+                param(type),
+              ]),
+            ),
+          ),
+        ],
         ['i.is_deleted != true'],
       ]),
     ] as Expression)) as { total: string }[];
@@ -440,14 +449,14 @@ export class Batch {
 
   private async updateRealmMeta() {
     let results = await this.#query([
-      `SELECT CAST(count(i.url) AS INTEGER) as total, i.display_names->>0 as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
+      `SELECT CAST(count(DISTINCT i.url) AS INTEGER) as total, i.display_names->>0 as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
        FROM boxel_index_working as i
           WHERE`,
       ...every([
         ['i.realm_url =', param(this.realmURL.href)],
         any([
           ['i.type = ', param('instance')],
-          ['i.type = ', param('error')],
+          ['i.type = ', param('instance-error')],
         ]),
         ['i.types IS NOT NULL'],
         [
@@ -683,16 +692,16 @@ export class Batch {
     {
       url: string;
       alias: string;
-      type: 'instance' | 'module' | 'error';
+      type: BoxelIndexTable['type'];
     }[]
   > {
     let start = Date.now();
     const pageSize = 1000;
     let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: 'instance' | 'module' | 'error';
+      type: BoxelIndexTable['type'];
     })[] = [];
     let rows: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: 'instance' | 'module' | 'error';
+      type: BoxelIndexTable['type'];
     })[] = [];
     let pageNumber = 0;
     do {
@@ -724,7 +733,7 @@ export class Batch {
         ]),
         `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
       ] as Expression)) as (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-        type: 'instance' | 'module' | 'error';
+        type: BoxelIndexTable['type'];
       })[];
       results = [...results, ...rows];
       pageNumber++;
@@ -755,7 +764,7 @@ export class Batch {
     let items = await this.itemsThatReference(resolvedPath);
     let invalidations = items.map(({ url }) => url);
     let aliases = items.map(({ alias: moduleAlias, type, url }) =>
-      type === 'instance'
+      type === 'instance' || type === 'instance-error'
         ? // for instances we expect that the deps for an entry always includes .json extension
           url
         : moduleAlias,
