@@ -907,6 +907,9 @@ export function buildPrerenderManagerApp(options?: {
   router.post('/prerender-module', (ctxt) =>
     proxyPrerenderRequest(ctxt, 'prerender-module', 'module'),
   );
+  router.post('/prerender-file-extract', (ctxt) =>
+    proxyPrerenderRequest(ctxt, 'prerender-file-extract', 'file-extract'),
+  );
 
   let verboseManagerLogs =
     process.env.PRERENDER_MANAGER_VERBOSE_LOGS === 'true';

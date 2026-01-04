@@ -2,6 +2,34 @@ import { isNode, executableExtensions } from './index';
 import type { FileRef } from './realm';
 import type { LocalPath } from './paths';
 
+export type ByteStream = ReadableStream<Uint8Array> | Uint8Array;
+
+async function webStreamToBytes(
+  stream: ReadableStream<Uint8Array>,
+): Promise<Uint8Array> {
+  let reader = stream.getReader();
+  let chunks: Uint8Array[] = [];
+  let totalLength = 0;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    let { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    if (value) {
+      chunks.push(value);
+      totalLength += value.length;
+    }
+  }
+  let merged = new Uint8Array(totalLength);
+  let offset = 0;
+  for (let chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return merged;
+}
+
 export async function webStreamToText(
   stream: ReadableStream<Uint8Array>,
 ): Promise<string> {
@@ -20,6 +48,15 @@ export async function webStreamToText(
     }
   }
   return pieces.join('');
+}
+
+export async function byteStreamToUint8Array(
+  stream: ByteStream,
+): Promise<Uint8Array> {
+  if (stream instanceof Uint8Array) {
+    return stream;
+  }
+  return await webStreamToBytes(stream);
 }
 
 export async function fileContentToText({
@@ -51,6 +88,36 @@ export async function fileContentToText({
     }
     return B.concat(chunks).toString('utf-8');
   }
+}
+
+export async function fileContentToBytes({
+  content,
+}: Pick<FileRef, 'content'>): Promise<Uint8Array> {
+  if (content instanceof Uint8Array) {
+    return content;
+  }
+  if (typeof content === 'string') {
+    return new TextEncoder().encode(content);
+  }
+  if (content instanceof ReadableStream) {
+    return await webStreamToBytes(content);
+  }
+  if (!isNode) {
+    throw new Error(`cannot handle node-streams when not in node`);
+  }
+
+  // we're in a node-only branch, so this code isn't relevant to the worker
+  // build, but the worker build will try to resolve the buffer polyfill and
+  // blow up since we don't include that library. So we're hiding from
+  // webpack.
+  const B = (globalThis as any)['Buffer'];
+
+  const chunks: (typeof B)[] = []; // Buffer is available from globalThis when in the node env, however tsc can't type check this for the worker
+  // the types for Readable have not caught up to the fact these are async generators
+  for await (const chunk of content as any) {
+    chunks.push(B.from(chunk));
+  }
+  return new Uint8Array(B.concat(chunks));
 }
 
 export interface TextFileRef {

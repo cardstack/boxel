@@ -2,6 +2,8 @@ import stringify from 'safe-stable-stringify';
 
 export interface RenderRouteOptions {
   clearCache?: true;
+  fileExtract?: true;
+  fileDefModule?: string;
 }
 
 export function parseRenderRouteOptions(
@@ -12,7 +14,17 @@ export function parseRenderRouteOptions(
   }
   try {
     let parsed = JSON.parse(raw) as RenderRouteOptions;
-    return parsed.clearCache ? { clearCache: true } : {};
+    let options: RenderRouteOptions = {};
+    if (parsed.clearCache) {
+      options.clearCache = true;
+    }
+    if (parsed.fileExtract) {
+      options.fileExtract = true;
+      if (typeof parsed.fileDefModule === 'string') {
+        options.fileDefModule = parsed.fileDefModule;
+      }
+    }
+    return options;
   } catch {
     return {};
   }
@@ -21,8 +33,15 @@ export function parseRenderRouteOptions(
 export function serializeRenderRouteOptions(
   options: RenderRouteOptions = {},
 ): string {
+  let serialized: RenderRouteOptions = {};
   if (options.clearCache) {
-    return stringify({ clearCache: true }) ?? '{}';
+    serialized.clearCache = true;
   }
-  return stringify({}) ?? '{}';
+  if (options.fileExtract) {
+    serialized.fileExtract = true;
+    if (options.fileDefModule) {
+      serialized.fileDefModule = options.fileDefModule;
+    }
+  }
+  return stringify(serialized) ?? '{}';
 }
