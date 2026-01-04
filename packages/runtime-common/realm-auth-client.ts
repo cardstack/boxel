@@ -32,6 +32,43 @@ interface Options {
   authWithRealmServer?: true;
 }
 
+const realmSessionRequests = new WeakMap<
+  RealmAuthMatrixClientInterface,
+  Map<string, Promise<string>>
+>();
+
+function getRealmSessionWithCache(
+  matrixClient: RealmAuthMatrixClientInterface,
+  cacheKey: string,
+  createSession: () => Promise<string>,
+) {
+  let sessionRequests = realmSessionRequests.get(matrixClient);
+  if (!sessionRequests) {
+    sessionRequests = new Map();
+    realmSessionRequests.set(matrixClient, sessionRequests);
+  }
+  let existing = sessionRequests.get(cacheKey);
+  if (existing) {
+    return existing;
+  }
+  let request = createSession();
+  sessionRequests.set(cacheKey, request);
+  let cleanup = () => {
+    if (sessionRequests?.get(cacheKey) === request) {
+      sessionRequests.delete(cacheKey);
+    }
+    if (sessionRequests?.size === 0) {
+      realmSessionRequests.delete(matrixClient);
+    }
+  };
+  request.then(cleanup, cleanup);
+  return request;
+}
+
+function realmSessionCacheKey(realmURL: URL, sessionEndpoint: string) {
+  return `${realmURL.href}|${sessionEndpoint}`;
+}
+
 export class RealmAuthClient {
   private _jwt: string | undefined;
   private isRealmServerAuth: boolean;
@@ -98,33 +135,36 @@ export class RealmAuthClient {
   }
 
   private async createRealmSession() {
-    if (!this.matrixClient.isLoggedIn()) {
-      throw new Error(
-        `must be logged in to matrix before a realm session can be created`,
-      );
-    }
+    let cacheKey = realmSessionCacheKey(this.realmURL, this.sessionEndpoint);
+    return getRealmSessionWithCache(this.matrixClient, cacheKey, async () => {
+      if (!this.matrixClient.isLoggedIn()) {
+        throw new Error(
+          `must be logged in to matrix before a realm session can be created`,
+        );
+      }
 
-    let initialResponse = await this.initiateSessionRequest();
+      let initialResponse = await this.initiateSessionRequest();
 
-    let jwt = initialResponse.headers.get('Authorization');
+      let jwt = initialResponse.headers.get('Authorization');
 
-    if (!jwt) {
-      throw new Error(
-        "expected 'Authorization' header in response to POST session but it was missing",
-      );
-    }
+      if (!jwt) {
+        throw new Error(
+          "expected 'Authorization' header in response to POST session but it was missing",
+        );
+      }
 
-    let [_header, payload] = jwt.split('.');
-    let jwt_body = JSON.parse(atob(payload));
-    let { sessionRoom } = jwt_body as { sessionRoom: string };
+      let [_header, payload] = jwt.split('.');
+      let jwt_body = JSON.parse(atob(payload));
+      let { sessionRoom } = jwt_body as { sessionRoom: string };
 
-    let { joined_rooms: rooms } = await this.matrixClient.getJoinedRooms();
+      let { joined_rooms: rooms } = await this.matrixClient.getJoinedRooms();
 
-    if (!rooms.includes(sessionRoom) && sessionRoom) {
-      await joinDMRoom(this.matrixClient, sessionRoom);
-    }
+      if (!rooms.includes(sessionRoom) && sessionRoom) {
+        await joinDMRoom(this.matrixClient, sessionRoom);
+      }
 
-    return jwt;
+      return jwt;
+    });
   }
 
   private async initiateSessionRequest() {
