@@ -263,7 +263,7 @@ export default class CardPrerender extends Component {
           }
         } catch (e: any) {
           try {
-            error = { ...JSON.parse(e.message), type: 'error' };
+            error = { ...JSON.parse(e.message), type: 'instance-error' };
           } catch (err) {
             let cardErr = new CardError(e.message);
             cardErr.stack = e.stack;
@@ -273,7 +273,7 @@ export default class CardPrerender extends Component {
                 deps: [url.replace(/\.json$/, '')],
                 additionalErrors: null,
               },
-              type: 'error',
+              type: 'instance-error',
             };
           }
           this.store.resetCache();

@@ -3101,7 +3101,7 @@ export class Realm {
     let errorRows = (await query(this.#dbAdapter, [
       `SELECT url, error_doc FROM boxel_index WHERE realm_url =`,
       param(sourceRealmURL),
-      `AND type = 'error'`,
+      `AND type = 'instance-error'`,
       `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
     ])) as { url: string; error_doc: unknown | null }[];
 

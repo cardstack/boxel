@@ -449,10 +449,10 @@ module(basename(__filename), function () {
       url: URL,
     ): Promise<IndexedInstance | undefined> {
       let maybeInstance = await realm.realmIndexQueryEngine.instance(url);
-      if (maybeInstance?.type === 'error') {
+      if (maybeInstance?.type === 'instance-error') {
         return undefined;
       }
-      return maybeInstance;
+      return maybeInstance as IndexedInstance | undefined;
     }
 
     setupBaseRealmServer(hooks, matrixURL);

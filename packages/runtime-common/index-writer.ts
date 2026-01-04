@@ -6,7 +6,6 @@ import {
   type RealmInfo,
   type JobInfo,
   jobIdentity,
-  hasExecutableExtension,
   trimExecutableExtension,
   RealmPaths,
   unixTime,
@@ -84,11 +83,15 @@ export interface InstanceEntry {
 }
 
 export interface ErrorEntry {
-  type: 'error';
+  type: 'instance-error' | 'module-error' | 'file-error';
   error: SerializedError;
   types?: string[];
   searchData?: Record<string, any>;
   cardType?: string;
+}
+
+function isErrorEntry(entry: IndexEntry): entry is ErrorEntry {
+  return entry.type.endsWith('-error');
 }
 
 interface ModuleEntry {
@@ -260,10 +263,9 @@ export class Batch {
       // drop this band-aid
       return;
     }
-    let errorEntry =
-      entry.type === 'error'
-        ? { ...entry, error: this.normalizeErrorDoc(entry.error, url) }
-        : undefined;
+    let errorEntry = isErrorEntry(entry)
+      ? { ...entry, error: this.normalizeErrorDoc(entry.error, url) }
+      : undefined;
     let href = url.href;
     this.#invalidations.add(url.href);
     let entryPayload;
@@ -310,13 +312,18 @@ export class Batch {
           error_doc: null,
         };
         break;
-      case 'error':
+      case 'instance-error':
+      case 'module-error':
+      case 'file-error':
         entryPayload = {
           types: entry.types,
           search_doc: entry.searchData,
           // favor the last known good types over the types derived from the error state
-          ...((await this.getProductionVersion(url)) ?? {}),
-          type: 'error',
+          ...((await this.getProductionVersion(
+            url,
+            baseTypeFromError(entry),
+          )) ?? {}),
+          type: entry.type,
           error_doc: errorEntry?.error ?? entry.error,
         };
         break;
@@ -339,13 +346,13 @@ export class Batch {
       indexed_at: number;
     };
 
-    if (entry.type === 'error') {
+    if (isErrorEntry(entry)) {
       // merge the last known good deps with the error deps so we can invalidate
       // when upstream issue is repaired
       preparedEntry.deps = [
         ...new Set([
           ...(preparedEntry.deps ?? []),
-          ...(errorEntry?.error.deps ?? entry.error.deps ?? []),
+          ...(errorEntry?.error.deps ?? []),
         ]),
       ];
     }
@@ -381,7 +388,10 @@ export class Batch {
     return query(this.#dbAdapter, expression, coerceTypes);
   }
 
-  private async getProductionVersion(url: URL) {
+  private async getProductionVersion(
+    url: URL,
+    expectedType: BoxelIndexTable['type'],
+  ) {
     let [entry] = (await this.#query([
       `SELECT i.*`,
       `FROM boxel_index as i
@@ -391,6 +401,7 @@ export class Batch {
           [`i.url =`, param(url.href)],
           [`i.file_alias =`, param(url.href)],
         ]),
+        ['i.type =', param(expectedType)],
       ]),
     ] as Expression)) as unknown as BoxelIndexTable[];
     if (!entry) {
@@ -420,7 +431,16 @@ export class Batch {
           WHERE`,
       ...every([
         ['i.realm_url =', param(this.realmURL.href)],
-        ['i.type != ', param('error')],
+        [
+          'i.type NOT IN',
+          ...addExplicitParens(
+            separatedByCommas(
+              ['instance-error', 'module-error', 'file-error'].map((type) => [
+                param(type),
+              ]),
+            ),
+          ),
+        ],
         ['i.is_deleted != true'],
       ]),
     ] as Expression)) as { total: string }[];
@@ -429,14 +449,14 @@ export class Batch {
 
   private async updateRealmMeta() {
     let results = await this.#query([
-      `SELECT CAST(count(i.url) AS INTEGER) as total, i.display_names->>0 as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
+      `SELECT CAST(count(DISTINCT i.url) AS INTEGER) as total, i.display_names->>0 as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
        FROM boxel_index_working as i
           WHERE`,
       ...every([
         ['i.realm_url =', param(this.realmURL.href)],
         any([
           ['i.type = ', param('instance')],
-          ['i.type = ', param('error')],
+          ['i.type = ', param('instance-error')],
         ]),
         ['i.types IS NOT NULL'],
         [
@@ -556,6 +576,7 @@ export class Batch {
 
   private async tombstoneEntries(invalidations: string[]) {
     // insert tombstone into next version of the realm index
+    let existingTypes = await this.existingIndexTypes(invalidations);
     let columns = [
       'url',
       'file_alias',
@@ -564,20 +585,26 @@ export class Batch {
       'realm_url',
       'is_deleted',
     ].map((c) => [c]);
-    let rows = invalidations.map((id) =>
-      [
-        id,
-        trimExecutableExtension(new URL(id)).href,
-        hasExecutableExtension(id)
-          ? 'module'
-          : id.endsWith('.json')
-            ? 'instance'
-            : 'file',
-        this.realmVersion,
-        this.realmURL.href,
-        true,
-      ].map((v) => [param(v)]),
-    );
+    let rows = invalidations.flatMap((id) => {
+      let types = existingTypes.get(id);
+      if (!types || types.length === 0) {
+        return [];
+      }
+      return types.map((type) =>
+        [
+          id,
+          trimExecutableExtension(new URL(id)).href,
+          type,
+          this.realmVersion,
+          this.realmURL.href,
+          true,
+        ].map((v) => [param(v)]),
+      );
+    });
+
+    if (rows.length === 0) {
+      return;
+    }
 
     await this.#query([
       ...upsertMultipleRows(
@@ -587,6 +614,37 @@ export class Batch {
         rows,
       ),
     ]);
+  }
+
+  private async existingIndexTypes(
+    invalidations: string[],
+  ): Promise<Map<string, BoxelIndexTable['type'][]>> {
+    if (invalidations.length === 0) {
+      return new Map();
+    }
+    let uniqueInvalidations = [...new Set(invalidations)];
+    let rows = (await this.#query([
+      'SELECT DISTINCT url, type FROM boxel_index WHERE',
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        [
+          'url IN',
+          ...addExplicitParens(
+            separatedByCommas(uniqueInvalidations.map((id) => [param(id)])),
+          ),
+        ],
+      ]),
+    ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'type'>[];
+    let typesByUrl = new Map<string, BoxelIndexTable['type'][]>();
+    for (let row of rows) {
+      let existing = typesByUrl.get(row.url);
+      if (existing) {
+        existing.push(row.type);
+      } else {
+        typesByUrl.set(row.url, [row.type]);
+      }
+    }
+    return typesByUrl;
   }
 
   async invalidate(urls: URL[]): Promise<void> {
@@ -634,16 +692,16 @@ export class Batch {
     {
       url: string;
       alias: string;
-      type: 'instance' | 'module' | 'error';
+      type: BoxelIndexTable['type'];
     }[]
   > {
     let start = Date.now();
     const pageSize = 1000;
     let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: 'instance' | 'module' | 'error';
+      type: BoxelIndexTable['type'];
     })[] = [];
     let rows: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: 'instance' | 'module' | 'error';
+      type: BoxelIndexTable['type'];
     })[] = [];
     let pageNumber = 0;
     do {
@@ -675,7 +733,7 @@ export class Batch {
         ]),
         `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
       ] as Expression)) as (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-        type: 'instance' | 'module' | 'error';
+        type: BoxelIndexTable['type'];
       })[];
       results = [...results, ...rows];
       pageNumber++;
@@ -706,7 +764,7 @@ export class Batch {
     let items = await this.itemsThatReference(resolvedPath);
     let invalidations = items.map(({ url }) => url);
     let aliases = items.map(({ alias: moduleAlias, type, url }) =>
-      type === 'instance'
+      type === 'instance' || type === 'instance-error'
         ? // for instances we expect that the deps for an entry always includes .json extension
           url
         : moduleAlias,
@@ -797,5 +855,18 @@ export class Batch {
         }
       }
     }
+  }
+}
+
+function baseTypeFromError(
+  entry: ErrorEntry,
+): Extract<BoxelIndexTable['type'], 'instance' | 'module' | 'file'> {
+  switch (entry.type) {
+    case 'instance-error':
+      return 'instance';
+    case 'module-error':
+      return 'module';
+    case 'file-error':
+      return 'file';
   }
 }

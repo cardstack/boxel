@@ -23,7 +23,7 @@
    resource_created_at,
    icon_html TEXT,
    head_html TEXT,
-   PRIMARY KEY ( url, realm_url ) 
+   PRIMARY KEY ( url, realm_url, type ) 
 );
 
  CREATE TABLE IF NOT EXISTS boxel_index_working (
@@ -48,7 +48,7 @@
    display_names BLOB,
    resource_created_at,
    head_html TEXT,
-   PRIMARY KEY ( url, realm_url ) 
+   PRIMARY KEY ( url, realm_url, type ) 
 );
 
  CREATE TABLE IF NOT EXISTS modules (

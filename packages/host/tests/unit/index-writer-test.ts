@@ -791,7 +791,7 @@ module('Unit | index-writer', function (hooks) {
     );
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
-      type: 'error',
+      type: 'instance-error',
       error: {
         message: 'test error',
         status: 500,
@@ -801,7 +801,7 @@ module('Unit | index-writer', function (hooks) {
     await batch.done();
 
     let [{ indexed_at: _remove, ...errorEntry }] = (await adapter.execute(
-      'SELECT * FROM boxel_index WHERE realm_version = 2 ORDER BY url COLLATE "POSIX"',
+      'SELECT * FROM boxel_index WHERE realm_version = 2 AND type = \'instance-error\' ORDER BY url COLLATE "POSIX"',
       { coerceTypes },
     )) as unknown as BoxelIndexTable[];
     assert.deepEqual(
@@ -811,7 +811,7 @@ module('Unit | index-writer', function (hooks) {
         file_alias: `${testRealmURL}1`,
         realm_version: 2,
         realm_url: testRealmURL,
-        type: 'error',
+        type: 'instance-error',
         pristine_doc: resource,
         error_doc: {
           message: 'test error',
@@ -855,7 +855,7 @@ module('Unit | index-writer', function (hooks) {
     );
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
-      type: 'error',
+      type: 'instance-error',
       error: {
         message: 'test error',
         status: 500,
@@ -865,7 +865,7 @@ module('Unit | index-writer', function (hooks) {
     await batch.done();
 
     let [{ indexed_at: _remove, ...errorEntry }] = (await adapter.execute(
-      'SELECT * FROM boxel_index WHERE realm_version = 2 ORDER BY url COLLATE "POSIX"',
+      'SELECT * FROM boxel_index WHERE realm_version = 2 AND type = \'instance-error\' ORDER BY url COLLATE "POSIX"',
       { coerceTypes },
     )) as unknown as BoxelIndexTable[];
     assert.deepEqual(
@@ -875,7 +875,7 @@ module('Unit | index-writer', function (hooks) {
         file_alias: `${testRealmURL}1`,
         realm_version: 2,
         realm_url: testRealmURL,
-        type: 'error',
+        type: 'instance-error',
         pristine_doc: null,
         error_doc: {
           message: 'test error',
@@ -909,7 +909,7 @@ module('Unit | index-writer', function (hooks) {
     );
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
     await batch.updateEntry(new URL(`${testRealmURL}nested/1.json`), {
-      type: 'error',
+      type: 'instance-error',
       error: {
         id: null,
         message: 'test error',
@@ -921,7 +921,7 @@ module('Unit | index-writer', function (hooks) {
     await batch.done();
 
     let [{ error_doc: errorDoc, deps }] = (await adapter.execute(
-      'SELECT error_doc, deps FROM boxel_index WHERE realm_version = 2 ORDER BY url COLLATE "POSIX"',
+      'SELECT error_doc, deps FROM boxel_index WHERE realm_version = 2 AND type = \'instance-error\' ORDER BY url COLLATE "POSIX"',
       { coerceTypes },
     )) as Pick<BoxelIndexTable, 'error_doc' | 'deps'>[];
 
@@ -949,7 +949,7 @@ module('Unit | index-writer', function (hooks) {
         url: `${testRealmURL}1.json`,
         realm_version: 1,
         realm_url: testRealmURL,
-        type: 'error',
+        type: 'instance-error',
         error_doc: {
           message: 'test error',
           status: 500,
@@ -959,11 +959,11 @@ module('Unit | index-writer', function (hooks) {
       },
     ]);
     let entry = await indexQueryEngine.getInstance(new URL(`${testRealmURL}1`));
-    if (entry?.type === 'error') {
+    if (entry?.type === 'instance-error') {
       assert.ok(entry.lastModified, 'lastModified exists');
       entry.lastModified = null;
       assert.deepEqual(entry, {
-        type: 'error',
+        type: 'instance-error',
         error: {
           message: 'test error',
           status: 500,
@@ -1275,6 +1275,44 @@ module('Unit | index-writer', function (hooks) {
     }
   });
 
+  test('allows multiple index entries for the same url with different types', async function (assert) {
+    await setupIndex(adapter);
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let now = Date.now();
+
+    await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
+      type: 'file',
+      lastModified: now,
+      resourceCreatedAt: now,
+      deps: new Set(),
+      searchData: {
+        name: 'person.gts',
+        contentType: 'text/plain',
+      },
+    });
+    await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
+      type: 'module',
+      lastModified: now,
+      resourceCreatedAt: now,
+      deps: new Set(),
+    });
+    await batch.done();
+
+    let rows = await adapter.execute(
+      'SELECT url, type FROM boxel_index WHERE url = $1 ORDER BY type COLLATE "POSIX"',
+      { bind: [`${testRealmURL}person.gts`] },
+    );
+
+    assert.deepEqual(
+      rows,
+      [
+        { url: `${testRealmURL}person.gts`, type: 'file' },
+        { url: `${testRealmURL}person.gts`, type: 'module' },
+      ],
+      'file and module entries share the same url',
+    );
+  });
+
   test('can get compiled module and source when requested without file extension', async function (assert) {
     await setupIndex(adapter);
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
@@ -1338,7 +1376,7 @@ module('Unit | index-writer', function (hooks) {
         url: `${testRealmURL}person.gts`,
         realm_version: 1,
         realm_url: testRealmURL,
-        type: 'error',
+        type: 'module-error',
         error_doc: {
           message: 'test error',
           status: 500,
@@ -1350,9 +1388,9 @@ module('Unit | index-writer', function (hooks) {
     let result = await indexQueryEngine.getModule(
       new URL(`${testRealmURL}person.gts`),
     );
-    if (result?.type === 'error') {
+    if (result?.type === 'module-error') {
       assert.deepEqual(result, {
-        type: 'error',
+        type: 'module-error',
         error: {
           message: 'test error',
           status: 500,
@@ -1589,7 +1627,7 @@ module('Unit | index-writer', function (hooks) {
 
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
-      type: 'error',
+      type: 'instance-error',
       error: {
         message: 'test error',
         status: 500,
