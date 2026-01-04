@@ -117,6 +117,11 @@ const CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
       border-radius: var(--boxel-border-radius-xxl);
       overflow: hidden;
     }
+    .code-block.compact {
+      background-color: transparent;
+      border: 0;
+      border-radius: 0;
+    }
     :deep(.monaco-editor) {
       --vscode-editor-background: var(--boxel-dark);
       --vscode-editorGutter-background: var(--boxel-dark);
