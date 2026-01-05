@@ -93,8 +93,10 @@ export class IndexRunner {
   readonly stats: Stats = {
     instancesIndexed: 0,
     modulesIndexed: 0,
+    filesIndexed: 0,
     instanceErrors: 0,
     moduleErrors: 0,
+    fileErrors: 0,
     totalIndexEntries: 0,
   };
   #shouldClearCacheForNextRender = true;
@@ -778,6 +780,7 @@ export class IndexRunner {
         `${jobIdentity(this.#jobInfo)} encountered error indexing file ${path}: ${renderError.error.message}`,
       );
       await this.batch.updateEntry(entryURL, renderError);
+      this.stats.fileErrors++;
       return;
     }
 
@@ -802,6 +805,7 @@ export class IndexRunner {
       types: [],
       displayNames: [],
     });
+    this.stats.filesIndexed++;
   }
 
   private async updateEntry(
