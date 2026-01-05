@@ -141,7 +141,7 @@ export default class Directory extends Component<Args> {
   private listing = directory(
     this,
     () => this.args.relativePath,
-    () => new URL(this.args.realmURL),
+    () => this.args.realmURL,
   );
 
   @tracked private selectedFile?: LocalPath;
