@@ -3130,18 +3130,36 @@ export class Realm {
     let resourceUrl = Array.isArray(payload.url)
       ? String(payload.url[0])
       : String(payload.url);
+    let requestedType = payload.type
+      ? Array.isArray(payload.type)
+        ? String(payload.type[0])
+        : String(payload.type)
+      : undefined;
+    let acceptedTypes = requestedType
+      ? [requestedType, `${requestedType}-error`]
+      : ['instance', 'instance-error'];
 
     let rows = (await query(this.#dbAdapter, [
-      `SELECT url, realm_url, deps FROM boxel_index WHERE (url =`,
+      `SELECT url, realm_url, deps, type FROM boxel_index WHERE (url =`,
       param(resourceUrl),
       `OR file_alias =`,
       param(resourceUrl),
+      `) AND type IN (`,
+      ...acceptedTypes.flatMap((type, index) =>
+        index === 0 ? [param(type)] : [',', param(type)],
+      ),
       `) AND (is_deleted IS NULL OR is_deleted = FALSE)`,
-    ])) as { url: string; realm_url: string; deps: unknown }[];
+    ])) as {
+      url: string;
+      realm_url: string;
+      deps: unknown;
+      type: string;
+    }[];
 
     let entries = rows.map((row) => ({
       canonicalUrl: row.url,
       realmUrl: ensureTrailingSlash(row.realm_url),
+      entryType: row.type,
       dependencies: parseDeps(row.deps),
     }));
 
@@ -3152,6 +3170,7 @@ export class Realm {
         attributes: {
           canonicalUrl: entry.canonicalUrl,
           realmUrl: entry.realmUrl,
+          entryType: entry.entryType,
           dependencies: entry.dependencies,
         },
       })),
@@ -3191,7 +3210,7 @@ export class Realm {
     let errorRows = (await query(this.#dbAdapter, [
       `SELECT url, error_doc FROM boxel_index WHERE realm_url =`,
       param(sourceRealmURL),
-      `AND type = 'instance-error'`,
+      `AND type = 'module-error'`,
       `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
     ])) as { url: string; error_doc: unknown | null }[];
 
@@ -3271,12 +3290,21 @@ export class Realm {
         return [];
       }
       let rows = (await query(this.#dbAdapter, [
-        `SELECT url, realm_url, deps FROM boxel_index WHERE (url =`,
+        `SELECT url, realm_url, deps, type FROM boxel_index WHERE (url =`,
         param(resourceUrl),
         `OR file_alias =`,
         param(resourceUrl),
+        `) AND type IN (`,
+        param('instance'),
+        `,`,
+        param('instance-error'),
         `) AND (is_deleted IS NULL OR is_deleted = FALSE)`,
-      ])) as { url: string; realm_url: string; deps: unknown }[];
+      ])) as {
+        url: string;
+        realm_url: string;
+        deps: unknown;
+        type: string;
+      }[];
 
       if (rows.length === 0) {
         return [];
@@ -3285,6 +3313,7 @@ export class Realm {
       return rows.map((row) => ({
         canonicalUrl: row.url,
         realmUrl: ensureTrailingSlash(row.realm_url),
+        entryType: row.type,
         dependencies: parseDeps(row.deps),
       }));
     };
@@ -3295,6 +3324,7 @@ export class Realm {
     ): Promise<ResourceIndexEntry[] | undefined> => {
       let endpoint = new URL('_dependencies', base);
       endpoint.searchParams.set('url', resourceUrl);
+      endpoint.searchParams.set('type', 'instance');
       let response: Response;
       try {
         response = await this.__fetchForTesting(endpoint, {
@@ -3321,6 +3351,7 @@ export class Realm {
           attributes?: {
             canonicalUrl?: string;
             realmUrl?: string;
+            entryType?: string;
             dependencies?: unknown;
           };
         }>;
@@ -3342,6 +3373,7 @@ export class Realm {
           return {
             canonicalUrl,
             realmUrl: ensureTrailingSlash(realmUrl),
+            entryType: resource.attributes?.entryType,
             dependencies,
           };
         })
