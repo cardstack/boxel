@@ -45,8 +45,16 @@ module('Integration | add-workspace', function (hooks) {
     let displayName = (
       find('[data-test-display-name-field]') as HTMLInputElement
     )?.value;
+    let endpoint = (find('[data-test-endpoint-field]') as HTMLInputElement)
+      ?.value;
 
     assert.ok(displayName?.length, 'display name is pre-populated');
+    assert.ok(displayName?.includes(' '), 'display name uses spaces');
+    assert.notEqual(
+      displayName,
+      endpoint,
+      'display name and endpoint are different',
+    );
     assert
       .dom('[data-test-endpoint-field]')
       .hasValue(cleanseString(displayName ?? ''));
