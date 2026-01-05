@@ -111,6 +111,17 @@ jobs:
       build-args: |
         "worker_script=start:worker-${{ inputs.environment }}"
 
+  build-daily-credit-grant:
+    name: Build daily credit grant Docker image
+    uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
+    secrets: inherit
+    with:
+      repository: "boxel-daily-credit-grant-${{ inputs.environment }}"
+      environment: ${{ inputs.environment }}
+      dockerfile: "packages/realm-server/daily-credit-grant.Dockerfile"
+      build-args: |
+        "daily_credit_grant_script=start:daily-credit-grant"
+
   build-pg-migration:
     name: Build pg-migration Docker image
     uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main

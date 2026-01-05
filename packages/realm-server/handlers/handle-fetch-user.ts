@@ -118,13 +118,23 @@ export default function handleFetchUserRequest({
           subscriptionCycleId: currentSubscriptionCycle.id,
         }),
         sumUpCreditsLedger(dbAdapter, {
-          creditType: ['extra_credit', 'extra_credit_used'],
+          creditType: [
+            'extra_credit',
+            'extra_credit_used',
+            'daily_credit',
+            'daily_credit_used',
+          ],
           userId: user.id,
         }),
       ]);
     } else {
       extraCreditsAvailableInBalance = await sumUpCreditsLedger(dbAdapter, {
-        creditType: ['extra_credit', 'extra_credit_used'],
+        creditType: [
+          'extra_credit',
+          'extra_credit_used',
+          'daily_credit',
+          'daily_credit_used',
+        ],
         userId: user.id,
       });
     }

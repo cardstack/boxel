@@ -5,7 +5,7 @@ import type {
   SubscriptionCycle,
   User,
 } from '@cardstack/runtime-common';
-import { param, query } from '@cardstack/runtime-common';
+import { logger, param, query } from '@cardstack/runtime-common';
 import { module, test } from 'qunit';
 import {
   fetchSubscriptionsByUserId,
@@ -24,6 +24,8 @@ import {
   insertSubscription,
   spendCredits,
 } from '@cardstack/billing/billing-queries';
+import type { TaskArgs } from '@cardstack/runtime-common/tasks';
+import { dailyCreditGrant } from '@cardstack/runtime-common/tasks/daily-credit-grant';
 
 import type {
   StripeInvoicePaymentSucceededWebhookEvent,
@@ -73,6 +75,27 @@ async function fetchCreditsLedgerByUser(
         subscriptionCycleId: result.subscription_cycle_id,
       }) as LedgerEntry,
   );
+}
+
+function buildDailyCreditGrantTaskArgs(dbAdapter: PgAdapter): TaskArgs {
+  return {
+    dbAdapter,
+    queuePublisher: {} as TaskArgs['queuePublisher'],
+    indexWriter: {} as TaskArgs['indexWriter'],
+    prerenderer: {} as TaskArgs['prerenderer'],
+    log: logger('test-daily-credit-grant'),
+    matrixURL: 'http://matrix.invalid',
+    getReader: () => {
+      throw new Error('getReader should not be called in daily credit grant');
+    },
+    getAuthedFetch: async () => {
+      throw new Error(
+        'getAuthedFetch should not be called in daily credit grant',
+      );
+    },
+    createPrerenderAuth: () => '',
+    reportStatus: () => {},
+  };
 }
 
 module(basename(__filename), function () {
@@ -1038,6 +1061,114 @@ module(basename(__filename), function () {
           }),
           3,
         );
+      });
+
+      test('spends ai credits using daily credits before extra credits', async function (assert) {
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: 5,
+          creditType: 'plan_allowance',
+          subscriptionCycleId: subscriptionCycle.id,
+        });
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: 4,
+          creditType: 'daily_credit',
+          subscriptionCycleId: null,
+        });
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: 3,
+          creditType: 'extra_credit',
+          subscriptionCycleId: null,
+        });
+
+        await spendCredits(dbAdapter, user.id, 10);
+
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, {
+            userId: user.id,
+            creditType: [
+              'plan_allowance',
+              'plan_allowance_used',
+              'plan_allowance_expired',
+            ],
+          }),
+          0,
+        );
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, {
+            userId: user.id,
+            creditType: ['daily_credit', 'daily_credit_used'],
+          }),
+          0,
+        );
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, {
+            userId: user.id,
+            creditType: ['extra_credit', 'extra_credit_used'],
+          }),
+          2,
+        );
+      });
+    });
+
+    module('daily credit grant', function () {
+      test('grants credits when user falls below the threshold', async function (assert) {
+        let user = await insertUser(
+          dbAdapter,
+          'low-credits@test',
+          'cus_low',
+          'low@test.com',
+        );
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: 3,
+          creditType: 'extra_credit',
+          subscriptionCycleId: null,
+        });
+
+        let task = dailyCreditGrant(buildDailyCreditGrantTaskArgs(dbAdapter));
+        await task({ lowCreditThreshold: 10 });
+
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, {
+            userId: user.id,
+            creditType: ['daily_credit', 'daily_credit_used'],
+          }),
+          7,
+        );
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, {
+            userId: user.id,
+          }),
+          10,
+        );
+      });
+
+      test('does not grant twice on the same day', async function (assert) {
+        let user = await insertUser(
+          dbAdapter,
+          'repeat@test',
+          'cus_repeat',
+          'repeat@test.com',
+        );
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: 2,
+          creditType: 'extra_credit',
+          subscriptionCycleId: null,
+        });
+
+        let task = dailyCreditGrant(buildDailyCreditGrantTaskArgs(dbAdapter));
+        await task({ lowCreditThreshold: 10 });
+        await task({ lowCreditThreshold: 10 });
+
+        let ledgerEntries = await fetchCreditsLedgerByUser(dbAdapter, user.id);
+        let dailyGrants = ledgerEntries.filter(
+          (entry) => entry.creditType === 'daily_credit',
+        );
+        assert.strictEqual(dailyGrants.length, 1);
       });
     });
   });
