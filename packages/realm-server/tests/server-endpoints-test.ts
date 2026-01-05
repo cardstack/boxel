@@ -1312,6 +1312,8 @@ module(basename(__filename), function () {
               )
               .set('Content-Type', 'application/json');
             assert.deepEqual(response.body, {
+              fileErrors: 0,
+              filesIndexed: 2,
               moduleErrors: 0,
               instanceErrors: 0,
               modulesIndexed: 0,
