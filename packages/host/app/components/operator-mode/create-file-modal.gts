@@ -655,7 +655,7 @@ export default class CreateFileModal extends Component<Signature> {
         `Cannot determine selectedRealmURL when there is no this.currentRequest`,
       );
     }
-    return this.currentRequest.realmURL;
+    return this.currentRequest.realmURL?.href;
   }
 
   private get definitionClass() {
@@ -762,7 +762,7 @@ export default class CreateFileModal extends Component<Signature> {
 
     let isField = this.fileType.id === 'field-definition';
 
-    let realmPath = new RealmPaths(this.selectedRealmURL);
+    let realmPath = new RealmPaths(new URL(this.selectedRealmURL));
     // assert that filename is a GTS file and is a LocalPath
     let fileName: LocalPath = `${this.fileName.replace(
       /\.[^.].+$/,
@@ -799,7 +799,7 @@ export default class CreateFileModal extends Component<Signature> {
     let moduleURL = maybeRelativeURL(
       absoluteModule,
       url,
-      this.selectedRealmURL,
+      new URL(this.selectedRealmURL),
     );
     let src: string[] = [];
 
@@ -869,7 +869,7 @@ export class ${className} extends ${exportName} {
       this.commandService.commandContext,
     ).execute({
       sourceCard: this.currentRequest.sourceInstance,
-      targetRealm: this.selectedRealmURL.href,
+      targetRealm: this.selectedRealmURL,
     });
     this.currentRequest.newFileDeferred.fulfill(new URL(`${newCardId}.json`));
   });
@@ -912,7 +912,7 @@ export class ${className} extends ${exportName} {
       data: {
         meta: {
           adoptsFrom: ref,
-          realmURL: this.selectedRealmURL.href,
+          realmURL: this.selectedRealmURL,
         },
       },
     };
@@ -920,7 +920,7 @@ export class ${className} extends ${exportName} {
     try {
       let maybeId = await this.store.create(doc, {
         relativeTo,
-        realm: this.selectedRealmURL.href,
+        realm: this.selectedRealmURL,
       });
       if (typeof maybeId !== 'string') {
         let error = maybeId;
@@ -953,7 +953,7 @@ export class ${className} extends ${exportName} {
       return;
     }
 
-    let realmPath = new RealmPaths(this.selectedRealmURL);
+    let realmPath = new RealmPaths(new URL(this.selectedRealmURL));
     let filePath: LocalPath = fileName as LocalPath;
     let url = realmPath.fileURL(filePath);
 

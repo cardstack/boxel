@@ -47,7 +47,7 @@ export default class CopyAndEditCommand extends HostBaseCommand<
       throw new Error('copy-and-edit requires a card with an id');
     }
 
-    let targetRealm = this.operatorModeStateService.realmURL?.href;
+    let targetRealm = this.operatorModeStateService.realmURL;
     if (!targetRealm) {
       throw new Error('Could not determine interact realm for card copy');
     }

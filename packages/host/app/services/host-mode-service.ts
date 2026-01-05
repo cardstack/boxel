@@ -72,7 +72,7 @@ export default class HostModeService extends Service {
   }
 
   get realmURL() {
-    return this.operatorModeStateService.realmURL.href;
+    return this.operatorModeStateService.realmURL;
   }
 
   get currentCardId() {

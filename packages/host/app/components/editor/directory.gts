@@ -20,7 +20,7 @@ import { normalizeDirPath } from '@cardstack/host/utils/normalized-dir-path';
 interface Args {
   Args: {
     relativePath: string;
-    realmURL: URL;
+    realmURL: string;
     selectedFile?: LocalPath;
     openDirs?: LocalPath[];
     onFileSelected?: (entryPath: LocalPath) => void;
@@ -141,7 +141,7 @@ export default class Directory extends Component<Args> {
   private listing = directory(
     this,
     () => this.args.relativePath,
-    () => this.args.realmURL,
+    () => new URL(this.args.realmURL),
   );
 
   @tracked private selectedFile?: LocalPath;

@@ -343,7 +343,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       let currentRealm = this.operatorModeStateService.realmURL;
       const result = await createSpecCommand.execute({
         codeRef: ref,
-        targetRealm: currentRealm.href,
+        targetRealm: currentRealm,
       });
       const spec = result.specs?.[0];
       if (spec) {
@@ -369,7 +369,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   }
 
   private get canWrite() {
-    return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
+    return this.realm.canWrite(this.operatorModeStateService.realmURL);
   }
 
   get showCreateSpec() {

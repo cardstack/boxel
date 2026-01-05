@@ -77,7 +77,7 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
         attachedCards: [...(await attachedCardsPromise)],
         attachedFileURLs: input.attachedFileURLs,
         openCardIds: input.openCardIds,
-        realmUrl: this.operatorModeStateService.realmURL.href,
+        realmUrl: this.operatorModeStateService.realmURL,
         requireCommandCall: input.requireCommandCall,
       });
       return sendMessageResult;
