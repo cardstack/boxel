@@ -1,0 +1,68 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "ThreeModesSection",
+        "module": "../three-modes-section"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "modes": [
+        {
+          "modeNumber": "01",
+          "modeLabel": "Mode",
+          "headline": "Apps that feel like docs.",
+          "subheadline": "",
+          "body": "Daily workspace for doing real work. Navigate cards, chat with AI, connect data across apps. This is where you live—working with your applications, not building them.",
+          "screenshotUrl": null,
+          "linkText": "Learn about Interact Mode →",
+          "linkUrl": null,
+          "isHighlighted": false,
+          "accentColor": "var(--boxel-teal)"
+        },
+        {
+          "modeNumber": "02",
+          "modeLabel": "Mode",
+          "headline": "IDE that lives on the web.",
+          "subheadline": "",
+          "body": "When you need to modify software, tap into the power of a full IDE built in. AI tracks your context automatically—code         navigation, schema visualization, debugging—without loading your entire codebase.",
+          "screenshotUrl": null,
+          "linkText": "Learn about Code Mode →",
+          "linkUrl": null,
+          "isHighlighted": true,
+          "accentColor": "var(--boxel-purple)"
+        },
+        {
+          "modeNumber": "03",
+          "modeLabel": "Mode",
+          "headline": "Live the moment you publish.",
+          "subheadline": "",
+          "body": "Share instantly. No pipelines, no deploys, no DevOps. Set permissions, claim domains, update in real-time. Recipients see your work the second you hit publish.",
+          "screenshotUrl": null,
+          "linkText": "Learn about Host Mode →",
+          "linkUrl": null,
+          "isHighlighted": false,
+          "accentColor": "var(--boxel-cyan)"
+        }
+      ],
+      "cardInfo": {
+        "notes": null,
+        "title": "Workspace Modes",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "headline": "One environment that unifies how you create, build, and share anything.",
+      "subheadline": "Boxel unifies chat, code editing, vibe coding, and hosting into one self-contained environment. Same files, same data, same system—just different lenses for different type of work. Switch modes, not apps.",
+      "sectionLabel": "AI-Native Workspace",
+      "sectionNumber": "002"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

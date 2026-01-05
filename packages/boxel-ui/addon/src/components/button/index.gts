@@ -157,7 +157,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         box-shadow: var(--boxel-button-box-shadow);
       }
       .boxel-button:not(.rectangular) {
-        border-radius: var(--boxel-button-border-radius, var(--radius, 100px));
+        border-radius: var(--boxel-button-border-radius, 100px);
       }
       .boxel-button:not(:disabled):hover {
         background-color: color-mix(
