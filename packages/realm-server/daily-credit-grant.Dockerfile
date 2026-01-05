@@ -19,6 +19,4 @@ ADD . ./
 RUN CI=1 pnpm fetch
 RUN CI=1 pnpm install -r --offline
 
-EXPOSE 3000
-
 CMD pnpm --filter "./packages/realm-server" $daily_credit_grant_script
