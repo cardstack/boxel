@@ -429,7 +429,7 @@ export function buildInvalidFileExtractResponseError(
     id = null;
   }
   return {
-    type: 'error',
+    type: 'file-error',
     error: {
       id,
       status: 500,

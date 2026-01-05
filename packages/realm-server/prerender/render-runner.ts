@@ -637,7 +637,7 @@ export class RenderRunner {
             searchDoc: null,
             deps: renderError.error.deps ?? [],
             error: {
-              type: 'error',
+              type: 'file-error',
               error: renderError.error,
             },
           };

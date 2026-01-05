@@ -215,9 +215,7 @@ export function getReader(
   ): { lastModified: number; created: number; path: string } => {
     let lastModifiedRfc7321 = response.headers.get('last-modified');
     if (!lastModifiedRfc7321) {
-      throw new Error(
-        `Response for ${url.href} has no 'last-modified' header`,
-      );
+      throw new Error(`Response for ${url.href} has no 'last-modified' header`);
     }
     // This is RFC-7321 format which is the last modified date format used in HTTP headers
     let lastModified = unixTime(
@@ -292,7 +290,9 @@ export function getReader(
       let stream: ByteStream;
       if ('nodeStream' in response && response.nodeStream) {
         if (Readable.toWeb) {
-          stream = Readable.toWeb(response.nodeStream) as ReadableStream<Uint8Array>;
+          stream = Readable.toWeb(
+            response.nodeStream,
+          ) as ReadableStream<Uint8Array>;
         } else {
           stream = await fileContentToBytes({
             content: response.nodeStream,

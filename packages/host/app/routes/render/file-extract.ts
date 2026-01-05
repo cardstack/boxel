@@ -154,7 +154,12 @@ export default class RenderFileExtractRoute extends Route<Model> {
 
   async #teeResponse(
     response: Response,
-  ): Promise<[ReadableStream<Uint8Array> | Uint8Array, ReadableStream<Uint8Array> | Uint8Array]> {
+  ): Promise<
+    [
+      ReadableStream<Uint8Array> | Uint8Array,
+      ReadableStream<Uint8Array> | Uint8Array,
+    ]
+  > {
     if (response.body && 'tee' in response.body) {
       return response.body.tee();
     }

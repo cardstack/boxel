@@ -200,7 +200,6 @@ export * from './render-route-options';
 export * from './publishability';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
-export const FILE_INDEX_QUERY_PARAM = '__file__';
 export { createResponse } from './create-response';
 
 export * from './db-queries/db-types';
@@ -523,12 +522,6 @@ export function trimExecutableExtension(url: URL): URL {
     }
   }
   return url;
-}
-
-export function fileIndexURL(url: URL): URL {
-  let fileURL = new URL(url.href);
-  fileURL.searchParams.set(FILE_INDEX_QUERY_PARAM, '1');
-  return fileURL;
 }
 
 export function internalKeyFor(

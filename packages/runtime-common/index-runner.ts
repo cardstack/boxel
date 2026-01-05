@@ -8,7 +8,6 @@ import {
   logger,
   isCardResource,
   hasExecutableExtension,
-  fileIndexURL,
   SupportedMimeType,
   unixTime,
   jobIdentity,
@@ -404,10 +403,8 @@ export class IndexRunner {
     // ensure created_at exists for this file and use it for resourceCreatedAt
     let resourceCreatedAt = await this.batch.ensureFileCreatedAt(localPath);
     let shouldIndexFile = true;
-    let shouldUseFileIndexURL = false;
     if (hasExecutableExtension(url.href)) {
       await this.indexModule(url);
-      shouldUseFileIndexURL = true;
     } else if (url.href.endsWith('.json')) {
       let resource;
 
@@ -433,7 +430,6 @@ export class IndexRunner {
           resourceCreatedAt,
           resource,
         });
-        shouldUseFileIndexURL = true;
       }
     }
 
@@ -448,7 +444,6 @@ export class IndexRunner {
         path: localPath,
         lastModified,
         resourceCreatedAt,
-        fileEntryURL: shouldUseFileIndexURL ? fileIndexURL(url) : url,
       });
     }
     this.#log.debug(
@@ -707,15 +702,13 @@ export class IndexRunner {
     path,
     lastModified,
     resourceCreatedAt,
-    fileEntryURL,
   }: {
     path: LocalPath;
     lastModified: number;
     resourceCreatedAt: number;
-    fileEntryURL?: URL;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
-    let entryURL = fileEntryURL ?? new URL(fileURL);
+    let entryURL = new URL(fileURL);
     let name = path.split('/').pop() ?? path;
     let contentType = inferContentType(name);
     let fileDefModule = resolveFileDefModule(new URL(fileURL));
@@ -759,14 +752,14 @@ export class IndexRunner {
         });
       }
       if (isCardError(err)) {
-        return { type: 'error', error: serializableError(err) };
+        return { type: 'file-error', error: serializableError(err) };
       }
       let fallback = new CardError(
         (err as Error)?.message ?? 'unknown file extract error',
         { status: 500 },
       );
       fallback.stack = (err as Error)?.stack;
-      return { type: 'error', error: serializableError(fallback) };
+      return { type: 'file-error', error: serializableError(fallback) };
     };
 
     if (!extractResult || extractResult.status === 'error') {

@@ -904,7 +904,10 @@ module(basename(__filename), function () {
         'mango.json',
         'file entry includes name',
       );
-      assert.ok(entry?.searchDoc?.contentHash, 'file entry includes contentHash');
+      assert.ok(
+        entry?.searchDoc?.contentHash,
+        'file entry includes contentHash',
+      );
     });
 
     test('file extractor populates search_doc', async function (assert) {
