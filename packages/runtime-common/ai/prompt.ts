@@ -766,7 +766,6 @@ function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
 async function toResultMessages(
   event: CardMessageEvent,
   commandResults: CommandResultEvent[] = [],
-  codePatchResults: CodePatchResultEvent[] = [],
   client: MatrixClient,
   history: DiscreteMatrixEvent[],
 ): Promise<OpenAIPromptMessage[]> {
@@ -1226,7 +1225,6 @@ export async function buildPromptForModel(
         await toResultMessages(
           event as CardMessageEvent,
           commandResults,
-          codePatchResults,
           client,
           history,
         )

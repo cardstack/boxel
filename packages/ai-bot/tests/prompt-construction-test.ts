@@ -3535,7 +3535,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
           '(The user has successfully applied code patch',
         ),
       ),
-      'Legacy code patch result messages should be omitted',
+      'Code patch result messages should be omitted',
     );
   });
 
@@ -3581,7 +3581,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       userMessages.some((message) =>
         (message.content as string).includes('(The user has successfully'),
       ),
-      'Legacy code patch result messages should be omitted',
+      'Code patch result messages should be omitted',
     );
   });
 
@@ -3658,7 +3658,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
           '(The user has successfully applied code patch',
         ),
       ),
-      'Legacy code patch result messages should be omitted',
+      'Code patch result messages should be omitted',
     );
     const toolResultMessages = messages!.filter(
       (message) => message.role === 'tool',
@@ -3725,7 +3725,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
           '(The user has successfully applied code patch',
         ),
       ),
-      'Legacy code patch result messages should be omitted',
+      'Code patch result messages should be omitted',
     );
     const toolResultMessages = messages!.filter(
       (message) => message.role === 'tool',
@@ -3762,7 +3762,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
           'The user tried to apply code patch',
         ),
       ),
-      'Legacy code patch result messages should be omitted',
+      'Code patch result messages should be omitted',
     );
   });
 
@@ -4890,7 +4890,7 @@ new content
     );
   });
 
-  test('getPromptParts includes correctness summary and omits legacy patch results', async function () {
+  test('getPromptParts includes correctness summary and omits patch result messages', async function () {
     const roomId = '!room:localhost';
     const aiMessageId = '$ai-msg';
     const eventList: DiscreteMatrixEvent[] = [
@@ -5042,7 +5042,7 @@ new
           'The user has successfully applied code patch 1.',
         ),
       ),
-      'Legacy code patch result message should be omitted',
+      'Code patch result message should be omitted',
     );
   });
 
