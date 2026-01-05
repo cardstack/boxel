@@ -194,6 +194,26 @@ module(basename(__filename), function () {
           );
         });
 
+        test('serves isolated HTML in index responses for card URLs', async function (assert) {
+          let cardURL = new URL('isolated-test', testRealm2URL).href;
+          let isolatedHTML = '<div data-test-isolated-html>Isolated HTML</div>';
+
+          await dbAdapter.execute(
+            `INSERT INTO boxel_index_working (url, file_alias, type, realm_version, realm_url, isolated_html)
+             VALUES ('${cardURL}', '${cardURL}', 'instance', 1, '${testRealm2URL.href}', '${isolatedHTML}')`,
+          );
+
+          let response = await request2
+            .get('/test/isolated-test')
+            .set('Accept', 'text/html');
+
+          assert.strictEqual(response.status, 200, 'serves HTML response');
+          assert.ok(
+            response.text.includes('data-test-isolated-html'),
+            'isolated HTML is injected into the HTML response',
+          );
+        });
+
         test('POST /_create-realm', async function (assert) {
           // we randomize the realm and owner names so that we can isolate matrix
           // test state--there is no "delete user" matrix API
