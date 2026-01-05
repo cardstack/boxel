@@ -1972,9 +1972,7 @@ Attached Files (files with newer versions don't show their content):
     const systemPromptText = (result[0].content as TextContent[])
       .map((c) => c.text)
       .join('\n');
-    assert.true(
-      systemPromptText.includes(SKILL_INSTRUCTIONS_MESSAGE),
-    );
+    assert.true(systemPromptText.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.true(
       systemPromptText.includes(
         'Skill (id: https://cardstack.com/base/Skill/card-editing, title: Card Editing):',
@@ -2091,9 +2089,7 @@ Attached Files (files with newer versions don't show their content):
     const systemPromptText = (result[0].content as TextContent[])
       .map((c) => c.text)
       .join('\n');
-    assert.true(
-      systemPromptText.includes(SKILL_INSTRUCTIONS_MESSAGE),
-    );
+    assert.true(systemPromptText.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.true(
       systemPromptText.includes(
         'If the user wants the data they see edited, AND the patchCardInstance function is available',
@@ -2159,15 +2155,9 @@ Attached Files (files with newer versions don't show their content):
     let systemPromptText = (messages![0].content as TextContent[])
       .map((c) => c.text)
       .join('\n');
-    assert.true(
-      systemPromptText.includes(SKILL_INSTRUCTIONS_MESSAGE),
-    );
-    assert.false(
-      systemPromptText.includes('This is skill 1'),
-    );
-    assert.true(
-      systemPromptText.includes('This is skill 2'),
-    );
+    assert.true(systemPromptText.includes(SKILL_INSTRUCTIONS_MESSAGE));
+    assert.false(systemPromptText.includes('This is skill 1'));
+    assert.true(systemPromptText.includes('This is skill 2'));
   });
 
   test('If there are no skill cards active in the latest matrix room state, remove from system prompt', async () => {
@@ -2323,12 +2313,8 @@ Attached Files (files with newer versions don't show their content):
     const systemPromptText = (messages![0].content as TextContent[])
       .map((c) => c.text)
       .join('\n');
-    assert.true(
-      systemPromptText.includes(SKILL_INSTRUCTIONS_MESSAGE),
-    );
-    assert.false(
-      systemPromptText.includes('SKILL_INSTRUCTIONS_V1'),
-    );
+    assert.true(systemPromptText.includes(SKILL_INSTRUCTIONS_MESSAGE));
+    assert.false(systemPromptText.includes('SKILL_INSTRUCTIONS_V1'));
     assert.true(
       systemPromptText.includes(
         'Skill (id: skill-card-1):\nSKILL_INSTRUCTIONS_V2',
@@ -3665,11 +3651,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       ['system', 'user', 'assistant', 'tool', 'system'],
     );
     const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.strictEqual(
-      userMessages.length,
-      1,
-      'Should have one user message',
-    );
+    assert.strictEqual(userMessages.length, 1, 'Should have one user message');
     assert.false(
       userMessages.some((message) =>
         (message.content as string).includes(
@@ -3736,11 +3718,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       ['system', 'user', 'assistant', 'tool', 'system'],
     );
     const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.strictEqual(
-      userMessages.length,
-      1,
-      'Should have one user message',
-    );
+    assert.strictEqual(userMessages.length, 1, 'Should have one user message');
     assert.false(
       userMessages.some((message) =>
         (message.content as string).includes(

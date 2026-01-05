@@ -52,9 +52,7 @@ import { isShuttingDown, setActiveGenerations } from './lib/shutdown';
 import type { MatrixClient } from 'matrix-js-sdk';
 import { debug } from 'debug';
 import { profEnabled, profTime, profNote } from './lib/profiler';
-import {
-  publishCodePatchCorrectnessMessage,
-} from './lib/code-patch-correctness';
+import { publishCodePatchCorrectnessMessage } from './lib/code-patch-correctness';
 
 let log = logger('ai-bot');
 
