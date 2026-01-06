@@ -1,0 +1,61 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CtaSection",
+        "module": "../cta-section"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "actions": [],
+      "cardInfo": {
+        "notes": null,
+        "title": "CTA",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "headline": "What will you build?",
+      "subheadline": "The transition from human-written to AI-generated software will be one of the most significant shifts in technology history. The constraint isn't architecture anymore. It's imagination.",
+      "sectionLabel": "Join the Builders",
+      "primaryCtaUrl": "#",
+      "sectionNumber": "008",
+      "primaryCtaText": "Start Building",
+      "secondaryCtaUrl": "#",
+      "secondaryCtaText": "Read the White Paper →",
+      "actions": [
+        {
+          "actionName": "Explore",
+          "actionDescription": "Open a workspace and ask the AI to build something.",
+          "actionIcon": null,
+          "accentColor": null
+        },
+        {
+          "actionName": "Remix",
+          "actionDescription": "Browse the catalog for components that match your needs.",
+          "actionIcon": null,
+          "accentColor": null
+        },
+        {
+          "actionName": "Extend",
+          "actionDescription": "Hit a limitation? Switch to Code Mode and fix it.",
+          "actionIcon": null,
+          "accentColor": null
+        },
+        {
+          "actionName": "Contribute",
+          "actionDescription": "Build a skill, publish a template, share what you've learned.",
+          "actionIcon": null,
+          "accentColor": null
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
