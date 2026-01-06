@@ -196,53 +196,9 @@ export default class RenderRoute extends Route<Model> {
     // hook fire twice per prerender step: every format capture goes through a
     // parent transition (render), then to the actual child route, so the parent
     // model executes twice per prerender, hence the need to share the work.
-    let promise = parsedOptions.fileExtract
-      ? this.#buildFileExtractModel({ id, nonce }, parsedOptions)
-      : this.#buildModel({ id, nonce }, parsedOptions);
+    let promise = this.#buildModel({ id, nonce }, parsedOptions);
     this.#modelPromises.set(key, promise);
     return await promise;
-  }
-
-  async #buildFileExtractModel(
-    { id, nonce }: { id: string; nonce: string },
-    parsedOptions: ReturnType<typeof parseRenderRouteOptions>,
-  ): Promise<Model> {
-    if (parsedOptions.clearCache) {
-      this.loaderService.resetLoader({
-        clearFetchCache: true,
-        reason: 'render-route clearCache',
-      });
-      let resetKey = `${id}:${nonce}`;
-      if (this.lastStoreResetKey !== resetKey) {
-        this.store.resetCache();
-        this.lastStoreResetKey = resetKey;
-      }
-    }
-    let state = new TrackedMap<string, unknown>();
-    state.set('status', 'ready');
-    let readyDeferred = new Deferred<void>();
-    readyDeferred.fulfill();
-    let model: Model = {
-      instance: undefined,
-      nonce,
-      cardId: this.#normalizeCardId(id),
-      renderOptions: parsedOptions,
-      get status(): RenderStatus {
-        return (state.get('status') as RenderStatus) ?? 'loading';
-      },
-      get ready(): boolean {
-        return (state.get('status') as RenderStatus) === 'ready';
-      },
-      readyPromise: readyDeferred.promise,
-    };
-    this.#modelStates.set(model, {
-      state,
-      readyDeferred,
-      isReady: true,
-    });
-    (globalThis as any).__renderModel = model;
-    this.currentTransition = undefined;
-    return model;
   }
 
   async #buildModel(
@@ -259,6 +215,33 @@ export default class RenderRoute extends Route<Model> {
         this.store.resetCache();
         this.lastStoreResetKey = resetKey;
       }
+    }
+    if (parsedOptions.fileExtract) {
+      let state = new TrackedMap<string, unknown>();
+      state.set('status', 'ready');
+      let readyDeferred = new Deferred<void>();
+      readyDeferred.fulfill();
+      let model: Model = {
+        instance: undefined,
+        nonce,
+        cardId: this.#normalizeCardId(id),
+        renderOptions: parsedOptions,
+        get status(): RenderStatus {
+          return (state.get('status') as RenderStatus) ?? 'loading';
+        },
+        get ready(): boolean {
+          return (state.get('status') as RenderStatus) === 'ready';
+        },
+        readyPromise: readyDeferred.promise,
+      };
+      this.#modelStates.set(model, {
+        state,
+        readyDeferred,
+        isReady: true,
+      });
+      (globalThis as any).__renderModel = model;
+      this.currentTransition = undefined;
+      return model;
     }
     // This is for host tests
     (globalThis as any).__renderModel = undefined;
