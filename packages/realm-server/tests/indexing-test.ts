@@ -1812,11 +1812,13 @@ module(basename(__filename), function () {
           // we splat because despite having the same shape, the constructors are different
           { ...testRealm2.realmIndexUpdater.stats },
           {
+            fileErrors: 0,
+            filesIndexed: 2,
             instancesIndexed: 1,
             instanceErrors: 0,
             moduleErrors: 0,
             modulesIndexed: 1,
-            totalIndexEntries: 2,
+            totalIndexEntries: 4,
           },
           'has no module errors',
         );
@@ -1840,11 +1842,13 @@ module(basename(__filename), function () {
           // we splat because despite having the same shape, the constructors are different
           { ...testRealm2.realmIndexUpdater.stats },
           {
+            fileErrors: 0,
+            filesIndexed: 2,
             instanceErrors: 1,
             instancesIndexed: 0,
             moduleErrors: 1,
             modulesIndexed: 0,
-            totalIndexEntries: 0,
+            totalIndexEntries: 2,
           },
           'has a module error',
         );

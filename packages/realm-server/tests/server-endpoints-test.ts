@@ -1318,7 +1318,7 @@ module(basename(__filename), function () {
               instanceErrors: 0,
               modulesIndexed: 0,
               instancesIndexed: 2,
-              totalIndexEntries: 2,
+              totalIndexEntries: 4,
             });
           }
           let finalJobs = await dbAdapter.execute('select * from jobs');
