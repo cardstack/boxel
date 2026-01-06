@@ -214,6 +214,36 @@ module(basename(__filename), function () {
           );
         });
 
+        test('serves scoped CSS in index responses for card URLs', async function (assert) {
+          let cardURL = new URL('scoped-css-test', testRealm2URL).href;
+          let scopedCSS = '.layout{display:flex;}';
+          let encodedCSS = encodeURIComponent(
+            Buffer.from(scopedCSS).toString('base64'),
+          );
+          let deps = JSON.stringify([
+            `https://cardstack.com/base/card-api.gts.${encodedCSS}.glimmer-scoped.css`,
+          ]);
+
+          await dbAdapter.execute(
+            `INSERT INTO boxel_index_working (url, file_alias, type, realm_version, realm_url, deps)
+             VALUES ('${cardURL}', '${cardURL}', 'instance', 1, '${testRealm2URL.href}', '${deps}'::jsonb)`,
+          );
+
+          let response = await request2
+            .get('/test/scoped-css-test')
+            .set('Accept', 'text/html');
+
+          assert.strictEqual(response.status, 200, 'serves HTML response');
+          assert.ok(
+            response.text.includes('data-boxel-scoped-css'),
+            'scoped CSS style tag is injected into the HTML response',
+          );
+          assert.ok(
+            response.text.includes(scopedCSS),
+            'scoped CSS is included in the HTML response',
+          );
+        });
+
         test('POST /_create-realm', async function (assert) {
           // we randomize the realm and owner names so that we can isolate matrix
           // test state--there is no "delete user" matrix API
