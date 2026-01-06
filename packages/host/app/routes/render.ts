@@ -240,6 +240,7 @@ export default class RenderRoute extends Route<Model> {
       readyDeferred,
       isReady: true,
     });
+    (globalThis as any).__renderModel = model;
     this.currentTransition = undefined;
     return model;
   }

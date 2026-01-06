@@ -5,7 +5,6 @@ import { service } from '@ember/service';
 import {
   baseRealm,
   formattedError,
-  parseRenderRouteOptions,
   SupportedMimeType,
   type FileExtractResponse,
   type RenderError,
@@ -15,6 +14,7 @@ import { errorJsonApiToErrorEntry } from '../../lib/window-error-handler';
 
 import type LoaderService from '../../services/loader-service';
 import type NetworkService from '../../services/network';
+import type { Model as RenderModel } from '../render';
 export type Model = FileExtractResponse;
 
 export default class RenderFileExtractRoute extends Route<Model> {
@@ -22,59 +22,10 @@ export default class RenderFileExtractRoute extends Route<Model> {
   @service declare network: NetworkService;
 
   async model(_: unknown, transition: Transition): Promise<Model> {
-    let renderParams:
-      | { id: string; nonce: string; options?: string }
-      | undefined;
-    let routeInfos = (
-      transition.to as { routeInfos?: { name?: string; params?: unknown }[] }
-    )?.routeInfos;
-    if (routeInfos) {
-      for (let routeInfo of routeInfos) {
-        if (routeInfo.name === 'render') {
-          renderParams = routeInfo.params as
-            | { id: string; nonce: string; options?: string }
-            | undefined;
-          break;
-        }
-      }
-    }
-    renderParams =
-      renderParams ??
-      (transition.to?.params?.render as
-        | { id: string; nonce: string; options?: string }
-        | undefined) ??
-      (transition.to?.parent?.params?.render as
-        | { id: string; nonce: string; options?: string }
-        | undefined) ??
-      (transition.to?.parent?.parent?.params?.render as
-        | { id: string; nonce: string; options?: string }
-        | undefined);
-    if (!renderParams) {
-      let url =
-        (transition.to as { url?: string } | undefined)?.url ??
-        (transition as { intent?: { url?: string } } | undefined)?.intent?.url;
-      if (url) {
-        let match = /\/render\/([^/]+)\/([^/]+)\/([^/]+)/.exec(url);
-        if (match) {
-          let [, id, nonce, options] = match;
-          renderParams = {
-            id: decodeURIComponent(id),
-            nonce: decodeURIComponent(nonce),
-            options: decodeURIComponent(options),
-          };
-        }
-      }
-    }
-    if (!renderParams) {
-      let baseParams = (globalThis as any).__boxelRenderBaseParams as
-        | [string, string, string]
-        | undefined;
-      if (baseParams) {
-        let [id, nonce, options] = baseParams;
-        renderParams = { id, nonce, options };
-      }
-    }
-    if (!renderParams) {
+    let renderModel =
+      (this.modelFor('render') as RenderModel | undefined) ??
+      ((globalThis as any).__renderModel as RenderModel | undefined);
+    if (!renderModel) {
       return {
         id: 'unknown',
         nonce: 'unknown',
@@ -87,13 +38,7 @@ export default class RenderFileExtractRoute extends Route<Model> {
         ),
       };
     }
-    console.debug('file-extract params', {
-      id: renderParams.id,
-      nonce: renderParams.nonce,
-      options: renderParams.options,
-    });
-    let { id, nonce, options } = renderParams;
-    let parsedOptions = parseRenderRouteOptions(options);
+    let { cardId: id, nonce, renderOptions: parsedOptions } = renderModel;
     if (!parsedOptions.fileExtract) {
       transition.abort();
       return {
