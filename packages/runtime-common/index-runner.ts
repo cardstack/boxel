@@ -404,7 +404,6 @@ export class IndexRunner {
     let { content, lastModified } = fileRef;
     // ensure created_at exists for this file and use it for resourceCreatedAt
     let resourceCreatedAt = await this.batch.ensureFileCreatedAt(localPath);
-    let shouldIndexFile = true;
     if (hasExecutableExtension(url.href)) {
       await this.indexModule(url);
     } else if (url.href.endsWith('.json')) {
@@ -436,19 +435,17 @@ export class IndexRunner {
       }
     }
 
-    if (shouldIndexFile) {
-      if (lastModified == null) {
-        this.#log.warn(
-          `${jobIdentity(this.#jobInfo)} No lastModified date available for ${url.href}, using current time`,
-        );
-        lastModified = unixTime(Date.now());
-      }
-      await this.indexFile({
-        path: localPath,
-        lastModified,
-        resourceCreatedAt,
-      });
+    if (lastModified == null) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} No lastModified date available for ${url.href}, using current time`,
+      );
+      lastModified = unixTime(Date.now());
     }
+    await this.indexFile({
+      path: localPath,
+      lastModified,
+      resourceCreatedAt,
+    });
     this.#log.debug(
       `${jobIdentity(this.#jobInfo)} completed visiting file ${url.href} in ${Date.now() - start}ms`,
     );

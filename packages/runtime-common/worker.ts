@@ -38,6 +38,14 @@ export interface Stats extends JSONTypes.Object {
   totalIndexEntries: number;
 }
 
+export interface StreamFileRef {
+  stream: ByteStream;
+  lastModified: number;
+  created: number;
+  path: string;
+  isShimmed?: true;
+}
+
 export interface Reader {
   readFile: (url: URL) => Promise<TextFileRef | undefined>;
   readStream: (url: URL) => Promise<StreamFileRef | undefined>;
@@ -351,12 +359,4 @@ export function getReader(
       return mtimes;
     },
   };
-}
-
-export interface StreamFileRef {
-  stream: ByteStream;
-  lastModified: number;
-  created: number;
-  path: string;
-  isShimmed?: true;
 }

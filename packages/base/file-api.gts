@@ -1,6 +1,9 @@
 import { concat } from '@ember/helper';
 import FileIcon from '@cardstack/boxel-icons/file';
-import { byteStreamToUint8Array, inferContentType } from '@cardstack/runtime-common';
+import {
+  byteStreamToUint8Array,
+  inferContentType,
+} from '@cardstack/runtime-common';
 import { md5 } from 'super-fast-md5';
 import {
   BaseDef,
@@ -81,7 +84,7 @@ export class FileDef extends BaseDef {
     if (!contentHash) {
       let bytes = await byteStreamToUint8Array(await getStream());
       try {
-        contentHash = md5(bytes as unknown as Uint8Array);
+        contentHash = md5(bytes);
       } catch {
         contentHash = md5(new TextDecoder().decode(bytes));
       }

@@ -3303,7 +3303,7 @@ export class Realm {
         url: string;
         realm_url: string;
         deps: unknown;
-        type: string;
+        type: ResourceIndexEntry['entryType'];
       }[];
 
       if (rows.length === 0) {
