@@ -57,9 +57,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
 
     let targetUrl = `${testRealm.url}dependencies-card.gts`;
     let response = await request
-      .get(
-        `/_dependencies?url=${encodeURIComponent(targetUrl)}&type=module`,
-      )
+      .get(`/_dependencies?url=${encodeURIComponent(targetUrl)}&type=module`)
       .set('Accept', SupportedMimeType.JSONAPI);
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');

@@ -5,17 +5,16 @@ import { service } from '@ember/service';
 import {
   baseRealm,
   formattedError,
-  parseRenderRouteOptions,
   SupportedMimeType,
   type FileExtractResponse,
   type RenderError,
 } from '@cardstack/runtime-common';
 
 import { errorJsonApiToErrorEntry } from '../../lib/window-error-handler';
-import type { Model as RenderModel } from '../render';
 
 import type LoaderService from '../../services/loader-service';
 import type NetworkService from '../../services/network';
+import type { Model as RenderModel } from '../render';
 
 export type Model = FileExtractResponse;
 
@@ -79,14 +78,12 @@ export default class RenderFileExtractRoute extends Route<Model> {
         console.warn('file extract meta fetch failed', { fileURL, error });
       }
     }
-    let streamsPromise:
-      | Promise<
-          [
-            ReadableStream<Uint8Array> | Uint8Array,
-            ReadableStream<Uint8Array> | Uint8Array,
-          ]
-        >
-      | null = null;
+    let streamsPromise: Promise<
+      [
+        ReadableStream<Uint8Array> | Uint8Array,
+        ReadableStream<Uint8Array> | Uint8Array,
+      ]
+    > | null = null;
     let getStreams = async () => {
       if (!streamsPromise) {
         streamsPromise = (async () => {

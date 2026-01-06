@@ -11,7 +11,6 @@ import {
   setupMatrixRoom,
   matrixURL,
   waitForRealmEvent,
-  waitUntil,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { PgAdapter } from '@cardstack/postgres';
