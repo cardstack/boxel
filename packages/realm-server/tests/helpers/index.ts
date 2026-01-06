@@ -676,6 +676,217 @@ export async function runTestRealmServer({
   };
 }
 
+// Use when a single RealmServer instance must expose multiple realms
+// (e.g. server endpoints that federate across realms like /_search).
+export async function runTestRealmServerWithRealms({
+  realmsRootPath,
+  realms,
+  virtualNetwork,
+  publisher,
+  runner,
+  dbAdapter,
+  matrixURL,
+  enableFileWatcher = false,
+  domainsForPublishedRealms = {
+    boxelSpace: 'localhost',
+    boxelSite: 'localhost',
+  },
+}: {
+  realmsRootPath: string;
+  realms: {
+    realmURL: URL;
+    fileSystem?: Record<string, string | LooseSingleCardDocument>;
+    permissions?: RealmPermissions;
+    matrixConfig?: MatrixConfig;
+  }[];
+  virtualNetwork: VirtualNetwork;
+  publisher: QueuePublisher;
+  runner: QueueRunner;
+  dbAdapter: PgAdapter;
+  matrixURL: URL;
+  enableFileWatcher?: boolean;
+  domainsForPublishedRealms?: {
+    boxelSpace?: string;
+    boxelSite?: string;
+  };
+}) {
+  ensureDirSync(realmsRootPath);
+  let prerenderer = await getTestPrerenderer();
+  let definitionLookup = new CachingDefinitionLookup(
+    dbAdapter,
+    prerenderer,
+    virtualNetwork,
+    testCreatePrerenderAuth,
+  );
+  let worker = new Worker({
+    indexWriter: new IndexWriter(dbAdapter),
+    queue: runner,
+    dbAdapter,
+    queuePublisher: publisher,
+    virtualNetwork,
+    matrixURL,
+    secretSeed: realmSecretSeed,
+    realmServerMatrixUsername: testRealmServerMatrixUsername,
+    prerenderer,
+    createPrerenderAuth: testCreatePrerenderAuth,
+  });
+  await worker.run();
+
+  let createdRealms: Realm[] = [];
+  let realmAdapters: RealmAdapter[] = [];
+  let matrixUsers = ['test_realm', 'node-test_realm'];
+
+  for (let [index, realmConfig] of realms.entries()) {
+    let realmDir = join(realmsRootPath, `realm_${index}`);
+    ensureDirSync(realmDir);
+    let { realm, adapter } = await createRealm({
+      dir: realmDir,
+      fileSystem: realmConfig.fileSystem,
+      realmURL: realmConfig.realmURL.href,
+      permissions: realmConfig.permissions,
+      virtualNetwork,
+      matrixConfig: realmConfig.matrixConfig ?? {
+        url: matrixURL,
+        username: matrixUsers[index] ?? matrixUsers[0],
+      },
+      publisher,
+      dbAdapter,
+      enableFileWatcher,
+      definitionLookup,
+    });
+    await realm.logInToMatrix();
+    virtualNetwork.mount(realm.handle);
+    createdRealms.push(realm);
+    realmAdapters.push(adapter);
+  }
+
+  let matrixClient = new MatrixClient({
+    matrixURL: realmServerTestMatrix.url,
+    username: realmServerTestMatrix.username,
+    seed: realmSecretSeed,
+  });
+
+  let serverURL = new URL(realms[0].realmURL.origin);
+  let testRealmServer = new RealmServer({
+    realms: createdRealms,
+    virtualNetwork,
+    matrixClient,
+    realmServerSecretSeed,
+    realmSecretSeed,
+    matrixRegistrationSecret,
+    realmsRootPath,
+    dbAdapter,
+    queue: publisher,
+    getIndexHTML,
+    grafanaSecret,
+    serverURL,
+    assetsURL: new URL(`http://example.com/notional-assets-host/`),
+    domainsForPublishedRealms,
+    definitionLookup,
+    prerenderer,
+  });
+  let testRealmHttpServer = testRealmServer.listen(parseInt(serverURL.port));
+  trackServer(testRealmHttpServer);
+  await testRealmServer.start();
+
+  return {
+    realms: createdRealms,
+    realmAdapters,
+    testRealmServer,
+    testRealmHttpServer,
+    matrixClient,
+  };
+}
+
+// Spins up one RealmServer per realm. Use for cross-realm behavior that doesn't
+// require a shared server (authorization, permissions, etc.).
+export function setupPermissionedRealms(
+  hooks: NestedHooks,
+  {
+    mode = 'beforeEach',
+    realms: realmsArg,
+    onRealmSetup,
+  }: {
+    mode?: 'beforeEach' | 'before';
+    realms: {
+      realmURL: string;
+      permissions: RealmPermissions;
+      fileSystem?: Record<string, string | LooseSingleCardDocument>;
+    }[];
+    onRealmSetup?: (args: {
+      dbAdapter: PgAdapter;
+      realms: {
+        realm: Realm;
+        realmPath: string;
+        realmHttpServer: Server;
+        realmAdapter: RealmAdapter;
+      }[];
+    }) => void;
+  },
+) {
+  // We want 2 different realm users to test authorization between them - these
+  // names are selected because they are already available in the test
+  // environment (via register-realm-users.ts)
+  let matrixUsers = ['test_realm', 'node-test_realm'];
+  let realms: {
+    realm: Realm;
+    realmPath: string;
+    realmHttpServer: Server;
+    realmAdapter: RealmAdapter;
+  }[] = [];
+  let _dbAdapter: PgAdapter;
+  setupDB(hooks, {
+    [mode]: async (
+      dbAdapter: PgAdapter,
+      publisher: QueuePublisher,
+      runner: QueueRunner,
+    ) => {
+      _dbAdapter = dbAdapter;
+      for (let [i, realmArg] of realmsArg.entries()) {
+        let {
+          testRealmDir: realmPath,
+          testRealm: realm,
+          testRealmHttpServer: realmHttpServer,
+          testRealmAdapter: realmAdapter,
+        } = await runTestRealmServer({
+          virtualNetwork: await createVirtualNetwork(),
+          testRealmDir: dirSync().name,
+          realmsRootPath: dirSync().name,
+          realmURL: new URL(realmArg.realmURL),
+          fileSystem: realmArg.fileSystem,
+          permissions: realmArg.permissions,
+          matrixURL,
+          matrixConfig: {
+            url: matrixURL,
+            username: matrixUsers[i] ?? matrixUsers[0],
+          },
+          dbAdapter,
+          publisher,
+          runner,
+        });
+        realms.push({
+          realm,
+          realmPath,
+          realmHttpServer,
+          realmAdapter,
+        });
+      }
+      onRealmSetup?.({
+        dbAdapter: _dbAdapter!,
+        realms,
+      });
+    },
+  });
+
+  hooks[mode === 'beforeEach' ? 'afterEach' : 'after'](async function () {
+    for (let realm of realms) {
+      realm.realm.__testOnlyClearCaches();
+      await closeServer(realm.realmHttpServer);
+    }
+    realms = [];
+  });
+}
+
 export async function insertUser(
   dbAdapter: PgAdapter,
   matrixUserId: string,
@@ -1072,92 +1283,8 @@ export function setupPermissionedRealm(
   });
 }
 
-export function setupPermissionedRealms(
-  hooks: NestedHooks,
-  {
-    mode = 'beforeEach',
-    realms: realmsArg,
-    onRealmSetup,
-  }: {
-    mode?: 'beforeEach' | 'before';
-    realms: {
-      realmURL: string;
-      permissions: RealmPermissions;
-      fileSystem?: Record<string, string | LooseSingleCardDocument>;
-    }[];
-    onRealmSetup?: (args: {
-      dbAdapter: PgAdapter;
-      realms: {
-        realm: Realm;
-        realmPath: string;
-        realmHttpServer: Server;
-        realmAdapter: RealmAdapter;
-      }[];
-    }) => void;
-  },
-) {
-  // We want 2 different realm users to test authorization between them - these
-  // names are selected because they are already available in the test
-  // environment (via register-realm-users.ts)
-  let matrixUsers = ['test_realm', 'node-test_realm'];
-  let realms: {
-    realm: Realm;
-    realmPath: string;
-    realmHttpServer: Server;
-    realmAdapter: RealmAdapter;
-  }[] = [];
-  let _dbAdapter: PgAdapter;
-  setupDB(hooks, {
-    [mode]: async (
-      dbAdapter: PgAdapter,
-      publisher: QueuePublisher,
-      runner: QueueRunner,
-    ) => {
-      _dbAdapter = dbAdapter;
-      for (let [i, realmArg] of realmsArg.entries()) {
-        let {
-          testRealmDir: realmPath,
-          testRealm: realm,
-          testRealmHttpServer: realmHttpServer,
-          testRealmAdapter: realmAdapter,
-        } = await runTestRealmServer({
-          virtualNetwork: await createVirtualNetwork(),
-          testRealmDir: dirSync().name,
-          realmsRootPath: dirSync().name,
-          realmURL: new URL(realmArg.realmURL),
-          fileSystem: realmArg.fileSystem,
-          permissions: realmArg.permissions,
-          matrixURL,
-          matrixConfig: {
-            url: matrixURL,
-            username: matrixUsers[i] ?? matrixUsers[0],
-          },
-          dbAdapter,
-          publisher,
-          runner,
-        });
-        realms.push({
-          realm,
-          realmPath,
-          realmHttpServer,
-          realmAdapter,
-        });
-      }
-      onRealmSetup?.({
-        dbAdapter: _dbAdapter!,
-        realms,
-      });
-    },
-  });
-
-  hooks[mode === 'beforeEach' ? 'afterEach' : 'after'](async function () {
-    for (let realm of realms) {
-      realm.realm.__testOnlyClearCaches();
-      await closeServer(realm.realmHttpServer);
-    }
-    realms = [];
-  });
-}
+// Spins up one RealmServer per realm. Use for cross-realm behavior that doesn't
+// require a shared server (authorization, permissions, etc.).
 
 export function createJWT(
   realm: Realm,

@@ -169,6 +169,7 @@ export * from './utils';
 export * from './authorization-middleware';
 export * from './resource-types';
 export * from './query';
+export * from './search-utils';
 export * from './query-field-utils';
 export * from './relationship-utils';
 export * from './formats';
@@ -222,7 +223,11 @@ export type { CodeRef };
 export * from './code-ref';
 export * from './serializers';
 
-export type { CardDocument, SingleCardDocument } from './document-types';
+export type {
+  CardDocument,
+  SingleCardDocument,
+  CardCollectionDocument,
+} from './document-types';
 export type {
   CardResource,
   ModuleResource,

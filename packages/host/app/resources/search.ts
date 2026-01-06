@@ -9,7 +9,6 @@ import { restartableTask, task } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
 import difference from 'lodash/difference';
-import flatMap from 'lodash/flatMap';
 import isEqual from 'lodash/isEqual';
 import { TrackedArray } from 'tracked-built-ins';
 
@@ -20,14 +19,14 @@ import {
   isCardInstance,
   logger as runtimeLogger,
   normalizeQueryForSignature,
-  buildQueryString,
+  buildQueryParamValue,
+  parseSearchURL,
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
-import type CardService from '../services/card-service';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 
@@ -56,7 +55,6 @@ export interface Args<T extends CardDef = CardDef> {
 export class SearchResource<T extends CardDef = CardDef> extends Resource<
   Args<T>
 > {
-  @service declare private cardService: CardService;
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
   @tracked private realmsToSearch: string[] = [];
@@ -114,7 +112,10 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
       this.loaded = this.applySeed.perform(seed);
       this.#seedApplied = true;
       if (seed.searchURL) {
-        this.#previousQueryString = new URL(seed.searchURL).search;
+        let { query: seedQuery } = parseSearchURL(seed.searchURL);
+        this.#previousQueryString = buildQueryParamValue(
+          normalizeQueryForSignature(seedQuery),
+        );
       }
       this.#previousQuery = query;
       if (seed.realms) {
@@ -161,7 +162,7 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
       });
     }
 
-    let queryString = buildQueryString(normalizeQueryForSignature(query));
+    let queryString = buildQueryParamValue(normalizeQueryForSignature(query));
     if (
       isEqual(queryString, this.#previousQueryString) &&
       isEqual(realms, this.#previousRealms)
@@ -267,57 +268,55 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
     // uncancellable it results in a flaky test.
     let token = waiter.beginAsync();
     try {
-      let searchResults = await Promise.all(
-        this.realmsToSearch.map(async (realm) => {
-          let json = await this.cardService.fetchJSON(`${realm}_search`, {
-            method: 'QUERY',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(query),
-          });
-          if (!isCardCollectionDocument(json)) {
-            throw new Error(
-              `The realm search response was not a card collection document:
+      let searchURL = new URL('_search', this.realmServer.url);
+      for (let realm of this.realmsToSearch) {
+        searchURL.searchParams.append('realms', realm);
+      }
+      let response = await this.realmServer.authedFetch(searchURL.href, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.card+json',
+          'Content-Type': 'application/json',
+          'X-HTTP-Method-Override': 'QUERY',
+        },
+        body: JSON.stringify(query),
+      });
+      if (!response.ok) {
+        let responseText = await response.text();
+        let err = new Error(
+          `status: ${response.status} - ${response.statusText}. ${responseText}`,
+        ) as any;
+        err.status = response.status;
+        err.responseText = responseText;
+        err.responseHeaders = response.headers;
+        throw err;
+      }
+      let json = await response.json();
+      if (!isCardCollectionDocument(json)) {
+        throw new Error(
+          `The realm search response was not a card collection document:
         ${JSON.stringify(json, null, 2)}`,
-            );
-          }
-          let collectionDoc = json;
-          for (let data of collectionDoc.data) {
-            let maybeInstance = this.store.peek(data.id!);
-            if (!maybeInstance) {
-              await this.store.add(
-                { data },
-                { doNotPersist: true, relativeTo: new URL(data.id!) }, // search results always have id's
-              );
-            }
-          }
-          let instances = collectionDoc.data
-            .map((r) => this.store.peek(r.id!)) // all results will have id's
-            .filter((i) => isCardInstance(i)) as T[];
-          return {
-            instances,
-            meta: collectionDoc.meta,
-          };
-        }),
-      );
-      let results = flatMap(searchResults, (result) => result.instances);
+        );
+      }
+      let collectionDoc = json;
+      for (let data of collectionDoc.data) {
+        let maybeInstance = this.store.peek(data.id!);
+        if (!maybeInstance) {
+          await this.store.add(
+            { data },
+            { doNotPersist: true, relativeTo: new URL(data.id!) }, // search results always have id's
+          );
+        }
+      }
+      let results = collectionDoc.data
+        .map((r) => this.store.peek(r.id!)) // all results will have id's
+        .filter((i) => isCardInstance(i)) as T[];
       this.#log.info(
         `search task complete; total instances=${results.length}; refs=${results
           .map((r) => r.id)
           .join(',')}`,
       );
-      // Combine metadata from all realms
-      this._meta = searchResults.reduce(
-        (acc, result) => {
-          if (result.meta?.page?.total !== undefined) {
-            acc.page = acc.page || { total: 0 };
-            acc.page.total = (acc.page.total || 0) + result.meta.page.total;
-          }
-          return acc;
-        },
-        { page: { total: 0 } } as QueryResultsMeta,
-      );
+      this._meta = collectionDoc.meta;
       this._errors = undefined;
       await this.updateInstances(results);
     } finally {

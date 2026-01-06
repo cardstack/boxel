@@ -13,6 +13,10 @@ import {
 } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
+function buildQueryParam(query: Query) {
+  return encodeURIComponent(stringify(query, { encode: false }));
+}
+
 module(`realm-endpoints/${basename(__filename)}`, function () {
   module('Realm-specific Endpoints | _search', function (hooks) {
     let testRealm: Realm;
@@ -51,7 +55,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
         test('serves a /_search GET request', async function (assert) {
           let response = await request
-            .get(`/_search?${stringify(query)}`)
+            .get(`/_search?query=${buildQueryParam(query)}`)
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -93,7 +97,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           };
 
           let response = await request
-            .get(`/_search?${stringify(unknownTypeQuery)}`)
+            .get(`/_search?query=${buildQueryParam(unknownTypeQuery)}`)
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -130,7 +134,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           };
 
           let response = await request
-            .get(`/_search?${stringify(paginationQuery)}`)
+            .get(`/_search?query=${buildQueryParam(paginationQuery)}`)
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -144,7 +148,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           // Get the second page
           paginationQuery.page = { number: 1, size: 1 };
           response = await request
-            .get(`/_search?${stringify(paginationQuery)}`)
+            .get(`/_search?query=${buildQueryParam(paginationQuery)}`)
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(
@@ -180,7 +184,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
         test('401 with invalid JWT', async function (assert) {
           let response = await request
-            .get(`/_search?${stringify(query)}`)
+            .get(`/_search?query=${buildQueryParam(query)}`)
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 401, 'HTTP 401 status');
@@ -188,7 +192,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
         test('401 without a JWT', async function (assert) {
           let response = await request
-            .get(`/_search?${stringify(query)}`)
+            .get(`/_search?query=${buildQueryParam(query)}`)
             .set('Accept', 'application/vnd.card+json'); // no Authorization header
 
           assert.strictEqual(response.status, 401, 'HTTP 401 status');
@@ -196,7 +200,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
         test('403 without permission', async function (assert) {
           let response = await request
-            .get(`/_search?${stringify(query)}`)
+            .get(`/_search?query=${buildQueryParam(query)}`)
             .set('Accept', 'application/vnd.card+json')
             .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
 
@@ -205,7 +209,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
         test('200 with permission', async function (assert) {
           let response = await request
-            .get(`/_search?${stringify(query)}`)
+            .get(`/_search?query=${buildQueryParam(query)}`)
             .set('Accept', 'application/vnd.card+json')
             .set(
               'Authorization',

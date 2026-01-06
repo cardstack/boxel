@@ -32,6 +32,12 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 import type { PgAdapter } from '@cardstack/postgres';
 
+function parseSearchQuery(searchURL: URL) {
+  let queryParam = searchURL.searchParams.get('query');
+  let rawQuery = queryParam ?? searchURL.searchParams.toString();
+  return parse(rawQuery) as Record<string, any>;
+}
+
 module(basename(__filename), function () {
   module('Realm-specific Endpoints | card URLs', function (hooks) {
     let testRealm: Realm;
@@ -1897,7 +1903,11 @@ module(basename(__filename), function () {
           };
 
           response = await request
-            .get(`/_search?${stringify(query)}`)
+            .get(
+              `/_search?query=${encodeURIComponent(
+                stringify(query, { encode: false }),
+              )}`,
+            )
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -3622,9 +3632,7 @@ module(basename(__filename), function () {
         new URL('_search', consumerRealmURL).href,
         'favorite relationship search link targets consumer realm',
       );
-      let favoriteQueryParams = parse(
-        favoriteSearchURL.searchParams.toString(),
-      ) as Record<string, any>;
+      let favoriteQueryParams = parseSearchQuery(favoriteSearchURL);
       assert.deepEqual(
         favoriteQueryParams.page,
         { size: '1', number: '0' },
@@ -3702,9 +3710,7 @@ module(basename(__filename), function () {
         new URL('_search', providerRealmURL).href,
         'matches relationship search link targets provider realm',
       );
-      let matchesQueryParams = parse(
-        matchesSearchURL.searchParams.toString(),
-      ) as Record<string, any>;
+      let matchesQueryParams = parseSearchQuery(matchesSearchURL);
       assert.deepEqual(
         matchesQueryParams.page,
         { size: '1', number: '0' },
@@ -3753,9 +3759,7 @@ module(basename(__filename), function () {
         new URL('_search', UNREACHABLE_REALM_URL).href,
         'failingMatches search link targets unreachable realm',
       );
-      let failingQueryParams = parse(
-        failingSearchURL.searchParams.toString(),
-      ) as Record<string, any>;
+      let failingQueryParams = parseSearchQuery(failingSearchURL);
       assert.deepEqual(
         failingQueryParams.page,
         { size: '1', number: '0' },

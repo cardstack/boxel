@@ -37,6 +37,7 @@ import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-clai
 import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain';
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain';
 import handlePrerenderProxy from './handlers/handle-prerender-proxy';
+import handleSearch from './handlers/handle-search';
 import { buildCreatePrerenderAuth } from './prerender/auth';
 
 export type CreateRoutesArgs = {
@@ -124,6 +125,7 @@ export function createRoutes(args: CreateRoutesArgs) {
       dbAdapter: args.dbAdapter,
     }),
   );
+  router.all('/_search', handleSearch(args));
   router.post(
     '/_prerender-card',
     jwtMiddleware(args.realmSecretSeed),
