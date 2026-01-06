@@ -224,7 +224,7 @@ export default class RenderRoute extends Route<Model> {
       let model: Model = {
         instance: undefined,
         nonce,
-        cardId: this.#normalizeCardId(id),
+        cardId: id,
         renderOptions: parsedOptions,
         get status(): RenderStatus {
           return (state.get('status') as RenderStatus) ?? 'loading';

@@ -432,6 +432,7 @@ export class IndexRunner {
           resourceCreatedAt,
           resource,
         });
+        // Intentionally fall through so card JSON files also get a file entry.
       }
     }
 

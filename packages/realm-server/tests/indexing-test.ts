@@ -910,6 +910,29 @@ module(basename(__filename), function () {
       );
     });
 
+    test('keeps instance entries when indexing card json files as file entries', async function (assert) {
+      let instanceEntry = await getInstance(
+        realm,
+        new URL(`${testRealm}mango`),
+      );
+      let fileEntry = await realm.realmIndexQueryEngine.file(
+        new URL(`${testRealm}mango.json`),
+      );
+      assert.ok(instanceEntry, 'instance entry exists for card json resource');
+      assert.ok(fileEntry, 'file entry exists for card json resource');
+      assert.strictEqual(
+        instanceEntry?.canonicalURL,
+        fileEntry?.canonicalURL,
+        'instance and file entries can share the same url',
+      );
+      assert.strictEqual(
+        instanceEntry?.type,
+        'instance',
+        'instance entry keeps instance type',
+      );
+      assert.strictEqual(fileEntry?.type, 'file', 'file entry keeps file type');
+    });
+
     test('file extractor populates search_doc', async function (assert) {
       let rows = (await testDbAdapter.execute(
         `SELECT search_doc FROM boxel_index WHERE url = '${testRealm}random-file.txt'`,
