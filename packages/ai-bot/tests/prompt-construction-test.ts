@@ -1969,24 +1969,23 @@ Attached Files (files with newer versions don't show their content):
     ).messages!;
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
+    const systemPromptText = (result[0].content as TextContent[])
+      .map((c) => c.text)
+      .join('\n');
+    assert.true(systemPromptText.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.true(
-      (result[0].content[1] as TextContent).text.includes(
-        SKILL_INSTRUCTIONS_MESSAGE,
-      ),
-    );
-    assert.true(
-      (result[0].content[2] as TextContent).text.includes(
+      systemPromptText.includes(
         'Skill (id: https://cardstack.com/base/Skill/card-editing, title: Card Editing):',
       ),
       'includes skill title metadata when present',
     );
     assert.true(
-      (result[0].content[2] as TextContent).text.includes(
+      systemPromptText.includes(
         'If the user wants the data they see edited, AND the patchCardInstance function is available',
       ),
     );
     assert.true(
-      (result[0].content[3] as TextContent).text.includes(
+      systemPromptText.includes(
         'Given a prompt, fill in the product requirements document.',
       ),
     );
@@ -2087,21 +2086,18 @@ Attached Files (files with newer versions don't show their content):
     ).messages!;
 
     assert.equal(result[0].role, 'system');
+    const systemPromptText = (result[0].content as TextContent[])
+      .map((c) => c.text)
+      .join('\n');
+    assert.true(systemPromptText.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.true(
-      (result[0].content[1] as TextContent).text.includes(
-        SKILL_INSTRUCTIONS_MESSAGE,
-      ),
-    );
-    assert.true(
-      (result[0].content[2] as TextContent).text.includes(
+      systemPromptText.includes(
         'If the user wants the data they see edited, AND the patchCardInstance function is available',
       ),
       'skill card instructions included in the system message',
     );
     assert.true(
-      (result[0].content[3] as TextContent).text.includes(
-        'Use pirate colloquialism when responding.',
-      ),
+      systemPromptText.includes('Use pirate colloquialism when responding.'),
       'skill card instructions included in the system message',
     );
     assert.equal(result[2].role, 'user');
@@ -2156,20 +2152,12 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.true(messages!.length > 0);
     assert.true(messages![0].role === 'system');
-    let systemPromptParts = messages![0].content;
-    assert.true(
-      (systemPromptParts[1] as TextContent).text.includes(
-        SKILL_INSTRUCTIONS_MESSAGE,
-      ),
-    );
-    assert.false(
-      (systemPromptParts as TextContent[])
-        .map((c) => c.text)
-        .some((text) => text.includes('This is skill 1')),
-    );
-    assert.true(
-      (systemPromptParts[2] as TextContent).text.includes('This is skill 2'),
-    );
+    let systemPromptText = (messages![0].content as TextContent[])
+      .map((c) => c.text)
+      .join('\n');
+    assert.true(systemPromptText.includes(SKILL_INSTRUCTIONS_MESSAGE));
+    assert.false(systemPromptText.includes('This is skill 1'));
+    assert.true(systemPromptText.includes('This is skill 2'));
   });
 
   test('If there are no skill cards active in the latest matrix room state, remove from system prompt', async () => {
@@ -2278,9 +2266,10 @@ Attached Files (files with newer versions don't show their content):
       fakeMatrixClient,
     );
     assert.true(
-      (messages![0]!.content[1] as TextContent).text.includes(
-        'Skill Instructions',
-      ),
+      (messages![0]!.content as TextContent[])
+        .map((c) => c.text)
+        .join('\n')
+        .includes('Skill Instructions'),
     );
   });
 
@@ -2321,19 +2310,13 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.true(messages!.length > 0);
     assert.equal(messages![0].role, 'system');
+    const systemPromptText = (messages![0].content as TextContent[])
+      .map((c) => c.text)
+      .join('\n');
+    assert.true(systemPromptText.includes(SKILL_INSTRUCTIONS_MESSAGE));
+    assert.false(systemPromptText.includes('SKILL_INSTRUCTIONS_V1'));
     assert.true(
-      (messages![0].content[1] as TextContent).text.includes(
-        SKILL_INSTRUCTIONS_MESSAGE,
-      ),
-    );
-    assert.false(
-      (messages![0].content as TextContent[])
-        .map((c) => c.text)
-        .join('')
-        .includes('SKILL_INSTRUCTIONS_V1'),
-    );
-    assert.true(
-      (messages![0].content[2] as TextContent).text.includes(
+      systemPromptText.includes(
         'Skill (id: skill-card-1):\nSKILL_INSTRUCTIONS_V2',
       ),
     );
@@ -3409,10 +3392,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.deepEqual(
       messages!.map((m) => m.role),
-      ['system', 'user', 'assistant', 'system', 'user'],
+      ['system', 'system', 'user', 'assistant'],
     );
     assert.equal(
-      messages![2].content,
+      messages![3].content,
       'Updating the file...\n' +
         'http://test.com/spaghetti-recipe.gts\n' +
         '[Omitting previously suggested and applied code change]\n' +
@@ -3544,12 +3527,15 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
     assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
-    // patch code results should be included
     const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.strictEqual(userMessages.length, 2, 'Should have two user messages');
-    assert.strictEqual(
-      userMessages[1].content,
-      '(The user has successfully applied code patch 1.)',
+    assert.ok(userMessages.length >= 1, 'Should have user messages');
+    assert.false(
+      userMessages.some((message) =>
+        (message.content as string).includes(
+          '(The user has successfully applied code patch',
+        ),
+      ),
+      'Code patch result messages should be omitted',
     );
   });
 
@@ -3589,16 +3575,13 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
     assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
-    // patch code results should be deserialised
     const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.strictEqual(
-      userMessages.length,
-      2,
-      'Should have three two messages',
-    );
-    assert.strictEqual(
-      userMessages[1].content,
-      '(The user has successfully applied code patch 1.)\n(The user tried to apply code patch 2 but there was an error: The patch did not apply cleanly.)',
+    assert.ok(userMessages.length >= 1, 'Should have user messages');
+    assert.false(
+      userMessages.some((message) =>
+        (message.content as string).includes('(The user has successfully'),
+      ),
+      'Code patch result messages should be omitted',
     );
   });
 
@@ -3665,18 +3648,17 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
     assert.deepEqual(
       messages!.map((m) => m.role),
-      ['system', 'user', 'assistant', 'tool', 'system', 'user'],
+      ['system', 'user', 'assistant', 'tool', 'system'],
     );
-    // patch code results should be deserialised
     const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.strictEqual(
-      userMessages.length,
-      2,
-      'Should have three user messages',
-    );
-    assert.strictEqual(
-      userMessages[1].content,
-      '(The user has successfully applied code patch 1.)',
+    assert.strictEqual(userMessages.length, 1, 'Should have one user message');
+    assert.false(
+      userMessages.some((message) =>
+        (message.content as string).includes(
+          '(The user has successfully applied code patch',
+        ),
+      ),
+      'Code patch result messages should be omitted',
     );
     const toolResultMessages = messages!.filter(
       (message) => message.role === 'tool',
@@ -3733,18 +3715,17 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
     assert.deepEqual(
       messages!.map((m) => m.role),
-      ['system', 'user', 'assistant', 'tool', 'system', 'user'],
+      ['system', 'user', 'assistant', 'tool', 'system'],
     );
-    // patch code results should be messages
     const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.strictEqual(
-      userMessages.length,
-      2,
-      'Should have three user messages',
-    );
-    assert.strictEqual(
-      userMessages[1].content,
-      '(The user has successfully applied code patch 1.)',
+    assert.strictEqual(userMessages.length, 1, 'Should have one user message');
+    assert.false(
+      userMessages.some((message) =>
+        (message.content as string).includes(
+          '(The user has successfully applied code patch',
+        ),
+      ),
+      'Code patch result messages should be omitted',
     );
     const toolResultMessages = messages!.filter(
       (message) => message.role === 'tool',
@@ -3773,12 +3754,15 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
     assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
-    // patch code results should be included
     const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.strictEqual(userMessages.length, 2, 'Should have two user messages');
-    assert.strictEqual(
-      userMessages[1].content,
-      '(The user tried to apply code patch 1 but there was an error: The patch did not apply cleanly.)',
+    assert.ok(userMessages.length >= 1, 'Should have user messages');
+    assert.false(
+      userMessages.some((message) =>
+        (message.content as string).includes(
+          'The user tried to apply code patch',
+        ),
+      ),
+      'Code patch result messages should be omitted',
     );
   });
 
@@ -3970,7 +3954,7 @@ Attached Cards (cards with newer versions don't show their content):
     );
   });
 
-  test('code patch messages include attached files when code patch result does', async () => {
+  test('getPromptParts collects patched files from code patch result attachments', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(__dirname, 'resources/chats/patched-gts.json'),
@@ -3989,30 +3973,24 @@ Attached Cards (cards with newer versions don't show their content):
       `,
     });
 
-    const { messages } = await getPromptParts(
+    const { pendingCodePatchCorrectnessChecks } = await getPromptParts(
       eventList,
       '@aibot:localhost',
       fakeMatrixClient,
     );
-    const lastUserMessage = messages!.findLast(
-      (message) => message.role === 'user',
-    );
-    assert.ok(lastUserMessage, 'Should have a code patch result message');
     assert.ok(
-      (lastUserMessage!.content as string).includes(
-        'The user has successfully applied code patch 1.',
-      ),
-      'Code patch result should reflect that the code patch was applied',
+      pendingCodePatchCorrectnessChecks,
+      'Should collect pending code patch correctness info',
     );
-    assert.ok(
-      (lastUserMessage!.content as string).includes(
-        `
-Attached Files (files with newer versions don't show their content):
-[postcard.gts](http://test-realm-server/user/test-realm/postcard.gts):
-  1: export default Postcard extends CardDef { /* after */ }
-      `.trim(),
-      ),
-      'Code patch result should include attached files',
+    assert.deepEqual(
+      pendingCodePatchCorrectnessChecks?.files,
+      [
+        {
+          sourceUrl: 'http://test-realm-server/user/test-realm/postcard.gts',
+          displayName: 'user/test-realm/postcard.gts',
+        },
+      ],
+      'Pending checks should include files from attached patch results',
     );
   });
 
@@ -4718,18 +4696,22 @@ new content
       'Only the first two failures should request more SEARCH/REPLACE fixes',
     );
 
-    let finalUserMessage = userMessages[userMessages.length - 1];
-    assert.ok(
-      (finalUserMessage?.content as string).includes(
+    let failureLimitMessages = userMessages.filter((message) =>
+      (message.content as string).includes(
         'Automated correctness fixes have already been attempted 3 times',
       ),
+    );
+    assert.strictEqual(
+      failureLimitMessages.length,
+      1,
       'After three failures the prompt should ask to stop automated fixes',
     );
+    let failureLimitMessage = failureLimitMessages[0];
     assert.notOk(
-      (finalUserMessage?.content as string).includes(
+      (failureLimitMessage?.content as string).includes(
         'Propose fixes for the above errors',
       ),
-      'The final prompt should not ask for another round of fixes',
+      'The failure limit prompt should not ask for another round of fixes',
     );
   });
 
@@ -4908,7 +4890,7 @@ new content
     );
   });
 
-  test('getPromptParts toggles correctness summary and patch result prompts based on autoCorrectnessChecksEnabled option', async function () {
+  test('getPromptParts includes correctness summary and omits patch result messages', async function () {
     const roomId = '!room:localhost';
     const aiMessageId = '$ai-msg';
     const eventList: DiscreteMatrixEvent[] = [
@@ -5043,44 +5025,16 @@ new
     const summaryMessage =
       'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls.';
 
-    const promptPartsWithAutoCorrectnessChecksDisabled = await getPromptParts(
+    const promptParts = await getPromptParts(
       eventList,
       '@aibot:localhost',
       fakeMatrixClient,
-      { autoCorrectnessChecksEnabled: false },
-    );
-    let disabledUserMessages =
-      promptPartsWithAutoCorrectnessChecksDisabled.messages?.filter(
-        (message) => message.role === 'user',
-      ) ?? [];
-    assert.false(
-      disabledUserMessages.some(
-        (message) => message.content === summaryMessage,
-      ),
-      'When disabled the automated summary should be omitted',
-    );
-    assert.true(
-      disabledUserMessages.some((message) =>
-        (message.content as string).includes(
-          'The user has successfully applied code patch 1.',
-        ),
-      ),
-      'When disabled the code patch result message should be included',
-    );
-
-    const promptPartsWithAutoCorrectnessChecksEnabled = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-      { autoCorrectnessChecksEnabled: true },
     );
     let enabledUserMessages =
-      promptPartsWithAutoCorrectnessChecksEnabled.messages?.filter(
-        (message) => message.role === 'user',
-      ) ?? [];
+      promptParts.messages?.filter((message) => message.role === 'user') ?? [];
     assert.true(
       enabledUserMessages.some((message) => message.content === summaryMessage),
-      'When enabled the summary should be included',
+      'Summary should be included',
     );
     assert.false(
       enabledUserMessages.some((message) =>
@@ -5088,7 +5042,7 @@ new
           'The user has successfully applied code patch 1.',
         ),
       ),
-      'When enabled the legacy code patch result message should be omitted',
+      'Code patch result message should be omitted',
     );
   });
 

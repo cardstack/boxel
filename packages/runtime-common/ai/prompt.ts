@@ -60,21 +60,6 @@ import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants';
 import { humanReadable } from '../code-ref';
 import { SEARCH_MARKER, REPLACE_MARKER, SEPARATOR_MARKER } from '../constants';
 
-let aiPatchingCorrectnessFlag: string | boolean | undefined;
-if (typeof globalThis !== 'undefined') {
-  let maybeProcess = (globalThis as any).process;
-  if (maybeProcess?.env) {
-    aiPatchingCorrectnessFlag =
-      maybeProcess.env.ENABLE_AI_PATCHING_CORRECTNESS_CHECKS;
-  }
-  if (aiPatchingCorrectnessFlag === undefined) {
-    aiPatchingCorrectnessFlag = (globalThis as any)?.ENV
-      ?.ENABLE_AI_PATCHING_CORRECTNESS_CHECKS;
-  }
-}
-const AI_PATCHING_CORRECTNESS_CHECKS_ENABLED =
-  aiPatchingCorrectnessFlag === 'true' || aiPatchingCorrectnessFlag === true;
-
 const CARD_PATCH_COMMAND_NAMES = new Set(['patchCardInstance', 'patchFields']);
 const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
 
@@ -86,11 +71,7 @@ export async function getPromptParts(
   eventList: DiscreteMatrixEvent[],
   aiBotUserId: string,
   client: MatrixClient,
-  options?: { autoCorrectnessChecksEnabled?: boolean },
 ): Promise<PromptParts> {
-  let autoCorrectnessChecksEnabled =
-    options?.autoCorrectnessChecksEnabled ??
-    AI_PATCHING_CORRECTNESS_CHECKS_ENABLED;
   let history: DiscreteMatrixEvent[] = await constructHistory(
     eventList,
     client,
@@ -122,7 +103,6 @@ export async function getPromptParts(
     skills,
     disabledSkillIds,
     client,
-    autoCorrectnessChecksEnabled,
   );
   let { model, toolsSupported, reasoningEffort } =
     getActiveLLMDetails(eventList);
@@ -786,10 +766,8 @@ function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
 async function toResultMessages(
   event: CardMessageEvent,
   commandResults: CommandResultEvent[] = [],
-  codePatchResults: CodePatchResultEvent[] = [],
   client: MatrixClient,
   history: DiscreteMatrixEvent[],
-  autoCorrectnessChecksEnabled: boolean,
 ): Promise<OpenAIPromptMessage[]> {
   const messageContent = event.content as CardMessageContent;
   let commandResultEntries = await Promise.all(
@@ -862,44 +840,7 @@ async function toResultMessages(
       .map((entry) => entry?.followUpMessage)
       .filter((message): message is OpenAIPromptMessage => Boolean(message)) ??
     [];
-  let codePatchResultMessages: OpenAIPromptMessage[] = [];
-  if (!autoCorrectnessChecksEnabled) {
-    let codePatchBlocks = extractCodePatchBlocks(messageContent.body || '');
-    if (codePatchBlocks.length) {
-      let codePatchResultsContent = (
-        await Promise.all(
-          codePatchBlocks.map(async (_codePatchBlock, codeBlockIndex) => {
-            let codePatchResultEvent = codePatchResults.find(
-              (codePatchResultEvent) =>
-                codePatchResultEvent.content.codeBlockIndex === codeBlockIndex,
-            );
-            let content = `(The user has not applied code patch ${codeBlockIndex + 1}.)`;
-            if (codePatchResultEvent) {
-              let status = codePatchResultEvent.content['m.relates_to']?.key;
-              if (status === 'applied') {
-                content = `(The user has successfully applied code patch ${codeBlockIndex + 1}.)`;
-              } else if (status === 'failed') {
-                content = `(The user tried to apply code patch ${codeBlockIndex + 1} but there was an error: ${codePatchResultEvent.content.failureReason})`;
-              }
-              let attachments = await buildAttachmentsMessagePart(
-                client,
-                codePatchResultEvent,
-                history,
-              );
-              content = [content, attachments].filter(Boolean).join('\n\n');
-            }
-            return content;
-          }),
-        )
-      ).join('\n');
-      codePatchResultMessages.push({
-        role: 'user',
-        content: codePatchResultsContent,
-      });
-    }
-  }
-
-  return [...toolMessages, ...followUpMessages, ...codePatchResultMessages];
+  return [...toolMessages, ...followUpMessages];
 }
 
 function buildCheckCorrectnessResultContent(
@@ -1238,7 +1179,6 @@ export async function buildPromptForModel(
   skillCards: LooseCardResource[] = [],
   disabledSkillIds: string[] = [],
   client: MatrixClient,
-  autoCorrectnessChecksEnabled = AI_PATCHING_CORRECTNESS_CHECKS_ENABLED,
 ) {
   // Need to make sure the passed in username is a full id
   if (
@@ -1285,10 +1225,8 @@ export async function buildPromptForModel(
         await toResultMessages(
           event as CardMessageEvent,
           commandResults,
-          codePatchResults,
           client,
           history,
-          autoCorrectnessChecksEnabled,
         )
       ).forEach((message) => historicalMessages.push(message));
     }
@@ -1307,10 +1245,7 @@ export async function buildPromptForModel(
       }
     }
   }
-  if (
-    autoCorrectnessChecksEnabled &&
-    shouldPromptCheckCorrectnessSummary(history, aiBotUserId)
-  ) {
+  if (shouldPromptCheckCorrectnessSummary(history, aiBotUserId)) {
     historicalMessages.push({
       role: 'user',
       content:
@@ -1319,11 +1254,9 @@ export async function buildPromptForModel(
   }
   let systemMessageParts = [SYSTEM_MESSAGE];
 
-  if (autoCorrectnessChecksEnabled) {
-    systemMessageParts.push(
-      'Never call the checkCorrectness tool on your own; follow-up correctness checks are handled automatically by the system.',
-    );
-  }
+  systemMessageParts.push(
+    'Never call the checkCorrectness tool on your own; follow-up correctness checks are handled automatically by the system.',
+  );
   if (skillCards.length) {
     systemMessageParts.push(SKILL_INSTRUCTIONS_MESSAGE);
     systemMessageParts = systemMessageParts.concat(
