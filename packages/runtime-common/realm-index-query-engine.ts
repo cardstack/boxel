@@ -20,7 +20,7 @@ import {
 } from '.';
 import type { Realm } from './realm';
 import { RealmPaths } from './paths';
-import { type Query } from './query';
+import type { Query } from './query';
 import { CardError, type SerializedError } from './error';
 import { isResolvedCodeRef, visitModuleDeps } from './code-ref';
 import {
