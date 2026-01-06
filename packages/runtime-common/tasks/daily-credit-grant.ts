@@ -39,7 +39,7 @@ const dailyCreditGrant: Task<DailyCreditGrantArgs, void> = ({
     // PERF: This scans all users + aggregates full ledger each run; consider a
     // materialized balance table/view (or denormalized user balance) to avoid
     // re-summing credits_ledger and to make the daily eligibility check cheaper.
-    let rows = await query(dbAdapter, [
+    let rows = (await query(dbAdapter, [
       `SELECT users.id as user_id,
         COALESCE(SUM(credits_ledger.credit_amount), 0) as credit_balance,
         EXISTS (
@@ -52,7 +52,11 @@ const dailyCreditGrant: Task<DailyCreditGrantArgs, void> = ({
       FROM users
       LEFT JOIN credits_ledger ON credits_ledger.user_id = users.id
       GROUP BY users.id`,
-    ]);
+    ])) as {
+      user_id: string;
+      credit_balance: string | null;
+      granted_today: boolean;
+    }[];
 
     let grantedCount = 0;
     let rowsToInsert: {
@@ -82,27 +86,37 @@ const dailyCreditGrant: Task<DailyCreditGrantArgs, void> = ({
     }
 
     if (rowsToInsert.length > 0) {
-      let nameExpressions: string[][] | undefined;
+      let nameExpressions: Expression[] | undefined;
       let valueRows: Expression[][] = [];
       for (let row of rowsToInsert) {
-        let { nameExpressions: rowNames, valueExpressions } = asExpressions(row);
+        let { nameExpressions: rowNames, valueExpressions } =
+          asExpressions(row);
         if (!nameExpressions) {
-          nameExpressions = rowNames;
+          nameExpressions = rowNames as Expression[];
         }
         valueRows.push(valueExpressions);
       }
 
-      await query(dbAdapter, [
+      let valueExpressionRows = valueRows.map(
+        (valueExpressions) =>
+          addExplicitParens(
+            separatedByCommas(valueExpressions as Expression[]),
+          ) as Expression,
+      );
+
+      let insertExpression = [
         'INSERT INTO',
         'credits_ledger',
-        ...addExplicitParens(separatedByCommas(nameExpressions!)),
+        ...(addExplicitParens(
+          separatedByCommas(nameExpressions as Expression[]),
+        ) as Expression),
         'VALUES',
-        ...separatedByCommas(
-          valueRows.map((valueExpressions) =>
-            addExplicitParens(separatedByCommas(valueExpressions)),
-          ),
-        ),
-      ]);
+        ...(separatedByCommas(
+          valueExpressionRows as Expression[],
+        ) as Expression),
+      ] as Expression;
+
+      await query(dbAdapter, insertExpression);
     }
 
     log.info(
