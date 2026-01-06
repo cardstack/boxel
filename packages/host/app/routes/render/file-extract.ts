@@ -5,6 +5,7 @@ import { service } from '@ember/service';
 import {
   baseRealm,
   formattedError,
+  parseRenderRouteOptions,
   SupportedMimeType,
   type FileExtractResponse,
   type RenderError,
@@ -21,7 +22,24 @@ export default class RenderFileExtractRoute extends Route<Model> {
   @service declare network: NetworkService;
 
   async model(_: unknown, transition: Transition): Promise<Model> {
-    let renderParams =
+    let renderParams:
+      | { id: string; nonce: string; options?: string }
+      | undefined;
+    let routeInfos = (
+      transition.to as { routeInfos?: { name?: string; params?: unknown }[] }
+    )?.routeInfos;
+    if (routeInfos) {
+      for (let routeInfo of routeInfos) {
+        if (routeInfo.name === 'render') {
+          renderParams = routeInfo.params as
+            | { id: string; nonce: string; options?: string }
+            | undefined;
+          break;
+        }
+      }
+    }
+    renderParams =
+      renderParams ??
       (transition.to?.params?.render as
         | { id: string; nonce: string; options?: string }
         | undefined) ??
@@ -48,6 +66,15 @@ export default class RenderFileExtractRoute extends Route<Model> {
       }
     }
     if (!renderParams) {
+      let baseParams = (globalThis as any).__boxelRenderBaseParams as
+        | [string, string, string]
+        | undefined;
+      if (baseParams) {
+        let [id, nonce, options] = baseParams;
+        renderParams = { id, nonce, options };
+      }
+    }
+    if (!renderParams) {
       return {
         id: 'unknown',
         nonce: 'unknown',
@@ -60,6 +87,11 @@ export default class RenderFileExtractRoute extends Route<Model> {
         ),
       };
     }
+    console.debug('file-extract params', {
+      id: renderParams.id,
+      nonce: renderParams.nonce,
+      options: renderParams.options,
+    });
     let { id, nonce, options } = renderParams;
     let parsedOptions = parseRenderRouteOptions(options);
     if (!parsedOptions.fileExtract) {
