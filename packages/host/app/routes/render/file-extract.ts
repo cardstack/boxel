@@ -14,8 +14,6 @@ import { errorJsonApiToErrorEntry } from '../../lib/window-error-handler';
 
 import type LoaderService from '../../services/loader-service';
 import type NetworkService from '../../services/network';
-import type { Model as RenderModel } from '../render';
-
 export type Model = FileExtractResponse;
 
 export default class RenderFileExtractRoute extends Route<Model> {
@@ -23,10 +21,33 @@ export default class RenderFileExtractRoute extends Route<Model> {
   @service declare network: NetworkService;
 
   async model(_: unknown, transition: Transition): Promise<Model> {
-    let renderModel = transition.resolvedModels?.render as
-      | RenderModel
-      | undefined;
-    if (!renderModel) {
+    let renderParams =
+      (transition.to?.params?.render as
+        | { id: string; nonce: string; options?: string }
+        | undefined) ??
+      (transition.to?.parent?.params?.render as
+        | { id: string; nonce: string; options?: string }
+        | undefined) ??
+      (transition.to?.parent?.parent?.params?.render as
+        | { id: string; nonce: string; options?: string }
+        | undefined);
+    if (!renderParams) {
+      let url =
+        (transition.to as { url?: string } | undefined)?.url ??
+        (transition as { intent?: { url?: string } } | undefined)?.intent?.url;
+      if (url) {
+        let match = /\/render\/([^/]+)\/([^/]+)\/([^/]+)/.exec(url);
+        if (match) {
+          let [, id, nonce, options] = match;
+          renderParams = {
+            id: decodeURIComponent(id),
+            nonce: decodeURIComponent(nonce),
+            options: decodeURIComponent(options),
+          };
+        }
+      }
+    }
+    if (!renderParams) {
       return {
         id: 'unknown',
         nonce: 'unknown',
@@ -35,12 +56,12 @@ export default class RenderFileExtractRoute extends Route<Model> {
         deps: [],
         error: this.#buildError(
           'unknown',
-          new Error('missing render route model'),
+          new Error('missing render route params'),
         ),
       };
     }
-    let { cardId, nonce, renderOptions: parsedOptions } = renderModel;
-    let id = cardId;
+    let { id, nonce, options } = renderParams;
+    let parsedOptions = parseRenderRouteOptions(options);
     if (!parsedOptions.fileExtract) {
       transition.abort();
       return {
