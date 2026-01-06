@@ -34,8 +34,10 @@ import type { PgAdapter } from '@cardstack/postgres';
 
 function parseSearchQuery(searchURL: URL) {
   let queryParam = searchURL.searchParams.get('query');
-  let rawQuery = queryParam ?? searchURL.searchParams.toString();
-  return parse(rawQuery) as Record<string, any>;
+  if (queryParam != null) {
+    return parse(queryParam) as Record<string, any>;
+  }
+  return parse(searchURL.searchParams.toString()) as Record<string, any>;
 }
 
 module(basename(__filename), function () {
@@ -1904,7 +1906,7 @@ module(basename(__filename), function () {
 
           response = await request
             .get(
-              `/_search?query=${encodeURIComponent(
+              `/_search?realms=${encodeURIComponent(testRealmHref)}&query=${encodeURIComponent(
                 stringify(query, { encode: false }),
               )}`,
             )
@@ -3705,6 +3707,10 @@ module(basename(__filename), function () {
         'linksToMany relationship exposes canonical search link',
       );
       let matchesSearchURL = new URL(matchesSearchLink);
+      assert.ok(
+        matchesSearchURL.searchParams.get('query'),
+        'matches search link uses query param',
+      );
       assert.strictEqual(
         matchesSearchURL.href.split('?')[0],
         new URL('_search', providerRealmURL).href,
@@ -3754,6 +3760,10 @@ module(basename(__filename), function () {
         'failingMatches relationship exposes canonical search link despite error',
       );
       let failingSearchURL = new URL(failingSearchLink);
+      assert.ok(
+        failingSearchURL.searchParams.get('query'),
+        'failingMatches search link uses query param',
+      );
       assert.strictEqual(
         failingSearchURL.href.split('?')[0],
         new URL('_search', UNREACHABLE_REALM_URL).href,

@@ -20,7 +20,7 @@ import {
 } from '.';
 import type { Realm } from './realm';
 import { RealmPaths } from './paths';
-import { buildQueryParamValue, type Query } from './query';
+import { type Query } from './query';
 import { CardError, type SerializedError } from './error';
 import { isResolvedCodeRef, visitModuleDeps } from './code-ref';
 import {
@@ -498,10 +498,8 @@ export class RealmIndexQueryEngine {
     query: Query,
   ): Promise<{ cards: CardResource<Saved>[]; error?: QueryFieldErrorDetail }> {
     try {
-      let baseHref = realmHref.endsWith('/') ? realmHref : `${realmHref}/`;
-      let searchURL = new URL('./_search', baseHref);
-      searchURL.searchParams.set('query', buildQueryParamValue(query));
-      let response = await this.#fetch(searchURL.href, {
+      let searchURL = buildQuerySearchURL(realmHref, query);
+      let response = await this.#fetch(searchURL, {
         headers: { Accept: SupportedMimeType.CardJson },
       });
       if (!response.ok) {
