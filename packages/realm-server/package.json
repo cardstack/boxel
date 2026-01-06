@@ -94,6 +94,7 @@
     "start:test-realms": "./scripts/start-test-realms.sh --workerManagerPort=4211",
     "start:all": "./scripts/start-all.sh",
     "start:skip-experiments": "./scripts/start-all-except-experiments.sh",
+    "start:services-for-host-tests": "./scripts/start-services-for-host-tests.sh",
     "start:without-matrix": "./scripts/start-without-matrix.sh",
     "start:staging": "./scripts/start-staging.sh",
     "start:development": "./scripts/start-development.sh --workerManagerPort=4210",

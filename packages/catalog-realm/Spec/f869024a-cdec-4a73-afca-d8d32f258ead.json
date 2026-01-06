@@ -5,7 +5,7 @@
       "readMe": null,
       "ref": {
         "name": "Listing",
-        "module": "http://localhost:4201/catalog/catalog-app/listing/listing"
+        "module": "../catalog-app/listing/listing"
       },
       "specType": "card",
       "containedExamples": [],
