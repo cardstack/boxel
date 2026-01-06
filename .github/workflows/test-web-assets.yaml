@@ -1,0 +1,111 @@
+name: Build Test Web Assets
+
+on:
+  workflow_call:
+    outputs:
+      artifact_name:
+        description: Artifact name containing built test web assets
+        value: ${{ jobs.build.outputs.artifact_name }}
+      cache_key:
+        description: Cache key used for the built assets
+        value: ${{ jobs.build.outputs.cache_key }}
+      cache_hit:
+        description: Whether the cache was hit
+        value: ${{ jobs.build.outputs.cache_hit }}
+
+jobs:
+  build:
+    name: Build and cache test web assets
+    runs-on: ubuntu-latest
+    concurrency:
+      group: test-web-assets-${{ github.ref }}-${{ github.sha }}
+      cancel-in-progress: false
+
+    outputs:
+      artifact_name: ${{ steps.keys.outputs.artifact_name }}
+      cache_key: ${{ steps.keys.outputs.cache_key }}
+      cache_hit: ${{ steps.restore.outputs.cache-hit }}
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: ./.github/actions/init
+
+      - name: Compute cache key
+        id: keys
+        shell: bash
+        run: |
+          ref_slug="$(echo "${GITHUB_REF}" | tr '/' '_')"
+          cache_key="test-web-assets-v1-${RUNNER_OS}-${ref_slug}-${GITHUB_SHA}"
+          artifact_name="test-web-assets-${GITHUB_SHA}"
+          echo "cache_key=$cache_key" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
+
+      - name: Restore cached assets
+        id: restore
+        uses: actions/cache/restore@d4323d4df104b026a6aa633fdb11d772146be0bf # 4.2.2
+        with:
+          key: ${{ steps.keys.outputs.cache_key }}
+          path: |
+            packages/boxel-icons/dist
+            packages/boxel-ui/addon/dist
+            packages/host/dist
+            .ci/test-web-assets/manifest.json
+
+      - name: Build boxel-icons
+        if: steps.restore.outputs.cache-hit != 'true'
+        run: pnpm build
+        working-directory: packages/boxel-icons
+
+      - name: Build boxel-ui
+        if: steps.restore.outputs.cache-hit != 'true'
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
+
+      - name: Build host dist (test assets)
+        if: steps.restore.outputs.cache-hit != 'true'
+        run: NODE_OPTIONS="--max_old_space_size=4096" pnpm build
+        working-directory: packages/host
+
+      - name: Write assets manifest
+        shell: bash
+        run: |
+          node -e '
+          const fs = require("fs");
+          fs.mkdirSync(".ci/test-web-assets", { recursive: true });
+          const manifest = {
+            sha: process.env.GITHUB_SHA,
+            ref: process.env.GITHUB_REF,
+            runnerOs: process.env.RUNNER_OS,
+            node: process.version,
+            pnpm: require("child_process").execSync("pnpm -v").toString().trim(),
+            cacheKey: process.env.CACHE_KEY,
+            cacheHit: process.env.CACHE_HIT === "true",
+            builtAt: new Date().toISOString(),
+          };
+          fs.writeFileSync(".ci/test-web-assets/manifest.json", JSON.stringify(manifest, null, 2));
+          '
+        env:
+          CACHE_KEY: ${{ steps.keys.outputs.cache_key }}
+          CACHE_HIT: ${{ steps.restore.outputs.cache-hit }}
+
+      - name: Save cached assets
+        if: steps.restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@d4323d4df104b026a6aa633fdb11d772146be0bf # 4.2.2
+        with:
+          key: ${{ steps.keys.outputs.cache_key }}
+          path: |
+            packages/boxel-icons/dist
+            packages/boxel-ui/addon/dist
+            packages/host/dist
+            .ci/test-web-assets/manifest.json
+
+      - name: Upload built assets
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        with:
+          name: ${{ steps.keys.outputs.artifact_name }}
+          path: |
+            packages/boxel-icons/dist
+            packages/boxel-ui/addon/dist
+            packages/host/dist
+            .ci/test-web-assets/manifest.json
+          retention-days: 7
