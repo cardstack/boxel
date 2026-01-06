@@ -203,7 +203,7 @@ export default class StyleReference extends StructuredTheme {
 
   @field themeName = contains(StringField, {
     computeVia: function (this: StyleReference) {
-      return this.title;
+      return this.cardTitle;
     },
   });
 

@@ -63,7 +63,7 @@ export class NestedQueryFieldPlayground extends CardDef {
           <div class='control-grid'>
             <fieldset>
               <legend>Nested title (used as filter)</legend>
-              <@fields.queries.title @format='edit' />
+              <@fields.queries.cardTitle @format='edit' />
               <p class='hint'>
                 Resolves to <code>contains.firstName</code> inside both nested query
                 fields. Leave empty to short-circuit the search.

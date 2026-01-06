@@ -1075,7 +1075,7 @@ export class Tournament extends CardDef {
                 'Untitled Tournament'
               }}</h4>
             {{#if @model.game}}
-              <div class='tournament-game-compact'>{{@model.game.title}}</div>
+              <div class='tournament-game-compact'>{{@model.game.cardTitle}}</div>
             {{/if}}
           </div>
           <div class='tournament-status-compact status-{{@model.status}}'>

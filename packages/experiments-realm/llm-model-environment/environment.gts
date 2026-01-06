@@ -56,7 +56,7 @@ export class ShortcutSettingsField extends FieldDef {
           <div class='preferred-model'>
             <div class='model-connection'></div>
             <div class='model-info'>
-              <div class='model-name'>{{@model.preferredModel.title}}</div>
+              <div class='model-name'>{{@model.preferredModel.cardTitle}}</div>
               {{#if @model.preferredModel.modelId}}
                 <div class='model-id'>{{@model.preferredModel.modelId}}</div>
               {{/if}}
@@ -97,7 +97,7 @@ export class ShortcutSettingsField extends FieldDef {
                         "custom-skill"
                       }}'
                   >
-                    {{if skill.title skill.title skill.id}}
+                    {{if skill.cardTitle skill.cardTitle skill.id}}
                   </div>
                 {{/if}}
               {{/each}}
@@ -336,7 +336,7 @@ export class ShortcutSettingsField extends FieldDef {
                 'Shortcut'
               }}</div>
             {{#if @model.preferredModel}}
-              <div class='fitted-model'>{{@model.preferredModel.title}}</div>
+              <div class='fitted-model'>{{@model.preferredModel.cardTitle}}</div>
             {{/if}}
             {{#if (gt @model.requiredSkills.length 0)}}
               <div class='fitted-skills'>{{@model.requiredSkills.length}}
@@ -751,8 +751,8 @@ class Fitted extends Component<typeof Environment> {
   get sortedModelSettings() {
     const settings = this.args?.model?.modelsList || [];
     return [...settings].sort((a, b) => {
-      const titleA = a.model?.title || '';
-      const titleB = b.model?.title || '';
+      const titleA = a.model?.cardTitle || '';
+      const titleB = b.model?.cardTitle || '';
       return titleA.localeCompare(titleB);
     });
   }
@@ -1462,8 +1462,8 @@ class Isolated extends Component<typeof Environment> {
       })
       .filter(Boolean)
       .sort((a, b) => {
-        const nameA = a?.model?.title || '';
-        const nameB = b?.model?.title || '';
+        const nameA = a?.model?.cardTitle || '';
+        const nameB = b?.model?.cardTitle || '';
         return nameA.localeCompare(nameB);
       });
   }
@@ -1513,8 +1513,8 @@ class Isolated extends Component<typeof Environment> {
       })
       .filter(Boolean)
       .sort((a, b) => {
-        const nameA = a?.model?.title || '';
-        const nameB = b?.model?.title || '';
+        const nameA = a?.model?.cardTitle || '';
+        const nameB = b?.model?.cardTitle || '';
         return nameA.localeCompare(nameB);
       });
   }
@@ -1639,7 +1639,7 @@ class Isolated extends Component<typeof Environment> {
                       <div class='model-info'>
                         <div
                           class='model-name'
-                        >{{item.shortcut.preferredModel.title}}</div>
+                        >{{item.shortcut.preferredModel.cardTitle}}</div>
                         {{#if item.shortcut.preferredModel.modelId}}
                           <div
                             class='model-id'
@@ -1670,7 +1670,7 @@ class Isolated extends Component<typeof Environment> {
                                 "custom-skill"
                               }}'
                             {{on 'click' (fn this.viewSkill skill)}}
-                          >{{if skill.title skill.title skill.id}}</button>
+                          >{{if skill.cardTitle skill.cardTitle skill.id}}</button>
                         {{/each}}
                       </div>
                     </div>
@@ -1718,7 +1718,7 @@ class Isolated extends Component<typeof Environment> {
               >
                 <div class='model-content'>
                   <div class='model-header'>
-                    <div class='model-name'>{{item.model.title}}</div>
+                    <div class='model-name'>{{item.model.cardTitle}}</div>
                     {{#if item.isDisabled}}
                       <div class='status-badge disabled'>Disabled</div>
                     {{else if item.isAddition}}
@@ -1841,7 +1841,7 @@ class Isolated extends Component<typeof Environment> {
                 >
                   <div class='model-content'>
                     <div class='model-header'>
-                      <div class='model-name'>{{item.model.title}}</div>
+                      <div class='model-name'>{{item.model.cardTitle}}</div>
                       {{#if item.isDisabledLocally}}
                         <div class='status-badge locally-disabled'>Disabled
                           Locally</div>

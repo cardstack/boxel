@@ -182,7 +182,7 @@ class MoodSelectorPlaylistEmbedded extends Component<
                 >
                   <div class='mood-emoji-embedded'>{{mood.emoji}}</div>
                   <p class='mood-name-embedded'>{{mood.name}}</p>
-                  <p class='mood-description-embedded'>{{mood.description}}</p>
+                  <p class='mood-description-embedded'>{{mood.cardDescription}}</p>
                 </button>
               {{/each}}
             </div>
@@ -521,7 +521,7 @@ class MoodSelectorPlaylistIsolated extends Component<
                   >
                     <div class='mood-emoji'>{{mood.emoji}}</div>
                     <p class='mood-name'>{{mood.name}}</p>
-                    <p class='mood-description'>{{mood.description}}</p>
+                    <p class='mood-description'>{{mood.cardDescription}}</p>
 
                     <div
                       class='mood-card-glow'

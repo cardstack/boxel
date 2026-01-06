@@ -519,7 +519,7 @@ export class ModelSettingsField extends FieldDef {
         <div class='tile-header'>
           <div class='model-section'>
             {{#if @model.model}}
-              <div class='model-name'>{{@model.model.title}}</div>
+              <div class='model-name'>{{@model.model.cardTitle}}</div>
               {{#if @model.model.modelId}}
                 <div class='model-id'>{{@model.model.modelId}}</div>
               {{/if}}

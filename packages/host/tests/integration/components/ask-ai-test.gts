@@ -74,7 +74,7 @@ module('Integration | ask-ai', function (hooks) {
         'pet.gts': petCard,
         'Pet/marco.json': {
           data: {
-            attributes: { cardTitle: 'Marco' },
+            attributes: { title: 'Marco' },
             meta: {
               adoptsFrom: {
                 module: `${testRealmURL}pet`,
@@ -85,7 +85,7 @@ module('Integration | ask-ai', function (hooks) {
         },
         'Pet/mango.json': {
           data: {
-            attributes: { cardTitle: 'Mango' },
+            attributes: { title: 'Mango' },
             meta: {
               adoptsFrom: {
                 module: `${testRealmURL}pet`,

@@ -92,7 +92,7 @@ module('Integration | computeds', function (hooks) {
       @field author = contains(Person);
       @field summary = contains(StringField, {
         computeVia: function (this: Post) {
-          return `${this.title} by ${this.author.firstName}`;
+          return `${this.cardTitle} by ${this.author.firstName}`;
         },
       });
       static isolated = class Isolated extends Component<typeof this> {
@@ -138,7 +138,9 @@ module('Integration | computeds', function (hooks) {
       });
       static isolated = class Isolated extends Component<typeof this> {
         <template>
-          <div data-test='title'><@fields.cardTitle /></div> by <@fields.author />
+          <div data-test='title'><@fields.cardTitle /></div>
+          by
+          <@fields.author />
         </template>
       };
     }
@@ -478,7 +480,7 @@ module('Integration | computeds', function (hooks) {
       @field author = contains(Author);
       @field summary = contains(StringField, {
         computeVia: function (this: Post) {
-          return `${this.title} by ${this.author.firstName} ${this.author.lastName}`;
+          return `${this.cardTitle} by ${this.author.firstName} ${this.author.lastName}`;
         },
       });
       static isolated = class Isolated extends Component<typeof this> {
@@ -533,10 +535,10 @@ module('Integration | computeds', function (hooks) {
       @field tagSummary = contains(StringField, {
         computeVia: function (this: Article) {
           if (this.tags.length === 0) {
-            return `${this.title} (no tags)`;
+            return `${this.cardTitle} (no tags)`;
           }
           let tagNames = this.tags.map((tag) => tag.name).join(', ');
-          return `${this.title} [${tagNames}]`;
+          return `${this.cardTitle} [${tagNames}]`;
         },
       });
       static isolated = class Isolated extends Component<typeof this> {
@@ -606,10 +608,10 @@ module('Integration | computeds', function (hooks) {
       @field categorySummary = contains(StringField, {
         computeVia: function (this: Blog) {
           if (this.categories.length === 0) {
-            return `${this.title} (no categories)`;
+            return `${this.cardTitle} (no categories)`;
           }
           let categoryNames = this.categories.map((cat) => cat.name).join(', ');
-          return `${this.title} [${categoryNames}]`;
+          return `${this.cardTitle} [${categoryNames}]`;
         },
       });
       static isolated = class Isolated extends Component<typeof this> {

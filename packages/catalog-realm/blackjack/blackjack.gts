@@ -665,10 +665,10 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
               <div class='player-avatar-container'>
                 <img
                   src={{@model.dealer.cardThumbnailURL}}
-                  alt={{@model.dealer.title}}
+                  alt={{@model.dealer.cardTitle}}
                   class='player-avatar'
                 />
-                <div>Dealer: {{@model.dealer.title}}</div>
+                <div>Dealer: {{@model.dealer.cardTitle}}</div>
               </div>
               <span>Score: {{this.calculatedDealerScore}}</span>
             </div>
@@ -705,10 +705,10 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
               <div class='player-avatar-container'>
                 <img
                   src={{@model.player.cardThumbnailURL}}
-                  alt={{@model.player.title}}
+                  alt={{@model.player.cardTitle}}
                   class='player-avatar'
                 />
-                <div>Player: {{@model.player.title}}</div>
+                <div>Player: {{@model.player.cardTitle}}</div>
               </div>
               <span>Score: {{this.calculatedPlayerScore}}</span>
             </div>

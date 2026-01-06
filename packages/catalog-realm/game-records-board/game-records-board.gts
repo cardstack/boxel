@@ -120,7 +120,7 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
 
     return [
       'All Games',
-      ...new Set(this.gameRecordsData.instances?.map((game) => game.title)),
+      ...new Set(this.gameRecordsData.instances?.map((game) => game.cardTitle)),
     ];
   }
 
@@ -145,7 +145,7 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
             module: gameResult.ref.module,
             name: gameResult.ref.name,
           },
-          title: gameResult.game.title,
+          title: gameResult.game.cardTitle,
         });
       }
     });

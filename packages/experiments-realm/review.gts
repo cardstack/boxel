@@ -28,7 +28,7 @@ export class Review extends BlogPost {
               <div class='categories'>
                 {{#each @model.categories as |category|}}
                   <div class='category' style={{categoryStyle category}}>
-                    {{category.title}}
+                    {{category.cardTitle}}
                   </div>
                 {{/each}}
               </div>
@@ -137,7 +137,7 @@ export class Review extends BlogPost {
             <div class='categories'>
               {{#each @model.categories as |category|}}
                 <div class='category' style={{categoryStyle category}}>
-                  {{category.title}}
+                  {{category.cardTitle}}
                 </div>
               {{/each}}
             </div>

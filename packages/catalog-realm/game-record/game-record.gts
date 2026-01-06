@@ -64,7 +64,7 @@ export class GameRecord extends CardDef {
         return undefined;
       }
 
-      return this.player.title + ' - ' + this.game.title;
+      return this.player.cardTitle + ' - ' + this.game.cardTitle;
     },
   });
 

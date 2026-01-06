@@ -1836,7 +1836,7 @@ class StudyHubEmbedded extends Component<typeof StudyHub> {
                     <span class='goal-title'>{{if
                         goal.goalTitle
                         goal.goalTitle
-                        (if goal.title goal.title 'Untitled Goal')
+                        (if goal.cardTitle goal.cardTitle 'Untitled Goal')
                       }}</span>
                     <span class='goal-progress'>{{if
                         goal.progress
@@ -2329,7 +2329,7 @@ export class StudyHub extends CardDef {
                         <span class='goal-name'>{{if
                             goal.goalTitle
                             goal.goalTitle
-                            (if goal.title goal.title 'Untitled Goal')
+                            (if goal.cardTitle goal.cardTitle 'Untitled Goal')
                           }}</span>
                         <span class='goal-progress'>{{if
                             goal.progress

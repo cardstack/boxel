@@ -143,7 +143,7 @@ class IsolatedTemplate extends Component<typeof GameLeaderboard> {
     }
 
     return [
-      ...new Set(this.gameRecordsData.instances?.map((game) => game.title)),
+      ...new Set(this.gameRecordsData.instances?.map((game) => game.cardTitle)),
     ];
   }
 
@@ -168,7 +168,7 @@ class IsolatedTemplate extends Component<typeof GameLeaderboard> {
             module: gameResult.ref.module,
             name: gameResult.ref.name,
           },
-          title: gameResult.game.title,
+          title: gameResult.game.cardTitle,
         });
       }
     });
@@ -271,8 +271,8 @@ class IsolatedTemplate extends Component<typeof GameLeaderboard> {
         }
 
         // TERTIARY SORT: If still tied, alphabetical by player name (ascending)
-        let titleA = String(a.player?.title ?? '');
-        let titleB = String(b.player?.title ?? '');
+        let titleA = String(a.player?.cardTitle ?? '');
+        let titleB = String(b.player?.cardTitle ?? '');
         return titleA.localeCompare(titleB);
       })
       .map((entry, index) => ({

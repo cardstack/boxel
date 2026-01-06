@@ -63,7 +63,7 @@ export class EmbeddedProductComponent extends GlimmerComponent<EmbeddedProductCo
         <MonetaryAmountAtom @model={{@model.unitPrice}} />
       </div>
       <div class='seller'>
-        {{@model.seller.title}}
+        {{@model.seller.cardTitle}}
       </div>
     </div>
     <style scoped>
@@ -265,7 +265,7 @@ class Isolated extends Component<typeof Product> {
       <div class='right-container'>
         <div class='seller-container'>
           <span class='seller'>
-            {{@model.seller.title}}
+            {{@model.seller.cardTitle}}
           </span>
         </div>
         <h1 class='title'>{{@model.cardTitle}}</h1>

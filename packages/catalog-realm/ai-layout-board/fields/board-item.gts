@@ -1408,8 +1408,8 @@ export class ExternalCard extends BoardItem {
                   'External Card'
                 }}</div>
               <div class='tertiary-text'>{{if
-                  @model.externalCard.title
-                  @model.externalCard.title
+                  @model.externalCard.cardTitle
+                  @model.externalCard.cardTitle
                   'No card linked'
                 }}</div>
             </div>

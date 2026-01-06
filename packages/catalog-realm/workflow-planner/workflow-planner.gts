@@ -146,7 +146,7 @@ export class WorkflowPlanner extends CardDef {
                         {{/if}}
                       </div>
                       <div class='step-description'>
-                        {{step.description}}
+                        {{step.cardDescription}}
                       </div>
                     </div>
                   </div>

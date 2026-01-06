@@ -471,7 +471,10 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
               attributes: {
                 firstName: 'Mango',
                 cardTitle: 'Mango',
-                favoriteToys: [{ cardTitle: 'Tug rope' }, { cardTitle: 'Lambchop' }],
+                favoriteToys: [
+                  { cardTitle: 'Tug rope' },
+                  { cardTitle: 'Lambchop' },
+                ],
               },
               meta: {
                 adoptsFrom: {
@@ -841,7 +844,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
 
       await createNewInstance();
       assert
-        .dom('[data-test-field-preview-card] [data-test-field="cardTitle"] input')
+        .dom(
+          '[data-test-field-preview-card] [data-test-field="cardTitle"] input',
+        )
         .hasNoValue();
       selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
@@ -1265,7 +1270,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
 
       await createNewInstance();
       assert
-        .dom('[data-test-field-preview-card] [data-test-field="cardTitle"] input')
+        .dom(
+          '[data-test-field-preview-card] [data-test-field="cardTitle"] input',
+        )
         .hasNoValue();
       selection =
         getPlaygroundSelections()?.[`${additionalRealmURL}pet/ToyField`];

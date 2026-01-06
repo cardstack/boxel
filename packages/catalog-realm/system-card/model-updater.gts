@@ -274,7 +274,7 @@ class Isolated extends Component<typeof ModelUpdater> {
           workingModelCard.canonicalSlug = apiModel.canonical_slug;
           workingModelCard.name = apiModel.name;
           workingModelCard.created = apiModel.created;
-          workingModelCard.description = apiModel.description || '';
+          workingModelCard.cardDescription = apiModel.description || '';
           workingModelCard.contextLength = apiModel.context_length;
 
           if (apiModel.pricing) {
@@ -346,7 +346,7 @@ class Isolated extends Component<typeof ModelUpdater> {
                 canonicalSlug: workingModelCard.canonicalSlug,
                 name: workingModelCard.name,
                 created: workingModelCard.created,
-                description: workingModelCard.description,
+                description: workingModelCard.cardDescription,
                 pricing: workingModelCard.pricing
                   ? {
                       prompt: workingModelCard.pricing.prompt,

@@ -654,7 +654,7 @@ class Isolated extends Component<typeof AILayoutBoard> {
               const selectedCard = await this.args.context.store.get(cardId);
               if (selectedCard instanceof CardDef) {
                 newItem.externalCard = selectedCard;
-                newItem.caption = selectedCard.title || 'External Card';
+                newItem.caption = selectedCard.cardTitle || 'External Card';
               } else {
                 console.warn(
                   'Selected card is not a CardDef; skipping external link',

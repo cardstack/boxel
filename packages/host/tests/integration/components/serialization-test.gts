@@ -667,7 +667,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'Person',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
 
     await setupIntegrationTestRealm({
@@ -1011,10 +1013,12 @@ module('Integration | serialization', function (hooks) {
     class Toy extends CardDef {
       @field cardTitle = contains(StringField, {
         computeVia: function (this: Toy) {
-          return this.description;
+          return this.cardDescription;
         },
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
       @field cardDescription = contains(StringField);
     }
     class Pet extends CardDef {
@@ -1025,8 +1029,12 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
-      @field cardDescription = contains(StringField, { computeVia: () => 'Pet' });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardDescription = contains(StringField, {
+        computeVia: () => 'Pet',
+      });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     class Person extends CardDef {
       @field firstName = contains(StringField);
@@ -1039,7 +1047,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'Person',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
 
     await setupIntegrationTestRealm({
@@ -1142,10 +1152,12 @@ module('Integration | serialization', function (hooks) {
     class Toy extends CardDef {
       @field cardTitle = contains(StringField, {
         computeVia: function (this: Toy) {
-          return this.description;
+          return this.cardDescription;
         },
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
       @field cardDescription = contains(StringField);
     }
     class Pet extends CardDef {
@@ -1156,8 +1168,12 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
-      @field cardDescription = contains(StringField, { computeVia: () => 'Pet' });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardDescription = contains(StringField, {
+        computeVia: () => 'Pet',
+      });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     class Person extends CardDef {
       @field firstName = contains(StringField);
@@ -1170,7 +1186,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'Person',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
 
     await setupIntegrationTestRealm({
@@ -1358,7 +1376,7 @@ module('Integration | serialization', function (hooks) {
       if (favoriteToy instanceof Toy) {
         assert.true(isSaved(favoriteToy), 'Toy card is saved');
         assert.strictEqual(
-          favoriteToy.description,
+          favoriteToy.cardDescription,
           'Toilet paper ghost: Poooo!',
         );
       } else {
@@ -1399,8 +1417,12 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
-      @field cardDescription = contains(StringField, { computeVia: () => 'Pet' });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardDescription = contains(StringField, {
+        computeVia: () => 'Pet',
+      });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     class Person extends CardDef {
       @field firstName = contains(StringField);
@@ -1413,7 +1435,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'Person',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
 
     await setupIntegrationTestRealm({
@@ -1512,7 +1536,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'Person',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
 
     await setupIntegrationTestRealm({
@@ -1648,7 +1674,10 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Jackie',
-          toys: [{ cardDescription: 'treat ball' }, { cardDescription: 'tug toy' }],
+          toys: [
+            { cardDescription: 'treat ball' },
+            { cardDescription: 'tug toy' },
+          ],
           favoriteToy: { cardDescription: 'treat ball' },
         },
         relationships: {
@@ -1704,7 +1733,7 @@ module('Integration | serialization', function (hooks) {
       }
     });
     if (favoriteToy instanceof Toy) {
-      assert.strictEqual(favoriteToy.description, 'treat ball');
+      assert.strictEqual(favoriteToy.cardDescription, 'treat ball');
     } else {
       assert.ok(false, '"favoriteToy" field value is not an instance of Toy');
     }
@@ -1746,7 +1775,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'Person',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
 
     await setupIntegrationTestRealm({
@@ -1931,10 +1962,12 @@ module('Integration | serialization', function (hooks) {
     class Toy extends CardDef {
       @field cardTitle = contains(StringField, {
         computeVia: function (this: Toy) {
-          return this.description;
+          return this.cardDescription;
         },
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
       @field cardDescription = contains(StringField);
     }
     class Pet extends FieldDef {
@@ -1945,8 +1978,12 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
-      @field cardDescription = contains(StringField, { computeVia: () => 'Pet' });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardDescription = contains(StringField, {
+        computeVia: () => 'Pet',
+      });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     class Person extends CardDef {
       @field firstName = contains(StringField);
@@ -1959,7 +1996,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'Person',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
 
     await setupIntegrationTestRealm({
@@ -2046,7 +2085,7 @@ module('Integration | serialization', function (hooks) {
         let { favoriteToy } = pet;
         if (favoriteToy instanceof Toy) {
           assert.strictEqual(
-            favoriteToy.description,
+            favoriteToy.cardDescription,
             'Toilet paper ghost: Poooo!',
           );
         } else {
@@ -2064,16 +2103,22 @@ module('Integration | serialization', function (hooks) {
     class Toy extends CardDef {
       @field cardTitle = contains(StringField, {
         computeVia: function (this: Toy) {
-          return this.description;
+          return this.cardDescription;
         },
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
       @field cardDescription = contains(StringField);
     }
     class Pet extends FieldDef {
       @field favoriteToy = linksTo(Toy);
-      @field cardDescription = contains(StringField, { computeVia: () => 'Pet' });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardDescription = contains(StringField, {
+        computeVia: () => 'Pet',
+      });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     class Person extends CardDef {
       @field firstName = contains(StringField);
@@ -2086,7 +2131,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'Person',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
 
     await setupIntegrationTestRealm({
@@ -2169,7 +2216,7 @@ module('Integration | serialization', function (hooks) {
         let { favoriteToy } = pet;
         if (favoriteToy instanceof Toy) {
           assert.strictEqual(
-            favoriteToy.description,
+            favoriteToy.cardDescription,
             'Toilet paper ghost: Poooo!',
           );
         } else {
@@ -2188,10 +2235,12 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField);
       @field cardTitle = contains(StringField, {
         computeVia: function (this: Toy) {
-          return this.description;
+          return this.cardDescription;
         },
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     class Pet extends FieldDef {
       @field firstName = contains(StringField);
@@ -2201,8 +2250,12 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
-      @field cardDescription = contains(StringField, { computeVia: () => 'Pet' });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardDescription = contains(StringField, {
+        computeVia: () => 'Pet',
+      });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     class Person extends CardDef {
       @field firstName = contains(StringField);
@@ -2215,7 +2268,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'Person',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
 
     await setupIntegrationTestRealm({
@@ -2307,7 +2362,7 @@ module('Integration | serialization', function (hooks) {
           let { favoriteToy } = pet;
           if (favoriteToy instanceof Toy) {
             assert.strictEqual(
-              favoriteToy.description,
+              favoriteToy.cardDescription,
               'Toilet paper ghost: Poooo!',
             );
           } else {
@@ -2567,7 +2622,7 @@ module('Integration | serialization', function (hooks) {
       @field author = contains(Person);
       @field cardTitle = contains(StringField, {
         computeVia: function (this: Post) {
-          return this.author?.title ?? 'Post';
+          return this.author?.cardTitle ?? 'Post';
         },
       });
       @field cardDescription = contains(StringField);
@@ -2939,7 +2994,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'Person',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <@fields.firstName />
@@ -2951,12 +3008,17 @@ module('Integration | serialization', function (hooks) {
       @field cardTitle = contains(StringField);
       @field reviews = contains(NumberField);
       @field author = contains(Person);
-      @field cardDescription = contains(StringField, { computeVia: () => 'Post' });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardDescription = contains(StringField, {
+        computeVia: () => 'Post',
+      });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
       static edit = class Edit extends Component<typeof this> {
         <template>
           <fieldset>
-            <label data-test-field='cardTitle'>Title <@fields.cardTitle /></label>
+            <label data-test-field='cardTitle'>Title
+              <@fields.cardTitle /></label>
             <label data-test-field='reviews'>Reviews <@fields.reviews /></label>
             <label data-test-field='author'>Author <@fields.author /></label>
           </fieldset>
@@ -3129,7 +3191,9 @@ module('Integration | serialization', function (hooks) {
     test('can serialize a computed linksTo field', async function (assert) {
       class Pet extends CardDef {
         @field name = contains(StringField);
-        @field cardDescription = contains(StringField, { computeVia: () => 'Pet' });
+        @field cardDescription = contains(StringField, {
+          computeVia: () => 'Pet',
+        });
         @field cardThumbnailURL = contains(StringField, {
           computeVia: () => '../pet.svg',
         });
@@ -3614,14 +3678,18 @@ module('Integration | serialization', function (hooks) {
       @field date = contains(DateField);
       @field location = contains(StringField);
       @field cardTitle = contains(StringField);
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     class Schedule extends CardDef {
       @field appointments = containsMany(Appointment);
       @field cardDescription = contains(StringField, {
         computeVia: () => 'Schedule',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -3718,7 +3786,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'Animal',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     class Person extends Animal {
       @field firstName = contains(StringField);
@@ -3733,8 +3803,12 @@ module('Integration | serialization', function (hooks) {
     class Post extends CardDef {
       @field cardTitle = contains(StringField);
       @field author = contains(Person);
-      @field cardDescription = contains(StringField, { computeVia: () => 'Post' });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardDescription = contains(StringField, {
+        computeVia: () => 'Post',
+      });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -3784,7 +3858,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'Person',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
 
     class Employee extends Person {
@@ -3799,8 +3875,12 @@ module('Integration | serialization', function (hooks) {
     class Post extends CardDef {
       @field cardTitle = contains(StringField);
       @field author = contains(Person);
-      @field cardDescription = contains(StringField, { computeVia: () => 'Post' });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardDescription = contains(StringField, {
+        computeVia: () => 'Post',
+      });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
 
     await setupIntegrationTestRealm({
@@ -3871,7 +3951,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'Person',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
 
     class Pet extends FieldDef {
@@ -3895,8 +3977,12 @@ module('Integration | serialization', function (hooks) {
     class Post extends CardDef {
       @field cardTitle = contains(StringField);
       @field author = contains(Person);
-      @field cardDescription = contains(StringField, { computeVia: () => 'Post' });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardDescription = contains(StringField, {
+        computeVia: () => 'Post',
+      });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
 
     await setupIntegrationTestRealm({
@@ -3986,7 +4072,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'Person',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
 
     class Employee extends Person {
@@ -4012,7 +4100,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'A group of people',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
 
     await setupIntegrationTestRealm({
@@ -4377,13 +4467,13 @@ module('Integration | serialization', function (hooks) {
 
     if (deserializedArticle instanceof Article) {
       assert.strictEqual(
-        deserializedArticle.title,
+        deserializedArticle.cardTitle,
         'How to Test Nested Fields',
       );
       let { category } = deserializedArticle;
 
       if (category instanceof Category) {
-        assert.strictEqual(category.title, 'Programming');
+        assert.strictEqual(category.cardTitle, 'Programming');
         assert.strictEqual(category.priority, 1);
         assert.strictEqual(category.tags.length, 3, 'correct number of tags');
 
@@ -4425,7 +4515,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'Person',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
 
     class Role extends FieldDef {
@@ -4435,8 +4527,12 @@ module('Integration | serialization', function (hooks) {
           return this.roleName;
         },
       });
-      @field cardDescription = contains(StringField, { computeVia: () => 'Role' });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardDescription = contains(StringField, {
+        computeVia: () => 'Role',
+      });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
 
     class DogWalker extends Role {
@@ -4453,7 +4549,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'A group of people',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
 
     await setupIntegrationTestRealm({
@@ -4558,6 +4656,11 @@ module('Integration | serialization', function (hooks) {
   test('can deserialize a linksTo field that contains a polymorphic field', async function (assert) {
     class Toy extends FieldDef {
       @field cardDescription = contains(StringField);
+      @field cardTitle = contains(StringField, {
+        computeVia: function (this: Toy) {
+          return this.cardDescription;
+        },
+      });
     }
     class Pet extends CardDef {
       @field firstName = contains(StringField);
@@ -4643,7 +4746,7 @@ module('Integration | serialization', function (hooks) {
       '"favorite" field value is an instance of Toy',
     );
     assert.strictEqual(
-      (favorite as Toy).description,
+      (favorite as Toy).cardTitle,
       'Toilet paper ghost: Poooo!',
     );
   });
@@ -4885,7 +4988,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'Person',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -4947,13 +5052,19 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'Person',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     class Post extends CardDef {
       @field cardTitle = contains(StringField);
       @field author = contains(Person);
-      @field cardDescription = contains(StringField, { computeVia: () => 'Post' });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardDescription = contains(StringField, {
+        computeVia: () => 'Post',
+      });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
 
     await setupIntegrationTestRealm({
@@ -4986,7 +5097,7 @@ module('Integration | serialization', function (hooks) {
       doc,
       new URL(testRealmURL),
     );
-    assert.strictEqual(post.title, 'Things I Want to Chew');
+    assert.strictEqual(post.cardTitle, 'Things I Want to Chew');
     assert.strictEqual(post.author.firstName, 'Mango');
     assert.deepEqual(
       serializeCard(post, { includeUnrenderedFields: true }),
@@ -5024,7 +5135,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'A person',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     class Post extends FieldDef {
       @field cardTitle = contains(StringField);
@@ -5032,7 +5145,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'A post',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     class Blog extends CardDef {
       @field posts = containsMany(Post);
@@ -5040,7 +5155,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'A blog post',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -5085,9 +5202,9 @@ module('Integration | serialization', function (hooks) {
     );
     let posts = blog.posts;
     assert.strictEqual(posts.length, 2, 'number of posts is correct');
-    assert.strictEqual(posts[0].title, 'Things I Want to Chew');
+    assert.strictEqual(posts[0].cardTitle, 'Things I Want to Chew');
     assert.strictEqual(posts[0].author.firstName, 'Mango');
-    assert.strictEqual(posts[1].title, 'When Mango Steals My Bone');
+    assert.strictEqual(posts[1].cardTitle, 'When Mango Steals My Bone');
     assert.strictEqual(posts[1].author.firstName, 'Van Gogh');
 
     assert.deepEqual(
@@ -5142,7 +5259,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'A person',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     class Post extends FieldDef {
       @field cardTitle = contains(StringField);
@@ -5150,7 +5269,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'A post',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     class Blog extends CardDef {
       @field posts = containsMany(Post);
@@ -5159,7 +5280,9 @@ module('Integration | serialization', function (hooks) {
         computeVia: () => 'A blog post',
       });
       @field editor = contains(Person);
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -5290,10 +5413,10 @@ module('Integration | serialization', function (hooks) {
       'editor certificate is correct',
     );
     assert.strictEqual(posts.length, 2, 'number of posts is correct');
-    assert.strictEqual(posts[0].title, 'Things I Want to Chew');
+    assert.strictEqual(posts[0].cardTitle, 'Things I Want to Chew');
     assert.strictEqual(posts[0].author.firstName, 'Mango');
     assert.strictEqual(posts[0].author.certificate.level, 20);
-    assert.strictEqual(posts[1].title, 'When Mango Steals My Bone');
+    assert.strictEqual(posts[1].cardTitle, 'When Mango Steals My Bone');
     assert.strictEqual(posts[1].author.firstName, 'Van Gogh');
     assert.strictEqual(posts[1].author.certificate.level, 18);
 
@@ -5427,7 +5550,9 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField, {
         computeVia: () => 'A person with birthdate',
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -6111,7 +6236,7 @@ module('Integration | serialization', function (hooks) {
         @field cardDescription = contains(StringField);
         @field cardTitle = contains(StringField, {
           computeVia: function (this: Toy) {
-            return this.description;
+            return this.cardDescription;
           },
         });
       }
@@ -6233,7 +6358,7 @@ module('Integration | serialization', function (hooks) {
             let { favoriteToy } = pet;
             if (favoriteToy instanceof Toy) {
               assert.strictEqual(
-                favoriteToy.description,
+                favoriteToy.cardDescription,
                 'Toilet paper ghost: Poooo!',
               );
             } else {
@@ -6383,7 +6508,9 @@ module('Integration | serialization', function (hooks) {
             return this.firstName;
           },
         });
-        @field cardDescription = contains(StringField, { computeVia: () => 'Pet' });
+        @field cardDescription = contains(StringField, {
+          computeVia: () => 'Pet',
+        });
         @field cardThumbnailURL = contains(StringField, {
           computeVia: () => 'pet.svg',
         });

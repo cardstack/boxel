@@ -75,7 +75,7 @@ export class PlayerOutcomeField extends FieldDef {
   > {
     <template>
       <div class='player-outcome'>
-        <span class='player-name'>{{@model.player.title}}</span>
+        <span class='player-name'>{{@model.player.cardTitle}}</span>
         <span class='outcome-badge'>{{@model.outcome.label}}</span>
       </div>
     </template>
@@ -210,7 +210,7 @@ export class GameResult extends CardDef {
   });
   @field cardTitle = contains(StringField, {
     computeVia: function (this: GameResult) {
-      return this.game.title ?? 'Untitled Game Result';
+      return this.game.cardTitle ?? 'Untitled Game Result';
     },
   });
 
@@ -241,11 +241,11 @@ export class GameResult extends CardDef {
           <div class='game-section'>
             <div class='game-header'>
               <GamepadIcon class='game-icon' />
-              <h1 class='game-title'>{{@model.game.title}}</h1>
+              <h1 class='game-title'>{{@model.game.cardTitle}}</h1>
             </div>
             <div class='player-info'>
               <span class='player-label'>Player:</span>
-              <span class='player-name'>{{@model.outcome.player.title}}</span>
+              <span class='player-name'>{{@model.outcome.player.cardTitle}}</span>
             </div>
           </div>
 
@@ -541,11 +541,11 @@ export class GameResult extends CardDef {
         <div class='game-section'>
           <div class='game-header'>
             <GamepadIcon class='game-icon' />
-            <div class='game-title'>{{@model.game.title}}</div>
+            <div class='game-title'>{{@model.game.cardTitle}}</div>
           </div>
           <div class='player-info'>
             <span class='player-label'>Player:</span>
-            <span class='player-name'>{{@model.outcome.player.title}}</span>
+            <span class='player-name'>{{@model.outcome.player.cardTitle}}</span>
           </div>
           <div class='game-meta'>
             <span class='game-id-label'>Game ID:</span>

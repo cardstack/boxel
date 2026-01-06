@@ -348,7 +348,7 @@ export function setupOperatorModeTests(
             <@fields.cardTitle />
             <br />
             Linked to:
-            {{@model.spec.title}}
+            {{@model.spec.cardTitle}}
           </div>
         </template>
       };

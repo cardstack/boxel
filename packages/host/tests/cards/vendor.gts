@@ -16,5 +16,7 @@ export class Vendor extends CardDef {
       return this.name;
     },
   });
-  @field cardDescription = contains(StringField, { computeVia: () => 'Vendor' });
+  @field cardDescription = contains(StringField, {
+    computeVia: () => 'Vendor',
+  });
 }

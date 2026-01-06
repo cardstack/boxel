@@ -527,7 +527,8 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       attributes: {
         cardInfo: {
           cardTitle: 'OpenAI: GPT-5',
-          cardDescription: 'Test fixture model configuration referencing GPT-5.',
+          cardDescription:
+            'Test fixture model configuration referencing GPT-5.',
           cardThumbnailURL: null,
           notes: null,
         },
@@ -1345,7 +1346,7 @@ export async function assertMessages(
   messages: {
     from: string;
     message?: string;
-    cards?: { id: string; title?: string; realmIconUrl?: string }[];
+    cards?: { id: string; cardTitle?: string; realmIconUrl?: string }[];
     files?: { name: string; sourceUrl: string }[];
   }[],
 ) {

@@ -110,10 +110,13 @@ export class AiAppGenerator extends CardDef {
                 <BoxelButton
                   @kind='secondary'
                   @size='small'
-                  title={{suggestion.title}}
-                  {{on 'click' (fn this.setPromptValue suggestion.description)}}
+                  title={{suggestion.cardTitle}}
+                  {{on
+                    'click'
+                    (fn this.setPromptValue suggestion.cardDescription)
+                  }}
                 >
-                  {{suggestion.title}}
+                  {{suggestion.cardTitle}}
                 </BoxelButton>
               {{/each}}
             </div>

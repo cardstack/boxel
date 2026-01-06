@@ -134,7 +134,7 @@ module(
         > {
           <template>
             <div data-test-inline-title>
-              <@fields.queries.title @format='edit' />
+              <@fields.queries.cardTitle @format='edit' />
             </div>
             <div data-test-favorite>
               {{#if @model.queries.favorite}}

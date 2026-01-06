@@ -29,14 +29,14 @@ export class SearchCardsByTypeAndTitleCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.SearchCardsByTypeAndTitleInput,
   ): Promise<BaseCommandModule.SearchCardsResult> {
-    if (!input.title && !input.cardType && !input.type) {
+    if (!input.cardTitle && !input.cardType && !input.type) {
       throw new Error(
-        'At least one of title, cardType, or type must be provided',
+        'At least one of cardTitle, cardType, or type must be provided',
       );
     }
     let filter = {} as any;
-    if (input.title) {
-      filter.contains = { title: input.title };
+    if (input.cardTitle) {
+      filter.contains = { title: input.cardTitle };
     }
     if (input.cardType) {
       filter.eq = { _cardType: input.cardType };
@@ -103,7 +103,7 @@ export class SearchCardsByQueryCommand extends HostBaseCommand<
         (c) =>
           new SearchCardSummaryField({
             id: c.id,
-            title: c.title,
+            title: c.cardTitle,
           }),
       ),
       description: `Query: ${JSON.stringify(input.query.filter, null, 2)}`,

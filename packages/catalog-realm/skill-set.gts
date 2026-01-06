@@ -109,7 +109,7 @@ function computeTableOfContents(
 
     sectionNumber += 1;
 
-    const topicName = skillRef.topicName || skillRef.skill?.title || 'Untitled';
+    const topicName = skillRef.topicName || skillRef.skill?.cardTitle || 'Untitled';
     const dividerAnchorId = `skill-divider-${i}`;
     tocLines.push(`- [**${sectionNumber}** ${topicName}](#${dividerAnchorId})`);
 

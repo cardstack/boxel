@@ -158,21 +158,21 @@ class StoryCard extends GlimmerComponent<StoryCardComponentArgs> {
         <h3 class='story-title'>
           {{#if @story.url}}
             <a href={{@story.url}} target='_blank' rel='noopener noreferrer'>
-              {{if @story.title @story.title 'Untitled Story'}}
+              {{if @story.cardTitle @story.cardTitle 'Untitled Story'}}
               <ExternalLinkIcon width='12' height='12' class='external-icon' />
             </a>
           {{else}}
             <span class='story-title-text'>{{if
-                @story.title
-                @story.title
+                @story.cardTitle
+                @story.cardTitle
                 'Untitled Story'
               }}</span>
           {{/if}}
         </h3>
 
-        {{#if @story.description}}
+        {{#if @story.cardDescription}}
           <div class='story-description'>
-            {{@story.description}}
+            {{@story.cardDescription}}
           </div>
         {{/if}}
 

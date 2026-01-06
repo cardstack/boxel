@@ -297,7 +297,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     // Create model configurations for testing
     let openAiGpt5Model = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        cardTitle: modelNameFor('openai/gpt-5'),
+        title: modelNameFor('openai/gpt-5'),
       }),
       modelId: 'openai/gpt-5',
       toolsSupported: true,
@@ -306,7 +306,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let openAiGpt4oMiniModel = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        cardTitle: modelNameFor('openai/gpt-4o-mini'),
+        title: modelNameFor('openai/gpt-4o-mini'),
       }),
       modelId: 'openai/gpt-4o-mini',
       toolsSupported: true,
@@ -314,7 +314,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let anthropicClaudeSonnet45Model = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        cardTitle: modelNameFor('anthropic/claude-sonnet-4.5'),
+        title: modelNameFor('anthropic/claude-sonnet-4.5'),
       }),
       modelId: 'anthropic/claude-sonnet-4.5',
       toolsSupported: true,
@@ -322,7 +322,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let anthropicClaudeSonnet37Model = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        cardTitle: modelNameFor('anthropic/claude-3.7-sonnet'),
+        title: modelNameFor('anthropic/claude-3.7-sonnet'),
       }),
       modelId: 'anthropic/claude-3.7-sonnet',
       toolsSupported: true,
@@ -341,7 +341,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let deepseekModel = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        cardTitle: modelNameFor('deepseek/deepseek-chat-v3-0324'),
+        title: modelNameFor('deepseek/deepseek-chat-v3-0324'),
       }),
       modelId: 'deepseek/deepseek-chat-v3-0324',
       toolsSupported: true,
@@ -349,7 +349,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let geminiFlashModel = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        cardTitle: modelNameFor('google/gemini-2.5-flash'),
+        title: modelNameFor('google/gemini-2.5-flash'),
       }),
       modelId: 'google/gemini-2.5-flash',
       toolsSupported: true,
@@ -423,7 +423,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
                 module: `${testRealmURL}plant`,
               },
               specType: 'card',
-              cardTitle: 'Plant spec',
+              title: 'Plant spec',
             },
             meta: {
               adoptsFrom: {
@@ -436,7 +436,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         'Skill/example.json': {
           data: {
             attributes: {
-              cardTitle: 'Exanple Skill',
+              title: 'Exanple Skill',
               cardDescription: 'This skill card is for testing purposes',
               instructions: 'This is an example skill card',
               commands: [],
@@ -449,7 +449,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         'Skill/example2.json': {
           data: {
             attributes: {
-              cardTitle: 'Example 2 Skill',
+              title: 'Example 2 Skill',
               cardDescription: 'This skill card is also for testing purposes',
               instructions: 'This is a second example skill card',
               commands: [],

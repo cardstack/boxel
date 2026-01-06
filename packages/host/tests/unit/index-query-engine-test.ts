@@ -637,7 +637,7 @@ module('Unit | query', function (hooks) {
         card: stringFieldEntry,
         data: {
           search_doc: {
-            cardTitle: stringFieldEntry.title,
+            cardTitle: stringFieldEntry.cardTitle,
             ref: internalKeyFor((stringFieldEntry as any).ref, undefined),
           },
         },
@@ -646,7 +646,7 @@ module('Unit | query', function (hooks) {
         card: numberFieldEntry,
         data: {
           search_doc: {
-            cardTitle: numberFieldEntry.title,
+            cardTitle: numberFieldEntry.cardTitle,
             ref: internalKeyFor((numberFieldEntry as any).ref, undefined),
           },
         },
@@ -684,7 +684,7 @@ module('Unit | query', function (hooks) {
         card: mangoBirthday,
         data: {
           search_doc: {
-            cardTitle: mangoBirthday.title,
+            cardTitle: mangoBirthday.cardTitle,
             venue: (mangoBirthday as any).venue,
             date: format((mangoBirthday as any).date, 'yyyy-MM-dd'),
           },
@@ -694,7 +694,7 @@ module('Unit | query', function (hooks) {
         card: vangoghBirthday,
         data: {
           search_doc: {
-            cardTitle: vangoghBirthday.title,
+            cardTitle: vangoghBirthday.cardTitle,
             venue: (vangoghBirthday as any).venue,
             date: format((vangoghBirthday as any).date, 'yyyy-MM-dd'),
           },

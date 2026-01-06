@@ -594,10 +594,10 @@ class SparklingWaterCatalogIsolatedTemplate extends Component<
             <div class='flavor-spotlight-details'>
               <h4
                 class='flavor-spotlight-title'
-              >{{this.selectedFlavor.title}}</h4>
-              {{#if this.selectedFlavor.description}}
+              >{{this.selectedFlavor.cardTitle}}</h4>
+              {{#if this.selectedFlavor.cardDescription}}
                 <div class='flavor-spotlight-description'>
-                  {{this.selectedFlavor.description}}
+                  {{this.selectedFlavor.cardDescription}}
                 </div>
               {{/if}}
               <div class='flavor-spotlight-meta'>

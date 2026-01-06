@@ -200,7 +200,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
               {{this.queryString}}
               <h2> Search Results </h2>
               {{#each this.authors as |author|}}
-                <div data-test-title>{{author.title}}</div>
+                <div data-test-title>{{author.cardTitle}}</div>
               {{/each}}
             {{/if}}
           </div>

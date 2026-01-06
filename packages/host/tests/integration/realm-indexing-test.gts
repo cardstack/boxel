@@ -2454,7 +2454,9 @@ module(`Integration | realm indexing`, function (hooks) {
           return this.venue;
         },
       });
-      @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,

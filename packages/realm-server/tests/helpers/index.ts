@@ -1624,16 +1624,15 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: false,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.name':
-    {
-      type: 'contains',
-      isComputed: false,
-      fieldOrCard: {
-        name: 'StringField',
-        module: 'https://cardstack.com/base/card-api',
-      },
-      isPrimitive: true,
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.name': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
     },
+    isPrimitive: true,
+  },
   'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.summary':
     {
       type: 'contains',
@@ -1654,15 +1653,16 @@ export const cardDefinition: Definition['fields'] = {
       },
       isPrimitive: true,
     },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardDescription': {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardDescription':
+    {
+      type: 'contains',
+      isComputed: true,
+      fieldOrCard: {
+        name: 'StringField',
+        module: 'https://cardstack.com/base/card-api',
+      },
+      isPrimitive: true,
     },
-    isPrimitive: true,
-  },
   'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssVariables': {
     type: 'contains',
     isComputed: false,
@@ -1681,15 +1681,16 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardThumbnailURL': {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'MaybeBase64Field',
-      module: 'https://cardstack.com/base/card-api',
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardThumbnailURL':
+    {
+      type: 'contains',
+      isComputed: true,
+      fieldOrCard: {
+        name: 'MaybeBase64Field',
+        module: 'https://cardstack.com/base/card-api',
+      },
+      isPrimitive: true,
     },
-    isPrimitive: true,
-  },
   'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme':
     {
       type: 'linksTo',

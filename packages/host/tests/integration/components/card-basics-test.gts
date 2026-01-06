@@ -766,7 +766,7 @@ module('Integration | card-basics', function (hooks) {
 
       let mang = new Person({
         firstName: 'Mango',
-        cardDescription: 'test card',
+        description: 'test card',
         image: new Base64ImageField({
           altText: 'Picture of Mango',
           size: 'contain',
@@ -1851,7 +1851,9 @@ module('Integration | card-basics', function (hooks) {
         .hasValue('');
       assert.dom('[data-test-links-to-editor="theme"]').exists();
       await click('[data-test-toggle-thumbnail-editor]');
-      assert.dom('[data-test-field="cardInfo-cardThumbnailURL"]').doesNotExist();
+      assert
+        .dom('[data-test-field="cardInfo-cardThumbnailURL"]')
+        .doesNotExist();
       assert.dom('[data-test-links-to-editor="theme"]').doesNotExist();
       assert.dom('[data-test-field="cardInfo-notes"] textarea').exists();
 
@@ -1896,7 +1898,7 @@ module('Integration | card-basics', function (hooks) {
       let instance = new Person({
         cardInfo: new CardInfoField({
           cardTitle: 'Johnny',
-          cardDescription: 'Volleyball player',
+          description: 'Volleyball player',
           cardThumbnailURL: 'http://pic/of/volleyball',
         }),
         firstName: 'John',
@@ -1973,7 +1975,7 @@ module('Integration | card-basics', function (hooks) {
 
       let instance = new Book({
         cardInfo: new CardInfoField({
-          cardDescription: 'The latest novel from John Doe',
+          description: 'The latest novel from John Doe',
         }),
         bookTitle: 'Insomniac',
         blurb: 'This book will keep you up at night',
@@ -2029,10 +2031,10 @@ module('Integration | card-basics', function (hooks) {
 
       let insomniac = new Book({
         cardTitle: 'Insomniac',
-        cardDescription: 'This book will keep you up at night',
+        description: 'This book will keep you up at night',
         cardThumbnailURL: 'http://book/pic.jpg',
         cardInfo: new CardInfoField({
-          cardDescription: 'The latest novel from John Doe',
+          description: 'The latest novel from John Doe',
         }),
       });
       await renderCard(loader, insomniac, 'isolated');
@@ -2127,7 +2129,7 @@ module('Integration | card-basics', function (hooks) {
         cardInfo: new CardInfoField({
           notes: null,
           cardTitle: 'Smith Wedding Flight',
-          cardDescription: 'John, Jane + kids to LA for holiday wedding',
+          description: 'John, Jane + kids to LA for holiday wedding',
           cardThumbnailURL: null,
         }),
         destination: 'LAX',
@@ -3414,7 +3416,8 @@ module('Integration | card-basics', function (hooks) {
         static edit = class Edit extends Component<typeof this> {
           <template>
             <fieldset>
-              <label data-test-field='cardTitle'>Title <@fields.cardTitle /></label>
+              <label data-test-field='cardTitle'>Title
+                <@fields.cardTitle /></label>
               <label data-test-field='reviews'>Reviews
                 <@fields.reviews /></label>
               <label data-test-field='author'>Author <@fields.author /></label>
@@ -3559,7 +3562,7 @@ module('Integration | card-basics', function (hooks) {
             <@fields.posts />
             <ul data-test-output>
               {{#each @model.posts as |post|}}
-                <li>{{post.title}}</li>
+                <li>{{post.cardTitle}}</li>
               {{/each}}
             </ul>
           </template>
@@ -3572,7 +3575,10 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-item]').doesNotExist();
 
       await click('[data-test-add-new]');
-      await fillIn('[data-test-field="cardTitle"] input', 'Tail Wagging Basics');
+      await fillIn(
+        '[data-test-field="cardTitle"] input',
+        'Tail Wagging Basics',
+      );
       assert.dom('[data-test-item]').exists({ count: 1 });
       assert.dom('[data-test-output]').hasText('Tail Wagging Basics');
 
@@ -3583,7 +3589,10 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-item]').exists({ count: 1 });
       assert.dom('[data-test-output]').hasText('');
 
-      await fillIn('[data-test-field="cardTitle"] input', 'Begging for Beginners');
+      await fillIn(
+        '[data-test-field="cardTitle"] input',
+        'Begging for Beginners',
+      );
       assert.dom('[data-test-item]').exists({ count: 1 });
       assert.dom('[data-test-output]').hasText('Begging for Beginners');
     });
@@ -3947,40 +3956,40 @@ module('Integration | card-basics', function (hooks) {
     test('Provide field descriptions', async function (assert) {
       class Pet extends CardDef {
         @field firstName = contains(StringField, {
-          cardDescription: 'The name of the pet',
+          description: 'The name of the pet',
         });
       }
 
       class Guest extends CardDef {
         @field name = contains(StringField, {
-          cardDescription: 'The name of the guest',
+          description: 'The name of the guest',
         });
         @field additionalGuestCount = contains(NumberField, {
-          cardDescription: 'The number of additional guests coming in this party',
+          description: 'The number of additional guests coming in this party',
         });
       }
 
       class Hometown extends FieldDef {
         @field city = contains(StringField, {
-          cardDescription: 'The city where the person was born',
+          description: 'The city where the person was born',
         });
         @field country = contains(StringField, {
-          cardDescription: 'The country where the person was born',
+          description: 'The country where the person was born',
         });
       }
 
       class Person extends CardDef {
         @field hometown = contains(Hometown, {
-          cardDescription: 'The place where the person was born',
+          description: 'The place where the person was born',
         });
         @field languagesSpoken = containsMany(StringField, {
-          cardDescription: 'The languages the person speaks',
+          description: 'The languages the person speaks',
         });
         @field pet = linksTo(Pet, {
-          cardDescription: "The person's pet",
+          description: "The person's pet",
         });
         @field guests = linksToMany(Guest, {
-          cardDescription: 'The people the person has invited over',
+          description: 'The people the person has invited over',
         });
       }
 

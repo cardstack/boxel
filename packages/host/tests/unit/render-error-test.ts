@@ -10,7 +10,7 @@ module('Unit | render-error', function () {
       type: 'instance-error',
       error: {
         status: 401,
-        cardTitle: 'Unauthorized',
+        title: 'Unauthorized',
         message: 'Request failed: Missing Authorization header',
         additionalErrors: null,
       },

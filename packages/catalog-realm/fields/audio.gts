@@ -599,7 +599,7 @@ export class AudioField extends FieldDef {
 
   @field displayTitle = contains(StringField, {
     computeVia: function (this: AudioField) {
-      return this.title || this.filename || 'Untitled Audio';
+      return this.cardTitle || this.filename || 'Untitled Audio';
     },
   });
 

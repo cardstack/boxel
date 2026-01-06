@@ -272,7 +272,7 @@ class BookRecommenderIsolatedTemplate extends Component<
             <div class='book-list'>
               {{#each this.selectedBooks as |book|}}
                 <div class='book-card'>
-                  <h3 class='book-title'>{{book.title}}</h3>
+                  <h3 class='book-title'>{{book.cardTitle}}</h3>
                   <div class='book-author'>by {{book.author}}</div>
                   <div class='book-details'>
                     <span class='book-tag'>{{if
@@ -281,7 +281,7 @@ class BookRecommenderIsolatedTemplate extends Component<
                         book.category
                       }}</span>
                   </div>
-                  <div class='book-description'>{{book.description}}</div>
+                  <div class='book-description'>{{book.cardDescription}}</div>
                   {{#if book.purchaseUrl}}
                     <a
                       href={{book.purchaseUrl}}

@@ -688,7 +688,7 @@ export class BlogPost extends CardDef {
     const authors = this.authors ?? [];
     if (authors.length === 0) return undefined;
 
-    const titles = authors.map((author) => author.title);
+    const titles = authors.map((author) => author.cardTitle);
 
     if (titles.length === 2) {
       return `${titles[0]} and ${titles[1]}`;

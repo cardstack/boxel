@@ -1017,18 +1017,18 @@ class CalendarIsolated extends Component<typeof CalendarCard> {
                                 )
                               )
                             }}
-                            title={{event.title}}
+                            title={{event.cardTitle}}
                             {{on 'click' (fn this.handleEventClick event)}}
                           >
                             <span class='event-text'>
                               {{#if event.isAllDay}}
-                                {{event.title}}
+                                {{event.cardTitle}}
                               {{else}}
                                 <span class='event-time'>{{formatCalendarDate
                                     event.startTime
                                     'time'
                                   }}</span>
-                                <span class='event-title'>{{event.title}}</span>
+                                <span class='event-title'>{{event.cardTitle}}</span>
                               {{/if}}
                             </span>
                           </div>
@@ -1130,8 +1130,8 @@ class CalendarIsolated extends Component<typeof CalendarCard> {
                               {{/if}}
                             </div>
                             <div class='event-title'>{{if
-                                event.title
-                                event.title
+                                event.cardTitle
+                                event.cardTitle
                                 'Untitled Event'
                               }}</div>
                             {{#if event.location}}
@@ -1232,8 +1232,8 @@ class CalendarIsolated extends Component<typeof CalendarCard> {
                               {{/if}}
                             </div>
                             <div class='event-title'>{{if
-                                event.title
-                                event.title
+                                event.cardTitle
+                                event.cardTitle
                                 'Untitled Event'
                               }}</div>
                             {{#if event.location}}
@@ -1343,8 +1343,8 @@ class CalendarIsolated extends Component<typeof CalendarCard> {
                   </div>
 
                   <div class='modal-event-title'>{{if
-                      event.title
-                      event.title
+                      event.cardTitle
+                      event.cardTitle
                       'Untitled Event'
                     }}</div>
 
@@ -3146,8 +3146,8 @@ export class CalendarCard extends CardDef {
                       'time'
                     }}{{/if}}</span>
                 <span class='event-title'>{{if
-                    event.title
-                    event.title
+                    event.cardTitle
+                    event.cardTitle
                     'Untitled Event'
                   }}</span>
               </div>
@@ -3373,8 +3373,8 @@ export class CalendarCard extends CardDef {
                       (formatCalendarDate event.startTime 'time')
                     }}</span>
                   <span class='event-title'>{{if
-                      event.title
-                      event.title
+                      event.cardTitle
+                      event.cardTitle
                       'Untitled Event'
                     }}</span>
                 </div>
@@ -3419,8 +3419,8 @@ export class CalendarCard extends CardDef {
                           (formatCalendarDate event.startTime 'time')
                         }}</span>
                       <span class='title'>{{if
-                          event.title
-                          event.title
+                          event.cardTitle
+                          event.cardTitle
                           'Untitled Event'
                         }}</span>
                     </div>

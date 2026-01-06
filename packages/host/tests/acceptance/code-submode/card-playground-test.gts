@@ -177,7 +177,7 @@ const localStyleReferenceCard = {
     type: 'card',
     attributes: {
       cardInfo: {
-        cardTitle: 'Local Style Reference',
+        title: 'Local Style Reference',
         cardDescription: 'Local card instance for style reference tests',
         cardThumbnailURL: null,
         notes: null,
@@ -255,7 +255,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           'HeadPreview/example.json': {
             data: {
               attributes: {
-                cardTitle: 'Definition Title',
+                title: 'Definition Title',
                 cardDescription: 'Definition description',
                 url: 'https://example.com/definition',
               },
@@ -270,7 +270,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           'BlogPost/remote-work.json': {
             data: {
               attributes: {
-                cardTitle: 'The Ultimate Guide to Remote Work',
+                title: 'The Ultimate Guide to Remote Work',
                 cardDescription:
                   'In today’s digital age, remote work has transformed from a luxury to a necessity. This comprehensive guide will help you navigate the world of remote work, offering tips, tools, and best practices for success.',
               },
@@ -291,7 +291,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'BlogPost/mad-hatter.json': {
             data: {
-              attributes: { cardTitle: 'Mad As a Hatter' },
+              attributes: { title: 'Mad As a Hatter' },
               relationships: {
                 author: {
                   links: {
@@ -310,7 +310,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           'BlogPost/urban-living.json': {
             data: {
               attributes: {
-                cardTitle:
+                title:
                   'The Future of Urban Living: Skyscrapers or Sustainable Communities?',
               },
               relationships: {
@@ -1324,7 +1324,10 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
             },
           ],
           cards: [
-            { id: `${testRealmURL}Category/city-design`, cardTitle: 'City Design' },
+            {
+              id: `${testRealmURL}Category/city-design`,
+              cardTitle: 'City Design',
+            },
           ],
         },
       ]);
@@ -1740,7 +1743,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         JSON.stringify({
           data: {
             attributes: {
-              cardTitle: 'Cassidy Cat',
+              title: 'Cassidy Cat',
             },
             meta: {
               adoptsFrom: {
@@ -2105,7 +2108,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         'Person/chef-mike.json',
         JSON.stringify({
           data: {
-            attributes: { cardTitle: 'Chef Mike' },
+            attributes: { title: 'Chef Mike' },
             relationships: {
               pet: {
                 links: {

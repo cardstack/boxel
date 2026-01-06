@@ -29,7 +29,9 @@ export class Person extends CardDef {
       return `${this.firstName ?? ''} ${this.lastName ?? ''}`;
     },
   });
-  @field cardDescription = contains(StringField, { computeVia: () => 'Person' });
+  @field cardDescription = contains(StringField, {
+    computeVia: () => 'Person',
+  });
 
   static isolated = class Isolated extends Component<typeof this> {
     runSwitchToCodeModeCommandViaAiAssistant = async () => {
@@ -90,7 +92,9 @@ export class PersonField extends FieldDef {
       return `${this.firstName ?? ''} ${this.lastName ?? ''}`;
     },
   });
-  @field cardDescription = contains(StringField, { computeVia: () => 'Person' });
+  @field cardDescription = contains(StringField, {
+    computeVia: () => 'Person',
+  });
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>

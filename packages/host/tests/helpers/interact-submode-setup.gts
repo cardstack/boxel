@@ -265,8 +265,8 @@ export function setupInteractSubmodeTests(
       ref: { module: string; name: string },
     ) => ({
       [`${fileName}.json`]: new Spec({
-        title,
-        cardDescription: `Spec for ${title}`,
+        title: cardTitle,
+        cardDescription: `Spec for ${cardTitle}`,
         specType: 'card',
         ref,
       }),
