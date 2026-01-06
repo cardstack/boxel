@@ -554,6 +554,8 @@ function startDailyCreditGrantCron() {
     null,
     false,
     DAILY_CREDIT_GRANT_CRON_TZ,
+    null,
+    true,
   );
 
   job.start();
