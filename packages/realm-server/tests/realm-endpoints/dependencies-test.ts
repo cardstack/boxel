@@ -96,9 +96,11 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
 
     assert.strictEqual(response.status, 400, 'HTTP 400 status');
 
-    assert.strictEqual(
-      response.body.errors?.[0]?.message,
-      'The request is missing the url query parameter',
+    assert.ok(
+      response.body.errors?.[0]?.message?.includes(
+        'missing either url or codeRef parameter',
+      ),
+      'error message mentions both url and codeRef parameters',
     );
   });
 });

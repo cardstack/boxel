@@ -22,7 +22,13 @@ import type { Realm } from './realm';
 import { RealmPaths } from './paths';
 import { buildQueryString, type Query } from './query';
 import { CardError, type SerializedError } from './error';
-import { isResolvedCodeRef, visitModuleDeps } from './code-ref';
+import {
+  isResolvedCodeRef,
+  visitModuleDeps,
+  type CodeRef,
+  moduleFrom,
+  isCodeRef,
+} from './code-ref';
 import {
   isCardCollectionDocument,
   isSingleCardDocument,
@@ -171,15 +177,24 @@ export class RealmIndexQueryEngine {
     return results;
   }
 
-  async getCardDependencies(url: URL): Promise<string[]> {
+  async getCardDependencies(urlOrCodeRef: URL | CodeRef): Promise<string[]> {
+    // Convert CodeRef to URL - CodeRef always references a module
+    let url = isCodeRef(urlOrCodeRef)
+      ? new URL(moduleFrom(urlOrCodeRef), this.realmURL)
+      : urlOrCodeRef;
+
+    // Try instance first (for cards), then module (for modules)
     let instance = await this.instance(url);
-    if (!instance) {
-      throw new Error(`Card not found: ${url.href}`);
+    if (instance) {
+      return instance.deps ?? [];
     }
-    if (instance.deps) {
-      return instance.deps;
+
+    let module = await this.module(url);
+    if (module?.type === 'module') {
+      return module.deps ?? [];
     }
-    return [];
+
+    throw new Error(`Card or module not found: ${url.href}`);
   }
 
   async cardDocument(

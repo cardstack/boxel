@@ -2995,20 +2995,50 @@ export class Realm {
   ): Promise<Response> {
     let href = new URL(request.url).search.slice(1);
     let payload = parseQuery(href);
-    if (!payload.url) {
+
+    // Guard: require either codeRef or url parameter
+    if (!payload.codeRef && !payload.url) {
       return badRequest({
-        message: `The request body is missing the url parameter`,
+        message: `The request is missing either url or codeRef parameter`,
         requestContext,
       });
     }
-    let url = Array.isArray(payload.url)
-      ? String(payload.url[0])
-      : String(payload.url);
+
+    let urlOrCodeRef: URL | CodeRef;
+
+    // Handle codeRef parameter
+    if (payload.codeRef) {
+      let codeRefString = Array.isArray(payload.codeRef)
+        ? String(payload.codeRef[0])
+        : String(payload.codeRef);
+
+      try {
+        urlOrCodeRef = JSON.parse(decodeURIComponent(codeRefString)) as CodeRef;
+      } catch (e) {
+        return badRequest({
+          message: `Invalid codeRef parameter: ${e instanceof Error ? e.message : String(e)}`,
+          requestContext,
+        });
+      }
+    } else {
+      // Handle url parameter
+      let urlString = Array.isArray(payload.url)
+        ? String(payload.url[0])
+        : String(payload.url);
+
+      try {
+        urlOrCodeRef = new URL(urlString);
+      } catch (e) {
+        return badRequest({
+          message: `Invalid url parameter: ${e instanceof Error ? e.message : String(e)}`,
+          requestContext,
+        });
+      }
+    }
 
     try {
-      const deps = await this.#realmIndexQueryEngine.getCardDependencies(
-        new URL(url),
-      );
+      const deps =
+        await this.#realmIndexQueryEngine.getCardDependencies(urlOrCodeRef);
 
       return createResponse({
         body: JSON.stringify(deps, null, 2),

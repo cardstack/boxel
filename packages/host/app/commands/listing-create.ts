@@ -163,7 +163,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
 
     const commandModule = await this.loadCommandModule();
     const listingCard = listing as CardAPI.CardDef; // ensure correct type
-    const specsPromise = this.linkSpecs(listingCard, openCardId, targetRealm);
+    const specsPromise = this.linkSpecs(listingCard, targetRealm, openCardId);
     await Promise.all([
       this.autoPatchName(listingCard),
       this.autoPatchSummary(listingCard),
@@ -251,13 +251,32 @@ export default class ListingCreateCommand extends HostBaseCommand<
 
   private async linkSpecs(
     listing: CardAPI.CardDef,
-    openCardId: string,
     targetRealm: string,
+    openCardId?: string,
   ): Promise<Spec[]> {
+    let queryParam: string;
+
+    // Prioritize: use openCardId (instance URL) if available for deeper dependencies, Includes relationship dependencies,Complete dependency tree
+    if (openCardId) {
+      queryParam = `url=${encodeURIComponent(openCardId)}`;
+    } else if (this.adoptedCodeRef) {
+      // Fallback: use CodeRef (module) if no instance ID available, but CodeRef is only moduel imports, not relationship dependencies (e.g. card dependencies)
+      //
+      const codeRefJson = JSON.stringify(this.adoptedCodeRef);
+      queryParam = `codeRef=${encodeURIComponent(codeRefJson)}`;
+    } else {
+      console.warn(
+        'No openCardId or adoptedCodeRef available for fetching dependencies',
+      );
+      (listing as any).specs = [];
+      return [];
+    }
+
     const response = await this.network.authedFetch(
-      `${targetRealm}_dependencies?url=${openCardId}`,
+      `${targetRealm}_dependencies?${queryParam}`,
       { headers: { Accept: SupportedMimeType.CardDependencies } },
     );
+
     if (!response.ok) {
       console.warn('Failed to fetch dependencies for specs');
       (listing as any).specs = [];
@@ -265,6 +284,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
     }
     const deps = (await response.json()) as string[];
     const sanitizedDeps = this.sanitizeDeps(deps ?? []);
+
     if (!sanitizedDeps.length) {
       (listing as any).specs = [];
       return [];

@@ -94,6 +94,69 @@ module(basename(__filename), function () {
 
             assert.strictEqual(response.status, 404, 'HTTP 404 status');
           });
+
+          test('serves the request with codeRef parameter', async function (assert) {
+            const codeRef = {
+              module: `${testRealm.url}person.gts`,
+              name: 'Person',
+            };
+            const codeRefJson = encodeURIComponent(JSON.stringify(codeRef));
+
+            let response = await request
+              .get(`/_dependencies?codeRef=${codeRefJson}`)
+              .set('Accept', 'application/json')
+              .set(
+                'Authorization',
+                `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
+              );
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+            let result: string[] = JSON.parse(response.text.trim());
+            assert.ok(result.length > 0, 'returns dependencies');
+            assert.ok(
+              result.includes('http://127.0.0.1:4444/person'),
+              'person.gts is a dependency',
+            );
+          });
+
+          test('returns bad request when both url and codeRef are missing', async function (assert) {
+            let response = await request
+              .get('/_dependencies')
+              .set('Accept', 'application/json')
+              .set(
+                'Authorization',
+                `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
+              );
+
+            assert.strictEqual(response.status, 400, 'HTTP 400 status');
+            let body = JSON.parse(response.text);
+            assert.ok(
+              body.errors?.[0]?.message?.includes(
+                'missing either url or codeRef parameter',
+              ),
+              'error message mentions both parameters',
+            );
+          });
+
+          test('returns bad request for invalid codeRef parameter', async function (assert) {
+            const invalidCodeRef = 'not-valid-json';
+            let response = await request
+              .get(
+                `/_dependencies?codeRef=${encodeURIComponent(invalidCodeRef)}`,
+              )
+              .set('Accept', 'application/json')
+              .set(
+                'Authorization',
+                `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
+              );
+
+            assert.strictEqual(response.status, 400, 'HTTP 400 status');
+            let body = JSON.parse(response.text);
+            assert.ok(
+              body.errors?.[0]?.message?.includes('Invalid codeRef parameter'),
+              'error message mentions invalid codeRef',
+            );
+          });
         });
 
         module('permissioned realm', function (hooks) {

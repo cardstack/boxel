@@ -72,20 +72,32 @@ export default class ListingUpdateSpecsCommand extends HostBaseCommand<
     }
 
     const targetRealm = (listing as any)?.[realmURLSymbol]?.href;
-
     if (!targetRealm) {
       throw new Error('targetRealm is required to update specs');
     }
 
+    // Try to get example ID first, then fallback to CodeRef
     const exampleId = (listing as any).examples?.[0]?.id;
-    if (!exampleId) {
-      throw new Error('No example found in listing to derive specs from');
+    let queryParam: string;
+
+    if (exampleId) {
+      // Prioritize: use example instance URL for deeper dependencies
+      queryParam = `url=${encodeURIComponent(exampleId)}`;
+    } else {
+      // Fallback: use CodeRef from listing's adoptsFrom
+      const adoptsFrom = (listing as any).meta?.adoptsFrom;
+      if (!adoptsFrom) {
+        throw new Error('No example found and listing missing adoptsFrom meta');
+      }
+      const codeRefJson = JSON.stringify(adoptsFrom);
+      queryParam = `codeRef=${encodeURIComponent(codeRefJson)}`;
     }
 
     const response = await this.network.authedFetch(
-      `${targetRealm}_dependencies?url=${encodeURIComponent(exampleId)}`,
+      `${targetRealm}_dependencies?${queryParam}`,
       { headers: { Accept: SupportedMimeType.CardDependencies } },
     );
+
     if (!response.ok) {
       throw new Error('Failed to fetch dependencies for listing');
     }

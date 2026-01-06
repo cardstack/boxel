@@ -30,10 +30,16 @@ module('Integration | commands | listing-update-specs', function (hooks) {
   let loader: Loader;
   let testRealm: Realm;
 
+  let codeRefUsed = false;
   setupRealmServerEndpoints(hooks, [
     {
       route: '_dependencies',
-      getResponse: async function () {
+      getResponse: async function (req: Request) {
+        const url = new URL(req.url);
+        // Check if codeRef parameter is used (fallback when no example)
+        if (url.searchParams.has('codeRef')) {
+          codeRefUsed = true;
+        }
         return new Response(JSON.stringify([modulePath]), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -158,6 +164,50 @@ module('Integration | commands | listing-update-specs', function (hooks) {
       specNames,
       ['AnotherCard', 'ExampleCard'],
       'new export is reflected in specs',
+    );
+  });
+
+  test('updates specs using CodeRef when no example exists', async function (assert) {
+    // Reset the flag for this test
+    codeRefUsed = false;
+
+    let commandService = getService('command-service');
+    let listingUpdateSpecsCommand = new ListingUpdateSpecsCommand(
+      commandService.commandContext,
+    );
+
+    let store = getService('store');
+
+    let ListingClass = (
+      (await loader.import(
+        '@cardstack/catalog/catalog-app/listing/listing',
+      )) as {
+        Listing: typeof Listing;
+      }
+    ).Listing;
+    let listing = (await store.add(new ListingClass(), {
+      realm: testRealmURL,
+    })) as InstanceType<typeof Listing>;
+
+    // Set adoptsFrom meta but no examples
+    (listing as any).meta = {
+      adoptsFrom: {
+        module: `${testRealmURL}listing-example.gts`,
+        name: 'ExampleCard',
+      },
+    };
+    (listing as Listing).examples = [];
+
+    let result = await listingUpdateSpecsCommand.execute({ listing });
+    assert.true(
+      codeRefUsed,
+      '_dependencies was called with codeRef parameter when no example exists',
+    );
+    let specNames = result.specs.map((spec) => spec.ref?.name).filter(Boolean);
+    assert.deepEqual(
+      specNames,
+      ['ExampleCard'],
+      'specs can be created using CodeRef when no examples exist',
     );
   });
 });
