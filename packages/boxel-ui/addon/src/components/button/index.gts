@@ -2,8 +2,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { array, concat, hash } from '@ember/helper';
 import { LinkTo } from '@ember/routing';
 
-import cn from '../../helpers/cn.ts';
-import { eq, not, or } from '../../helpers/truth-helpers.ts';
+import { cn, eq, not, or, sanitizeHtml } from '../../helpers.ts';
 import LoadingIndicator from '../loading-indicator/index.gts';
 
 export type BoxelButtonKind =
@@ -99,7 +98,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
     {{else if (eq @as 'anchor')}}
       <a
         class={{classes}}
-        href={{unless @disabled @href}}
+        href={{unless @disabled (if @href (sanitizeHtml @href))}}
         data-test-boxel-button
         ...attributes
       >

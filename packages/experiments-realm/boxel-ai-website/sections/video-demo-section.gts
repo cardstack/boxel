@@ -9,6 +9,8 @@ import enumField from 'https://cardstack.com/base/enum';
 
 import setBackgroundImage from 'https://cardstack.com/base/helpers/set-background-image';
 
+import { sanitizeHtml } from '@cardstack/boxel-ui/helpers';
+
 import { Section, SectionCardComponent } from '../components/section';
 import { SectionCard } from './section-card';
 
@@ -45,7 +47,7 @@ export class VideoDemoSection extends SectionCard {
               {{#if @model.videoUrl}}
                 <a
                   class='video-frame'
-                  href={{@model.videoUrl}}
+                  href={{sanitizeHtml @model.videoUrl}}
                   style={{if
                     @model.posterUrl
                     (setBackgroundImage @model.posterUrl)

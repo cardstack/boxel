@@ -9,7 +9,7 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import BooleanField from 'https://cardstack.com/base/boolean';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, sanitizeHtml } from '@cardstack/boxel-ui/helpers';
 
 import { Site } from './site-config';
 import { PageSectionField } from './fields/page-section-field';
@@ -23,7 +23,7 @@ class Isolated extends Component<typeof DocsLayoutCard> {
           <div class='sidebar-nav'>
             {{#each @model.site.pages as |page|}}
               <a
-                href={{page.pageUrl}}
+                href={{if page.pageUrl (sanitizeHtml page.pageUrl)}}
                 class={{if (eq page.pageId @model.currentPageId) 'active' ''}}
               >
                 {{page.pageLabel}}

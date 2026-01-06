@@ -24,9 +24,7 @@ export class Tag extends GlimmerComponent<TagSignature> {
       {{@label}}
     </span>
 
-    <style
-      scoped
-    >
+    <style scoped>
       .tag {
         display: inline-flex;
         align-items: center;
@@ -39,7 +37,7 @@ export class Tag extends GlimmerComponent<TagSignature> {
         line-height: var(--boxel-caption-line-height);
       }
       .tag--default {
-        color: var(--foreground, var(--boxel-dark)));
+        color: var(--foreground, var(--boxel-dark));
         background-color: color-mix(
           in oklab,
           var(--accent-color, currentColor) 15%,
@@ -47,7 +45,7 @@ export class Tag extends GlimmerComponent<TagSignature> {
         );
       }
       .tag--primary {
-        color: var(--primary-foreground, var(--boxel-dark)));
+        color: var(--primary-foreground, var(--boxel-dark));
         background-color: color-mix(
           in oklab,
           var(--primary, var(--boxel-highlight)) 15%,
@@ -55,7 +53,7 @@ export class Tag extends GlimmerComponent<TagSignature> {
         );
       }
       .tag--secondary {
-        color: var(--secondary-foreground, var(--boxel-dark)));
+        color: var(--secondary-foreground, var(--boxel-dark));
         background-color: color-mix(
           in oklab,
           var(--secondary, var(--boxel-light)) 15%,
@@ -63,7 +61,7 @@ export class Tag extends GlimmerComponent<TagSignature> {
         );
       }
       .tag--accent {
-        color: var(--accent-foreground, var(--boxel-dark)));
+        color: var(--accent-foreground, var(--boxel-dark));
         background-color: color-mix(
           in oklab,
           var(--accent-foreground, var(--boxel-dark)) 15%,
