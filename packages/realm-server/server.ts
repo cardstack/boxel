@@ -24,6 +24,7 @@ import {
   writeJSONSync,
   readdirSync,
   existsSync,
+  readFile,
 } from 'fs-extra';
 import { setupCloseHandler } from './node-realm';
 import {
@@ -77,6 +78,7 @@ export class RealmServer {
   private serverURL: URL;
   private matrixRegistrationSecret: string | undefined;
   private promiseForIndexHTML: Promise<string> | undefined;
+  private promiseForBoxelVariablesCSS: Promise<string | null> | undefined;
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
@@ -337,6 +339,13 @@ export class RealmServer {
 
       let responseHTML = indexHTML;
       let headFragments: string[] = [];
+      let boxelVariablesCSS =
+        scopedCSS != null ? await this.retrieveBoxelVariablesCSS() : null;
+      if (boxelVariablesCSS != null) {
+        headFragments.push(
+          `<style data-boxel-base-vars>\n${boxelVariablesCSS}\n</style>`,
+        );
+      }
       if (headHTML != null) {
         headFragments.push(headHTML);
       }
@@ -544,6 +553,33 @@ export class RealmServer {
     return scopedCSS;
   }
 
+  private async retrieveBoxelVariablesCSS(): Promise<string | null> {
+    if (this.promiseForBoxelVariablesCSS) {
+      return this.promiseForBoxelVariablesCSS;
+    }
+    let deferred = new Deferred<string | null>();
+    this.promiseForBoxelVariablesCSS = deferred.promise;
+
+    let cssPath = this.findBoxelVariablesCSSPath();
+    if (!cssPath) {
+      this.scopedCssLog.debug('Boxel base variables CSS not found');
+      deferred.fulfill(null);
+      return deferred.promise;
+    }
+
+    try {
+      let css = await readFile(cssPath, 'utf8');
+      deferred.fulfill(css);
+      return css;
+    } catch (error) {
+      this.scopedCssLog.debug(
+        `Failed to read Boxel base variables CSS: ${error}`,
+      );
+      deferred.fulfill(null);
+      return deferred.promise;
+    }
+  }
+
   private stripProtocol(href: string): string {
     return href.replace(/^https?:\/\//, '');
   }
@@ -576,6 +612,38 @@ export class RealmServer {
         ],
       ]),
     ) as Expression;
+  }
+
+  private findBoxelVariablesCSSPath(): string | null {
+    let candidates = [
+      resolve(
+        process.cwd(),
+        'packages',
+        'boxel-ui',
+        'addon',
+        'src',
+        'styles',
+        'variables.css',
+      ),
+      resolve(__dirname, '..', 'boxel-ui', 'addon', 'src', 'styles', 'variables.css'),
+      resolve(
+        __dirname,
+        '..',
+        '..',
+        'boxel-ui',
+        'addon',
+        'src',
+        'styles',
+        'variables.css',
+      ),
+    ];
+
+    for (let candidate of candidates) {
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
   }
 
   private coerceDeps(deps: unknown): string[] | null {
