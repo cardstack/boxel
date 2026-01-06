@@ -272,7 +272,7 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
       for (let realm of this.realmsToSearch) {
         searchURL.searchParams.append('realms', realm);
       }
-      let response = await this.realmServer.authedFetch(searchURL.href, {
+      let response = await this.realmServer.maybeAuthedFetch(searchURL.href, {
         method: 'POST',
         headers: {
           Accept: 'application/vnd.card+json',

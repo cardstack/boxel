@@ -475,6 +475,17 @@ export default class RealmServerService extends Service {
     return response;
   }
 
+  maybeAuthedFetch(url: string, options: RequestInit = {}) {
+    const headers = new Headers(options.headers);
+    if (this.token) {
+      headers.set('Authorization', `Bearer ${this.token}`);
+    }
+    return this.network.fetch(url, {
+      ...options,
+      headers,
+    });
+  }
+
   // args is of type `RequestForwardBody` in realm-server/handlers/handle-request-forward
   async requestForward(args: {
     url: string;
