@@ -1,9 +1,7 @@
-/* eslint-disable camelcase */
-
-exports.shorthands = undefined;
-
 exports.up = (pgm) => {
-  if (['staging', 'production'].includes(process.env.REALM_SENTRY_ENVIRONMENT)) {
+  if (
+    ['staging', 'production'].includes(process.env.REALM_SENTRY_ENVIRONMENT)
+  ) {
     return;
   }
 
@@ -21,7 +19,9 @@ exports.up = (pgm) => {
 };
 
 exports.down = (pgm) => {
-  if (['staging', 'production'].includes(process.env.REALM_SENTRY_ENVIRONMENT)) {
+  if (
+    ['staging', 'production'].includes(process.env.REALM_SENTRY_ENVIRONMENT)
+  ) {
     return;
   }
 
