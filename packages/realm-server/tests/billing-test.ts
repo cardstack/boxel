@@ -381,13 +381,13 @@ module(basename(__filename), function () {
                   data: [
                     {
                       amount: -amountCreditedForUnusedTimeOnPreviousPlan,
-                      cardDescription: 'Unused time on Creator plan',
+                      description: 'Unused time on Creator plan',
                       price: { product: 'prod_creator' },
                       period: { start: 3, end: 4 },
                     },
                     {
                       amount: amountCreditedForRemainingTimeOnNewPlan,
-                      cardDescription: 'Remaining time on Power User plan',
+                      description: 'Remaining time on Power User plan',
                       price: { product: 'prod_power_user' },
                       period: { start: 4, end: 5 },
                     },

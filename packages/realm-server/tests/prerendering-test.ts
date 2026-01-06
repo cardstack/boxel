@@ -2184,7 +2184,7 @@ module(basename(__filename), function () {
                     error: {
                       message: `Failed to execute 'removeChild' on 'Node': NotFoundError`,
                       status: 500,
-                      cardTitle: 'boom',
+                      title: 'boom',
                       additionalErrors: null,
                       stack: `Failed to execute 'removeChild' on 'Node': NotFoundError`,
                     },
@@ -2284,7 +2284,7 @@ module(basename(__filename), function () {
                     error: {
                       message: `Failed to execute 'removeChild' on 'Node': NotFoundError`,
                       status: 500,
-                      cardTitle: 'boom',
+                      title: 'boom',
                       additionalErrors: null,
                       stack: `Failed to execute 'removeChild' on 'Node': NotFoundError`,
                     },
