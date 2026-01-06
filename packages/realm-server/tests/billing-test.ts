@@ -1113,6 +1113,51 @@ module(basename(__filename), function () {
       });
     });
 
+    module('AI usage tracking without subscription', function (hooks) {
+      let user: User;
+
+      hooks.beforeEach(async function () {
+        user = await insertUser(
+          dbAdapter,
+          'free-user',
+          'cus_free',
+          'free-user@test.com',
+        );
+      });
+
+      test('spends daily credits before extra credits on free plan', async function (assert) {
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: 4,
+          creditType: 'daily_credit',
+          subscriptionCycleId: null,
+        });
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: 3,
+          creditType: 'extra_credit',
+          subscriptionCycleId: null,
+        });
+
+        await spendCredits(dbAdapter, user.id, 5);
+
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, {
+            userId: user.id,
+            creditType: ['daily_credit', 'daily_credit_used'],
+          }),
+          0,
+        );
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, {
+            userId: user.id,
+            creditType: ['extra_credit', 'extra_credit_used'],
+          }),
+          2,
+        );
+      });
+    });
+
     module('daily credit grant', function () {
       test('grants credits when user falls below the threshold', async function (assert) {
         let user = await insertUser(
@@ -1169,6 +1214,38 @@ module(basename(__filename), function () {
           (entry) => entry.creditType === 'daily_credit',
         );
         assert.strictEqual(dailyGrants.length, 1);
+      });
+
+      test('does not grant when user already meets threshold', async function (assert) {
+        let user = await insertUser(
+          dbAdapter,
+          'enough-credits@test',
+          'cus_enough',
+          'enough@test.com',
+        );
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: 10,
+          creditType: 'extra_credit',
+          subscriptionCycleId: null,
+        });
+
+        let task = dailyCreditGrant(buildDailyCreditGrantTaskArgs(dbAdapter));
+        await task({ lowCreditThreshold: 10 });
+
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, {
+            userId: user.id,
+            creditType: ['daily_credit', 'daily_credit_used'],
+          }),
+          0,
+        );
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, {
+            userId: user.id,
+          }),
+          10,
+        );
       });
     });
   });
