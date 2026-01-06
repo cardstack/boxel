@@ -22,7 +22,7 @@ export class SimpleSearchCard extends CardDef {
       typeof SearchCardsResult
     >(this, SearchCardsByTypeAndTitleCommand, () => {
       return {
-        title: this.args.model.titleSearch,
+        title: this.args.model.cardTitleSearch,
       };
     });
 
@@ -51,7 +51,7 @@ export class SimpleSearchCard extends CardDef {
         <h2>Simple Search</h2>
 
         <div class='input'>
-          <@fields.titleSearch @format='edit' />
+          <@fields.cardTitleSearch @format='edit' />
         </div>
 
         <div class='execution-state'>

@@ -562,7 +562,7 @@ export class StudyResource extends CardDef {
   @field progressPercentage = contains(NumberField); // ²²³ 0-100 completion percentage
 
   // ⁷ Computed title
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: StudyResource) {
       try {
         return this.resourceTitle ?? 'Untitled Resource';

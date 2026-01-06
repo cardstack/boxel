@@ -21,9 +21,9 @@ type BookFieldType = InstanceType<typeof BookField>;
 
 // Book field definition
 class BookField extends FieldDef {
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field author = contains(StringField);
-  @field description = contains(MarkdownField);
+  @field cardDescription = contains(MarkdownField);
   @field isFiction = contains(BooleanField);
   @field genre = contains(StringField); // For fiction: Fantasy, Science Fiction, Mystery, etc.
   @field category = contains(StringField); // For non-fiction: History, Self-Help, Science, etc.

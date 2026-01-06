@@ -1016,10 +1016,10 @@ module(basename(__filename), function () {
             id: newCardId,
             type: 'card',
             attributes: {
-              title: 'Mango',
+              cardTitle: 'Mango',
               firstName: 'Mango',
-              description: null,
-              thumbnailURL: null,
+              cardDescription: null,
+              cardThumbnailURL: null,
               cardInfo,
             },
             meta: {

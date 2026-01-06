@@ -477,7 +477,7 @@ class Isolated extends Component<typeof ModelUpdater> {
   <template>
     <article class='model-updater'>
       <header class='header'>
-        <h1>{{if @model.title @model.title 'OpenRouter Model Updater'}}</h1>
+        <h1>{{if @model.cardTitle @model.cardTitle 'OpenRouter Model Updater'}}</h1>
         <p class='subtitle'>Fetch and update OpenRouter model data</p>
       </header>
 
@@ -879,9 +879,9 @@ export class ModelUpdater extends CardDef {
     description: 'Status of the last update operation',
   });
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: ModelUpdater) {
-      return this.cardInfo?.title || 'OpenRouter Model Updater';
+      return this.cardInfo?.name || 'OpenRouter Model Updater';
     },
   });
   static isolated = Isolated;

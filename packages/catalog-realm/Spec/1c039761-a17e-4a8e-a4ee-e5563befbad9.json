@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "DailyReportDashboard",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "DailyReportDashboard",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

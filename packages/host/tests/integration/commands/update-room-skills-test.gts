@@ -138,8 +138,8 @@ export class DoThing extends Command {
   }
 }`,
           'skill-with-commands.json': new Skill({
-            title: 'Skill with invalid command',
-            description: 'test',
+            cardTitle: 'Skill with invalid command',
+            cardDescription: 'test',
             instructions: 'test',
             commands: [
               new CommandField({

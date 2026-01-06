@@ -13,9 +13,9 @@
       "network": "American Express",
       "cardInfo": {
         "notes": null,
-        "title": "American Express KrisFlyer Credit Card",
-        "description": "KrisFlyer-focused rewards with elevated earnings on Singapore Airlines purchases",
-        "thumbnailURL": "https://icm.aexp-static.com/Internet/internationalcardshop/en_sg/images/Amex_KrisFlyer-Credit_Card315x200.png"
+        "name": "American Express KrisFlyer Credit Card",
+        "summary": "KrisFlyer-focused rewards with elevated earnings on Singapore Airlines purchases",
+        "cardThumbnailURL": "https://icm.aexp-static.com/Internet/internationalcardshop/en_sg/images/Amex_KrisFlyer-Credit_Card315x200.png"
       },
       "cardName": "American Express KrisFlyer Credit Card",
       "annualFee": {

@@ -14,7 +14,7 @@ export class FamilyPhotoCard extends CardDef {
 
   // URL of the photo
   @field photoUrl = contains(StringField, {
-    description: 'URL of the photo',
+    cardDescription: 'URL of the photo',
   });
   @field thumbnailUrl = contains(StringField, {
     computeVia: function (this: FamilyPhotoCard) {

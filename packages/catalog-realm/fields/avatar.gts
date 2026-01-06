@@ -86,7 +86,7 @@ export default class Avatar extends FieldDef {
     description: 'Selected skin color',
   });
 
-  @field thumbnailURL = contains(StringField, {
+  @field cardThumbnailURL = contains(StringField, {
     computeVia: function (this: Avatar) {
       return getAvataarsUrl({
         topType: this.topType,

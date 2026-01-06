@@ -567,12 +567,12 @@ class IsolatedStory extends Component<typeof Story> {
         <h1 class='story-title'>
           {{#if @model.url}}
             <a href={{@model.url}} target='_blank' rel='noopener noreferrer'>
-              {{if @model.title @model.title 'Untitled Story'}}
+              {{if @model.cardTitle @model.cardTitle 'Untitled Story'}}
               <ExternalLinkIcon width='16' height='16' class='external-icon' />
             </a>
           {{else}}
             <span class='story-title-text'>
-              {{if @model.title @model.title 'Untitled Story'}}
+              {{if @model.cardTitle @model.cardTitle 'Untitled Story'}}
             </span>
           {{/if}}
         </h1>
@@ -590,9 +590,9 @@ class IsolatedStory extends Component<typeof Story> {
       </div>
 
       <div class='story-content'>
-        {{#if @model.description}}
+        {{#if @model.cardDescription}}
           <div class='story-description'>
-            {{@model.description}}
+            {{@model.cardDescription}}
           </div>
         {{/if}}
 
@@ -801,9 +801,9 @@ export class Story extends CardDef {
   static displayName = 'Story';
   static icon = MessageSquareIcon;
 
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field url = contains(UrlField);
-  @field description = contains(MarkdownField);
+  @field cardDescription = contains(MarkdownField);
   @field author = contains(StringField);
   @field upvotes = contains(NumberField);
   @field downvotes = contains(NumberField);
@@ -1304,7 +1304,7 @@ export class StoryBoard extends CardDef {
   static prefersWideFormat = true;
 
   @field boardName = contains(StringField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: StoryBoard) {
       if (this.boardName) {
         return `${this.boardName} • Story Board`;

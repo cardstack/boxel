@@ -544,7 +544,7 @@ import MyComponent from 'somewhere';
         .set('Accept', 'application/json')
         .send(`import { CardDef } from "https://cardstack.com/base/card-api";
 export class MyCard extends CardDef {
-@field name = contains(StringField, { description: "test description" });
+@field name = contains(StringField, { cardDescription: "test description" });
 }`);
 
       assert.strictEqual(response.status, 200, 'HTTP 200 status');

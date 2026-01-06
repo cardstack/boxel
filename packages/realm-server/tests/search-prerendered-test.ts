@@ -206,7 +206,7 @@ module(basename(__filename), function () {
               data: {
                 attributes: {
                   firstName: 'Aaron',
-                  title: 'Person Aaron',
+                  cardTitle: 'Person Aaron',
                 },
                 meta: {
                   adoptsFrom: {
@@ -220,7 +220,7 @@ module(basename(__filename), function () {
               data: {
                 attributes: {
                   firstName: 'Craig',
-                  title: 'Person Craig',
+                  cardTitle: 'Person Craig',
                 },
                 meta: {
                   adoptsFrom: {
@@ -235,7 +235,7 @@ module(basename(__filename), function () {
                 attributes: {
                   firstName: 'Jane',
                   favoriteColor: 'blue',
-                  title: 'FancyPerson Jane',
+                  cardTitle: 'FancyPerson Jane',
                 },
                 meta: {
                   adoptsFrom: {
@@ -250,7 +250,7 @@ module(basename(__filename), function () {
                 attributes: {
                   firstName: 'Jimmy',
                   favoriteColor: 'black',
-                  title: 'FancyPerson Jimmy',
+                  cardTitle: 'FancyPerson Jimmy',
                 },
                 meta: {
                   adoptsFrom: {
@@ -744,7 +744,7 @@ module(basename(__filename), function () {
               data: {
                 attributes: {
                   firstName: 'Aaron',
-                  title: 'Person Aaron',
+                  cardTitle: 'Person Aaron',
                 },
                 meta: {
                   adoptsFrom: {
@@ -758,7 +758,7 @@ module(basename(__filename), function () {
               data: {
                 attributes: {
                   firstName: 'Craig',
-                  title: 'Person Craig',
+                  cardTitle: 'Person Craig',
                 },
                 meta: {
                   adoptsFrom: {
@@ -773,7 +773,7 @@ module(basename(__filename), function () {
                 attributes: {
                   firstName: 'Jane',
                   favoriteColor: 'blue',
-                  title: 'FancyPerson Jane',
+                  cardTitle: 'FancyPerson Jane',
                 },
                 meta: {
                   adoptsFrom: {
@@ -788,7 +788,7 @@ module(basename(__filename), function () {
                 attributes: {
                   firstName: 'Jimmy',
                   favoriteColor: 'black',
-                  title: 'FancyPerson Jimmy',
+                  cardTitle: 'FancyPerson Jimmy',
                 },
                 meta: {
                   adoptsFrom: {

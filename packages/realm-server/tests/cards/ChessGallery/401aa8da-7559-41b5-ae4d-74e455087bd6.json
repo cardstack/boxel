@@ -6,9 +6,9 @@
       "dateOfGame": "2022-08-06",
       "whitePlayer": "Gukesh D",
       "blackPlayer": "Alexei Shirov",
-      "title": "Gukesh D vs Alexei Shirov - 2022 Chess Olympiad",
-      "description": "A remarkable victory by Gukesh over Alexei Shirov at the 2022 Chess Olympiad, showcasing his extraordinary talent and strategic prowess.",
-      "thumbnailURL": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRqPDi__ejymzQm5Ho7m6zWAOExXkYS-DcAmw&s"
+      "cardTitle": "Gukesh D vs Alexei Shirov - 2022 Chess Olympiad",
+      "cardDescription": "A remarkable victory by Gukesh over Alexei Shirov at the 2022 Chess Olympiad, showcasing his extraordinary talent and strategic prowess.",
+      "cardThumbnailURL": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRqPDi__ejymzQm5Ho7m6zWAOExXkYS-DcAmw&s"
     },
     "meta": {
       "adoptsFrom": {

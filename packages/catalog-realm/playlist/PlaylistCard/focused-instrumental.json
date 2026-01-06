@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "playlistName": "Focused Instrumental",
-      "description": "Instrumental tracks for deep concentration and productivity",
+      "cardDescription": "Instrumental tracks for deep concentration and productivity",
       "coverImageUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop",
       "songCount": 28,
       "duration": "1h 56m",

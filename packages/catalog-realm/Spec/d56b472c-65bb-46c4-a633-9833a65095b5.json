@@ -12,16 +12,16 @@
         "name": "default",
         "module": "http://localhost:4201/catalog/fields/color"
       },
-      "title": "Color Field",
+      "cardTitle": "Color Field",
       "readMe": "",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "specType": "field",
-      "description": "Spec of Color",
+      "cardDescription": "Spec of Color",
       "containedExamples": []
     },
     "relationships": {

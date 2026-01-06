@@ -53,7 +53,7 @@ const personCardSource = `
     static displayName = 'Person';
     @field firstName = contains(StringField);
     @field lastName = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Person) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
@@ -65,7 +65,7 @@ const personCardSource = `
         <div data-test-person>
           <p>First name: <@fields.firstName /></p>
           <p>Last name: <@fields.lastName /></p>
-          <p>Title: <@fields.title /></p>
+          <p>Title: <@fields.cardTitle /></p>
           <p>Address List: <@fields.address /></p>
           <p>Friends: <@fields.friends /></p>
         </div>
@@ -196,7 +196,7 @@ const friendCardSource = `
     static displayName = 'Friend';
     @field name = contains(StringField);
     @field friend = linksTo(() => Friend);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Person) {
         return name;
       },
@@ -206,7 +206,7 @@ const friendCardSource = `
         <div data-test-person>
           <p>First name: <@fields.firstName /></p>
           <p>Last name: <@fields.lastName /></p>
-          <p>Title: <@fields.title /></p>
+          <p>Title: <@fields.cardTitle /></p>
         </div>
         <style scoped>
           div {
@@ -282,8 +282,8 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'Person',
-              description: 'Spec',
+              cardTitle: 'Person',
+              cardDescription: 'Spec',
               specType: 'card',
               ref: {
                 module: `./person`,
@@ -447,7 +447,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       .exists();
     assert
       .dom(
-        `[data-test-card-schema="Card"] [data-test-field-name="thumbnailURL"] [data-test-card-display-name="String"]`,
+        `[data-test-card-schema="Card"] [data-test-field-name="cardThumbnailURL"] [data-test-card-display-name="String"]`,
       )
       .exists();
 
@@ -981,7 +981,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     static displayName = 'Person';
     @field firstName = contains(StringField);
     @field lastName = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Person) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
@@ -994,7 +994,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
         <div data-test-person>
           <p>First name: <@fields.firstName /></p>
           <p>Last name: <@fields.lastName /></p>
-          <p>Title: <@fields.title /></p>
+          <p>Title: <@fields.cardTitle /></p>
           <p>Address List: <@fields.address /></p>
           <p>Friends: <@fields.friends /></p>
         </div>
@@ -1045,7 +1045,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     static displayName = 'Person';
     @field givenName = contains(StringField);
     @field lastName = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Person) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
@@ -1057,7 +1057,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
         <div data-test-person>
           <p>First name: <@fields.firstName /></p>
           <p>Last name: <@fields.lastName /></p>
-          <p>Title: <@fields.title /></p>
+          <p>Title: <@fields.cardTitle /></p>
           <p>Address List: <@fields.address /></p>
           <p>Friends: <@fields.friends /></p>
         </div>

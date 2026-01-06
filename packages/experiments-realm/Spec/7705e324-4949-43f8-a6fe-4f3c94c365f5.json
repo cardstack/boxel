@@ -38,9 +38,9 @@
           "goalTitle": null
         }
       ],
-      "title": "TravelGoalWithProgress",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "TravelGoalWithProgress",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

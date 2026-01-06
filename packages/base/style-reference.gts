@@ -35,9 +35,9 @@ class Isolated extends Component<typeof StyleReference> {
     >
       <:header>
         <header class='style-header'>
-          <h1><@fields.title /></h1>
+          <h1><@fields.cardTitle /></h1>
           <p class='style-header-description'>
-            <@fields.description />
+            <@fields.cardDescription />
           </p>
         </header>
       </:header>
@@ -207,21 +207,21 @@ export default class StyleReference extends StructuredTheme {
     },
   });
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: StyleReference) {
-      return this.cardInfo?.title ?? this.styleName ?? 'Untitled Style';
+      return this.cardInfo?.name ?? this.styleName ?? 'Untitled Style';
     },
   });
 
-  @field description = contains(StringField, {
+  @field cardDescription = contains(StringField, {
     computeVia: function (this: StyleReference) {
-      return this.cardInfo?.description ?? this.visualDNA;
+      return this.cardInfo?.summary ?? this.visualDNA;
     },
   });
 
-  @field thumbnailURL = contains(StringField, {
+  @field cardThumbnailURL = contains(StringField, {
     computeVia: function (this: StyleReference) {
-      return this.cardInfo?.thumbnailURL ?? this.wallpaperImages?.[0];
+      return this.cardInfo?.cardThumbnailURL ?? this.wallpaperImages?.[0];
     },
   });
 

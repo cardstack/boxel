@@ -60,10 +60,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
     {
       cardInfo: {
         properties: {
-          description: { type: 'string' },
+          cardDescription: { type: 'string' },
           notes: { type: 'string' },
-          thumbnailURL: { type: 'string' },
-          title: { type: 'string' },
+          cardThumbnailURL: { type: 'string' },
+          cardTitle: { type: 'string' },
         },
         type: 'object',
       },
@@ -539,7 +539,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
     }
     class BasicCard extends CardDef {
       @field containerField = contains(InternalField, {
-        description: 'Desc #1',
+        cardDescription: 'Desc #1',
       });
     }
 
@@ -551,7 +551,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
           ...cardDefAttributesProperties,
           containerField: {
             type: 'object',
-            description: 'Desc #1',
+            cardDescription: 'Desc #1',
             properties: {
               innerStringField: { type: 'string' },
             },
@@ -570,20 +570,20 @@ module('Unit | ai-function-generation-test', function (hooks) {
     }
     class InternalField extends FieldDef {
       @field innerStringField = contains(StringField, {
-        description: 'Desc #2',
+        cardDescription: 'Desc #2',
       });
       @field linkedCard = linksTo(InnerCard, {
-        description: 'Desc #3',
+        cardDescription: 'Desc #3',
       });
       @field linkedCard2 = linksTo(InnerCard);
       @field linkedCards = linksToMany(InnerCard, {
-        description: 'Desc #4',
+        cardDescription: 'Desc #4',
       });
       @field linkedCards2 = linksToMany(InnerCard);
     }
     class BasicCard extends CardDef {
       @field containerField = contains(InternalField, {
-        description: 'Desc #1',
+        cardDescription: 'Desc #1',
       });
     }
 
@@ -602,9 +602,9 @@ module('Unit | ai-function-generation-test', function (hooks) {
           ...cardDefAttributesProperties,
           containerField: {
             type: 'object',
-            description: 'Desc #1',
+            cardDescription: 'Desc #1',
             properties: {
-              innerStringField: { type: 'string', description: 'Desc #2' },
+              innerStringField: { type: 'string', cardDescription: 'Desc #2' },
             },
           },
         },
@@ -614,7 +614,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
         properties: {
           'containerField.linkedCard': {
             type: 'object',
-            description: 'Desc #3',
+            cardDescription: 'Desc #3',
             properties: { links },
             required: ['links'],
           },
@@ -625,7 +625,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
           },
           'containerField.linkedCards': {
             type: 'array',
-            description: 'Desc #4',
+            cardDescription: 'Desc #4',
             items: {
               type: 'object',
               properties: { links },
@@ -657,7 +657,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       static displayName = 'TestCard';
       @field linkedCard = linksTo(OtherCard);
       @field simpleField = contains(StringField);
-      @field linkedCard2 = linksTo(OtherCard, { description: 'linked card' });
+      @field linkedCard2 = linksTo(OtherCard, { cardDescription: 'linked card' });
     }
 
     let schema = generateJsonSchemaForCardType(TestCard, cardApi, mappings);
@@ -687,7 +687,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
         },
         linkedCard2: {
           type: 'object',
-          description: 'linked card',
+          cardDescription: 'linked card',
           properties: {
             links: {
               type: 'object',
@@ -716,7 +716,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       static displayName = 'TestCard';
       @field simpleField = contains(StringField);
       @field linkedCards = linksToMany(OtherCard, {
-        description: 'linked cards',
+        cardDescription: 'linked cards',
       });
     }
 
@@ -734,7 +734,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       properties: {
         linkedCards: {
           type: 'array',
-          description: 'linked cards',
+          cardDescription: 'linked cards',
           items: {
             type: 'object',
             properties: {
@@ -764,7 +764,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
     }
     class BasicCard extends CardDef {
       @field containerField = containsMany(InternalField, {
-        description: 'Desc #1',
+        cardDescription: 'Desc #1',
       });
     }
 
@@ -776,7 +776,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
           ...cardDefAttributesProperties,
           containerField: {
             type: 'array',
-            description: 'Desc #1',
+            cardDescription: 'Desc #1',
             items: {
               type: 'object',
               properties: {

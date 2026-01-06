@@ -1695,7 +1695,7 @@ export class EventTicketCard extends CardDef {
   @field maxCapacity = contains(NumberField);
   @field soldTickets = contains(NumberField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: EventTicketCard) {
       try {
         const event = this.eventName ?? 'Unknown Event';

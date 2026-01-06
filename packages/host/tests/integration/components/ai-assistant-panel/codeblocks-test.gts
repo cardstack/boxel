@@ -136,7 +136,7 @@ export default class MyComponent extends Component {
           return this.firstName[0];
         },
       });
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },

@@ -10,9 +10,9 @@
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": "Botanical",
-        "description": null,
-        "thumbnailURL": null
+        "name": "Botanical",
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "styleName": "Botanical",
       "visualDNA": "A natural, organic design language inspired by botanical gardens and plant life. Features earthy greens, warm neutrals, and soft, flowing forms that evoke the tranquility of nature.",

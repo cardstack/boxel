@@ -11,9 +11,9 @@
       "name": "Technical Documentation",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "API documentation, user guides, technical specifications, code examples, and instructional content.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "API documentation, user guides, technical specifications, code examples, and instructional content.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

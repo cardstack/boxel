@@ -69,7 +69,7 @@ module(
       }
       PersonClass = Person;
       class QueryLinksField extends FieldDef {
-        @field title = contains(StringField);
+        @field cardTitle = contains(StringField);
         @field favorite = linksTo(() => Person, {
           query: {
             filter: {
@@ -90,7 +90,7 @@ module(
         });
       }
       class QueryCard extends CardDef {
-        @field title = contains(StringField);
+        @field cardTitle = contains(StringField);
         @field favorite = linksTo(() => Person, {
           query: {
             filter: {
@@ -112,7 +112,7 @@ module(
         static isolated = class Isolated extends Component<typeof QueryCard> {
           <template>
             <div data-test-inline-title>
-              <@fields.title @format='edit' />
+              <@fields.cardTitle @format='edit' />
             </div>
             <div data-test-favorite>
               {{#if @model.favorite}}
@@ -157,18 +157,18 @@ module(
           'Person/target.json': new Person({ name: 'Target' }),
           'Person/not-target.json': new Person({ name: 'Not Target' }),
           'query-card.json': new QueryCard({
-            title: 'Target',
+            cardTitle: 'Target',
           }),
           'query-card-2.json': new QueryCard({
-            title: 'Not Target',
+            cardTitle: 'Not Target',
           }),
           'query-card-nested.json': new QueryCardNested({
             queries: new QueryLinksField({
-              title: 'Target',
+              cardTitle: 'Target',
             }),
           }),
           'query-card-missing.json': new QueryCard({
-            title: 'Missing',
+            cardTitle: 'Missing',
           }),
         },
       });
@@ -533,7 +533,7 @@ module(
         });
         await waitFor('[data-test-edit-button]');
         await click('[data-test-edit-button]');
-        await fillIn('[data-test-field="title"] input', 'Not Target');
+        await fillIn('[data-test-field="cardTitle"] input', 'Not Target');
 
         await waitUntil(
           () => {

@@ -95,8 +95,8 @@ export class CalendarEvent extends CardDef {
   static displayName = 'Calendar Event';
   static icon = CalendarIcon;
 
-  @field title = contains(StringField); // ⁴ Event details
-  @field description = contains(TextAreaField);
+  @field cardTitle = contains(StringField); // ⁴ Event details
+  @field cardDescription = contains(TextAreaField);
   @field startTime = contains(DatetimeField);
   @field endTime = contains(DatetimeField);
   @field location = contains(StringField);
@@ -120,8 +120,8 @@ export class CalendarEvent extends CardDef {
           {{/if}}
         </div>
         <div class='event-title'>{{if
-            @model.title
-            @model.title
+            @model.cardTitle
+            @model.cardTitle
             'Untitled Event'
           }}</div>
         {{#if @model.location}}
@@ -169,8 +169,8 @@ export class CalendarEvent extends CardDef {
                 (formatCalendarDate @model.startTime 'time')
               }}</div>
             <div class='event-title'>{{if
-                @model.title
-                @model.title
+                @model.cardTitle
+                @model.cardTitle
                 'Event'
               }}</div>
           </div>
@@ -184,8 +184,8 @@ export class CalendarEvent extends CardDef {
                 (formatCalendarDate @model.startTime 'time')
               }}</span>
             <span class='title'>{{if
-                @model.title
-                @model.title
+                @model.cardTitle
+                @model.cardTitle
                 'Untitled Event'
               }}</span>
             {{#if @model.location}}<span class='location'>📍
@@ -208,15 +208,15 @@ export class CalendarEvent extends CardDef {
                 }}</span>
             </div>
             <div class='tile-title'>{{if
-                @model.title
-                @model.title
+                @model.cardTitle
+                @model.cardTitle
                 'Untitled Event'
               }}</div>
             {{#if @model.location}}<div class='tile-location'>📍
                 {{@model.location}}</div>{{/if}}
-            {{#if @model.description}}<div
+            {{#if @model.cardDescription}}<div
                 class='tile-desc'
-              >{{@model.description}}</div>{{/if}}
+              >{{@model.cardDescription}}</div>{{/if}}
           </div>
         </div>
 
@@ -235,15 +235,15 @@ export class CalendarEvent extends CardDef {
                 }}</div>
             </div>
             <div class='card-title'>{{if
-                @model.title
-                @model.title
+                @model.cardTitle
+                @model.cardTitle
                 'Untitled Event'
               }}</div>
             {{#if @model.location}}<div class='card-location'>📍
                 {{@model.location}}</div>{{/if}}
-            {{#if @model.description}}<div
+            {{#if @model.cardDescription}}<div
                 class='card-description'
-              >{{@model.description}}</div>{{/if}}
+              >{{@model.cardDescription}}</div>{{/if}}
           </div>
         </div>
       </div>
@@ -3014,7 +3014,7 @@ export class CalendarCard extends CardDef {
   @field calendarName = contains(StringField); // ⁷ Calendar identification
 
   // ⁹ Computed title
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: CalendarCard) {
       try {
         const name = this.calendarName || 'Calendar';

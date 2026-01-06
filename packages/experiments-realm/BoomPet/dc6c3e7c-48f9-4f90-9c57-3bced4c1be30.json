@@ -3,11 +3,11 @@
     "type": "card",
     "attributes": {
       "boom": {
-        "title": null
+        "cardTitle": null
       },
-      "title": "Bam Bam",
-      "description": "",
-      "thumbnailURL": null
+      "cardTitle": "Bam Bam",
+      "cardDescription": "",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "person": {

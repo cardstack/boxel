@@ -19,7 +19,7 @@ export class TypeExamples extends CardDef {
   @field dateTimeField = contains(DateTimeField);
   @field booleanField = contains(BooleanField);
   @field stringArrayField = containsMany(StringField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: TypeExamples) {
       return this.constructor.displayName;
     },

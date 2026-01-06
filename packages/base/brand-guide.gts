@@ -64,8 +64,8 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       <:header>
         <ThemeDashboardHeader
           class='brand-guide-dashboard-header'
-          @title={{@model.title}}
-          @description={{@model.description}}
+          @title={{@model.cardTitle}}
+          @description={{@model.cardDescription}}
           @isDarkMode={{this.isDarkMode}}
         >
           <:meta>
@@ -641,10 +641,10 @@ export default class BrandGuide extends DetailedStyleRef {
     },
   });
 
-  @field thumbnailURL = contains(StringField, {
+  @field cardThumbnailURL = contains(StringField, {
     computeVia: function (this: BrandGuide) {
-      return this.cardInfo?.thumbnailURL?.length
-        ? this.cardInfo?.thumbnailURL
+      return this.cardInfo?.cardThumbnailURL?.length
+        ? this.cardInfo?.cardThumbnailURL
         : this.markUsage?.socialMediaProfileIcon;
     },
   });
@@ -653,15 +653,15 @@ export default class BrandGuide extends DetailedStyleRef {
   static fitted = class Fitted extends Component<typeof this> {
     <template>
       <BasicFitted
-        @primary={{@model.title}}
+        @primary={{@model.cardTitle}}
         @secondary={{cardTypeDisplayName @model}}
-        @description={{@model.description}}
+        @description={{@model.cardDescription}}
       >
         <:thumbnail>
-          {{#if @model.thumbnailURL}}
+          {{#if @model.cardThumbnailURL}}
             <div
               class='brand-logo-thumbnail'
-              style={{cssUrl 'background-image' @model.thumbnailURL}}
+              style={{cssUrl 'background-image' @model.cardThumbnailURL}}
             />
           {{else}}
             <@model.constructor.icon
@@ -695,19 +695,19 @@ export default class BrandGuide extends DetailedStyleRef {
         <div
           class='thumbnail-image'
           style={{if
-            @model.thumbnailURL
-            (cssUrl 'background-image' @model.thumbnailURL)
+            @model.cardThumbnailURL
+            (cssUrl 'background-image' @model.cardThumbnailURL)
           }}
-          role={{if @model.thumbnailURL 'img'}}
-          alt={{if @model.thumbnailURL @model.title}}
+          role={{if @model.cardThumbnailURL 'img'}}
+          alt={{if @model.cardThumbnailURL @model.cardTitle}}
         >
-          {{#unless @model.thumbnailURL}}
+          {{#unless @model.cardThumbnailURL}}
             <@model.constructor.icon width='30' height='30' />
           {{/unless}}
         </div>
         <div class='content'>
-          <h3><@fields.title /></h3>
-          <p><@fields.description /></p>
+          <h3><@fields.cardTitle /></h3>
+          <p><@fields.cardDescription /></p>
         </div>
       </article>
 

@@ -208,7 +208,7 @@ export class GameResult extends CardDef {
       return lastModified ? new Date(lastModified * 1000) : undefined;
     },
   });
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: GameResult) {
       return this.game.title ?? 'Untitled Game Result';
     },

@@ -136,7 +136,7 @@ test.describe('Head tags', () => {
 
           <template>
             <article data-test-default-head-card>
-              <h1>{{@model.title}}</h1>
+              <h1>{{@model.cardTitle}}</h1>
               <button type="button" data-test-head-nav="custom" {{on "click" this.viewCustom}}>
                 Go to custom head card
               </button>
@@ -188,7 +188,7 @@ test.describe('Head tags', () => {
 
           <template>
             <article data-test-custom-head-card>
-              <h1>{{@model.title}}</h1>
+              <h1>{{@model.cardTitle}}</h1>
               <button type="button" data-test-head-nav="default" {{on "click" this.viewDefault}}>
                 Go to default head card
               </button>

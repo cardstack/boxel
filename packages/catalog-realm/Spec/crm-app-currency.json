@@ -9,9 +9,9 @@
       },
       "specType": "field",
       "containedExamples": [],
-      "title": "Currency",
-      "description": "Spec for Currency field",
-      "thumbnailURL": null
+      "cardTitle": "Currency",
+      "cardDescription": "Spec for Currency field",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

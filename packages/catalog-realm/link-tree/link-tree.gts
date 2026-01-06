@@ -298,9 +298,9 @@ export class LinkField extends FieldDef {
   static displayName = 'Link';
   static icon = LinkIcon;
 
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field url = contains(UrlField);
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field backgroundColor = contains(ColorField);
   @field textColor = contains(ColorField);
   @field isActive = contains(BooleanField);
@@ -324,12 +324,12 @@ export class LinkField extends FieldDef {
       >
         <div class='link-content'>
           <h3 class='link-title'>{{if
-              @model.title
-              @model.title
+              @model.cardTitle
+              @model.cardTitle
               '✨ Click Here'
             }}</h3>
-          {{#if @model.description}}
-            <p class='link-description'>{{@model.description}}</p>
+          {{#if @model.cardDescription}}
+            <p class='link-description'>{{@model.cardDescription}}</p>
           {{/if}}
         </div>
         <div class='link-arrow'>→</div>
@@ -431,7 +431,7 @@ export class LinkTree extends CardDef {
   @field backgroundGradient = contains(StringField);
   @field links = containsMany(LinkField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: LinkTree) {
       return this.profileName ? `${this.profileName}'s Links` : 'Fashion Links';
     },

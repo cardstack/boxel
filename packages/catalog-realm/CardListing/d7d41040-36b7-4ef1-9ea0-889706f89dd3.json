@@ -15,9 +15,9 @@
       "summary": "Intelligent book recommendation engine with preference-based filtering - select fiction/non-fiction preferences and specific genres while viewing personalized book matches. Features dynamic preference collection, smart genre categorization, detailed book cards with purchase links, and adaptive filtering algorithms for curated reading suggestions.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/book-recommender-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/book-recommender-listing/thumbnail.png"
       }
     },
     "relationships": {

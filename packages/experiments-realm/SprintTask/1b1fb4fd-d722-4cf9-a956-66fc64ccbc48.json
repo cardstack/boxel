@@ -18,8 +18,8 @@
       },
       "name": "Implement Status and Priority Template Component with Dynamic Rendering",
       "details": "Technical implementation of a reusable template component for displaying status and priority indicators across the application. Requirements include:\n- Create base template structure\n- Implement dynamic color rendering based on status\n- Add priority level visualization\n- Ensure accessibility compliance\n- Add unit tests for component",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "project": {

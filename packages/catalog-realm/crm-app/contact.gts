@@ -114,7 +114,7 @@ class EmbeddedTemplate extends Component<typeof Contact> {
       <AvatarGroup
         @userId={{@model.id}}
         @name={{@model.name}}
-        @thumbnailURL={{@model.thumbnailURL}}
+        @thumbnailURL={{@model.cardThumbnailURL}}
         class='avatar-group-container'
       >
         <:content>
@@ -210,7 +210,7 @@ class FittedTemplate extends Component<typeof Contact> {
       <AvatarGroup
         @userId={{@model.id}}
         @name={{@model.name}}
-        @thumbnailURL={{@model.thumbnailURL}}
+        @thumbnailURL={{@model.cardThumbnailURL}}
         class='avatar-group-container'
       >
         <:content>
@@ -465,7 +465,7 @@ class AtomTemplate extends Component<typeof Contact> {
           <Avatar
             @userID={{@model.id}}
             @displayName={{@model.name}}
-            @thumbnailURL={{@model.thumbnailURL}}
+            @thumbnailURL={{@model.cardThumbnailURL}}
             @isReady={{true}}
             class='avatar'
           />
@@ -511,7 +511,7 @@ export class Contact extends CardDef {
     },
   });
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Contact) {
       return this.name;
     },

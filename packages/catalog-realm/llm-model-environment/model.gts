@@ -881,7 +881,7 @@ class Isolated extends Component<typeof Model> {
   }
 
   get parsedModelInfo() {
-    const title = this.args.model?.title || '';
+    const title = this.args.model?.cardTitle || '';
     const modelId = this.args.model?.modelId || '';
     const displayName = this.args.model?.displayName || '';
 
@@ -1046,10 +1046,10 @@ class Isolated extends Component<typeof Model> {
           Model Information
         </h2>
         <div class='info-grid'>
-          {{#if @model.title}}
+          {{#if @model.cardTitle}}
             <div class='info-item'>
               <div class='info-label'>Title</div>
-              <div class='info-value'>{{@model.title}}</div>
+              <div class='info-value'>{{@model.cardTitle}}</div>
             </div>
           {{/if}}
 
@@ -1448,7 +1448,7 @@ export class Model extends CardDef {
   @field modelName = contains(StringField);
   @field displayName = contains(StringField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Model) {
       try {
         const modelName = this.modelName ?? this.displayName ?? 'Unnamed Model';
@@ -1464,7 +1464,7 @@ export class Model extends CardDef {
   static embedded = class Embedded extends Component<typeof this> {
     // Parse provider from title/modelId for display consistency
     get providerInfo() {
-      const title = this.args.model?.title || '';
+      const title = this.args.model?.cardTitle || '';
       const modelId = this.args.model?.modelId || '';
 
       // Extract provider from title patterns
@@ -1521,7 +1521,7 @@ export class Model extends CardDef {
               <div class='model-id'>{{@model.modelId}}</div>
             {{/if}}
             {{#if @model.displayName}}
-              {{#unless (eq @model.displayName @model.title)}}
+              {{#unless (eq @model.displayName @model.cardTitle)}}
                 <div class='model-tagline'>{{@model.displayName}}</div>
               {{/unless}}
             {{/if}}
@@ -1677,7 +1677,7 @@ export class Model extends CardDef {
 
   static fitted = class Fitted extends Component<typeof this> {
     get fittedDisplayInfo() {
-      const title = this.args.model?.title || '';
+      const title = this.args.model?.cardTitle || '';
       const modelId = this.args.model?.modelId || '';
 
       // Extract provider from title patterns
@@ -1809,7 +1809,7 @@ export class Model extends CardDef {
                   {{/if}}
                   <div class='card-name'>{{this.fittedDisplayInfo.model}}</div>
                   {{#if @model.displayName}}
-                    {{#unless (eq @model.displayName @model.title)}}
+                    {{#unless (eq @model.displayName @model.cardTitle)}}
                       <div class='card-tagline'>{{@model.displayName}}</div>
                     {{/unless}}
                   {{/if}}
@@ -2238,7 +2238,7 @@ export class Model extends CardDef {
   static atom = class Atom extends Component<typeof this> {
     // Parse provider for atom display
     get atomInfo() {
-      const title = this.args.model?.title || '';
+      const title = this.args.model?.cardTitle || '';
       const modelId = this.args.model?.modelId || '';
 
       // Extract provider from title patterns

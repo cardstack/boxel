@@ -526,9 +526,9 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       type: 'card',
       attributes: {
         cardInfo: {
-          title: 'OpenAI: GPT-5',
-          description: 'Test fixture model configuration referencing GPT-5.',
-          thumbnailURL: null,
+          cardTitle: 'OpenAI: GPT-5',
+          cardDescription: 'Test fixture model configuration referencing GPT-5.',
+          cardThumbnailURL: null,
           notes: null,
         },
         modelId: 'openai/gpt-5',
@@ -555,10 +555,10 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       type: 'card',
       attributes: {
         cardInfo: {
-          title: 'Anthropic: Claude Sonnet 4.5',
-          description:
+          cardTitle: 'Anthropic: Claude Sonnet 4.5',
+          cardDescription:
             'Test fixture model configuration referencing Claude Sonnet 4.5.',
-          thumbnailURL: null,
+          cardThumbnailURL: null,
           notes: null,
         },
         modelId: 'anthropic/claude-sonnet-4.5',
@@ -584,10 +584,10 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       type: 'card',
       attributes: {
         cardInfo: {
-          title: 'Anthropic: Claude 3.7 Sonnet',
-          description:
+          cardTitle: 'Anthropic: Claude 3.7 Sonnet',
+          cardDescription:
             'Test fixture model configuration referencing Claude 3.7 Sonnet.',
-          thumbnailURL: null,
+          cardThumbnailURL: null,
           notes: null,
         },
         modelId: 'anthropic/claude-3.7-sonnet',
@@ -1369,17 +1369,17 @@ export async function assertMessages(
         .dom(`[data-test-message-idx="${index}"] [data-test-attached-card]`)
         .exists({ count: cards.length });
       cards.map((card) => {
-        if (card.title) {
-          if (message != null && card.title.includes(message)) {
+        if (card.cardTitle) {
+          if (message != null && card.cardTitle.includes(message)) {
             throw new Error(
-              `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.title}'`,
+              `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.cardTitle}'`,
             );
           }
           assert
             .dom(
               `[data-test-message-idx="${index}"] [data-test-attached-card="${card.id}"]`,
             )
-            .containsText(card.title);
+            .containsText(card.cardTitle);
         }
 
         if (card.realmIconUrl) {
@@ -1417,9 +1417,9 @@ export async function assertMessages(
 }
 
 export const cardInfo = Object.freeze({
-  title: null,
-  description: null,
-  thumbnailURL: null,
+  cardTitle: null,
+  cardDescription: null,
+  cardThumbnailURL: null,
   notes: null,
 });
 

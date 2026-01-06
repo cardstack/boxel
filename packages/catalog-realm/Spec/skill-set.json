@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Skill Set",
-      "description": "A documentation card of a curated collection of skills",
+      "cardTitle": "Skill Set",
+      "cardDescription": "A documentation card of a curated collection of skills",
       "specType": "card",
       "ref": {
         "module": "../skill-set",

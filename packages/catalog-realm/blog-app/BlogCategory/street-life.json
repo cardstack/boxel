@@ -7,9 +7,9 @@
       "slug": "street-life",
       "pillColor": "#39B1FF",
       "cardInfo": {
-        "description": "Discovering the stories of streets and public spaces.",
-        "title": "Street Life",
-        "thumbnailURL": null
+        "summary": "Discovering the stories of streets and public spaces.",
+        "name": "Street Life",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

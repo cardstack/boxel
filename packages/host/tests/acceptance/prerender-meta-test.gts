@@ -71,7 +71,7 @@ module('Acceptance | prerender | meta', function (hooks) {
     class Pet extends CardDef {
       static displayName = 'Pet';
       @field name = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia(this: Pet) {
           return `${this.name}`;
         },
@@ -89,7 +89,7 @@ module('Acceptance | prerender | meta', function (hooks) {
       @field name = contains(StringField);
       @field pets = linksToMany(() => Pet);
       @field friend = linksTo(() => Person);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia(this: Person) {
           return this.name;
         },
@@ -254,15 +254,15 @@ module('Acceptance | prerender | meta', function (hooks) {
           id: `${testRealmURL}Person/hassan`,
           attributes: {
             name: 'Hassan',
-            title: 'Hassan',
+            cardTitle: 'Hassan',
             cardInfo: {
-              title: null,
-              description: null,
-              thumbnailURL: null,
+              cardTitle: null,
+              cardDescription: null,
+              cardThumbnailURL: null,
               notes: null,
             },
-            description: null,
-            thumbnailURL: null,
+            cardDescription: null,
+            cardThumbnailURL: null,
             numOfPets: '3',
           },
           relationships: {
@@ -348,7 +348,7 @@ module('Acceptance | prerender | meta', function (hooks) {
         _cardType: 'Pet',
         cardInfo: {},
         name: 'Mango',
-        title: 'Mango',
+        cardTitle: 'Mango',
       },
       'search doc is correct',
     );
@@ -366,7 +366,7 @@ module('Acceptance | prerender | meta', function (hooks) {
         _cardType: 'Cat',
         cardInfo: {},
         name: 'Paper',
-        title: 'Paper',
+        cardTitle: 'Paper',
         aliases: ['Satan', "Satan's Mistress"],
         emergencyContacts: null,
       },
@@ -390,7 +390,7 @@ module('Acceptance | prerender | meta', function (hooks) {
           theme: null,
         },
         name: 'Jade',
-        title: 'Jade',
+        cardTitle: 'Jade',
         pets: null,
         numOfPets: '0',
         friend: {
@@ -399,7 +399,7 @@ module('Acceptance | prerender | meta', function (hooks) {
             theme: null,
           },
           name: 'Hassan',
-          title: 'Hassan',
+          cardTitle: 'Hassan',
           numOfPets: '3',
           pets: [
             {
@@ -433,14 +433,14 @@ module('Acceptance | prerender | meta', function (hooks) {
           theme: null,
         },
         name: 'Hassan',
-        title: 'Hassan',
+        cardTitle: 'Hassan',
         friend: null,
         numOfPets: '3',
         pets: [
           {
             id: `${testRealmURL}Pet/mango`,
             name: 'Mango',
-            title: 'Mango',
+            cardTitle: 'Mango',
             cardInfo: {
               theme: null,
             },
@@ -448,7 +448,7 @@ module('Acceptance | prerender | meta', function (hooks) {
           {
             id: `${testRealmURL}Pet/vangogh`,
             name: 'Van Gogh',
-            title: 'Van Gogh',
+            cardTitle: 'Van Gogh',
             cardInfo: {
               theme: null,
             },
@@ -456,7 +456,7 @@ module('Acceptance | prerender | meta', function (hooks) {
           {
             id: `${testRealmURL}Pet/paper`,
             name: 'Paper',
-            title: 'Paper',
+            cardTitle: 'Paper',
             aliases: ['Satan', "Satan's Mistress"],
             emergencyContacts: null,
             cardInfo: {
@@ -489,7 +489,7 @@ module('Acceptance | prerender | meta', function (hooks) {
             contact: {
               id: `${testRealmURL}Person/jade`,
               name: 'Jade',
-              title: 'Jade',
+              cardTitle: 'Jade',
               numOfPets: '0',
               pets: null,
               cardInfo: {
@@ -505,7 +505,7 @@ module('Acceptance | prerender | meta', function (hooks) {
             contact: {
               id: `${testRealmURL}Person/hassan`,
               name: 'Hassan',
-              title: 'Hassan',
+              cardTitle: 'Hassan',
               cardInfo: {
                 theme: null,
               },
@@ -526,7 +526,7 @@ module('Acceptance | prerender | meta', function (hooks) {
         ],
         id: `${testRealmURL}Pet/molly`,
         name: 'Molly',
-        title: 'Molly',
+        cardTitle: 'Molly',
       },
       'search doc is correct',
     );

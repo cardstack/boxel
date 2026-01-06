@@ -763,7 +763,7 @@ class Fitted extends Component<typeof Environment> {
         <div class='badge-format'>
           <div class='badge-panel-header'>
             <div class='badge-header-main'>
-              <div class='badge-env-title'>{{@model.title}}</div>
+              <div class='badge-env-title'>{{@model.cardTitle}}</div>
             </div>
             <div class='badge-header-stats'>
               <div
@@ -777,7 +777,7 @@ class Fitted extends Component<typeof Environment> {
         <div class='strip-format'>
           <div class='strip-panel-header'>
             <div class='strip-header-main'>
-              <div class='strip-env-title'>{{@model.title}}</div>
+              <div class='strip-env-title'>{{@model.cardTitle}}</div>
               {{#if @model.parent}}
                 <div class='strip-env-subtitle'>
                   <span class='strip-inherits-label'>Inherits from parent</span>
@@ -804,7 +804,7 @@ class Fitted extends Component<typeof Environment> {
         <div class='tile-format'>
           <div class='tile-panel-header'>
             <div class='tile-header-main'>
-              <div class='tile-env-title'>{{@model.title}}</div>
+              <div class='tile-env-title'>{{@model.cardTitle}}</div>
               {{#if @model.parent}}
                 <div class='tile-env-subtitle'>
                   <span class='tile-inherits-label'>Inherits from</span>
@@ -865,7 +865,7 @@ class Fitted extends Component<typeof Environment> {
         <div class='card-format'>
           <div class='card-panel-header'>
             <div class='card-header-main'>
-              <div class='card-env-title'>{{@model.title}}</div>
+              <div class='card-env-title'>{{@model.cardTitle}}</div>
               {{#if @model.parent}}
                 <div class='card-env-subtitle'>
                   <span class='card-inherits-label'>Inherits from</span>
@@ -1523,7 +1523,7 @@ class Isolated extends Component<typeof Environment> {
     <div class='shortcuts-panel'>
       <div class='panel-header'>
         <div class='header-main'>
-          <div class='env-title'>{{@model.title}}</div>
+          <div class='env-title'>{{@model.cardTitle}}</div>
           {{#if @model.parent}}
             <div class='env-subtitle'>
               <span class='inherits-label'>Inherits from</span>
@@ -2881,7 +2881,7 @@ class Edit extends Component<typeof Environment> {
 
         <div class='env-stats'>
           <div class='stats-header'>
-            <h2 class='stats-title'>{{@model.title}} Statistics</h2>
+            <h2 class='stats-title'>{{@model.cardTitle}} Statistics</h2>
           </div>
           <div class='stats-grid'>
             <div class='stat-card shortcuts'>
@@ -3612,7 +3612,7 @@ export class Environment extends CardDef {
     return Array.isArray(field) ? [...field] : [];
   }
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Environment) {
       try {
         if (this.name) {
@@ -3698,7 +3698,7 @@ export class Environment extends CardDef {
       <div class='environment-panel-embedded'>
         <div class='panel-header'>
           <div class='header-main'>
-            <div class='env-title'>{{@model.title}}</div>
+            <div class='env-title'>{{@model.cardTitle}}</div>
             {{#if @model.parent}}
               <div class='env-subtitle'>
                 <span class='inherits-label'>Inherits from</span>

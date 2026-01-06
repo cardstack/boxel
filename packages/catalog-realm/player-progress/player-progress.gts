@@ -48,7 +48,7 @@ export class PlayerProgress extends CardDef {
   @field screenshotUrls = containsMany(UrlField);
   @field lastPlayedDate = contains(DatetimeField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: PlayerProgress) {
       if (!this.player || !this.game) {
         return undefined;

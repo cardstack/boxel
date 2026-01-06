@@ -11,7 +11,7 @@ export class Boat extends CardDef {
 
 export class Captain extends CardDef {
   @field firstName = contains(StringField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Captain) {
       return this.firstName;
     },

@@ -14,17 +14,17 @@ export class Chain extends CardDef {
       return CHAIN_IDS[this.name];
     },
   });
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Chain) {
       return this.name;
     },
   });
-  @field description = contains(StringField, {
+  @field cardDescription = contains(StringField, {
     computeVia: function (this: Chain) {
       return `Chain ${this.chainId}`;
     },
   });
-  @field thumbnailURL = contains(StringField, {
+  @field cardThumbnailURL = contains(StringField, {
     computeVia: function (this: Chain) {
       return `${this.name}-icon.png`;
     },

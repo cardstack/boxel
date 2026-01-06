@@ -47,7 +47,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
     return {
       id,
       status: 500,
-      title: 'test card error',
+      cardTitle: 'test card error',
       message: "i'm a test card error",
       realm: undefined,
       meta: {

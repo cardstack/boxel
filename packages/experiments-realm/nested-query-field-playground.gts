@@ -12,7 +12,7 @@ import StringField from 'https://cardstack.com/base/string';
 import { Friend } from './friend';
 
 class NestedQueryFields extends FieldDef {
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
 
   // These query-backed relationships live inside a FieldDef, mirroring
   // the nesting pattern we exercise in host tests.

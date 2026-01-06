@@ -12,8 +12,8 @@ export default class DefaultAtomViewTemplate extends GlimmerComponent<{
     if (!this.args.model) {
       return;
     }
-    if (typeof this.args.model.title === 'string') {
-      return this.args.model.title.trim();
+    if (typeof this.args.model.cardTitle === 'string') {
+      return this.args.model.cardTitle.trim();
     }
     return `Untitled ${this.args.model.constructor.displayName}`;
   }

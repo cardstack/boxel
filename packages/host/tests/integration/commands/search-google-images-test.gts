@@ -44,7 +44,7 @@ module('Integration | commands | search-google-images', function (hooks) {
             queries: {
               request: [
                 {
-                  title: 'Google Custom Search - test',
+                  cardTitle: 'Google Custom Search - test',
                   totalResults: '2',
                   searchTerms: 'test',
                   count: 2,
@@ -57,7 +57,7 @@ module('Integration | commands | search-google-images', function (hooks) {
               ],
               nextPage: [
                 {
-                  title: 'Google Custom Search - test',
+                  cardTitle: 'Google Custom Search - test',
                   totalResults: '2',
                   searchTerms: 'test',
                   count: 2,
@@ -70,7 +70,7 @@ module('Integration | commands | search-google-images', function (hooks) {
               ],
             },
             context: {
-              title: 'boxel-search-image',
+              cardTitle: 'boxel-search-image',
             },
             searchInformation: {
               searchTime: 0.5,
@@ -81,7 +81,7 @@ module('Integration | commands | search-google-images', function (hooks) {
             items: [
               {
                 kind: 'customsearch#result',
-                title: 'Test Image 1',
+                cardTitle: 'Test Image 1',
                 htmlTitle: '<b>Test</b> Image 1',
                 link: 'https://example.com/image1.jpg',
                 displayLink: 'example.com',
@@ -101,7 +101,7 @@ module('Integration | commands | search-google-images', function (hooks) {
               },
               {
                 kind: 'customsearch#result',
-                title: 'Test Image 2',
+                cardTitle: 'Test Image 2',
                 htmlTitle: '<b>Test</b> Image 2',
                 link: 'https://example.com/image2.jpg',
                 displayLink: 'example.com',

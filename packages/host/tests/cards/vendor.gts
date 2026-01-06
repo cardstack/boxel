@@ -11,10 +11,10 @@ import { PaymentMethod } from './payment-method';
 export class Vendor extends CardDef {
   @field name = contains(StringField);
   @field paymentMethods = containsMany(PaymentMethod);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Vendor) {
       return this.name;
     },
   });
-  @field description = contains(StringField, { computeVia: () => 'Vendor' });
+  @field cardDescription = contains(StringField, { computeVia: () => 'Vendor' });
 }

@@ -55,9 +55,9 @@ interface EmbeddedProductComponentSignature {
 export class EmbeddedProductComponent extends GlimmerComponent<EmbeddedProductComponentSignature> {
   <template>
     <div class='product' ...attributes>
-      <img src={{@model.thumbnailURL}} alt={{@model.title}} />
+      <img src={{@model.cardThumbnailURL}} alt={{@model.cardTitle}} />
       <div class='title'>
-        {{@model.title}}
+        {{@model.cardTitle}}
       </div>
       <div class='price'>
         <MonetaryAmountAtom @model={{@model.unitPrice}} />
@@ -268,7 +268,7 @@ class Isolated extends Component<typeof Product> {
             {{@model.seller.title}}
           </span>
         </div>
-        <h1 class='title'>{{@model.title}}</h1>
+        <h1 class='title'>{{@model.cardTitle}}</h1>
         <div class='price'>
           <MonetaryAmountAtom @model={{@model.unitPrice}} />
         </div>
@@ -341,7 +341,7 @@ export class Product extends CardDef {
   @field deliveryWindowDays = contains(NumberField);
   @field isReturnable = contains(BooleanField);
   @field details = contains(MarkdownField);
-  @field thumbnailURL = contains(StringField, {
+  @field cardThumbnailURL = contains(StringField, {
     computeVia(this: Product) {
       return this.images?.[0];
     },

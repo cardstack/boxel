@@ -557,7 +557,7 @@ export class SpreadsheetChartIsolated extends Component<
               <path d='M3 3v18h18' />
               <path d='M18.7 8l-5.1 5.2-2.8-2.7L7 14.3' />
             </svg>
-            {{@model.title}}
+            {{@model.cardTitle}}
           </h1>
         </div>
         <div class='chart-controls'>
@@ -1313,7 +1313,7 @@ export class SpreadsheetChart extends CardDef {
   @field xHeader = contains(StringField);
   @field topN = contains(NumberField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: SpreadsheetChart) {
       try {
         const srcTitle = (this as any).source?.title;
@@ -1371,7 +1371,7 @@ export class SpreadsheetChart extends CardDef {
               <path d='M18 16v-4' />
             {{/if}}
           </svg>
-          <div class='title'>{{@model.title}}</div>
+          <div class='title'>{{@model.cardTitle}}</div>
         </div>
         <div class='meta'>{{this.dataSummary}}</div>
         {{#if @model.source}}
@@ -1478,7 +1478,7 @@ export class SpreadsheetChart extends CardDef {
             {{/if}}
           </svg>
           <div class='strip-content'>
-            <div class='primary-text'>{{@model.title}}</div>
+            <div class='primary-text'>{{@model.cardTitle}}</div>
             <div class='secondary-text'>{{this.miniData}}</div>
           </div>
         </div>
@@ -1505,7 +1505,7 @@ export class SpreadsheetChart extends CardDef {
                 <path d='M11 16v-6' />
               {{/if}}
             </svg>
-            <div class='primary-text'>{{@model.title}}</div>
+            <div class='primary-text'>{{@model.cardTitle}}</div>
           </div>
           <div class='secondary-text'>{{this.miniData}}</div>
           {{#if @model.source}}
@@ -1538,7 +1538,7 @@ export class SpreadsheetChart extends CardDef {
               </svg>
             </div>
             <div class='card-info'>
-              <div class='primary-text'>{{@model.title}}</div>
+              <div class='primary-text'>{{@model.cardTitle}}</div>
               <div class='secondary-text'>{{this.miniData}}</div>
             </div>
           </div>

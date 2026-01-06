@@ -37,8 +37,8 @@ import { AdventureScenario } from './adventure-scenario'; // ¹ᵇ Linked Scenar
 import { MultipleChoice } from '../multiple-choice/multiple-choice';
 
 class CustomAdventureField extends FieldDef {
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field tags = containsMany(StringField);
   @field imageStyles = containsMany(StringField);
 }
@@ -1827,7 +1827,7 @@ export class Adventure extends CardDef {
 
   @field lastChoiceOffered = linksTo(() => MultipleChoice);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Adventure) {
       try {
         if (this.selectedScenario) {

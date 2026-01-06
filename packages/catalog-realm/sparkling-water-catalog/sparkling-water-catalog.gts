@@ -529,9 +529,9 @@ class SparklingWaterCatalogIsolatedTemplate extends Component<
           <h1 class='brand-title'>{{this.brandTitle}}</h1>
         </div>
 
-        {{#if @model.description}}
+        {{#if @model.cardDescription}}
           <div class='brand-description'>
-            <@fields.description />
+            <@fields.cardDescription />
           </div>
         {{else}}
           <p class='brand-placeholder'>Refreshingly crisp sparkling water with
@@ -923,13 +923,13 @@ export class SparkleFlavor extends CardDef {
   static icon = DropletIcon;
 
   @field flavorName = contains(StringField);
-  @field description = contains(MarkdownField);
+  @field cardDescription = contains(MarkdownField);
   @field primaryColor = contains(ColorField);
   @field accentColor = contains(ColorField);
   @field intensity = contains(NumberField);
   @field price = contains(NumberField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: SparkleFlavor) {
       const name = this.flavorName ?? 'Mystery Flavor';
       const price = this.price ? ` - $${this.price.toFixed(2)}` : '';
@@ -949,9 +949,9 @@ export class SparkleFlavor extends CardDef {
         </div>
 
         <div class='flavor-details'>
-          {{#if @model.description}}
+          {{#if @model.cardDescription}}
             <div class='description'>
-              <@fields.description />
+              <@fields.cardDescription />
             </div>
           {{else}}
             <p class='placeholder'>A delightfully refreshing sparkling water
@@ -1074,10 +1074,10 @@ export class SparklingWaterCatalog extends CardDef {
   static prefersWideFormat = true;
 
   @field brandName = contains(StringField);
-  @field description = contains(MarkdownField);
+  @field cardDescription = contains(MarkdownField);
   @field featuredFlavors = linksToMany(SparkleFlavor);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: SparklingWaterCatalog) {
       const brand = this.brandName ?? 'Bupples';
       return `${brand} Sparkling Water Collection`;

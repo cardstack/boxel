@@ -19,7 +19,7 @@ class LineItemEmbedded extends Component<typeof LineItem> {
   <template>
     <div class='row'>
       <div class='cell'>
-        <img src={{@model.product.thumbnailURL}} alt={{@model.product.title}} />
+        <img src={{@model.product.cardThumbnailURL}} alt={{@model.product.title}} />
         <@fields.product.title @format='atom' />
       </div>
       <div class='cell quantity-cell'>

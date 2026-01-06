@@ -17,7 +17,7 @@ interface AvatarGroupSignature {
 
 export default class AvatarGroup extends GlimmerComponent<AvatarGroupSignature> {
   get backgroundImageStyle() {
-    return htmlSafe(`background-image: url(${this.args.thumbnailURL});`);
+    return htmlSafe(`background-image: url(${this.args.cardThumbnailURL});`);
   }
 
   <template>

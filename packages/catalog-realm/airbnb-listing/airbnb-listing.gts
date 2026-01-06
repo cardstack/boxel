@@ -185,10 +185,10 @@ class IsolatedTemplate extends Component<typeof AirbnbListing> {
             </div>
           {{/if}}
 
-          {{#if @model.description}}
+          {{#if @model.cardDescription}}
             <div class='description'>
               <h3>About this place</h3>
-              <p>{{@model.description}}</p>
+              <p>{{@model.cardDescription}}</p>
             </div>
           {{/if}}
 
@@ -597,12 +597,12 @@ export class AirbnbListing extends CardDef {
     },
   });
   @field amenities = containsMany(StringField); // ⁹ e.g., "WiFi", "Pool", "Kitchen"
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field host = contains(StringField);
   @field superhost = contains(StringField); // "Yes" or "No"
   @field listedDate = contains(DateField); // ¹⁵ Date when listing was uploaded
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     // ¹⁰ Computed title
     computeVia: function (this: AirbnbListing) {
       try {

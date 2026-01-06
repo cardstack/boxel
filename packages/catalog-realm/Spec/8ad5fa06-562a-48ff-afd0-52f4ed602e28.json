@@ -12,16 +12,16 @@
         "name": "default",
         "module": "../fields/rating"
       },
-      "title": "Rating Field",
+      "cardTitle": "Rating Field",
       "readMe": null,
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "specType": "field",
-      "description": null,
+      "cardDescription": null,
       "containedExamples": []
     },
     "relationships": {

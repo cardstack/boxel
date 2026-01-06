@@ -20,7 +20,7 @@ export class Review extends BlogPost {
       <article class='embedded-review'>
         <div
           class='thumbnail'
-          style={{setBackgroundImage @model.thumbnailURL}}
+          style={{setBackgroundImage @model.cardThumbnailURL}}
         />
         <div class='content'>
           <div class='meta'>
@@ -37,8 +37,8 @@ export class Review extends BlogPost {
               <@fields.rating class='rating-info' @format='atom' />
             {{/if}}
           </div>
-          <h3 class='title'><@fields.title /></h3>
-          <p class='description'>{{@model.description}}</p>
+          <h3 class='title'><@fields.cardTitle /></h3>
+          <p class='description'>{{@model.cardDescription}}</p>
           <div class='info'>
             <div class='byline'>{{@model.formattedAuthors}}</div>
             {{#if @model.datePublishedIsoTimestamp}}
@@ -143,10 +143,10 @@ export class Review extends BlogPost {
             </div>
             <@fields.rating class='rating' />
           </div>
-          <h1><@fields.title /></h1>
-          {{#if @model.description}}
+          <h1><@fields.cardTitle /></h1>
+          {{#if @model.cardDescription}}
             <p class='description'>
-              <@fields.description />
+              <@fields.cardDescription />
             </p>
           {{/if}}
           <ul class='info'>

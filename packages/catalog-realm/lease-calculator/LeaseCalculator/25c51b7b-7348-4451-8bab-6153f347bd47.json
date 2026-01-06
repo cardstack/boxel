@@ -53,9 +53,9 @@
       "estimatedResaleValueFinancePercent": null,
       "userMemo": null,
       "resultMode": null,
-      "title": "2025 BMW X3",
-      "description": null,
-      "thumbnailURL": "https://media.ed.edmunds-media.com/bmw/x3/2025/oem/2025_bmw_x3_4dr-suv_30-xdrive_fq_oem_1_815.jpg"
+      "cardTitle": "2025 BMW X3",
+      "cardDescription": null,
+      "cardThumbnailURL": "https://media.ed.edmunds-media.com/bmw/x3/2025/oem/2025_bmw_x3_4dr-suv_30-xdrive_fq_oem_1_815.jpg"
     },
     "meta": {
       "adoptsFrom": {

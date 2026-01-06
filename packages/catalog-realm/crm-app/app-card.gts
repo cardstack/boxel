@@ -141,9 +141,9 @@ class TableView extends GlimmerComponent<{
     let headers: string[] = [];
     for (let fieldName in exampleCard) {
       if (
-        fieldName !== 'title' &&
-        fieldName !== 'description' &&
-        fieldName !== 'thumbnailURL' &&
+        fieldName !== 'cardTitle' &&
+        fieldName !== 'cardDescription' &&
+        fieldName !== 'cardThumbnailURL' &&
         fieldName !== 'id'
       ) {
         headers.push(fieldName);
@@ -372,7 +372,7 @@ export class AppCardTemplate extends GlimmerComponent<{
   <template>
     <section class='app-card'>
       <TabbedHeader
-        @headerTitle={{@model.title}}
+        @headerTitle={{@model.cardTitle}}
         @tabs={{@model.tabs}}
         @setActiveTab={{this.setActiveTab}}
         @activeTabId={{this.activeTab.tabId}}

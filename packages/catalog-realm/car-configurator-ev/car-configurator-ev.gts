@@ -40,7 +40,7 @@ export class ConfigOptionField extends FieldDef {
   static displayName = 'Configuration Option';
   @field name = contains(StringField);
   @field price = contains(NumberField);
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field imageUrl = contains(UrlField);
   @field colorValue = contains(StringField);
   @field isSelected = contains(BooleanField);

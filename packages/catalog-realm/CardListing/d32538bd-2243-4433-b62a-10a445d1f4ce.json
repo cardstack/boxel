@@ -16,9 +16,9 @@
       "summary": "A Pomodoro-style focus timer to help manage study and work sessions with customizable intervals and progress tracking",
       "cardInfo": {
         "notes": "Features session tracking, progress monitoring, and flexible timer configurations",
-        "title": "Focus Timer Card",
-        "description": "A productivity tool that implements the Pomodoro Technique with customizable focus and break durations. Perfect for students, professionals, and anyone looking to improve their focus and time management skills.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/focus-timer-listing/thumbnail.png"
+        "name": "Focus Timer Card",
+        "summary": "A productivity tool that implements the Pomodoro Technique with customizable focus and break durations. Perfect for students, professionals, and anyone looking to improve their focus and time management skills.",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/focus-timer-listing/thumbnail.png"
       }
     },
     "relationships": {

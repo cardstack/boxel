@@ -776,7 +776,7 @@ module(basename(__filename), function () {
             'secret.json': {
               data: {
                 attributes: {
-                  title: 'Top Secret',
+                  cardTitle: 'Top Secret',
                 },
                 meta: {
                   adoptsFrom: {
@@ -2184,7 +2184,7 @@ module(basename(__filename), function () {
                     error: {
                       message: `Failed to execute 'removeChild' on 'Node': NotFoundError`,
                       status: 500,
-                      title: 'boom',
+                      cardTitle: 'boom',
                       additionalErrors: null,
                       stack: `Failed to execute 'removeChild' on 'Node': NotFoundError`,
                     },
@@ -2284,7 +2284,7 @@ module(basename(__filename), function () {
                     error: {
                       message: `Failed to execute 'removeChild' on 'Node': NotFoundError`,
                       status: 500,
-                      title: 'boom',
+                      cardTitle: 'boom',
                       additionalErrors: null,
                       stack: `Failed to execute 'removeChild' on 'Node': NotFoundError`,
                     },

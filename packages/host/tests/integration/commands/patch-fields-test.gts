@@ -92,7 +92,7 @@ module('Integration | Command | patch-fields', function (hooks) {
     }
 
     class Book extends CardDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field isbn = contains(StringField);
       @field publishYear = contains(NumberField);
       @field chapters = containsMany(StringField);
@@ -123,25 +123,25 @@ module('Integration | Command | patch-fields', function (hooks) {
       contents: {
         'author.gts': { Author, Address, Coordinates, Book, Country },
         'Book/relationship-book.json': new Book({
-          title: 'Relationship Book',
+          cardTitle: 'Relationship Book',
           isbn: '123-REL',
           publishYear: 2025,
           chapters: ['Rel 1'],
         }),
         'Book/book-1.json': new Book({
-          title: 'Book 1',
+          cardTitle: 'Book 1',
           isbn: '111',
           publishYear: 2020,
           chapters: ['A'],
         }),
         'Book/book-2.json': new Book({
-          title: 'Book 2',
+          cardTitle: 'Book 2',
           isbn: '222',
           publishYear: 2021,
           chapters: ['B'],
         }),
         'Book/test-book.json': new Book({
-          title: 'Test Book',
+          cardTitle: 'Test Book',
           isbn: '978-0123456789',
           publishYear: 2023,
           chapters: ['Introduction', 'Chapter 1'],
@@ -1866,7 +1866,7 @@ module('Integration | Command | patch-fields', function (hooks) {
       let result = await patchFieldsCommand.execute({
         cardId: `${testRealmURL}Book/test-book`,
         fieldUpdates: {
-          title: 'Updated Book Title', // This field exists on Book and should be validated dynamically
+          cardTitle: 'Updated Book Title', // This field exists on Book and should be validated dynamically
         },
       });
 

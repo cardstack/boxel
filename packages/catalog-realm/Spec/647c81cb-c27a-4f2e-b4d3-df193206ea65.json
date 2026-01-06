@@ -15,7 +15,7 @@
           "mimeType": null,
           "duration": null,
           "fileSize": null,
-          "title": null,
+          "cardTitle": null,
           "artist": null,
           "waveformData": null,
           "liked": false,
@@ -29,12 +29,12 @@
           "loopEnd": null
         }
       ],
-      "title": "AudioField",
-      "description": null,
+      "cardTitle": "AudioField",
+      "cardDescription": null,
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

@@ -18,13 +18,13 @@
       },
       "cardInfo": {},
       "totalSpent": 67823.94,
-      "description": null,
+      "cardDescription": null,
       "loyaltyTier": {
         "name": "Platinum"
       },
       "totalOrders": 238,
       "customerName": "James Mitchell-Brown",
-      "thumbnailURL": null,
+      "cardThumbnailURL": null,
       "customerSince": "2021-11-03T08:45:00.000Z"
     },
     "relationships": {

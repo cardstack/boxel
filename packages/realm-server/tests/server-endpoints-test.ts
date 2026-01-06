@@ -306,7 +306,7 @@ module(basename(__filename), function () {
               .send({
                 data: {
                   type: 'card',
-                  attributes: { cardInfo: { title: 'Test Card' } },
+                  attributes: { cardInfo: { name: 'Test Card' } },
                   meta: {
                     adoptsFrom: {
                       module: 'https://cardstack.com/base/card-api',
@@ -361,7 +361,7 @@ module(basename(__filename), function () {
                   filter: {
                     on: baseCardRef,
                     eq: {
-                      title: 'Test Card',
+                      cardTitle: 'Test Card',
                     },
                   },
                 } as Query)}`,
@@ -423,7 +423,7 @@ module(basename(__filename), function () {
                   filter: {
                     on: baseCardRef,
                     eq: {
-                      title: 'Test Card',
+                      cardTitle: 'Test Card',
                     },
                   },
                 } as Query)}`,
@@ -439,7 +439,7 @@ module(basename(__filename), function () {
                 data: {
                   type: 'card',
                   attributes: {
-                    title: 'Test Card',
+                    cardTitle: 'Test Card',
                   },
                   meta: {
                     adoptsFrom: {
@@ -501,7 +501,7 @@ module(basename(__filename), function () {
               .send({
                 data: {
                   type: 'card',
-                  attributes: { cardInfo: { title: 'Test Card' } },
+                  attributes: { cardInfo: { name: 'Test Card' } },
                   meta: {
                     adoptsFrom: {
                       module: 'https://cardstack.com/base/card-api',

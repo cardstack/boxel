@@ -664,7 +664,7 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
             <div class='area-label'>
               <div class='player-avatar-container'>
                 <img
-                  src={{@model.dealer.thumbnailURL}}
+                  src={{@model.dealer.cardThumbnailURL}}
                   alt={{@model.dealer.title}}
                   class='player-avatar'
                 />
@@ -704,7 +704,7 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
             <div class='area-label'>
               <div class='player-avatar-container'>
                 <img
-                  src={{@model.player.thumbnailURL}}
+                  src={{@model.player.cardThumbnailURL}}
                   alt={{@model.player.title}}
                   class='player-avatar'
                 />
@@ -1276,7 +1276,7 @@ export class BlackjackGame extends CardDef {
   @field dealerHand = containsMany(PlayingCardField);
   @field playerHand = containsMany(PlayingCardField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: BlackjackGame) {
       return 'Blackjack';
     },

@@ -88,7 +88,7 @@ module('Integration | computeds', function (hooks) {
     }
 
     class Post extends CardDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field author = contains(Person);
       @field summary = contains(StringField, {
         computeVia: function (this: Post) {
@@ -110,7 +110,7 @@ module('Integration | computeds', function (hooks) {
     });
 
     let firstPost = new Post({
-      title: 'First Post',
+      cardTitle: 'First Post',
       author: new Person({ firstName: 'Mango' }),
     });
     let root = await renderCard(loader, firstPost, 'isolated');
@@ -128,7 +128,7 @@ module('Integration | computeds', function (hooks) {
     }
 
     class Post extends CardDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field author = contains(Person, {
         computeVia: function (this: Post) {
           let person = new Person();
@@ -138,11 +138,11 @@ module('Integration | computeds', function (hooks) {
       });
       static isolated = class Isolated extends Component<typeof this> {
         <template>
-          <div data-test='title'><@fields.title /></div> by <@fields.author />
+          <div data-test='title'><@fields.cardTitle /></div> by <@fields.author />
         </template>
       };
     }
-    let firstPost = new Post({ title: 'First Post' });
+    let firstPost = new Post({ cardTitle: 'First Post' });
     await renderCard(loader, firstPost, 'isolated');
     assert.dom('[data-test="title"]').hasText('First Post');
     assert.dom('[data-test="firstName"]').hasText('Mango');
@@ -363,7 +363,7 @@ module('Integration | computeds', function (hooks) {
       };
     }
     class Post extends CardDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field author = contains(Person);
       @field friend = linksTo(Pet, {
         computeVia: function (this: Post) {
@@ -374,7 +374,7 @@ module('Integration | computeds', function (hooks) {
 
     let friend = new Pet({ name: 'Van Gogh' });
     let author = new Person({ firstName: 'Mango', bestFriend: friend });
-    let firstPost = new Post({ title: 'First Post', author });
+    let firstPost = new Post({ cardTitle: 'First Post', author });
 
     await renderCard(loader, firstPost, 'isolated');
     assert.dom('[data-test-field="cardTitle"]').hasText('First Post');
@@ -415,7 +415,7 @@ module('Integration | computeds', function (hooks) {
       };
     }
     class Post extends CardDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field author = linksTo(Person);
       @field factCheckers = linksToMany(Pet);
       @field collaborators = linksToMany(Pet, {
@@ -433,7 +433,7 @@ module('Integration | computeds', function (hooks) {
     let f3 = new Pet({ name: 'C' });
     let author = new Person({ firstName: 'Van Gogh', pets: [p1, p2] });
     let firstPost = new Post({
-      title: 'First Post',
+      cardTitle: 'First Post',
       author,
       factCheckers: [f1, f2, f3],
     });
@@ -474,7 +474,7 @@ module('Integration | computeds', function (hooks) {
     }
 
     class Post extends CardDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field author = contains(Author);
       @field summary = contains(StringField, {
         computeVia: function (this: Post) {
@@ -498,7 +498,7 @@ module('Integration | computeds', function (hooks) {
 
     let author = new Author({ firstName: 'John', lastName: 'Doe' });
     let post = new Post({
-      title: 'My First Post',
+      cardTitle: 'My First Post',
       author,
     });
 
@@ -528,7 +528,7 @@ module('Integration | computeds', function (hooks) {
     }
 
     class Article extends CardDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field tags = containsMany(Tag);
       @field tagSummary = contains(StringField, {
         computeVia: function (this: Article) {
@@ -557,7 +557,7 @@ module('Integration | computeds', function (hooks) {
     let tag1 = new Tag({ name: 'tech' });
     let tag2 = new Tag({ name: 'web' });
     let article = new Article({
-      title: 'My Article',
+      cardTitle: 'My Article',
       tags: [tag1, tag2],
     });
 
@@ -601,7 +601,7 @@ module('Integration | computeds', function (hooks) {
     }
 
     class Blog extends CardDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field categories = linksToMany(Category);
       @field categorySummary = contains(StringField, {
         computeVia: function (this: Blog) {
@@ -630,7 +630,7 @@ module('Integration | computeds', function (hooks) {
     let cat1 = new Category({ name: 'programming' });
     let cat2 = new Category({ name: 'design' });
     let blog = new Blog({
-      title: 'My Blog',
+      cardTitle: 'My Blog',
       categories: [cat1, cat2],
     });
 

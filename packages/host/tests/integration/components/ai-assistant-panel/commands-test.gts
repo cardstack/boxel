@@ -96,7 +96,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     class Pet extends CardDef {
       static displayName = 'Pet';
       @field name = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
         },
@@ -138,7 +138,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           return this.firstName[0];
         },
       });
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
@@ -744,7 +744,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           id: 'search1',
           name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: JSON.stringify({
-            description: 'Searching for card',
+            cardDescription: 'Searching for card',
             attributes: {
               type: {
                 module: `${testRealmURL}pet`,
@@ -792,9 +792,9 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           id: 'search1',
           name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: JSON.stringify({
-            description: 'Searching for card',
+            cardDescription: 'Searching for card',
             attributes: {
-              title: 'Mango',
+              cardTitle: 'Mango',
             },
           }),
         },
@@ -833,7 +833,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           id: '721c8c78-d8c1-4cc1-a7e9-51d2d3143e4d',
           name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: JSON.stringify({
-            description: 'Searching for card',
+            cardDescription: 'Searching for card',
             attributes: {
               type: {
                 module: `${testRealmURL}person`,
@@ -879,7 +879,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     const id = `${testRealmURL}Person/fadhlan`;
     const roomId = await renderAiAssistantPanel(`${id}.json`);
     const toolArgs = {
-      description: 'Search for Person cards',
+      cardDescription: 'Search for Person cards',
       attributes: {
         type: {
           module: `${testRealmURL}person`,
@@ -951,7 +951,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     const id = `${testRealmURL}Person/fadhlan`;
     const roomId = await renderAiAssistantPanel(`${id}.json`);
     const toolArgs = {
-      description: 'Search for Person cards',
+      cardDescription: 'Search for Person cards',
       attributes: {
         type: {
           module: `${testRealmURL}person`,
@@ -990,7 +990,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     const id = `${readOnlyRealmURL}Person/ian`;
     const roomId = await renderAiAssistantPanel(`${id}.json`);
     const toolArgs = {
-      description: 'Search for Person cards',
+      cardDescription: 'Search for Person cards',
       attributes: {
         type: {
           module: `${testRealmURL}person`,
@@ -1033,7 +1033,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     const id = `${testRealmURL}Person/fadhlan`;
     const roomId = await renderAiAssistantPanel(`${id}.json`);
     const toolArgs = {
-      description: 'Search for Person cards',
+      cardDescription: 'Search for Person cards',
       attributes: {
         type: {
           module: `${testRealmURL}person`,

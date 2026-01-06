@@ -6,7 +6,7 @@
       "canonicalSlug": "sao10k/l3.1-euryale-70b",
       "name": "Sao10K: Llama 3.1 Euryale 70B v2.2",
       "created": 1724803200,
-      "description": "Euryale L3.1 70B v2.2 is a model focused on creative roleplay from [Sao10k](https://ko-fi.com/sao10k). It is the successor of [Euryale L3 70B v2.1](/models/sao10k/l3-euryale-70b).",
+      "cardDescription": "Euryale L3.1 70B v2.2 is a model focused on creative roleplay from [Sao10k](https://ko-fi.com/sao10k). It is the successor of [Euryale L3 70B v2.1](/models/sao10k/l3-euryale-70b).",
       "pricing": {
         "prompt": "0.00000065",
         "completion": "0.00000075",
@@ -49,9 +49,9 @@
       ],
       "defaultParameters": {},
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

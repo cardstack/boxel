@@ -24,7 +24,7 @@ export class MoodField extends FieldDef {
 
   @field name = contains(StringField);
   @field emoji = contains(StringField);
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field color = contains(StringField);
   @field gradient = contains(StringField);
   @field playlist = linksTo(() => PlaylistCard);
@@ -38,7 +38,7 @@ export class MoodField extends FieldDef {
         <span class='mood-emoji'>{{@model.emoji}}</span>
         <div class='mood-info'>
           <h4>{{@model.name}}</h4>
-          <p>{{@model.description}}</p>
+          <p>{{@model.cardDescription}}</p>
         </div>
       </div>
 
@@ -166,8 +166,8 @@ class MoodSelectorPlaylistEmbedded extends Component<
                 'How are you feeling?'
               }}</h3>
             <p>{{if
-                @model.description
-                @model.description
+                @model.cardDescription
+                @model.cardDescription
                 "Choose your current mood and we'll suggest the perfect playlist"
               }}</p>
           </header>
@@ -505,8 +505,8 @@ class MoodSelectorPlaylistIsolated extends Component<
                   'How are you feeling?'
                 }}</h1>
               <p>{{if
-                  @model.description
-                  @model.description
+                  @model.cardDescription
+                  @model.cardDescription
                   "Choose your current mood and we'll suggest the perfect playlist"
                 }}</p>
             </header>
@@ -885,10 +885,10 @@ export class MoodSelectorPlaylistCard extends CardDef {
   static icon = MusicIcon;
 
   @field selectorTitle = contains(StringField);
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field moods = containsMany(MoodField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: MoodSelectorPlaylistCard) {
       try {
         return this.selectorTitle ?? 'Choose Your Mood';

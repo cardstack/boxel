@@ -115,7 +115,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       static displayName = 'Pet';
       static headerColor = '#355e3b';
       @field name = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
         },
@@ -152,7 +152,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       static displayName = 'Shipping Info';
       @field preferredCarrier = contains(StringField);
       @field remarks = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: ShippingInfo) {
           return this.preferredCarrier;
         },
@@ -168,7 +168,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     class CountryWithNoEmbedded extends CardDef {
       static displayName = 'Country';
       @field name = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia(this: CountryWithNoEmbedded) {
           return this.name;
         },
@@ -245,7 +245,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           return this.firstName[0];
         },
       });
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
@@ -286,7 +286,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           throw new Error('Boom!');
         },
       });
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: BoomPerson) {
           return this.firstName;
         },
@@ -309,8 +309,8 @@ module('Acceptance | operator mode tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'Person Card',
-              description: 'Spec for Person Card',
+              cardTitle: 'Person Card',
+              cardDescription: 'Spec for Person Card',
               specType: 'card',
               ref: {
                 module: `${testRealmURL}person`,

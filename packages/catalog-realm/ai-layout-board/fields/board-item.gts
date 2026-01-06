@@ -1797,7 +1797,7 @@ export class EmbeddedCountdownTimer extends Component<typeof CountdownTimer> {
   <template>
     <div class='countdown-timer'>
       <div class='timer-title'>
-        {{if @model.title @model.title 'Countdown'}}
+        {{if @model.cardTitle @model.cardTitle 'Countdown'}}
         {{! ¹¹⁷ Event flow debug indicator }}
         {{#if this.isRunning}}
           <span class='running-indicator'>● RUNNING</span>
@@ -2029,8 +2029,8 @@ export class FittedCountdownTimer extends Component<typeof CountdownTimer> {
           <div class='badge-icon'>⏱️</div>
           <div class='badge-text'>
             <div class='primary-text'>{{if
-                @model.title
-                @model.title
+                @model.cardTitle
+                @model.cardTitle
                 'Timer'
               }}</div>
           </div>
@@ -2051,8 +2051,8 @@ export class FittedCountdownTimer extends Component<typeof CountdownTimer> {
         <div class='strip-icon'>⏱️</div>
         <div class='strip-content'>
           <div class='primary-text'>{{if
-              @model.title
-              @model.title
+              @model.cardTitle
+              @model.cardTitle
               'Countdown Timer'
             }}</div>
           {{#if this.timeRemaining}}
@@ -2074,8 +2074,8 @@ export class FittedCountdownTimer extends Component<typeof CountdownTimer> {
         <div class='tile-timer'>
           <div class='tile-header'>
             <div class='primary-text'>{{if
-                @model.title
-                @model.title
+                @model.cardTitle
+                @model.cardTitle
                 'Timer'
               }}</div>
             <div class='timer-icon'>⏱️</div>
@@ -2134,8 +2134,8 @@ export class FittedCountdownTimer extends Component<typeof CountdownTimer> {
         <div class='card-timer'>
           <div class='card-header'>
             <div class='primary-text'>{{if
-                @model.title
-                @model.title
+                @model.cardTitle
+                @model.cardTitle
                 'Countdown Timer'
               }}</div>
             <div class='timer-icon'>⏱️</div>
@@ -2529,8 +2529,8 @@ export class IsolatedCountdownTimer extends Component<typeof CountdownTimer> {
         <div class='large-timer'>
           <div class='timer-header'>
             <h1 class='timer-title'>{{if
-                @model.title
-                @model.title
+                @model.cardTitle
+                @model.cardTitle
                 'Countdown Timer'
               }}</h1>
             <div class='target-date'>Target:
@@ -2737,7 +2737,7 @@ export class CountdownTimer extends BoardItem {
   static displayName = 'Countdown Timer';
 
   @field targetDate = contains(DatetimeField);
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
 
   static isolated = IsolatedCountdownTimer;
   static embedded = EmbeddedCountdownTimer;

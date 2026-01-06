@@ -28,8 +28,8 @@ module(
 
     let llmResponseContent = JSON.stringify({
       attributes: {
-        title: 'Generated Title',
-        description: 'Generated description from LLM',
+        cardTitle: 'Generated Title',
+        cardDescription: 'Generated description from LLM',
       },
     });
 
@@ -77,8 +77,8 @@ import StringField from 'https://cardstack.com/base/string';
 
 export class TestCard extends CardDef {
   static displayName = 'Test Card';
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
 }`,
         },
       });

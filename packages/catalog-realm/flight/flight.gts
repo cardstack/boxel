@@ -694,7 +694,7 @@ export class Flight extends CardDef {
       <BasicFitted
         @primary={{this.primary}}
         @secondary={{this.secondary}}
-        @thumbnailURL={{this.thumbnailURL}}
+        @thumbnailURL={{this.cardThumbnailURL}}
         @iconComponent={{PlaneIcon}}
         @isEmpty={{this.isEmpty}}
       />

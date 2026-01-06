@@ -2009,7 +2009,7 @@ export class StudyHub extends CardDef {
   @field annotations = linksToMany(() => AnnotationCard); // ¹²¹ Dynamic annotation cards
 
   // ²¹ Computed title
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: StudyHub) {
       try {
         return this.hubName ?? 'My Study Hub';

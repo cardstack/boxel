@@ -36,7 +36,7 @@ export class Tournament extends CardDef {
   @field streamUrl = contains(UrlField);
   @field bracketImageUrl = contains(UrlField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Tournament) {
       return this.name ?? 'Untitled Tournament';
     },

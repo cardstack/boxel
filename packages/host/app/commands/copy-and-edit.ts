@@ -105,10 +105,10 @@ export default class CopyAndEditCommand extends HostBaseCommand<
     let renamed = false;
     if (
       newCard.cardInfo &&
-      typeof (newCard as any).cardInfo?.title === 'string'
+      typeof (newCard as any).cardInfo?.name === 'string'
     ) {
-      let currentTitle = (newCard as any).cardInfo.title;
-      (newCard as any).cardInfo.title = `${currentTitle} (Copy ${suffix})`;
+      let currentTitle = (newCard as any).cardInfo.name;
+      (newCard as any).cardInfo.name = `${currentTitle} (Copy ${suffix})`;
       renamed = true;
     }
     if (renamed && newCard.id) {

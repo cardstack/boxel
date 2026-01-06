@@ -403,7 +403,7 @@ export default class InteractSubmode extends Component {
       let loadedCard = card as CardDef;
       cardToDelete = {
         id: loadedCard.id,
-        title: loadedCard.title,
+        title: loadedCard.cardTitle,
       };
     } else {
       let cardUrl = card instanceof URL ? card : new URL(card as string);
@@ -411,7 +411,7 @@ export default class InteractSubmode extends Component {
       if (isCardInstance(loadedCard)) {
         cardToDelete = {
           id: loadedCard.id,
-          title: loadedCard.title,
+          title: loadedCard.cardTitle,
         };
       } else {
         let error = loadedCard;
@@ -792,7 +792,7 @@ export default class InteractSubmode extends Component {
           >
             <:content>
               Delete the card
-              <strong>{{this.cardToDelete.title}}</strong>?
+              <strong>{{this.cardToDelete.cardTitle}}</strong>?
             </:content>
           </DeleteModal>
         {{/if}}

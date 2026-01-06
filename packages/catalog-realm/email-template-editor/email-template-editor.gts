@@ -1259,7 +1259,7 @@ export class EmailTemplateEditor extends CardDef {
     },
   });
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     // ¹⁶ Computed title
     computeVia: function (this: EmailTemplateEditor) {
       return this.subject ?? 'Email Template Editor';

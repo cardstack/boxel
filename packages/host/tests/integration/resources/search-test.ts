@@ -94,7 +94,7 @@ module(`Integration | search resource`, function (hooks) {
     class Post extends CardDef {
       static displayName = 'Post';
       @field article = linksTo(Article);
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
     }
 
     class BlogPost extends Post {
@@ -112,8 +112,8 @@ module(`Integration | search resource`, function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'Card 1',
-            description: 'Sample post',
+            cardTitle: 'Card 1',
+            cardDescription: 'Sample post',
             author: {
               firstName: 'Cardy',
               lastName: 'Stackington Jr. III',
@@ -148,8 +148,8 @@ module(`Integration | search resource`, function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'Card 1',
-            description: 'Sample post',
+            cardTitle: 'Card 1',
+            cardDescription: 'Sample post',
             author: {
               firstName: 'Carl',
               lastName: 'Stack',
@@ -170,8 +170,8 @@ module(`Integration | search resource`, function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'Card 2',
-            description: 'Sample post',
+            cardTitle: 'Card 2',
+            cardDescription: 'Sample post',
             author: {
               firstName: 'Carl',
               lastName: 'Deck',
@@ -249,8 +249,8 @@ module(`Integration | search resource`, function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'Post',
-            description: 'A card that represents a blog post',
+            cardTitle: 'Post',
+            cardDescription: 'A card that represents a blog post',
             specType: 'card',
             ref: {
               module: `${testRealmURL}post`,
@@ -269,8 +269,8 @@ module(`Integration | search resource`, function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'Article',
-            description: 'A card that represents an online article ',
+            cardTitle: 'Article',
+            cardDescription: 'A card that represents an online article ',
             specType: 'card',
             ref: {
               module: `${testRealmURL}article`,

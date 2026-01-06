@@ -301,7 +301,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     class PersonField extends FieldDef {
       @field fullName = contains(StringField);
       @field guestCount = contains(NumberField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: PersonField) {
           return this.guestCount
             ? `${this.fullName} + ${this.guestCount}`
@@ -521,7 +521,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     class Country extends CardDef {
       static displayName = 'Country';
       @field name = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia(this: Country) {
           return this.name;
         },

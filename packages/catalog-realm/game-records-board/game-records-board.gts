@@ -1002,7 +1002,7 @@ export class GameRecordsBoard extends CardDef {
   static displayName = 'Game Records Board';
   static icon = GamepadIcon;
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: GameRecordsBoard) {
       return 'Game Records Board';
     },

@@ -41,7 +41,7 @@ export class VideoGame extends Game {
               {{#if @model.coverImageUrl}}
                 <img
                   src={{@model.coverImageUrl}}
-                  alt='{{@model.title}} cover'
+                  alt='{{@model.cardTitle}} cover'
                   class='cover-image'
                 />
               {{else}}
@@ -69,8 +69,8 @@ export class VideoGame extends Game {
 
             <div class='game-info'>
               <h1 class='game-title'>{{if
-                  @model.title
-                  @model.title
+                  @model.cardTitle
+                  @model.cardTitle
                   'Untitled Game'
                 }}</h1>
 
@@ -183,11 +183,11 @@ export class VideoGame extends Game {
             </div>
           </header>
 
-          {{#if @model.description}}
+          {{#if @model.cardDescription}}
             <section class='game-description'>
               <h2>About this Game</h2>
               <div class='description-content'>
-                <@fields.description />
+                <@fields.cardDescription />
               </div>
             </section>
           {{/if}}
@@ -571,7 +571,7 @@ export class VideoGame extends Game {
           {{#if @model.coverImageUrl}}
             <img
               src={{@model.coverImageUrl}}
-              alt='{{@model.title}} cover'
+              alt='{{@model.cardTitle}} cover'
               class='cover-img'
             />
           {{else}}
@@ -601,8 +601,8 @@ export class VideoGame extends Game {
         <div class='game-content'>
           <div class='game-title-section'>
             <h4 class='game-name'>{{if
-                @model.title
-                @model.title
+                @model.cardTitle
+                @model.cardTitle
                 'Untitled Game'
               }}</h4>
             <div class='game-badges'>

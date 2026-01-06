@@ -4,8 +4,8 @@
     "attributes": {
       "name": "Chuan",
       "email": "chuan@gmail.com",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "team": {

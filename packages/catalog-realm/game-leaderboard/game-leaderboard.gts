@@ -974,7 +974,7 @@ export class GameLeaderboard extends CardDef {
   static displayName = 'Game Leaderboard';
   static icon = GamepadIcon;
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: GameLeaderboard) {
       return 'Game Leaderboard';
     },

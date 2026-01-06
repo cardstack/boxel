@@ -35,7 +35,7 @@ export default class AuthorDisplay extends GlimmerComponent<AuthorDisplayArgs> {
   }
 
   get thumbnailURL() {
-    return this.args.author?.thumbnailURL;
+    return this.args.author?.cardThumbnailURL;
   }
 
   <template>
@@ -44,7 +44,7 @@ export default class AuthorDisplay extends GlimmerComponent<AuthorDisplayArgs> {
         <Avatar
           @userId={{this.authorId}}
           @displayName={{this.displayName}}
-          @thumbnailURL={{this.thumbnailURL}}
+          @thumbnailURL={{this.cardThumbnailURL}}
           @isReady={{true}}
           class='author-avatar'
         />

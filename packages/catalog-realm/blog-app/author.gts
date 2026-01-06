@@ -52,7 +52,7 @@ export class Author extends CardDef {
   static icon = UserRoundPen;
   @field firstName = contains(StringField);
   @field lastName = contains(StringField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Author) {
       let fullName = [this.firstName, this.lastName].filter(Boolean).join(' ');
       return fullName.length ? fullName : 'Untitled Author';
@@ -76,8 +76,8 @@ export class Author extends CardDef {
       <article class='author-bio'>
         <header>
           <div class='title-group'>
-            <h1><@fields.title /></h1>
-            <p class='description'><@fields.description /></p>
+            <h1><@fields.cardTitle /></h1>
+            <p class='description'><@fields.cardDescription /></p>
             {{#if @model.quote}}
               <blockquote class='quote'>
                 <p><@fields.quote /></p>
@@ -209,17 +209,17 @@ export class Author extends CardDef {
       <article class='author-embedded'>
         <div
           class='thumbnail-image'
-          style={{setBackgroundImage @model.thumbnailURL}}
-          role={{if @model.thumbnailURL 'img'}}
-          alt={{if @model.thumbnailURL @model.title}}
+          style={{setBackgroundImage @model.cardThumbnailURL}}
+          role={{if @model.cardThumbnailURL 'img'}}
+          alt={{if @model.cardThumbnailURL @model.cardTitle}}
         >
-          {{#unless @model.thumbnailURL}}
+          {{#unless @model.cardThumbnailURL}}
             <UserIcon width='30' height='30' />
           {{/unless}}
         </div>
         <header>
-          <h3><@fields.title /></h3>
-          <p class='desc'><@fields.description /></p>
+          <h3><@fields.cardTitle /></h3>
+          <p class='desc'><@fields.cardDescription /></p>
         </header>
         <p class='bio'><@fields.bio /></p>
         <div class='author-bio-links'>
@@ -295,18 +295,18 @@ export class Author extends CardDef {
   static atom = class Atom extends Component<typeof this> {
     <template>
       <span class='author-atom'>
-        {{#if @model.thumbnailURL}}
+        {{#if @model.cardThumbnailURL}}
           <span
             class='author-thumbnail'
-            style={{setBackgroundImage @model.thumbnailURL}}
+            style={{setBackgroundImage @model.cardThumbnailURL}}
             role='img'
-            alt={{@model.title}}
+            alt={{@model.cardTitle}}
           />
         {{else}}
           <UserIcon class='author-icon' width='20' height='20' />
         {{/if}}
         <span class='author-title'>
-          <@fields.title />
+          <@fields.cardTitle />
         </span>
       </span>
       <style scoped>
@@ -342,18 +342,18 @@ export class Author extends CardDef {
     <template>
       <article class='author-fitted'>
         <div
-          class={{cn 'author-thumbnail' is-icon=(not @model.thumbnailURL)}}
-          style={{setBackgroundImage @model.thumbnailURL}}
-          role={{if @model.thumbnailURL 'img'}}
-          alt={{if @model.thumbnailURL @model.title}}
+          class={{cn 'author-thumbnail' is-icon=(not @model.cardThumbnailURL)}}
+          style={{setBackgroundImage @model.cardThumbnailURL}}
+          role={{if @model.cardThumbnailURL 'img'}}
+          alt={{if @model.cardThumbnailURL @model.cardTitle}}
         >
-          {{#unless @model.thumbnailURL}}
+          {{#unless @model.cardThumbnailURL}}
             <UserIcon width='24' height='24' />
           {{/unless}}
         </div>
         <header class='title-group'>
-          <h3 class='title'><@fields.title /></h3>
-          <p class='description'><@fields.description /></p>
+          <h3 class='title'><@fields.cardTitle /></h3>
+          <p class='description'><@fields.cardDescription /></p>
         </header>
         <p class='bio'><@fields.bio /></p>
         <div class='links'><@fields.contactLinks @format='atom' /></div>

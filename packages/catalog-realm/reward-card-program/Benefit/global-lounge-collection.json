@@ -24,9 +24,9 @@
       "partner": "Centurion Lounges & Partners",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "minSpend": {
         "amount": null,

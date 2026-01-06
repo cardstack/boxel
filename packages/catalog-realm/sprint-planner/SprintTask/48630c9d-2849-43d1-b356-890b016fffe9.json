@@ -18,8 +18,8 @@
       },
       "name": "Fill up task board with realistic data",
       "details": "### Objective\nPopulate the task board with realistic sample data that demonstrates the full capabilities of our markdown and task tracking features.\n\n#### Requirements\n- [ ] Add variety of task statuses (Todo, In Progress, Done)\n- [ ] Include tasks with different priority levels\n- [ ] Create sample tasks with rich markdown content\n- [ ] Add realistic date ranges and deadlines",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "project": {
