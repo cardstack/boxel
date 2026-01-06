@@ -779,35 +779,47 @@ export async function withTimeout<T>(
     let [_a, _b, encodedId] = url.pathname.split('/');
     let id = encodedId ? decodeURIComponent(encodedId) : undefined;
 
-    let dom = await page.evaluate(() => {
-      let el = document.querySelector('[data-prerender]');
-      if (el) {
-        return el.outerHTML;
-      }
-      let err = document.querySelector('[data-prerender-error]');
-      return err?.outerHTML ?? null;
-    });
-    let docsInFlight = await page.evaluate(() => {
+    // Capture diagnostics only if the page is still alive; timeouts can close the target.
+    let dom: string | null = null;
+    let docsInFlight: number | null = null;
+    let timerSummary: string | null = null;
+    if (!page.isClosed()) {
       try {
-        return (globalThis as any).__docsInFlight();
-      } catch (error) {
-        return null;
-      }
-    });
-    let timerSummary: string | null = await page.evaluate(() => {
-      try {
-        let summary = (globalThis as any).__boxelRenderTimerSummary;
-        if (typeof summary === 'function') {
-          return summary();
-        }
-        if (typeof summary === 'string') {
-          return summary;
-        }
+        dom = await page.evaluate(() => {
+          let el = document.querySelector('[data-prerender]');
+          if (el) {
+            return el.outerHTML;
+          }
+          let err = document.querySelector('[data-prerender-error]');
+          return err?.outerHTML ?? null;
+        });
+        docsInFlight = await page.evaluate(() => {
+          try {
+            return (globalThis as any).__docsInFlight();
+          } catch (error) {
+            return null;
+          }
+        });
+        timerSummary = await page.evaluate(() => {
+          try {
+            let summary = (globalThis as any).__boxelRenderTimerSummary;
+            if (typeof summary === 'function') {
+              return summary();
+            }
+            if (typeof summary === 'string') {
+              return summary;
+            }
+          } catch {
+            return null;
+          }
+          return null;
+        });
       } catch {
-        return null;
+        dom = null;
+        docsInFlight = null;
+        timerSummary = null;
       }
-      return null;
-    });
+    }
     log.warn(
       `render of ${id} timed out with DOM:\n${dom?.trim()}\nDocs in flight: ${docsInFlight}`,
     );

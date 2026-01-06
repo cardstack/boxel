@@ -3137,7 +3137,7 @@ export class Realm {
       : undefined;
     let acceptedTypes = requestedType
       ? [requestedType, `${requestedType}-error`]
-      : ['instance', 'instance-error'];
+      : ['instance', 'instance-error', 'module', 'module-error'];
 
     let rows = (await query(this.#dbAdapter, [
       `SELECT url, realm_url, deps, type FROM boxel_index WHERE (url =`,
@@ -3210,7 +3210,7 @@ export class Realm {
     let errorRows = (await query(this.#dbAdapter, [
       `SELECT url, error_doc FROM boxel_index WHERE realm_url =`,
       param(sourceRealmURL),
-      `AND type = 'module-error'`,
+      `AND type = 'instance-error'`,
       `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
     ])) as { url: string; error_doc: unknown | null }[];
 
@@ -3324,7 +3324,6 @@ export class Realm {
     ): Promise<ResourceIndexEntry[] | undefined> => {
       let endpoint = new URL('_dependencies', base);
       endpoint.searchParams.set('url', resourceUrl);
-      endpoint.searchParams.set('type', 'instance');
       let response: Response;
       try {
         response = await this.__fetchForTesting(endpoint, {
