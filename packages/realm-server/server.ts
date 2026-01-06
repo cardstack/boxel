@@ -79,6 +79,7 @@ export class RealmServer {
   private matrixRegistrationSecret: string | undefined;
   private promiseForIndexHTML: Promise<string> | undefined;
   private promiseForBoxelVariablesCSS: Promise<string | null> | undefined;
+  private promiseForBoxelGlobalCSS: Promise<string | null> | undefined;
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
@@ -339,11 +340,21 @@ export class RealmServer {
 
       let responseHTML = indexHTML;
       let headFragments: string[] = [];
-      let boxelVariablesCSS =
-        scopedCSS != null ? await this.retrieveBoxelVariablesCSS() : null;
+      let [boxelVariablesCSS, boxelGlobalCSS] =
+        scopedCSS != null
+          ? await Promise.all([
+              this.retrieveBoxelVariablesCSS(),
+              this.retrieveBoxelGlobalCSS(),
+            ])
+          : [null, null];
       if (boxelVariablesCSS != null) {
         headFragments.push(
           `<style data-boxel-base-vars>\n${boxelVariablesCSS}\n</style>`,
+        );
+      }
+      if (boxelGlobalCSS != null) {
+        headFragments.push(
+          `<style data-boxel-base-global>\n${boxelGlobalCSS}\n</style>`,
         );
       }
       if (headHTML != null) {
@@ -580,6 +591,33 @@ export class RealmServer {
     }
   }
 
+  private async retrieveBoxelGlobalCSS(): Promise<string | null> {
+    if (this.promiseForBoxelGlobalCSS) {
+      return this.promiseForBoxelGlobalCSS;
+    }
+    let deferred = new Deferred<string | null>();
+    this.promiseForBoxelGlobalCSS = deferred.promise;
+
+    let cssPath = this.findBoxelGlobalCSSPath();
+    if (!cssPath) {
+      this.scopedCssLog.debug('Boxel base global CSS not found');
+      deferred.fulfill(null);
+      return deferred.promise;
+    }
+
+    try {
+      let css = await readFile(cssPath, 'utf8');
+      deferred.fulfill(css);
+      return css;
+    } catch (error) {
+      this.scopedCssLog.debug(
+        `Failed to read Boxel base global CSS: ${error}`,
+      );
+      deferred.fulfill(null);
+      return deferred.promise;
+    }
+  }
+
   private stripProtocol(href: string): string {
     return href.replace(/^https?:\/\//, '');
   }
@@ -635,6 +673,38 @@ export class RealmServer {
         'src',
         'styles',
         'variables.css',
+      ),
+    ];
+
+    for (let candidate of candidates) {
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  private findBoxelGlobalCSSPath(): string | null {
+    let candidates = [
+      resolve(
+        process.cwd(),
+        'packages',
+        'boxel-ui',
+        'addon',
+        'src',
+        'styles',
+        'global.css',
+      ),
+      resolve(__dirname, '..', 'boxel-ui', 'addon', 'src', 'styles', 'global.css'),
+      resolve(
+        __dirname,
+        '..',
+        '..',
+        'boxel-ui',
+        'addon',
+        'src',
+        'styles',
+        'global.css',
       ),
     ];
 
