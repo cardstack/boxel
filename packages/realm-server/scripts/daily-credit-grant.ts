@@ -1,5 +1,5 @@
-import './instrument';
-import './setup-logger'; // This should be first
+import '../instrument';
+import '../setup-logger'; // This should be first
 import { logger } from '@cardstack/runtime-common';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import * as Sentry from '@sentry/node';
