@@ -15,14 +15,15 @@ export interface Model {
 
 export default class RenderIconRoute extends Route<Model> {
   async model() {
-    let parentModel = this.modelFor('render') as ParentModel;
-    let instance: CardDef;
-    if (!parentModel) {
-      // this is to support in-browser rendering, where we actually don't have the
-      // ability to lookup the parent route using RouterService.recognizeAndLoad()
-      instance = (globalThis as any).__renderInstance;
-    } else {
-      instance = parentModel.instance;
+    let parentModel = this.modelFor('render') as ParentModel | undefined;
+    // the global use below is to support in-browser rendering, where we actually don't have the
+    // ability to lookup the parent route using RouterService.recognizeAndLoad()
+    let renderModel =
+      parentModel ??
+      ((globalThis as any).__renderModel as ParentModel | undefined);
+    let instance: CardDef | undefined = renderModel?.instance;
+    if (!instance) {
+      throw new Error('Missing render instance');
     }
     return { Component: cardTypeIcon(instance) };
   }
