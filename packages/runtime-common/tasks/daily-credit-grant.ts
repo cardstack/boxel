@@ -1,6 +1,13 @@
 import type * as JSONTypes from 'json-typescript';
 import type { Task } from './index';
-import { asExpressions, insert, jobIdentity, query } from '../index';
+import {
+  addExplicitParens,
+  asExpressions,
+  jobIdentity,
+  query,
+  separatedByCommas,
+  type Expression,
+} from '../index';
 
 export interface DailyCreditGrantArgs extends JSONTypes.Object {
   lowCreditThreshold: number;
@@ -29,6 +36,9 @@ const dailyCreditGrant: Task<DailyCreditGrantArgs, void> = ({
       );
     }
 
+    // PERF: This scans all users + aggregates full ledger each run; consider a
+    // materialized balance table/view (or denormalized user balance) to avoid
+    // re-summing credits_ledger and to make the daily eligibility check cheaper.
     let rows = await query(dbAdapter, [
       `SELECT users.id as user_id,
         COALESCE(SUM(credits_ledger.credit_amount), 0) as credit_balance,
@@ -45,6 +55,12 @@ const dailyCreditGrant: Task<DailyCreditGrantArgs, void> = ({
     ]);
 
     let grantedCount = 0;
+    let rowsToInsert: {
+      user_id: string;
+      credit_amount: number;
+      credit_type: 'daily_credit';
+      subscription_cycle_id: null;
+    }[] = [];
     for (let row of rows) {
       let currentBalance = Number(row.credit_balance ?? 0);
       let grantedToday = Boolean(row.granted_today);
@@ -56,17 +72,37 @@ const dailyCreditGrant: Task<DailyCreditGrantArgs, void> = ({
         continue;
       }
 
-      let { nameExpressions, valueExpressions } = asExpressions({
+      rowsToInsert.push({
         user_id: row.user_id,
         credit_amount: creditAmount,
         credit_type: 'daily_credit',
         subscription_cycle_id: null,
       });
-      await query(
-        dbAdapter,
-        insert('credits_ledger', nameExpressions, valueExpressions),
-      );
       grantedCount++;
+    }
+
+    if (rowsToInsert.length > 0) {
+      let nameExpressions: string[][] | undefined;
+      let valueRows: Expression[][] = [];
+      for (let row of rowsToInsert) {
+        let { nameExpressions: rowNames, valueExpressions } = asExpressions(row);
+        if (!nameExpressions) {
+          nameExpressions = rowNames;
+        }
+        valueRows.push(valueExpressions);
+      }
+
+      await query(dbAdapter, [
+        'INSERT INTO',
+        'credits_ledger',
+        ...addExplicitParens(separatedByCommas(nameExpressions!)),
+        'VALUES',
+        ...separatedByCommas(
+          valueRows.map((valueExpressions) =>
+            addExplicitParens(separatedByCommas(valueExpressions)),
+          ),
+        ),
+      ]);
     }
 
     log.info(
