@@ -515,7 +515,6 @@ export default class RenderRoute extends Route<Model> {
   #setupTransitionHelper(id: string, nonce: string, options: string) {
     let baseParams: [string, string, string] = [id, nonce, options];
     this.renderBaseParams = baseParams;
-    (globalThis as any).__boxelRenderBaseParams = baseParams;
     (globalThis as any).boxelTransitionTo = (
       routeName: Parameters<RouterService['transitionTo']>[0],
       ...params: any[]
@@ -525,7 +524,6 @@ export default class RenderRoute extends Route<Model> {
           baseParams = params.slice(0, 3) as [string, string, string];
         }
         this.renderBaseParams = baseParams;
-        (globalThis as any).__boxelRenderBaseParams = baseParams;
         join(() =>
           this.router.transitionTo(
             routeName as never,
@@ -548,7 +546,6 @@ export default class RenderRoute extends Route<Model> {
           join(() => this.router.transitionTo('render', ...targetBase));
           baseParams = targetBase;
           this.renderBaseParams = baseParams;
-          (globalThis as any).__boxelRenderBaseParams = baseParams;
           normalized = normalized.slice(3);
         }
         join(() => this.router.transitionTo(routeName, ...normalized));
