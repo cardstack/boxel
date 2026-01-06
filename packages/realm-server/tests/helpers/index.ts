@@ -1174,6 +1174,7 @@ export function setupPermissionedRealm(
   hooks: NestedHooks,
   {
     permissions,
+    realmURL,
     fileSystem,
     onRealmSetup,
     subscribeToRealmEvents = false,
@@ -1181,6 +1182,7 @@ export function setupPermissionedRealm(
     published = false,
   }: {
     permissions: RealmPermissions;
+    realmURL?: URL;
     fileSystem?: Record<string, string | LooseSingleCardDocument>;
     onRealmSetup?: (args: {
       dbAdapter: PgAdapter;
@@ -1206,6 +1208,7 @@ export function setupPermissionedRealm(
       publisher: QueuePublisher,
       runner: QueueRunner,
     ) => {
+      let resolvedRealmURL = realmURL ?? testRealmURL;
       let dir = dirSync();
 
       let testRealmDir;
@@ -1229,7 +1232,7 @@ export function setupPermissionedRealm(
               '${publishedRealmId}',
               '@user:localhost',
               'http://example.localhost/source',
-              '${testRealmHref}'
+              '${resolvedRealmURL.href}'
             )`,
         );
       } else {
@@ -1249,7 +1252,7 @@ export function setupPermissionedRealm(
         virtualNetwork,
         testRealmDir,
         realmsRootPath: join(dir.name, 'realm_server_1'),
-        realmURL: testRealmURL,
+        realmURL: resolvedRealmURL,
         permissions,
         dbAdapter,
         runner,

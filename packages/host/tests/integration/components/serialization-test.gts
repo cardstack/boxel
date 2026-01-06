@@ -4198,7 +4198,7 @@ module('Integration | serialization', function (hooks) {
       'favorite search link points to canonical search endpoint',
     );
     let favoriteQueryParams = parseQueryString(
-      favoriteSearchURL.searchParams.toString(),
+      favoriteSearchURL.searchParams.get('query') ?? '',
     ) as Record<string, any>;
     assert.strictEqual(
       favoriteQueryParams.filter?.eq?.title,
@@ -4227,7 +4227,7 @@ module('Integration | serialization', function (hooks) {
       'matches search link points to canonical search endpoint',
     );
     let matchesQueryParams = parseQueryString(
-      matchesSearchURL.searchParams.toString(),
+      matchesSearchURL.searchParams.get('query') ?? '',
     ) as Record<string, any>;
     assert.strictEqual(
       matchesQueryParams.page?.size,
