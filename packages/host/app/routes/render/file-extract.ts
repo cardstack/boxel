@@ -12,6 +12,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import { errorJsonApiToErrorEntry } from '../../lib/window-error-handler';
+import type { Model as RenderModel } from '../render';
 
 import type LoaderService from '../../services/loader-service';
 import type NetworkService from '../../services/network';
@@ -23,12 +24,24 @@ export default class RenderFileExtractRoute extends Route<Model> {
   @service declare network: NetworkService;
 
   async model(_: unknown, transition: Transition): Promise<Model> {
-    let { id, nonce, options } = this.paramsFor('render') as {
-      id: string;
-      nonce: string;
-      options?: string;
-    };
-    let parsedOptions = parseRenderRouteOptions(options);
+    let renderModel = transition.resolvedModels?.render as
+      | RenderModel
+      | undefined;
+    if (!renderModel) {
+      return {
+        id: 'unknown',
+        nonce: 'unknown',
+        status: 'error',
+        searchDoc: null,
+        deps: [],
+        error: this.#buildError(
+          'unknown',
+          new Error('missing render route model'),
+        ),
+      };
+    }
+    let { cardId, nonce, renderOptions: parsedOptions } = renderModel;
+    let id = cardId;
     if (!parsedOptions.fileExtract) {
       transition.abort();
       return {
@@ -44,30 +57,72 @@ export default class RenderFileExtractRoute extends Route<Model> {
     let fileDefModule =
       parsedOptions.fileDefModule ?? `${baseRealm.url}file-api`;
     let fileURL = this.#decodeURL(id);
-    let response = await this.network.authedFetch(fileURL, {
-      method: 'GET',
-      headers: {
-        Accept: SupportedMimeType.CardSource,
-      },
-    });
-    if (!response.ok) {
-      return {
-        id: fileURL,
-        nonce,
-        status: 'error',
-        searchDoc: null,
-        deps: [fileURL, fileDefModule],
-        error: this.#buildError(
-          fileURL,
-          new Error(`Failed to fetch file (${response.status})`),
-        ),
-      };
+    let contentHash: string | undefined = parsedOptions.fileContentHash;
+    if (!contentHash) {
+      try {
+        let metaResponse = await this.network.authedFetch(fileURL, {
+          method: 'GET',
+          headers: {
+            Accept: SupportedMimeType.FileMeta,
+          },
+        });
+        if (!metaResponse.ok) {
+          console.warn('file extract meta returned non-ok', {
+            fileURL,
+            status: metaResponse.status,
+          });
+        } else {
+          contentHash =
+            metaResponse.headers.get('x-boxel-content-hash') ?? undefined;
+        }
+      } catch (error) {
+        console.warn('file extract meta fetch failed', { fileURL, error });
+      }
     }
-
-    let [primaryStream, fallbackStream] = await this.#teeResponse(response);
+    let streamsPromise:
+      | Promise<
+          [
+            ReadableStream<Uint8Array> | Uint8Array,
+            ReadableStream<Uint8Array> | Uint8Array,
+          ]
+        >
+      | null = null;
+    let getStreams = async () => {
+      if (!streamsPromise) {
+        streamsPromise = (async () => {
+          let response: Response;
+          try {
+            response = await this.network.authedFetch(fileURL, {
+              method: 'GET',
+              headers: {
+                Accept: SupportedMimeType.CardSource,
+              },
+            });
+          } catch (error) {
+            console.warn('file extract fetch failed', { fileURL, error });
+            throw error;
+          }
+          if (!response.ok) {
+            console.warn('file extract fetch returned non-ok', {
+              fileURL,
+              status: response.status,
+            });
+            throw new Error(`Failed to fetch file (${response.status})`);
+          }
+          return await this.#teeResponse(response);
+        })();
+      }
+      return streamsPromise;
+    };
+    let getPrimaryStream = async () => (await getStreams())[0];
+    let getFallbackStream = async () => (await getStreams())[1];
     let { FileDef } = await this.loaderService.loader.import<{
       FileDef?: {
-        extractAttributes: (url: string, stream: unknown) => Promise<any>;
+        extractAttributes: (
+          url: string,
+          getStream: () => Promise<unknown>,
+          options?: { contentHash?: string },
+        ) => Promise<any>;
       };
     }>(fileDefModule);
     if (!FileDef?.extractAttributes) {
@@ -86,7 +141,11 @@ export default class RenderFileExtractRoute extends Route<Model> {
     let baseModule = `${baseRealm.url}file-api`;
     let { FileDef: BaseFileDef } = await this.loaderService.loader.import<{
       FileDef?: {
-        extractAttributes: (url: string, stream: unknown) => Promise<any>;
+        extractAttributes: (
+          url: string,
+          getStream: () => Promise<unknown>,
+          options?: { contentHash?: string },
+        ) => Promise<any>;
       };
     }>(baseModule);
     if (!BaseFileDef?.extractAttributes) {
@@ -108,7 +167,11 @@ export default class RenderFileExtractRoute extends Route<Model> {
     let mismatch = false;
 
     try {
-      let searchDoc = await FileDef.extractAttributes(fileURL, primaryStream);
+      let searchDoc = await FileDef.extractAttributes(
+        fileURL,
+        getPrimaryStream,
+        { contentHash },
+      );
       return {
         id: fileURL,
         nonce,
@@ -128,7 +191,8 @@ export default class RenderFileExtractRoute extends Route<Model> {
     try {
       let searchDoc = await BaseFileDef.extractAttributes(
         fileURL,
-        fallbackStream,
+        getFallbackStream,
+        { contentHash },
       );
       return {
         id: fileURL,

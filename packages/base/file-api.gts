@@ -71,17 +71,20 @@ export class FileDef extends BaseDef {
 
   static async extractAttributes(
     url: string,
-    stream: ByteStream,
+    getStream: () => Promise<ByteStream>,
+    options: { contentHash?: string } = {},
   ): Promise<SerializedFile> {
     let parsed = new URL(url);
     let name = parsed.pathname.split('/').pop() ?? parsed.pathname;
     let contentType = inferContentType(name);
-    let bytes = await byteStreamToUint8Array(stream);
-    let contentHash: string | undefined;
-    try {
-      contentHash = md5(bytes as unknown as Uint8Array);
-    } catch {
-      contentHash = md5(new TextDecoder().decode(bytes));
+    let contentHash: string | undefined = options.contentHash;
+    if (!contentHash) {
+      let bytes = await byteStreamToUint8Array(await getStream());
+      try {
+        contentHash = md5(bytes as unknown as Uint8Array);
+      } catch {
+        contentHash = md5(new TextDecoder().decode(bytes));
+      }
     }
 
     return {

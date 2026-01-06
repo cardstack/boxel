@@ -13,6 +13,7 @@ import {
   removeSync,
   writeFileSync,
 } from 'fs-extra';
+import { md5 } from 'super-fast-md5';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   baseRealm,
@@ -215,6 +216,12 @@ module(basename(__filename), function () {
           SupportedMimeType.FileMeta,
         ),
         'content-type uses file meta mime type',
+      );
+      let fileBytes = readFileSync(join(testRealmDir, 'person.gts'));
+      assert.strictEqual(
+        response.headers['x-boxel-content-hash'],
+        md5(fileBytes as unknown as Uint8Array),
+        'content hash header matches file contents',
       );
 
       let json = response.body as LooseSingleCardDocument;

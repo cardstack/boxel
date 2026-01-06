@@ -3,12 +3,14 @@ import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
+import { md5 } from 'super-fast-md5';
 
 import {
   baseRealm,
   baseCardRef,
   internalKeyFor,
   skillCardRef,
+  SupportedMimeType,
   type LooseSingleCardDocument,
   type IndexedInstance,
   type Realm,
@@ -165,6 +167,34 @@ module(`Integration | realm indexing`, function (hooks) {
     ]);
   });
 
+  test('indexing captures file meta content hash', async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'notes.txt': 'Hello from the test realm.',
+      },
+    });
+
+    await realm.fullIndex();
+
+    let { virtualNetwork } = getService('network');
+    let response = await virtualNetwork.fetch(
+      new URL('notes.txt', testRealmURL),
+      {
+        headers: { Accept: SupportedMimeType.FileMeta },
+      },
+    );
+
+    assert.true(response.ok, 'file meta request succeeds');
+
+    let body = await response.json();
+    let contentHash = body?.data?.attributes?.contentHash;
+    let expectedHash = md5(
+      new TextEncoder().encode('Hello from the test realm.'),
+    );
+    assert.strictEqual(contentHash, expectedHash, 'content hash is returned');
+  });
+
   test('full indexing skips over unchanged items in index', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -202,11 +232,13 @@ module(`Integration | realm indexing`, function (hooks) {
     assert.deepEqual(
       realm.realmIndexUpdater.stats,
       {
+        filesIndexed: 3,
+        fileErrors: 0,
         instanceErrors: 0,
         instancesIndexed: 2,
         moduleErrors: 0,
         modulesIndexed: 1,
-        totalIndexEntries: 3,
+        totalIndexEntries: 6,
       },
       'indexer stats are correct',
     );
@@ -236,11 +268,13 @@ module(`Integration | realm indexing`, function (hooks) {
     assert.deepEqual(
       realm.realmIndexUpdater.stats,
       {
+        filesIndexed: 1,
+        fileErrors: 0,
         instanceErrors: 0,
         instancesIndexed: 1,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 3,
+        totalIndexEntries: 6,
       },
       'indexer stats are correct',
     );
@@ -3541,11 +3575,13 @@ module(`Integration | realm indexing`, function (hooks) {
     assert.deepEqual(
       realmIndexUpdater.stats,
       {
+        filesIndexed: 3,
+        fileErrors: 0,
         instanceErrors: 0,
         instancesIndexed: 3,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 3,
+        totalIndexEntries: 6,
       },
       'instances are indexed without error',
     );

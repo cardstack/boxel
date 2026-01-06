@@ -4,6 +4,7 @@ export interface RenderRouteOptions {
   clearCache?: true;
   fileExtract?: true;
   fileDefModule?: string;
+  fileContentHash?: string;
 }
 
 export function parseRenderRouteOptions(
@@ -23,6 +24,9 @@ export function parseRenderRouteOptions(
       if (typeof parsed.fileDefModule === 'string') {
         options.fileDefModule = parsed.fileDefModule;
       }
+      if (typeof parsed.fileContentHash === 'string') {
+        options.fileContentHash = parsed.fileContentHash;
+      }
     }
     return options;
   } catch {
@@ -41,6 +45,9 @@ export function serializeRenderRouteOptions(
     serialized.fileExtract = true;
     if (options.fileDefModule) {
       serialized.fileDefModule = options.fileDefModule;
+    }
+    if (options.fileContentHash) {
+      serialized.fileContentHash = options.fileContentHash;
     }
   }
   return stringify(serialized) ?? '{}';
