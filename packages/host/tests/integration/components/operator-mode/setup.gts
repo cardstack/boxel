@@ -376,6 +376,20 @@ export function setupOperatorModeTests(
       };
     }
 
+    class ExplodingCard extends CardDef {
+      static displayName = 'Exploding Card';
+      @field name = contains(StringField);
+      @field status = contains(StringField);
+      @field title = contains(StringField, {
+        computeVia: function (this: ExplodingCard) {
+          if (this.status === 'boom') {
+            throw new Error('Boom!');
+          }
+          return this.name;
+        },
+      });
+    }
+
     class PublishingPacket extends CardDef {
       static displayName = 'Publishing Packet';
       static headerColor = '#6638ff'; // rgb(102, 56, 255);
@@ -409,6 +423,10 @@ export function setupOperatorModeTests(
       body: 'Hello world',
       authorBio: author1,
     });
+    let explodingCard = new ExplodingCard({
+      name: 'Stable Example',
+      status: 'ok',
+    });
 
     //Generate 11 person card to test recent card menu in card sheet
     let personCards: Map<String, any> = new Map<String, any>();
@@ -437,6 +455,7 @@ export function setupOperatorModeTests(
           'boom-field.gts': { BoomField },
           'boom-pet.gts': { BoomPet },
           'blog-post.gts': { BlogPost },
+          'exploding-card.gts': { ExplodingCard },
           'car.gts': { Car },
           'author.gts': { Author },
           'friend.gts': { Friend },
@@ -598,6 +617,7 @@ export function setupOperatorModeTests(
           }),
           'BlogPost/1.json': blogPost,
           'BlogPost/2.json': new BlogPost({ title: 'Beginnings' }),
+          'ExplodingCard/1.json': explodingCard,
           'CardDef/1.json': new CardDef({ title: 'CardDef instance' }),
           'PublishingPacket/story.json': new PublishingPacket({
             title: 'Space Story',

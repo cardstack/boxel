@@ -63,6 +63,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         let json = response.body;
         for (let relationship of Object.values(json.data.relationships)) {
           delete (relationship as any).meta.lastModified;
+          delete (relationship as any).meta.resourceCreatedAt;
         }
         assert.deepEqual(
           json,

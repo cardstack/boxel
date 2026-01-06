@@ -50,13 +50,16 @@ export function coerceRenderError(reason: unknown): RenderError | undefined {
       if (Array.isArray(errors) && errors.length > 0) {
         let cardError = coerceCardError(errors[0]);
         if (cardError) {
-          return { type: 'error', error: serializableError(cardError) };
+          return {
+            type: 'instance-error',
+            error: serializableError(cardError),
+          };
         }
       }
     }
     let cardError = coerceCardError(reason);
     if (cardError) {
-      return { type: 'error', error: serializableError(cardError) };
+      return { type: 'instance-error', error: serializableError(cardError) };
     }
   }
   return undefined;

@@ -16,35 +16,32 @@ import ms from 'ms';
 
 import { validate as uuidValidate } from 'uuid';
 
-import type {
-  RealmAdapter,
-  LooseSingleCardDocument,
-  RealmPermissions,
-  RealmAction,
-} from '@cardstack/runtime-common';
 import {
   baseRealm,
-  Worker,
-  IndexWriter,
-  type RealmInfo,
-  type TokenClaims,
-  type Prerenderer,
-  insertPermissions,
-  unixTime,
-  type RenderError,
-  type DefinitionLookup,
   CachingDefinitionLookup,
-} from '@cardstack/runtime-common';
-import { getCreatedTime } from '@cardstack/runtime-common/file-meta';
-import {
+  ensureTrailingSlash,
+  getCreatedTime,
+  IndexWriter,
+  insertPermissions,
+  Loader,
+  MatrixClient,
+  Realm,
   testHostModeRealmURL,
   testRealmInfo,
   testRealmURL,
   testRealmURLToUsername,
-} from '@cardstack/runtime-common/helpers/const';
-import { Loader } from '@cardstack/runtime-common/loader';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import { Realm } from '@cardstack/runtime-common/realm';
+  unixTime,
+  Worker,
+  type DefinitionLookup,
+  type LooseSingleCardDocument,
+  type Prerenderer,
+  type RealmAction,
+  type RealmAdapter,
+  type RealmInfo,
+  type RealmPermissions,
+  type RenderError,
+  type TokenClaims,
+} from '@cardstack/runtime-common';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
@@ -86,6 +83,14 @@ export * from '@cardstack/runtime-common/helpers';
 export * from './indexer';
 
 export const testModuleRealm = 'http://localhost:4202/test/';
+
+export {
+  catalogRealm,
+  skillsRealm,
+  skillCardURL,
+  devSkillId,
+  envSkillId,
+} from '@cardstack/host/lib/utils';
 
 const { sqlSchema } = ENV;
 
@@ -832,11 +837,19 @@ async function setupTestRealm({
 const authHandlerStateSymbol = Symbol('test-auth-handler-state');
 const TEST_MATRIX_USER = '@testuser:localhost';
 
+type EnsureSessionRoom = (
+  realmURL: string,
+  userId: string,
+) => Promise<void> | void;
+
 type AuthHandlerState = {
   handler: (req: Request) => Promise<Response | null>;
   realmPermissions: Map<string, RealmAction[]>;
   mountedVirtualNetwork?: unknown;
+  ensureSessionRoom?: EnsureSessionRoom;
 };
+
+let sessionRoomEnsurer: EnsureSessionRoom | undefined;
 
 function ensureAuthHandlerState(network: NetworkService): AuthHandlerState {
   let state = (network as any)[authHandlerStateSymbol] as
@@ -848,6 +861,9 @@ function ensureAuthHandlerState(network: NetworkService): AuthHandlerState {
       if (req.url.includes('_realm-auth')) {
         const authTokens: Record<string, string> = {};
         for (let [realmURL, permissions] of realmPermissions.entries()) {
+          if (state && state.ensureSessionRoom) {
+            await state.ensureSessionRoom(realmURL, TEST_MATRIX_USER);
+          }
           authTokens[realmURL] = createJWT(
             {
               user: TEST_MATRIX_USER,
@@ -863,35 +879,35 @@ function ensureAuthHandlerState(network: NetworkService): AuthHandlerState {
       }
       if (req.url.includes('_server-session')) {
         let data = await req.json();
-        if (!data.challenge) {
+        if (!data.access_token) {
           return new Response(
             JSON.stringify({
-              challenge: 'test',
-              room: 'test-auth-realm-server-session-room',
+              errors: [`Request body missing 'access_token' property`],
             }),
-            {
-              status: 401,
-            },
+            { status: 400 },
           );
-        } else {
-          return new Response('Ok', {
-            status: 200,
-            headers: {
-              Authorization: createJWT(
-                {
-                  user: TEST_MATRIX_USER,
-                  sessionRoom: 'test-auth-realm-server-session-room',
-                },
-                '1d',
-                testRealmSecretSeed,
-              ),
-            },
-          });
         }
+        return new Response(null, {
+          status: 201,
+          headers: {
+            Authorization: createJWT(
+              {
+                user: TEST_MATRIX_USER,
+                sessionRoom: 'test-auth-realm-server-session-room',
+              },
+              '1d',
+              testRealmSecretSeed,
+            ),
+          },
+        });
       }
       return null;
     };
-    state = { realmPermissions, handler };
+    state = {
+      realmPermissions,
+      handler,
+      ensureSessionRoom: sessionRoomEnsurer,
+    };
     (network as any)[authHandlerStateSymbol] = state;
   }
   if (state.mountedVirtualNetwork !== network.virtualNetwork) {
@@ -917,6 +933,19 @@ export function setupAuthEndpoints(
   }
 }
 
+export function registerRealmAuthSessionRoomEnsurer(
+  callback: EnsureSessionRoom,
+) {
+  sessionRoomEnsurer = callback;
+  let network = getService('network') as NetworkService;
+  let state = (network as any)[authHandlerStateSymbol] as
+    | AuthHandlerState
+    | undefined;
+  if (state) {
+    state.ensureSessionRoom = callback;
+  }
+}
+
 function deriveTestUserPermissions(
   permissions?: RealmPermissions,
 ): RealmAction[] {
@@ -936,10 +965,6 @@ function deriveTestUserPermissions(
     return firstEntry as RealmAction[];
   }
   return ['read', 'write'];
-}
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
 }
 
 export function setupUserSubscription() {
@@ -1177,31 +1202,27 @@ export function setupRealmServerEndpoints(
       route: '_server-session',
       getResponse: async function (req: Request) {
         let data = await req.json();
-        if (!data.challenge) {
+        if (!data.access_token) {
           return new Response(
             JSON.stringify({
-              challenge: 'test',
-              room: 'boxel-session-room-id',
+              errors: [`Request body missing 'access_token' property`],
             }),
-            {
-              status: 401,
-            },
+            { status: 400 },
           );
-        } else {
-          return new Response('Ok', {
-            status: 200,
-            headers: {
-              Authorization: createJWT(
-                {
-                  user: '@testuser:localhost',
-                  sessionRoom: 'boxel-session-room-id',
-                },
-                '1d',
-                testRealmSecretSeed,
-              ),
-            },
-          });
         }
+        return new Response(null, {
+          status: 201,
+          headers: {
+            Authorization: createJWT(
+              {
+                user: '@testuser:localhost',
+                sessionRoom: 'boxel-session-room-id',
+              },
+              '1d',
+              testRealmSecretSeed,
+            ),
+          },
+        });
       },
     },
     {

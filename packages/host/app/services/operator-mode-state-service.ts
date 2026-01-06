@@ -590,12 +590,7 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
 
     if (submode === Submodes.Code) {
-      await Promise.all([
-        this.matrixService.setLLMForCodeMode(),
-        this.matrixService.activateCodingSkill(),
-      ]);
-    } else if (submode === Submodes.Interact) {
-      await this.matrixService.setLLMForInteractMode();
+      await this.matrixService.activateCodingSkill();
     }
   }
 

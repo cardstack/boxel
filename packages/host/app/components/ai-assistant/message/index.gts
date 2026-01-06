@@ -222,7 +222,11 @@ export default class AiAssistantMessage extends Component<Signature> {
 
   <template>
     <section
-      class={{cn 'ai-assistant-message' meta-hidden=@hideMeta}}
+      class={{cn
+        'ai-assistant-message'
+        meta-hidden=@hideMeta
+        code-patch-correctness=@isCodePatchCorrectness
+      }}
       {{MessageScroller index=@index registerScroller=@registerScroller}}
       data-test-ai-assistant-message
       data-test-ai-assistant-message-pending={{@isPending}}
@@ -332,6 +336,11 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
       .content > :deep(* + *) {
         margin-top: var(--boxel-sp-sm);
+      }
+      .ai-assistant-message.code-patch-correctness
+        .content
+        > :deep(.room-message-command.compact + .room-message-command.compact) {
+        margin-top: 0;
       }
       :deep(pre) {
         white-space: pre-wrap;
@@ -480,6 +489,9 @@ const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSign
       }
       .ai-assistant-conversation > :deep(* + .meta-hidden) {
         margin-top: var(--boxel-sp-xs);
+      }
+      .ai-assistant-conversation > :deep(* + .code-patch-correctness) {
+        margin-top: var(--boxel-sp-xxs);
       }
     </style>
   </template>;

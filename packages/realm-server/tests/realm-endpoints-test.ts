@@ -200,6 +200,52 @@ module(basename(__filename), function () {
       );
     });
 
+    test('serves file meta with dedicated accept header', async function (assert) {
+      let response = await request
+        .get(`/person.gts`)
+        .set('Accept', SupportedMimeType.FileMeta)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.ok(
+        response.headers['content-type']?.startsWith(
+          SupportedMimeType.FileMeta,
+        ),
+        'content-type uses file meta mime type',
+      );
+
+      let json = response.body as LooseSingleCardDocument;
+      assert.strictEqual(json.data.attributes?.name, 'person.gts');
+      assert.deepEqual(json.data.meta?.adoptsFrom, {
+        module: `${baseRealm.url}file-api`,
+        name: 'FileDef',
+      });
+    });
+
+    test('sets canonical path header for nested module requests', async function (assert) {
+      let response = await request
+        .get(`/nested/example`)
+        .set('Accept', SupportedMimeType.All)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+
+      assert.strictEqual(
+        response.status,
+        200,
+        'module request succeeds for nested module',
+      );
+      assert.strictEqual(
+        response.headers['x-boxel-canonical-path'],
+        `${testRealmURL}nested/example.js`,
+        'canonical path header includes full nested path with realm origin',
+      );
+    });
+
     test('can set response Cache-Control header for json api request', async function (assert) {
       let response = await request
         .get(`/_info`)
@@ -1416,6 +1462,14 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   kind: 'file',
+                },
+              },
+              'nested/': {
+                links: {
+                  related: `${testRealmHref}nested/`,
+                },
+                meta: {
+                  kind: 'directory',
                 },
               },
               'person-1.json': {

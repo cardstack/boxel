@@ -61,6 +61,10 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
     >
       <CardRenderer class='preview' @card={{@card}} @format={{@format}} />
     </CardContainer>
+  {{else if (eq @format 'head')}}
+    <CardContainer class='preview-container'>
+      <CardRenderer class='preview' @card={{@card}} @format={{@format}} />
+    </CardContainer>
   {{else if (eq @format 'atom')}}
     <div class='atom-preview-container' data-test-atom-preview>Lorem ipsum dolor
       sit amet, consectetur adipiscing elit, sed do

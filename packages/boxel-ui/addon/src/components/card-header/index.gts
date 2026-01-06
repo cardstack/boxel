@@ -46,6 +46,10 @@ export default class CardHeader extends Component<Signature> {
   get safeMoreOptionsMenuItems() {
     return this.args.moreOptionsMenuItems || [];
   }
+
+  get hasMoreOptionsMenuItems() {
+    return this.safeMoreOptionsMenuItems.length > 0;
+  }
   <template>
     {{#let (bool @onFinishEditing) as |isEditing|}}
       <header
@@ -170,7 +174,7 @@ export default class CardHeader extends Component<Signature> {
               </:content>
             </Tooltip>
           {{/if}}
-          {{#if (bool @moreOptionsMenuItems)}}
+          {{#if this.hasMoreOptionsMenuItems}}
             <div>
               <BoxelDropdown>
                 <:trigger as |bindings|>

@@ -7,14 +7,11 @@ import { isTesting } from '@embroider/macros';
 import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 
-import { RealmPaths } from '@cardstack/runtime-common';
-
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
 import type BillingService from '@cardstack/host/services/billing-service';
 import type CardService from '@cardstack/host/services/card-service';
-import type HomePageResolver from '@cardstack/host/services/home-page-resolver';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -54,58 +51,10 @@ export default class Card extends Route {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare router: RouterService;
   @service private declare store: StoreService;
-  @service private declare homePageResolver: HomePageResolver;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
 
   didMatrixServiceStart = false;
-
-  async beforeModel(transition: Transition) {
-    await super.beforeModel(transition);
-
-    if (!this.hostModeService.isActive) {
-      return;
-    }
-
-    let currentURL = this.currentURL(transition);
-    if (!currentURL) {
-      return;
-    }
-
-    let homePage = await this.homePageResolver.resolve(currentURL);
-    if (!homePage) {
-      return;
-    }
-
-    let { realmURL, cardId: homePageCardId } = homePage;
-    let realmPath = new URL(realmURL).pathname;
-    let homeCardPath: string | undefined;
-    try {
-      let realmPaths = new RealmPaths(new URL(realmURL));
-      homeCardPath = realmPaths.local(new URL(homePageCardId));
-    } catch (_error) {
-      console.error(
-        `Should never get here: Failed to compute local path for home page card ${homePageCardId} in realm ${realmURL}`,
-      );
-      return;
-    }
-
-    let realmPathname = realmPath.replace(/^\//, '').replace(/\/$/, '');
-    let targetPathSegments = [realmPathname, homeCardPath];
-    let targetPath = targetPathSegments.filter(Boolean).join('/');
-    if (targetPath && transition.to?.params?.path !== targetPath) {
-      transition.abort();
-      this.router.replaceWith('index', targetPath, {
-        queryParams: transition.to?.queryParams ?? {},
-      });
-    }
-  }
-
-  private currentURL(transition: Transition): string | undefined {
-    return `${this.hostModeService.hostModeOrigin}/${
-      transition.to?.params?.path ?? ''
-    }`;
-  }
 
   // WARNING! Make sure we are _very_ careful with our async in this model. This
   // model hook is called _every_  time

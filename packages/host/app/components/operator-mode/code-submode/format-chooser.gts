@@ -36,10 +36,7 @@ export default class FormatChooser extends Component<Signature> {
     </div>
     <style scoped>
       .format-chooser {
-        height: var(
-          --boxel-format-chooser-height,
-          var(--boxel-form-control-height)
-        );
+        height: var(--boxel-format-chooser-height);
         display: flex;
         justify-content: center;
         align-items: center;

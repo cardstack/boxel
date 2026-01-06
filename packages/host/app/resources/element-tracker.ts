@@ -92,6 +92,7 @@ export default class ElementTracker {
   filter(
     conditions: Partial<Meta>[],
     operator: 'and' | 'or' = 'and',
+    opts?: { exclude?: Partial<Meta>[] },
   ): RenderedCardForOverlayActions[] {
     const checkCondition = (
       entry: { element: HTMLElement; meta: Meta },
@@ -101,7 +102,18 @@ export default class ElementTracker {
         return entry.meta[key as keyof Meta] === condition[key as keyof Meta];
       });
     };
+    let excludes = opts?.exclude ?? [];
+
     const filteredElements = this.elements.filter((entry) => {
+      if (excludes.length > 0) {
+        let isExcluded = excludes.some((condition) =>
+          checkCondition(entry, condition),
+        );
+        if (isExcluded) {
+          return false;
+        }
+      }
+
       if (operator === 'and') {
         return conditions.every((condition) =>
           checkCondition(entry, condition),

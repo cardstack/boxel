@@ -18,6 +18,29 @@ import type MatrixService from './matrix-service';
 import type NetworkService from './network';
 import type * as MatrixSDK from 'matrix-js-sdk';
 
+type JoinedRoomsResponse = { joined_rooms: string[] };
+
+const joinedRoomsRequests = new WeakMap<
+  MatrixSDK.MatrixClient,
+  Promise<JoinedRoomsResponse>
+>();
+
+function getJoinedRoomsWithCache(client: MatrixSDK.MatrixClient) {
+  let existing = joinedRoomsRequests.get(client);
+  if (existing) {
+    return existing;
+  }
+  let request = client.getJoinedRooms();
+  joinedRoomsRequests.set(client, request);
+  let cleanup = () => {
+    if (joinedRoomsRequests.get(client) === request) {
+      joinedRoomsRequests.delete(client);
+    }
+  };
+  request.then(cleanup, cleanup);
+  return request;
+}
+
 /*
   This abstracts over the matrix SDK, including several extra functions that are
   actually implemented via direct HTTP.
@@ -117,6 +140,7 @@ export type ExtendedClient = Pick<
   | 'leave'
   | 'loginWithPassword'
   | 'logout'
+  | 'getOpenIdToken'
   | 'off'
   | 'on'
   | 'registerRequest'
@@ -268,6 +292,8 @@ function extendedClient({
           return loginWithEmail.bind(extendedTarget, fetch);
         case 'createRealmSession':
           return createRealmSession.bind(extendedTarget, fetch);
+        case 'getJoinedRooms':
+          return getJoinedRoomsWithCache.bind(null, target);
         case 'uploadCards':
           return fileDefManager.uploadCards.bind(fileDefManager);
         case 'uploadCommandDefinitions':

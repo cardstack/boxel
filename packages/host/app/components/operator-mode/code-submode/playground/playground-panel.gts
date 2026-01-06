@@ -230,6 +230,9 @@ export default class PlaygroundPanel extends Component<Signature> {
     let entries = this.cardTracker.filter(
       [{ fieldType: 'linksTo' }, { fieldType: 'linksToMany' }],
       'or',
+      // the only linksTo field with isolated format is in the index card,
+      // we don't want to show overlays for those cards here
+      { exclude: [{ fieldType: 'linksTo', format: 'isolated' }] },
     );
     return entries.length ? entries : undefined;
   }
@@ -1014,6 +1017,15 @@ export default class PlaygroundPanel extends Component<Signature> {
         display: flex;
         justify-content: center;
         margin: 30vh auto;
+      }
+
+      .playground-panel-content:has(.social-preview-container) {
+        padding: 0;
+      }
+
+      .playground-panel :deep(.social-preview-container) {
+        border: 0;
+        border-radius: unset;
       }
     </style>
   </template>

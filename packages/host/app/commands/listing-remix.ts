@@ -11,7 +11,7 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import { skillCardURL } from '../lib/utils';
+import { skillCardURL, devSkillId, envSkillId } from '../lib/utils';
 
 import UseAiAssistantCommand from './ai-assistant';
 import ListingInstallCommand from './listing-install';
@@ -140,8 +140,8 @@ export default class RemixCommand extends HostBaseCommand<
       'Remix done! Please suggest two example prompts on how to edit this card.';
 
     const skillCardIds = [
-      skillCardURL('boxel-environment'),
-      skillCardURL('boxel-development'),
+      devSkillId,
+      envSkillId,
       skillCardURL('source-code-editing'),
       skillCardURL('catalog-listing'),
     ];

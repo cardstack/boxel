@@ -63,7 +63,7 @@ export interface CardResource<Identity extends Unsaved = Saved> {
   type: 'card';
   attributes?: Record<string, any>;
   relationships?: {
-    [fieldName: string]: Relationship;
+    [fieldName: string]: Relationship | Relationship[];
   };
   meta: CardResourceMeta;
   links?: {
@@ -129,7 +129,11 @@ export function isCardResource(resource: any): resource is CardResource {
       if (typeof fieldName !== 'string') {
         return false;
       }
-      if (!isRelationship(relationship)) {
+      if (Array.isArray(relationship)) {
+        if (relationship.some((entry) => !isRelationship(entry))) {
+          return false;
+        }
+      } else if (!isRelationship(relationship)) {
         return false;
       }
     }
@@ -243,6 +247,42 @@ export function isRelationship(
     return false;
   }
   return true;
+}
+
+export function extractRelationshipIds(
+  relationship: Relationship,
+  baseUrl: string | URL,
+): string[] {
+  let ids: string[] = [];
+  let data = relationship.data;
+  if (!data || typeof data !== 'object') {
+    return ids;
+  }
+  let resolveId = (id: string) => {
+    try {
+      return new URL(id, baseUrl).href;
+    } catch {
+      return id;
+    }
+  };
+  if (Array.isArray(data)) {
+    for (let item of data) {
+      if (item && typeof item === 'object' && 'id' in item) {
+        let id = (item as { id?: string }).id;
+        if (typeof id === 'string') {
+          ids.push(resolveId(id));
+        }
+      }
+    }
+    return ids;
+  }
+  if ('id' in data) {
+    let id = (data as { id?: string }).id;
+    if (typeof id === 'string') {
+      ids.push(resolveId(id));
+    }
+  }
+  return ids;
 }
 
 //validation - prerendered cards
