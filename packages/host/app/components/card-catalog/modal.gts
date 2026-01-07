@@ -347,7 +347,8 @@ export default class CardCatalogModal extends Component<Signature> {
       } = {},
     ) => {
       await this.realmServer.ready;
-      await Promise.all(
+      // Preload realm info without blocking the modal from opening.
+      void Promise.all(
         this.realmServer.availableRealmURLs.map(async (realmURL) => {
           let resource = this.realm.getOrCreateRealmResource(realmURL);
           try {

@@ -1,8 +1,8 @@
+import { getService } from '@universal-ember/test-support';
+
 import {
   buildSearchErrorResponse,
-  combinePrerenderedSearchResults,
-  combineSearchResults,
-  baseRealm,
+  ensureTrailingSlash,
   parseRealmsParam,
   parsePrerenderedSearchRequestFromRequest,
   parseSearchQueryFromRequest,
@@ -10,23 +10,40 @@ import {
   searchPrerenderedRealms,
   searchRealms,
   SupportedMimeType,
+  type Query,
 } from '@cardstack/runtime-common';
+
+import type {
+  CardCollectionDocument,
+  PrerenderedCardCollectionDocument,
+} from '@cardstack/runtime-common/document-types';
+
+import ENV from '@cardstack/host/config/environment';
+
+import type NetworkService from '@cardstack/host/services/network';
 
 import { getRoomIdForRealmAndUser } from '../mock-matrix/_utils';
 import { createJWT, testRealmSecretSeed } from '../test-auth';
 import { getTestRealmRegistry } from '../test-realm-registry';
 
-import {
-  buildPrerenderedDocFromCards,
-  buildSearchDocFromCards,
-  catalogRealmURL,
-  filterBaseRealmCards,
-  filterCatalogRealmCards,
-} from './fixtures';
-
 import type { RealmServerMockRoute, RealmServerMockState } from './types';
 
 const TEST_MATRIX_USER = '@testuser:localhost';
+const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
+
+type SearchableRealm = {
+  url?: string;
+  search: (query: Query) => Promise<CardCollectionDocument>;
+  searchPrerendered: (
+    query: Query,
+    opts: Pick<
+      Awaited<ReturnType<typeof parsePrerenderedSearchRequestFromRequest>>,
+      'htmlFormat' | 'cardUrls' | 'renderType'
+    >,
+  ) => Promise<PrerenderedCardCollectionDocument>;
+};
+
+const remoteRealmCache = new Map<string, SearchableRealm>();
 
 const realmServerRoutes = new Map<string, RealmServerMockRoute>();
 
@@ -70,27 +87,10 @@ function registerSearchRoutes() {
         throw e;
       }
 
-      let registry = getTestRealmRegistry();
       let combined = await searchRealms(
-        realmList.map((realmURL) => registry.get(realmURL)?.realm),
+        realmList.map((realmURL) => getSearchableRealmForURL(realmURL)),
         cardsQuery,
       );
-      let extraDocs = [] as ReturnType<typeof buildSearchDocFromCards>[];
-      if (realmList.includes(baseRealm.url)) {
-        let baseCards = filterBaseRealmCards(cardsQuery);
-        if (baseCards.length > 0) {
-          extraDocs.push(buildSearchDocFromCards(baseCards));
-        }
-      }
-      if (realmList.includes(catalogRealmURL)) {
-        let catalogCards = filterCatalogRealmCards(cardsQuery);
-        if (catalogCards.length > 0) {
-          extraDocs.push(buildSearchDocFromCards(catalogCards));
-        }
-      }
-      if (extraDocs.length > 0) {
-        combined = combineSearchResults([combined, ...extraDocs]);
-      }
 
       return new Response(JSON.stringify(combined), {
         status: 200,
@@ -118,9 +118,8 @@ function registerSearchRoutes() {
         throw e;
       }
 
-      let registry = getTestRealmRegistry();
       let combined = await searchPrerenderedRealms(
-        realmList.map((realmURL) => registry.get(realmURL)?.realm),
+        realmList.map((realmURL) => getSearchableRealmForURL(realmURL)),
         parsed.cardsQuery,
         {
           htmlFormat: parsed.htmlFormat,
@@ -128,22 +127,6 @@ function registerSearchRoutes() {
           renderType: parsed.renderType,
         },
       );
-      let extraDocs = [] as ReturnType<typeof buildPrerenderedDocFromCards>[];
-      if (realmList.includes(baseRealm.url)) {
-        let baseCards = filterBaseRealmCards(parsed.cardsQuery);
-        if (baseCards.length > 0) {
-          extraDocs.push(buildPrerenderedDocFromCards(baseCards));
-        }
-      }
-      if (realmList.includes(catalogRealmURL)) {
-        let catalogCards = filterCatalogRealmCards(parsed.cardsQuery);
-        if (catalogCards.length > 0) {
-          extraDocs.push(buildPrerenderedDocFromCards(catalogCards));
-        }
-      }
-      if (extraDocs.length > 0) {
-        combined = combinePrerenderedSearchResults([combined, ...extraDocs]);
-      }
 
       return new Response(JSON.stringify(combined), {
         status: 200,
@@ -227,4 +210,68 @@ function registerCatalogRoutes() {
       );
     },
   });
+}
+
+function getSearchableRealmForURL(
+  realmURL: string,
+): SearchableRealm | undefined {
+  let registry = getTestRealmRegistry();
+  let registryEntry = registry.get(realmURL);
+  if (registryEntry?.realm) {
+    return registryEntry.realm;
+  }
+
+  let cached = remoteRealmCache.get(realmURL);
+  if (cached) {
+    return cached;
+  }
+
+  let network = getService('network') as NetworkService;
+  let remoteRealm: SearchableRealm = {
+    url: realmURL,
+    async search(query: Query) {
+      let url = new URL('_search', realmURL);
+      let response = await network.fetch(url.href, {
+        method: 'QUERY',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(query),
+      });
+      if (!response.ok) {
+        let responseText = await response.text();
+        throw new Error(
+          `Remote realm search failed for ${realmURL}: ${response.status} ${responseText}`,
+        );
+      }
+      return (await response.json()) as CardCollectionDocument;
+    },
+    async searchPrerendered(query: Query, opts) {
+      let url = new URL('_search-prerendered', realmURL);
+      let response = await network.fetch(url.href, {
+        method: 'QUERY',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...query,
+          prerenderedHtmlFormat: opts.htmlFormat,
+          cardUrls: opts.cardUrls,
+          renderType: opts.renderType,
+        }),
+      });
+      if (!response.ok) {
+        let responseText = await response.text();
+        throw new Error(
+          `Remote realm prerendered search failed for ${realmURL}: ${response.status} ${responseText}`,
+        );
+      }
+      return (await response.json()) as PrerenderedCardCollectionDocument;
+    },
+  };
+
+  remoteRealmCache.set(realmURL, remoteRealm);
+  return remoteRealm;
 }

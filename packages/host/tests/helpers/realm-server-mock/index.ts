@@ -7,6 +7,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import type NetworkService from '@cardstack/host/services/network';
+import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import { getRealmServerRoute, registerDefaultRoutes } from './routes';
 
@@ -67,6 +68,8 @@ export function setupAuthEndpoints(
 ) {
   let network = getService('network') as NetworkService;
   let state = ensureRealmServerMockState(network);
+  let realmServer = getService('realm-server') as RealmServerService;
+  void realmServer.fetchCatalogRealms();
 
   for (let [realmURL, permissions] of Object.entries(realmPermissions)) {
     state.realmPermissions.set(
