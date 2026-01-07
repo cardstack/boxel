@@ -307,7 +307,7 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
           { not: { eq: { id: this.args.model.id! } } },
         ],
       },
-      // sorting by title so that we can maintain stability in
+      // sorting by cardTitle so that we can maintain stability in
       // the ordering of the search results (server sorts results
       // by order indexed by default)
       sort: [
@@ -316,7 +316,7 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
             module: `${baseRealm.url}card-api`,
             name: 'CardDef',
           },
-          by: 'title',
+          by: 'cardTitle',
         },
       ],
     } as Query;

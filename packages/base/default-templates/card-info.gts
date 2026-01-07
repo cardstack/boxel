@@ -73,13 +73,13 @@ class CardInfoView extends GlimmerComponent<ViewSignature> {
       class='image-container'
       @cardThumbnailURL={{@cardThumbnailURL}}
       @icon={{@icon}}
-      data-test-field='cardThumbnailURL'
+      data-test-field='cardInfo-thumbnailURL'
     />
     <div class='info'>
-      <h2 class='card-info-title' data-test-field='cardTitle'>
+      <h2 class='card-info-title' data-test-field='cardInfo-name'>
         {{@cardTitle}}
       </h2>
-      <p class='card-info-description' data-test-field='cardDescription'>
+      <p class='card-info-description' data-test-field='cardInfo-summary'>
         {{@cardDescription}}
       </p>
     </div>
@@ -222,7 +222,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
             @label='Thumbnail URL'
             @tag='label'
             @icon={{LinkIcon}}
-            data-test-field='cardInfo-cardThumbnailURL'
+            data-test-field='cardInfo-thumbnailURL'
           >
             <div class='thumbnail-input-container'>
               {{#if this.showThumbnailPlaceholder}}

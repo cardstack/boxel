@@ -766,7 +766,7 @@ module('Integration | card-basics', function (hooks) {
 
       let mang = new Person({
         firstName: 'Mango',
-        description: 'test card',
+        cardDescription: 'test card',
         image: new Base64ImageField({
           altText: 'Picture of Mango',
           size: 'contain',
@@ -1815,14 +1815,14 @@ module('Integration | card-basics', function (hooks) {
       class MeetingMinutes extends CardDef {}
       loader.shimModule(`${testRealmURL}test-cards`, { MeetingMinutes });
 
-      const title = 'Minutes of Meeting - Project Alpha';
-      const description =
+      const name = 'Minutes of Meeting - Project Alpha';
+      const summary =
         'Concise documentation of the decisions, tasks, and discussions from the Project Alpha Meeting on January 15, 2024.';
 
       let instance = new MeetingMinutes({
         cardInfo: new CardInfoField({
-          title,
-          description,
+          name,
+          summary,
           cardThumbnailURL: null,
           notes:
             '## Meeting Notes\n\nDate: January 15, 2024<br>\nParticipants: John Doe, Jane Smith, Alice Johnson\n\n### Key Points Discussed\n<ul>\n<li>Project timeline was reviewed and adjusted for Q2</li>\n<li> Budget allocation confirmed</li>\n<li> Risk assessment introduced, with mitigation strategies \n   identified</li>\n</ul>\n\n### Actions Items\n<ol>\n<li> <strong>John Doe:</strong> Update project timeline by January 20</li>\n<li> <strong>Jane Smith:</strong> Finalize budget report by January 22</li>\n<li> <strong>Alice Johnson:</strong> Conduct a follow-up meeting with  \n    stakeholders by January 30</li>\n</ol>',
@@ -1832,28 +1832,26 @@ module('Integration | card-basics', function (hooks) {
       // isolated format
       await renderCard(loader, instance, 'isolated');
       assert.dom('[data-test-thumbnail-icon]').exists();
-      assert.dom('[data-test-field="cardTitle"]').hasText(title);
-      assert.dom('[data-test-field="cardDescription"]').hasText(description);
+      assert.dom('[data-test-field="cardInfo-name"]').hasText(name);
+      assert.dom('[data-test-field="cardInfo-summary"]').hasText(summary);
       assert
         .dom('[data-test-field="cardInfo-notes"]')
         .containsText('Meeting Notes');
 
       // edit format
       await renderCard(loader, instance, 'edit');
-      assert.dom('[data-test-field="cardInfo-name"] input').hasValue(title);
+      assert.dom('[data-test-field="cardInfo-name"] input').hasValue(name);
       assert
         .dom('[data-test-field="cardInfo-summary"] input')
-        .hasValue(description);
+        .hasValue(summary);
       assert.dom('[data-test-thumbnail-icon]').exists();
       await click('[data-test-toggle-thumbnail-editor]');
       assert
-        .dom('[data-test-field="cardInfo-cardThumbnailURL"] input')
+        .dom('[data-test-field="cardInfo-thumbnailURL"] input')
         .hasValue('');
       assert.dom('[data-test-links-to-editor="theme"]').exists();
       await click('[data-test-toggle-thumbnail-editor]');
-      assert
-        .dom('[data-test-field="cardInfo-cardThumbnailURL"]')
-        .doesNotExist();
+      assert.dom('[data-test-field="cardInfo-thumbnailURL"]').doesNotExist();
       assert.dom('[data-test-links-to-editor="theme"]').doesNotExist();
       assert.dom('[data-test-field="cardInfo-notes"] textarea').exists();
 
@@ -1862,10 +1860,10 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-edit-preview="cardType"]')
         .hasText('Card Type Card');
-      assert.dom('[data-test-edit-preview="cardTitle"]').containsText(title);
+      assert.dom('[data-test-edit-preview="cardTitle"]').containsText(name);
       assert
         .dom('[data-test-edit-preview="cardDescription"]')
-        .containsText(description);
+        .containsText(summary);
       assert
         .dom('[data-test-edit-preview="cardThumbnailURL"]')
         .hasText('Thumbnail URL');
@@ -1897,8 +1895,8 @@ module('Integration | card-basics', function (hooks) {
 
       let instance = new Person({
         cardInfo: new CardInfoField({
-          cardTitle: 'Johnny',
-          description: 'Volleyball player',
+          name: 'Johnny',
+          summary: 'Volleyball player',
           cardThumbnailURL: 'http://pic/of/volleyball',
         }),
         firstName: 'John',
@@ -1908,11 +1906,11 @@ module('Integration | card-basics', function (hooks) {
       await renderCard(loader, instance, 'isolated');
       assert.dom('[data-test-thumbnail-icon]').doesNotExist();
       assert
-        .dom('[data-test-field="cardThumbnailURL"]')
+        .dom('[data-test-field="cardInfo-thumbnailURL"]')
         .hasAttribute('style', `background-image: url(http://john/pic.jpg);`);
-      assert.dom('[data-test-field="cardTitle"]').hasText('John Doe');
+      assert.dom('[data-test-field="cardInfo-name"]').hasText('John Doe');
       assert
-        .dom('[data-test-field="cardDescription"]')
+        .dom('[data-test-field="cardInfo-summary"]')
         .hasText('Volleyball player');
 
       await renderCard(loader, instance, 'edit');
@@ -1924,7 +1922,7 @@ module('Integration | card-basics', function (hooks) {
       await click('[data-test-toggle-thumbnail-editor]');
       assert.dom('[data-test-thumbnail-placeholder]').doesNotExist();
       assert
-        .dom('[data-test-field="cardInfo-cardThumbnailURL"] input')
+        .dom('[data-test-field="cardInfo-thumbnailURL"] input')
         .hasValue('http://pic/of/volleyball');
       assert.dom('[data-test-links-to-editor="theme"]').exists();
       assert.dom('[data-test-field="cardInfo-notes"] textarea').exists();
@@ -1975,7 +1973,7 @@ module('Integration | card-basics', function (hooks) {
 
       let instance = new Book({
         cardInfo: new CardInfoField({
-          description: 'The latest novel from John Doe',
+          summary: 'The latest novel from John Doe',
         }),
         bookTitle: 'Insomniac',
         blurb: 'This book will keep you up at night',
@@ -1984,11 +1982,11 @@ module('Integration | card-basics', function (hooks) {
       await renderCard(loader, instance, 'isolated');
       assert.dom('[data-test-thumbnail-icon]').doesNotExist();
       assert
-        .dom('[data-test-field="cardThumbnailURL"]')
+        .dom('[data-test-field="cardInfo-thumbnailURL"]')
         .hasAttribute('style', `background-image: url(http://book/pic.jpg);`);
-      assert.dom('[data-test-field="cardTitle"]').hasText('Insomniac');
+      assert.dom('[data-test-field="cardInfo-name"]').hasText('Insomniac');
       assert
-        .dom('[data-test-field="cardDescription"]')
+        .dom('[data-test-field="cardInfo-summary"]')
         .hasText('This book will keep you up at night');
 
       await renderCard(loader, instance, 'edit');
@@ -2031,28 +2029,30 @@ module('Integration | card-basics', function (hooks) {
 
       let insomniac = new Book({
         cardTitle: 'Insomniac',
-        description: 'This book will keep you up at night',
+        cardDescription: 'This book will keep you up at night',
         cardThumbnailURL: 'http://book/pic.jpg',
         cardInfo: new CardInfoField({
-          description: 'The latest novel from John Doe',
+          summary: 'The latest novel from John Doe',
         }),
       });
       await renderCard(loader, insomniac, 'isolated');
-      assert.dom('[data-test-field="cardTitle"]').hasText('Insomniac');
+      assert.dom('[data-test-field="cardInfo-name"]').hasText('Insomniac');
       assert
-        .dom('[data-test-field="cardDescription"]')
+        .dom('[data-test-field="cardInfo-summary"]')
         .hasText('This book will keep you up at night');
       assert
-        .dom('[data-test-field="cardThumbnailURL"]')
+        .dom('[data-test-field="cardInfo-thumbnailURL"]')
         .hasAttribute('style', 'background-image: url(http://book/pic.jpg);');
 
-      assert.dom('[data-test-field="cardTitle"]').hasText('Title Insomniac');
       assert
-        .dom('[data-test-field="description"]')
-        .hasText('Description This book will keep you up at night');
+        .dom('[data-test-field="cardTitle"]')
+        .hasText('Card Title Insomniac');
+      assert
+        .dom('[data-test-field="cardDescription"]')
+        .hasText('Card Description This book will keep you up at night');
       assert
         .dom('[data-test-field="cardThumbnailURL"]')
-        .hasText('Thumbnail URL http://book/pic.jpg');
+        .hasText('Card Thumbnail URL http://book/pic.jpg');
 
       await renderCard(loader, insomniac, 'edit');
       assert.dom('[data-test-field="cardInfo-name"] input').hasNoValue();
@@ -2067,7 +2067,7 @@ module('Integration | card-basics', function (hooks) {
       await click('[data-test-toggle-thumbnail-editor]');
       assert.dom('[data-test-field="cardTitle"] input').hasValue('Insomniac');
       assert
-        .dom('[data-test-field="description"] input')
+        .dom('[data-test-field="cardDescription"] input')
         .hasValue('This book will keep you up at night');
       assert
         .dom('[data-test-field="cardThumbnailURL"] input')
@@ -2128,8 +2128,8 @@ module('Integration | card-basics', function (hooks) {
         origin: 'JFK',
         cardInfo: new CardInfoField({
           notes: null,
-          cardTitle: 'Smith Wedding Flight',
-          description: 'John, Jane + kids to LA for holiday wedding',
+          name: 'Smith Wedding Flight',
+          summary: 'John, Jane + kids to LA for holiday wedding',
           cardThumbnailURL: null,
         }),
         destination: 'LAX',
@@ -2137,10 +2137,10 @@ module('Integration | card-basics', function (hooks) {
       });
       await renderCard(loader, instance, 'isolated');
       assert
-        .dom('[data-test-field="cardTitle"]')
+        .dom('[data-test-field="cardInfo-name"]')
         .hasText('JFK to LAX (12/25/25) Flt. 101');
       assert
-        .dom('[data-test-field="cardDescription"]')
+        .dom('[data-test-field="cardInfo-summary"]')
         .hasText(
           'Smith Wedding Flight - John, Jane + kids to LA for holiday wedding',
         );
@@ -2159,7 +2159,7 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-thumbnail-icon]').hasClass('lucide-plane');
       await click('[data-test-toggle-thumbnail-editor]');
       assert
-        .dom('[data-test-field="cardInfo-cardThumbnailURL"] input')
+        .dom('[data-test-field="cardInfo-thumbnailURL"] input')
         .hasNoValue();
       await click('[data-test-toggle-thumbnail-editor]');
       assert.dom('[data-test-field="destination"] input').hasValue('LAX');
@@ -2171,7 +2171,7 @@ module('Integration | card-basics', function (hooks) {
         .containsText('Flight Booking');
       assert
         .dom('[data-test-edit-preview="cardTitle"]')
-        .containsText('JFK to LAX (12/25/25) Flt. 101');
+        .containsText('Title JFK to LAX (12/25/25) Flt. 101');
       assert
         .dom('[data-test-edit-preview="cardDescription"]')
         .containsText(
@@ -3282,7 +3282,7 @@ module('Integration | card-basics', function (hooks) {
       });
 
       await renderCard(loader, helloWorld, 'edit');
-      assert.dom('[data-test-field="cardTitle"]').hasText('Title');
+      assert.dom('[data-test-field="cardTitle"]').hasText('Card Title');
       assert
         .dom('[data-test-field="cardTitle"] .boxel-field__icon')
         .hasClass('icon-tabler-letter-case');

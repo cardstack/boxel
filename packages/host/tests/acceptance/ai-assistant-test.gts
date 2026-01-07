@@ -297,7 +297,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     // Create model configurations for testing
     let openAiGpt5Model = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        title: modelNameFor('openai/gpt-5'),
+        name: modelNameFor('openai/gpt-5'),
       }),
       modelId: 'openai/gpt-5',
       toolsSupported: true,
@@ -306,7 +306,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let openAiGpt4oMiniModel = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        title: modelNameFor('openai/gpt-4o-mini'),
+        name: modelNameFor('openai/gpt-4o-mini'),
       }),
       modelId: 'openai/gpt-4o-mini',
       toolsSupported: true,
@@ -314,7 +314,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let anthropicClaudeSonnet45Model = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        title: modelNameFor('anthropic/claude-sonnet-4.5'),
+        name: modelNameFor('anthropic/claude-sonnet-4.5'),
       }),
       modelId: 'anthropic/claude-sonnet-4.5',
       toolsSupported: true,
@@ -322,7 +322,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let anthropicClaudeSonnet37Model = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        title: modelNameFor('anthropic/claude-3.7-sonnet'),
+        name: modelNameFor('anthropic/claude-3.7-sonnet'),
       }),
       modelId: 'anthropic/claude-3.7-sonnet',
       toolsSupported: true,
@@ -341,7 +341,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let deepseekModel = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        title: modelNameFor('deepseek/deepseek-chat-v3-0324'),
+        name: modelNameFor('deepseek/deepseek-chat-v3-0324'),
       }),
       modelId: 'deepseek/deepseek-chat-v3-0324',
       toolsSupported: true,
@@ -349,7 +349,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let geminiFlashModel = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        title: modelNameFor('google/gemini-2.5-flash'),
+        name: modelNameFor('google/gemini-2.5-flash'),
       }),
       modelId: 'google/gemini-2.5-flash',
       toolsSupported: true,
@@ -619,9 +619,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let cardContent = await matrixService.downloadCardFileDef(attachedCard);
 
-    // Check that the computed title is present in the downloaded content
+    // Check that the computed cardTitle is present in the downloaded content
     assert.strictEqual(
-      cardContent.data.attributes!.title,
+      cardContent.data.attributes!.cardTitle,
       'Hassan Abdel-Rahman',
       'Computed card title is present in downloaded content',
     );

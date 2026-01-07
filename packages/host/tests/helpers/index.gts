@@ -1418,8 +1418,8 @@ export async function assertMessages(
 }
 
 export const cardInfo = Object.freeze({
-  cardTitle: null,
-  cardDescription: null,
+  name: null,
+  summary: null,
   cardThumbnailURL: null,
   notes: null,
 });

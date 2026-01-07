@@ -316,7 +316,7 @@ export default class CardCatalogModal extends Component<Signature> {
   ): Promise<undefined | string> {
     return await this._chooseCard.perform(
       {
-        // default to title sort so that we can maintain stability in
+        // default to cardTitle sort so that we can maintain stability in
         // the ordering of the search results (server sorts results
         // by order indexed by default)
         sort: [
@@ -325,7 +325,7 @@ export default class CardCatalogModal extends Component<Signature> {
               module: `${baseRealm.url}card-api`,
               name: 'CardDef',
             },
-            by: 'title',
+            by: 'cardTitle',
           },
         ],
         ...query,

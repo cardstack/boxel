@@ -852,6 +852,8 @@ export default class Room extends Component<Signature> {
           options[usedLLM] = usedLLM; // Use model ID as display name
         }
       }
+      console.log(systemCard.modelConfigurations);
+      console.log(options);
       return options;
     }
 

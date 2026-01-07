@@ -4215,7 +4215,7 @@ module('Integration | serialization', function (hooks) {
           filter: {
             eq: { cardTitle: '$this.title' },
           },
-          sort: [{ by: 'title', direction: 'asc' }],
+          sort: [{ by: 'cardTitle', direction: 'asc' }],
           page: { size: 5 },
         },
       });

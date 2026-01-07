@@ -1,20 +1,28 @@
 {
   "data": {
     "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "./friend",
+        "name": "Friend"
+      }
+    },
     "attributes": {
-      "firstName": "Boris"
+      "firstName": "Boris",
+      "cardInfo": {
+        "notes": null
+      }
     },
     "relationships": {
       "friend": {
         "links": {
-          "self": "./does-not-exist"
+          "self": null
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "./friend.gts",
-        "name": "Friend"
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

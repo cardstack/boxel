@@ -224,7 +224,7 @@ class Isolated extends Component<typeof GardenDesign> {
                 module: `${baseRealm.url}card-api`,
                 name: 'CardDef',
               },
-              by: 'title',
+              by: 'cardTitle',
             },
           ],
         };
