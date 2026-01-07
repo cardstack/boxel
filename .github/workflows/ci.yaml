@@ -462,6 +462,7 @@ jobs:
             "types-endpoint-test.ts",
             "server-endpoints-test.ts",
             "server-endpoints/search-test.ts",
+            "server-endpoints/search-prerendered-test.ts",
             "virtual-network-test.ts",
             "atomic-endpoints-test.ts",
             "request-forward-test.ts",

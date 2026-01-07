@@ -5,7 +5,10 @@ import {
   parseQuery,
   type Query,
 } from './query';
-import type { CardCollectionDocument } from './document-types';
+import type {
+  CardCollectionDocument,
+  PrerenderedCardCollectionDocument,
+} from './document-types';
 import { SupportedMimeType } from './router';
 
 export type SearchRequestErrorCode =
@@ -13,7 +16,15 @@ export type SearchRequestErrorCode =
   | 'missing-query'
   | 'invalid-json'
   | 'unsupported-method'
-  | 'invalid-query';
+  | 'invalid-query'
+  | 'invalid-prerendered-html-format';
+
+type PrerenderedHtmlFormat = 'embedded' | 'fitted' | 'atom' | 'head';
+
+type PrerenderedRenderType = {
+  module: string;
+  name: string;
+};
 
 export class SearchRequestError extends Error {
   code: SearchRequestErrorCode;
@@ -23,6 +34,56 @@ export class SearchRequestError extends Error {
     this.code = code;
     this.name = 'SearchRequestError';
   }
+}
+
+function isValidPrerenderedHtmlFormat(
+  format: string | undefined,
+): format is PrerenderedHtmlFormat {
+  return (
+    format !== undefined &&
+    ['embedded', 'fitted', 'atom', 'head'].includes(format)
+  );
+}
+
+function normalizeStringParam(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    typeof value[0] === 'string'
+  ) {
+    return value[0];
+  }
+  return undefined;
+}
+
+function normalizeStringArrayParam(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) {
+    return value.map((entry) => String(entry));
+  }
+  if (typeof value === 'string') {
+    return [value];
+  }
+  return undefined;
+}
+
+function normalizeRenderType(
+  value: unknown,
+): PrerenderedRenderType | undefined {
+  if (
+    value &&
+    typeof value === 'object' &&
+    'module' in value &&
+    'name' in value
+  ) {
+    let { module, name } = value as { module?: unknown; name?: unknown };
+    if (typeof module === 'string' && typeof name === 'string') {
+      return { module, name };
+    }
+  }
+  return undefined;
 }
 
 export function parseRealmsParam(url: URL): string[] {
@@ -93,6 +154,92 @@ export async function parseSearchQueryFromRequest(
   return cardsQuery as Query;
 }
 
+export async function parsePrerenderedSearchRequestFromRequest(
+  request: Request,
+): Promise<{
+  cardsQuery: Query;
+  htmlFormat: PrerenderedHtmlFormat;
+  cardUrls?: string[];
+  renderType?: PrerenderedRenderType;
+}> {
+  let method = resolveSearchRequestMethod(request);
+  let cardsQuery: unknown;
+  let htmlFormat: string | undefined;
+  let cardUrls: string[] | undefined;
+  let renderType: PrerenderedRenderType | undefined;
+
+  if (method === 'QUERY') {
+    let payload: unknown;
+    try {
+      payload = await request.json();
+    } catch (e: any) {
+      throw new SearchRequestError(
+        'invalid-json',
+        `Request body is not valid JSON: ${e?.message ?? e}`,
+      );
+    }
+    let payloadRecord =
+      payload && typeof payload === 'object'
+        ? (payload as Record<string, any>)
+        : {};
+    htmlFormat = normalizeStringParam(payloadRecord.prerenderedHtmlFormat);
+    cardUrls = normalizeStringArrayParam(payloadRecord.cardUrls);
+    renderType = normalizeRenderType(payloadRecord.renderType);
+    let {
+      prerenderedHtmlFormat: _remove1,
+      cardUrls: _remove2,
+      renderType: _remove3,
+      ...rest
+    } = payloadRecord;
+    cardsQuery = rest;
+  } else if (method === 'GET') {
+    let url = new URL(request.url);
+    let queryParam = url.searchParams.get('query');
+    if (queryParam === null) {
+      throw new SearchRequestError(
+        'missing-query',
+        'query param "query" must be supplied',
+      );
+    }
+    cardsQuery = parseQuery(queryParam);
+    let params = parseQuery(url.search.slice(1)) as Record<string, unknown>;
+    htmlFormat = normalizeStringParam(params.prerenderedHtmlFormat);
+    cardUrls = normalizeStringArrayParam(params.cardUrls);
+    renderType = normalizeRenderType(params.renderType);
+  } else {
+    throw new SearchRequestError(
+      'unsupported-method',
+      'method must be QUERY or GET',
+    );
+  }
+
+  if (!isValidPrerenderedHtmlFormat(htmlFormat)) {
+    throw new SearchRequestError(
+      'invalid-prerendered-html-format',
+      "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint",
+    );
+  }
+
+  try {
+    assertQuery(cardsQuery);
+  } catch (e) {
+    if (e instanceof InvalidQueryError) {
+      throw new SearchRequestError(
+        'invalid-query',
+        `Invalid query: ${e.message}`,
+      );
+    }
+    throw e;
+  }
+
+  return {
+    cardsQuery: cardsQuery as Query,
+    htmlFormat,
+    cardUrls,
+    renderType,
+  };
+}
+
 export function combineSearchResults(
   docs: CardCollectionDocument[],
 ): CardCollectionDocument {
@@ -121,6 +268,33 @@ export function combineSearchResults(
 
   if (included.length > 0) {
     combined.included = included;
+  }
+
+  return combined;
+}
+
+export function combinePrerenderedSearchResults(
+  docs: PrerenderedCardCollectionDocument[],
+): PrerenderedCardCollectionDocument {
+  let combined: PrerenderedCardCollectionDocument = {
+    data: [],
+    meta: { page: { total: 0 } },
+  };
+  let scopedCssUrls = new Set<string>();
+
+  for (let doc of docs) {
+    combined.data.push(...doc.data);
+    combined.meta.page.total += doc.meta?.page?.total ?? 0;
+    for (let url of doc.meta?.scopedCssUrls ?? []) {
+      scopedCssUrls.add(url);
+    }
+  }
+
+  if (scopedCssUrls.size > 0) {
+    combined.meta.scopedCssUrls = [...scopedCssUrls];
+  }
+  if (docs.length === 1 && docs[0]?.meta?.realmInfo) {
+    combined.meta.realmInfo = docs[0].meta.realmInfo;
   }
 
   return combined;
@@ -164,6 +338,58 @@ export async function searchRealms(
     result.status === 'fulfilled' ? [result.value] : [],
   );
   return combineSearchResults(docs);
+}
+
+type PrerenderedSearchableRealm = {
+  searchPrerendered: (
+    query: Query,
+    opts: {
+      htmlFormat: PrerenderedHtmlFormat;
+      cardUrls?: string[];
+      renderType?: PrerenderedRenderType;
+    },
+  ) => Promise<PrerenderedCardCollectionDocument>;
+  url?: string;
+};
+
+export async function searchPrerenderedRealms(
+  realms: Array<PrerenderedSearchableRealm | null | undefined>,
+  query: Query,
+  opts: {
+    htmlFormat: PrerenderedHtmlFormat;
+    cardUrls?: string[];
+    renderType?: PrerenderedRenderType;
+  },
+): Promise<PrerenderedCardCollectionDocument> {
+  let realmEntries = realms
+    .filter((realm): realm is PrerenderedSearchableRealm => Boolean(realm))
+    .map((realm) => ({
+      realm,
+      label: realm.url ? String(realm.url) : undefined,
+    }));
+  let searchPromises = realmEntries.map(({ realm }) =>
+    Promise.resolve().then(() => realm.searchPrerendered(query, opts)),
+  );
+  let results = await Promise.allSettled(searchPromises);
+  let queryLabel = '[unserializable query]';
+  try {
+    queryLabel = JSON.stringify(query);
+  } catch {
+    // ignore stringify errors, fallback label already set
+  }
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      let label = realmEntries[index]?.label ?? `index ${index}`;
+      console.error(
+        `searchPrerenderedRealms realm search failed: ${label} query=${queryLabel} htmlFormat=${opts.htmlFormat}`,
+        result.reason,
+      );
+    }
+  });
+  let docs = results.flatMap((result) =>
+    result.status === 'fulfilled' ? [result.value] : [],
+  );
+  return combinePrerenderedSearchResults(docs);
 }
 
 export type SearchErrorBody = {

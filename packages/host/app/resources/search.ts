@@ -273,11 +273,9 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
         searchURL.searchParams.append('realms', realm);
       }
       let response = await this.realmServer.maybeAuthedFetch(searchURL.href, {
-        method: 'POST',
+        method: 'QUERY',
         headers: {
           Accept: 'application/vnd.card+json',
-          'Content-Type': 'application/json',
-          'X-HTTP-Method-Override': 'QUERY',
         },
         body: JSON.stringify(query),
       });

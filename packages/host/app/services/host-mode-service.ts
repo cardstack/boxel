@@ -2,6 +2,8 @@ import Service, { service } from '@ember/service';
 
 import window from 'ember-window-mock';
 
+import { buildQueryParamValue } from '@cardstack/runtime-common';
+
 import config from '@cardstack/host/config/environment';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -206,6 +208,7 @@ export default class HostModeService extends Service {
     let searchURL = new URL('_search-prerendered', realmRoot);
     let cardJsonURL = cardURL.endsWith('.json') ? cardURL : `${cardURL}.json`;
 
+    searchURL.searchParams.set('query', buildQueryParamValue({}));
     searchURL.searchParams.set('prerenderedHtmlFormat', 'head');
     searchURL.searchParams.append('cardUrls[]', cardJsonURL);
 

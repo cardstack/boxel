@@ -4,8 +4,10 @@ import {
   buildSearchErrorResponse,
   ensureTrailingSlash,
   parseRealmsParam,
+  parsePrerenderedSearchRequestFromRequest,
   parseSearchQueryFromRequest,
   SearchRequestError,
+  searchPrerenderedRealms,
   searchRealms,
   SupportedMimeType,
   testRealmURL,
@@ -87,6 +89,43 @@ function registerDefaultRoutes() {
       let combined = await searchRealms(
         realmList.map((realmURL) => registry.get(realmURL)?.realm),
         cardsQuery,
+      );
+
+      return new Response(JSON.stringify(combined), {
+        status: 200,
+        headers: { 'content-type': SupportedMimeType.CardJson },
+      });
+    },
+  });
+
+  registerRealmServerRoute({
+    path: '/_search-prerendered',
+    handler: async (req, url) => {
+      let realmList = parseRealmsParam(url);
+
+      if (realmList.length === 0) {
+        return buildSearchErrorResponse('realms query param must be supplied');
+      }
+
+      let parsed;
+      try {
+        parsed = await parsePrerenderedSearchRequestFromRequest(req.clone());
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          return buildSearchErrorResponse(e.message);
+        }
+        throw e;
+      }
+
+      let registry = getTestRealmRegistry();
+      let combined = await searchPrerenderedRealms(
+        realmList.map((realmURL) => registry.get(realmURL)?.realm),
+        parsed.cardsQuery,
+        {
+          htmlFormat: parsed.htmlFormat,
+          cardUrls: parsed.cardUrls,
+          renderType: parsed.renderType,
+        },
       );
 
       return new Response(JSON.stringify(combined), {

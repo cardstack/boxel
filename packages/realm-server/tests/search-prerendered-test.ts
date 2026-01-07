@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
-import { stringify } from 'qs';
+import { buildQueryParamValue } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
   setupBaseRealmServer,
@@ -24,6 +24,32 @@ module(basename(__filename), function () {
     }) {
       testRealm = args.testRealm;
       request = args.request;
+    }
+
+    type PrerenderedSearchQuery = Query & {
+      prerenderedHtmlFormat?: string;
+      cardUrls?: string[];
+      renderType?: { module: string; name: string };
+    };
+
+    function buildPrerenderedSearchPath(query: PrerenderedSearchQuery) {
+      let { prerenderedHtmlFormat, cardUrls, renderType, ...cardsQuery } =
+        query;
+      let searchParams = new URLSearchParams();
+      searchParams.set('query', buildQueryParamValue(cardsQuery));
+      if (prerenderedHtmlFormat) {
+        searchParams.set('prerenderedHtmlFormat', prerenderedHtmlFormat);
+      }
+      if (cardUrls) {
+        for (let url of cardUrls) {
+          searchParams.append('cardUrls[]', url);
+        }
+      }
+      if (renderType) {
+        searchParams.set('renderType[module]', renderType.module);
+        searchParams.set('renderType[name]', renderType.name);
+      }
+      return `/_search-prerendered?${searchParams.toString()}`;
     }
 
     setupBaseRealmServer(hooks, matrixURL);
@@ -79,7 +105,7 @@ module(basename(__filename), function () {
 
           test('endpoint will respond with a bad request if html format is not provided', async function (assert) {
             let response = await request
-              .get(`/_search-prerendered`)
+              .get(buildPrerenderedSearchPath({}))
               .set('Accept', 'application/vnd.card+json');
 
             assert.strictEqual(response.status, 400, 'HTTP 200 status');
@@ -105,7 +131,7 @@ module(basename(__filename), function () {
               prerenderedHtmlFormat: 'embedded',
             };
             let response = await request
-              .get(`/_search-prerendered?${stringify(query)}`)
+              .get(buildPrerenderedSearchPath(query))
               .set('Accept', 'application/vnd.card+json');
 
             assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -266,7 +292,11 @@ module(basename(__filename), function () {
 
         test('returns instances with CardDef prerendered embedded html + css when there is no "on" filter', async function (assert) {
           let response = await request
-            .get(`/_search-prerendered?prerenderedHtmlFormat=embedded`)
+            .get(
+              buildPrerenderedSearchPath({
+                prerenderedHtmlFormat: 'embedded',
+              }),
+            )
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -350,7 +380,7 @@ module(basename(__filename), function () {
           };
 
           let response = await request
-            .get(`/_search-prerendered?${stringify(query)}`)
+            .get(buildPrerenderedSearchPath(query))
             .set('Accept', 'application/vnd.card+json');
 
           let json = response.body;
@@ -400,7 +430,7 @@ module(basename(__filename), function () {
             prerenderedHtmlFormat: 'embedded',
           };
           let response = await request
-            .get(`/_search-prerendered?${stringify(query)}`)
+            .get(buildPrerenderedSearchPath(query))
             .set('Accept', 'application/vnd.card+json');
 
           let json = response.body;
@@ -425,7 +455,7 @@ module(basename(__filename), function () {
             cardUrls: [`${testRealmHref}jimmy.json`],
           };
           let response = await request
-            .get(`/_search-prerendered?${stringify(query)}`)
+            .get(buildPrerenderedSearchPath(query))
             .set('Accept', 'application/vnd.card+json');
 
           let json = response.body;
@@ -448,7 +478,7 @@ module(basename(__filename), function () {
             ],
           };
           response = await request
-            .get(`/_search-prerendered?${stringify(query)}`)
+            .get(buildPrerenderedSearchPath(query))
             .set('Accept', 'application/vnd.card+json');
 
           json = response.body;
@@ -480,7 +510,7 @@ module(basename(__filename), function () {
             prerenderedHtmlFormat: 'embedded',
           };
           let response = await request
-            .get(`/_search-prerendered?${stringify(query)}`)
+            .get(buildPrerenderedSearchPath(query))
             .set('Accept', 'application/vnd.card+json');
 
           let json = response.body;
@@ -524,7 +554,7 @@ module(basename(__filename), function () {
           };
 
           let response = await request
-            .get(`/_search-prerendered?${stringify(query)}`)
+            .get(buildPrerenderedSearchPath(query))
             .set('Accept', 'application/vnd.card+json');
 
           let json = response.body;
@@ -543,7 +573,7 @@ module(basename(__filename), function () {
           // Second page
           query.page = { number: 1, size: 2 };
           response = await request
-            .get(`/_search-prerendered?${stringify(query)}`)
+            .get(buildPrerenderedSearchPath(query))
             .set('Accept', 'application/vnd.card+json');
 
           json = response.body;
