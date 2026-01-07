@@ -7,14 +7,19 @@ import { resolvePrettierConfig } from '../prettier-config';
 
 export { lintSource };
 
+export type LintMode = 'default' | 'full';
+export type LintFlow = 'lint' | 'lintAndFix';
+
 export interface LintArgs {
   source: string;
   filename?: string; // Added to support parser detection
+  lintMode?: LintMode;
+  lintFlow?: LintFlow;
 }
 
 export type LintResult = Linter.FixReport;
 
-const lintSource: Task<LintArgs, Pick<LintResult, 'output'>> = ({
+const lintSource: Task<LintArgs, LintResult> = ({
   reportStatus,
   log,
 }) =>
@@ -36,7 +41,9 @@ const lintSource: Task<LintArgs, Pick<LintResult, 'output'>> = ({
 async function lintFix({
   source,
   filename = 'input.gts',
-}: LintArgs): Promise<Pick<LintResult, 'output'>> {
+  lintMode = 'default',
+  lintFlow = 'lintAndFix',
+}: LintArgs): Promise<LintResult> {
   if (typeof (globalThis as any).document !== 'undefined') {
     throw new Error(
       'Linting is not supported in the browser environment. Please run this in a Node.js environment.',
@@ -62,6 +69,49 @@ async function lintFix({
     /* webpackIgnore: true */ '../etc/eslint/missing-card-api-import-config.js'
   );
 
+  const baseRules: Linter.RulesRecord = {
+    'no-undef': 'off',
+    '@cardstack/boxel/template-missing-invokable': [
+      'error',
+      {
+        invokables: missingInvokablesConfig.default.invokables,
+      },
+    ],
+    '@cardstack/boxel/missing-card-api-import': [
+      'error',
+      {
+        importMappings: missingCardApiImportConfig.default.importMappings,
+      },
+    ],
+    '@cardstack/boxel/no-duplicate-imports': 'error',
+  };
+
+  let rules = baseRules;
+  if (lintMode === 'full') {
+    const eslintUnsupported = await import(
+      /* webpackIgnore: true */ 'eslint/use-at-your-own-risk'
+    );
+    const builtinRules =
+      (eslintUnsupported as any)?.builtinRules ??
+      (eslintUnsupported as any)?.default?.builtinRules ??
+      new Map();
+    const recommendedRules: Linter.RulesRecord = {};
+    if (builtinRules && typeof builtinRules[Symbol.iterator] === 'function') {
+      for (let [name, rule] of builtinRules as Map<string, any>) {
+        if (rule?.meta?.docs?.recommended) {
+          recommendedRules[name] = 'error';
+        }
+      }
+    } else if (builtinRules && typeof builtinRules === 'object') {
+      for (let [name, rule] of Object.entries(builtinRules)) {
+        if ((rule as any)?.meta?.docs?.recommended) {
+          recommendedRules[name] = 'error';
+        }
+      }
+    }
+    rules = { ...recommendedRules, ...baseRules };
+  }
+
   const LINT_CONFIG: any = [
     {
       files: ['**/*.gts', '**/*.ts'],
@@ -85,29 +135,22 @@ async function lintFix({
       plugins: {
         '@cardstack/boxel': pluginModule.default,
       },
-      rules: {
-        'no-undef': 'off',
-        '@cardstack/boxel/template-missing-invokable': [
-          'error',
-          {
-            invokables: missingInvokablesConfig.default.invokables,
-          },
-        ],
-        '@cardstack/boxel/missing-card-api-import': [
-          'error',
-          {
-            importMappings: missingCardApiImportConfig.default.importMappings,
-          },
-        ],
-        '@cardstack/boxel/no-duplicate-imports': 'error',
-      },
+      rules,
     },
   ];
 
   // Step 1: Run existing ESLint fixes (preserving current functionality)
   const linter = new eslintModule.Linter({ configType: 'flat' });
+  if (lintFlow === 'lint') {
+    const messages = linter.verify(source, LINT_CONFIG, filename);
+    return {
+      fixed: false,
+      output: source,
+      messages,
+    };
+  }
   let eslintResult = linter.verifyAndFix(source, LINT_CONFIG, filename);
-  let { output: eslintOutput } = eslintResult;
+  let eslintOutput = eslintResult.output ?? source;
 
   // Step 2: Apply Prettier formatting to the ESLint output
   try {
@@ -120,7 +163,10 @@ async function lintFix({
     const formattedOutput = await prettier.format(eslintOutput, prettierConfig);
 
     // Step 4: Return combined result with properly formatted code
-    return { output: formattedOutput };
+    return {
+      ...eslintResult,
+      output: formattedOutput,
+    };
   } catch (error) {
     // Step 5: Handle errors gracefully with fallback behavior
     console.warn(
@@ -129,6 +175,9 @@ async function lintFix({
         ? (error as any).message
         : error,
     );
-    return { output: eslintOutput };
+    return {
+      ...eslintResult,
+      output: eslintOutput,
+    };
   }
 }

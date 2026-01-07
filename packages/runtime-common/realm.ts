@@ -2844,6 +2844,21 @@ export class Realm {
       // Get source from plain text request body
       const source = await request.text();
       const filename = request.headers.get('X-Filename') || 'input.gts';
+      let lintMode: LintArgs['lintMode'] = 'default';
+      let lintFlow: LintArgs['lintFlow'] = 'lintAndFix';
+      try {
+        let searchParams = new URL(request.url).searchParams;
+        let fullLint = searchParams.get('fullLint');
+        if (fullLint === 'true' || fullLint === '1') {
+          lintMode = 'full';
+        }
+        let requestedFlow = searchParams.get('lintFlow');
+        if (requestedFlow === 'lint') {
+          lintFlow = 'lint';
+        }
+      } catch {
+        // ignore malformed URLs and keep default lint mode
+      }
 
       if (!source || source.trim() === '') {
         return createResponse({
@@ -2863,7 +2878,7 @@ export class Realm {
         concurrencyGroup: `lint:${this.url}:${Math.random().toString().slice(-1)}`,
         timeout: 10,
         priority: userInitiatedPriority,
-        args: { source, filename } satisfies LintArgs,
+        args: { source, filename, lintMode, lintFlow } satisfies LintArgs,
       });
       result = await job.done;
     }
