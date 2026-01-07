@@ -90,6 +90,7 @@
     "setup:experiments-in-deployment": "mkdir -p /persistent/experiments && rsync --dry-run --itemize-changes --checksum --recursive ../experiments-realm/. /persistent/experiments/ && rsync --checksum --recursive ../experiments-realm/. /persistent/experiments/",
     "setup:catalog-in-deployment": "mkdir -p /persistent/catalog && rsync --dry-run --itemize-changes --checksum --recursive --delete ../catalog-realm/. /persistent/catalog/ && rsync --checksum --recursive --delete ../catalog-realm/. /persistent/catalog/",
     "setup:skills-in-deployment": "mkdir -p /persistent/skills",
+    "setup:boxel-homepage-in-deployment": "mkdir -p /persistent/boxel-homepage",
     "start": "PGPORT=5435 NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
     "start:base": "./scripts/start-base.sh --workerManagerPort=4213",
     "start:test-realms": "./scripts/start-test-realms.sh --workerManagerPort=4211",

@@ -76,7 +76,6 @@
    realm_url TEXT NOT NULL,
    file_path TEXT NOT NULL,
    created_at INTEGER NOT NULL,
-   content_hash TEXT,
    PRIMARY KEY ( realm_url, file_path ) 
 );
 
