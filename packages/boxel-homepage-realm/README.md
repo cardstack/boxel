@@ -23,7 +23,7 @@ Make sure you have completed the standard Boxel setup as described in the [main 
 
 If you have started from scratch these should have been automatically run for you, but they are safe to run again.
 
-1. **Clone the homepage repository** (automatically done with `start:all` or `start:development` in the realm-server package):
+1. **Clone the homepage repository** (automatically done with `start:all-with-homepage` or `start:development` in the realm-server package — `start:all` skips the homepage realm!):
 
    ```bash
    cd packages/boxel-homepage-realm
@@ -60,14 +60,17 @@ This workflow is ideal for rapid iteration and testing of the homepage:
 1. **Log in as homepage_writer** in the Boxel interface using the credentials above
    - Using a different browser profile or incognito window allow you to edit and test at the same time
 
-2. **Edit files directly** in the Boxel interface:
+2. **Visit `/boxel-homepage`** to view the workspace. This workspace will not show up in the workspace chooser.
+
+3. **Edit files directly** in the Boxel interface:
    - Navigate to the boxel-homepage realm
    - Create or modify the files using the visual editor
    - Changes are automatically saved to `packages/boxel-homepage-realm/contents/`
 
-3. **Test your changes** immediately in the live environment
+4. **Test your changes** immediately in the live environment
 
-4. **Commit and push** when satisfied:
+5. **Commit and push** when satisfied:
+   - **IMPORTANT**: Edits made as `homepage_writer` are saved locally and are not automatically synced to the **private** `boxel-home` repo. You need your own git access to push changes.
 
    ```bash
    cd packages/boxel-homepage-realm/contents
@@ -77,11 +80,11 @@ This workflow is ideal for rapid iteration and testing of the homepage:
    git push origin your-feature-branch
    ```
 
-5. **Create a Pull Request** in the [boxel-home](https://github.com/cardstack/boxel-home) repository
+6. **Create a Pull Request** in the [boxel-home](https://github.com/cardstack/boxel-home) repository
 
-6. **Deploy to staging** happens automatically when the PR is merged
+7. **Deploy to staging** happens automatically when the PR is merged
 
-7. **Tag the commit** to release to production
+8. **Tag the commit** to release to production
 
 ## Deployment Pipeline
 
@@ -95,7 +98,7 @@ This workflow is ideal for rapid iteration and testing of the homepage:
 
 ### Changes not appearing after changes
 
-- Ensure the boxel-homepage realm server is running (`pnpm start:all` in `packages/realm-server`)
+- Ensure the boxel-homepage realm server is running (`pnpm start:all-with-homepage` in `packages/realm-server` — `start:all` skips this realm!!!)
 - Check that you're logged in as `homepage_writer`
 - Verify the `contents/` directory exists and has the latest homepage files
 
