@@ -23,7 +23,7 @@ Make sure you have completed the standard Boxel setup as described in the [main 
 
 If you have started from scratch these should have been automatically run for you, but they are safe to run again.
 
-1. **Clone the homepage repository** (automatically done with `start:all-with-homepage` or `start:development` in the realm-server package — `start:all` skips the homepage realm!):
+1. **Clone the homepage repository** (automatically done with `start:all` or `start:development` in the realm-server package):
 
    ```bash
    cd packages/boxel-homepage-realm
@@ -98,7 +98,7 @@ This workflow is ideal for rapid iteration and testing of the homepage:
 
 ### Changes not appearing after changes
 
-- Ensure the boxel-homepage realm server is running (`pnpm start:all-with-homepage` in `packages/realm-server` — `start:all` skips this realm!!!)
+- Ensure the boxel-homepage realm server is running (`pnpm start:all` in `packages/realm-server`)
 - Check that you're logged in as `homepage_writer`
 - Verify the `contents/` directory exists and has the latest homepage files
 
