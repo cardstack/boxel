@@ -40,22 +40,26 @@ const dailyCreditGrant: Task<DailyCreditGrantArgs, void> = ({
     // materialized balance table/view (or denormalized user balance) to avoid
     // re-summing credits_ledger and to make the daily eligibility check cheaper.
     let rows = (await query(dbAdapter, [
-      `SELECT users.id as user_id,
-        COALESCE(SUM(credits_ledger.credit_amount), 0) as credit_balance,
-        EXISTS (
-          SELECT 1 FROM credits_ledger daily
-          WHERE daily.user_id = users.id
-            AND daily.credit_type = 'daily_credit'
-            AND daily.created_at >= EXTRACT(epoch FROM date_trunc('day', NOW()))::integer
-            AND daily.created_at < EXTRACT(epoch FROM date_trunc('day', NOW()) + interval '1 day')::integer
-        ) as granted_today
-      FROM users
-      LEFT JOIN credits_ledger ON credits_ledger.user_id = users.id
-      GROUP BY users.id`,
+      `SELECT user_id, credit_amount, granted_today
+      FROM (
+        SELECT users.id AS user_id,
+          (${lowCreditThreshold} - COALESCE(SUM(credits_ledger.credit_amount), 0)) AS credit_amount,
+          EXISTS (
+            SELECT 1 FROM credits_ledger daily
+            WHERE daily.user_id = users.id
+              AND daily.credit_type = 'daily_credit'
+              AND daily.created_at >= EXTRACT(epoch FROM date_trunc('day', NOW()))::integer
+              AND daily.created_at < EXTRACT(epoch FROM date_trunc('day', NOW()) + interval '1 day')::integer
+          ) AS granted_today
+        FROM users
+        LEFT JOIN credits_ledger ON credits_ledger.user_id = users.id
+        GROUP BY users.id
+      ) balances
+      WHERE credit_amount > 0
+        AND granted_today = false`,
     ])) as {
       user_id: string;
-      credit_balance: string | null;
-      granted_today: boolean;
+      credit_amount: string | null;
     }[];
 
     let grantedCount = 0;
@@ -66,13 +70,8 @@ const dailyCreditGrant: Task<DailyCreditGrantArgs, void> = ({
       subscription_cycle_id: null;
     }[] = [];
     for (let row of rows) {
-      let currentBalance = Number(row.credit_balance ?? 0);
-      let grantedToday = Boolean(row.granted_today);
-      if (Number.isNaN(currentBalance) || grantedToday) {
-        continue;
-      }
-      let creditAmount = lowCreditThreshold - currentBalance;
-      if (creditAmount <= 0) {
+      let creditAmount = Number(row.credit_amount ?? 0);
+      if (Number.isNaN(creditAmount) || creditAmount <= 0) {
         continue;
       }
 
