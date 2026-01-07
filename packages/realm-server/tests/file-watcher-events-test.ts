@@ -6,10 +6,8 @@ import type { DirResult } from 'tmp';
 import { removeSync, writeJSONSync, writeFileSync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
 import {
-  setupBaseRealmServer,
   setupPermissionedRealm,
   setupMatrixRoom,
-  matrixURL,
   waitForRealmEvent,
   waitUntil,
 } from './helpers';
@@ -52,7 +50,6 @@ module(basename(__filename), function () {
         dbAdapter,
       };
     }
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealm(hooks, {
       permissions: {

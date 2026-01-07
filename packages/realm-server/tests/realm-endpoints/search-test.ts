@@ -4,21 +4,13 @@ import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
 import type { Query } from '@cardstack/runtime-common/query';
-import {
-  setupBaseRealmServer,
-  setupPermissionedRealm,
-  matrixURL,
-  testRealmHref,
-  createJWT,
-} from '../helpers';
+import { setupPermissionedRealm, testRealmHref, createJWT } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
-  module('Realm-specific Endpoints | _search', function (hooks) {
+  module('Realm-specific Endpoints | _search', function () {
     let testRealm: Realm;
     let request: SuperTest<Test>;
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     function onRealmSetup(args: {
       testRealm: Realm;
@@ -28,7 +20,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       request = args.request;
     }
 
-    module('GET request', function (_hooks) {
+    module('GET request', function () {
       let query: Query = {
         filter: {
           on: {

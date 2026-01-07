@@ -4,13 +4,7 @@ import { join, basename } from 'path';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
-import {
-  setupBaseRealmServer,
-  setupPermissionedRealm,
-  matrixURL,
-  testRealmHref,
-  createJWT,
-} from '../helpers';
+import { setupPermissionedRealm, testRealmHref, createJWT } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
@@ -18,8 +12,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     let testRealm: Realm;
     let request: SuperTest<Test>;
     let dir: DirResult;
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.beforeEach(async function () {
       dir = dirSync();

@@ -4,12 +4,7 @@ import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
 import { SupportedMimeType } from '@cardstack/runtime-common';
 import type { Server } from 'http';
-import {
-  closeServer,
-  matrixURL,
-  setupBaseRealmServer,
-  setupPermissionedRealm,
-} from '../helpers';
+import { closeServer, setupPermissionedRealm } from '../helpers';
 
 module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
   let testRealm: Realm;
@@ -28,8 +23,6 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     testRealmHttpServer = server;
     request = req;
   }
-
-  setupBaseRealmServer(hooks, matrixURL);
 
   hooks.afterEach(async function () {
     await closeServer(testRealmHttpServer);

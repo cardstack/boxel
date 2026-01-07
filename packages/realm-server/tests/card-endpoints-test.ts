@@ -14,11 +14,9 @@ import {
 import { stringify, parse } from 'qs';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
-  setupBaseRealmServer,
   setupPermissionedRealm,
   setupPermissionedRealms,
   setupMatrixRoom,
-  matrixURL,
   closeServer,
   testRealmInfo,
   cleanWhiteSpace,
@@ -63,8 +61,6 @@ module(basename(__filename), function () {
         dbAdapter,
       };
     }
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.afterEach(async function () {
       await closeServer(testRealmHttpServer);
@@ -3492,8 +3488,6 @@ module(basename(__filename), function () {
     const consumerRealmURL = 'http://127.0.0.1:5522/';
     const UNREACHABLE_REALM_URL = 'https://example.invalid/offline/';
     let consumerRequest: SuperTest<Test>;
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealms(hooks, {
       realms: [
