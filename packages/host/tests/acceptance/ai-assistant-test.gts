@@ -47,7 +47,6 @@ import {
   getMonacoContent,
   envSkillId,
   catalogRealm,
-  skillsRealm,
 } from '../helpers';
 
 import {
@@ -1992,11 +1991,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
           name: 'Cardstack Catalog',
           type: 'catalog-workspace',
           url: catalogRealm.url,
-        },
-        {
-          name: 'Boxel Skills',
-          type: 'catalog-workspace',
-          url: skillsRealm.url,
         },
       ],
       'Context sent with message contains correct workspaces',
