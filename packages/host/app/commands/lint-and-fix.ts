@@ -30,7 +30,7 @@ export default class LintAndFixCommand extends HostBaseCommand<
     let commandModule = await this.loadCommandModule();
     const { LintAndFixResult } = commandModule;
     let response = await this.network.authedFetch(
-      `${input.realm}_lint?lintFlow=lintAndFix`,
+      `${input.realm}_lint?lintMode=lintAndAutofix`,
       {
         method: 'POST',
         body: input.fileContent,

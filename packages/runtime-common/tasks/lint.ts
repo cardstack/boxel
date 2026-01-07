@@ -7,14 +7,12 @@ import { resolvePrettierConfig } from '../prettier-config';
 
 export { lintSource };
 
-export type LintMode = 'default' | 'full';
-export type LintFlow = 'lint' | 'lintAndFix';
+export type LintMode = 'lint' | 'lintAndAutofix';
 
 export interface LintArgs {
   source: string;
   filename?: string; // Added to support parser detection
   lintMode?: LintMode;
-  lintFlow?: LintFlow;
 }
 
 export type LintResult = Linter.FixReport;
@@ -41,8 +39,7 @@ const lintSource: Task<LintArgs, LintResult> = ({
 async function lintFix({
   source,
   filename = 'input.gts',
-  lintMode = 'default',
-  lintFlow = 'lintAndFix',
+  lintMode = 'lintAndAutofix',
 }: LintArgs): Promise<LintResult> {
   if (typeof (globalThis as any).document !== 'undefined') {
     throw new Error(
@@ -86,31 +83,28 @@ async function lintFix({
     '@cardstack/boxel/no-duplicate-imports': 'error',
   };
 
-  let rules = baseRules;
-  if (lintMode === 'full') {
-    const eslintUnsupported = await import(
-      /* webpackIgnore: true */ 'eslint/use-at-your-own-risk'
-    );
-    const builtinRules =
-      (eslintUnsupported as any)?.builtinRules ??
-      (eslintUnsupported as any)?.default?.builtinRules ??
-      new Map();
-    const recommendedRules: Linter.RulesRecord = {};
-    if (builtinRules && typeof builtinRules[Symbol.iterator] === 'function') {
-      for (let [name, rule] of builtinRules as Map<string, any>) {
-        if (rule?.meta?.docs?.recommended) {
-          recommendedRules[name] = 'error';
-        }
-      }
-    } else if (builtinRules && typeof builtinRules === 'object') {
-      for (let [name, rule] of Object.entries(builtinRules)) {
-        if ((rule as any)?.meta?.docs?.recommended) {
-          recommendedRules[name] = 'error';
-        }
+  const eslintUnsupported = await import(
+    /* webpackIgnore: true */ 'eslint/use-at-your-own-risk'
+  );
+  const builtinRules =
+    (eslintUnsupported as any)?.builtinRules ??
+    (eslintUnsupported as any)?.default?.builtinRules ??
+    new Map();
+  const recommendedRules: Linter.RulesRecord = {};
+  if (builtinRules && typeof builtinRules[Symbol.iterator] === 'function') {
+    for (let [name, rule] of builtinRules as Map<string, any>) {
+      if (rule?.meta?.docs?.recommended) {
+        recommendedRules[name] = 'error';
       }
     }
-    rules = { ...recommendedRules, ...baseRules };
+  } else if (builtinRules && typeof builtinRules === 'object') {
+    for (let [name, rule] of Object.entries(builtinRules)) {
+      if ((rule as any)?.meta?.docs?.recommended) {
+        recommendedRules[name] = 'error';
+      }
+    }
   }
+  const rules = { ...recommendedRules, ...baseRules };
 
   const LINT_CONFIG: any = [
     {
@@ -141,7 +135,7 @@ async function lintFix({
 
   // Step 1: Run existing ESLint fixes (preserving current functionality)
   const linter = new eslintModule.Linter({ configType: 'flat' });
-  if (lintFlow === 'lint') {
+  if (lintMode === 'lint') {
     const messages = linter.verify(source, LINT_CONFIG, filename);
     return {
       fixed: false,

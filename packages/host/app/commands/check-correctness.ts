@@ -274,20 +274,18 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
 
       let filename = fileUrl.pathname.split('/').pop() || 'input.gts';
       let response = await this.network.authedFetch(
-        `${realmURL.href}_lint?fullLint=true&lintFlow=lint`,
+        `${realmURL.href}_lint?lintMode=lint`,
         {
           method: 'POST',
           body: content,
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': SupportedMimeType.CardSource,
-          'X-HTTP-Method-Override': 'QUERY',
-          'X-Filename': filename,
-        },
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': SupportedMimeType.CardSource,
+            'X-HTTP-Method-Override': 'QUERY',
+            'X-Filename': filename,
+          },
         },
       );
-
-      debugger;
 
       if (!response.ok) {
         console.warn(
