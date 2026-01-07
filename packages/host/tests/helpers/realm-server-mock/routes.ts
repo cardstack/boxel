@@ -2,7 +2,6 @@ import { getService } from '@universal-ember/test-support';
 
 import {
   buildSearchErrorResponse,
-  ensureTrailingSlash,
   parseRealmsParam,
   parsePrerenderedSearchRequestFromRequest,
   parseSearchQueryFromRequest,
@@ -18,8 +17,6 @@ import type {
   PrerenderedCardCollectionDocument,
 } from '@cardstack/runtime-common/document-types';
 
-import ENV from '@cardstack/host/config/environment';
-
 import type NetworkService from '@cardstack/host/services/network';
 
 import { getRoomIdForRealmAndUser } from '../mock-matrix/_utils';
@@ -29,7 +26,6 @@ import { getTestRealmRegistry } from '../test-realm-registry';
 import type { RealmServerMockRoute, RealmServerMockState } from './types';
 
 const TEST_MATRIX_USER = '@testuser:localhost';
-const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
 
 type SearchableRealm = {
   url?: string;
@@ -64,7 +60,6 @@ export function getRealmServerRoute(
 export function registerDefaultRoutes() {
   registerSearchRoutes();
   registerAuthRoutes();
-  registerCatalogRoutes();
 }
 
 function registerSearchRoutes() {
@@ -185,29 +180,6 @@ function registerAuthRoutes() {
           ),
         },
       });
-    },
-  });
-}
-
-function registerCatalogRoutes() {
-  registerRealmServerRoute({
-    path: '/_catalog-realms',
-    handler: async () => {
-      return new Response(
-        JSON.stringify({
-          data: [
-            {
-              type: 'catalog-realm',
-              id: catalogRealmURL,
-              attributes: {},
-            },
-          ],
-        }),
-        {
-          status: 200,
-          headers: { 'content-type': SupportedMimeType.JSONAPI },
-        },
-      );
     },
   });
 }
