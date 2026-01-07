@@ -6,6 +6,7 @@ CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
 NODE_NO_WARNINGS=1 \
   NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
+  LOW_CREDIT_THRESHOLD=2000 \
   ts-node \
   --transpileOnly worker-manager \
   --allPriorityCount="${WORKER_ALL_PRIORITY_COUNT:-1}" \

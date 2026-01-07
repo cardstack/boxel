@@ -111,6 +111,7 @@ catalog:
   classnames: ^2.3.2
   concurrently: ^8.2.2
   content-tag: ^4.0.0
+  cron: ^3.1.7
   countries-list: ^3.1.1
   crypto-browserify: ^3.12.0
   date-fns: ^2.28.0
