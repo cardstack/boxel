@@ -76,14 +76,13 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     let commandModule = await this.loadCommandModule();
     const { CorrectnessResultCard } = commandModule;
     let errors: string[] = [];
-    let warnings: string[] = [];
     let lintIssues: string[] = [];
 
     if (targetType === 'file' && input.targetRef.endsWith('.gts')) {
       errors = await this.collectModuleErrors(input.targetRef, roomId);
-      lintIssues = await this.collectLintWarnings(input.targetRef);
+      lintIssues = await this.collectLintIssues(input.targetRef);
     } else if (targetType === 'file' && this.isLintableFile(input.targetRef)) {
-      lintIssues = await this.collectLintWarnings(input.targetRef);
+      lintIssues = await this.collectLintIssues(input.targetRef);
     } else if (targetType === 'card') {
       if (!cardId) {
         throw new Error('Card correctness checks require a targetRef.');
@@ -98,7 +97,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     return new CorrectnessResultCard({
       correct: errors.length === 0,
       errors,
-      warnings,
+      warnings: [],
     });
   }
 
@@ -255,7 +254,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     return /\.(gts|ts)$/.test(path);
   }
 
-  private async collectLintWarnings(targetRef: string): Promise<string[]> {
+  private async collectLintIssues(targetRef: string): Promise<string[]> {
     try {
       if (!this.isLintableFile(targetRef)) {
         return [];
@@ -309,7 +308,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
         ? lintResult.messages
         : [];
       return messages
-        .map((message) => this.formatLintWarning(message))
+        .map((message) => this.formatLintIssue(message))
         .filter((warning) => warning.length > 0);
     } catch (error) {
       console.warn(
@@ -320,7 +319,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     }
   }
 
-  private formatLintWarning(message: LintResult['messages'][number]): string {
+  private formatLintIssue(message: LintResult['messages'][number]): string {
     if (!message || typeof message.message !== 'string') {
       return '';
     }

@@ -5,8 +5,6 @@ import { jobIdentity } from '../index';
 
 import { resolvePrettierConfig } from '../prettier-config';
 
-export { lintSource };
-
 export type LintMode = 'lint' | 'lintAndAutofix';
 
 export interface LintArgs {
@@ -17,7 +15,7 @@ export interface LintArgs {
 
 export type LintResult = Linter.FixReport;
 
-const lintSource: Task<LintArgs, LintResult> = ({ reportStatus, log }) =>
+export const lintSource: Task<LintArgs, LintResult> = ({ reportStatus, log }) =>
   async function (args) {
     let { source: _remove, ...displayableArgs } = args;
     let { jobInfo } = displayableArgs;
