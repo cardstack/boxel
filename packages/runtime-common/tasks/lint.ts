@@ -17,10 +17,7 @@ export interface LintArgs {
 
 export type LintResult = Linter.FixReport;
 
-const lintSource: Task<LintArgs, LintResult> = ({
-  reportStatus,
-  log,
-}) =>
+const lintSource: Task<LintArgs, LintResult> = ({ reportStatus, log }) =>
   async function (args) {
     let { source: _remove, ...displayableArgs } = args;
     let { jobInfo } = displayableArgs;
