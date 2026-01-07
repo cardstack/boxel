@@ -181,7 +181,6 @@ const CACHE_HIT_VALUE = 'hit';
 const CACHE_MISS_VALUE = 'miss';
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
-const CONTENT_HASH_HEADER = 'X-Boxel-Content-Hash';
 const FILE_DEF_CODE_REF: ResolvedCodeRef = {
   module: `${baseRealm.url}file-api`,
   name: 'FileDef',
@@ -2110,7 +2109,7 @@ export class Realm {
     return this.#adapter.openFile(localPath);
   }
 
-  private async fileCardDocument(
+  private async fileMetaDocument(
     requestContext: RequestContext,
     localPath: LocalPath,
     contentType: SupportedMimeType = SupportedMimeType.CardJson,
@@ -2138,13 +2137,13 @@ export class Realm {
           sourceUrl: fileURL,
           contentType: inferredContentType,
           contentHash,
+          lastModified: fileRef.lastModified,
+          createdAt: createdAt ?? fileRef.lastModified,
         },
         meta: {
           adoptsFrom: FILE_DEF_CODE_REF,
-          lastModified: fileRef.lastModified,
           realmInfo,
           realmURL: this.url,
-          resourceCreatedAt: createdAt ?? fileRef.lastModified,
         },
         links: { self: fileURL },
       },
@@ -2154,22 +2153,16 @@ export class Realm {
       init: {
         headers: {
           'content-type': contentType,
-          ...lastModifiedHeader(doc),
-          ...(createdAt != null
-            ? { 'x-created': formatRFC7231(createdAt * 1000) }
-            : {}),
-          ...(contentHash ? { [CONTENT_HASH_HEADER]: contentHash } : {}),
         },
       },
       requestContext,
     });
   }
 
-  private async fileCardDocumentFromIndex(
+  private async fileMetaDocumentFromIndex(
     requestContext: RequestContext,
     localPath: LocalPath,
     fileEntry: IndexedFile,
-    contentType: SupportedMimeType = SupportedMimeType.CardJson,
   ): Promise<Response> {
     let fileURL = this.paths.fileURL(localPath).href;
     let name = localPath.split('/').pop() ?? localPath;
@@ -2193,13 +2186,13 @@ export class Realm {
           sourceUrl: searchDoc.sourceUrl ?? fileURL,
           contentType: searchDoc.contentType ?? inferredContentType,
           contentHash,
+          lastModified: fileEntry.lastModified ?? unixTime(Date.now()),
+          createdAt: createdAt ?? unixTime(Date.now()),
         },
         meta: {
           adoptsFrom: FILE_DEF_CODE_REF,
-          lastModified: fileEntry.lastModified ?? unixTime(Date.now()),
           realmInfo,
           realmURL: this.url,
-          resourceCreatedAt: createdAt ?? unixTime(Date.now()),
         },
         links: { self: fileURL },
       },
@@ -2208,12 +2201,7 @@ export class Realm {
       body: JSON.stringify(doc, null, 2),
       init: {
         headers: {
-          'content-type': contentType,
-          ...lastModifiedHeader(doc),
-          ...(createdAt != null
-            ? { 'x-created': formatRFC7231(createdAt * 1000) }
-            : {}),
-          ...(contentHash ? { [CONTENT_HASH_HEADER]: contentHash } : {}),
+          'content-type': SupportedMimeType.FileMeta,
         },
       },
       requestContext,
@@ -2232,14 +2220,13 @@ export class Realm {
       this.paths.fileURL(localPath),
     );
     if (fileEntry) {
-      return await this.fileCardDocumentFromIndex(
+      return await this.fileMetaDocumentFromIndex(
         requestContext,
         localPath,
         fileEntry,
-        SupportedMimeType.FileMeta,
       );
     }
-    let fileResponse = await this.fileCardDocument(
+    let fileResponse = await this.fileMetaDocument(
       requestContext,
       localPath,
       SupportedMimeType.FileMeta,

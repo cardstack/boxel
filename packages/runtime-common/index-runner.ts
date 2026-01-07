@@ -40,23 +40,26 @@ import {
 import { inferContentType } from './infer-content-type';
 import { CardError, isCardError, serializableError } from './error';
 
-const FILEDEF_MODULE_BY_EXTENSION: Record<string, string> = {
+const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   // TODO: Replace with realm metadata configuration.
-  '.mismatch': './filedef-mismatch',
+  '.mismatch': { module: './filedef-mismatch', name: 'FileDef' },
 };
 
-function resolveFileDefModule(fileURL: URL): string {
+function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
   let name = fileURL.pathname.split('/').pop() ?? '';
   let dot = name.lastIndexOf('.');
   let extension = dot === -1 ? '' : name.slice(dot).toLowerCase();
-  let mapping = extension ? FILEDEF_MODULE_BY_EXTENSION[extension] : undefined;
+  let mapping = extension ? FILEDEF_CODE_REF_BY_EXTENSION[extension] : undefined;
   if (!mapping) {
-    return `${baseRealm.url}file-api`;
+    return { module: `${baseRealm.url}file-api`, name: 'FileDef' };
   }
-  if (mapping.includes('://')) {
+  if (mapping.module.includes('://')) {
     return mapping;
   }
-  return new URL(mapping, fileURL).href;
+  return {
+    ...mapping,
+    module: new URL(mapping.module, fileURL).href,
+  };
 }
 
 function canonicalURL(url: string, relativeTo?: string): string {
@@ -711,11 +714,11 @@ export class IndexRunner {
     let entryURL = new URL(fileURL);
     let name = path.split('/').pop() ?? path;
     let contentType = inferContentType(name);
-    let fileDefModule = resolveFileDefModule(new URL(fileURL));
+    let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
     let clearCache = this.#consumeClearCacheForRender();
     let renderOptions: RenderRouteOptions = {
       fileExtract: true,
-      fileDefModule,
+      fileDefCodeRef,
       ...(clearCache ? { clearCache } : {}),
     };
 
@@ -768,7 +771,7 @@ export class IndexRunner {
         uncaughtError,
       );
       renderError.error.deps = renderError.error.deps ?? [];
-      renderError.error.deps.push(fileURL, fileDefModule);
+      renderError.error.deps.push(fileURL, fileDefCodeRef.module);
       if (extractResult?.deps) {
         renderError.error.deps.push(...extractResult.deps);
       }

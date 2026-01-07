@@ -51,8 +51,10 @@ export type SerializedFile = {
 
 export type ByteStream = ReadableStream<Uint8Array> | Uint8Array;
 
-export class FileSignatureMismatchError extends Error {
-  name = 'FileSignatureMismatchError';
+// Throw this error from extractAttributes when the file content doesn't match this FileDef's
+// expectations so the extractor can fall back to a superclass/base FileDef.
+export class FileContentMismatchError extends Error {
+  name = 'FileContentMismatchError';
 }
 
 export class FileDef extends BaseDef {

@@ -1,9 +1,11 @@
 import stringify from 'safe-stable-stringify';
+import { isResolvedCodeRef } from './code-ref';
+import type { ResolvedCodeRef } from './code-ref';
 
 export interface RenderRouteOptions {
   clearCache?: true;
   fileExtract?: true;
-  fileDefModule?: string;
+  fileDefCodeRef?: ResolvedCodeRef;
   fileContentHash?: string;
 }
 
@@ -21,8 +23,8 @@ export function parseRenderRouteOptions(
     }
     if (parsed.fileExtract) {
       options.fileExtract = true;
-      if (typeof parsed.fileDefModule === 'string') {
-        options.fileDefModule = parsed.fileDefModule;
+      if (isResolvedCodeRef(parsed.fileDefCodeRef)) {
+        options.fileDefCodeRef = parsed.fileDefCodeRef;
       }
       if (typeof parsed.fileContentHash === 'string') {
         options.fileContentHash = parsed.fileContentHash;
@@ -43,8 +45,8 @@ export function serializeRenderRouteOptions(
   }
   if (options.fileExtract) {
     serialized.fileExtract = true;
-    if (options.fileDefModule) {
-      serialized.fileDefModule = options.fileDefModule;
+    if (options.fileDefCodeRef) {
+      serialized.fileDefCodeRef = options.fileDefCodeRef;
     }
     if (options.fileContentHash) {
       serialized.fileContentHash = options.fileContentHash;

@@ -400,12 +400,12 @@ function makeTestRealmFileSystem(): Record<
     'filedef-mismatch.gts': `
       import {
         FileDef as BaseFileDef,
-        FileSignatureMismatchError,
+        FileContentMismatchError,
       } from "https://cardstack.com/base/file-api";
 
       export class FileDef extends BaseFileDef {
         static async extractAttributes() {
-          throw new FileSignatureMismatchError('signature mismatch');
+          throw new FileContentMismatchError('content mismatch');
         }
       }
     `,

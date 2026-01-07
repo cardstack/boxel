@@ -217,13 +217,6 @@ module(basename(__filename), function () {
         ),
         'content-type uses file meta mime type',
       );
-      let fileBytes = readFileSync(join(testRealmDir, 'person.gts'));
-      assert.strictEqual(
-        response.headers['x-boxel-content-hash'],
-        md5(fileBytes as unknown as Uint8Array),
-        'content hash header matches file contents',
-      );
-
       let json = response.body as LooseSingleCardDocument;
       assert.strictEqual(json.data.attributes?.name, 'person.gts');
       assert.deepEqual(json.data.meta?.adoptsFrom, {
