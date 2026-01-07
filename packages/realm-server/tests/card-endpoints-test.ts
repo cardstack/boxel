@@ -691,8 +691,8 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'CardDef',
+                    module: `${testRealm.url}person`,
+                    name: 'Person',
                   },
                 },
               },
@@ -706,6 +706,7 @@ module(basename(__filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              type: 'Person',
             },
           );
           let id = incrementalEventContent.invalidations[0].split('/').pop()!;
@@ -734,7 +735,7 @@ module(basename(__filename), function () {
 
           assert.strictEqual(
             json.data.id,
-            `${testRealmHref}CardDef/${id}`,
+            `${testRealmHref}Person/${id}`,
             'the id is correct',
           );
           assert.ok(json.data.meta.lastModified, 'lastModified is populated');
@@ -742,7 +743,7 @@ module(basename(__filename), function () {
             dir.name,
             'realm_server_1',
             'test',
-            'CardDef',
+            'Person',
             `${id}.json`,
           );
           assert.ok(existsSync(cardFile), 'card json exists');
@@ -755,8 +756,8 @@ module(basename(__filename), function () {
                 type: 'card',
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'CardDef',
+                    module: '../person',
+                    name: 'Person',
                   },
                 },
               },
@@ -1703,8 +1704,8 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'CardDef',
+                    module: `${testRealm.url}person`,
+                    name: 'Person',
                   },
                 },
               },
