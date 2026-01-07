@@ -12,6 +12,7 @@ import {
   type RealmAction,
 } from '@cardstack/runtime-common';
 
+import ENV from '@cardstack/host/config/environment';
 import type NetworkService from '@cardstack/host/services/network';
 
 import { getRoomIdForRealmAndUser } from './mock-matrix/_utils';
@@ -143,6 +144,28 @@ function registerDefaultRoutes() {
           ),
         },
       });
+    },
+  });
+
+  registerRealmServerRoute({
+    path: '/_catalog-realms',
+    handler: async () => {
+      let catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              type: 'catalog-realm',
+              id: catalogRealmURL,
+              attributes: {},
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        },
+      );
     },
   });
 }
