@@ -1,10 +1,9 @@
 import { service } from '@ember/service';
 
-import flatMap from 'lodash/flatMap';
-
 import type { Filter } from '@cardstack/runtime-common';
 import { assertQuery } from '@cardstack/runtime-common';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -77,22 +76,13 @@ export class SearchCardsByQueryCommand extends HostBaseCommand<
   ): Promise<BaseCommandModule.SearchCardsResult> {
     assertQuery(input.query);
     let realmUrls = this.realmServer.availableRealmURLs;
-    let instances = flatMap(
-      await Promise.all(
-        realmUrls.map(async (realm) => {
-          try {
-            let realmInstances = await this.store.search(
-              input.query,
-              new URL(realm),
-            );
-            return realmInstances;
-          } catch (e) {
-            console.error(`Error searching in realm ${realm}:`, e, input.query);
-            return [];
-          }
-        }),
-      ),
-    );
+    let instances: CardDef[];
+    try {
+      instances = await this.store.search(input.query, realmUrls);
+    } catch (e) {
+      console.error('Error searching realms:', e, input.query);
+      instances = [];
+    }
 
     let commandModule = await this.loadCommandModule();
     const { SearchCardsResult, SearchCardSummaryField } = commandModule;

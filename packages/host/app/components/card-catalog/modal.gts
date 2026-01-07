@@ -9,8 +9,6 @@ import Component from '@glimmer/component';
 import { restartableTask, task, timeout } from 'ember-concurrency';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 
-import flatMap from 'lodash/flatMap';
-
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 import { Button, BoxelInput } from '@cardstack/boxel-ui/components';
@@ -256,12 +254,12 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 
   private get availableRealms(): Record<string, RealmInfo> | undefined {
+    if (!this.state) {
+      return undefined;
+    }
     let items: Record<string, RealmInfo> = {};
-    for (let [url, realmMeta] of Object.entries(this.realm.allRealmsInfo)) {
-      if (this.state == null || !this.state.availableRealmUrls.includes(url)) {
-        continue;
-      }
-      items[url] = realmMeta.info;
+    for (let url of this.state.availableRealmUrls) {
+      items[url] = this.realm.info(url);
     }
     return items;
   }
@@ -349,6 +347,16 @@ export default class CardCatalogModal extends Component<Signature> {
       } = {},
     ) => {
       await this.realmServer.ready;
+      await Promise.all(
+        this.realmServer.availableRealmURLs.map(async (realmURL) => {
+          let resource = this.realm.getOrCreateRealmResource(realmURL);
+          try {
+            await resource.fetchInfo();
+          } catch {
+            // Leave realm info as fallback if it cannot be fetched.
+          }
+        }),
+      );
       this.stateId++;
       let title = await chooseCardTitle(
         query.filter,
@@ -361,16 +369,9 @@ export default class CardCatalogModal extends Component<Signature> {
       });
       let preselectedCardUrl: string | undefined;
       if (opts?.preselectedCardTypeQuery) {
-        let instances: CardDef[] = flatMap(
-          await Promise.all(
-            this.realmServer.availableRealmURLs.map(
-              async (realm) =>
-                await this.store.search(
-                  opts.preselectedCardTypeQuery!,
-                  new URL(realm),
-                ),
-            ),
-          ),
+        let instances: CardDef[] = await this.store.search(
+          opts.preselectedCardTypeQuery!,
+          this.realmServer.availableRealmURLs,
         );
         if (instances?.[0]?.id) {
           preselectedCardUrl = `${instances[0].id}.json`;

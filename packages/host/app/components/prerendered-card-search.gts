@@ -25,6 +25,7 @@ import {
   type PrerenderedCardData,
   type PrerenderedCardComponentSignature,
   CardContextName,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 import type { PrerenderedCardCollectionDocument } from '@cardstack/runtime-common/document-types';
 import { isPrerenderedCardCollectionDocument } from '@cardstack/runtime-common/document-types';
@@ -136,6 +137,18 @@ const normalizeRealms = (realms: string[]) => {
   });
 };
 
+function resolveCardRealmUrl(cardId: string, realms: string[]): string {
+  let cardUrl = new URL(cardId);
+  for (let realm of realms) {
+    let realmUrl = new URL(realm);
+    let realmPaths = new RealmPaths(realmUrl);
+    if (realmPaths.inRealm(cardUrl)) {
+      return realmPaths.url;
+    }
+  }
+  return new RealmPaths(cardUrl).url;
+}
+
 interface SearchResult {
   instances: PrerenderedCard[];
   meta: QueryResultsMeta;
@@ -225,7 +238,9 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
     let response = await this.realmServer.maybeAuthedFetch(searchURL.href, {
       method: 'QUERY',
       headers: {
+        Accept: SupportedMimeType.CardJson,
         'Content-Type': 'application/json',
+        'X-HTTP-Method-Override': 'QUERY',
       },
       body: JSON.stringify({
         ...query,
@@ -267,9 +282,10 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
 
     let modifier = this.cardComponentModifier;
 
+    let resolvedRealms = normalizeRealms(realms);
     return {
       instances: json.data.filter(Boolean).map((r) => {
-        let realmUrl = new RealmPaths(new URL(r.id)).url;
+        let realmUrl = resolveCardRealmUrl(r.id, resolvedRealms);
         return new PrerenderedCard(
           {
             url: r.id,

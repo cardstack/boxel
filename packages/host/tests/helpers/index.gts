@@ -809,7 +809,7 @@ async function setupTestRealm({
 
   let realmServer = getService('realm-server');
   if (!realmServer.availableRealmURLs.includes(realmURL)) {
-    realmServer.setAvailableRealmURLs([realmURL]);
+    await realmServer.setAvailableRealmURLs([realmURL]);
   }
 
   return { realm, adapter };

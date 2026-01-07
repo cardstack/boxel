@@ -1,8 +1,8 @@
-import { getService } from '@universal-ember/test-support';
-
 import {
   buildSearchErrorResponse,
-  ensureTrailingSlash,
+  combinePrerenderedSearchResults,
+  combineSearchResults,
+  baseRealm,
   parseRealmsParam,
   parsePrerenderedSearchRequestFromRequest,
   parseSearchQueryFromRequest,
@@ -10,48 +10,25 @@ import {
   searchPrerenderedRealms,
   searchRealms,
   SupportedMimeType,
-  testRealmURL,
-  type RealmAction,
 } from '@cardstack/runtime-common';
 
-import ENV from '@cardstack/host/config/environment';
-import type NetworkService from '@cardstack/host/services/network';
+import { getRoomIdForRealmAndUser } from '../mock-matrix/_utils';
+import { createJWT, testRealmSecretSeed } from '../test-auth';
+import { getTestRealmRegistry } from '../test-realm-registry';
 
-import { getRoomIdForRealmAndUser } from './mock-matrix/_utils';
-import { createJWT, testRealmSecretSeed } from './test-auth';
-import { getTestRealmRegistry } from './test-realm-registry';
+import {
+  buildPrerenderedDocFromCards,
+  buildSearchDocFromCards,
+  catalogRealmURL,
+  filterBaseRealmCards,
+  filterCatalogRealmCards,
+} from './fixtures';
 
-// Host tests mock realm-server endpoints here (e.g. /_search, /_realm-auth,
-// /_server-session, etc.) to avoid wiring up a real realm server in
-// acceptance/integration tests.
-const realmServerHandlerStateSymbol = Symbol('test-realm-server-handler-state');
+import type { RealmServerMockRoute, RealmServerMockState } from './types';
+
 const TEST_MATRIX_USER = '@testuser:localhost';
 
-type RealmServerMockRouteHandler = (
-  req: Request,
-  url: URL,
-  state: RealmServerMockState,
-) => Promise<Response | null>;
-
-type RealmServerMockRoute = {
-  path: string;
-  handler: RealmServerMockRouteHandler;
-};
-
-type EnsureSessionRoom = (
-  realmURL: string,
-  userId: string,
-) => Promise<void> | void;
-
-type RealmServerMockState = {
-  handler: (req: Request) => Promise<Response | null>;
-  realmPermissions: Map<string, RealmAction[]>;
-  mountedVirtualNetwork?: unknown;
-  ensureSessionRoom?: EnsureSessionRoom;
-};
-
 const realmServerRoutes = new Map<string, RealmServerMockRoute>();
-let sessionRoomEnsurer: EnsureSessionRoom | undefined;
 
 function normalizeRoutePath(path: string): string {
   return path.startsWith('/') ? path : `/${path}`;
@@ -61,11 +38,19 @@ function registerRealmServerRoute(route: RealmServerMockRoute) {
   realmServerRoutes.set(normalizeRoutePath(route.path), route);
 }
 
-function getRealmServerRoute(url: URL): RealmServerMockRoute | undefined {
+export function getRealmServerRoute(
+  url: URL,
+): RealmServerMockRoute | undefined {
   return realmServerRoutes.get(url.pathname);
 }
 
-function registerDefaultRoutes() {
+export function registerDefaultRoutes() {
+  registerSearchRoutes();
+  registerAuthRoutes();
+  registerCatalogRoutes();
+}
+
+function registerSearchRoutes() {
   registerRealmServerRoute({
     path: '/_search',
     handler: async (req, url) => {
@@ -90,6 +75,22 @@ function registerDefaultRoutes() {
         realmList.map((realmURL) => registry.get(realmURL)?.realm),
         cardsQuery,
       );
+      let extraDocs = [] as ReturnType<typeof buildSearchDocFromCards>[];
+      if (realmList.includes(baseRealm.url)) {
+        let baseCards = filterBaseRealmCards(cardsQuery);
+        if (baseCards.length > 0) {
+          extraDocs.push(buildSearchDocFromCards(baseCards));
+        }
+      }
+      if (realmList.includes(catalogRealmURL)) {
+        let catalogCards = filterCatalogRealmCards(cardsQuery);
+        if (catalogCards.length > 0) {
+          extraDocs.push(buildSearchDocFromCards(catalogCards));
+        }
+      }
+      if (extraDocs.length > 0) {
+        combined = combineSearchResults([combined, ...extraDocs]);
+      }
 
       return new Response(JSON.stringify(combined), {
         status: 200,
@@ -127,6 +128,22 @@ function registerDefaultRoutes() {
           renderType: parsed.renderType,
         },
       );
+      let extraDocs = [] as ReturnType<typeof buildPrerenderedDocFromCards>[];
+      if (realmList.includes(baseRealm.url)) {
+        let baseCards = filterBaseRealmCards(parsed.cardsQuery);
+        if (baseCards.length > 0) {
+          extraDocs.push(buildPrerenderedDocFromCards(baseCards));
+        }
+      }
+      if (realmList.includes(catalogRealmURL)) {
+        let catalogCards = filterCatalogRealmCards(parsed.cardsQuery);
+        if (catalogCards.length > 0) {
+          extraDocs.push(buildPrerenderedDocFromCards(catalogCards));
+        }
+      }
+      if (extraDocs.length > 0) {
+        combined = combinePrerenderedSearchResults([combined, ...extraDocs]);
+      }
 
       return new Response(JSON.stringify(combined), {
         status: 200,
@@ -134,10 +151,12 @@ function registerDefaultRoutes() {
       });
     },
   });
+}
 
+function registerAuthRoutes() {
   registerRealmServerRoute({
     path: '/_realm-auth',
-    handler: async (_req, _url, state) => {
+    handler: async (_req, _url, state: RealmServerMockState) => {
       const authTokens: Record<string, string> = {};
       for (let [realmURL, permissions] of state.realmPermissions.entries()) {
         if (state.ensureSessionRoom) {
@@ -185,11 +204,12 @@ function registerDefaultRoutes() {
       });
     },
   });
+}
 
+function registerCatalogRoutes() {
   registerRealmServerRoute({
     path: '/_catalog-realms',
     handler: async () => {
-      let catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
       return new Response(
         JSON.stringify({
           data: [
@@ -207,78 +227,4 @@ function registerDefaultRoutes() {
       );
     },
   });
-}
-
-registerDefaultRoutes();
-
-async function handleRealmServerMockRequest(
-  req: Request,
-  state: RealmServerMockState,
-): Promise<Response | null> {
-  let url = new URL(req.url);
-  let route = getRealmServerRoute(url);
-  if (!route) {
-    return null;
-  }
-  return route.handler(req, url, state);
-}
-
-function ensureRealmServerMockState(
-  network: NetworkService,
-): RealmServerMockState {
-  let state = (network as any)[realmServerHandlerStateSymbol] as
-    | RealmServerMockState
-    | undefined;
-  if (!state) {
-    let realmPermissions = new Map<string, RealmAction[]>();
-    let handler = async (req: Request) => {
-      let currentState = (network as any)[realmServerHandlerStateSymbol] as
-        | RealmServerMockState
-        | undefined;
-      if (!currentState) {
-        return null;
-      }
-      return handleRealmServerMockRequest(req, currentState);
-    };
-    state = {
-      realmPermissions,
-      handler,
-      ensureSessionRoom: sessionRoomEnsurer,
-    };
-    (network as any)[realmServerHandlerStateSymbol] = state;
-  }
-  if (state.mountedVirtualNetwork !== network.virtualNetwork) {
-    network.mount(state.handler, { prepend: true });
-    state.mountedVirtualNetwork = network.virtualNetwork;
-  }
-  return state;
-}
-
-export function setupAuthEndpoints(
-  realmPermissions: Record<string, RealmAction[]> = {
-    [testRealmURL]: ['read', 'write'],
-  },
-) {
-  let network = getService('network') as NetworkService;
-  let state = ensureRealmServerMockState(network);
-
-  for (let [realmURL, permissions] of Object.entries(realmPermissions)) {
-    state.realmPermissions.set(
-      ensureTrailingSlash(realmURL),
-      permissions as RealmAction[],
-    );
-  }
-}
-
-export function registerRealmAuthSessionRoomEnsurer(
-  callback: EnsureSessionRoom,
-) {
-  sessionRoomEnsurer = callback;
-  let network = getService('network') as NetworkService;
-  let state = (network as any)[realmServerHandlerStateSymbol] as
-    | RealmServerMockState
-    | undefined;
-  if (state) {
-    state.ensureSessionRoom = callback;
-  }
 }
