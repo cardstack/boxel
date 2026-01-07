@@ -304,11 +304,11 @@ module(basename(__filename), function () {
               .send({
                 data: {
                   type: 'card',
-                  attributes: { cardInfo: { title: 'Test Card' } },
+                  attributes: { firstName: 'My Name' },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/card-api',
-                      name: 'CardDef',
+                      module: `${testRealmURL}person`,
+                      name: 'Person',
                     },
                   },
                 },
@@ -346,7 +346,7 @@ module(basename(__filename), function () {
             let doc = response.body as SingleCardDocument;
             assert.strictEqual(
               doc.data.attributes?.title,
-              'Test Card',
+              'My Name',
               'instance data is correct',
             );
           }
@@ -357,9 +357,12 @@ module(basename(__filename), function () {
               .get(
                 `${new URL(realm.url).pathname}_search?${stringify({
                   filter: {
-                    on: baseCardRef,
+                    on: {
+                      module: `${testRealmURL}person`,
+                      name: 'Person',
+                    },
                     eq: {
-                      title: 'Test Card',
+                      title: 'My Name',
                     },
                   },
                 } as Query)}`,
