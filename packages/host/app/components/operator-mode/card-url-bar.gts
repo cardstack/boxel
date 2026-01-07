@@ -26,7 +26,7 @@ interface Signature {
     userHasDismissedError: boolean; // user driven state that indicates if we should show error message
     resetLoadFileError: () => void; // callback to reset upstream error state -- perform on keypress
     dismissURLError: () => void; // callback allow user to dismiss the error message
-    realmURL: URL;
+    realmURL: string;
   };
 }
 
@@ -39,7 +39,7 @@ export default class CardURLBar extends Component<Signature> {
       ...attributes
     >
       <div class='realm-info' data-test-card-url-bar-realm-info>
-        {{#let (this.realm.info @realmURL.href) as |realmInfo|}}
+        {{#let (this.realm.info @realmURL) as |realmInfo|}}
           <RealmIcon
             class='url-realm-icon'
             @realmInfo={{realmInfo}}

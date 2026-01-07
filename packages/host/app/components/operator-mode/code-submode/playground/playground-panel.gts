@@ -506,7 +506,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get currentRealm() {
-    return this.operatorModeStateService.realmURL.href;
+    return this.operatorModeStateService.realmURL;
   }
 
   private get canWriteRealm() {

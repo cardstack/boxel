@@ -11,7 +11,7 @@ import Directory from './directory';
 
 interface Signature {
   Args: {
-    realmURL: URL;
+    realmURL: string;
     selectedFile?: LocalPath;
     openDirs?: LocalPath[];
     onFileSelected?: (entryPath: LocalPath) => Promise<void>;

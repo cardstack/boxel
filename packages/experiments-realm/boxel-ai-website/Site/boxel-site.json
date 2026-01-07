@@ -1,0 +1,41 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Site",
+        "module": "../site-config"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Boxel",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "siteTitle": "Boxel",
+      "ctaPrimaryUrl": "https://app.boxel.ai",
+      "ctaPrimaryText": "Open App",
+      "ctaSecondaryUrl": "https://app.boxel.ai/signin",
+      "ctaSecondaryText": "Sign In"
+    },
+    "relationships": {
+      "pages": {
+        "links": {
+          "self": null
+        }
+      },
+      "brandGuide": {
+        "links": {
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

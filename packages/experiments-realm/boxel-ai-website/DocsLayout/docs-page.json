@@ -1,0 +1,45 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "DocsLayoutCard",
+        "module": "../boxel-docs-layout"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Docs Page",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "sections": [
+        {
+          "sectionNumber": null,
+          "sectionLabel": null,
+          "showInNav": false
+        }
+      ],
+      "showSidebar": true,
+      "currentPageId": "docs"
+    },
+    "relationships": {
+      "site": {
+        "links": {
+          "self": "../Site/boxel-site"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+        }
+      },
+      "sections.0.content": {
+        "links": {
+          "self": "../sections/HeroSection/compose-hero"
+        }
+      }
+    }
+  }
+}

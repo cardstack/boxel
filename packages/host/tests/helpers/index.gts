@@ -150,6 +150,8 @@ export function setMonacoContent(content: string): string {
 }
 
 export function cleanupMonacoEditorModels() {
+  // If there's no monaco, nothing to clean up
+  if (!(window as any).monaco) return;
   let diffEditors = (window as any).monaco.editor.getDiffEditors();
   for (let editor of diffEditors) {
     editor.dispose();

@@ -1,0 +1,190 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CatalogSection",
+        "module": "../catalog-section"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Catalog",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "headline": "Skip generation. Remix proven solutions.",
+      "categories": [
+        {
+          "categoryIcon": "📊",
+          "categoryLabel": "Business",
+          "accentColor": "var(--primary)"
+        },
+        {
+          "categoryIcon": "🎨",
+          "categoryLabel": "Creative",
+          "accentColor": "var(--primary)"
+        },
+        {
+          "categoryIcon": "📝",
+          "categoryLabel": "Productivity",
+          "accentColor": "var(--primary)"
+        },
+        {
+          "categoryIcon": "💰",
+          "categoryLabel": "Finance",
+          "accentColor": "var(--primary)"
+        },
+        {
+          "categoryIcon": "🛒",
+          "categoryLabel": "E-commerce",
+          "accentColor": "var(--primary)"
+        },
+        {
+          "categoryIcon": "🤖",
+          "categoryLabel": "AI Tools",
+          "accentColor": "var(--secondary)"
+        }
+      ],
+      "subheadline": "Your AI searches the catalog before generating from scratch. Need a CRM? It finds proven templates that match. Browse what the community has built, or let AI find it for you—either way, you get full source to customize.",
+      "catalogItems": [
+        {
+          "itemIcon": "📈",
+          "itemTitle": "Sales CRM",
+          "itemDescription": "Complete CRM with contacts, deals, pipeline view, and activity tracking.",
+          "itemPrice": "Free",
+          "remixCount": "2.4k remixes",
+          "badge": "app",
+          "isHighlighted": false,
+          "accentColor": "primary"
+        },
+        {
+          "itemIcon": "📋",
+          "itemTitle": "Project Tracker",
+          "itemDescription": "Kanban boards, task lists, deadlines, and team assignments.",
+          "itemPrice": "$5",
+          "remixCount": "1.8k remixes",
+          "badge": "app",
+          "isHighlighted": false,
+          "accentColor": "primary"
+        },
+        {
+          "itemIcon": "🧾",
+          "itemTitle": "Invoice System",
+          "itemDescription": "Create, send, and track invoices. Stripe integration included.",
+          "itemPrice": "$12",
+          "remixCount": "956 remixes",
+          "badge": "app",
+          "isHighlighted": false,
+          "accentColor": "primary"
+        },
+        {
+          "itemIcon": "✍️",
+          "itemTitle": "Blog Platform",
+          "itemDescription": "Full publishing system with posts, authors, tags, and SEO.",
+          "itemPrice": "Free",
+          "remixCount": "3.2k remixes",
+          "badge": "app",
+          "isHighlighted": false,
+          "accentColor": "primary"
+        },
+        {
+          "itemIcon": "🛠️",
+          "itemTitle": "Code Review",
+          "itemDescription": "AI skill that reviews code for bugs, performance, and best practices.",
+          "itemPrice": "$8",
+          "remixCount": "612 remixes",
+          "badge": "skill",
+          "isHighlighted": true,
+          "accentColor": "accent"
+        },
+        {
+          "itemIcon": "📊",
+          "itemTitle": "Analytics Dashboard",
+          "itemDescription": "Charts, metrics, KPIs, and data visualization components.",
+          "itemPrice": "$15",
+          "remixCount": "789 remixes",
+          "badge": "app",
+          "isHighlighted": false,
+          "accentColor": "primary"
+        },
+        {
+          "itemIcon": "🏪",
+          "itemTitle": "Storefront",
+          "itemDescription": "Full e-commerce with products, cart, checkout, and orders.",
+          "itemPrice": "$25",
+          "remixCount": "1.1k remixes",
+          "badge": "app",
+          "isHighlighted": false,
+          "accentColor": "primary"
+        },
+        {
+          "itemIcon": "🖥️",
+          "itemTitle": "SaaS Landing",
+          "itemDescription": "Hero, features, pricing, testimonials, and CTA sections.",
+          "itemPrice": "Free",
+          "remixCount": "4.5k remixes",
+          "badge": "theme",
+          "isHighlighted": false,
+          "accentColor": "primary"
+        }
+      ],
+      "sectionLabel": "AI-Searchable Catalog",
+      "sectionNumber": "006",
+      "themeSwatches": [
+        "var(--cardstack-lime)",
+        "var(--boxel-teal)",
+        "var(--cardstack-purple)",
+        "var(--boxel-cyan)"
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "catalogItems.0.linkedCard": {
+        "links": {
+          "self": null
+        }
+      },
+      "catalogItems.1.linkedCard": {
+        "links": {
+          "self": null
+        }
+      },
+      "catalogItems.2.linkedCard": {
+        "links": {
+          "self": null
+        }
+      },
+      "catalogItems.3.linkedCard": {
+        "links": {
+          "self": null
+        }
+      },
+      "catalogItems.4.linkedCard": {
+        "links": {
+          "self": null
+        }
+      },
+      "catalogItems.5.linkedCard": {
+        "links": {
+          "self": null
+        }
+      },
+      "catalogItems.6.linkedCard": {
+        "links": {
+          "self": null
+        }
+      },
+      "catalogItems.7.linkedCard": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

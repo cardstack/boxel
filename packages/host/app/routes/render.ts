@@ -58,9 +58,10 @@ import type RenderStoreService from '../services/render-store';
 type RenderStatus = 'loading' | 'ready' | 'error' | 'unusable';
 
 export type Model = {
-  instance: CardDef;
+  instance?: CardDef;
   nonce: string;
   cardId: string;
+  renderOptions: ReturnType<typeof parseRenderRouteOptions>;
   readonly status: RenderStatus;
   readonly ready: boolean;
   readyPromise: Promise<void>;
@@ -133,7 +134,7 @@ export default class RenderRoute extends Route<Model> {
 
   deactivate() {
     (globalThis as any).__boxelRenderContext = undefined;
-    (globalThis as any).__renderInstance = undefined;
+    (globalThis as any).__renderModel = undefined;
     window.removeEventListener('boxel-render-error', this.handleRenderError);
     this.#detachWindowErrorListeners();
     this.lastStoreResetKey = undefined;
@@ -216,7 +217,7 @@ export default class RenderRoute extends Route<Model> {
       }
     }
     // This is for host tests
-    (globalThis as any).__renderInstance = undefined;
+    (globalThis as any).__renderModel = undefined;
 
     let response: Response;
     try {
@@ -263,6 +264,7 @@ export default class RenderRoute extends Route<Model> {
       instance: undefined as unknown as CardDef,
       nonce,
       cardId: canonicalId,
+      renderOptions: parsedOptions,
       get status(): RenderStatus {
         return (state.get('status') as RenderStatus) ?? 'loading';
       },
@@ -331,7 +333,7 @@ export default class RenderRoute extends Route<Model> {
 
     // this is to support in-browser rendering, where we actually don't have the
     // ability to lookup the parent route using RouterService.recognizeAndLoad()
-    (globalThis as any).__renderInstance = instance;
+    (globalThis as any).__renderModel = model;
     this.currentTransition = undefined;
     return model;
   }

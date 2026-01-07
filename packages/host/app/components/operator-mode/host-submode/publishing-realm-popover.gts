@@ -19,7 +19,7 @@ export default class PublishingRealmPopover extends Component<PublishingRealmArg
   }
 
   get realmURL() {
-    return this.operatorModeStateService.realmURL.href;
+    return this.operatorModeStateService.realmURL;
   }
 
   <template>
