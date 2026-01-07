@@ -83,27 +83,11 @@ async function lintFix({
     '@cardstack/boxel/no-duplicate-imports': 'error',
   };
 
-  const eslintUnsupported = await import(
-    /* webpackIgnore: true */ 'eslint/use-at-your-own-risk'
-  );
-  const builtinRules =
-    (eslintUnsupported as any)?.builtinRules ??
-    (eslintUnsupported as any)?.default?.builtinRules ??
-    new Map();
-  const recommendedRules: Linter.RulesRecord = {};
-  if (builtinRules && typeof builtinRules[Symbol.iterator] === 'function') {
-    for (let [name, rule] of builtinRules as Map<string, any>) {
-      if (rule?.meta?.docs?.recommended) {
-        recommendedRules[name] = 'error';
-      }
-    }
-  } else if (builtinRules && typeof builtinRules === 'object') {
-    for (let [name, rule] of Object.entries(builtinRules)) {
-      if ((rule as any)?.meta?.docs?.recommended) {
-        recommendedRules[name] = 'error';
-      }
-    }
-  }
+  const eslintJsModule = await import(/* webpackIgnore: true */ '@eslint/js');
+  const recommendedRules =
+    (eslintJsModule as any)?.default?.configs?.recommended?.rules ??
+    (eslintJsModule as any)?.configs?.recommended?.rules ??
+    {};
   const rules = { ...recommendedRules, ...baseRules };
 
   const LINT_CONFIG: any = [
