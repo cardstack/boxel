@@ -244,15 +244,23 @@ export default class RealmServerService extends Service {
   }
 
   assertOwnRealmServer(realmServerURLs: string[]): void {
+    let normalizedOwnRealmServerURL = this.normalizeRealmServerURL(
+      this.realmServer.url.href,
+    );
+    let normalizedRealmServerURLs = [
+      ...new Set(
+        realmServerURLs.map((url) => this.normalizeRealmServerURL(url)),
+      ),
+    ];
     if (realmServerURLs.length === 0) {
       throw new Error(`Unable to determine realm server to use`);
     }
     if (
-      realmServerURLs.length > 1 ||
-      realmServerURLs[0] !== this.realmServer.url.href
+      normalizedRealmServerURLs.length > 1 ||
+      normalizedRealmServerURLs[0] !== normalizedOwnRealmServerURL
     ) {
       throw new Error(
-        `Multi-realm server support is not yet implemented: don't know how to provide auth token for different realm servers: ${realmServerURLs.join()} (own realm server: ${this.url.href})`,
+        `Multi-realm server support is not yet implemented: don't know how to provide auth token for different realm servers: ${normalizedRealmServerURLs.join()} (own realm server: ${normalizedOwnRealmServerURL})`,
       );
     }
   }
@@ -288,15 +296,28 @@ export default class RealmServerService extends Service {
 
       let claims = realmClaimsFromRawToken(token);
       if (claims?.realmServerURL) {
-        realmServerURLs.add(ensureTrailingSlash(claims.realmServerURL));
+        realmServerURLs.add(
+          this.normalizeRealmServerURL(claims.realmServerURL),
+        );
       }
     }
 
     if (realmServerURLs.size === 0) {
-      realmServerURLs.add(ensureTrailingSlash(this.url.href));
+      realmServerURLs.add(this.normalizeRealmServerURL(this.url.href));
     }
 
     return [...realmServerURLs];
+  }
+
+  private normalizeRealmServerURL(url: string): string {
+    let normalizedURL = ensureTrailingSlash(url);
+    if (isTesting()) {
+      let testRealmOrigin = new URL(testRealmURL).origin;
+      if (new URL(normalizedURL).origin === testRealmOrigin) {
+        return ensureTrailingSlash(new URL(resolvedBaseRealmURL).origin);
+      }
+    }
+    return normalizedURL;
   }
 
   @cached

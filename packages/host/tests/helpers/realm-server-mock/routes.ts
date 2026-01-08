@@ -1,5 +1,3 @@
-import { getService } from '@universal-ember/test-support';
-
 import {
   buildSearchErrorResponse,
   ensureTrailingSlash,
@@ -20,8 +18,6 @@ import type {
 
 import ENV from '@cardstack/host/config/environment';
 
-import type NetworkService from '@cardstack/host/services/network';
-
 import { getRoomIdForRealmAndUser } from '../mock-matrix/_utils';
 import { createJWT, testRealmSecretSeed } from '../test-auth';
 import { getTestRealmRegistry } from '../test-realm-registry';
@@ -41,8 +37,6 @@ type SearchableRealm = {
     >,
   ) => Promise<PrerenderedCardCollectionDocument>;
 };
-
-const remoteRealmCache = new Map<string, SearchableRealm>();
 
 const realmServerRoutes = new Map<string, RealmServerMockRoute>();
 
@@ -216,62 +210,9 @@ function getSearchableRealmForURL(
   realmURL: string,
 ): SearchableRealm | undefined {
   let registry = getTestRealmRegistry();
-  let registryEntry = registry.get(realmURL);
+  let registryEntry = registry.get(ensureTrailingSlash(realmURL));
   if (registryEntry?.realm) {
     return registryEntry.realm;
   }
-
-  let cached = remoteRealmCache.get(realmURL);
-  if (cached) {
-    return cached;
-  }
-
-  let network = getService('network') as NetworkService;
-  let remoteRealm: SearchableRealm = {
-    url: realmURL,
-    async search(query: Query) {
-      let url = new URL('_search', realmURL);
-      let response = await network.fetch(url.href, {
-        method: 'QUERY',
-        headers: {
-          Accept: SupportedMimeType.CardJson,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(query),
-      });
-      if (!response.ok) {
-        let responseText = await response.text();
-        throw new Error(
-          `Remote realm search failed for ${realmURL}: ${response.status} ${responseText}`,
-        );
-      }
-      return (await response.json()) as CardCollectionDocument;
-    },
-    async searchPrerendered(query: Query, opts) {
-      let url = new URL('_search-prerendered', realmURL);
-      let response = await network.fetch(url.href, {
-        method: 'QUERY',
-        headers: {
-          Accept: SupportedMimeType.CardJson,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...query,
-          prerenderedHtmlFormat: opts.htmlFormat,
-          cardUrls: opts.cardUrls,
-          renderType: opts.renderType,
-        }),
-      });
-      if (!response.ok) {
-        let responseText = await response.text();
-        throw new Error(
-          `Remote realm prerendered search failed for ${realmURL}: ${response.status} ${responseText}`,
-        );
-      }
-      return (await response.json()) as PrerenderedCardCollectionDocument;
-    },
-  };
-
-  remoteRealmCache.set(realmURL, remoteRealm);
-  return remoteRealm;
+  return undefined;
 }
