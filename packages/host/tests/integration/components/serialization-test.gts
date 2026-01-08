@@ -4205,7 +4205,7 @@ module('Integration | serialization', function (hooks) {
         query: {
           realm: '$thisRealm',
           filter: {
-            eq: { cardTitle: '$this.title' },
+            eq: { cardTitle: '$this.cardTitle' },
           },
         },
       });
@@ -4213,7 +4213,7 @@ module('Integration | serialization', function (hooks) {
         query: {
           realm: '$thisRealm',
           filter: {
-            eq: { cardTitle: '$this.title' },
+            eq: { cardTitle: '$this.cardTitle' },
           },
           sort: [{ by: 'cardTitle', direction: 'asc' }],
           page: { size: 5 },
@@ -4291,7 +4291,7 @@ module('Integration | serialization', function (hooks) {
       favoriteSearchURL.searchParams.toString(),
     ) as Record<string, any>;
     assert.strictEqual(
-      favoriteQueryParams.filter?.eq?.title,
+      favoriteQueryParams.filter?.eq?.cardTitle,
       'Target',
       'favorite search link encodes interpolated filter',
     );
@@ -4325,7 +4325,7 @@ module('Integration | serialization', function (hooks) {
       'matches search link preserves pagination',
     );
     assert.strictEqual(
-      matchesQueryParams.filter?.eq?.title,
+      matchesQueryParams.filter?.eq?.cardTitle,
       'Target',
       'matches search link encodes interpolated filter',
     );
@@ -5764,14 +5764,14 @@ module('Integration | serialization', function (hooks) {
       @field favorite = linksTo(() => Person, {
         query: {
           filter: {
-            eq: { name: '$this.title' },
+            eq: { name: '$this.cardTitle' },
           },
         },
       });
       @field matches = linksToMany(() => Person, {
         query: {
           filter: {
-            eq: { name: '$this.title' },
+            eq: { name: '$this.cardTitle' },
           },
           page: {
             size: 5,

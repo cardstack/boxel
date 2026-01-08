@@ -256,8 +256,8 @@ module('Acceptance | prerender | meta', function (hooks) {
             name: 'Hassan',
             cardTitle: 'Hassan',
             cardInfo: {
-              cardTitle: null,
-              cardDescription: null,
+              name: null,
+              summary: null,
               cardThumbnailURL: null,
               notes: null,
             },

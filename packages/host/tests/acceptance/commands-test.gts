@@ -502,10 +502,10 @@ module('Acceptance | Commands tests', function (hooks) {
           name: 'patchCardInstance',
           id: '794c52f1-b444-47bd-8b2c-5d03ba7ef042',
           arguments: JSON.stringify({
-            cardDescription:
+            description:
               'Change the topic of the meeting to "Meeting with Hassan"',
             attributes: {
-              cardId: meetingCardId,
+              id: meetingCardId,
               patch: {
                 attributes: {
                   topic: 'Meeting with Hassan',
@@ -575,7 +575,7 @@ module('Acceptance | Commands tests', function (hooks) {
           id: 'abc123',
           name: 'switch-submode_dd88',
           arguments: JSON.stringify({
-            cardDescription: 'Switching to code submode',
+            description: 'Switching to code submode',
             attributes: {
               submode: 'code',
             },
@@ -658,7 +658,7 @@ module('Acceptance | Commands tests', function (hooks) {
             name: 'default',
           }),
           arguments: JSON.stringify({
-            cardDescription: 'Finding and opening Hassan card',
+            description: 'Finding and opening Hassan card',
             attributes: {
               cardTitle: 'Hassan',
             },
@@ -737,8 +737,8 @@ module('Acceptance | Commands tests', function (hooks) {
           }),
           arguments: JSON.stringify({
             attributes: {
-              cardDescription: 'Finding and opening Hassan card',
-              cardTitle: 'Hassan',
+              description: 'Finding and opening Hassan card',
+              title: 'Hassan',
             },
           }),
         },
@@ -836,7 +836,7 @@ module('Acceptance | Commands tests', function (hooks) {
           id: '1554f297-e9f2-43fe-8b95-55b29251444d',
           name: 'show-card_566f',
           arguments: JSON.stringify({
-            cardDescription:
+            description:
               'Displaying the card with the Latin word for milkweed in the title.',
             attributes: {
               cardId: 'http://test-realm/test/Person/hassan',
@@ -926,11 +926,11 @@ module('Acceptance | Commands tests', function (hooks) {
           id: '1554f297-e9f2-43fe-8b95-55b29251444d',
           name: 'show-card_566f',
           arguments: JSON.stringify({
-            cardDescription:
+            description:
               'Displaying the card with the Latin word for milkweed in the title.',
             attributes: {
-              cardId: 'http://test-realm/test/Person/hassan',
-              cardTitle: 'Asclepias',
+              id: 'http://test-realm/test/Person/hassan',
+              title: 'Asclepias',
             },
           }),
         },
@@ -1037,7 +1037,7 @@ module('Acceptance | Commands tests', function (hooks) {
           id: commandId,
           name: 'switch-submode_dd88',
           arguments: JSON.stringify({
-            cardDescription: 'switch to code mode',
+            description: 'switch to code mode',
             attributes: { submode: 'code' },
           }),
         },
@@ -1076,7 +1076,7 @@ module('Acceptance | Commands tests', function (hooks) {
           id: commandId2,
           name: 'switch-submode_dd88',
           arguments: JSON.stringify({
-            cardDescription: 'switch to interact mode',
+            description: 'switch to interact mode',
             attributes: { submode: 'interact' },
           }),
         },
@@ -1113,7 +1113,7 @@ module('Acceptance | Commands tests', function (hooks) {
           id: commandId3,
           name: 'switch-submode_dd88',
           arguments: JSON.stringify({
-            cardDescription: 'switch to code mode',
+            description: 'switch to code mode',
             attributes: { submode: 'code' },
           }),
         },
@@ -1161,7 +1161,7 @@ module('Acceptance | Commands tests', function (hooks) {
           id: commandId4,
           name: 'switch-submode_dd88',
           arguments: JSON.stringify({
-            cardDescription: 'switch to interact mode',
+            description: 'switch to interact mode',
             attributes: { submode: 'interact' },
           }),
         },
@@ -1215,11 +1215,11 @@ module('Acceptance | Commands tests', function (hooks) {
           id: '1554f297-e9f2-43fe-8b95-55b29251444d',
           name: 'no-such-command',
           arguments: JSON.stringify({
-            cardDescription:
+            description:
               'Displaying the card with the Latin word for milkweed in the title.',
             attributes: {
-              cardId: 'http://test-realm/test/Person/hassan',
-              cardTitle: 'Asclepias',
+              id: 'http://test-realm/test/Person/hassan',
+              title: 'Asclepias',
             },
           }),
         },
@@ -1295,10 +1295,10 @@ module('Acceptance | Commands tests', function (hooks) {
           id: '1554f297-e9f2-43fe-8b95-55b29251444d',
           name: 'show-card_566f',
           arguments: JSON.stringify({
-            cardDescription:
+            description:
               'Displaying the card with the Latin word for milkweed in the title.',
             attributes: {
-              cardTitle: 'Asclepias',
+              title: 'Asclepias',
             },
           }),
         },
@@ -1374,7 +1374,7 @@ module('Acceptance | Commands tests', function (hooks) {
             id: '2dd27b90-b473-403c-a5ae-399a29af7d62',
             name: 'maybe-boom-command_4b30',
             arguments: JSON.stringify({
-              cardDescription: 'Maybe it will boom',
+              description: 'Maybe it will boom',
               attributes: {},
             }),
           },

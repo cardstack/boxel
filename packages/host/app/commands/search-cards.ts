@@ -36,7 +36,7 @@ export class SearchCardsByTypeAndTitleCommand extends HostBaseCommand<
     }
     let filter = {} as any;
     if (input.cardTitle) {
-      filter.contains = { title: input.cardTitle };
+      filter.contains = { cardTitle: input.cardTitle };
     }
     if (input.cardType) {
       filter.eq = { _cardType: input.cardType };
@@ -106,7 +106,7 @@ export class SearchCardsByQueryCommand extends HostBaseCommand<
             title: c.cardTitle,
           }),
       ),
-      description: `Query: ${JSON.stringify(input.query.filter, null, 2)}`,
+      cardDescription: `Query: ${JSON.stringify(input.query.filter, null, 2)}`,
     });
     return resultCard;
   }

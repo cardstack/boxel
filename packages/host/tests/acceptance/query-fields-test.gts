@@ -73,14 +73,14 @@ module(
         @field favorite = linksTo(() => Person, {
           query: {
             filter: {
-              eq: { name: '$this.title' },
+              eq: { name: '$this.cardTitle' },
             },
           },
         });
         @field matches = linksToMany(() => Person, {
           query: {
             filter: {
-              eq: { name: '$this.title' },
+              eq: { name: '$this.cardTitle' },
             },
             page: {
               size: 10,
@@ -94,14 +94,14 @@ module(
         @field favorite = linksTo(() => Person, {
           query: {
             filter: {
-              eq: { name: '$this.title' },
+              eq: { name: '$this.cardTitle' },
             },
           },
         });
         @field matches = linksToMany(() => Person, {
           query: {
             filter: {
-              eq: { name: '$this.title' },
+              eq: { name: '$this.cardTitle' },
             },
             page: {
               size: 10,

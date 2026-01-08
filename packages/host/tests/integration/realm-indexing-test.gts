@@ -1405,10 +1405,10 @@ module(`Integration | realm indexing`, function (hooks) {
         type: 'card',
         attributes: {
           cardInfo: {
-            cardDescription: null,
+            summary: null,
             notes: null,
             cardThumbnailURL: null,
-            cardTitle: null,
+            name: null,
           },
           cardDescription: null,
           firstName: 'Van Van',

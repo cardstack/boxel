@@ -453,7 +453,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
           throw new Error('expected JSON save data');
         }
         assert.strictEqual(
-          json.data.attributes?.title,
+          json.data.attributes?.cardTitle,
           'Untitled Card',
           'title field defaults to fallback',
         );
@@ -515,7 +515,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
           throw new Error('expected JSON save data');
         }
         assert.strictEqual(
-          json.data.attributes?.title,
+          json.data.attributes?.cardTitle,
           'Untitled Card',
           'title field defaults to fallback',
         );

@@ -255,7 +255,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           'HeadPreview/example.json': {
             data: {
               attributes: {
-                title: 'Definition Title',
+                cardTitle: 'Definition Title',
                 cardDescription: 'Definition description',
                 url: 'https://example.com/definition',
               },
@@ -291,7 +291,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'BlogPost/mad-hatter.json': {
             data: {
-              attributes: { title: 'Mad As a Hatter' },
+              attributes: { cardTitle: 'Mad As a Hatter' },
               relationships: {
                 author: {
                   links: {
@@ -310,7 +310,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           'BlogPost/urban-living.json': {
             data: {
               attributes: {
-                title:
+                cardTitle:
                   'The Future of Urban Living: Skyscrapers or Sustainable Communities?',
               },
               relationships: {
@@ -2044,7 +2044,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .containsText('Card Error: Link Not Found');
       assert.dom('[data-test-card-error]').exists();
       assert
-        .dom('[data-test-playground-panel] [data-test-field="cardTitle"]')
+        .dom('[data-test-playground-panel] [data-test-field="cardInfo-name"]')
         .containsText('Delilah', 'last known good state is rendered');
       assert
         .dom('[data-test-error-message]')
@@ -2075,7 +2075,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await settled();
       assert.dom('[data-test-boxel-card-header-title]').containsText('Person');
       assert
-        .dom('[data-test-playground-panel] [data-test-field="cardTitle"]')
+        .dom('[data-test-playground-panel] [data-test-field="cardInfo-name"]')
         .containsText('Lila');
       assert
         .dom('[data-test-error-container]')

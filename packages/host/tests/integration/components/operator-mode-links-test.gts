@@ -535,8 +535,8 @@ module('Integration | operator-mode | links', function (hooks) {
           attributes: {
             name: 'Mango',
             cardInfo: {
-              cardTitle: null,
-              cardDescription: null,
+              name: null,
+              summary: null,
               cardThumbnailURL: null,
               notes: null,
             },

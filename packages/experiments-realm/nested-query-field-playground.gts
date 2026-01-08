@@ -19,7 +19,7 @@ class NestedQueryFields extends FieldDef {
   @field favorite = linksTo(() => Friend, {
     query: {
       filter: {
-        contains: { firstName: '$this.title' },
+        contains: { firstName: '$this.cardTitle' },
       },
     },
   });
@@ -27,7 +27,7 @@ class NestedQueryFields extends FieldDef {
   @field matches = linksToMany(() => Friend, {
     query: {
       filter: {
-        contains: { firstName: '$this.title' },
+        contains: { firstName: '$this.cardTitle' },
       },
       page: { size: 10, number: 0 },
     },
@@ -65,8 +65,10 @@ export class NestedQueryFieldPlayground extends CardDef {
               <legend>Nested title (used as filter)</legend>
               <@fields.queries.cardTitle @format='edit' />
               <p class='hint'>
-                Resolves to <code>contains.firstName</code> inside both nested query
-                fields. Leave empty to short-circuit the search.
+                Resolves to
+                <code>contains.firstName</code>
+                inside both nested query fields. Leave empty to short-circuit
+                the search.
               </p>
             </fieldset>
           </div>
@@ -89,7 +91,8 @@ export class NestedQueryFieldPlayground extends CardDef {
             <h3>
               Nested linksToMany results
               <span class='meta'>
-                ({{@model.queries.matches.length}} cards)
+                ({{@model.queries.matches.length}}
+                cards)
               </span>
             </h3>
             {{#if @fields.queries.matches.length}}

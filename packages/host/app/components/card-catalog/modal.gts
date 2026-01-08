@@ -478,14 +478,14 @@ export default class CardCatalogModal extends Component<Signature> {
       if (_isCardTypeFilter) {
         newFilter = {
           on: (this.state.originalQuery.filter as CardTypeFilter).type,
-          every: [{ contains: { title: this.state.searchKey } }],
+          every: [{ contains: { cardTitle: this.state.searchKey } }],
         };
       } else if (_isEveryFilter) {
         newFilter = {
           ...(this.state.originalQuery.filter as EveryFilter),
           every: [
             ...(this.state.originalQuery.filter as EveryFilter).every,
-            { contains: { title: this.state.searchKey } },
+            { contains: { cardTitle: this.state.searchKey } },
           ],
         };
       } else {
@@ -495,6 +495,7 @@ export default class CardCatalogModal extends Component<Signature> {
         );
       }
     }
+    console.log(newFilter);
     if (newFilter) {
       this.state.query = { ...this.state.query, filter: newFilter };
     }

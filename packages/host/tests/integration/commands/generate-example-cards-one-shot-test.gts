@@ -106,12 +106,12 @@ export class TestCard extends CardDef {
       const serialized = await cardService.serializeCard(createdCard);
 
       assert.strictEqual(
-        serialized.data.attributes?.title,
+        serialized.data.attributes?.cardTitle,
         'Generated Title',
         'created card adopts title from LLM payload',
       );
       assert.strictEqual(
-        serialized.data.attributes?.description,
+        serialized.data.attributes?.cardDescription,
         'Generated description from LLM',
         'created card adopts description from LLM payload',
       );

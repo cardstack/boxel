@@ -627,7 +627,7 @@ export default class PlaygroundPanel extends Component<Signature> {
           attributes: {
             specType: 'field',
             ref: this.args.codeRef,
-            title: this.args.codeRef.name,
+            cardTitle: this.args.codeRef.name,
             containedExamples: [new fieldCard()],
           },
           meta: {

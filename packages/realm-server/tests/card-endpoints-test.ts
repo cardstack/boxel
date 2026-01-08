@@ -190,14 +190,14 @@ module(basename(__filename), function () {
                   @field favorite = linksTo(Person, {
                     query: {
                       filter: {
-                        eq: { firstName: '$this.title' },
+                        eq: { firstName: '$this.cardTitle' },
                       },
                     },
                   });
                   @field matches = linksToMany(Person, {
                     query: {
                       filter: {
-                        eq: { firstName: '$this.title' },
+                        eq: { firstName: '$this.cardTitle' },
                       },
                     },
                   });
@@ -278,14 +278,14 @@ module(basename(__filename), function () {
                   @field favorite = linksTo(Person, {
                     query: {
                       filter: {
-                        eq: { firstName: '$this.title' },
+                        eq: { firstName: '$this.cardTitle' },
                       },
                     },
                   });
                   @field matches = linksToMany(Person, {
                     query: {
                       filter: {
-                        eq: { firstName: '$this.title' },
+                        eq: { firstName: '$this.cardTitle' },
                       },
                     },
                   });

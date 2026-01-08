@@ -502,8 +502,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           cardDescription: null,
           cardThumbnailURL: null,
           cardInfo: {
-            cardTitle: null,
-            cardDescription: null,
+            name: null,
+            summary: null,
             cardThumbnailURL: null,
             notes: null,
           },

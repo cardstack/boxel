@@ -1591,7 +1591,7 @@ ${REPLACE_MARKER}
       .exists('Initial name field exists');
     assert
       .dom(
-        '[data-test-card-schema="Test Card"] [data-test-field-name="description"]',
+        '[data-test-card-schema="Test Card"] [data-test-field-name="cardDescription"]',
       )
       .exists('Initial description field exists');
 

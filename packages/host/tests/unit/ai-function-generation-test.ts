@@ -60,10 +60,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
     {
       cardInfo: {
         properties: {
-          description: { type: 'string' },
+          summary: { type: 'string' },
           notes: { type: 'string' },
           cardThumbnailURL: { type: 'string' },
-          cardTitle: { type: 'string' },
+          name: { type: 'string' },
         },
         type: 'object',
       },

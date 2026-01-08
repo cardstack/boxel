@@ -385,17 +385,17 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       .exists();
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="title"] [data-test-card-display-name="String"]`,
+        `[data-test-card-schema="Person"] [data-test-field-name="cardTitle"] [data-test-card-display-name="String"]`,
       )
       .exists();
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="title"] [data-test-field-types]`,
+        `[data-test-card-schema="Person"] [data-test-field-name="cardTitle"] [data-test-field-types]`,
       )
       .hasText('Override, Computed');
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="title"] [data-test-computed-icon]`,
+        `[data-test-card-schema="Person"] [data-test-field-name="cardTitle"] [data-test-computed-icon]`,
       )
       .exists();
 
@@ -431,18 +431,18 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       .containsText('+ 4 Fields');
     assert
       .dom(
-        `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-overridden-field-link]`,
+        `[data-test-card-schema="Card"] [data-test-field-name="cardTitle"] [data-test-overridden-field-link]`,
       )
       .exists();
     assert
       .dom(
-        `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-field-types]`,
+        `[data-test-card-schema="Card"] [data-test-field-name="cardTitle"] [data-test-field-types]`,
       )
       .hasText('Overridden, Computed');
 
     assert
       .dom(
-        `[data-test-card-schema="Card"] [data-test-field-name="description"] [data-test-card-display-name="String"]`,
+        `[data-test-card-schema="Card"] [data-test-field-name="cardDescription"] [data-test-card-display-name="String"]`,
       )
       .exists();
     assert
@@ -1203,10 +1203,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert.true(monacoService.getLineCursorOn()?.includes('@field address'));
 
     await click(
-      `[data-test-card-schema="Card"] [data-test-field-name-button="title"]`,
+      `[data-test-card-schema="Card"] [data-test-field-name-button="cardTitle"]`,
     );
     assert.dom('[data-test-current-module-name="person.gts"]').doesNotExist();
     assert.dom('[data-test-current-module-name="card-api.gts"]').exists();
-    assert.true(monacoService.getLineCursorOn()?.includes('@field title'));
+    assert.true(monacoService.getLineCursorOn()?.includes('@field cardTitle'));
   });
 });

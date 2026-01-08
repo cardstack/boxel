@@ -423,7 +423,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
                 module: `${testRealmURL}plant`,
               },
               specType: 'card',
-              title: 'Plant spec',
+              cardTitle: 'Plant spec',
             },
             meta: {
               adoptsFrom: {
@@ -436,7 +436,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         'Skill/example.json': {
           data: {
             attributes: {
-              title: 'Exanple Skill',
+              cardTitle: 'Example Skill',
               cardDescription: 'This skill card is for testing purposes',
               instructions: 'This is an example skill card',
               commands: [],
@@ -449,7 +449,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         'Skill/example2.json': {
           data: {
             attributes: {
-              title: 'Example 2 Skill',
+              cardTitle: 'Example 2 Skill',
               cardDescription: 'This skill card is also for testing purposes',
               instructions: 'This is a second example skill card',
               commands: [],

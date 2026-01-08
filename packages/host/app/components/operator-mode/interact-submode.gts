@@ -416,6 +416,7 @@ export default class InteractSubmode extends Component {
       } else {
         let error = loadedCard;
         if (error.meta != null) {
+          console.log(error);
           let cardTitle = error.meta.cardTitle || 'Unknown';
           cardToDelete = {
             id: cardUrl.href,

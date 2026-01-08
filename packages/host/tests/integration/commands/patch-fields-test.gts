@@ -1884,8 +1884,8 @@ module('Integration | Command | patch-fields', function (hooks) {
       // Should successfully validate the title field
       assert.strictEqual(
         result.updatedFields[0],
-        'title',
-        'Should update the title field',
+        'cardTitle',
+        'Should update the cardTitle field',
       );
       assert.deepEqual(result.errors, {}, 'Should have no validation errors');
     });
