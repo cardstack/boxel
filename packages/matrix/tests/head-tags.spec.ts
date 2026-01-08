@@ -110,7 +110,7 @@ test.describe('Head tags', () => {
       import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
 
       export class DefaultHeadCard extends CardDef {
-        @field title = contains(StringField);
+        @field cardTitle = contains(StringField);
 
         static isolated = class Isolated extends Component<typeof this> {
           @consume(CardCrudFunctionsContextName) cardCrudFunctions: CardCrudFunctions | undefined;
@@ -155,7 +155,7 @@ test.describe('Head tags', () => {
       import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
 
       export class CustomHeadCard extends CardDef {
-        @field title = contains(StringField);
+        @field cardTitle = contains(StringField);
 
         static head = class Head extends Component<typeof this> {
           <template>
@@ -221,7 +221,7 @@ test.describe('Head tags', () => {
             type: 'card',
             id: `${realmURL}default-head-card`,
             attributes: {
-              title: 'Default Head Card',
+              cardTitle: 'Default Head Card',
             },
             meta: {
               adoptsFrom: {
@@ -246,7 +246,7 @@ test.describe('Head tags', () => {
             type: 'card',
             id: `${realmURL}custom-head-card`,
             attributes: {
-              title: 'Custom Head Card',
+              cardTitle: 'Custom Head Card',
             },
             meta: {
               adoptsFrom: {

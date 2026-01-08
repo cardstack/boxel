@@ -316,7 +316,7 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
             module: `${baseRealm.url}card-api`,
             name: 'CardDef',
           },
-          by: 'title',
+          by: 'cardTitle',
         },
       ],
     } as Query;
