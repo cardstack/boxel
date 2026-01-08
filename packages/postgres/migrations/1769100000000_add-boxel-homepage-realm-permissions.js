@@ -57,17 +57,17 @@ exports.down = (pgm) => {
   switch (process.env.REALM_SENTRY_ENVIRONMENT) {
     case 'staging':
       pgm.sql(
-        "DELETE FROM realm_user_permissions WHERE realm_url = 'https://realms-staging.stack.cards/boxel-homepage/' AND username = '@boxel_homepage_realm:stack.cards'",
+        "DELETE FROM realm_user_permissions WHERE realm_url = 'https://realms-staging.stack.cards/boxel-homepage/' AND username IN ('@boxel_homepage_realm:stack.cards', '@homepage_writer:stack.cards', '*')",
       );
       break;
     case 'production':
       pgm.sql(
-        "DELETE FROM realm_user_permissions WHERE realm_url = 'https://app.boxel.ai/boxel-homepage/' AND username = '@boxel_homepage_realm:boxel.ai'",
+        "DELETE FROM realm_user_permissions WHERE realm_url = 'https://app.boxel.ai/boxel-homepage/' AND username IN ('@boxel_homepage_realm:boxel.ai', '@homepage_writer:boxel.ai', '*')",
       );
       break;
     default:
       pgm.sql(
-        "DELETE FROM realm_user_permissions WHERE realm_url = 'http://localhost:4201/boxel-homepage/' AND username = '@boxel_homepage_realm:localhost'",
+        "DELETE FROM realm_user_permissions WHERE realm_url IN ('http://localhost:4201/boxel-homepage/', 'http://localhost:4205/boxel-homepage/') AND username IN ('@boxel_homepage_realm:localhost', '@homepage_writer:localhost', '*')",
       );
   }
 };
