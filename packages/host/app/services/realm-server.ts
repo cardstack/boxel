@@ -2,6 +2,8 @@ import type Owner from '@ember/owner';
 import Service from '@ember/service';
 import { service } from '@ember/service';
 
+import { isTesting } from '@embroider/macros';
+
 import { cached } from '@glimmer/tracking';
 
 import { restartableTask, rawTimeout, task } from 'ember-concurrency';
@@ -15,6 +17,7 @@ import {
   ensureTrailingSlash,
   SupportedMimeType,
   Deferred,
+  testRealmURL,
   type JWTPayload,
 } from '@cardstack/runtime-common';
 import {
@@ -255,6 +258,9 @@ export default class RealmServerService extends Service {
   }
 
   getRealmServersForRealms(realms: string[]) {
+    let testRealmOrigin = isTesting()
+      ? new URL(testRealmURL).origin
+      : undefined;
     let sessionTokens: Record<string, string> = {};
     let sessionStr =
       window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
@@ -269,6 +275,12 @@ export default class RealmServerService extends Service {
 
     for (let realmURL of realms) {
       let normalizedRealmURL = ensureTrailingSlash(realmURL);
+      if (
+        testRealmOrigin &&
+        new URL(normalizedRealmURL).origin === testRealmOrigin
+      ) {
+        continue;
+      }
       let token = sessionTokens[normalizedRealmURL] ?? sessionTokens[realmURL];
       if (!token) {
         continue;
