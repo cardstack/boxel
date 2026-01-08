@@ -18,6 +18,8 @@ import type {
   PrerenderedCardCollectionDocument,
 } from '@cardstack/runtime-common/document-types';
 
+import ENV from '@cardstack/host/config/environment';
+
 import type NetworkService from '@cardstack/host/services/network';
 
 import { getRoomIdForRealmAndUser } from '../mock-matrix/_utils';
@@ -60,6 +62,7 @@ export function getRealmServerRoute(
 
 export function registerDefaultRoutes() {
   registerSearchRoutes();
+  registerCatalogRoutes();
   registerAuthRoutes();
 }
 
@@ -127,6 +130,28 @@ function registerSearchRoutes() {
       return new Response(JSON.stringify(combined), {
         status: 200,
         headers: { 'content-type': SupportedMimeType.CardJson },
+      });
+    },
+  });
+}
+
+function registerCatalogRoutes() {
+  registerRealmServerRoute({
+    path: '/_catalog-realms',
+    handler: async () => {
+      let catalogURLs = [
+        ENV.resolvedCatalogRealmURL,
+        ENV.resolvedSkillsRealmURL,
+      ]
+        .filter(Boolean)
+        .map((url) => ensureTrailingSlash(url));
+      let data = catalogURLs.map((realmURL) => ({
+        id: realmURL,
+        type: 'catalog-realm',
+      }));
+      return new Response(JSON.stringify({ data }), {
+        status: 200,
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
       });
     },
   });
