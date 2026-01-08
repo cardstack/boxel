@@ -9,8 +9,6 @@ import Component from '@glimmer/component';
 import { restartableTask, task, timeout } from 'ember-concurrency';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 
-import flatMap from 'lodash/flatMap';
-
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 import { Button, BoxelInput } from '@cardstack/boxel-ui/components';
@@ -361,16 +359,9 @@ export default class CardCatalogModal extends Component<Signature> {
       });
       let preselectedCardUrl: string | undefined;
       if (opts?.preselectedCardTypeQuery) {
-        let instances: CardDef[] = flatMap(
-          await Promise.all(
-            this.realmServer.availableRealmURLs.map(
-              async (realm) =>
-                await this.store.search(
-                  opts.preselectedCardTypeQuery!,
-                  new URL(realm),
-                ),
-            ),
-          ),
+        let instances: CardDef[] = await this.store.search(
+          opts.preselectedCardTypeQuery!,
+          this.realmServer.availableRealmURLs,
         );
         if (instances?.[0]?.id) {
           preselectedCardUrl = `${instances[0].id}.json`;

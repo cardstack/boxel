@@ -12,8 +12,10 @@ import { TrackedArray } from 'tracked-built-ins';
 
 import {
   baseRealm,
+  ensureTrailingSlash,
   SupportedMimeType,
   Deferred,
+  type JWTPayload,
 } from '@cardstack/runtime-common';
 import {
   joinDMRoom,
@@ -21,6 +23,7 @@ import {
 } from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
+import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
 
 import type { ExtendedClient } from './matrix-sdk-loader';
 import type NetworkService from './network';
@@ -235,6 +238,53 @@ export default class RealmServerService extends Service {
   @cached
   get availableRealmURLs() {
     return this.availableRealms.map((r) => r.url);
+  }
+
+  assertOwnRealmServer(realmServerURLs: string[]): void {
+    if (realmServerURLs.length === 0) {
+      throw new Error(`Unable to determine realm server to use`);
+    }
+    if (
+      realmServerURLs.length > 1 ||
+      realmServerURLs[0] !== this.realmServer.url.href
+    ) {
+      throw new Error(
+        `Multi-realm server support is not yet implemented: don't know how to provide auth token for different realm server`,
+      );
+    }
+  }
+
+  getRealmServersForRealms(realms: string[]) {
+    let sessionTokens: Record<string, string> = {};
+    let sessionStr =
+      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
+
+    try {
+      sessionTokens = JSON.parse(sessionStr) as Record<string, string>;
+    } catch {
+      sessionTokens = {};
+    }
+
+    let realmServerURLs = new Set<string>();
+
+    for (let realmURL of realms) {
+      let normalizedRealmURL = ensureTrailingSlash(realmURL);
+      let token = sessionTokens[normalizedRealmURL] ?? sessionTokens[realmURL];
+      if (!token) {
+        continue;
+      }
+
+      let claims = realmClaimsFromRawToken(token);
+      if (claims?.realmServerURL) {
+        realmServerURLs.add(ensureTrailingSlash(claims.realmServerURL));
+      }
+    }
+
+    if (realmServerURLs.size === 0) {
+      realmServerURLs.add(ensureTrailingSlash(this.url.href));
+    }
+
+    return [...realmServerURLs];
   }
 
   @cached
@@ -719,6 +769,15 @@ const sessionLocalStorageKey = 'boxel-realm-server-session';
 function claimsFromRawToken(rawToken: string): RealmServerJWTPayload {
   let [_header, payload] = rawToken.split('.');
   return JSON.parse(atob(payload)) as RealmServerJWTPayload;
+}
+
+function realmClaimsFromRawToken(rawToken: string): JWTPayload | undefined {
+  try {
+    let [_header, payload] = rawToken.split('.');
+    return JSON.parse(atob(payload)) as JWTPayload;
+  } catch {
+    return undefined;
+  }
 }
 
 declare module '@ember/service' {
