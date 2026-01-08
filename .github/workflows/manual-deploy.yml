@@ -57,7 +57,11 @@ jobs:
         with:
           script: |
             const deployment_id = Number('${{ steps.create.outputs.deployment_id }}');
-            const environment_url = '${{ steps.env.outputs.environment_url }}' || undefined;
+            const environmentUrlValue = '${{ steps.env.outputs.environment_url }}';
+            const environment_url =
+              environmentUrlValue && environmentUrlValue.length > 0
+                ? environmentUrlValue
+                : undefined;
             await github.rest.repos.createDeploymentStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -344,7 +348,11 @@ jobs:
               state = 'inactive';
             }
 
-            const environment_url = process.env.ENVIRONMENT_URL || undefined;
+            const environment_url =
+              process.env.ENVIRONMENT_URL &&
+              process.env.ENVIRONMENT_URL.length > 0
+                ? process.env.ENVIRONMENT_URL
+                : undefined;
             await github.rest.repos.createDeploymentStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
