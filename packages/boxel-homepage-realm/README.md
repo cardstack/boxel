@@ -61,12 +61,19 @@ This workflow is ideal for rapid iteration and testing of the homepage:
 
 2. **Visit `/boxel-homepage`** to view the workspace. This workspace will not show up in the workspace chooser.
 
-3. **Edit files directly** in the Boxel interface:
-   - Navigate to the boxel-homepage realm
-   - Create or modify the files using the visual editor
+3. **Edit files directly** in the Boxel interface or locally.
    - Changes are automatically saved to `packages/boxel-homepage-realm/contents/`
 
-4. **Test your changes** immediately in the live environment
+4. **Test your changes** immediately in the live environment. Your changes will appear locally.
+
+- You can also push the workspace with your changes and test them on staging or production by following the instructions on `packages/boxel-homepage-realm/contents/README.md`. For this, you must have the `cardstack/boxel-home` repo set as the remote repo for `packages/boxel-homepage-realm/contents/`. You need git access to the private `cardstack/boxel-home` for this.
+
+Here're the instructions for setting the remote repo:
+
+```bash
+   cd packages/boxel-homepage-realm/contents
+   git remote set-url origin git@github.com:cardstack/boxel-home.git
+```
 
 5. **Commit and push** when satisfied:
    - **IMPORTANT**: Edits made as `homepage_writer` are saved locally and are not automatically synced to the **private** `boxel-home` repo. You need your own git access to push changes.
