@@ -57,11 +57,6 @@ import {
   isScopedCSSRequest,
 } from 'glimmer-scoped-css';
 
-type BoxelScopedCSSIndex = {
-  cssByPath: Map<string, string>;
-  byAttribute: Map<string, Set<string>>;
-};
-
 export class RealmServer {
   private log = logger('realm-server');
   private headLog = logger('realm-server:head');
@@ -85,9 +80,6 @@ export class RealmServer {
   private promiseForIndexHTML: Promise<string> | undefined;
   private promiseForBoxelVariablesCSS: Promise<string | null> | undefined;
   private promiseForBoxelGlobalCSS: Promise<string | null> | undefined;
-  private promiseForBoxelScopedCSSIndex:
-    | Promise<BoxelScopedCSSIndex | null>
-    | undefined;
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
@@ -335,8 +327,6 @@ export class RealmServer {
         this.retrieveIsolatedHTML(cardURL),
         this.retrieveScopedCSS(cardURL),
       ]);
-      let boxelScopedCSS = await this.retrieveBoxelScopedCSS(isolatedHTML);
-      let mergedScopedCSS = this.mergeScopedCSS(scopedCSS, boxelScopedCSS);
 
       if (headHTML != null) {
         this.headLog.debug(
@@ -351,7 +341,7 @@ export class RealmServer {
       let responseHTML = indexHTML;
       let headFragments: string[] = [];
       let [boxelVariablesCSS, boxelGlobalCSS] =
-        mergedScopedCSS != null
+        scopedCSS != null
           ? await Promise.all([
               this.retrieveBoxelVariablesCSS(),
               this.retrieveBoxelGlobalCSS(),
@@ -370,9 +360,9 @@ export class RealmServer {
       if (headHTML != null) {
         headFragments.push(headHTML);
       }
-      if (mergedScopedCSS != null) {
+      if (scopedCSS != null) {
         headFragments.push(
-          `<style data-boxel-scoped-css>\n${mergedScopedCSS}\n</style>`,
+          `<style data-boxel-scoped-css>\n${scopedCSS}\n</style>`,
         );
       }
       if (headFragments.length > 0) {
@@ -724,144 +714,6 @@ export class RealmServer {
       }
     }
     return null;
-  }
-
-  private findBoxelUIDistPath(): string | null {
-    let candidates = [
-      resolve(process.cwd(), 'packages', 'boxel-ui', 'addon', 'dist'),
-      resolve(__dirname, '..', 'boxel-ui', 'addon', 'dist'),
-      resolve(__dirname, '..', '..', 'boxel-ui', 'addon', 'dist'),
-    ];
-
-    for (let candidate of candidates) {
-      if (existsSync(candidate)) {
-        return candidate;
-      }
-    }
-    return null;
-  }
-
-  private listBoxelCSSFiles(root: string): string[] {
-    let cssFiles: string[] = [];
-    let pending = [root];
-
-    while (pending.length > 0) {
-      let current = pending.pop();
-      if (!current) {
-        continue;
-      }
-      let entries = readdirSync(current, { withFileTypes: true });
-      for (let entry of entries) {
-        let entryPath = join(current, entry.name);
-        if (entry.isDirectory()) {
-          pending.push(entryPath);
-          continue;
-        }
-        if (entry.isFile() && entry.name.endsWith('.css')) {
-          cssFiles.push(entryPath);
-        }
-      }
-    }
-
-    return cssFiles;
-  }
-
-  private async retrieveBoxelScopedCSSIndex(): Promise<BoxelScopedCSSIndex | null> {
-    if (this.promiseForBoxelScopedCSSIndex) {
-      return this.promiseForBoxelScopedCSSIndex;
-    }
-
-    let deferred = new Deferred<BoxelScopedCSSIndex | null>();
-    this.promiseForBoxelScopedCSSIndex = deferred.promise;
-
-    let distPath = this.findBoxelUIDistPath();
-    if (!distPath) {
-      this.scopedCssLog.debug('Boxel UI dist directory not found');
-      deferred.fulfill(null);
-      return deferred.promise;
-    }
-
-    let cssByPath = new Map<string, string>();
-    let byAttribute = new Map<string, Set<string>>();
-    let scopedAttrPattern = /data-scopedcss-[a-z0-9-]+/gi;
-
-    try {
-      let cssFiles = this.listBoxelCSSFiles(distPath);
-      for (let cssFile of cssFiles) {
-        let css = await readFile(cssFile, 'utf8');
-        let attributes = css.match(scopedAttrPattern);
-        if (!attributes || attributes.length === 0) {
-          continue;
-        }
-        cssByPath.set(cssFile, css);
-        for (let attribute of new Set(attributes.map((attr) => attr.toLowerCase()))) {
-          let paths = byAttribute.get(attribute);
-          if (!paths) {
-            paths = new Set<string>();
-            byAttribute.set(attribute, paths);
-          }
-          paths.add(cssFile);
-        }
-      }
-    } catch (error) {
-      this.scopedCssLog.debug(`Failed to read Boxel UI scoped CSS: ${error}`);
-      deferred.fulfill(null);
-      return deferred.promise;
-    }
-
-    deferred.fulfill({ cssByPath, byAttribute });
-    return deferred.promise;
-  }
-
-  private async retrieveBoxelScopedCSS(
-    isolatedHTML: string | null,
-  ): Promise<string | null> {
-    if (!isolatedHTML) {
-      return null;
-    }
-    let scopedAttrPattern = /data-scopedcss-[a-z0-9-]+/gi;
-    let attributes = isolatedHTML.match(scopedAttrPattern);
-    if (!attributes || attributes.length === 0) {
-      return null;
-    }
-
-    let index = await this.retrieveBoxelScopedCSSIndex();
-    if (!index) {
-      return null;
-    }
-
-    let cssBlocks = new Set<string>();
-    for (let attribute of new Set(attributes.map((attr) => attr.toLowerCase()))) {
-      let paths = index.byAttribute.get(attribute);
-      if (!paths) {
-        continue;
-      }
-      for (let path of paths) {
-        let css = index.cssByPath.get(path);
-        if (css) {
-          cssBlocks.add(css);
-        }
-      }
-    }
-
-    if (cssBlocks.size === 0) {
-      return null;
-    }
-
-    return [...cssBlocks].join('\n');
-  }
-
-  private mergeScopedCSS(...blocks: Array<string | null | undefined>): string | null {
-    let merged = new Set<string>();
-    for (let block of blocks) {
-      if (block && block.trim().length > 0) {
-        merged.add(block);
-      }
-    }
-    if (merged.size === 0) {
-      return null;
-    }
-    return [...merged].join('\n');
   }
 
   private coerceDeps(deps: unknown): string[] | null {
