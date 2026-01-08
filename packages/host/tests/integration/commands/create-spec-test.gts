@@ -5,6 +5,7 @@ import { baseRealm, ensureTrailingSlash } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import CreateSpecCommand from '@cardstack/host/commands/create-specs';
+import { catalogRealm } from '@cardstack/host/lib/utils';
 
 import type { Spec } from 'https://cardstack.com/base/spec';
 
@@ -18,9 +19,8 @@ import {
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
-import { setupRenderingTest } from '../../helpers/setup';
-import { catalogRealm } from '@cardstack/host/lib/utils';
 import { renderCard } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
 
 const catalogRealmURL = ensureTrailingSlash(catalogRealm.url);
 const FIELD_SPEC_EDIT_COMPONENT = `${catalogRealmURL}field-spec/components/field-spec-edit-template`;
