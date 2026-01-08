@@ -1624,10 +1624,12 @@ module(basename(__filename), function () {
         }
       `,
       );
+      mapOfWrites.set('notes.txt', 'Hello from writeMany');
       let result = await realm.writeMany(mapOfWrites);
-      assert.strictEqual(result.length, 2, '2 files were written');
+      assert.strictEqual(result.length, 3, '3 files were written');
       assert.strictEqual(result[0].path, 'place.gts');
       assert.strictEqual(result[1].path, 'country.gts');
+      assert.strictEqual(result[2].path, 'notes.txt');
 
       let place = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}place`),
@@ -1638,6 +1640,10 @@ module(basename(__filename), function () {
         new URL(`${testRealm}country`),
       );
       assert.ok(country, 'country module is in the index');
+      let fileEntry = await realm.realmIndexQueryEngine.file(
+        new URL(`${testRealm}notes.txt`),
+      );
+      assert.ok(fileEntry, 'file entry is in the index');
       assert.strictEqual(
         realm.realmIndexUpdater.stats.modulesIndexed,
         2,
@@ -1645,7 +1651,7 @@ module(basename(__filename), function () {
       );
     });
 
-    test('can write instances and modules at once', async function (assert) {
+    test('can write instances and modules and files at once', async function (assert) {
       let mapOfWrites = new Map();
       mapOfWrites.set(
         'city.gts',
@@ -1672,10 +1678,12 @@ module(basename(__filename), function () {
           },
         }),
       );
+      mapOfWrites.set('notes.txt', 'Hello from mixed writeMany');
       let result = await realm.writeMany(mapOfWrites);
-      assert.strictEqual(result.length, 2, '2 files were written');
+      assert.strictEqual(result.length, 3, '3 files were written');
       assert.strictEqual(result[0].path, 'city.gts');
       assert.strictEqual(result[1].path, 'city.json');
+      assert.strictEqual(result[2].path, 'notes.txt');
 
       let module = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}city`),
@@ -1686,14 +1694,26 @@ module(basename(__filename), function () {
         new URL(`${testRealm}city`),
       );
       assert.ok(instance, 'city instance is in the index');
+      let fileEntry = await realm.realmIndexQueryEngine.file(
+        new URL(`${testRealm}notes.txt`),
+      );
+      assert.ok(fileEntry, 'file entry for notes.txt is in the index');
+      let instanceFileEntry = await realm.realmIndexQueryEngine.file(
+        new URL(`${testRealm}city.json`),
+      );
+      assert.ok(instanceFileEntry, 'file entry for city.json is in the index');
       assert.deepEqual(
         {
+          filesIndexed: realm.realmIndexUpdater.stats.filesIndexed,
+          fileErrors: realm.realmIndexUpdater.stats.fileErrors,
           instancesIndexed: realm.realmIndexUpdater.stats.instancesIndexed,
           instanceErrors: realm.realmIndexUpdater.stats.instanceErrors,
           moduleErrors: realm.realmIndexUpdater.stats.moduleErrors,
           modulesIndexed: realm.realmIndexUpdater.stats.modulesIndexed,
         },
         {
+          filesIndexed: 2,
+          fileErrors: 0,
           instancesIndexed: 1,
           instanceErrors: 0,
           moduleErrors: 0,

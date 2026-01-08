@@ -195,6 +195,45 @@ module(`Integration | realm indexing`, function (hooks) {
     assert.strictEqual(contentHash, expectedHash, 'content hash is returned');
   });
 
+  test('full indexing stores file entries with search doc and deps', async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'notes.txt': 'Hello from the test realm.',
+      },
+    });
+
+    await realm.fullIndex();
+
+    let fileURL = new URL('notes.txt', testRealmURL);
+    let fileEntry = await realm.realmIndexQueryEngine.file(fileURL);
+    assert.ok(fileEntry, 'file entry exists');
+    assert.strictEqual(fileEntry?.type, 'file');
+    assert.strictEqual(
+      fileEntry?.searchDoc?.name,
+      'notes.txt',
+      'search doc includes name',
+    );
+    assert.strictEqual(
+      fileEntry?.searchDoc?.contentType,
+      'text/plain',
+      'search doc includes contentType',
+    );
+    assert.strictEqual(
+      fileEntry?.searchDoc?.contentHash,
+      md5(new TextEncoder().encode('Hello from the test realm.')),
+      'search doc includes contentHash',
+    );
+    assert.ok(
+      fileEntry?.deps?.includes(`${baseRealm.url}file-api`),
+      'deps include base file-api module',
+    );
+    assert.ok(
+      fileEntry?.deps?.includes(fileURL.href),
+      'deps include file URL',
+    );
+  });
+
   test('full indexing skips over unchanged items in index', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
