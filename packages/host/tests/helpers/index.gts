@@ -792,6 +792,7 @@ async function setupTestRealm({
       username: testRealmServerMatrixUsername,
       seed: testRealmSecretSeed,
     }),
+    realmServerURL: ensureTrailingSlash(ENV.realmServerURL),
     definitionLookup,
   });
 

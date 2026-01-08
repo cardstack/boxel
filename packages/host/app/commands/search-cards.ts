@@ -76,12 +76,11 @@ export class SearchCardsByQueryCommand extends HostBaseCommand<
   ): Promise<BaseCommandModule.SearchCardsResult> {
     assertQuery(input.query);
     let realmUrls = this.realmServer.availableRealmURLs;
-    let instances: CardDef[];
+    let instances: CardDef[] = [];
     try {
       instances = await this.store.search(input.query, realmUrls);
     } catch (e) {
-      console.error('Error searching realms:', e, input.query);
-      instances = [];
+      console.error(`Error searching in realms:`, e, input.query);
     }
 
     let commandModule = await this.loadCommandModule();

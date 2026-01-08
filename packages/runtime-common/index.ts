@@ -439,7 +439,7 @@ export interface Store {
     patchData: PatchData,
     opts?: { doNotPersist?: boolean; clientRequestId?: string },
   ): Promise<T | CardErrorJSONAPI | undefined>;
-  search(query: Query, realms?: string[]): Promise<CardDef[]>;
+  search(query: Query, realmURLs?: string[]): Promise<CardDef[]>;
   getSaveState(id: string): AutoSaveState | undefined;
 }
 

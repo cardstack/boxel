@@ -507,7 +507,11 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private async _search(query: Query, realms: string[]): Promise<CardDef[]> {
-    let searchURL = new URL('_search', this.realmServer.url);
+    let realmServerURLs = this.realmServer.getRealmServersForRealms(realms);
+    // TODO remove this assertion after multi-realm serer/federated identity is supported
+    this.realmServer.assertOwnRealmServer(realmServerURLs);
+    let [realmServerURL] = realmServerURLs;
+    let searchURL = new URL('_search', realmServerURL);
     for (let realm of realms) {
       searchURL.searchParams.append('realms', realm);
     }

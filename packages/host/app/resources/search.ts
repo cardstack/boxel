@@ -267,8 +267,14 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
     // the Task instance to a promise which makes it uncancellable. When this is
     // uncancellable it results in a flaky test.
     let token = waiter.beginAsync();
+    let realmServerURLs = this.realmServer.getRealmServersForRealms(
+      this.realmsToSearch,
+    );
+    // TODO remove this assertion after multi-realm serer/federated identity is supported
+    this.realmServer.assertOwnRealmServer(realmServerURLs);
+    let [realmServerURL] = realmServerURLs;
     try {
-      let searchURL = new URL('_search', this.realmServer.url);
+      let searchURL = new URL('_search', realmServerURL);
       for (let realm of this.realmsToSearch) {
         searchURL.searchParams.append('realms', realm);
       }

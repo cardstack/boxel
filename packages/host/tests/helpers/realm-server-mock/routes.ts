@@ -18,8 +18,6 @@ import type {
   PrerenderedCardCollectionDocument,
 } from '@cardstack/runtime-common/document-types';
 
-import ENV from '@cardstack/host/config/environment';
-
 import type NetworkService from '@cardstack/host/services/network';
 
 import { getRoomIdForRealmAndUser } from '../mock-matrix/_utils';
@@ -63,7 +61,6 @@ export function getRealmServerRoute(
 export function registerDefaultRoutes() {
   registerSearchRoutes();
   registerAuthRoutes();
-  registerCatalogRoutes();
 }
 
 function registerSearchRoutes() {
@@ -139,6 +136,7 @@ function registerAuthRoutes() {
   registerRealmServerRoute({
     path: '/_realm-auth',
     handler: async (_req, _url, state: RealmServerMockState) => {
+      let realmServerURL = ensureTrailingSlash(_url.origin);
       const authTokens: Record<string, string> = {};
       for (let [realmURL, permissions] of state.realmPermissions.entries()) {
         if (state.ensureSessionRoom) {
@@ -150,6 +148,7 @@ function registerAuthRoutes() {
             sessionRoom: getRoomIdForRealmAndUser(realmURL, TEST_MATRIX_USER),
             permissions,
             realm: realmURL,
+            realmServerURL,
           },
           '1d',
           testRealmSecretSeed,
@@ -183,30 +182,6 @@ function registerAuthRoutes() {
             testRealmSecretSeed,
           ),
         },
-      });
-    },
-  });
-}
-
-function registerCatalogRoutes() {
-  registerRealmServerRoute({
-    path: '/_catalog-realms',
-    handler: async () => {
-      let catalogURLs = [
-        ENV.resolvedCatalogRealmURL,
-        ENV.resolvedSkillsRealmURL,
-      ]
-        .filter(Boolean)
-        .map((url) => ensureTrailingSlash(url));
-
-      let data = catalogURLs.map((id) => ({
-        type: 'realm',
-        id,
-      }));
-
-      return new Response(JSON.stringify({ data }), {
-        status: 200,
-        headers: { 'content-type': SupportedMimeType.JSONAPI },
       });
     },
   });
