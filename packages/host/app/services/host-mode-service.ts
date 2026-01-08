@@ -216,6 +216,7 @@ export default class HostModeService extends Service {
     let searchURL = new URL('_search-prerendered', realmServerURL);
     let cardJsonURL = cardURL.endsWith('.json') ? cardURL : `${cardURL}.json`;
 
+    searchURL.searchParams.append('realms', realmRoot);
     searchURL.searchParams.set('query', buildQueryParamValue({}));
     searchURL.searchParams.set('prerenderedHtmlFormat', 'head');
     searchURL.searchParams.append('cardUrls[]', cardJsonURL);
