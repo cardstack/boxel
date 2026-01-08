@@ -505,7 +505,7 @@ module('Acceptance | Commands tests', function (hooks) {
             description:
               'Change the topic of the meeting to "Meeting with Hassan"',
             attributes: {
-              id: meetingCardId,
+              cardId: meetingCardId,
               patch: {
                 attributes: {
                   topic: 'Meeting with Hassan',

@@ -545,7 +545,7 @@ module('Acceptance | prerender | html', function (hooks) {
     await visit(renderPath(url, '/html/isolated/0'));
     assert
       .dom(
-        `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="isolated"] [data-test-field="cardTitle"]`,
+        `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="isolated"] [data-test-field="cardInfo-name"]`,
       )
       .containsText('Paper', 'isolated format is rendered');
   });
