@@ -269,6 +269,7 @@ export interface TokenClaims {
   realm: string;
   sessionRoom: string;
   permissions: RealmPermissions['user'];
+  realmServerURL: string;
 }
 
 export interface AdapterWriteResult {
@@ -368,6 +369,7 @@ export class Realm {
   #startedUp = new Deferred<void>();
   #matrixClient: MatrixClient;
   #realmServerMatrixClient: MatrixClient;
+  #realmServerURL: string;
   #realmIndexUpdater: RealmIndexUpdater;
   #realmIndexQueryEngine: RealmIndexQueryEngine;
   #adapter: RealmAdapter;
@@ -411,6 +413,10 @@ export class Realm {
     return this.paths.url;
   }
 
+  get realmServerURL(): string {
+    return this.#realmServerURL;
+  }
+
   constructor(
     {
       url,
@@ -421,6 +427,7 @@ export class Realm {
       queue,
       virtualNetwork,
       realmServerMatrixClient,
+      realmServerURL,
       definitionLookup,
     }: {
       url: string;
@@ -431,6 +438,7 @@ export class Realm {
       queue: QueuePublisher;
       virtualNetwork: VirtualNetwork;
       realmServerMatrixClient: MatrixClient;
+      realmServerURL: string;
       definitionLookup: DefinitionLookup;
     },
     opts?: Options,
@@ -445,6 +453,7 @@ export class Realm {
     this.#fromScratchIndexPriority =
       opts?.fromScratchIndexPriority ?? systemInitiatedPriority;
     this.#realmServerMatrixClient = realmServerMatrixClient;
+    this.#realmServerURL = ensureTrailingSlash(realmServerURL);
     this.#realmServerMatrixUserId = userIdFromUsername(
       realmServerMatrixClient.username,
       realmServerMatrixClient.matrixURL.href,
@@ -1349,6 +1358,7 @@ export class Realm {
               sessionRoom,
               permissions: userPermissions,
               realm: this.url,
+              realmServerURL: this.#realmServerURL,
             },
             '7d',
             this.#realmSecretSeed,

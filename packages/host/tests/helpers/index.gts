@@ -811,6 +811,7 @@ async function setupTestRealm({
       username: testRealmServerMatrixUsername,
       seed: testRealmSecretSeed,
     }),
+    realmServerURL: ensureTrailingSlash(ENV.realmServerURL),
     definitionLookup,
   });
 
@@ -870,6 +871,7 @@ function ensureAuthHandlerState(network: NetworkService): AuthHandlerState {
               sessionRoom: getRoomIdForRealmAndUser(realmURL, TEST_MATRIX_USER),
               permissions,
               realm: realmURL,
+              realmServerURL: ensureTrailingSlash(new URL(realmURL).origin),
             },
             '1d',
             testRealmSecretSeed,
