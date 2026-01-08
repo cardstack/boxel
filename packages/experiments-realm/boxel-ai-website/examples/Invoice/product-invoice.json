@@ -1,0 +1,30 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Invoice",
+        "module": "../invoice"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "amount": 1200,
+      "status": "pending",
+      "cardInfo": {
+        "notes": null,
+        "title": "Product Invoice",
+        "description": "Product sale invoice",
+        "thumbnailURL": null
+      },
+      "clientName": "Northwind",
+      "invoiceNumber": "INV-2024-010"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

@@ -471,7 +471,7 @@ export default class CodeSubmode extends Component<Signature> {
         // TODO: This is a side effect of the recent-file service making assumptions about
         // what realm we are in. we should refactor that so that callers have to tell
         // it the realm of the file in question
-        let realmURL = this.operatorModeStateService.realmURL;
+        let realmURL = new URL(this.operatorModeStateService.realmURL);
 
         if (realmURL) {
           let realmPaths = new RealmPaths(realmURL);

@@ -178,7 +178,7 @@ export default class RoomMessageCommand extends Component<Signature> {
   }
 
   private get activeRealmURL() {
-    return this.operatorModeStateService.realmURL?.href;
+    return this.operatorModeStateService.realmURL;
   }
 
   private get commandResultCardForRendering(): CardDef {

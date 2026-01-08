@@ -40,15 +40,13 @@ export default class RenderMetaRoute extends Route<Model> {
   async model(_: unknown, transition: Transition) {
     let api = await this.cardService.getAPI();
     let parentModel = this.modelFor('render') as ParentModel | undefined;
-    await parentModel?.readyPromise;
-    let instance: CardDef;
-    if (!parentModel) {
-      // this is to support in-browser rendering, where we actually don't have the
-      // ability to lookup the parent route using RouterService.recognizeAndLoad()
-      instance = (globalThis as any).__renderInstance;
-    } else {
-      instance = parentModel.instance;
-    }
+    // the global use below is to support in-browser rendering, where we actually don't have the
+    // ability to lookup the parent route using RouterService.recognizeAndLoad()
+    let renderModel =
+      parentModel ??
+      ((globalThis as any).__renderModel as ParentModel | undefined);
+    await renderModel?.readyPromise;
+    let instance: CardDef | undefined = renderModel?.instance;
 
     if (!instance) {
       // the lack of an instance is dealt with in the parent route

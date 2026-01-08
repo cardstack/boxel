@@ -26,7 +26,7 @@ export interface RealmDropdownItem extends EnhancedRealmInfo {
 interface Signature {
   Args: {
     onSelect: (item: RealmDropdownItem) => void;
-    selectedRealmURL: URL | undefined;
+    selectedRealmURL: string | undefined;
     disabled?: boolean;
     contentClass?: string;
     selectedRealmPrefix?: string;
@@ -142,7 +142,7 @@ export default class RealmDropdown extends Component<Signature> {
 
   allRealmsInfo = trackedFunction(this, async () => {
     if (this.args.selectedRealmURL) {
-      await this.realm.ensureRealmMeta(this.args.selectedRealmURL.href);
+      await this.realm.ensureRealmMeta(this.args.selectedRealmURL);
     }
     return this.realm.allRealmsInfo;
   });
@@ -187,7 +187,8 @@ export default class RealmDropdown extends Component<Signature> {
     if (this.args.selectedRealmURL) {
       selectedRealm = this.realms.find(
         (realm) =>
-          realm.path === new RealmPaths(this.args.selectedRealmURL!).url,
+          realm.path ===
+          new RealmPaths(new URL(this.args.selectedRealmURL!)).url,
       );
     }
     if (selectedRealm) {

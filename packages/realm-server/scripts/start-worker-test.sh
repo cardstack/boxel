@@ -14,6 +14,7 @@ NODE_ENV=test \
   NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
   REALM_SECRET_SEED="shhh! it's a secret" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
+  LOW_CREDIT_THRESHOLD=2000 \
   ts-node \
   --transpileOnly worker-manager \
   --port=4211 \
