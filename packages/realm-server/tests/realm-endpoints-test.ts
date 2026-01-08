@@ -13,7 +13,6 @@ import {
   removeSync,
   writeFileSync,
 } from 'fs-extra';
-import { md5 } from 'super-fast-md5';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   baseRealm,

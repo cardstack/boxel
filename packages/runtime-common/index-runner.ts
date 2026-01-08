@@ -49,7 +49,9 @@ function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
   let name = fileURL.pathname.split('/').pop() ?? '';
   let dot = name.lastIndexOf('.');
   let extension = dot === -1 ? '' : name.slice(dot).toLowerCase();
-  let mapping = extension ? FILEDEF_CODE_REF_BY_EXTENSION[extension] : undefined;
+  let mapping = extension
+    ? FILEDEF_CODE_REF_BY_EXTENSION[extension]
+    : undefined;
   if (!mapping) {
     return { module: `${baseRealm.url}file-api`, name: 'FileDef' };
   }
