@@ -249,7 +249,7 @@ export default class RealmServerService extends Service {
       realmServerURLs[0] !== this.realmServer.url.href
     ) {
       throw new Error(
-        `Multi-realm server support is not yet implemented: don't know how to provide auth token for different realm server`,
+        `Multi-realm server support is not yet implemented: don't know how to provide auth token for different realm servers: ${realmServerURLs.join()} (own realm server: ${this.url.href})`,
       );
     }
   }

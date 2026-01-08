@@ -98,6 +98,7 @@ function registerDefaultRoutes() {
   registerRealmServerRoute({
     path: '/_realm-auth',
     handler: async (_req, _url, state) => {
+      let realmServerURL = ensureTrailingSlash(_url.origin);
       const authTokens: Record<string, string> = {};
       for (let [realmURL, permissions] of state.realmPermissions.entries()) {
         if (state.ensureSessionRoom) {
@@ -109,6 +110,7 @@ function registerDefaultRoutes() {
             sessionRoom: getRoomIdForRealmAndUser(realmURL, TEST_MATRIX_USER),
             permissions,
             realm: realmURL,
+            realmServerURL,
           },
           '1d',
           testRealmSecretSeed,
