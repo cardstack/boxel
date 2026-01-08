@@ -11,6 +11,7 @@ import type { JobInfo } from '../worker';
 export type * from './lint';
 export * from '#lint-task';
 export * from './full-reindex';
+export * from './daily-credit-grant';
 export * from './copy';
 export * from './indexer';
 

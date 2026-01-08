@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "ModelsSection",
+        "module": "../models-section"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Models",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "headline": "Pick your brains.",
+      "footerNote": null,
+      "subheadline": null,
+      "sectionLabel": "Model Sources",
+      "sectionNumber": "005",
+      "openRouterModels": [],
+      "replicateCategories": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

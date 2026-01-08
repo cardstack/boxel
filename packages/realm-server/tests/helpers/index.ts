@@ -53,6 +53,10 @@ import {
 } from '@cardstack/postgres';
 import type { Server } from 'http';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import {
+  Prerenderer as LocalPrerenderer,
+  type Prerenderer as TestPrerenderer,
+} from '../../prerender';
 
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
@@ -139,6 +143,11 @@ export const testCreatePrerenderAuth =
 
 let prerenderServer: Server | undefined;
 let prerenderServerStart: Promise<void> | undefined;
+const trackedServers = new Set<Server>();
+const trackedPrerenderers = new Set<TestPrerenderer>();
+const trackedDbAdapters = new Set<PgAdapter>();
+const trackedQueuePublishers = new Set<QueuePublisher>();
+const trackedQueueRunners = new Set<QueueRunner>();
 
 const basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
 
@@ -163,6 +172,82 @@ export async function closeServer(server: Server) {
   await new Promise<void>((r) => (server ? server.close(() => r()) : r()));
 }
 
+function trackServer(server: Server): Server {
+  trackedServers.add(server);
+  server.once('close', () => trackedServers.delete(server));
+  return server;
+}
+
+export async function closeTrackedServers(): Promise<void> {
+  let servers = [...trackedServers].filter((server) => server.listening);
+  await Promise.all(servers.map((server) => closeServer(server)));
+}
+
+export function trackPrerenderer(prerenderer: TestPrerenderer): void {
+  trackedPrerenderers.add(prerenderer);
+}
+
+export function getPrerendererForTesting(options: {
+  serverURL: string;
+  maxPages?: number;
+}): TestPrerenderer {
+  let prerenderer = new LocalPrerenderer(options);
+  trackPrerenderer(prerenderer);
+  return prerenderer;
+}
+
+export async function stopTrackedPrerenderers(): Promise<void> {
+  let prerenderers = [...trackedPrerenderers];
+  trackedPrerenderers.clear();
+  await Promise.all(
+    prerenderers.map(async (prerenderer) => {
+      try {
+        await prerenderer.stop();
+      } catch {
+        // best-effort cleanup
+      }
+    }),
+  );
+}
+
+export async function closeTrackedDbAdapters(): Promise<void> {
+  let adapters = [...trackedDbAdapters];
+  trackedDbAdapters.clear();
+  for (let adapter of adapters) {
+    if (!adapter.isClosed) {
+      try {
+        await adapter.close();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+  }
+}
+
+export async function destroyTrackedQueuePublishers(): Promise<void> {
+  let publishers = [...trackedQueuePublishers];
+  trackedQueuePublishers.clear();
+  for (let publisher of publishers) {
+    try {
+      await publisher.destroy();
+    } catch {
+      // best-effort cleanup
+    }
+  }
+}
+
+export async function destroyTrackedQueueRunners(): Promise<void> {
+  let runners = [...trackedQueueRunners];
+  trackedQueueRunners.clear();
+  for (let runner of runners) {
+    try {
+      await runner.destroy();
+    } catch {
+      // best-effort cleanup
+    }
+  }
+}
+
 async function startTestPrerenderServer(): Promise<string> {
   if (prerenderServer?.listening) {
     return testPrerenderURL;
@@ -175,6 +260,7 @@ async function startTestPrerenderServer(): Promise<string> {
     silent: Boolean(process.env.SILENT_PRERENDERER),
   });
   prerenderServer = server;
+  trackServer(server);
   prerenderServerStart = new Promise<void>((resolve, reject) => {
     let onError = (error: Error) => {
       server.off('error', onError);
@@ -232,17 +318,29 @@ export function setupDB(
   const runBeforeHook = async () => {
     prepareTestDB();
     dbAdapter = new PgAdapter({ autoMigrate: true });
+    trackedDbAdapters.add(dbAdapter);
     publisher = new PgQueuePublisher(dbAdapter);
+    trackedQueuePublishers.add(publisher);
     runner = new PgQueueRunner({ adapter: dbAdapter, workerId: 'test-worker' });
+    trackedQueueRunners.add(runner);
   };
 
   const runAfterHook = async () => {
     await publisher?.destroy();
+    if (publisher) {
+      trackedQueuePublishers.delete(publisher);
+    }
     await runner?.destroy();
+    if (runner) {
+      trackedQueueRunners.delete(runner);
+    }
     if (dbAdapter) {
       await clearSessionRooms(dbAdapter);
     }
     await dbAdapter?.close();
+    if (dbAdapter) {
+      trackedDbAdapters.delete(dbAdapter);
+    }
     await stopTestPrerenderServer();
   };
 
@@ -365,6 +463,7 @@ export async function createRealm({
     dbAdapter,
     queue: publisher,
     realmServerMatrixClient,
+    realmServerURL: new URL(new URL(realmURL).origin).href,
     definitionLookup,
   });
   if (worker) {
@@ -465,7 +564,8 @@ export async function runBaseRealmServer(
     definitionLookup,
     prerenderer,
   });
-  return testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
+  let server = testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
+  return trackServer(server);
 }
 
 export async function runTestRealmServer({
@@ -565,6 +665,7 @@ export async function runTestRealmServer({
     prerenderer,
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
+  trackServer(testRealmHttpServer);
   await testRealmServer.start();
   return {
     testRealmDir,
@@ -742,38 +843,39 @@ export function setupMatrixRoom(
     let userId = matrixClient.getUserId()!;
 
     let realmSetup = getRealmSetup();
+    let openIdToken = await matrixClient.getOpenIdToken();
+    if (!openIdToken) {
+      throw new Error('matrixClient did not return an OpenID token');
+    }
+
     let response = await realmSetup.request
       .post('/_server-session')
-      .send(JSON.stringify({ user: userId }))
+      .send(JSON.stringify(openIdToken))
       .set('Accept', 'application/json')
       .set('Content-Type', 'application/json');
 
-    let json = response.body;
+    let jwt = response.header['authorization'];
+    if (!jwt) {
+      throw new Error('Realm server did not send Authorization header');
+    }
+
+    let payload = JSON.parse(
+      Buffer.from(jwt.split('.')[1], 'base64').toString('utf8'),
+    ) as { sessionRoom: string };
 
     let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
 
-    if (!rooms.includes(json.room)) {
-      await matrixClient.joinRoom(json.room);
+    if (!rooms.includes(payload.sessionRoom)) {
+      await matrixClient.joinRoom(payload.sessionRoom);
     }
 
-    await matrixClient.sendEvent(json.room, 'm.room.message', {
-      body: `auth-response: ${json.challenge}`,
-      msgtype: 'm.text',
-    });
-
-    response = await realmSetup.request
-      .post('/_server-session')
-      .send(JSON.stringify({ user: userId, challenge: json.challenge }))
-      .set('Accept', 'application/json')
-      .set('Content-Type', 'application/json');
-
-    testAuthRoomId = json.room;
+    testAuthRoomId = payload.sessionRoom;
 
     await upsertSessionRoom(
       realmSetup.dbAdapter,
       realmSetup.testRealm.url,
       userId,
-      json.room,
+      payload.sessionRoom,
     );
   });
 
@@ -1069,6 +1171,7 @@ export function createJWT(
       realm: realm.url,
       permissions,
       sessionRoom: `test-session-room-for-${user}`,
+      realmServerURL: realm.realmServerURL,
     },
     '7d',
   );

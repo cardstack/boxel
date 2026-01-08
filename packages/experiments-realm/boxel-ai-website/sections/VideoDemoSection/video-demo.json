@@ -1,0 +1,34 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "VideoDemoSection",
+        "module": "../video-demo-section"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "badge": "video",
+      "title": "The Complete Workflow",
+      "cardInfo": {
+        "notes": null,
+        "title": "Video Demo",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "duration": "00:45",
+      "videoUrl": "#",
+      "posterUrl": null,
+      "description": "From idea to deployed app in 45 seconds. Watch how Boxel unifies chat, code, and hosting into one seamless experience.",
+      "sectionLabel": "Demo",
+      "sectionNumber": "002"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

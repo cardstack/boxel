@@ -23,6 +23,7 @@
     "lint:glint": "glint",
     "ensure-boxel-ui": "../boxel-ui/addon/bin/conditional-build.sh",
     "start": "vite",
+    "serve:dist": "serve --config ../tests/serve.json --single --cors --no-request-logging --no-etag --listen 4200 dist",
     "start:build": "NODE_OPTIONS='--max-old-space-size=8192' ember build --watch",
     "test": "concurrently \"pnpm:lint\" \"pnpm:test:*\" --names \"lint,test:\"",
     "test-with-percy": "percy exec --parallel -- pnpm test:wait-for-servers",
@@ -171,6 +172,7 @@
     "qunit": "catalog:",
     "qunit-dom": "catalog:",
     "safe-stable-stringify": "catalog:",
+    "serve": "^14.2.5",
     "simple-html-tokenizer": "catalog:",
     "start-server-and-test": "catalog:",
     "statuses": "catalog:",
@@ -186,7 +188,8 @@
   },
   "dependencies": {
     "ember-modify-based-class-resource": "catalog:",
-    "reactiveweb": "catalog:"
+    "reactiveweb": "catalog:",
+    "unique-names-generator": "^4.7.1"
   },
   "engines": {
     "node": ">= 20"

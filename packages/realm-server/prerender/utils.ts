@@ -167,7 +167,7 @@ function buildInvalidRenderResponseError(
     id = null;
   }
   return {
-    type: 'error',
+    type: 'instance-error',
     error: {
       id,
       status: 500,
@@ -193,7 +193,7 @@ export function buildInvalidModuleResponseError(
     id = null;
   }
   return {
-    type: 'error',
+    type: 'module-error',
     error: {
       id,
       status: 500,
@@ -594,7 +594,7 @@ export async function captureResult(
           return {
             status: 'error',
             value: JSON.stringify({
-              type: 'error',
+              type: 'instance-error',
               error: {
                 id: resolvedElement.dataset.prerenderId ?? null,
                 status: 500,
@@ -667,11 +667,25 @@ export async function withTimeout<T>(
         return null;
       }
     });
+    let timerSummary: string | null = await page.evaluate(() => {
+      try {
+        let summary = (globalThis as any).__boxelRenderTimerSummary;
+        if (typeof summary === 'function') {
+          return summary();
+        }
+        if (typeof summary === 'string') {
+          return summary;
+        }
+      } catch {
+        return null;
+      }
+      return null;
+    });
     log.warn(
       `render of ${id} timed out with DOM:\n${dom?.trim()}\nDocs in flight: ${docsInFlight}`,
     );
     let timeoutError: RenderError = {
-      type: 'error',
+      type: 'instance-error',
       error: {
         id,
         status: 504,
@@ -681,6 +695,9 @@ export async function withTimeout<T>(
       },
       evict: true,
     };
+    if (typeof timerSummary === 'string' && timerSummary.trim()) {
+      timeoutError.error.stack = timerSummary.trim();
+    }
     (timeoutError as any).capturedDom = dom ?? null;
     (timeoutError as any).docsInFlight = docsInFlight ?? null;
     return timeoutError;

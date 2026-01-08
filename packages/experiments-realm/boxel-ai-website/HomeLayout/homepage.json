@@ -1,0 +1,135 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "HomeLayoutCard",
+        "module": "../boxel-home-layout"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": "Boxel Home",
+        "description": "Boxel AI Website Homepage",
+        "thumbnailURL": null
+      },
+      "sections": [
+        {
+          "sectionNumber": "001",
+          "sectionLabel": "Overview",
+          "showInNav": true
+        },
+        {
+          "sectionNumber": "002",
+          "sectionLabel": "Demo",
+          "showInNav": true
+        },
+        {
+          "sectionNumber": "002",
+          "sectionLabel": "AI-Native Workspace",
+          "showInNav": true
+        },
+        {
+          "sectionNumber": "003",
+          "sectionLabel": "AI-Native Stack",
+          "showInNav": true
+        },
+        {
+          "sectionNumber": "004",
+          "sectionLabel": "AI-Native Composition",
+          "showInNav": true
+        },
+        {
+          "sectionNumber": "005",
+          "sectionLabel": "AI Extensibility",
+          "showInNav": true
+        },
+        {
+          "sectionNumber": "006",
+          "sectionLabel": "AI-Searchable Catalog",
+          "showInNav": true
+        },
+        {
+          "sectionNumber": "007",
+          "sectionLabel": "Builder Economy",
+          "showInNav": true
+        },
+        {
+          "sectionNumber": "008",
+          "sectionLabel": "Join the Builders",
+          "showInNav": true
+        },
+        {
+          "sectionNumber": null,
+          "sectionLabel": null,
+          "showInNav": false
+        }
+      ],
+      "currentPageId": "home",
+      "showDarkModeToggle": true
+    },
+    "relationships": {
+      "site": {
+        "links": {
+          "self": "../Site/boxel-site"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+        }
+      },
+      "sections.0.content": {
+        "links": {
+          "self": "../sections/HeroSection/compose-hero"
+        }
+      },
+      "sections.1.content": {
+        "links": {
+          "self": "../sections/VideoDemoSection/video-demo"
+        }
+      },
+      "sections.2.content": {
+        "links": {
+          "self": "../sections/ThreeModesSection/workspace-modes"
+        }
+      },
+      "sections.3.content": {
+        "links": {
+          "self": "../sections/StackArchitectureSection/stack-architecture"
+        }
+      },
+      "sections.4.content": {
+        "links": {
+          "self": "../sections/SoftwareMediaSection/software-media"
+        }
+      },
+      "sections.5.content": {
+        "links": {
+          "self": "../sections/SkillsSection/skills"
+        }
+      },
+      "sections.6.content": {
+        "links": {
+          "self": "../sections/CatalogSection/catalog"
+        }
+      },
+      "sections.7.content": {
+        "links": {
+          "self": "../sections/BuilderEconomySection/builder-economy"
+        }
+      },
+      "sections.8.content": {
+        "links": {
+          "self": "../sections/CtaSection/cta"
+        }
+      },
+      "sections.9.content": {
+        "links": {
+          "self": "../sections/FooterSection/footer"
+        }
+      }
+    }
+  }
+}

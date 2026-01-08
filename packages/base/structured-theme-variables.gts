@@ -1,6 +1,7 @@
-import { CopyButton } from '@cardstack/boxel-ui/components';
+import { CopyButton, Swatch } from '@cardstack/boxel-ui/components';
 import {
   buildCssVariableName,
+  dasherize,
   entriesToCssRuleMap,
   type CssVariableEntry,
   type CssRuleMap,
@@ -19,6 +20,7 @@ import {
 import ColorField from './color';
 import CSSValueField from './css-value';
 import TypographyField from './typography';
+import GlimmerComponent from '@glimmer/component';
 
 export interface CssVariableFieldEntry extends CssVariableEntry {
   fieldName: string;
@@ -33,6 +35,13 @@ const COLOR_VALUE_INPUT_HELP =
 
 function describeColor(base: string) {
   return `${base} ${COLOR_VALUE_INPUT_HELP}`;
+}
+
+function getFieldGroup(fieldNames: string[], model?: Record<string, any>) {
+  return fieldNames?.map((fieldName: string) => ({
+    name: dasherize(fieldName).replace('-', ' '),
+    value: model?.[fieldName],
+  }));
 }
 
 export function calculateTypographyVariables(
@@ -182,90 +191,117 @@ export class ThemeTypographyField extends FieldDef {
 }
 
 class Embedded extends Component<typeof ThemeVarField> {
-  private get cssFields(): CssVariableFieldEntry[] | undefined {
-    let fields: CssVariableField = this.args.fields;
-    let cssFields = this.args.model?.cssVariableFields;
-    cssFields = cssFields?.map((f) => ({
-      component: fields?.[f.fieldName],
-      ...f,
-    }));
-    return cssFields;
-  }
-
   <template>
-    <div class='field-list'>
-      {{#each this.cssFields as |field|}}
-        <div class='code-preview'>
-          <span class='css-label'>{{field.cssVariableName}}</span>
-          <CopyButton
-            class='copy-button'
-            @textToCopy={{field.cssVariableName}}
-            @width='16px'
-            @height='16px'
-            @ariaLabel='Copy CSS variable name'
-          />
-        </div>
-        <div class='code-preview'>
-          {{#if field.value}}
-            <span
-              class='css-value'
-              data-test-var-value={{field.fieldName}}
-            ><field.component /></span>
-            <CopyButton
-              class='copy-button'
-              @textToCopy={{field.value}}
-              @width='16px'
-              @height='16px'
-              @ariaLabel='Copy CSS variable value'
-            />
-          {{else}}
-            <span class='css-value empty-state'>/* not set */</span>
-          {{/if}}
-        </div>
+    {{#each @model.fieldGroups as |group|}}
+      <h4 class='field-group-title'>{{group.title}}</h4>
+      <FieldGrid class='field-group-grid' @fields={{group.fields}} />
+    {{/each}}
+    <style scoped>
+      @layer baseComponent {
+        .field-group-title {
+          margin-block: var(--boxel-sp);
+          color: var(--muted-foreground);
+          font-weight: 500;
+          font-size: var(--boxel-font-size);
+        }
+        .field-group-grid {
+          margin-bottom: var(--boxel-sp-2xl);
+        }
+      }
+    </style>
+  </template>
+}
+
+class ThemeSwatch extends GlimmerComponent<{
+  Args: {
+    value: string;
+    label?: string;
+  };
+  Element: HTMLElement;
+}> {
+  <template>
+    {{#if @value.length}}
+      <div
+        class='theme-swatch-display'
+        data-test-var-value={{@label}}
+        ...attributes
+      >
+        <Swatch class='theme-swatch' @color={{@value}} @label={{@label}} />
+        <CopyButton
+          @width='16px'
+          @height='16px'
+          @ariaLabel='Copy {{@value}}'
+          @tooltipText='Copy {{@value}}'
+          @textToCopy={{@value}}
+        />
+      </div>
+    {{else if @label.length}}
+      <div data-test-var-value={{@label}}>
+        <div class='empty-field-name'>{{@label}}</div>
+        <code class='empty-value'>/* not set */</code>
+      </div>
+    {{/if}}
+    <style scoped>
+      @layer {
+        .theme-swatch-display {
+          display: inline-grid;
+          grid-template-columns: minmax(50%, 1fr) 1.875rem;
+          align-items: end;
+          width: 20rem;
+          max-width: 100%;
+        }
+        .theme-swatch {
+          --swatch-width: 3.375rem;
+          display: flex;
+          flex-direction: row-reverse;
+          justify-content: flex-end;
+          align-items: center;
+        }
+        :deep(.boxel-swatch-preview) {
+          box-shadow: var(--swatch-background);
+        }
+        :deep(.boxel-swatch-label) {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .empty-field-name,
+        :deep(.boxel-swatch-name) {
+          font-weight: 600;
+          text-wrap: wrap;
+          text-transform: capitalize;
+        }
+        :deep(.boxel-swatch-value) {
+          font-size: var(--boxel-font-size-xs);
+          text-transform: lowercase;
+        }
+        .empty-value {
+          padding: var(--boxel-sp-4xs);
+          font-style: italic;
+          font-size: var(--boxel-font-size-xs);
+        }
+      }
+    </style>
+  </template>
+}
+
+class FieldGrid extends GlimmerComponent<{
+  Args: {
+    fields: { name: string; value: string }[];
+  };
+  Element: HTMLElement;
+}> {
+  <template>
+    <div class='field-grid' ...attributes>
+      {{#each @fields as |field|}}
+        <ThemeSwatch @value={{field.value}} @label={{field.name}} />
       {{/each}}
     </div>
     <style scoped>
-      @layer baseComponent {
-        .field-list {
-          display: grid;
-          grid-template-columns: 1fr 1.5fr;
-          align-items: center;
-          column-gap: var(--boxel-sp-xs);
-          row-gap: var(--boxel-sp-6xs);
-        }
-        .code-preview {
-          min-height: 2.5em;
-          display: inline-flex;
-          align-items: center;
-          justify-content: flex-start;
-          font-family: var(
-            --font-mono,
-            var(--boxel-monospace-font-family, monospace)
-          );
-          overflow-wrap: break-word;
-          word-break: break-word;
-        }
-        .css-label {
-          font-weight: 500;
-        }
-        .css-value {
-          display: flex;
-          padding: var(--boxel-sp-4xs);
-          border-radius: var(--boxel-border-radius-sm);
-          background-color: var(--muted, var(--boxel-100));
-          color: var(--muted-foreground, var(--boxel-500));
-        }
-        .empty-state {
-          font-style: italic;
-        }
-        .copy-button {
-          color: var(--primary);
-          opacity: 0;
-        }
-        .code-preview:focus-within .copy-button,
-        .code-preview:hover .copy-button {
-          opacity: 1;
-        }
+      .field-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr));
+        gap: var(--boxel-sp-xs) var(--boxel-sp-2xs);
       }
     </style>
   </template>
@@ -279,13 +315,15 @@ export default class ThemeVarField extends FieldDef {
     description: describeColor('Base page background color.'),
   });
   @field foreground = contains(ColorField, {
-    description: describeColor('Primary foreground/text color.'),
+    description: describeColor('The main foreground/text color.'),
   });
   @field card = contains(ColorField, {
-    description: describeColor('Default card surface color.'),
+    description: describeColor(
+      'Nested card or box background-color. Do not use as foreground color.',
+    ),
   });
   @field cardForeground = contains(ColorField, {
-    description: describeColor('Text color used on card surfaces.'),
+    description: describeColor('Foreground text color used on card surfaces.'),
   });
   @field popover = contains(ColorField, {
     description: describeColor('Background color for popovers/overlays.'),
@@ -294,28 +332,38 @@ export default class ThemeVarField extends FieldDef {
     description: describeColor('Text color for popover content.'),
   });
   @field primary = contains(ColorField, {
-    description: describeColor('Primary brand/action color.'),
+    description: describeColor(
+      'Primary brand/action cta background-color. Do not use as foreground color.',
+    ),
   });
   @field primaryForeground = contains(ColorField, {
-    description: describeColor('Text/icon color on primary surfaces.'),
+    description: describeColor(
+      'Text/icon foreground color on primary surfaces.',
+    ),
   });
   @field secondary = contains(ColorField, {
-    description: describeColor('Secondary emphasis color.'),
+    description: describeColor(
+      'Secondary brand/action cta background-color. Do not use as foreground color.',
+    ),
   });
   @field secondaryForeground = contains(ColorField, {
-    description: describeColor('Text/icon color on secondary surfaces.'),
+    description: describeColor(
+      'Text/icon foreground color on secondary surfaces.',
+    ),
   });
   @field muted = contains(ColorField, {
     description: describeColor('Muted background color for subtle UI.'),
   });
   @field mutedForeground = contains(ColorField, {
-    description: describeColor('Foreground color on muted surfaces.'),
+    description: describeColor('Muted foreground color.'),
   });
   @field accent = contains(ColorField, {
-    description: describeColor('Accent/highlight color.'),
+    description: describeColor('Accent background-color.'),
   });
   @field accentForeground = contains(ColorField, {
-    description: describeColor('Text/icon color on accent surfaces.'),
+    description: describeColor(
+      'Text/icon foreground color on accent surfaces.',
+    ),
   });
   @field destructive = contains(ColorField, {
     description: describeColor('Destructive/error action color.'),
@@ -352,19 +400,23 @@ export default class ThemeVarField extends FieldDef {
 
   // sidebar color variables
   @field sidebar = contains(ColorField, {
-    description: describeColor('Sidebar background color.'),
+    description: describeColor('Sidebar background-color.'),
   });
   @field sidebarForeground = contains(ColorField, {
-    description: describeColor('Sidebar text/icon color.'),
+    description: describeColor('Sidebar text/icon foreground color.'),
   });
   @field sidebarPrimary = contains(ColorField, {
-    description: describeColor('Primary action color within sidebar.'),
+    description: describeColor(
+      'Primary action background-color within sidebar. Do not use as foreground color.',
+    ),
   });
   @field sidebarPrimaryForeground = contains(ColorField, {
-    description: describeColor('Text/icon color for sidebar primary actions.'),
+    description: describeColor('Text/icon color on sidebar primary surface.'),
   });
   @field sidebarAccent = contains(ColorField, {
-    description: describeColor('Accent color within sidebar.'),
+    description: describeColor(
+      'Accent background-color within sidebar. Do not use as foreground color.',
+    ),
   });
   @field sidebarAccentForeground = contains(ColorField, {
     description: describeColor('Text/icon color for sidebar accent surfaces.'),
@@ -447,6 +499,78 @@ export default class ThemeVarField extends FieldDef {
       });
     }
     return cssVariableFields;
+  }
+
+  private primaryColors = [
+    'background',
+    'foreground',
+    'primary',
+    'primaryForeground',
+  ];
+  private secondaryColors = [
+    'secondary',
+    'secondaryForeground',
+    'accent',
+    'accentForeground',
+  ];
+  private uiComponentColors = [
+    'card',
+    'cardForeground',
+    'popover',
+    'popoverForeground',
+    'muted',
+    'mutedForeground',
+  ];
+  private formColors = [
+    'border',
+    'input',
+    'ring',
+    'destructive',
+    'destructiveForeground',
+  ];
+  private chartColors = ['chart1', 'chart2', 'chart3', 'chart4', 'chart5'];
+  private sidebarColors = [
+    'sidebar',
+    'sidebarForeground',
+    'sidebarPrimary',
+    'sidebarPrimaryForeground',
+    'sidebarAccent',
+    'sidebarAccentForeground',
+    'sidebarBorder',
+    'sidebarRing',
+  ];
+  private boxShadows = ['shadowSm', 'shadowMd', 'shadowLg', 'shadowXl'];
+  get fieldGroups() {
+    return [
+      {
+        title: 'Primary Colors',
+        fields: getFieldGroup(this.primaryColors, this),
+      },
+      {
+        title: 'Secondary & Accent Colors',
+        fields: getFieldGroup(this.secondaryColors, this),
+      },
+      {
+        title: 'UI Component Colors',
+        fields: getFieldGroup(this.uiComponentColors, this),
+      },
+      {
+        title: 'Form & Feedback Colors',
+        fields: getFieldGroup(this.formColors, this),
+      },
+      {
+        title: 'Chart Colors',
+        fields: getFieldGroup(this.chartColors, this),
+      },
+      {
+        title: 'Sidebar Colors',
+        fields: getFieldGroup(this.sidebarColors, this),
+      },
+      {
+        title: 'Box Shadow',
+        fields: getFieldGroup(this.boxShadows, this),
+      },
+    ];
   }
 
   get cssRuleMap(): CssRuleMap | undefined {

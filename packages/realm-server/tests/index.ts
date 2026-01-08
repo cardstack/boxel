@@ -1,12 +1,13 @@
 (globalThis as any).__environment = 'test';
 
-// Ensure test timeouts don't hold the Node event loop open. Wrap setTimeout to
-// unref timers so the process can exit once work is done. This does have the
-// effect of masking any issues where code should be clearing timers, however
-// the tradeoff is that server tests finish immediately instead of getting into
-// situations where they hang until CI times out.
+// Ensure test timers don't hold the Node event loop open. Wrap setTimeout and
+// setInterval to unref timers so the process can exit once work is done. This
+// does have the effect of masking any issues where code should be clearing
+// timers, however the tradeoff is that server tests finish immediately instead
+// of getting into situations where they hang until CI times out.
 {
   const originalSetTimeout = global.setTimeout;
+  const originalSetInterval = global.setInterval;
   global.setTimeout = ((...args: Parameters<typeof setTimeout>) => {
     const handle = originalSetTimeout(...args);
     if (typeof (handle as any)?.unref === 'function') {
@@ -14,6 +15,13 @@
     }
     return handle;
   }) as typeof setTimeout;
+  global.setInterval = ((...args: Parameters<typeof setInterval>) => {
+    const handle = originalSetInterval(...args);
+    if (typeof (handle as any)?.unref === 'function') {
+      (handle as any).unref();
+    }
+    return handle;
+  }) as typeof setInterval;
 }
 
 import * as ContentTagGlobal from 'content-tag';
@@ -22,6 +30,87 @@ import * as ContentTagGlobal from 'content-tag';
 import QUnit from 'qunit';
 
 QUnit.config.testTimeout = 60000;
+
+// Cleanup here ensures lingering servers/prerenderers/queues don't keep the
+// Node event loop alive after tests finish.
+QUnit.done(() => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const helpers = require('./helpers') as {
+    closeTrackedServers?: () => Promise<void>;
+    stopTrackedPrerenderers?: () => Promise<void>;
+    destroyTrackedQueueRunners?: () => Promise<void>;
+    destroyTrackedQueuePublishers?: () => Promise<void>;
+    closeTrackedDbAdapters?: () => Promise<void>;
+  };
+  Promise.resolve()
+    .then(async () => {
+      await helpers.stopTrackedPrerenderers?.();
+      await helpers.closeTrackedServers?.();
+      await helpers.destroyTrackedQueueRunners?.();
+      await helpers.destroyTrackedQueuePublishers?.();
+      await helpers.closeTrackedDbAdapters?.();
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const undici = require('undici') as {
+          getGlobalDispatcher?: () => { close?: () => Promise<void> };
+        };
+        await undici.getGlobalDispatcher?.()?.close?.();
+      } catch {
+        // best-effort cleanup
+      }
+      let handles = (process as any)._getActiveHandles?.() ?? [];
+      for (let handle of handles) {
+        if (
+          handle &&
+          typeof handle.kill === 'function' &&
+          typeof handle.spawnfile === 'string' &&
+          /chrome|chromium/i.test(handle.spawnfile)
+        ) {
+          try {
+            handle.kill('SIGKILL');
+            handle.unref?.();
+          } catch {
+            // best-effort cleanup
+          }
+        }
+      }
+      handles = (process as any)._getActiveHandles?.() ?? [];
+      for (let handle of handles) {
+        if (!handle || typeof handle.destroy !== 'function') {
+          continue;
+        }
+        let websocketSymbol = Object.getOwnPropertySymbols(handle).find(
+          (symbol) => symbol.description === 'websocket',
+        );
+        if (websocketSymbol) {
+          try {
+            handle[websocketSymbol]?.terminate?.();
+            handle.destroy();
+          } catch {
+            // best-effort cleanup
+          }
+        }
+      }
+      handles = (process as any)._getActiveHandles?.() ?? [];
+      for (let handle of handles) {
+        if (!handle || typeof handle.destroy !== 'function') {
+          continue;
+        }
+        if ((handle as any)._isStdio || (handle as any)._type === 'pipe') {
+          continue;
+        }
+        try {
+          handle.unref?.();
+          handle.destroy();
+        } catch {
+          // best-effort cleanup
+        }
+      }
+    })
+    .catch((error) => {
+      console.error('QUnit.done cleanup failed:', error);
+    });
+});
 
 import 'decorator-transforms/globals';
 import '../setup-logger'; // This should be first

@@ -1,23 +1,31 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Category",
+        "module": "../catalog-app/listing/category"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Certifications & Training",
-      "description": "Training programs, certification paths, course materials, exam preparations, and skill validations.",
-      "color": "#3b82f6",
-      "order": 2
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": "Training programs, certification paths, course materials, exam preparations, and skill validations.",
+        "thumbnailURL": null
+      }
     },
     "relationships": {
       "sphere": {
         "links": {
           "self": "../Sphere/67ffc7a9-70d6-4cd3-93f0-b32a8fbbd34e"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/category",
-        "name": "Category"
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

@@ -1,7 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { BoxelButton, CircleSpinner } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, Exclamation, Warning } from '@cardstack/boxel-ui/icons';
 
 export type ApplyButtonState =
@@ -18,6 +18,7 @@ interface Signature {
   Args: {
     state: ApplyButtonState;
     actionVerb?: string;
+    isCompact?: boolean;
   };
   Blocks: {
     default: [];
@@ -26,7 +27,7 @@ interface Signature {
 
 const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
   <div
-    class='state-indicator {{@state}}'
+    class={{cn 'state-indicator' @state compact=@isCompact}}
     data-test-apply-state={{@state}}
     ...attributes
   >
@@ -87,6 +88,10 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
         width var(--boxel-transition),
         border-radius var(--boxel-transition);
     }
+    .state-indicator.compact {
+      flex-shrink: 0;
+      order: 1;
+    }
     .state-indicator.ready {
       border-radius: 100px;
       width: fit-content;
@@ -95,6 +100,15 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       --icon-stroke-width: 5;
       width: 58px;
       border-radius: 100px;
+    }
+    .state-indicator.compact.applying {
+      width: 1rem;
+      height: 1rem;
+      min-width: 1rem;
+      min-height: 1rem;
+      padding: 0;
+      border-radius: 50%;
+      overflow: hidden;
     }
 
     .state-indicator.preparing {
@@ -161,10 +175,33 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       overflow: hidden;
     }
 
-    .state-indicator:not(.applying):not(.preparing):not(.ready) {
+    .state-indicator:not(.applying):not(.preparing):not(.ready):not(.compact) {
       width: 1.5rem;
       aspect-ratio: 1;
       border-radius: 50%;
+    }
+    .state-indicator.compact {
+      width: 1rem;
+      height: 1rem;
+      min-width: 1rem;
+      min-height: 1rem;
+      padding: 0;
+      aspect-ratio: 1;
+      border-radius: 50%;
+    }
+    .state-indicator.compact.ready {
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .state-indicator.compact svg {
+      width: 10px;
+      height: 10px;
+    }
+    .state-indicator.compact.applied svg {
+      margin-left: -1px;
+    }
+    .state-indicator.compact.applied-with-error svg {
+      margin-top: -1px;
     }
     .state-indicator.failed {
       --icon-color: var(--boxel-light);

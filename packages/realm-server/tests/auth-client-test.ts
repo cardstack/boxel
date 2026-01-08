@@ -9,15 +9,32 @@ import { VirtualNetwork } from '@cardstack/runtime-common';
 import jwt from 'jsonwebtoken';
 import { basename } from 'path';
 
-function createJWT(expiresIn: string | number) {
-  return jwt.sign({}, 'secret', { expiresIn });
+function createJWT(
+  expiresIn: string | number,
+  payload: Record<string, unknown> = {},
+) {
+  return jwt.sign(payload, 'secret', { expiresIn });
 }
 
 module(basename(__filename), function () {
   module('realm-auth-client', function (assert) {
     let client: RealmAuthClient;
+    let sessionHandler: (request: Request) => Promise<Response>;
+    let openIdToken: {
+      access_token: string;
+      expires_in: number;
+      matrix_server_name: string;
+      token_type: string;
+    };
 
     assert.beforeEach(function () {
+      openIdToken = {
+        access_token: 'matrix-openid-token',
+        expires_in: 3600,
+        matrix_server_name: 'synapse',
+        token_type: 'Bearer',
+      };
+
       let mockMatrixClient = {
         isLoggedIn() {
           return true;
@@ -43,38 +60,35 @@ module(basename(__filename), function () {
         async setAccountData() {
           return Promise.resolve();
         },
+        async getOpenIdToken() {
+          return openIdToken;
+        },
       } as RealmAuthMatrixClientInterface;
 
       let virtualNetwork = new VirtualNetwork();
+      sessionHandler = async () =>
+        new Response(null, {
+          status: 201,
+          headers: {
+            Authorization: createJWT('1h', {
+              sessionRoom: 'room',
+              realmServerURL: 'http://testrealm.com/',
+            }),
+          },
+        });
+
+      virtualNetwork.mount(async (request) => {
+        if (request.url === 'http://testrealm.com/_session') {
+          return sessionHandler(request);
+        }
+        return null;
+      });
 
       client = new RealmAuthClient(
         new URL('http://testrealm.com/'),
         mockMatrixClient,
         virtualNetwork.fetch,
       ) as any;
-
-      // [] notation is a hack to make TS happy so we can set private properties with mocks
-      client['initiateSessionRequest'] = async function (): Promise<Response> {
-        return {
-          status: 401,
-          json() {
-            return Promise.resolve({
-              room: 'room',
-              challenge: 'challenge',
-            });
-          },
-        } as Response;
-      };
-      client['challengeRequest'] = async function (): Promise<Response> {
-        return {
-          ok: true,
-          headers: {
-            get() {
-              return createJWT('1h');
-            },
-          },
-        } as unknown as Response;
-      };
     });
 
     test('it authenticates and caches the jwt until it expires', async function (assert) {
@@ -110,6 +124,59 @@ module(basename(__filename), function () {
         jwtFromClient,
         await client.getJWT(),
         'jwt got refreshed',
+      );
+    });
+
+    test('it includes the realm server url in the jwt claims', async function (assert) {
+      let jwtFromClient = await client.getJWT();
+      let [_header, payload] = jwtFromClient.split('.');
+      let claims = JSON.parse(atob(payload)) as {
+        realmServerURL: string;
+      };
+
+      assert.strictEqual(
+        claims.realmServerURL,
+        'http://testrealm.com/',
+        'realmServerURL is included in the jwt claims',
+      );
+    });
+
+    test('it sends the openid token when requesting a realm session', async function (assert) {
+      assert.expect(2);
+      sessionHandler = async (request) => {
+        let requestToken = await request.json();
+        assert.deepEqual(
+          requestToken,
+          openIdToken,
+          'matrix openid token was forwarded to the realm session endpoint',
+        );
+        return new Response(null, {
+          status: 201,
+          headers: {
+            Authorization: createJWT('1h', {
+              sessionRoom: 'room',
+              realmServerURL: 'http://testrealm.com/',
+            }),
+          },
+        });
+      };
+
+      let jwtFromClient = await client.getJWT();
+      assert.ok(jwtFromClient, 'received jwt after verifying openid token');
+    });
+
+    test('it throws when the openid token cannot be verified by the realm', async function (assert) {
+      sessionHandler = async () => {
+        return new Response(JSON.stringify({ errors: ['invalid token'] }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      };
+
+      await assert.rejects(
+        client.getJWT(),
+        /expected 'Authorization' header/,
+        'missing Authorization header indicates verification failure',
       );
     });
   });

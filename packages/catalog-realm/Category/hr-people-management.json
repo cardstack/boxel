@@ -1,23 +1,31 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Category",
+        "module": "../catalog-app/listing/category"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "HR & People Management",
-      "description": "Human resources management, employee onboarding, performance reviews, payroll processing, and team development tools.",
-      "color": "#0891b2",
-      "order": 5
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": "Human resources management, employee onboarding, performance reviews, payroll processing, and team development tools.",
+        "thumbnailURL": null
+      }
     },
     "relationships": {
       "sphere": {
         "links": {
           "self": "../Sphere/20dcc8f6-891d-4570-a0c0-1e07b14c97ee"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/category",
-        "name": "Category"
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

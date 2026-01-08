@@ -183,7 +183,9 @@ export async function createRealm(
   await page.locator('[data-test-display-name-field]').fill(name);
   await page.locator('[data-test-endpoint-field]').fill(endpoint);
   await page.locator('[data-test-create-workspace-submit]').click();
-  await expect(page.locator(`[data-test-workspace="${name}"]`)).toHaveCount(1);
+  await expect(page.locator(`[data-test-workspace="${name}"]`)).toHaveCount(1, {
+    timeout: 30_000,
+  });
 }
 
 export async function openRoot(page: Page, url = testHost) {

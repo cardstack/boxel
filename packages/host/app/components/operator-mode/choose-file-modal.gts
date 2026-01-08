@@ -219,7 +219,7 @@ export default class ChooseFileModal extends Component<Signature> {
             @tag='div'
           >
             <FileTree
-              @realmURL={{this.selectedRealm.url}}
+              @realmURL={{this.selectedRealm.url.href}}
               @onFileSelected={{this.selectFile}}
             />
           </FieldContainer>

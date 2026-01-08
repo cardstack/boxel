@@ -280,8 +280,10 @@ export async function getStripeEventById(
 type CreditType =
   | 'plan_allowance'
   | 'extra_credit'
+  | 'daily_credit'
   | 'plan_allowance_used'
   | 'extra_credit_used'
+  | 'daily_credit_used'
   | 'plan_allowance_expired';
 
 export async function sumUpCreditsLedger(
@@ -492,23 +494,41 @@ export async function spendCredits(
 
   if (!subscription) {
     // If user has no subscription, it means they are on the free plan
-    let availableExtraCredits = await sumUpCreditsLedger(dbAdapter, {
-      creditType: ['extra_credit', 'extra_credit_used'],
+    let availableDailyCredits = await sumUpCreditsLedger(dbAdapter, {
+      creditType: ['daily_credit', 'daily_credit_used'],
       userId,
     });
+    let dailyCreditsToSpend = Math.min(creditsToSpend, availableDailyCredits);
+    let remainingCredits = creditsToSpend - dailyCreditsToSpend;
 
-    let extraCreditsToSpend = creditsToSpend;
-    if (extraCreditsToSpend > availableExtraCredits) {
-      extraCreditsToSpend = availableExtraCredits;
-    }
-
-    if (extraCreditsToSpend > 0) {
+    if (dailyCreditsToSpend > 0) {
       await addToCreditsLedger(dbAdapter, {
         userId,
-        creditAmount: -extraCreditsToSpend,
-        creditType: 'extra_credit_used',
+        creditAmount: -dailyCreditsToSpend,
+        creditType: 'daily_credit_used',
         subscriptionCycleId: null, // Free plan has no subscription cycle
       });
+    }
+
+    if (remainingCredits > 0) {
+      let availableExtraCredits = await sumUpCreditsLedger(dbAdapter, {
+        creditType: ['extra_credit', 'extra_credit_used'],
+        userId,
+      });
+
+      let extraCreditsToSpend = Math.min(
+        remainingCredits,
+        availableExtraCredits,
+      );
+
+      if (extraCreditsToSpend > 0) {
+        await addToCreditsLedger(dbAdapter, {
+          userId,
+          creditAmount: -extraCreditsToSpend,
+          creditType: 'extra_credit_used',
+          subscriptionCycleId: null, // Free plan has no subscription cycle
+        });
+      }
     }
 
     return;
@@ -538,16 +558,8 @@ export async function spendCredits(
       subscriptionCycleId: subscriptionCycle.id,
     });
   } else {
-    // If user does not have enough plan allowance credits to cover the spend, try to also use extra credits
-    let availableExtraCredits = await sumUpCreditsLedger(dbAdapter, {
-      creditType: ['extra_credit', 'extra_credit_used'],
-      userId,
-    });
     let planAllowanceToSpend = availablePlanAllowanceCredits; // Spend all plan allowance credits first
-    let extraCreditsToSpend = creditsToSpend - planAllowanceToSpend;
-    if (extraCreditsToSpend > availableExtraCredits) {
-      extraCreditsToSpend = availableExtraCredits;
-    }
+    let remainingCredits = creditsToSpend - planAllowanceToSpend;
 
     if (planAllowanceToSpend > 0) {
       await addToCreditsLedger(dbAdapter, {
@@ -558,13 +570,40 @@ export async function spendCredits(
       });
     }
 
-    if (extraCreditsToSpend > 0) {
+    let availableDailyCredits = await sumUpCreditsLedger(dbAdapter, {
+      creditType: ['daily_credit', 'daily_credit_used'],
+      userId,
+    });
+    let dailyCreditsToSpend = Math.min(remainingCredits, availableDailyCredits);
+    remainingCredits -= dailyCreditsToSpend;
+
+    if (dailyCreditsToSpend > 0) {
       await addToCreditsLedger(dbAdapter, {
         userId,
-        creditAmount: -extraCreditsToSpend,
-        creditType: 'extra_credit_used',
-        subscriptionCycleId: subscriptionCycle.id,
+        creditAmount: -dailyCreditsToSpend,
+        creditType: 'daily_credit_used',
+        subscriptionCycleId: null,
       });
+    }
+
+    if (remainingCredits > 0) {
+      // If user does not have enough plan allowance or daily credits, use extra credits
+      let availableExtraCredits = await sumUpCreditsLedger(dbAdapter, {
+        creditType: ['extra_credit', 'extra_credit_used'],
+        userId,
+      });
+      let extraCreditsToSpend = Math.min(
+        remainingCredits,
+        availableExtraCredits,
+      );
+      if (extraCreditsToSpend > 0) {
+        await addToCreditsLedger(dbAdapter, {
+          userId,
+          creditAmount: -extraCreditsToSpend,
+          creditType: 'extra_credit_used',
+          subscriptionCycleId: subscriptionCycle.id,
+        });
+      }
     }
   }
 }

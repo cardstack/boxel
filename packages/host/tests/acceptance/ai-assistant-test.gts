@@ -16,21 +16,15 @@ import stringify from 'safe-stable-stringify';
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
-import {
-  Deferred,
-  baseRealm,
-  ensureTrailingSlash,
-  skillCardRef,
-} from '@cardstack/runtime-common';
+import { Deferred, baseRealm, skillCardRef } from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_LLM_MODE,
   APP_BOXEL_MESSAGE_MSGTYPE,
-  DEFAULT_LLM,
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import ENV from '@cardstack/host/config/environment';
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { AiAssistantMessageDrafts } from '@cardstack/host/utils/local-storage-keys';
@@ -51,6 +45,9 @@ import {
   type TestContextWithSave,
   delay,
   getMonacoContent,
+  envSkillId,
+  catalogRealm,
+  skillsRealm,
 } from '../helpers';
 
 import {
@@ -71,9 +68,6 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { getRoomIdForRealmAndUser } from '../helpers/mock-matrix/_utils';
 import { setupApplicationTest } from '../helpers/setup';
-
-const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
-const skillsRealmURL = ensureTrailingSlash(ENV.resolvedSkillsRealmURL);
 
 async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-attach-button]');
@@ -738,39 +732,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
   });
 
-  test('defaults to anthropic/claude-sonnet-4.5 in code mode', async function (assert) {
-    let defaultCodeLLMId = 'anthropic/claude-sonnet-4.5';
-    let defaultCodeLLMName = modelNameFor(defaultCodeLLMId);
-
-    await visitOperatorMode({
-      stacks: [
-        [
-          {
-            id: `${testRealmURL}index`,
-            format: 'isolated',
-          },
-        ],
-      ],
-    });
-
-    await click('[data-test-open-ai-assistant]');
-    await waitFor(`[data-room-settled]`);
-    await click('[data-test-submode-switcher] button');
-    await click('[data-test-boxel-menu-item-text="Code"]');
-    assert.dom('[data-test-llm-select-selected]').hasText(defaultCodeLLMName);
-
-    createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test-2',
-    });
-
-    await click('[data-test-past-sessions-button]');
-    await waitFor("[data-test-enter-room='mock_room_1']");
-    await click('[data-test-enter-room="mock_room_1"]');
-    assert.dom('[data-test-llm-select-selected]').hasText(defaultCodeLLMName);
-  });
-
-  test('defaults to the system card default in interact mode', async function (assert) {
+  test('defaults to the system card default regardless of submode', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -794,48 +756,11 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     assert.dom('[data-test-llm-select-selected]').hasText(expectedName);
 
-    assert.strictEqual(
-      defaultSystemModelId,
-      'anthropic/claude-sonnet-4.5',
-      'sonnet 4.5 remains the leading option',
-    );
-
-    await click('[data-test-close-ai-assistant]');
-  });
-
-  test('switching back to interact mode uses the system default model', async function (assert) {
-    let interactFallbackName = modelNameFor(DEFAULT_LLM);
-
-    await visitOperatorMode({
-      stacks: [
-        [
-          {
-            id: `${testRealmURL}index`,
-            format: 'isolated',
-          },
-        ],
-      ],
-    });
-
-    await click('[data-test-open-ai-assistant]');
-    await waitFor(`[data-room-settled]`);
-
-    // Initial interact mode defaults to the system card default
-    assert
-      .dom('[data-test-llm-select-selected]')
-      .hasText(modelNameFor('anthropic/claude-sonnet-4.5'));
-
-    // Switch to Code mode and confirm coding default is applied
+    // Switching submodes should not change the active LLM
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    assert
-      .dom('[data-test-llm-select-selected]')
-      .hasText(modelNameFor('anthropic/claude-sonnet-4.5'));
+    assert.dom('[data-test-llm-select-selected]').hasText(expectedName);
 
-    // Switch back to Interact mode and ensure we fall back to the default
-    await click('[data-test-submode-switcher] button');
-    await click('[data-test-boxel-menu-item-text="Interact"]');
-    assert.dom('[data-test-llm-select-selected]').hasText(interactFallbackName);
     await click('[data-test-close-ai-assistant]');
   });
 
@@ -2066,12 +1991,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         {
           name: 'Cardstack Catalog',
           type: 'catalog-workspace',
-          url: catalogRealmURL,
+          url: catalogRealm.url,
         },
         {
           name: 'Boxel Skills',
           type: 'catalog-workspace',
-          url: skillsRealmURL,
+          url: skillsRealm.url,
         },
       ],
       'Context sent with message contains correct workspaces',
@@ -2788,10 +2713,58 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .dom('[data-test-skill-menu] [data-test-attached-card]')
       .exists({ count: 1 });
     assert
-      .dom(
-        `[data-test-skill-menu] [data-test-attached-card="${skillsRealmURL}Skill/boxel-environment"]`,
-      )
+      .dom(`[data-test-skill-menu] [data-test-attached-card="${envSkillId}"]`)
       .exists();
+  });
+
+  test('new session inherits llm mode from current room', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+
+    await click('[data-test-llm-mode-option="act"]');
+    assert
+      .dom('[data-test-llm-mode-option="act"]')
+      .hasClass('selected', 'LLM mode is set to act');
+
+    await fillIn(
+      '[data-test-message-field]',
+      'Enable create new session button',
+    );
+    await click('[data-test-send-message-btn]');
+
+    let roomsBeforeNewSession = getRoomIds();
+    await waitFor('[data-test-create-room-btn]:not([disabled])');
+    await click('[data-test-create-room-btn]');
+    await waitFor('[data-room-settled]');
+
+    let roomsAfterNewSession = getRoomIds();
+    let newlyCreatedRoomId = roomsAfterNewSession.find(
+      (roomId) => !roomsBeforeNewSession.includes(roomId),
+    );
+    assert.ok(newlyCreatedRoomId, 'Creating a new session creates a new room');
+    if (newlyCreatedRoomId) {
+      let llmModeState = getRoomState(
+        newlyCreatedRoomId,
+        APP_BOXEL_LLM_MODE,
+        '',
+      );
+      assert.strictEqual(
+        llmModeState?.mode,
+        'act',
+        'New session inherits LLM mode from current room',
+      );
+    }
   });
 
   test('copies file history when creating new session with option checked', async function (assert) {

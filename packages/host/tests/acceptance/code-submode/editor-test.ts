@@ -750,11 +750,12 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
+      let themeRelationship = json.data.relationships?.['cardInfo.theme'];
+      if (Array.isArray(themeRelationship)) {
+        throw new Error('expected cardInfo.theme relationship to be singular');
+      }
       assert.strictEqual(url.href, `${testRealmURL}Pet/mango`);
-      assert.strictEqual(
-        json.data.relationships?.['cardInfo.theme']?.links?.self,
-        currentThemeId,
-      );
+      assert.strictEqual(themeRelationship?.links?.self, currentThemeId);
     };
 
     await visitOperatorMode({

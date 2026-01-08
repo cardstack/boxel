@@ -1,0 +1,32 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "PageCard",
+        "module": "../site-config"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "pageId": "docs",
+      "pageUrl": "/docs",
+      "cardInfo": {
+        "notes": null,
+        "title": "Docs Page",
+        "description": "Documentation landing page",
+        "thumbnailURL": null
+      },
+      "navOrder": 2,
+      "pageLabel": "Docs",
+      "showInNav": true,
+      "hasDropdown": true
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

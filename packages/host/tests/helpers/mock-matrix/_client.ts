@@ -151,12 +151,14 @@ export class MockClient implements ExtendedClient {
     if (publicRealmURLs.includes(realmURL.href)) {
       permissions = ['read'];
     }
+    let sessionRoom = `test-session-room-realm-${realmURL.href}-user-${this.loggedInAs}`;
     let payload = {
       iat: nowInSeconds,
       exp: expires,
       user: this.loggedInAs,
       realm: realmURL.href,
-      sessionRoom: `test-session-room-realm-${realmURL.href}-user-${this.loggedInAs}`,
+      sessionRoom,
+      realmServerURL: new URL(realmURL.origin).href,
       // adding a nonce to the test token so that we can tell the difference
       // between different tokens created in the same second
       nonce: nonce++,
@@ -187,6 +189,24 @@ export class MockClient implements ExtendedClient {
 
   getAccessToken(): string | null {
     return "shhh! it's a secret";
+  }
+
+  async getOpenIdToken() {
+    let accessToken =
+      this.sdkOpts.loggedInAs ?? this.clientOpts.userId ?? 'mock-matrix-user';
+    let baseUrl = this.baseUrl ?? 'http://localhost';
+    let matrixServerName: string;
+    try {
+      matrixServerName = new URL(baseUrl).host;
+    } catch (_e) {
+      matrixServerName = 'localhost';
+    }
+    return {
+      access_token: `mock-openid-token:${accessToken}`,
+      expires_in: this.sdkOpts.expiresInSec ?? 60 * 60,
+      matrix_server_name: matrixServerName,
+      token_type: 'Bearer',
+    };
   }
 
   setAccountData<K extends keyof MatrixSDK.AccountDataEvents>(
@@ -332,7 +352,19 @@ export class MockClient implements ExtendedClient {
     _roomIdOrAlias: string,
     _opts?: MatrixSDK.IJoinRoomOpts | undefined,
   ): Promise<MatrixSDK.Room> {
-    this.serverState.rooms.push({ id: _roomIdOrAlias });
+    let userId =
+      this.loggedInAs ?? this.clientOpts.userId ?? '@test_user:localhost';
+
+    this.serverState.setRoomState(
+      userId,
+      _roomIdOrAlias,
+      'm.room.member',
+      {
+        displayname: userId,
+        membership: 'join',
+      },
+      userId,
+    );
     if (this.slidingSyncInstance) {
       setTimeout(() => {
         this.slidingSyncInstance.triggerRoomSync(

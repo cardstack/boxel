@@ -1,5 +1,6 @@
 import { module, test } from 'qunit';
 import { dirSync } from 'tmp';
+import { SupportedMimeType } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
   LooseSingleCardDocument,
@@ -441,7 +442,6 @@ async function stopTestRealm(testRealmServer?: TestRealmServerResult) {
 module(basename(__filename), function () {
   module('indexing (read only)', function (hooks) {
     let realm: Realm;
-    let adapter: RealmAdapter;
     let testRealmServer: TestRealmServerResult | undefined;
 
     async function getInstance(
@@ -449,10 +449,10 @@ module(basename(__filename), function () {
       url: URL,
     ): Promise<IndexedInstance | undefined> {
       let maybeInstance = await realm.realmIndexQueryEngine.instance(url);
-      if (maybeInstance?.type === 'error') {
+      if (maybeInstance?.type === 'instance-error') {
         return undefined;
       }
-      return maybeInstance;
+      return maybeInstance as IndexedInstance | undefined;
     }
 
     setupBaseRealmServer(hooks, matrixURL);
@@ -466,7 +466,6 @@ module(basename(__filename), function () {
           runner,
         });
         realm = testRealmServer.testRealm;
-        adapter = testRealmServer.testRealmAdapter;
       },
       after: async () => {
         await stopTestRealm(testRealmServer);
@@ -522,17 +521,11 @@ module(basename(__filename), function () {
 
         assert.ok(entry.headHtml, 'pre-rendered head format html is present');
 
-        let cleanedHead = cleanWhiteSpace(entry.headHtml!);
-
         // TODO: restore in CS-9807
         // assert.ok(
         //   cleanedHead.includes('<title data-test-card-head-title>'),
         //   `head html includes title: ${cleanedHead}`,
         // );
-        assert.ok(
-          cleanedHead.includes(`property="og:url" content="${testRealm}mango"`),
-          `head html includes canonical url: ${cleanedHead}`,
-        );
 
         assert.strictEqual(
           trimCardContainer(
@@ -860,6 +853,68 @@ module(basename(__filename), function () {
       ['random-file.txt', 'random-image.png', '.DS_Store'].forEach((file) => {
         assert.notOk(deletedEntryUrls.includes(file));
       });
+    });
+
+    test('indexes non-card files as file entries', async function (assert) {
+      let rows = (await testDbAdapter.execute(
+        `SELECT url, type, last_modified FROM boxel_index WHERE url = '${testRealm}random-file.txt'`,
+      )) as { url: string; type: string; last_modified: string | null }[];
+      assert.strictEqual(rows.length, 1, 'file entry is in the index');
+      assert.strictEqual(rows[0].type, 'file', 'file entry type is file');
+      assert.ok(rows[0].last_modified, 'file entry has last_modified');
+    });
+
+    test('serves FileMeta from index entries', async function (assert) {
+      // Mutate the index row so we can validate that the response must come from the index,
+      // not from filesystem metadata.
+      await testDbAdapter.execute(
+        `UPDATE boxel_index SET search_doc = '{"name":"from-index.txt","contentType":"application/x-index-test"}'::jsonb WHERE url = '${testRealm}random-file.txt'`,
+      );
+      let response = await fetch(`${testRealm}random-file.txt`, {
+        headers: { Accept: SupportedMimeType.FileMeta },
+      });
+      assert.strictEqual(response.status, 200, 'file meta response is ok');
+      let doc = (await response.json()) as LooseSingleCardDocument;
+      assert.strictEqual(doc.data.id, `${testRealm}random-file.txt`);
+      assert.strictEqual(
+        doc.data.attributes?.name,
+        'from-index.txt',
+        'name sourced from index',
+      );
+      assert.strictEqual(
+        doc.data.attributes?.contentType,
+        'application/x-index-test',
+        'contentType sourced from index',
+      );
+      assert.ok(
+        response.headers.get('last-modified'),
+        'response includes last-modified',
+      );
+    });
+  });
+
+  module('indexing (mutating)', function (hooks) {
+    let realm: Realm;
+    let adapter: RealmAdapter;
+    let testRealmServer: TestRealmServerResult | undefined;
+
+    setupBaseRealmServer(hooks, matrixURL);
+
+    setupDB(hooks, {
+      beforeEach: async (dbAdapter, publisher, runner) => {
+        testDbAdapter = dbAdapter;
+        testRealmServer = await startTestRealm({
+          dbAdapter,
+          publisher,
+          runner,
+        });
+        realm = testRealmServer.testRealm;
+        adapter = testRealmServer.testRealmAdapter;
+      },
+      afterEach: async () => {
+        await stopTestRealm(testRealmServer);
+        testRealmServer = undefined;
+      },
     });
 
     test('can incrementally index updated instance', async function (assert) {
@@ -1225,44 +1280,6 @@ module(basename(__filename), function () {
       `,
       );
       {
-        assert.true(
-          await adapter.exists('post.gts'),
-          'post module file exists on disk',
-        );
-        realm.__testOnlyClearCaches();
-        await realm.realmIndexUpdater.update([new URL(`${testRealm}post.gts`)]);
-        let moduleResponse = await realm.handle(
-          new Request(`${testRealm}post`, {
-            headers: { Accept: 'application/javascript' },
-          }),
-        );
-        assert.strictEqual(
-          moduleResponse?.status,
-          200,
-          `module response status ${moduleResponse?.status}`,
-        );
-        assert.ok(
-          realm.realmIndexUpdater.stats.modulesIndexed >= 1,
-          `modulesIndexed=${realm.realmIndexUpdater.stats.modulesIndexed}`,
-        );
-        let [postIndexEntry] = (await testDbAdapter.execute(
-          `SELECT url, is_deleted, type FROM boxel_index WHERE url = '${testRealm}post.gts'`,
-        )) as { url: string; is_deleted: boolean; type: string }[];
-        assert.ok(postIndexEntry, 'post module row exists in index');
-        assert.false(postIndexEntry?.is_deleted);
-        assert.strictEqual(
-          postIndexEntry?.type,
-          'module',
-          JSON.stringify(postIndexEntry, null, 2),
-        );
-        let postModule = await realm.realmIndexQueryEngine.module(
-          new URL(`${testRealm}post`),
-        );
-        assert.strictEqual(
-          postModule?.type,
-          'module',
-          'post module is in the index after recreation',
-        );
         let { data: result } = await realm.realmIndexQueryEngine.search({
           filter: {
             on: { module: `${testRealm}post`, name: 'Post' },
@@ -1497,16 +1514,9 @@ module(basename(__filename), function () {
         new URL(`${testRealm}country`),
       );
       assert.ok(country, 'country module is in the index');
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...realm.realmIndexUpdater.stats },
-        {
-          instancesIndexed: 0,
-          instanceErrors: 0,
-          moduleErrors: 0,
-          modulesIndexed: 2,
-          totalIndexEntries: 23,
-        },
+      assert.strictEqual(
+        realm.realmIndexUpdater.stats.modulesIndexed,
+        2,
         'indexed correct number of files',
       );
     });

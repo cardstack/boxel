@@ -90,7 +90,6 @@ module('Integration | commands | check-correctness', function (hooks) {
     let firstResult = await command.execute({
       targetType: 'card',
       targetRef: cardId,
-      cardId,
       roomId,
     });
 
@@ -114,7 +113,6 @@ module('Integration | commands | check-correctness', function (hooks) {
     let secondResult = await command.execute({
       targetType: 'card',
       targetRef: cardId,
-      cardId,
       roomId,
     });
 
@@ -155,7 +153,6 @@ module('Integration | commands | check-correctness', function (hooks) {
     let thirdResult = await command.execute({
       targetType: 'card',
       targetRef: cardId,
-      cardId,
       roomId,
     });
 
@@ -180,7 +177,6 @@ module('Integration | commands | check-correctness', function (hooks) {
     let firstResult = await command.execute({
       targetType: 'card',
       targetRef: cardId,
-      cardId,
       roomId,
     });
     assert.true(firstResult.correct, 'initial run reports no errors');
@@ -202,7 +198,6 @@ module('Integration | commands | check-correctness', function (hooks) {
     let secondResult = await command.execute({
       targetType: 'card',
       targetRef: cardId,
-      cardId,
       roomId,
     });
 
@@ -238,7 +233,6 @@ module('Integration | commands | check-correctness', function (hooks) {
     let thirdResult = await command.execute({
       targetType: 'card',
       targetRef: cardId,
-      cardId,
       roomId,
     });
 

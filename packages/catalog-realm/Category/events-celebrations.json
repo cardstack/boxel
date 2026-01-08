@@ -1,23 +1,31 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Category",
+        "module": "../catalog-app/listing/category"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Events & Celebrations",
-      "description": "Event planning, party themes, guest lists, venue details, celebration timelines, and memorable moments.",
-      "color": "#facc15",
-      "order": 1
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": "Event planning, party themes, guest lists, venue details, celebration timelines, and memorable moments.",
+        "thumbnailURL": null
+      }
     },
     "relationships": {
       "sphere": {
         "links": {
           "self": "../Sphere/5d7420dc-c8f6-491d-9570-60c01e07b14c"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/category",
-        "name": "Category"
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

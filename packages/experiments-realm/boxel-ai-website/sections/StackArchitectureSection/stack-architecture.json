@@ -1,0 +1,79 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "StackArchitectureSection",
+        "module": "../stack-architecture-section"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tiles": [
+        {
+          "tileNumber": "01",
+          "tileLabel": "Memory",
+          "headline": "Workspace memory that persists.",
+          "body": "In other tools, chat IS your project. Lose the chat, lose the work. Boxel inverts this: the workspace remembers, sessions are disposable helpers you summon and discard.",
+          "markdown": "<div class=\"markdown-content\" data-scopedcss-84a0dd53c9-3d62c95e78=\"\">\n      <code>\n            <div style=\"display: flex;justify-content: space-around;gap: 0.5rem;flex-wrap: wrap;\">\n              <span>🧠 Model (frozen)</span>\n              <span>💬 Chat (volatile)</span>\n              <span style=\"color: var(--cardstack-purple); font-weight: 600;\">🗄️ Workspace (persists)</span>\n            </div>\n</code>\n    </div>",
+          "content": "* 🧠 Model (frozen)\n* 💬 Chat (volatile)\n* 🗄️ **Workspace (persists)**",
+          "accentColor": "var(--secondary)"
+        },
+        {
+          "tileNumber": "02",
+          "tileLabel": "Database",
+          "headline": "The database that builds itself.",
+          "body": "Data is just JSON. AI outputs JSON, we index it automatically into a queryable database. No Supabase, no migrations, no SQL.",
+          "markdown": "<code>\ncontact.json → 🗄️ Indexed → Queryable!\n</code>",
+          "content": "contact.json → 🗄️ Indexed → Queryable!",
+          "accentColor": null
+        },
+        {
+          "tileNumber": "03",
+          "tileLabel": "Context",
+          "headline": "AI that understands your app.",
+          "body": "Current AI tools are \"brains in a jar\"—floating outside your actual data. Boxel's assistant reads your schema, inspects your Cards, and accesses code when needed.",
+          "markdown": "<code>📝 Schema + 📄 Cards + ⚙️ Code → 🤖 AI</code>",
+          "content": "📝 Schema + 📄 Cards + ⚙️ Code → 🤖 AI",
+          "accentColor": null
+        }
+      ],
+      "bullets": [
+        "Two file types: JSON for data, TypeScript for logic",
+        "AI-native formats: Both are in every LLM's training corpus",
+        "One file, all layers: Schema, UI, and logic live together"
+      ],
+      "cardInfo": {
+        "notes": null,
+        "title": "Stack Architecture",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "headline": "Legacy stacks weren't built for AI.",
+      "subheadline": "AI excels at reading and writing files. So we built an architecture where one file type defines your entire application—schema, templates, relationships, and commands.",
+      "sectionLabel": "AI-Native Stack",
+      "sectionNumber": "003"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "tiles.0.linkedCard": {
+        "links": {
+          "self": null
+        }
+      },
+      "tiles.1.linkedCard": {
+        "links": {
+          "self": null
+        }
+      },
+      "tiles.2.linkedCard": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

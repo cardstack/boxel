@@ -105,6 +105,8 @@ export default class OperatorModeContainer extends Component<Signature> {
       store: this.store,
       commandContext: this.commandContext,
       prerenderedCardSearchComponent: PrerenderedCardSearch,
+      mode: 'operator',
+      submode: this.operatorModeStateService.state?.submode,
     };
   }
 

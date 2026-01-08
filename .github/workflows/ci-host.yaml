@@ -25,9 +25,14 @@ permissions:
   pull-requests: write
 
 jobs:
+  test-web-assets:
+    name: Build test web assets
+    uses: ./.github/workflows/test-web-assets.yaml
+
   host-test:
     name: Host Tests
     runs-on: ubuntu-latest
+    needs: test-web-assets
     strategy:
       fail-fast: false
       matrix:
@@ -39,29 +44,36 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - uses: ./.github/actions/init
-      - name: Build boxel-icons
-        run: pnpm build
-        working-directory: packages/boxel-icons
+
+      - name: Download test web assets
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
+
       - name: Serve boxel-icons
         run: pnpm serve &> /tmp/icon-server.log &
         working-directory: packages/boxel-icons
-      - name: Build boxel-ui
-        run: pnpm build
-        working-directory: packages/boxel-ui/addon
+
       # this is to hopefully address the CI network flakiness that we
       # occasionally see in host tests.
       # https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
       - name: Disable TCP/UDP network offloading
         run: sudo ethtool -K eth0 tx off rx off
-      - name: Start host to serve assets for realm server
+      - name: Serve host dist (test assets) for realm server
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
-          run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
+          run: pnpm serve:dist &
           working-directory: packages/host
           wait-for: 3m
           wait-on: http-get://localhost:4200
       - name: Start realm servers
-        run: pnpm start:skip-experiments | tee -a /tmp/server.log &
+        run: pnpm start:services-for-host-tests | tee -a /tmp/server.log &
         working-directory: packages/realm-server
       - name: create realm users
         run: pnpm register-realm-users

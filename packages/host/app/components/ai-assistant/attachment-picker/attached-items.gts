@@ -76,7 +76,7 @@ export default class AttachedItems extends Component<Signature> {
   }
 
   private getCardErrorRealm(cardError: CardErrorJSONAPI) {
-    return cardError.realm ?? this.operatorModeStateService.realmURL.href;
+    return cardError.realm ?? this.operatorModeStateService.realmURL;
   }
 
   @action

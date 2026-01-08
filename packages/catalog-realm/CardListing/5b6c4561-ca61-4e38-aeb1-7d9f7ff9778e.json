@@ -81,21 +81,6 @@
           "self": "../travel-mapper/TravelMapper/14027fa4-003c-4b89-bcca-f5bb3c4b4740"
         }
       },
-      "examples.1": {
-        "links": {
-          "self": "../route/Route/sibu-kl"
-        }
-      },
-      "examples.2": {
-        "links": {
-          "self": "../route/Route/china-tokyo"
-        }
-      },
-      "examples.3": {
-        "links": {
-          "self": "../route/Route/thailand-vietnam"
-        }
-      },
       "categories.0": {
         "links": {
           "self": "../Category/travel-experiences"

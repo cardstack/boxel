@@ -1,23 +1,31 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Category",
+        "module": "../catalog-app/listing/category"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "AI & Automation",
-      "description": "Artificial intelligence projects, automation scripts, machine learning workflows, and intelligent system development.",
-      "color": "#0891b2",
-      "order": 6
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": "Artificial intelligence projects, automation scripts, machine learning workflows, and intelligent system development.",
+        "thumbnailURL": null
+      }
     },
     "relationships": {
       "sphere": {
         "links": {
           "self": "../Sphere/637767ff-c7a9-40d6-9cd3-93f0b32a8fbb"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/category",
-        "name": "Category"
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

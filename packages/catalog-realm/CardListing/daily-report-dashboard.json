@@ -151,11 +151,6 @@
           "self": "../daily-report-dashboard/ActivityLog/jul24-1pm"
         }
       },
-      "examples.16": {
-        "links": {
-          "self": "../daily-report-dashboard/PolicyManual/operations-manual"
-        }
-      },
       "categories.0": {
         "links": {
           "self": "../Category/hr-people-management"

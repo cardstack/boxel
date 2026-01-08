@@ -51,18 +51,12 @@ export class Prerenderer {
   #realmIdleEvictMs: number;
   #semaphore: AsyncSemaphore;
 
-  constructor(options: {
-    serverURL: string;
-    maxPages?: number;
-    silent?: boolean;
-  }) {
+  constructor(options: { serverURL: string; maxPages?: number }) {
     let maxPages = options.maxPages ?? 4;
-    let silent = options.silent || process.env.PRERENDER_SILENT === 'true';
     this.#semaphore = new AsyncSemaphore(maxPages);
     this.#browserManager = new BrowserManager();
     this.#pagePool = new PagePool({
       maxPages,
-      silent,
       serverURL: options.serverURL,
       browserManager: this.#browserManager,
       boxelHostURL,

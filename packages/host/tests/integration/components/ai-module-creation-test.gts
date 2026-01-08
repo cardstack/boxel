@@ -111,7 +111,7 @@ module('Integration | create app module via ai-assistant', function (hooks) {
 
   async function getModule(realm: Realm, url: URL) {
     let maybeInstance = await realm.realmIndexQueryEngine.module(url);
-    if (maybeInstance?.type === 'error') {
+    if (maybeInstance?.type === 'module-error') {
       return undefined;
     }
     return maybeInstance;
@@ -233,6 +233,8 @@ module('Integration | create app module via ai-assistant', function (hooks) {
       document.querySelector('[data-test-view-module]') as HTMLElement
     )?.innerText;
     let module = await getModule(realm, new URL(moduleURL));
+    assert.ok(module, 'module entry exists');
+    assert.strictEqual(module?.type, 'module');
     assert.strictEqual(module?.canonicalURL, moduleURL);
 
     await click('[data-test-view-module]');

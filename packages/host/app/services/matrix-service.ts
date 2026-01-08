@@ -54,8 +54,6 @@ import {
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
-  DEFAULT_CODING_LLM,
-  DEFAULT_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
@@ -109,7 +107,7 @@ import UpdateRoomSkillsCommand from '../commands/update-room-skills';
 import { addPatchTools } from '../commands/utils';
 import { getUniqueValidCommandDefinitions } from '../lib/command-definitions';
 import { isSkillCard } from '../lib/file-def-manager';
-import { skillCardURL } from '../lib/utils';
+import { skillCardURL, devSkillId, envSkillId } from '../lib/utils';
 import { importResource } from '../resources/import';
 
 import { getRoom } from '../resources/room';
@@ -366,8 +364,11 @@ export default class MatrixService extends Service {
               await this.realmServer.setAvailableRealmURLs(
                 e.event.content.realms,
               );
-              await this.loginToRealms();
-              await this.loadMoreAuthRooms(e.event.content.realms);
+              // Only do this after we've completed our overall login
+              if (this.postLoginCompleted) {
+                await this.loginToRealms();
+                await this.loadMoreAuthRooms(e.event.content.realms);
+              }
               break;
             case APP_BOXEL_SYSTEM_CARD_EVENT_TYPE:
               await this.setSystemCard(e.event.content.id);
@@ -657,14 +658,6 @@ export default class MatrixService extends Service {
           ([_url, realmResource]) => !realmResource.isLoggedIn,
         );
 
-        if (noRealmsLoggedIn) {
-          // In this case we want to authenticate to all accessible realms in a single request,
-          // for performance reasons (otherwise we would make 2 auth requests for
-          // each realm, which could be a lot of requests).
-
-          await this.realmServer.authenticateToAllAccessibleRealms();
-        }
-
         await Promise.all([
           this.realmServer.fetchCatalogRealms(),
           this.realmServer.setAvailableRealmURLs(
@@ -672,14 +665,23 @@ export default class MatrixService extends Service {
           ),
         ]);
 
+        await this.initSlidingSync(accountDataContent);
+        await this.client.startClient({ slidingSync: this.slidingSync });
         let systemCardAccountData = (await this.client.getAccountDataFromServer(
           APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
         )) as { id?: string } | null;
-
         await this.setSystemCard(systemCardAccountData?.id);
+        if (noRealmsLoggedIn) {
+          // In this case we want to authenticate to all accessible realms in a single request,
+          // for performance reasons (otherwise we would make 2 auth requests for
+          // each realm, which could be a lot of requests).
 
-        await this.initSlidingSync(accountDataContent);
-        await this.client.startClient({ slidingSync: this.slidingSync });
+          await this.realmServer.authenticateToAllAccessibleRealms();
+        }
+        // Login here triggers other setup code that needs to happen after
+        // otherwise we don't have the realm info.
+        // This should be cleaned up as we move to single logins
+        await this.loginToRealms();
 
         this.postLoginCompleted = true;
       } catch (e) {
@@ -1189,11 +1191,11 @@ export default class MatrixService extends Service {
   }
 
   async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [skillCardURL('boxel-environment')];
+    let interactModeDefaultSkills = [envSkillId];
 
     let codeModeDefaultSkills = [
-      skillCardURL('boxel-environment'),
-      skillCardURL('boxel-development'),
+      devSkillId,
+      envSkillId,
       skillCardURL('source-code-editing'),
     ];
 
@@ -1867,34 +1869,6 @@ export default class MatrixService extends Service {
       roomId: this.currentRoomId,
       skillCardIdsToActivate: defaultSkills.map((s) => s.id),
     });
-  }
-
-  async setLLMForCodeMode() {
-    let preferredModel =
-      this.systemCard?.defaultModelConfiguration?.modelId ??
-      this.systemCard?.modelConfigurations?.[0]?.modelId ??
-      DEFAULT_CODING_LLM;
-    return this.setLLMModel(preferredModel);
-  }
-
-  async setLLMForInteractMode() {
-    let preferredModel =
-      this.systemCard?.defaultModelConfiguration?.modelId ??
-      this.systemCard?.modelConfigurations?.[0]?.modelId ??
-      DEFAULT_LLM;
-
-    return this.setLLMModel(preferredModel);
-  }
-
-  private async setLLMModel(model: string) {
-    if (!this.currentRoomId) {
-      return;
-    }
-    let roomResource = this.roomResources.get(this.currentRoomId);
-    if (!roomResource) {
-      return;
-    }
-    return roomResource.activateLLMTask.perform(model);
   }
 
   loadMoreAIRooms() {

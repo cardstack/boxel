@@ -6,27 +6,42 @@ import {
 
 import { field, contains, Component, getFields, FieldDef } from './card-api';
 import ColorField from './color';
-import type { CssRuleMap } from '@cardstack/boxel-ui/helpers';
+import { dasherize, type CssRuleMap } from '@cardstack/boxel-ui/helpers';
 import {
   type CssVariableField,
   type CssVariableFieldEntry,
 } from './structured-theme-variables';
 
+export const formatSwatchName = (name?: string) => {
+  return dasherize(name).split('-').join(' ');
+};
+
 export default class BrandFunctionalPalette extends FieldDef {
   static displayName = 'Functional Palette';
-  @field primary = contains(ColorField);
-  @field secondary = contains(ColorField);
-  @field accent = contains(ColorField);
-  @field light = contains(ColorField);
-  @field dark = contains(ColorField);
+  @field primary = contains(ColorField, {
+    description: 'Primary CTA background-color.',
+  });
+  @field secondary = contains(ColorField, {
+    description: 'Secondary CTA background-color.',
+  });
+  @field accent = contains(ColorField, {
+    description: 'Accent background-color.',
+  });
+  @field light = contains(ColorField, {
+    description: 'Light background-color.',
+  });
+  @field dark = contains(ColorField, {
+    description: 'Dark background-color.',
+  });
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <GridContainer class='functional-palette'>
         {{#each @model.cssVariableFields as |color|}}
-          {{#if color.value}}
-            <Swatch @label='Brand {{color.fieldName}}' @color={{color.value}} />
-          {{/if}}
+          <Swatch
+            @label={{formatSwatchName color.fieldName}}
+            @color={{if color.value color.value '/* Not set */'}}
+          />
         {{/each}}
       </GridContainer>
       <style scoped>
@@ -38,6 +53,10 @@ export default class BrandFunctionalPalette extends FieldDef {
         }
         :deep(.boxel-swatch-name) {
           font-weight: 600;
+          text-transform: capitalize;
+        }
+        :deep(.boxel-swatch-value) {
+          text-transform: lowercase;
         }
       </style>
     </template>

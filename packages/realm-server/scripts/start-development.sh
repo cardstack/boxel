@@ -12,11 +12,25 @@ if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
 fi
 
 START_EXPERIMENTS=$(if [ -z "$SKIP_EXPERIMENTS" ]; then echo "true"; else echo ""; fi)
+START_CATALOG=$(if [ -z "$SKIP_CATALOG" ]; then echo "true"; else echo ""; fi)
 
 DEFAULT_CATALOG_REALM_URL='http://localhost:4201/catalog/'
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
 
+# This can be overridden from the environment to point to a different catalog
+# and is used in start-services-for-host-tests.sh to point to a trimmed down
+# version of the catalog-realm for faster startup.
+CATALOG_REALM_PATH="${CATALOG_REALM_PATH:-../catalog-realm}"
+
+if [ -n "$USE_EXTERNAL_CATALOG" ]; then
+  pnpm --dir=../catalog catalog:setup
+  pnpm --dir=../catalog catalog:update
+  CATALOG_REALM_PATH='../catalog/contents'
+fi
+
 PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
+
+
 
 
 NODE_ENV=development \
@@ -44,10 +58,10 @@ NODE_ENV=development \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='http://localhost:4201/base/' \
   \
-  --path='../catalog-realm' \
-  --username='catalog_realm' \
-  --fromUrl="${CATALOG_REALM_URL}" \
-  --toUrl="${CATALOG_REALM_URL}" \
+  ${START_CATALOG:+--path="${CATALOG_REALM_PATH}"} \
+  ${START_CATALOG:+--username='catalog_realm'} \
+  ${START_CATALOG:+--fromUrl="${CATALOG_REALM_URL}"} \
+  ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"} \
   \
   --path='../skills-realm/contents' \
   --username='skills_realm' \
