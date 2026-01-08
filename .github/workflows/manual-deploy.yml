@@ -143,8 +143,16 @@ jobs:
     name: Wait for db-migration
     needs: [migrate-db]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - run: sleep 180
+      - uses: ./.github/actions/ecs-wait
+        with:
+          environment: ${{ inputs.environment }}
+          cluster: ${{ inputs.environment }}
+          service-name: "boxel-pg-migration-${{ inputs.environment }}"
+          timeout-seconds: "180"
 
   deploy-prerender:
     name: Deploy prerender
@@ -163,8 +171,16 @@ jobs:
     name: Wait for prerender
     needs: [deploy-prerender]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - run: sleep 180
+      - uses: ./.github/actions/ecs-wait
+        with:
+          environment: ${{ inputs.environment }}
+          cluster: ${{ inputs.environment }}
+          service-name: "boxel-prerender-server-${{ inputs.environment }}"
+          timeout-seconds: "180"
 
   deploy-prerender-manager:
     name: Deploy prerender manager
@@ -183,8 +199,16 @@ jobs:
     name: Wait for prerender manager
     needs: [deploy-prerender-manager]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - run: sleep 180
+      - uses: ./.github/actions/ecs-wait
+        with:
+          environment: ${{ inputs.environment }}
+          cluster: ${{ inputs.environment }}
+          service-name: "boxel-prerender-manager-${{ inputs.environment }}"
+          timeout-seconds: "180"
 
   deploy-worker:
     name: Deploy worker
@@ -212,8 +236,16 @@ jobs:
     name: Wait for worker
     needs: [deploy-worker]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - run: sleep 180
+      - uses: ./.github/actions/ecs-wait
+        with:
+          environment: ${{ inputs.environment }}
+          cluster: ${{ inputs.environment }}
+          service-name: "boxel-worker-${{ inputs.environment }}"
+          timeout-seconds: "180"
 
   deploy-realm-server:
     name: Deploy realm server
