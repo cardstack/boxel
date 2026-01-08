@@ -9,7 +9,12 @@ import { isMeta, type CardResource, type Relationship } from './resource-types';
 import { normalizeRelationships } from './relationship-utils';
 import type { LocalPath } from './paths';
 import { RealmPaths, ensureTrailingSlash, join } from './paths';
-import { persistFileMeta, removeFileMeta, getCreatedTime } from './file-meta';
+import {
+  persistFileMeta,
+  removeFileMeta,
+  getCreatedTime,
+  getContentHash,
+} from './file-meta';
 import {
   systemError,
   notFound,
@@ -71,6 +76,7 @@ import { inferContentType } from './infer-content-type';
 import type { CardFields } from './resource-types';
 import {
   fileContentToText,
+  fileContentToBytes,
   readFileAsText,
   getFileWithFallbacks,
   type TextFileRef,
@@ -108,6 +114,7 @@ import { fetcher } from './fetcher';
 import { RealmIndexQueryEngine } from './realm-index-query-engine';
 import { RealmIndexUpdater } from './realm-index-updater';
 import serialize from './file-serializer';
+import { md5 } from 'super-fast-md5';
 
 import type { Utils } from './matrix-backend-authentication';
 import { MatrixBackendAuthentication } from './matrix-backend-authentication';
@@ -174,6 +181,7 @@ const CACHE_HIT_VALUE = 'hit';
 const CACHE_MISS_VALUE = 'miss';
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
+const CONTENT_HASH_HEADER = 'X-Boxel-Content-Hash';
 const FILE_DEF_CODE_REF: ResolvedCodeRef = {
   module: `${baseRealm.url}file-api`,
   name: 'FileDef',
@@ -228,11 +236,42 @@ function buildEtag(
   return variant ? `${base}:${variant}` : base;
 }
 
+function computeContentHash(content: string | Uint8Array): string {
+  try {
+    if (content instanceof Uint8Array) {
+      return md5(content);
+    }
+    return md5(new TextEncoder().encode(content));
+  } catch {
+    try {
+      return md5(String(content));
+    } catch {
+      throw new Error('Failed to compute content hash');
+    }
+  }
+}
+
+async function computeContentHashFromRef(
+  ref: FileRef,
+): Promise<string | undefined> {
+  try {
+    let content = ref.content;
+    if (typeof content === 'string' || content instanceof Uint8Array) {
+      return computeContentHash(content);
+    }
+    let bytes = await fileContentToBytes({ content });
+    return computeContentHash(bytes);
+  } catch {
+    return undefined;
+  }
+}
+
 export interface TokenClaims {
   user: string;
   realm: string;
   sessionRoom: string;
   permissions: RealmPermissions['user'];
+  realmServerURL: string;
 }
 
 export interface AdapterWriteResult {
@@ -332,6 +371,7 @@ export class Realm {
   #startedUp = new Deferred<void>();
   #matrixClient: MatrixClient;
   #realmServerMatrixClient: MatrixClient;
+  #realmServerURL: string;
   #realmIndexUpdater: RealmIndexUpdater;
   #realmIndexQueryEngine: RealmIndexQueryEngine;
   #adapter: RealmAdapter;
@@ -375,6 +415,10 @@ export class Realm {
     return this.paths.url;
   }
 
+  get realmServerURL(): string {
+    return this.#realmServerURL;
+  }
+
   constructor(
     {
       url,
@@ -385,6 +429,7 @@ export class Realm {
       queue,
       virtualNetwork,
       realmServerMatrixClient,
+      realmServerURL,
       definitionLookup,
     }: {
       url: string;
@@ -395,6 +440,7 @@ export class Realm {
       queue: QueuePublisher;
       virtualNetwork: VirtualNetwork;
       realmServerMatrixClient: MatrixClient;
+      realmServerURL: string;
       definitionLookup: DefinitionLookup;
     },
     opts?: Options,
@@ -409,6 +455,7 @@ export class Realm {
     this.#fromScratchIndexPriority =
       opts?.fromScratchIndexPriority ?? systemInitiatedPriority;
     this.#realmServerMatrixClient = realmServerMatrixClient;
+    this.#realmServerURL = ensureTrailingSlash(realmServerURL);
     this.#realmServerMatrixUserId = userIdFromUsername(
       realmServerMatrixClient.username,
       realmServerMatrixClient.matrixURL.href,
@@ -691,7 +738,7 @@ export class Realm {
     let urls: URL[] = [];
     // Collect write results for all files we wrote
     let results: { path: LocalPath; lastModified: number }[] = [];
-    let fileMetaRows: { path: LocalPath }[] = [];
+    let fileMetaRows: { path: LocalPath; contentHash?: string }[] = [];
     let lastWriteType: 'module' | 'instance' | undefined;
     let invalidations: Set<string> = new Set();
     let clientRequestId: string | null = options?.clientRequestId ?? null;
@@ -741,6 +788,7 @@ export class Realm {
         fileMetaRows.push({ path });
         continue;
       }
+      let contentHash = computeContentHash(content);
       if (lastWriteType === 'module' && currentWriteType === 'instance') {
         // we need to generate/update possible definition in order for
         // instance file serialization that may depend on the included module to
@@ -760,7 +808,7 @@ export class Realm {
         this.#moduleCache.invalidate(path);
       }
       results.push({ path, lastModified });
-      fileMetaRows.push({ path });
+      fileMetaRows.push({ path, contentHash });
       urls.push(url);
       lastWriteType = currentWriteType ?? lastWriteType;
     }
@@ -779,19 +827,19 @@ export class Realm {
     return results.map(({ path, lastModified }) => ({
       path,
       lastModified,
-      created: createdMap.get(path) ?? null,
+      created: createdMap.get(path)?.createdAt ?? null,
     }));
   }
 
   // persist created_at into realm_file_meta table using db adapter
   private async persistFileMeta(
-    rows: { path: LocalPath }[],
-  ): Promise<Map<LocalPath, number>> {
+    rows: { path: LocalPath; contentHash?: string }[],
+  ): Promise<Map<LocalPath, { createdAt: number; contentHash?: string }>> {
     if (!this.#dbAdapter || rows.length === 0) return new Map();
     const createdMap = await persistFileMeta(
       this.#dbAdapter,
       this.url,
-      rows.map((r) => r.path),
+      rows.map((r) => ({ path: r.path, contentHash: r.contentHash })),
     );
     // maintain LocalPath typing on keys
     return new Map(
@@ -1320,6 +1368,7 @@ export class Realm {
               sessionRoom,
               permissions: userPermissions,
               realm: this.url,
+              realmServerURL: this.#realmServerURL,
             },
             '7d',
             this.#realmSecretSeed,
@@ -2075,6 +2124,10 @@ export class Realm {
     let inferredContentType = inferContentType(name);
     let createdAt = await this.getCreatedTime(localPath);
     let realmInfo = await this.parseRealmInfo();
+    let contentHash =
+      (this.#dbAdapter
+        ? await getContentHash(this.#dbAdapter, this.url, localPath)
+        : undefined) ?? (await computeContentHashFromRef(fileRef));
     let doc: LooseSingleCardDocument = {
       data: {
         type: 'card',
@@ -2084,6 +2137,7 @@ export class Realm {
           url: fileURL,
           sourceUrl: fileURL,
           contentType: inferredContentType,
+          contentHash,
         },
         meta: {
           adoptsFrom: FILE_DEF_CODE_REF,
@@ -2104,6 +2158,7 @@ export class Realm {
           ...(createdAt != null
             ? { 'x-created': formatRFC7231(createdAt * 1000) }
             : {}),
+          ...(contentHash ? { [CONTENT_HASH_HEADER]: contentHash } : {}),
         },
       },
       requestContext,
@@ -2122,6 +2177,12 @@ export class Realm {
     let createdAt = fileEntry.resourceCreatedAt ?? fileEntry.lastModified;
     let realmInfo = await this.parseRealmInfo();
     let searchDoc = fileEntry.searchDoc ?? {};
+    let contentHash =
+      typeof searchDoc.contentHash === 'string'
+        ? searchDoc.contentHash
+        : this.#dbAdapter
+          ? await getContentHash(this.#dbAdapter, this.url, localPath)
+          : undefined;
     let doc: LooseSingleCardDocument = {
       data: {
         type: 'card',
@@ -2131,6 +2192,7 @@ export class Realm {
           url: searchDoc.url ?? fileURL,
           sourceUrl: searchDoc.sourceUrl ?? fileURL,
           contentType: searchDoc.contentType ?? inferredContentType,
+          contentHash,
         },
         meta: {
           adoptsFrom: FILE_DEF_CODE_REF,
@@ -2151,6 +2213,7 @@ export class Realm {
           ...(createdAt != null
             ? { 'x-created': formatRFC7231(createdAt * 1000) }
             : {}),
+          ...(contentHash ? { [CONTENT_HASH_HEADER]: contentHash } : {}),
         },
       },
       requestContext,
@@ -2861,6 +2924,16 @@ export class Realm {
       // Get source from plain text request body
       const source = await request.text();
       const filename = request.headers.get('X-Filename') || 'input.gts';
+      let lintMode: LintArgs['lintMode'] = 'lintAndAutofix';
+      try {
+        let searchParams = new URL(request.url).searchParams;
+        let requestedMode = searchParams.get('lintMode');
+        if (requestedMode === 'lint' || requestedMode === 'lintAndAutofix') {
+          lintMode = requestedMode;
+        }
+      } catch {
+        // ignore malformed URLs and keep default lint mode
+      }
 
       if (!source || source.trim() === '') {
         return createResponse({
@@ -2880,7 +2953,7 @@ export class Realm {
         concurrencyGroup: `lint:${this.url}:${Math.random().toString().slice(-1)}`,
         timeout: 10,
         priority: userInitiatedPriority,
-        args: { source, filename } satisfies LintArgs,
+        args: { source, filename, lintMode } satisfies LintArgs,
       });
       result = await job.done;
     }

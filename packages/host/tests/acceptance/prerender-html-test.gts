@@ -804,7 +804,8 @@ module('Acceptance | prerender | html', function (hooks) {
     let url = `${testRealmURL}Cat/paper.json`;
     await visit(renderPath(url, '/html/isolated/0'));
 
-    let renderInstance = (globalThis as any).__renderInstance;
+    let renderModel = (globalThis as any).__renderModel;
+    let renderInstance = renderModel?.instance;
     assert.ok(renderInstance, 'render instance exists when prerendering');
 
     // Mutate the rendered instance between the visit and capture, mirroring instance mutations that

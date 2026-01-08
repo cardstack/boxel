@@ -234,7 +234,10 @@ const getIndexHTML = async () => {
     seed: REALM_SECRET_SEED,
   });
   let prerenderer = createRemotePrerenderer(prerendererUrl);
-  let createPrerenderAuth = buildCreatePrerenderAuth(REALM_SECRET_SEED);
+  let createPrerenderAuth = buildCreatePrerenderAuth(
+    REALM_SECRET_SEED,
+    serverURL,
+  );
 
   let definitionLookup = new CachingDefinitionLookup(
     dbAdapter,
@@ -267,6 +270,7 @@ const getIndexHTML = async () => {
         dbAdapter,
         queue,
         realmServerMatrixClient,
+        realmServerURL: serverURL,
         definitionLookup,
       },
       {
