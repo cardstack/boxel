@@ -2768,6 +2768,9 @@ importers:
       fs-extra:
         specifier: 'catalog:'
         version: 11.3.0
+      glimmer-scoped-css:
+        specifier: 'catalog:'
+        version: 0.8.1
       glob:
         specifier: 'catalog:'
         version: 11.0.1
