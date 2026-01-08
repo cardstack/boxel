@@ -671,7 +671,7 @@ export class RenderRunner {
   }
 
   shouldRetryWithClearCache(
-    response: RenderResponse | ModuleRenderResponse,
+    response: RenderResponse | ModuleRenderResponse | FileExtractResponse,
   ): readonly string[] | undefined {
     let renderError = response.error?.error;
     if (!renderError) {

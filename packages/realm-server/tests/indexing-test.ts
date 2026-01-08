@@ -1011,8 +1011,8 @@ module(basename(__filename), function () {
         'contentType sourced from index',
       );
       assert.ok(
-        response.headers.get('last-modified'),
-        'response includes last-modified',
+        doc.data.attributes?.lastModified,
+        'lastModified sourced from response attributes',
       );
     });
   });
