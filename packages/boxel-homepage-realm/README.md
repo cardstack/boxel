@@ -59,7 +59,7 @@ This workflow is ideal for rapid iteration and testing of the homepage:
 
 1. **Log in as homepage_writer** in the Boxel interface using the credentials above
 
-2. **Visit `/boxel-homepage`** to view the workspace. This workspace will not show up in the workspace chooser.
+2. **Visit the Boxel Homepage realm.** Open "Boxel Homepage" realm from the workspace-chooser or navigate to `/boxel-homepage` to view the workspace.
 
 3. **Edit files directly** in the Boxel interface or locally.
    - Changes are automatically saved to `packages/boxel-homepage-realm/contents/`
