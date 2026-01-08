@@ -4,7 +4,14 @@ import supertest from 'supertest';
 import { join, basename } from 'path';
 import type { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
-import { copySync, existsSync, ensureDirSync, readJSONSync } from 'fs-extra';
+import {
+  copySync,
+  existsSync,
+  ensureDirSync,
+  readdirSync,
+  readFileSync,
+  readJSONSync,
+} from 'fs-extra';
 import type { Realm, VirtualNetwork } from '@cardstack/runtime-common';
 import {
   Deferred,
@@ -241,6 +248,57 @@ module(basename(__filename), function () {
           assert.ok(
             response.text.includes(scopedCSS),
             'scoped CSS is included in the HTML response',
+          );
+        });
+
+        test('serves boxel-ui scoped CSS in index responses for card URLs', async function (assert) {
+          let cardURL = new URL('boxel-ui-scoped-css-test', testRealm2URL).href;
+          let distDir = join(
+            process.cwd(),
+            'packages',
+            'boxel-ui',
+            'addon',
+            'dist',
+            'components',
+            'filter-list',
+          );
+          let scopedAttr: string | undefined;
+          for (let cssFile of readdirSync(distDir)) {
+            if (!cssFile.endsWith('.css')) {
+              continue;
+            }
+            let css = readFileSync(join(distDir, cssFile), 'utf8');
+            let match = css.match(/data-scopedcss-[a-z0-9-]+/i);
+            if (match) {
+              scopedAttr = match[0];
+              break;
+            }
+          }
+
+          assert.ok(scopedAttr, 'found boxel-ui scoped css attribute');
+          if (!scopedAttr) {
+            return;
+          }
+          let scopedSelector = `.list-item-buttons[${scopedAttr}]`;
+          let isolatedHTML = `<div ${scopedAttr}></div>`;
+
+          await dbAdapter.execute(
+            `INSERT INTO boxel_index_working (url, file_alias, type, realm_version, realm_url, isolated_html)
+             VALUES ('${cardURL}', '${cardURL}', 'instance', 1, '${testRealm2URL.href}', '${isolatedHTML}')`,
+          );
+
+          let response = await request2
+            .get('/test/boxel-ui-scoped-css-test')
+            .set('Accept', 'text/html');
+
+          assert.strictEqual(response.status, 200, 'serves HTML response');
+          assert.ok(
+            response.text.includes('data-boxel-scoped-css'),
+            'scoped CSS style tag is injected into the HTML response',
+          );
+          assert.ok(
+            response.text.includes(scopedSelector),
+            'boxel-ui scoped CSS is included in the HTML response',
           );
         });
 
