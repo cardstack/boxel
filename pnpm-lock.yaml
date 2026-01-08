@@ -943,6 +943,8 @@ importers:
         specifier: 'catalog:'
         version: 8.2.2
 
+  packages/boxel-homepage-realm: {}
+
   packages/boxel-icons:
     dependencies:
       '@ember/string':
