@@ -22,6 +22,112 @@ let stubDepth = 0;
 let blockDepth = 0;
 let warnedTimeout = false;
 let warnedInterval = false;
+type RenderTimerType = 'setTimeout' | 'setInterval';
+type RenderTimerRecord = {
+  type: RenderTimerType;
+  delay?: number;
+  callbackName?: string;
+  stack?: string | null;
+};
+const TIMER_SUMMARY_HEADER = 'Timers blocked during prerender:';
+let blockedTimers: RenderTimerRecord[] = [];
+const TIMER_SUMMARY_GLOBAL = '__boxelRenderTimerSummary';
+
+function registerTimerSummaryGlobal() {
+  if (typeof globalThis === 'undefined') {
+    return;
+  }
+  (globalThis as any)[TIMER_SUMMARY_GLOBAL] = () => getRenderTimerSummary();
+}
+
+function unregisterTimerSummaryGlobal() {
+  if (typeof globalThis === 'undefined') {
+    return;
+  }
+  delete (globalThis as any)[TIMER_SUMMARY_GLOBAL];
+}
+
+function recordBlockedTimer(
+  type: RenderTimerType,
+  args:
+    | Parameters<typeof window.setTimeout>
+    | Parameters<typeof window.setInterval>,
+) {
+  let delay =
+    typeof args[1] === 'number' && Number.isFinite(args[1])
+      ? args[1]
+      : undefined;
+  let callbackName =
+    typeof args[0] === 'function' && args[0].name ? args[0].name : undefined;
+  let stack: string | null = null;
+  try {
+    stack = new Error(`Timer blocked during prerender (${type})`).stack ?? null;
+  } catch {
+    stack = null;
+  }
+  blockedTimers.push({
+    type,
+    ...(delay !== undefined ? { delay } : {}),
+    ...(callbackName ? { callbackName } : {}),
+    stack,
+  });
+}
+
+export function resetRenderTimerStats() {
+  blockedTimers = [];
+}
+
+export function getRenderTimerSummary(): string | undefined {
+  if (!blockedTimers.length) {
+    return undefined;
+  }
+  let counts = blockedTimers.reduce(
+    (acc, timer) => {
+      acc[timer.type] += 1;
+      return acc;
+    },
+    { setTimeout: 0, setInterval: 0 },
+  );
+  let lines = [
+    TIMER_SUMMARY_HEADER,
+    `Total timers blocked: ${blockedTimers.length}`,
+    `setTimeout: ${counts.setTimeout}`,
+    `setInterval: ${counts.setInterval}`,
+    'Stacks (timer scheduling):',
+  ];
+  blockedTimers.forEach((timer, index) => {
+    let label = `${index + 1}) ${timer.type}`;
+    if (timer.delay !== undefined) {
+      label += ` (${timer.delay}ms)`;
+    }
+    if (timer.callbackName) {
+      label += ` callback: ${timer.callbackName}`;
+    }
+    lines.push(label);
+    if (timer.stack) {
+      for (let line of timer.stack.split('\n')) {
+        lines.push(`  ${line}`);
+      }
+    }
+  });
+  return lines.join('\n');
+}
+
+export function appendRenderTimerSummaryToStack(
+  stack: string | null | undefined,
+): string | undefined {
+  let summary = getRenderTimerSummary();
+  if (!summary) {
+    return stack ?? undefined;
+  }
+  if (stack && stack.includes(TIMER_SUMMARY_HEADER)) {
+    return stack;
+  }
+  if (!stack) {
+    return summary;
+  }
+  return `${stack}\n\n${summary}`;
+}
 
 function timersBlocked() {
   return stubDepth > 0 && blockDepth > 0;
@@ -34,6 +140,7 @@ function installStubs() {
   if (restoreSetTimeout) {
     return;
   }
+  registerTimerSummaryGlobal();
   restoreSetTimeout = window.setTimeout;
   restoreSetInterval = window.setInterval;
   invokeSetTimeout = window.setTimeout.bind(window);
@@ -43,6 +150,7 @@ function installStubs() {
     if (!timersBlocked() || !invokeSetTimeout) {
       return invokeSetTimeout ? invokeSetTimeout(...args) : (0 as const);
     }
+    recordBlockedTimer('setTimeout', args);
     if (!warnedTimeout) {
       console.warn(
         '[boxel] setTimeout is disabled while prerendering to prevent runaway timers',
@@ -60,6 +168,7 @@ function installStubs() {
     if (!timersBlocked() || !invokeSetInterval) {
       return invokeSetInterval ? invokeSetInterval(...args) : (0 as const);
     }
+    recordBlockedTimer('setInterval', args);
     if (!warnedInterval) {
       console.warn(
         '[boxel] setInterval is disabled while prerendering to prevent runaway timers',
@@ -86,6 +195,8 @@ function restoreStubs() {
     invokeSetInterval = undefined;
     warnedTimeout = false;
     warnedInterval = false;
+    resetRenderTimerStats();
+    unregisterTimerSummaryGlobal();
   }
 }
 

@@ -13,13 +13,14 @@ import {
   type QueryOptions,
   type IndexedModuleOrError,
   type InstanceOrError,
+  type IndexedFile,
   type DefinitionLookup,
   visitInstanceURLs,
   maybeRelativeURL,
 } from '.';
 import type { Realm } from './realm';
 import { RealmPaths } from './paths';
-import { buildQueryString, type Query } from './query';
+import type { Query } from './query';
 import { CardError, type SerializedError } from './error';
 import { isResolvedCodeRef, visitModuleDeps } from './code-ref';
 import {
@@ -28,6 +29,7 @@ import {
   type SingleCardDocument,
   type CardCollectionDocument,
 } from './document-types';
+import { relationshipEntries } from './relationship-utils';
 import type { CardResource, Saved } from './resource-types';
 import type { FieldDefinition } from './definitions';
 import {
@@ -189,7 +191,7 @@ export class RealmIndexQueryEngine {
     if (!instance) {
       return undefined;
     }
-    if (instance.type === 'error') {
+    if (instance.type === 'instance-error') {
       let scopedCssUrls = (instance.deps ?? []).filter(isScopedCSSRequest);
       return {
         type: 'error',
@@ -238,6 +240,10 @@ export class RealmIndexQueryEngine {
     opts?: QueryOptions,
   ): Promise<InstanceOrError | undefined> {
     return await this.#indexQueryEngine.getInstance(url, opts);
+  }
+
+  async file(url: URL, opts?: QueryOptions): Promise<IndexedFile | undefined> {
+    return await this.#indexQueryEngine.getFile(url, opts);
   }
 
   private async populateQueryFields(
@@ -492,10 +498,8 @@ export class RealmIndexQueryEngine {
     query: Query,
   ): Promise<{ cards: CardResource<Saved>[]; error?: QueryFieldErrorDetail }> {
     try {
-      let baseHref = realmHref.endsWith('/') ? realmHref : `${realmHref}/`;
-      let searchURL = new URL('./_search', baseHref);
-      searchURL.search = buildQueryString(query);
-      let response = await this.#fetch(searchURL.href, {
+      let searchURL = buildQuerySearchURL(realmHref, query);
+      let response = await this.#fetch(searchURL, {
         headers: { Accept: SupportedMimeType.CardJson },
       });
       if (!response.ok) {
@@ -572,16 +576,15 @@ export class RealmIndexQueryEngine {
     let realmPath = new RealmPaths(realmURL);
     let processedRelationships = new Set<string>();
     let processRelationships = async () => {
-      for (let [fieldName, relationship] of Object.entries(
-        resource.relationships ?? {},
-      )) {
-        if (processedRelationships.has(fieldName)) {
+      for (let entry of relationshipEntries(resource.relationships)) {
+        let { relationship, key } = entry;
+        if (processedRelationships.has(key)) {
           continue;
         }
         if (!relationship.links?.self) {
           continue;
         }
-        processedRelationships.add(fieldName);
+        processedRelationships.add(key);
         let linkURL = new URL(
           relationship.links.self,
           resource.id ? new URL(resource.id) : realmURL,
@@ -610,10 +613,17 @@ export class RealmIndexQueryEngine {
             throw new Error(
               `instance ${
                 linkURL.href
-              } is not a card document. it is: ${JSON.stringify(json, null, 2)}`,
+              } is not a card document. it is: ${JSON.stringify(
+                json,
+                null,
+                2,
+              )}`,
             );
           }
-          linkResource = { ...json.data, ...{ links: { self: json.data.id } } };
+          linkResource = {
+            ...json.data,
+            ...{ links: { self: json.data.id } },
+          };
         }
         let foundLinks = false;
         // TODO stop using maxLinkDepth. we should save the JSON-API doc in the
@@ -662,7 +672,7 @@ export class RealmIndexQueryEngine {
           omit.includes(relationshipId.href) ||
           included.find((i) => i.id === relationshipId!.href)
         ) {
-          resource.relationships![fieldName].data = {
+          relationship.data = {
             type: 'card',
             id: relationshipId.href,
           };

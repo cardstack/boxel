@@ -17,15 +17,17 @@ import {
   FieldContainer,
   Button,
   BoxelInput,
+  BoxelSelect,
   LoadingIndicator,
   Pill,
   RealmIcon,
 } from '@cardstack/boxel-ui/components';
-import { not, eq, or } from '@cardstack/boxel-ui/helpers';
+import { not, eq, or, and } from '@cardstack/boxel-ui/helpers';
 import {
   type Icon,
   CardDefinition,
   CardInstance,
+  File,
   Field,
 } from '@cardstack/boxel-ui/icons';
 
@@ -75,6 +77,7 @@ export type NewFileType =
   | 'card-instance'
   | 'card-definition'
   | 'field-definition'
+  | 'text-file'
   | 'spec-instance';
 
 export const newFileTypes: {
@@ -105,12 +108,25 @@ export const newFileTypes: {
     description: 'For storing data or content',
     extension: '.json',
   },
+  {
+    id: 'text-file',
+    icon: File,
+    description: 'For plain text or markdown',
+    extension: '.txt/.md',
+  },
   { id: 'spec-instance', extension: '.json' },
 ];
 
 export interface FileType {
   id: NewFileType;
   displayName: string;
+}
+
+const TEXT_FILE_EXTENSIONS = ['.txt', '.md'];
+
+function textFileExtensionFromInput(input: string) {
+  let lower = input.toLowerCase();
+  return TEXT_FILE_EXTENSIONS.find((extension) => lower.endsWith(extension));
 }
 
 interface Signature {
@@ -156,7 +172,12 @@ export default class CreateFileModal extends Component<Signature> {
                     @onSelect={{this.onSelectRealm}}
                   />
                 </FieldContainer>
-                {{#unless (eq this.fileType.id 'duplicate-instance')}}
+                {{#if
+                  (and
+                    (not (eq this.fileType.id 'duplicate-instance'))
+                    (not (eq this.fileType.id 'text-file'))
+                  )
+                }}
                   <FieldContainer
                     @label={{this.refLabel}}
                     class='field'
@@ -187,7 +208,35 @@ export default class CreateFileModal extends Component<Signature> {
                       {{/if}}
                     </div>
                   </FieldContainer>
-                {{/unless}}
+                {{/if}}
+                {{#if (eq this.fileType.id 'text-file')}}
+                  <FieldContainer @label='File Name' @tag='label' class='field'>
+                    <BoxelInput
+                      data-test-text-file-name-field
+                      placeholder='notes'
+                      @value={{this.fileName}}
+                      @state={{this.fileNameInputState}}
+                      @errorMessage={{this.fileNameError}}
+                      @onInput={{this.setFileName}}
+                    />
+                  </FieldContainer>
+                  <FieldContainer @label='Extension' @tag='label' class='field'>
+                    <BoxelSelect
+                      @options={{this.textFileExtensionOptions}}
+                      @selected={{this.selectedTextFileExtension}}
+                      @onChange={{this.handleTextFileExtensionChange}}
+                      @searchEnabled={{false}}
+                      @matchTriggerWidth={{true}}
+                      @renderInPlace={{true}}
+                      data-test-text-file-extension-select
+                      as |option|
+                    >
+                      <span data-test-text-file-extension-option={{option}}>
+                        {{option}}
+                      </span>
+                    </BoxelSelect>
+                  </FieldContainer>
+                {{/if}}
                 {{#if
                   (or
                     (eq this.fileType.id 'card-definition')
@@ -293,6 +342,18 @@ export default class CreateFileModal extends Component<Signature> {
                     >
                       Create
                     </Button>
+                  {{else if (eq this.fileType.id 'text-file')}}
+                    <Button
+                      @kind='primary'
+                      @size='tall'
+                      @loading={{this.createTextFile.isRunning}}
+                      @disabled={{this.isCreateTextFileButtonDisabled}}
+                      {{on 'click' (perform this.createTextFile)}}
+                      {{onKeyMod 'Enter'}}
+                      data-test-create-text-file
+                    >
+                      Create
+                    </Button>
                   {{/if}}
                 </div>
               {{/if}}
@@ -386,6 +447,7 @@ export default class CreateFileModal extends Component<Signature> {
   @tracked private fileName = '';
   @tracked private hasUserEditedFileName = false;
   @tracked private fileNameError: string | undefined;
+  @tracked private selectedTextFileExtension = '.txt';
   @tracked private saveError: CardErrorJSONAPI | undefined;
   @tracked private currentRequest:
     | {
@@ -438,9 +500,13 @@ export default class CreateFileModal extends Component<Signature> {
   }
 
   private get isReady() {
-    return this.definitionClass
-      ? true
-      : Boolean(this.defaultSpecResource?.isLoaded);
+    if (this.definitionClass) {
+      return true;
+    }
+    if (this.maybeFileType?.id === 'text-file') {
+      return true;
+    }
+    return Boolean(this.defaultSpecResource?.isLoaded);
   }
 
   private get selectedSpecResource() {
@@ -466,14 +532,16 @@ export default class CreateFileModal extends Component<Signature> {
         sourceInstance,
       };
       if (!this.definitionClass) {
-        let specEntryPath =
-          this.fileType.id === 'field-definition'
-            ? 'fields/field'
-            : 'types/card';
-        this.defaultSpecResource = this.getCard(
-          this,
-          () => `${baseRealm.url}${specEntryPath}`,
-        );
+        if (this.fileType.id !== 'text-file') {
+          let specEntryPath =
+            this.fileType.id === 'field-definition'
+              ? 'fields/field'
+              : 'types/card';
+          this.defaultSpecResource = this.getCard(
+            this,
+            () => `${baseRealm.url}${specEntryPath}`,
+          );
+        }
       }
       let url = await this.currentRequest.newFileDeferred.promise;
       this.clearState();
@@ -489,6 +557,7 @@ export default class CreateFileModal extends Component<Signature> {
     this.displayName = '';
     this.fileName = '';
     this.hasUserEditedFileName = false;
+    this.selectedTextFileExtension = '.txt';
     this.clearSaveError();
   }
 
@@ -536,7 +605,21 @@ export default class CreateFileModal extends Component<Signature> {
     this.hasUserEditedFileName = true;
     this.clearSaveError();
     this.fileNameError = undefined;
+    if (this.fileType.id === 'text-file') {
+      let extension = textFileExtensionFromInput(name);
+      if (extension) {
+        this.selectedTextFileExtension = extension;
+        this.fileName = name.slice(0, -extension.length);
+        return;
+      }
+    }
     this.fileName = name;
+  }
+
+  @action private handleTextFileExtensionChange(extension: string) {
+    this.clearSaveError();
+    this.fileNameError = undefined;
+    this.selectedTextFileExtension = extension;
   }
 
   private get initialFocusSelector() {
@@ -546,6 +629,8 @@ export default class CreateFileModal extends Component<Signature> {
       case 'field-definition':
       case 'duplicate-instance':
         return '.create-file-modal .realm-dropdown-trigger';
+      case 'text-file':
+        return '.create-file-modal [data-test-text-file-name-field]';
       default:
         return false;
     }
@@ -570,7 +655,7 @@ export default class CreateFileModal extends Component<Signature> {
         `Cannot determine selectedRealmURL when there is no this.currentRequest`,
       );
     }
-    return this.currentRequest.realmURL;
+    return this.currentRequest.realmURL?.href;
   }
 
   private get definitionClass() {
@@ -604,8 +689,36 @@ export default class CreateFileModal extends Component<Signature> {
     );
   }
 
+  private get isCreateTextFileButtonDisabled() {
+    return (
+      !this.selectedRealmURL ||
+      !this.fileName?.trim() ||
+      this.createTextFile.isRunning
+    );
+  }
+
   private get isCreateRunning() {
-    return this.createCardInstance.isRunning || this.createDefinition.isRunning;
+    return (
+      this.createCardInstance.isRunning ||
+      this.createDefinition.isRunning ||
+      this.createTextFile.isRunning
+    );
+  }
+
+  private get textFileExtensionOptions() {
+    return TEXT_FILE_EXTENSIONS;
+  }
+
+  private getTextFileNameForSave() {
+    let trimmed = this.fileName.trim().replace(/^\//, '');
+    if (!trimmed) {
+      return undefined;
+    }
+    let extension = textFileExtensionFromInput(trimmed);
+    if (extension) {
+      return trimmed;
+    }
+    return `${trimmed}${this.selectedTextFileExtension}`;
   }
 
   private chooseType = restartableTask(async () => {
@@ -649,7 +762,7 @@ export default class CreateFileModal extends Component<Signature> {
 
     let isField = this.fileType.id === 'field-definition';
 
-    let realmPath = new RealmPaths(this.selectedRealmURL);
+    let realmPath = new RealmPaths(new URL(this.selectedRealmURL));
     // assert that filename is a GTS file and is a LocalPath
     let fileName: LocalPath = `${this.fileName.replace(
       /\.[^.].+$/,
@@ -686,7 +799,7 @@ export default class CreateFileModal extends Component<Signature> {
     let moduleURL = maybeRelativeURL(
       absoluteModule,
       url,
-      this.selectedRealmURL,
+      new URL(this.selectedRealmURL),
     );
     let src: string[] = [];
 
@@ -756,7 +869,7 @@ export class ${className} extends ${exportName} {
       this.commandService.commandContext,
     ).execute({
       sourceCard: this.currentRequest.sourceInstance,
-      targetRealm: this.selectedRealmURL.href,
+      targetRealm: this.selectedRealmURL,
     });
     this.currentRequest.newFileDeferred.fulfill(new URL(`${newCardId}.json`));
   });
@@ -799,7 +912,7 @@ export class ${className} extends ${exportName} {
       data: {
         meta: {
           adoptsFrom: ref,
-          realmURL: this.selectedRealmURL.href,
+          realmURL: this.selectedRealmURL,
         },
       },
     };
@@ -807,7 +920,7 @@ export class ${className} extends ${exportName} {
     try {
       let maybeId = await this.store.create(doc, {
         relativeTo,
-        realm: this.selectedRealmURL.href,
+        realm: this.selectedRealmURL,
       });
       if (typeof maybeId !== 'string') {
         let error = maybeId;
@@ -816,6 +929,51 @@ export class ${className} extends ${exportName} {
       this.currentRequest.newFileDeferred.fulfill(new URL(`${maybeId}.json`));
     } catch (e: any) {
       console.log('Error saving', e);
+      this.saveError = e;
+    }
+  });
+
+  private createTextFile = restartableTask(async () => {
+    if (!this.currentRequest) {
+      throw new Error(
+        `Cannot createTextFile when there is no this.currentRequest`,
+      );
+    }
+    if (!this.selectedRealmURL) {
+      throw new Error(
+        `bug: cannot call createTextFile without a selected realm URL`,
+      );
+    }
+    if (!this.fileName) {
+      throw new Error(`bug: cannot call createTextFile without a file name`);
+    }
+
+    let fileName = this.getTextFileNameForSave();
+    if (!fileName) {
+      return;
+    }
+
+    let realmPath = new RealmPaths(new URL(this.selectedRealmURL));
+    let filePath: LocalPath = fileName as LocalPath;
+    let url = realmPath.fileURL(filePath);
+
+    try {
+      let response = await this.network.authedFetch(url, {
+        headers: { Accept: SupportedMimeType.CardSource },
+      });
+      if (response.ok) {
+        this.fileNameError = `This file already exists`;
+        return;
+      }
+    } catch (_err: any) {
+      // we expect a 404 here
+    }
+
+    try {
+      await this.cardService.saveSource(url, '', 'create-file');
+      this.currentRequest.newFileDeferred.fulfill(url);
+    } catch (e: any) {
+      console.log('Error saving text file', e);
       this.saveError = e;
     }
   });

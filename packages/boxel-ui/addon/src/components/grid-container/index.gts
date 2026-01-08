@@ -20,14 +20,18 @@ const GridContainer: TemplateOnlyComponent<Signature> = <template>
   {{/let}}
 
   <style scoped>
-    .grid-container {
-      display: grid;
-      gap: var(--boxel-sp);
+    @layer boxelComponentL1 {
+      .grid-container {
+        display: grid;
+        gap: var(--boxel-sp);
+      }
     }
 
-    .grid-container :deep(h2),
-    .grid-container :deep(h3) {
-      margin: 0;
+    @layer reset {
+      .grid-container :deep(h2),
+      .grid-container :deep(h3) {
+        margin: 0;
+      }
     }
   </style>
 </template>;

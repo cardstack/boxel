@@ -310,9 +310,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
         line-height: var(--boxel-body-line-height);
       }
       :global(small) {
-        font-family: var(--boxel-caption-font-family);
         font-size: var(--boxel-caption-font-size);
-        font-weight: var(--boxel-caption-font-weight);
         line-height: var(--boxel-caption-line-height);
       }
     }

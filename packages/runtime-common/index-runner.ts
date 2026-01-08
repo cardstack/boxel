@@ -35,6 +35,7 @@ import {
   type Reader,
   type Stats,
 } from './index';
+import { inferContentType } from './infer-content-type';
 import { CardError, isCardError, serializableError } from './error';
 
 function canonicalURL(url: string, relativeTo?: string): string {
@@ -310,17 +311,11 @@ export class IndexRunner {
     let invalidationList: string[] = [];
     let skipList: string[] = [];
     for (let [url, lastModified] of Object.entries(filesystemMtimes)) {
-      if (!url.endsWith('.json') && !hasExecutableExtension(url)) {
-        // Only allow json and executable files to be invalidated so that we
-        // don't end up with invalidated files that weren't meant to be indexed
-        // (images, etc)
-        continue;
-      }
       let indexEntry = indexMtimes.get(url);
 
       if (
         !indexEntry ||
-        indexEntry.type === 'error' ||
+        indexEntry.type.endsWith('-error') ||
         indexEntry.lastModified == null ||
         lastModified !== indexEntry.lastModified
       ) {
@@ -414,8 +409,21 @@ export class IndexRunner {
             resourceCreatedAt,
             resource,
           });
+          return;
         }
       }
+
+      if (lastModified == null) {
+        this.#log.warn(
+          `${jobIdentity(this.#jobInfo)} No lastModified date available for ${url.href}, using current time`,
+        );
+        lastModified = unixTime(Date.now());
+      }
+      await this.indexFile({
+        path: localPath,
+        lastModified,
+        resourceCreatedAt,
+      });
     }
     this.#log.debug(
       `${jobIdentity(this.#jobInfo)} completed visiting file ${url.href} in ${Date.now() - start}ms`,
@@ -441,7 +449,7 @@ export class IndexRunner {
         `${jobIdentity(this.#jobInfo)} encountered error rendering module "${url.href}": ${err.message}`,
       );
       await this.batch.updateEntry(url, {
-        type: 'error',
+        type: 'module-error',
         error: {
           status: err.status ?? 500,
           message: `encountered error rendering module "${url.href}": ${err.message}`,
@@ -461,7 +469,7 @@ export class IndexRunner {
 
     if (error) {
       this.stats.moduleErrors++;
-      await this.batch.updateEntry(url, error);
+      await this.batch.updateEntry(url, { ...error, type: 'module-error' });
       return;
     }
 
@@ -587,14 +595,14 @@ export class IndexRunner {
             });
           }
           if (isCardError(err)) {
-            return { type: 'error', error: serializableError(err) };
+            return { type: 'instance-error', error: serializableError(err) };
           }
           let fallback = new CardError(
             (err as Error)?.message ?? 'unknown render error',
             { status: 500 },
           );
           fallback.stack = (err as Error)?.stack;
-          return { type: 'error', error: serializableError(fallback) };
+          return { type: 'instance-error', error: serializableError(fallback) };
         };
 
         renderError = normalizeToErrorEntry(renderError, uncaughtError);
@@ -667,6 +675,35 @@ export class IndexRunner {
       deferred?.fulfill();
       this.reportStatus('finish', fileURL, resource);
     }
+  }
+
+  private async indexFile({
+    path,
+    lastModified,
+    resourceCreatedAt,
+  }: {
+    path: LocalPath;
+    lastModified: number;
+    resourceCreatedAt: number;
+  }): Promise<void> {
+    let fileURL = this.#realmPaths.fileURL(path).href;
+    let name = path.split('/').pop() ?? path;
+    let contentType = inferContentType(name);
+    await this.batch.updateEntry(new URL(fileURL), {
+      // Temporary: will be replaced once FileDef extractors populate richer metadata.
+      type: 'file',
+      lastModified,
+      resourceCreatedAt,
+      deps: new Set(),
+      searchData: {
+        url: fileURL,
+        sourceUrl: fileURL,
+        name,
+        contentType,
+      },
+      types: [],
+      displayNames: [],
+    });
   }
 
   private async updateEntry(

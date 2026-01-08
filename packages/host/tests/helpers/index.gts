@@ -12,46 +12,37 @@ import { tracked } from '@glimmer/tracking';
 
 import { getService } from '@universal-ember/test-support';
 
-import ms from 'ms';
-
 import { validate as uuidValidate } from 'uuid';
 
-import type {
-  RealmAdapter,
-  LooseSingleCardDocument,
-  RealmPermissions,
-  RealmAction,
-} from '@cardstack/runtime-common';
 import {
   baseRealm,
-  Worker,
-  IndexWriter,
-  type RealmInfo,
-  type TokenClaims,
-  type Prerenderer,
-  insertPermissions,
-  unixTime,
-  type RenderError,
-  type DefinitionLookup,
   CachingDefinitionLookup,
-} from '@cardstack/runtime-common';
-import { getCreatedTime } from '@cardstack/runtime-common/file-meta';
-import {
+  ensureTrailingSlash,
+  getCreatedTime,
+  IndexWriter,
+  insertPermissions,
+  Loader,
+  MatrixClient,
+  Realm,
   testHostModeRealmURL,
   testRealmInfo,
   testRealmURL,
   testRealmURLToUsername,
-} from '@cardstack/runtime-common/helpers/const';
-import { Loader } from '@cardstack/runtime-common/loader';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import { Realm } from '@cardstack/runtime-common/realm';
+  Worker,
+  type DefinitionLookup,
+  type LooseSingleCardDocument,
+  type Prerenderer,
+  type RealmAction,
+  type RealmAdapter,
+  type RealmInfo,
+  type RealmPermissions,
+  type RenderError,
+} from '@cardstack/runtime-common';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
 import { render as renderIntoElement } from '@cardstack/host/lib/isolated-render';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
-import type NetworkService from '@cardstack/host/services/network';
-import type { RealmServerTokenClaims } from '@cardstack/host/services/realm-server';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
 
 import {
@@ -67,10 +58,13 @@ import type {
 
 import { TestRealmAdapter } from './adapter';
 import { testRealmServerMatrixUsername } from './mock-matrix';
-import { getRoomIdForRealmAndUser, type MockUtils } from './mock-matrix/_utils';
 import percySnapshot from './percy-snapshot';
-
+import { setupAuthEndpoints } from './realm-server-mock';
+import { createJWT, testRealmSecretSeed } from './test-auth';
+import { getTestRealmRegistry } from './test-realm-registry';
 import visitOperatorMode from './visit-operator-mode';
+
+import type { MockUtils } from './mock-matrix/_utils';
 
 import type { SimpleElement } from '@simple-dom/interface';
 
@@ -81,35 +75,28 @@ export {
   testRealmInfo,
   percySnapshot,
 };
+export { createJWT, testRealmSecretSeed } from './test-auth';
+export {
+  registerRealmAuthSessionRoomEnsurer,
+  setupAuthEndpoints,
+} from './realm-server-mock';
 export { setupOperatorModeStateCleanup } from './operator-mode-state';
 export * from '@cardstack/runtime-common/helpers';
 export * from './indexer';
 
 export const testModuleRealm = 'http://localhost:4202/test/';
 
+export {
+  catalogRealm,
+  skillsRealm,
+  skillCardURL,
+  devSkillId,
+  envSkillId,
+} from '@cardstack/host/lib/utils';
+
 const { sqlSchema } = ENV;
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
-
-type TestRealmRecord = {
-  realm: Realm;
-  adapter: TestRealmAdapter;
-};
-
-const TEST_REALM_REGISTRY = '__cardstack_testRealmRegistry';
-
-function getTestRealmRegistry(): Map<string, TestRealmRecord> {
-  // We track test realms globally so helpers like persistDocumentToTestRealm can
-  // locate the correct realm/adapter for a card URL during test runs.
-  let registry = (globalThis as any)[TEST_REALM_REGISTRY] as
-    | Map<string, TestRealmRecord>
-    | undefined;
-  if (!registry) {
-    registry = new Map();
-    (globalThis as any)[TEST_REALM_REGISTRY] = registry;
-  }
-  return registry;
-}
 
 const baseTestMatrix = {
   url: new URL(`http://localhost:8008`),
@@ -145,6 +132,8 @@ export function setMonacoContent(content: string): string {
 }
 
 export function cleanupMonacoEditorModels() {
+  // If there's no monaco, nothing to clean up
+  if (!(window as any).monaco) return;
   let diffEditors = (window as any).monaco.editor.getDiffEditors();
   for (let editor of diffEditors) {
     editor.dispose();
@@ -705,7 +694,6 @@ export async function withoutLoaderMonitoring<T>(cb: () => Promise<T>) {
   }
 }
 
-export const testRealmSecretSeed = "shhh! it's a secret";
 export const createPrerenderAuth = (
   _userId: string,
   _permissions: RealmPermissions,
@@ -804,6 +792,7 @@ async function setupTestRealm({
       username: testRealmServerMatrixUsername,
       seed: testRealmSecretSeed,
     }),
+    realmServerURL: ensureTrailingSlash(ENV.realmServerURL),
     definitionLookup,
   });
 
@@ -827,97 +816,10 @@ async function setupTestRealm({
   return { realm, adapter };
 }
 
-const authHandlerStateSymbol = Symbol('test-auth-handler-state');
-const TEST_MATRIX_USER = '@testuser:localhost';
-
-type AuthHandlerState = {
-  handler: (req: Request) => Promise<Response | null>;
-  realmPermissions: Map<string, RealmAction[]>;
-  mountedVirtualNetwork?: unknown;
-};
-
-function ensureAuthHandlerState(network: NetworkService): AuthHandlerState {
-  let state = (network as any)[authHandlerStateSymbol] as
-    | AuthHandlerState
-    | undefined;
-  if (!state) {
-    let realmPermissions = new Map<string, RealmAction[]>();
-    let handler = async (req: Request) => {
-      if (req.url.includes('_realm-auth')) {
-        const authTokens: Record<string, string> = {};
-        for (let [realmURL, permissions] of realmPermissions.entries()) {
-          authTokens[realmURL] = createJWT(
-            {
-              user: TEST_MATRIX_USER,
-              sessionRoom: getRoomIdForRealmAndUser(realmURL, TEST_MATRIX_USER),
-              permissions,
-              realm: realmURL,
-            },
-            '1d',
-            testRealmSecretSeed,
-          );
-        }
-        return new Response(JSON.stringify(authTokens), { status: 200 });
-      }
-      if (req.url.includes('_server-session')) {
-        let data = await req.json();
-        if (!data.challenge) {
-          return new Response(
-            JSON.stringify({
-              challenge: 'test',
-              room: 'test-auth-realm-server-session-room',
-            }),
-            {
-              status: 401,
-            },
-          );
-        } else {
-          return new Response('Ok', {
-            status: 200,
-            headers: {
-              Authorization: createJWT(
-                {
-                  user: TEST_MATRIX_USER,
-                  sessionRoom: 'test-auth-realm-server-session-room',
-                },
-                '1d',
-                testRealmSecretSeed,
-              ),
-            },
-          });
-        }
-      }
-      return null;
-    };
-    state = { realmPermissions, handler };
-    (network as any)[authHandlerStateSymbol] = state;
-  }
-  if (state.mountedVirtualNetwork !== network.virtualNetwork) {
-    network.mount(state.handler, { prepend: true });
-    state.mountedVirtualNetwork = network.virtualNetwork;
-  }
-  return state;
-}
-
-export function setupAuthEndpoints(
-  realmPermissions: Record<string, RealmAction[]> = {
-    [testRealmURL]: ['read', 'write'],
-  },
-) {
-  let network = getService('network') as NetworkService;
-  let state = ensureAuthHandlerState(network);
-
-  for (let [realmURL, permissions] of Object.entries(realmPermissions)) {
-    state.realmPermissions.set(
-      ensureTrailingSlash(realmURL),
-      permissions as RealmAction[],
-    );
-  }
-}
-
 function deriveTestUserPermissions(
   permissions?: RealmPermissions,
 ): RealmAction[] {
+  const TEST_MATRIX_USER = '@testuser:localhost';
   if (!permissions) {
     return ['read', 'write'];
   }
@@ -934,10 +836,6 @@ function deriveTestUserPermissions(
     return firstEntry as RealmAction[];
   }
   return ['read', 'write'];
-}
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
 }
 
 export function setupUserSubscription() {
@@ -1073,29 +971,6 @@ export function setupCardLogs(
   });
 }
 
-export function createJWT(
-  claims: TokenClaims | RealmServerTokenClaims,
-  expiration: string,
-  secret: string,
-) {
-  let nowInSeconds = unixTime(Date.now());
-  let expires = nowInSeconds + unixTime(ms(expiration));
-  let header = { alg: 'none', typ: 'JWT' };
-  let payload = {
-    iat: nowInSeconds,
-    exp: expires,
-    ...claims,
-  };
-  let stringifiedHeader = JSON.stringify(header);
-  let stringifiedPayload = JSON.stringify(payload);
-  let headerAndPayload = `${btoa(stringifiedHeader)}.${btoa(
-    stringifiedPayload,
-  )}`;
-  // this is our silly JWT--we don't sign with crypto since we are running in the
-  // browser so the secret is the signature
-  return `${headerAndPayload}.${secret}`;
-}
-
 export function delay(delayAmountMs: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, delayAmountMs);
@@ -1175,31 +1050,27 @@ export function setupRealmServerEndpoints(
       route: '_server-session',
       getResponse: async function (req: Request) {
         let data = await req.json();
-        if (!data.challenge) {
+        if (!data.access_token) {
           return new Response(
             JSON.stringify({
-              challenge: 'test',
-              room: 'boxel-session-room-id',
+              errors: [`Request body missing 'access_token' property`],
             }),
-            {
-              status: 401,
-            },
+            { status: 400 },
           );
-        } else {
-          return new Response('Ok', {
-            status: 200,
-            headers: {
-              Authorization: createJWT(
-                {
-                  user: '@testuser:localhost',
-                  sessionRoom: 'boxel-session-room-id',
-                },
-                '1d',
-                testRealmSecretSeed,
-              ),
-            },
-          });
         }
+        return new Response(null, {
+          status: 201,
+          headers: {
+            Authorization: createJWT(
+              {
+                user: '@testuser:localhost',
+                sessionRoom: 'boxel-session-room-id',
+              },
+              '1d',
+              testRealmSecretSeed,
+            ),
+          },
+        });
       },
     },
     {

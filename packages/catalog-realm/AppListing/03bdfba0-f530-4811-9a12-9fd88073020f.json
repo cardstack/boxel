@@ -61,11 +61,6 @@
           "self": "../tournament/Tournament/valorant-championship"
         }
       },
-      "examples.1": {
-        "links": {
-          "self": "../video-game/VideoGame/valorant"
-        }
-      },
       "categories.0": {
         "links": {
           "self": "../Category/video-games-interactive"

@@ -1,7 +1,5 @@
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
-import { modifier } from 'ember-modifier';
 import { provide, consume } from 'ember-provide-consume-context';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -18,6 +16,8 @@ import {
   type getCards,
   type getCardCollection,
 } from '@cardstack/runtime-common';
+
+import HeadFormatPreview from '@cardstack/host/components/head-format-preview';
 
 import type {
   BaseDef,
@@ -44,8 +44,6 @@ export default class CardRenderer extends Component<Signature> {
   private declare getCardCollection: getCardCollection;
   @consume(CardContextName) private declare cardContext: CardContext;
 
-  @tracked private headMarkup = '';
-
   @provide(DefaultFormatsContextName)
   // @ts-ignore "defaultFormat is declared but not used"
   get defaultFormat() {
@@ -62,21 +60,12 @@ export default class CardRenderer extends Component<Signature> {
       : undefined;
   }
 
-  captureHeadMarkup = modifier((element: HTMLElement) => {
-    this.headMarkup = element.innerHTML.trim();
-  });
-
-  setHeadPreview = modifier((element: HTMLElement, [markup]: [string]) => {
-    element.textContent = markup ?? '';
-  });
-
   <template>
-    {{! TODO: replace this hackish HTML preview in CS-9782 }}
     {{#if (eq @format 'head')}}
-      <div hidden aria-hidden='true' {{this.captureHeadMarkup}}>
-        <this.renderedCard @displayContainer={{false}} />
-      </div>
-      <pre {{this.setHeadPreview this.headMarkup}}></pre>
+      <HeadFormatPreview
+        @renderedCard={{this.renderedCard}}
+        @cardURL={{this.cardURL}}
+      />
     {{else}}
       <this.renderedCard
         @displayContainer={{@displayContainer}}

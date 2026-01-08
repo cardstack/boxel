@@ -1,0 +1,13 @@
+{
+  "name": "@cardstack/catalog",
+  "version": "1.0.0",
+  "license": "MIT",
+  "scripts": {
+    "catalog:setup": "[ -d contents ] || (git clone git@github.com:cardstack/boxel-catalog.git contents || git clone https://github.com/cardstack/boxel-catalog.git contents)",
+    "catalog:update": "pnpm catalog:setup && cd contents && git pull",
+    "catalog:reset": "rm -rf contents && pnpm catalog:setup"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
+}

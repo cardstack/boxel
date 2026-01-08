@@ -205,6 +205,8 @@ export default class RoomMessage extends Component<Signature> {
         @retryAction={{@retryAction}}
         @waitAction={{if this.streamingTimeout this.waitLonger}}
         @isPending={{@isPending}}
+        @hideMeta={{this.message.isCodePatchCorrectness}}
+        @isCodePatchCorrectness={{this.message.isCodePatchCorrectness}}
         @commands={{this.message.commands}}
         data-test-boxel-message-from={{this.message.author.name}}
         data-test-boxel-message-instance-id={{this.message.instanceId}}
@@ -217,6 +219,7 @@ export default class RoomMessage extends Component<Signature> {
             @runCommand={{fn (perform this.run) command}}
             @roomId={{@roomId}}
             @isPending={{@isPending}}
+            @isCompact={{this.message.isCodePatchCorrectness}}
             @monacoSDK={{@monacoSDK}}
             @isError={{bool this.errorMessage}}
             @isStreaming={{@isStreaming}}

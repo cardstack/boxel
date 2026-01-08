@@ -4,6 +4,10 @@ import { REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME } from './realm';
 import { Deferred } from './deferred';
 import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
+type JoinedRoomsResponse = { joined_rooms: string[] };
+
+const joinedRoomsRequests = new WeakMap<object, Promise<JoinedRoomsResponse>>();
+
 export interface MatrixAccess {
   accessToken: string;
   deviceId: string;
@@ -124,9 +128,22 @@ export class MatrixClient {
   }
 
   async getJoinedRooms() {
-    let response = await this.request('_matrix/client/v3/joined_rooms');
-
-    return (await response.json()) as { joined_rooms: string[] };
+    let existing = joinedRoomsRequests.get(this);
+    if (existing) {
+      return existing;
+    }
+    let request = (async () => {
+      let response = await this.request('_matrix/client/v3/joined_rooms');
+      return (await response.json()) as JoinedRoomsResponse;
+    })();
+    joinedRoomsRequests.set(this, request);
+    try {
+      return await request;
+    } finally {
+      if (joinedRoomsRequests.get(this) === request) {
+        joinedRoomsRequests.delete(this);
+      }
+    }
   }
 
   async joinRoom(roomId: string) {
@@ -285,6 +302,66 @@ export class MatrixClient {
       chunk: MatrixEvent[];
     };
     return json.chunk;
+  }
+
+  async getOpenIdToken(): Promise<
+    | {
+        access_token: string;
+        expires_in: number;
+        matrix_server_name: string;
+        token_type: string;
+      }
+    | undefined
+  > {
+    const url = `_matrix/client/v3/user/${encodeURIComponent(this.access!.userId)}/openid/request_token`;
+    // The body must be an empty JSON object, otherwise this request will fail
+    const response = await this.request(url, 'POST', { body: '{}' });
+    let json:
+      | {
+          access_token: string;
+          expires_in: number;
+          matrix_server_name: string;
+          token_type: string;
+        }
+      | undefined;
+    const text = await response.text();
+    try {
+      json = JSON.parse(text);
+    } catch (e) {
+      throw new Error(
+        `unable to parse response from ${url}, response was not JSON: ${text}`,
+      );
+    }
+    if (!json || !response.ok) {
+      return undefined;
+    } else {
+      return json;
+    }
+  }
+
+  async verifyOpenIdToken(openIdToken: string): Promise<string | undefined> {
+    const url = `_matrix/federation/v1/openid/userinfo?access_token=${encodeURIComponent(
+      openIdToken,
+    )}`;
+    const response = await this.request(url, 'GET', undefined, false);
+    let json:
+      | {
+          sub: string;
+        }
+      | undefined;
+    const text = await response.text();
+    try {
+      json = JSON.parse(text);
+    } catch (e) {
+      throw new Error(
+        `unable to parse response from ${url}, response was not JSON: ${text}`,
+      );
+    }
+    if (!json || !response.ok) {
+      return undefined;
+    } else {
+      return json.sub;
+    }
   }
 
   async isTokenValid() {

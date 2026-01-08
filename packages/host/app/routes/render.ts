@@ -44,6 +44,8 @@ import {
 import {
   enableRenderTimerStub,
   beginTimerBlock,
+  appendRenderTimerSummaryToStack,
+  resetRenderTimerStats,
 } from '../utils/render-timer-stub';
 
 import type LoaderService from '../services/loader-service';
@@ -56,9 +58,10 @@ import type RenderStoreService from '../services/render-store';
 type RenderStatus = 'loading' | 'ready' | 'error' | 'unusable';
 
 export type Model = {
-  instance: CardDef;
+  instance?: CardDef;
   nonce: string;
   cardId: string;
+  renderOptions: ReturnType<typeof parseRenderRouteOptions>;
   readonly status: RenderStatus;
   readonly ready: boolean;
   readyPromise: Promise<void>;
@@ -131,7 +134,7 @@ export default class RenderRoute extends Route<Model> {
 
   deactivate() {
     (globalThis as any).__boxelRenderContext = undefined;
-    (globalThis as any).__renderInstance = undefined;
+    (globalThis as any).__renderModel = undefined;
     window.removeEventListener('boxel-render-error', this.handleRenderError);
     this.#detachWindowErrorListeners();
     this.lastStoreResetKey = undefined;
@@ -151,6 +154,7 @@ export default class RenderRoute extends Route<Model> {
 
   async beforeModel(transition: Transition) {
     await super.beforeModel?.(transition);
+    resetRenderTimerStats();
     if (!isTesting()) {
       // tests have their own way of dealing with window level errors in card-prerender.gts
       this.#attachWindowErrorListeners();
@@ -213,7 +217,7 @@ export default class RenderRoute extends Route<Model> {
       }
     }
     // This is for host tests
-    (globalThis as any).__renderInstance = undefined;
+    (globalThis as any).__renderModel = undefined;
 
     let response: Response;
     try {
@@ -260,6 +264,7 @@ export default class RenderRoute extends Route<Model> {
       instance: undefined as unknown as CardDef,
       nonce,
       cardId: canonicalId,
+      renderOptions: parsedOptions,
       get status(): RenderStatus {
         return (state.get('status') as RenderStatus) ?? 'loading';
       },
@@ -328,7 +333,7 @@ export default class RenderRoute extends Route<Model> {
 
     // this is to support in-browser rendering, where we actually don't have the
     // ability to lookup the parent route using RouterService.recognizeAndLoad()
-    (globalThis as any).__renderInstance = instance;
+    (globalThis as any).__renderModel = model;
     this.currentTransition = undefined;
     return model;
   }
@@ -609,7 +614,12 @@ export default class RenderRoute extends Route<Model> {
         normalizationContext,
       );
       let withType = withCardType(normalized, cardType);
-      return JSON.stringify(this.#stripLastKnownGoodHtml(withType), null, 2);
+      let withTimerSummary = this.#appendTimerSummary(withType);
+      return JSON.stringify(
+        this.#stripLastKnownGoodHtml(withTimerSummary),
+        null,
+        2,
+      );
     }
     let current: Transition['to'] | null = transition?.to;
     let id: string | undefined;
@@ -622,13 +632,18 @@ export default class RenderRoute extends Route<Model> {
     if (isCardError(error)) {
       let normalized = normalizeRenderError(
         {
-          type: 'error',
+          type: 'instance-error',
           error: serializableError(error),
         },
         normalizationContext,
       );
       let withType = withCardType(normalized, cardType);
-      return JSON.stringify(this.#stripLastKnownGoodHtml(withType), null, 2);
+      let withTimerSummary = this.#appendTimerSummary(withType);
+      return JSON.stringify(
+        this.#stripLastKnownGoodHtml(withTimerSummary),
+        null,
+        2,
+      );
     }
     let errorJSONAPI = formattedError(id, error).errors[0];
     let errorPayload = normalizeRenderError(
@@ -637,11 +652,32 @@ export default class RenderRoute extends Route<Model> {
     );
     return JSON.stringify(
       this.#stripLastKnownGoodHtml(
-        withCardType(errorPayload as RenderError, cardType),
+        this.#appendTimerSummary(
+          withCardType(errorPayload as RenderError, cardType),
+        ),
       ),
       null,
       2,
     );
+  }
+
+  #appendTimerSummary(renderError: RenderError): RenderError {
+    let updatedStack = appendRenderTimerSummaryToStack(
+      renderError?.error?.stack ?? undefined,
+    );
+    if (
+      updatedStack === undefined ||
+      updatedStack === renderError.error.stack
+    ) {
+      return renderError;
+    }
+    return {
+      ...renderError,
+      error: {
+        ...renderError.error,
+        stack: updatedStack,
+      },
+    };
   }
 
   #stripLastKnownGoodHtml<T>(value: T): T {
@@ -859,7 +895,7 @@ export default class RenderRoute extends Route<Model> {
     } else {
       reason = JSON.stringify(
         {
-          type: 'error',
+          type: 'instance-error',
           error: {
             status: 500,
             title: 'Render failed',

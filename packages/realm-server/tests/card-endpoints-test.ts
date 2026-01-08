@@ -32,6 +32,14 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 import type { PgAdapter } from '@cardstack/postgres';
 
+function parseSearchQuery(searchURL: URL) {
+  let queryParam = searchURL.searchParams.get('query');
+  if (queryParam != null) {
+    return parse(queryParam) as Record<string, any>;
+  }
+  return parse(searchURL.searchParams.toString()) as Record<string, any>;
+}
+
 module(basename(__filename), function () {
   module('Realm-specific Endpoints | card URLs', function (hooks) {
     let testRealm: Realm;
@@ -649,6 +657,26 @@ module(basename(__filename), function () {
             undefined,
             'realm is not public readable',
           );
+        });
+      });
+
+      module('public readable realm with file', function (hooks) {
+        setupPermissionedRealm(hooks, {
+          permissions: {
+            '*': ['read'],
+          },
+          fileSystem: {
+            'greeting.txt': 'hello',
+          },
+          onRealmSetup,
+        });
+
+        test('does not return card JSON for file urls', async function (assert) {
+          let response = await request
+            .get('/greeting.txt')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 404, 'HTTP 404 status');
         });
       });
     });
@@ -1704,7 +1732,73 @@ module(basename(__filename), function () {
       });
     });
 
+    module('card POST request | file URL', function (_hooks) {
+      module('public writable realm with file', function (hooks) {
+        setupPermissionedRealm(hooks, {
+          permissions: {
+            '*': ['read', 'write'],
+          },
+          fileSystem: {
+            'greeting.txt': 'hello',
+          },
+          onRealmSetup,
+        });
+
+        test('rejects POST to a file URL', async function (assert) {
+          let response = await request
+            .post('/greeting.txt')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/card-api',
+                    name: 'CardDef',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 405, 'HTTP 405 status');
+        });
+      });
+    });
+
     module('card PATCH request', function (_hooks) {
+      module('public writable realm with file', function (hooks) {
+        setupPermissionedRealm(hooks, {
+          permissions: {
+            '*': ['read', 'write'],
+          },
+          fileSystem: {
+            'greeting.txt': 'hello',
+          },
+          onRealmSetup,
+        });
+
+        test('rejects PATCH to a file URL', async function (assert) {
+          let response = await request
+            .patch('/greeting.txt')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/card-api',
+                    name: 'CardDef',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 405, 'HTTP 405 status');
+        });
+      });
+
       module('public writable realm', function (hooks) {
         setupPermissionedRealm(hooks, {
           permissions: {
@@ -1811,7 +1905,11 @@ module(basename(__filename), function () {
           };
 
           response = await request
-            .get(`/_search?${stringify(query)}`)
+            .get(
+              `/_search?realms=${encodeURIComponent(testRealmHref)}&query=${encodeURIComponent(
+                stringify(query, { encode: false }),
+              )}`,
+            )
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -1884,7 +1982,7 @@ module(basename(__filename), function () {
           for (let table of ['boxel_index', 'boxel_index_working']) {
             await dbAdapter.execute(
               `UPDATE ${table}
-               SET type = 'error', error_doc = $1::jsonb
+               SET type = 'instance-error', error_doc = $1::jsonb
                WHERE url = $2`,
               {
                 bind: [JSON.stringify(errorDoc), cardURL],
@@ -1947,7 +2045,7 @@ module(basename(__filename), function () {
           for (let table of ['boxel_index', 'boxel_index_working']) {
             await dbAdapter.execute(
               `UPDATE ${table}
-               SET type = 'error', error_doc = $1::jsonb, pristine_doc = NULL
+               SET type = 'instance-error', error_doc = $1::jsonb, pristine_doc = NULL
                WHERE url = $2`,
               {
                 bind: [JSON.stringify(errorDoc), cardURL],
@@ -3193,7 +3291,61 @@ module(basename(__filename), function () {
       });
     });
 
+    module('card PUT request | file URL', function (_hooks) {
+      module('public writable realm with file', function (hooks) {
+        setupPermissionedRealm(hooks, {
+          permissions: {
+            '*': ['read', 'write'],
+          },
+          fileSystem: {
+            'greeting.txt': 'hello',
+          },
+          onRealmSetup,
+        });
+
+        test('rejects PUT to a file URL', async function (assert) {
+          let response = await request
+            .put('/greeting.txt')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/card-api',
+                    name: 'CardDef',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 405, 'HTTP 405 status');
+        });
+      });
+    });
+
     module('card DELETE request', function (_hooks) {
+      module('public writable realm with file', function (hooks) {
+        setupPermissionedRealm(hooks, {
+          permissions: {
+            '*': ['read', 'write'],
+          },
+          fileSystem: {
+            'greeting.txt': 'hello',
+          },
+          onRealmSetup,
+        });
+
+        test('rejects DELETE to a file URL', async function (assert) {
+          let response = await request
+            .delete('/greeting.txt')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 405, 'HTTP 405 status');
+        });
+      });
+
       module('public writable realm', function (hooks) {
         setupPermissionedRealm(hooks, {
           permissions: {
@@ -3482,9 +3634,7 @@ module(basename(__filename), function () {
         new URL('_search', consumerRealmURL).href,
         'favorite relationship search link targets consumer realm',
       );
-      let favoriteQueryParams = parse(
-        favoriteSearchURL.searchParams.toString(),
-      ) as Record<string, any>;
+      let favoriteQueryParams = parseSearchQuery(favoriteSearchURL);
       assert.deepEqual(
         favoriteQueryParams.page,
         { size: '1', number: '0' },
@@ -3557,14 +3707,16 @@ module(basename(__filename), function () {
         'linksToMany relationship exposes canonical search link',
       );
       let matchesSearchURL = new URL(matchesSearchLink);
+      assert.ok(
+        matchesSearchURL.searchParams.get('query'),
+        'matches search link uses query param',
+      );
       assert.strictEqual(
         matchesSearchURL.href.split('?')[0],
         new URL('_search', providerRealmURL).href,
         'matches relationship search link targets provider realm',
       );
-      let matchesQueryParams = parse(
-        matchesSearchURL.searchParams.toString(),
-      ) as Record<string, any>;
+      let matchesQueryParams = parseSearchQuery(matchesSearchURL);
       assert.deepEqual(
         matchesQueryParams.page,
         { size: '1', number: '0' },
@@ -3608,14 +3760,16 @@ module(basename(__filename), function () {
         'failingMatches relationship exposes canonical search link despite error',
       );
       let failingSearchURL = new URL(failingSearchLink);
+      assert.ok(
+        failingSearchURL.searchParams.get('query'),
+        'failingMatches search link uses query param',
+      );
       assert.strictEqual(
         failingSearchURL.href.split('?')[0],
         new URL('_search', UNREACHABLE_REALM_URL).href,
         'failingMatches search link targets unreachable realm',
       );
-      let failingQueryParams = parse(
-        failingSearchURL.searchParams.toString(),
-      ) as Record<string, any>;
+      let failingQueryParams = parseSearchQuery(failingSearchURL);
       assert.deepEqual(
         failingQueryParams.page,
         { size: '1', number: '0' },

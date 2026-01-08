@@ -446,6 +446,7 @@ export class RenderRunner {
     let response: ModuleRenderResponse;
     if (isRenderError(capture)) {
       let renderError = capture as RenderError;
+      renderError.type = 'module-error';
       markTimeout(renderError);
       if (await this.#maybeEvict(realm, 'module render', renderError)) {
         poolInfo.evicted = true;
@@ -485,7 +486,7 @@ export class RenderRunner {
             deps: renderError.error.deps ?? [],
             definitions: {},
             error: {
-              type: 'error',
+              type: 'module-error',
               error: renderError.error,
             },
           };
@@ -570,7 +571,7 @@ export class RenderRunner {
         parsed = JSON.parse(capture.value);
       } catch (_e) {
         parsed = {
-          type: 'error',
+          type: 'instance-error',
           error: {
             status: 500,
             title: 'Render capture parse error',
@@ -580,6 +581,10 @@ export class RenderRunner {
         } as RenderError;
       }
       if (parsed) {
+        let parsedType = (parsed as { type?: string }).type;
+        if (parsedType === 'error') {
+          parsed.type = 'instance-error';
+        }
         return {
           ...parsed,
           evict: capture.status === 'unusable',

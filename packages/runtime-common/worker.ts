@@ -137,6 +137,10 @@ export class Worker {
       this.#queue.register(`copy-index`, Tasks['copy'](taskArgs)),
       this.#queue.register(`lint-source`, Tasks['lintSource'](taskArgs)),
       this.#queue.register(`full-reindex`, Tasks['fullReindex'](taskArgs)),
+      this.#queue.register(
+        `daily-credit-grant`,
+        Tasks['dailyCreditGrant'](taskArgs),
+      ),
     ]);
     await this.#queue.start();
   }
@@ -266,6 +270,19 @@ export function getReader(
           Accept: SupportedMimeType.Mtimes,
         },
       });
+      if (!response.ok) {
+        let responseText = '';
+        try {
+          responseText = await response.text();
+        } catch {
+          responseText = '';
+        }
+        let details = responseText ? `: ${responseText}` : '';
+        console.warn(
+          `mtimes request failed for ${realmURL}_mtimes (${response.status} ${response.statusText})${details}`,
+        );
+        return {};
+      }
       let {
         data: {
           attributes: { mtimes },

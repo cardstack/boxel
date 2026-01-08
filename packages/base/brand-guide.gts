@@ -17,7 +17,6 @@ import {
   Button,
   FieldContainer,
   GridContainer,
-  BoxelInput,
 } from '@cardstack/boxel-ui/components';
 import {
   buildCssGroups,
@@ -26,45 +25,51 @@ import {
   getContrastColor,
   buildCssVariableName,
   eq,
-  extractCssVariables,
-  sanitizeHtmlSafe,
-  parseCssGroups,
 } from '@cardstack/boxel-ui/helpers';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import BrandTypography from './brand-typography';
-import BrandFunctionalPalette from './brand-functional-palette';
+import BrandFunctionalPalette, {
+  formatSwatchName,
+} from './brand-functional-palette';
 import BrandLogo from './brand-logo';
 import CSSValueField from './css-value';
+import { mergeRuleMaps } from './structured-theme';
+import DetailedStyleRef from './detailed-style-reference';
 import {
-  applyCssRulesToField,
-  mergeRuleMaps,
-  CSS_PLACEHOLDER,
-} from './structured-theme';
-import DetailedStyleRef, {
-  STYLE_GUIDE_SECTIONS,
   ThemeDashboard,
   ThemeDashboardHeader,
   NavSection,
   ModeToggle,
-} from './detailed-style-reference';
+  CssFieldEditor,
+} from './default-templates/theme-dashboard';
 
-const rootToBrandVariableMapping: Record<string, string> = {
+const sharedBrandVarsMap: Record<string, string> = {
   '--primary': '--brand-primary',
   '--secondary': '--brand-secondary',
   '--accent': '--brand-accent',
-  '--background': '--brand-light',
-  '--foreground': '--brand-dark',
   '--spacing': '--brand-spacing',
   '--radius': '--brand-radius',
+};
+
+const rootToBrandVariableMapping: Record<string, string> = {
+  '--background': '--brand-light',
+  '--foreground': '--brand-dark',
+  ...sharedBrandVarsMap,
+};
+
+const darkToBrandVariableMapping: Record<string, string> = {
+  '--background': '--brand-dark',
+  '--foreground': '--brand-light',
+  ...sharedBrandVarsMap,
 };
 
 class BrandGuideIsolated extends Component<typeof BrandGuide> {
   <template>
     <ThemeDashboard
       class='brand-guide'
-      style={{this.themeStyles}}
+      style={{if this.isDarkMode @model.darkModeStyles}}
       @sections={{this.sectionsWithContent}}
       @isDarkMode={{this.isDarkMode}}
     >
@@ -94,144 +99,140 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
           @toggleDarkMode={{this.toggleDarkMode}}
           @isDarkMode={{this.isDarkMode}}
         />
-
-        {{#each this.sectionsWithContent as |section|}}
-          <NavSection @id={{section.id}} @title={{section.title}}>
-            {{#if (eq section.id 'brand-palette')}}
-              <GridContainer>
-                {{#if @model.brandColorPalette.length}}
-                  <h3>Brand Color Palette</h3>
-                  <@fields.brandColorPalette class='brand-palette' />
-                {{/if}}
-                <h3>Functional Palette</h3>
-                <@fields.functionalPalette />
-              </GridContainer>
-            {{else if (eq section.id 'ui-components')}}
-              <GridContainer class='cta-grid'>
-                <FieldContainer @label='Primary CTA' @vertical={{true}}>
-                  <div class='preview-container cta-preview-container'>
-                    <Button @kind='primary' @size='extra-small'>Sample CTA</Button>
+        <GridContainer class='brand-guide-grid'>
+          {{#each this.sectionsWithContent as |section|}}
+            <NavSection @id={{section.id}} @title={{section.title}}>
+              {{#if (eq section.id 'brand-palette')}}
+                <GridContainer>
+                  {{#if @model.brandColorPalette.length}}
+                    <h3>Brand Color Palette</h3>
+                    <@fields.brandColorPalette class='brand-palette' />
+                  {{/if}}
+                  <h3>Functional Palette</h3>
+                  <@fields.functionalPalette class='functional-palette' />
+                  <h3 class='color-system-title'>Color System</h3>
+                  <div class='color-system-container'>
+                    {{#if this.isDarkMode}}
+                      <@fields.darkModeVariables />
+                    {{else}}
+                      <@fields.rootVariables />
+                    {{/if}}
                   </div>
-                </FieldContainer>
-                <FieldContainer @label='Secondary CTA' @vertical={{true}}>
-                  <div class='preview-container cta-preview-container'>
-                    <Button @kind='secondary' @size='extra-small'>Sample CTA</Button>
-                  </div>
-                </FieldContainer>
-                <FieldContainer @label='Disabled CTA' @vertical={{true}}>
-                  <div class='preview-container cta-preview-container'>
-                    <Button @disabled={{true}} @size='extra-small'>Sample CTA</Button>
-                  </div>
-                </FieldContainer>
-              </GridContainer>
-              <FieldContainer
-                @label='Corner Radius for holding shapes'
-                @vertical={{true}}
-              >
-                <GridContainer class='ui-grid'>
-                  <div class='preview-container ui-preview-container'>
-                    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit,
-                      sed do eiusmod tempor incididunt ut labore et dolore magna
-                      aliqua. Ut enim ad minim veniam, quis nostrud exercitation
-                      ullamco laboris nisi ut aliquip ex ea commodo consequat.
-                      Duis aute irure dolor in reprehenderit in voluptate velit
-                      esse cillum dolore eu fugiat nulla pariatur. Excepteur
-                      sint occaecat cupidatat non proident, sunt in culpa qui
-                      officia deserunt mollit anim id est laborum.
-                    </p>
-                  </div>
-                  <div
-                    class='preview-container ui-preview-container photo-container'
-                  />
                 </GridContainer>
-              </FieldContainer>
-            {{else if (eq section.id 'visual-dna')}}
-              <div class='dsr-section-content'>
-                {{#if @model.colorPalette}}
-                  <div class='subsection'>
-                    <h3 class='subsection-title'>Color Palette</h3>
-                    <div class='content-prose'>
-                      <@fields.colorPalette />
+              {{else if (eq section.id 'ui-components')}}
+                <GridContainer class='cta-grid'>
+                  <FieldContainer @label='Primary CTA' @vertical={{true}}>
+                    <div class='preview-container cta-preview-container'>
+                      <Button @kind='primary' @size='extra-small'>Sample CTA</Button>
                     </div>
-                  </div>
-                {{/if}}
-
-                {{#if @model.typographySystem}}
-                  <div class='dsr-subsection'>
-                    <h3 class='dsr-subsection-title'>Typography System</h3>
-                    <div class='dsr-content-prose'>
-                      <@fields.typographySystem />
+                  </FieldContainer>
+                  <FieldContainer @label='Secondary CTA' @vertical={{true}}>
+                    <div class='preview-container cta-preview-container'>
+                      <Button @kind='secondary' @size='extra-small'>Sample CTA</Button>
                     </div>
-                  </div>
-                {{/if}}
-
-                {{#if @model.geometricLanguage}}
-                  <div class='dsr-subsection'>
-                    <h3 class='dsr-subsection-title'>Geometric Language</h3>
-                    <div class='dsr-content-prose'>
-                      <@fields.geometricLanguage />
+                  </FieldContainer>
+                  <FieldContainer @label='Disabled CTA' @vertical={{true}}>
+                    <div class='preview-container cta-preview-container'>
+                      <Button @disabled={{true}} @size='extra-small'>Sample CTA</Button>
                     </div>
-                  </div>
-                {{/if}}
-
-                {{#if @model.materialVocabulary}}
-                  <div class='dsr-subsection'>
-                    <h3 class='dsr-subsection-title'>Material Vocabulary</h3>
-                    <div class='dsr-content-prose'>
-                      <@fields.materialVocabulary />
-                    </div>
-                  </div>
-                {{/if}}
-
-                {{#if @model.wallpaperImages.length}}
-                  <div class='dsr-subsection'>
-                    <h3 class='dsr-subsection-title'>Visual References</h3>
-                    <div class='dsr-image-gallery'>
-                      {{#each @model.wallpaperImages as |imageUrl|}}
-                        <figure class='dsr-gallery-item'>
-                          <img
-                            src='{{imageUrl}}'
-                            alt='Style reference'
-                            class='dsr-gallery-image'
-                          />
-                        </figure>
-                      {{/each}}
-                    </div>
-                  </div>
-                {{/if}}
-              </div>
-            {{else if (eq section.id 'import-css')}}
-              <div class='dsr-section-content'>
+                  </FieldContainer>
+                </GridContainer>
                 <FieldContainer
+                  @label='Corner Radius for holding shapes'
                   @vertical={{true}}
-                  @label='Paste your CSS below to customize the theme variables.'
-                  @tag='label'
                 >
-                  <BoxelInput
-                    @type='textarea'
-                    @onInput={{this.parseCss}}
-                    @placeholder={{CSS_PLACEHOLDER}}
-                    class='css-textarea'
-                    data-test-custom-css-variables
-                  />
+                  <GridContainer class='ui-grid'>
+                    <div class='preview-container ui-preview-container'>
+                      <p>Lorem ipsum dolor sit amet, consectetur adipiscing
+                        elit, sed do eiusmod tempor incididunt ut labore et
+                        dolore magna aliqua. Ut enim ad minim veniam, quis
+                        nostrud exercitation ullamco laboris nisi ut aliquip ex
+                        ea commodo consequat. Duis aute irure dolor in
+                        reprehenderit in voluptate velit esse cillum dolore eu
+                        fugiat nulla pariatur. Excepteur sint occaecat cupidatat
+                        non proident, sunt in culpa qui officia deserunt mollit
+                        anim id est laborum.
+                      </p>
+                    </div>
+                    <div
+                      class='preview-container ui-preview-container photo-container'
+                    />
+                  </GridContainer>
                 </FieldContainer>
-              </div>
-            {{else if (eq section.id 'inspirations')}}
-              <div class='dsr-inspiration-tags'>
-                {{#each @model.inspirations as |inspiration|}}
-                  <span class='dsr-inspiration-tag'>{{inspiration}}</span>
-                {{/each}}
-              </div>
-            {{else if section.fieldName}}
-              {{#let (get @fields section.fieldName) as |FieldContent|}}
-                <div class='dsr-content-prose'>
-                  {{! @glint-ignore }}
-                  <FieldContent />
+              {{else if (eq section.id 'visual-dna')}}
+                <div class='dsr-section-content'>
+                  {{#if @model.colorPalette}}
+                    <div class='subsection'>
+                      <h3 class='subsection-title'>Color Palette</h3>
+                      <div class='content-prose'>
+                        <@fields.colorPalette />
+                      </div>
+                    </div>
+                  {{/if}}
+
+                  {{#if @model.typographySystem}}
+                    <div class='dsr-subsection'>
+                      <h3 class='dsr-subsection-title'>Typography System</h3>
+                      <div class='dsr-content-prose'>
+                        <@fields.typographySystem />
+                      </div>
+                    </div>
+                  {{/if}}
+
+                  {{#if @model.geometricLanguage}}
+                    <div class='dsr-subsection'>
+                      <h3 class='dsr-subsection-title'>Geometric Language</h3>
+                      <div class='dsr-content-prose'>
+                        <@fields.geometricLanguage />
+                      </div>
+                    </div>
+                  {{/if}}
+
+                  {{#if @model.materialVocabulary}}
+                    <div class='dsr-subsection'>
+                      <h3 class='dsr-subsection-title'>Material Vocabulary</h3>
+                      <div class='dsr-content-prose'>
+                        <@fields.materialVocabulary />
+                      </div>
+                    </div>
+                  {{/if}}
+
+                  {{#if @model.wallpaperImages.length}}
+                    <div class='dsr-subsection'>
+                      <h3 class='dsr-subsection-title'>Visual References</h3>
+                      <div class='dsr-image-gallery'>
+                        {{#each @model.wallpaperImages as |imageUrl|}}
+                          <figure class='dsr-gallery-item'>
+                            <img
+                              src='{{imageUrl}}'
+                              alt='Style reference'
+                              class='dsr-gallery-image'
+                            />
+                          </figure>
+                        {{/each}}
+                      </div>
+                    </div>
+                  {{/if}}
                 </div>
-              {{/let}}
-            {{/if}}
-          </NavSection>
-        {{/each}}
+              {{else if (eq section.id 'import-css')}}
+                <CssFieldEditor @setCss={{@model.setCss}} />
+              {{else if (eq section.id 'inspirations')}}
+                <div class='dsr-inspiration-tags'>
+                  {{#each @model.inspirations as |inspiration|}}
+                    <span class='dsr-inspiration-tag'>{{inspiration}}</span>
+                  {{/each}}
+                </div>
+              {{else if section.fieldName}}
+                {{#let (get @fields section.fieldName) as |FieldContent|}}
+                  <div class='dsr-content-prose'>
+                    {{! @glint-ignore }}
+                    <FieldContent />
+                  </div>
+                {{/let}}
+              {{/if}}
+            </NavSection>
+          {{/each}}
+        </GridContainer>
       </:default>
     </ThemeDashboard>
 
@@ -240,17 +241,18 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         --brand-guide-border: 1px solid var(--dsr-border);
         --brand-guide-spacing: var(--boxel-sp-xl);
         --boxel-container-padding: var(--brand-guide-spacing);
-        height: 100%;
+      }
+      .brand-guide-dashboard-header {
         position: relative;
+        text-align: center;
       }
       .brand-guide-mode-toggle {
         position: absolute;
         top: var(--boxel-sp);
         right: var(--boxel-sp);
       }
-      .brand-guide-dashboard-header {
-        padding-top: var(--boxel-sp);
-        text-align: center;
+      .brand-guide-grid {
+        gap: var(--boxel-sp-2xl);
       }
       .header-logo-container {
         display: flex;
@@ -272,8 +274,20 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         align-items: end;
         text-wrap: pretty;
       }
-      .brand-palette + h3 {
+      .brand-palette :deep(.boxel-swatch-value),
+      .functional-palette :deep(.boxel-swatch-value) {
+        font-size: var(--boxel-font-size-xs);
+      }
+      .brand-palette + h3,
+      .color-system-title {
         margin-top: var(--brand-guide-spacing);
+      }
+      .color-system-container {
+        background-color: var(--dsr-card);
+        color: var(--dsr-card-fg);
+        border-radius: var(--boxel-border-radius);
+        padding: calc(var(--boxel-sp) * 2);
+        border: 1px solid var(--dsr-border);
       }
       :deep(h3) {
         font-size: var(--boxel-font-size-md);
@@ -401,21 +415,6 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
     this.isDarkMode = !this.isDarkMode;
   };
 
-  private parseCss = (content: string) => {
-    if (!content || !parseCssGroups) {
-      return;
-    }
-    const groups = parseCssGroups(content);
-    if (!groups?.size) {
-      return;
-    }
-    applyCssRulesToField(this.args.model?.rootVariables, groups.get(':root'));
-    applyCssRulesToField(
-      this.args.model?.darkModeVariables,
-      groups.get('.dark'),
-    );
-  };
-
   private sections = [
     {
       id: 'brand-palette',
@@ -438,14 +437,15 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       id: 'ui-components',
       navTitle: 'UI Components',
       title: 'UI Components',
-      alwaysInclude: true,
     },
-    ...STYLE_GUIDE_SECTIONS,
+    ...(this.args.model?.guideSections ?? []),
   ];
 
   private get sectionsWithContent() {
     return this.sections.filter((section) => {
-      if (section.alwaysInclude) {
+      let idsToInclude = ['ui-components', 'import-css', 'view-code'];
+
+      if (idsToInclude.includes(section.id)) {
         return true;
       }
 
@@ -496,12 +496,6 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         model.wallpaperImages?.length,
     );
   }
-
-  private get themeStyles() {
-    let css = this.args.model?.cssVariables;
-    let selector = this.isDarkMode ? '.dark' : ':root';
-    return sanitizeHtmlSafe(extractCssVariables(css, selector));
-  }
 }
 
 export class CompoundColorField extends FieldDef {
@@ -511,17 +505,23 @@ export class CompoundColorField extends FieldDef {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <Swatch
-        class='compound-color-swatch'
-        @label={{@model.name}}
-        @color={{@model.value}}
-      />
+      {{#if @model.value}}
+        <Swatch
+          class='compound-color-swatch'
+          @label={{formatSwatchName @model.name}}
+          @color={{@model.value}}
+        />
+      {{/if}}
       <style scoped>
         .compound-color-swatch {
           display: flex;
         }
         :deep(.boxel-swatch-name) {
           font-weight: 600;
+          text-transform: capitalize;
+        }
+        :deep(.boxel-swatch-value) {
+          text-transform: lowercase;
         }
       </style>
     </template>
@@ -576,16 +576,21 @@ export default class BrandGuide extends DetailedStyleRef {
     return brandRules;
   }
 
-  private calculatedRootRules(): Map<string, string> | undefined {
-    let rootRules = this.rootVariables?.cssRuleMap;
+  private calculatedRules(opts?: {
+    darkMode: true;
+  }): Map<string, string> | undefined {
+    let rootRules = opts?.darkMode
+      ? this.darkModeVariables?.cssRuleMap
+      : this.rootVariables?.cssRuleMap;
     let functionalRules = this.functionalPalette?.cssRuleMap;
     let combinedRules = rootRules
       ? new Map<string, string>(rootRules)
       : new Map<string, string>();
 
-    for (let [rootName, brandName] of Object.entries(
-      rootToBrandVariableMapping,
-    )) {
+    let variablesMap = opts?.darkMode
+      ? darkToBrandVariableMapping
+      : rootToBrandVariableMapping;
+    for (let [rootName, brandName] of Object.entries(variablesMap)) {
       let rootValue = rootRules?.get(rootName);
       let paletteBrandValue = functionalRules?.get(brandName);
       // if variable exists in root variables, use it, else use brand fallback
@@ -644,10 +649,9 @@ export default class BrandGuide extends DetailedStyleRef {
         return;
       }
       let brandRules = this.calculateBrandRuleMap();
-      let calculatedRootRules = this.calculatedRootRules();
-      let rootRules = mergeRuleMaps(calculatedRootRules, brandRules);
+      let rootRules = mergeRuleMaps(this.calculatedRules(), brandRules);
       let darkRules = mergeRuleMaps(
-        this.darkModeVariables?.cssRuleMap,
+        this.calculatedRules({ darkMode: true }),
         brandRules,
       );
       return generateCssVariables(

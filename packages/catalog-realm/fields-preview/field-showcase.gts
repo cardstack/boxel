@@ -32,7 +32,7 @@ import QuantityField from '../fields/quantity';
 import ImageField from '../fields/image';
 import MultipleImageField from '../fields/multiple-image';
 import AudioField from '../fields/audio';
-import ColorField from '../fields/color-field';
+import ColorField from '../fields/color';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
 import ChevronRightIcon from '@cardstack/boxel-icons/chevron-right';
 import ChevronLeftIcon from '@cardstack/boxel-icons/chevron-left';
@@ -3936,6 +3936,9 @@ export class FieldShowcase extends CardDef {
   @field colorWheel = contains(ColorField, {
     configuration: {
       variant: 'wheel',
+       options: {
+        defaultFormat: 'rgb',
+      },
     },
   });
   @field colorSliderRgb = contains(ColorField, {

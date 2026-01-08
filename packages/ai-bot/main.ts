@@ -52,14 +52,9 @@ import { isShuttingDown, setActiveGenerations } from './lib/shutdown';
 import type { MatrixClient } from 'matrix-js-sdk';
 import { debug } from 'debug';
 import { profEnabled, profTime, profNote } from './lib/profiler';
-import {
-  ensureLegacyPatchSummaryPrompt,
-  publishCodePatchCorrectnessMessage,
-} from './lib/code-patch-correctness';
+import { publishCodePatchCorrectnessMessage } from './lib/code-patch-correctness';
 
 let log = logger('ai-bot');
-const AI_PATCHING_CORRECTNESS_CHECKS_ENABLED =
-  process.env.ENABLE_AI_PATCHING_CORRECTNESS_CHECKS === 'true';
 
 let trackAiUsageCostPromises = new Map<string, Promise<void>>();
 let activeGenerations = new Map<
@@ -374,21 +369,11 @@ Common issues are:
             responder.responseState.setAllowedToolNames(
               promptParts.tools?.map((tool) => tool.function.name),
             );
-            if (
-              AI_PATCHING_CORRECTNESS_CHECKS_ENABLED &&
-              promptParts.pendingCodePatchCorrectnessChecks
-            ) {
+            if (promptParts.pendingCodePatchCorrectnessChecks) {
               return await publishCodePatchCorrectnessMessage(
                 promptParts.pendingCodePatchCorrectnessChecks,
                 client,
               );
-            }
-
-            if (
-              !AI_PATCHING_CORRECTNESS_CHECKS_ENABLED &&
-              promptParts.pendingCodePatchCorrectnessChecks
-            ) {
-              ensureLegacyPatchSummaryPrompt(promptParts); // TODO: Remove this after the feature flag is removed
             }
             if (!promptParts.shouldRespond) {
               return;
@@ -533,11 +518,24 @@ Common issues are:
           }
 
           if (shouldSetRoomTitle(eventList, aiBotUserId, event)) {
-            return await assistant.setTitle(
-              room.roomId,
-              promptParts.history,
-              event,
-            );
+            // Intentionally do not await setTitle - let it run async so that
+            // the room lock gets released asap after finalizing the response.
+            // This is important because tool call results may arrive
+            // immediately after responder.finalize(), and we need to make sure
+            // the room lock is released.
+            assistant
+              .setTitle(room.roomId, promptParts.history, event)
+              .catch((error) => {
+                log.error(`[${eventId}] Error setting room title`);
+                log.error(error);
+                Sentry.captureException(error, {
+                  extra: {
+                    roomId: room.roomId,
+                    eventId,
+                    eventType: event.getType(),
+                  },
+                });
+              });
           }
           return;
         } finally {

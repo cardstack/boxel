@@ -1,6 +1,11 @@
 import deburr from 'lodash/deburr';
 
-import { realmURL } from '@cardstack/runtime-common';
+import {
+  realmURL,
+  RealmPaths,
+  devSkillLocalPath,
+  envSkillLocalPath,
+} from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 
@@ -143,6 +148,12 @@ export function urlForRealmLookup(card: CardDef) {
   return urlForRealmLookup;
 }
 
+// usage example for realm url: `catalogRealm.url`, `skillsRealm.url`
+export const catalogRealm = new RealmPaths(
+  new URL(ENV.resolvedCatalogRealmURL),
+);
+export const skillsRealm = new RealmPaths(new URL(ENV.resolvedSkillsRealmURL));
+
 /**
  * Safely constructs a URL to a skill card in the skills realm.
  * Uses the URL constructor to handle path joining safely.
@@ -151,10 +162,11 @@ export function urlForRealmLookup(card: CardDef) {
  * @returns The complete URL to the skill card
  *
  * @example
- * skillCardURL('boxel-environment') // 'http://localhost:4201/skills/Skill/boxel-environment'
  * skillCardURL('catalog-listing')   // 'http://localhost:4201/skills/Skill/catalog-listing'
  */
 export function skillCardURL(skillId: string): string {
-  const skillsRealmURL = ENV.resolvedSkillsRealmURL;
-  return new URL(`Skill/${skillId}`, skillsRealmURL).href;
+  return skillsRealm.fileURL(`Skill/${skillId}`).href;
 }
+
+export const devSkillId = skillsRealm.fileURL(devSkillLocalPath).href;
+export const envSkillId = skillsRealm.fileURL(envSkillLocalPath).href;

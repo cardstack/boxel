@@ -7,7 +7,7 @@ import { normalizeRenderError } from '@cardstack/host/utils/render-error';
 module('Unit | render-error', function () {
   test('coerces missing authorization header message', function (assert) {
     let renderError: RenderError = {
-      type: 'error',
+      type: 'instance-error',
       error: {
         status: 401,
         title: 'Unauthorized',

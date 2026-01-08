@@ -8,7 +8,9 @@
     },
     "type": "card",
     "attributes": {
-      "image": {},
+      "image": {
+        "imageUrl": null
+      },
       "cardInfo": {
         "notes": null,
         "title": "Blue Bottle 3",

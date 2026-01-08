@@ -1,23 +1,31 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Category",
+        "module": "../catalog-app/listing/category"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "E-commerce & Online Sales",
-      "description": "Online stores, digital marketplaces, sales platforms, customer relationship management, order processing, and e-commerce business operations.",
-      "color": "#10b981",
-      "order": 4
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": "Online stores, digital marketplaces, sales platforms, customer relationship management, order processing, and e-commerce business operations.",
+        "thumbnailURL": null
+      }
     },
     "relationships": {
       "sphere": {
         "links": {
           "self": "../Sphere/20dcc8f6-891d-4570-a0c0-1e07b14c97ee"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/category",
-        "name": "Category"
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

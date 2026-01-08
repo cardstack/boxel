@@ -68,36 +68,6 @@
           "self": "../chord-progression/ChordProgressionPlayerCard/43a76bb7-8d83-468e-a062-ced1850a65f4"
         }
       },
-      "examples.1": {
-        "links": {
-          "self": "../chord-progression/ChordProgressionCard/vi-iv-i-v-progression"
-        }
-      },
-      "examples.2": {
-        "links": {
-          "self": "../chord-progression/ChordProgressionCard/ii-v-i-jazz-progression"
-        }
-      },
-      "examples.3": {
-        "links": {
-          "self": "../chord-progression/ChordProgressionCard/i-v-vi-iv-progression"
-        }
-      },
-      "examples.4": {
-        "links": {
-          "self": "../chord-progression/ChordProgressionCard/circle-of-fifths-progression"
-        }
-      },
-      "examples.5": {
-        "links": {
-          "self": "../chord-progression/ChordProgressionCard/blues-twelve-bar-progression"
-        }
-      },
-      "examples.6": {
-        "links": {
-          "self": "../chord-progression/ChordProgressionCard/andalusian-cadence-progression"
-        }
-      },
       "categories.0": {
         "links": {
           "self": "../Category/entertainment-media"

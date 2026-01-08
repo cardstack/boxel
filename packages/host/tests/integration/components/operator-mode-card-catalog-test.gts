@@ -12,7 +12,10 @@ import GlimmerComponent from '@glimmer/component';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
@@ -689,6 +692,62 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     assert.dom(`[data-test-boxel-filter-list-button="CardDef"]`).doesNotExist();
   });
 
+  test('card type filter remains for instance errors with last known good state', async function (assert) {
+    await ctx.testRealm.write(
+      'ExplodingCard/1.json',
+      JSON.stringify({
+        data: {
+          attributes: {
+            name: 'Stable Example',
+            status: 'boom',
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../exploding-card.gts',
+              name: 'ExplodingCard',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+        </template>
+      },
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    await waitFor(
+      `[data-test-cards-grid-item="${testRealmURL}ExplodingCard/1"][data-test-instance-error]`,
+    );
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}ExplodingCard/1"][data-test-instance-error]`,
+      )
+      .exists();
+
+    await waitFor('[data-test-boxel-filter-list-button="Exploding Card"]');
+    assert
+      .dom('[data-test-boxel-filter-list-button="Exploding Card"]')
+      .exists();
+
+    await click('[data-test-boxel-filter-list-button="Exploding Card"]');
+    await waitFor(
+      `[data-test-cards-grid-item="${testRealmURL}ExplodingCard/1"][data-test-instance-error]`,
+    );
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}ExplodingCard/1"][data-test-instance-error] [data-test-card-title]`,
+      )
+      .containsText('Stable Example');
+  });
+
   test('updates filter list when there is indexing event', async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
 
@@ -708,7 +767,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       .dom(`[data-test-cards-grid-item="${testRealmURL}CardDef/1"]`)
       .exists();
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 12 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 13 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
 
     await click('[data-test-create-new-card-button]');
@@ -722,7 +781,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await fillIn('[data-test-field="title"] input', 'New Skill');
     await click('[data-test-close-button]');
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 13 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 14 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).exists();
 
     await click('[data-test-boxel-filter-list-button="Skill"]');
@@ -735,7 +794,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     await click('[data-test-confirm-delete-button]');
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 12 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 13 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
   });
 });

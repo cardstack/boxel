@@ -8,6 +8,8 @@ import {
 } from '@cardstack/runtime-common';
 import { serializableError } from '@cardstack/runtime-common/error';
 
+import { appendRenderTimerSummaryToStack } from '../utils/render-timer-stub';
+
 export function windowErrorHandler({
   event,
   setStatusToUnusable,
@@ -47,7 +49,7 @@ export function windowErrorHandler({
   if (reason) {
     if (isCardError(reason)) {
       errorPayload = {
-        type: 'error',
+        type: 'instance-error',
         error: { ...reason, stack: reason.stack },
       };
     } else if (isCardErrorJSONAPI(reason)) {
@@ -65,7 +67,7 @@ export function windowErrorHandler({
       });
     } else {
       errorPayload = {
-        type: 'error',
+        type: 'instance-error',
         error:
           reason instanceof CardError
             ? { ...serializableError(reason) }
@@ -79,9 +81,18 @@ export function windowErrorHandler({
     }
   } else {
     errorPayload = {
-      type: 'error',
+      type: 'instance-error',
       error: new CardError('indexing failed', { status: 500, id }),
     };
+  }
+
+  if ('stack' in errorPayload.error) {
+    let updatedStack = appendRenderTimerSummaryToStack(
+      errorPayload.error.stack ?? undefined,
+    );
+    if (updatedStack !== undefined) {
+      errorPayload.error.stack = updatedStack;
+    }
   }
 
   setError(JSON.stringify(errorPayload));
@@ -94,7 +105,7 @@ export function errorJsonApiToErrorEntry(
 ): ErrorEntry {
   let error = CardError.fromCardErrorJsonAPI(errorJSONAPI);
   return {
-    type: 'error',
+    type: 'instance-error',
     error,
   };
 }

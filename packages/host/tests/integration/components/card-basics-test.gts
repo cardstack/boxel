@@ -64,6 +64,7 @@ import {
   EthereumAddressField,
   field,
   FieldDef,
+  FileDef,
   flushLogs,
   getFieldDescription,
   getQueryableValue,
@@ -3303,6 +3304,23 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-field="author"] [data-test-field="firstName"] input')
         .hasValue('Carl Stack');
+    });
+
+    test('render FileDef edit template as unavailable', async function (assert) {
+      let fileDef = new FileDef({
+        sourceUrl: 'https://example.com/file.txt',
+        url: 'https://example.com/file.txt',
+        name: 'file.txt',
+        contentType: 'text/plain',
+      });
+
+      await renderCard(loader, fileDef, 'edit');
+
+      assert
+        .dom('[data-test-filedef-edit-unavailable]')
+        .hasText(
+          'This file is not editable via this interface. Replace it via file upload.',
+        );
     });
 
     test('renders field name for boolean default view values', async function (assert) {

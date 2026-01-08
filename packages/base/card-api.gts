@@ -2,7 +2,7 @@ import Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash';
 import { WatchedArray } from './watched-array';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { BoxelInput, CopyButton } from '@cardstack/boxel-ui/components';
 import { type MenuItemOptions, not } from '@cardstack/boxel-ui/helpers';
 import {
   getBoxComponent,
@@ -265,6 +265,9 @@ export interface CardContext<T extends CardDef = CardDef> {
   getCards: getCards;
   getCardCollection: getCardCollection;
   store: Store;
+  // Optional runtime mode/submode hints used by cards that render differently per context.
+  mode?: 'host' | 'operator';
+  submode?: 'interact' | 'code' | 'host';
 }
 
 export interface FieldConstructor<T> {
@@ -1626,19 +1629,22 @@ class LinksToMany<FieldT extends CardDefConstructor>
         if (reference == null) {
           return null;
         }
-        let cachedInstance = store.get(new URL(reference, relativeTo).href);
+        let normalizedReference = new URL(reference, relativeTo).href;
+        let cachedInstance = store.get(normalizedReference);
 
         if (cachedInstance) {
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
         }
-        //links.self is used to tell the consumer of this payload how to get the resource via HTTP. data.id is used to tell the
-        //consumer of this payload how to get the resource from the side loaded included bucket. we need to strictly only
-        //consider data.id when calling the resourceFrom() function (which actually loads the resource out of the included
-        //bucket). we should never used links.self as part of that consideration. If there is a missing data.id in the resource entity
-        //that means that the serialization is incorrect and is not JSON-API compliant.
+        // links.self is used to tell the consumer of this payload how to get the resource via HTTP.
+        // data.id is used to tell the consumer how to find the resource in the included bucket.
+        // Prefer data.id for resourceFrom(), but fall back to links.self when data.id is missing
+        // (the array-style linksToMany format omits data.id).
         let resourceId =
           value.data && 'id' in value.data ? value.data?.id : undefined;
+        if (!resourceId) {
+          resourceId = normalizedReference;
+        }
         if (loadedValues && Array.isArray(loadedValues)) {
           let loadedValue = loadedValues.find(
             (v) => isCardOrField(v) && 'id' in v && v.id === resourceId,
@@ -1648,6 +1654,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
           }
         }
         let resource = resourceFrom(doc, resourceId);
+        if (!resource && reference !== normalizedReference) {
+          resource = resourceFrom(doc, reference);
+        }
         if (!resource) {
           return {
             type: 'not-loaded',
@@ -2230,19 +2239,47 @@ export class CSSField extends TextAreaField {
   static displayName = 'CSS Field';
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <pre class='css-field'>{{if @model @model '/* No CSS defined */'}}</pre>
+      <div class='css-field-container'>
+        {{#if @model.length}}
+          <CopyButton class='css-field-copy-button' @textToCopy={{@model}} />
+        {{/if}}
+        <pre class='css-field' data-test-css-field>{{if
+            @model
+            @model
+            '/* No CSS defined */'
+          }}</pre>
+      </div>
       <style scoped>
+        .css-field-container {
+          --field-bg: var(--card, var(--boxel-100));
+          --field-fg: var(--card-foreground, var(--boxel-dark));
+          --field-border: var(
+            --border,
+            color-mix(in oklab, var(--field-fg) 20%, var(--field-bg))
+          );
+          position: relative;
+        }
+        .css-field-copy-button {
+          position: absolute;
+          top: var(--boxel-sp-xs);
+          right: var(--boxel-sp-xs);
+        }
         .css-field {
           margin-block: 0;
-          padding: var(--boxel-sp-xxs);
-          background-color: var(--muted, var(--boxel-100));
+          padding: var(--boxel-sp);
+          background-color: var(--field-bg);
+          border: 1px solid var(--field-border);
           border-radius: var(--radius, var(--boxel-border-radius));
-          color: var(--muted-foreground, var(--boxel-700));
+          color: var(--field-fg);
           font-family: var(
             --font-mono,
             var(--boxel-monospace-font-family, monospace)
           );
+          font-size: var(--boxel-font-size-xs);
           white-space: pre-wrap;
+        }
+        .css-field::placeholder {
+          opacity: 0.5;
         }
       </style>
     </template>
@@ -2276,6 +2313,7 @@ export class MarkdownField extends StringField {
         @value={{@model}}
         @onInput={{@set}}
         @disabled={{not @canEdit}}
+        @readonly={{not @canEdit}}
       />
     </template>
   };

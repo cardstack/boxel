@@ -60,6 +60,8 @@ import {
 import type { EmailFormatValidationError } from './helpers/validate-email-format.ts';
 import type { NormalizePhoneFormatResult } from './helpers/validate-phone-format.ts';
 
+export * from './helpers/color-tools.ts';
+
 export {
   add,
   and,

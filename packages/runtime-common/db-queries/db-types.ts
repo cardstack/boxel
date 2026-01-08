@@ -38,8 +38,10 @@ export interface LedgerEntry {
   creditType:
     | 'plan_allowance'
     | 'extra_credit'
+    | 'daily_credit'
     | 'plan_allowance_used'
     | 'extra_credit_used'
+    | 'daily_credit_used'
     | 'plan_allowance_expired';
   subscriptionCycleId: string | null;
 }

@@ -13,9 +13,13 @@ import { module, test } from 'qunit';
 
 import {
   baseRealm,
+  hasExecutableExtension,
   trimJsonExtension,
   type Realm,
 } from '@cardstack/runtime-common';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import {
   percySnapshot,
@@ -149,6 +153,25 @@ const personCard = `import { field, linksTo, CardDef } from 'https://cardstack.c
   }
 `;
 
+const headPreviewCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+  import StringField from "https://cardstack.com/base/string";
+
+  export class HeadPreview extends CardDef {
+    static displayName = 'Head Preview';
+    @field title = contains(StringField);
+    @field description = contains(StringField);
+    @field url = contains(StringField);
+
+    static head = class Head extends Component<typeof this> {
+      <template>
+        <title>{{@model.title}}</title>
+        <meta name='description' content={{@model.description}} />
+        <meta property='og:url' content={{@model.url}} />
+      </template>
+    };
+  }
+`;
+
 const localStyleReferenceCard = {
   data: {
     type: 'card',
@@ -213,6 +236,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           'blog-post.gts': blogPostCard,
           'code-ref-driver.gts': codeRefDriverCard,
           'person.gts': personCard,
+          'head-preview.gts': headPreviewCard,
           'Author/jane-doe.json': {
             data: {
               attributes: {
@@ -224,6 +248,21 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
                 adoptsFrom: {
                   module: `${testRealmURL}author`,
                   name: 'Author',
+                },
+              },
+            },
+          },
+          'HeadPreview/example.json': {
+            data: {
+              attributes: {
+                title: 'Definition Title',
+                description: 'Definition description',
+                url: 'https://example.com/definition',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}head-preview`,
+                  name: 'HeadPreview',
                 },
               },
             },
@@ -491,6 +530,25 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assertCardExists(assert, `${testRealmURL}Category/future-tech`);
 
       await percySnapshot(assert);
+    });
+
+    test('head format preview renders for card definitions in playground', async function (assert) {
+      removePlaygroundSelections();
+      setPlaygroundSelections({
+        [`${testRealmURL}head-preview/HeadPreview`]: {
+          cardId: `${testRealmURL}HeadPreview/example`,
+          format: 'head',
+        },
+      });
+
+      await openFileInPlayground('head-preview.gts', testRealmURL, {
+        declaration: 'HeadPreview',
+      });
+      await selectFormat('head');
+
+      assert.dom('.google-title').hasText('Definition Title');
+      assert.dom('.google-description').hasText('Definition description');
+      assert.dom('.google-site-name').hasText('example.com');
     });
 
     test('can populate instance chooser options from recent-files and recent-cards, ordered by last viewed timestamp', async function (assert) {
@@ -1025,6 +1083,68 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .dom('[data-test-post-title]')
         .containsText('Hello Mad As a Hatter');
       assert.dom('[data-test-byline]').containsText('Jane Doe');
+    });
+
+    test('playground edit format refreshes even if code invalidations are ignored', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}person.gts`,
+      });
+
+      let loaderService = getService('loader-service') as LoaderService;
+      let resetCount = 0;
+      let originalResetLoader = loaderService.resetLoader.bind(loaderService);
+      loaderService.resetLoader = (options) => {
+        resetCount += 1;
+        return originalResetLoader(options);
+      };
+
+      let store = getService('store') as StoreService;
+      let originalHandleInvalidations = (store as any).handleInvalidations.bind(
+        store,
+      );
+      (store as any).handleInvalidations = (event: any) => {
+        if (
+          event?.eventName === 'index' &&
+          event?.indexType === 'incremental' &&
+          Array.isArray(event?.invalidations) &&
+          event.invalidations.some(hasExecutableExtension)
+        ) {
+          return;
+        }
+        return originalHandleInvalidations(event);
+      };
+
+      try {
+        await click('[data-test-module-inspector-view="preview"]');
+        await waitFor('[data-test-instance-chooser]');
+        await click('[data-test-instance-chooser]');
+        await click('[data-option-index="0"]');
+        await click('[data-test-edit-button]');
+        await waitFor('[data-test-card-format="edit"]');
+
+        await click('[data-test-module-inspector-view="schema"]');
+        await waitFor('[data-test-add-field-button]');
+        await click('[data-test-add-field-button]');
+        await fillIn('[data-test-field-name-input]', 'nickname');
+        await click('[data-test-save-field-button]');
+        await waitFor(
+          '[data-test-card-schema="Person"] [data-test-field-name="nickname"]',
+        );
+        await waitUntil(() => resetCount > 0);
+
+        await click('[data-test-module-inspector-view="preview"]');
+        await waitFor('[data-test-instance-chooser]');
+        await waitFor(
+          '[data-test-card-format="edit"] [data-test-field="nickname"]',
+        );
+        assert
+          .dom('[data-test-card-format="edit"] [data-test-field="nickname"]')
+          .exists();
+      } finally {
+        loaderService.resetLoader = originalResetLoader;
+        (store as any).handleInvalidations = originalHandleInvalidations;
+      }
     });
 
     test('can remember playground selections and format choices via local storage', async function (assert) {

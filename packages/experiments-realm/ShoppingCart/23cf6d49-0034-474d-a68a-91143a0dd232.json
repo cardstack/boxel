@@ -1,6 +1,12 @@
 {
   "data": {
     "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../shopping-cart",
+        "name": "ShoppingCart"
+      }
+    },
     "attributes": {
       "lineItems": [
         {
@@ -13,9 +19,12 @@
           "quantity": 1
         }
       ],
-      "title": "My Cart",
-      "description": null,
-      "thumbnailURL": null
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
     },
     "relationships": {
       "lineItems.0.product": {
@@ -52,12 +61,11 @@
         "links": {
           "self": "../ExchangeRate/5fe108c9-ddac-4b4b-805b-130d53134308"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../shopping-cart",
-        "name": "ShoppingCart"
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

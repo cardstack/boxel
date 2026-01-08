@@ -146,6 +146,7 @@ export * from './definitions';
 export * from './catalog';
 export * from './commands';
 export * from './constants';
+export * from './helpers/const';
 export * from './document';
 export * from './matrix-constants';
 export * from './matrix-client';
@@ -168,8 +169,11 @@ export * from './utils';
 export * from './authorization-middleware';
 export * from './resource-types';
 export * from './query';
+export * from './search-utils';
 export * from './query-field-utils';
+export * from './relationship-utils';
 export * from './formats';
+export { getCreatedTime } from './file-meta';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
 export { Loader };
@@ -219,7 +223,11 @@ export type { CodeRef };
 export * from './code-ref';
 export * from './serializers';
 
-export type { CardDocument, SingleCardDocument } from './document-types';
+export type {
+  CardDocument,
+  SingleCardDocument,
+  CardCollectionDocument,
+} from './document-types';
 export type {
   CardResource,
   ModuleResource,
@@ -245,7 +253,12 @@ export {
 
 export type { JWTPayload } from './realm-auth-client';
 export { sanitizeHtml } from './dompurify-runtime';
-export { markedSync, markdownToHtml } from './marked-sync';
+export {
+  hasCodeBlocks,
+  markedSync,
+  markdownToHtml,
+  preloadMarkdownLanguages,
+} from './marked-sync';
 export { getPlural } from './pluralize-runtime';
 
 import type {
@@ -426,7 +439,7 @@ export interface Store {
     patchData: PatchData,
     opts?: { doNotPersist?: boolean; clientRequestId?: string },
   ): Promise<T | CardErrorJSONAPI | undefined>;
-  search(query: Query, realmURL?: URL): Promise<CardDef[]>;
+  search(query: Query, realmURLs?: string[]): Promise<CardDef[]>;
   getSaveState(id: string): AutoSaveState | undefined;
 }
 
@@ -513,6 +526,28 @@ export function internalKeyFor(
     case 'fieldOf':
       return `${internalKeyFor(ref.card, relativeTo)}/fields/${ref.field}`;
   }
+}
+
+export function codeRefFromInternalKey(
+  internalKey: string | null | undefined,
+): ResolvedCodeRef | undefined {
+  if (!internalKey) {
+    return;
+  }
+  if (internalKey.includes('/fields/')) {
+    return;
+  }
+  if (internalKey.endsWith('/ancestor')) {
+    return;
+  }
+  let lastSlash = internalKey.lastIndexOf('/');
+  if (lastSlash <= 0 || lastSlash === internalKey.length - 1) {
+    return;
+  }
+  return {
+    module: internalKey.slice(0, lastSlash),
+    name: internalKey.slice(lastSlash + 1),
+  };
 }
 
 export function loaderFor(cardOrField: CardDef | FieldDef) {

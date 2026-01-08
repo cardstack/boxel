@@ -33,7 +33,10 @@ import config from '@cardstack/host/config/environment';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
-import type { PrivateDependencyViolation } from '@cardstack/host/services/realm';
+import type {
+  PrivateDependencyViolation,
+  ErrorDocumentViolation,
+} from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type {
   ClaimedDomain,
@@ -82,6 +85,9 @@ export default class PublishRealmModal extends Component<Signature> {
   @tracked private privateDependencyViolations:
     | PrivateDependencyViolation[]
     | null = null;
+  @tracked private errorDocumentViolations: ErrorDocumentViolation[] | null =
+    null;
+  @tracked private warningTypes: string[] | null = null;
 
   @tracked private initialSelectionsSet = false;
 
@@ -106,8 +112,17 @@ export default class PublishRealmModal extends Component<Signature> {
 
   get shouldShowPrivateDependencyWarning() {
     return (
+      this.warningTypes?.includes('has-private-dependencies') &&
       Array.isArray(this.privateDependencyViolations) &&
       this.privateDependencyViolations.length > 0
+    );
+  }
+
+  get shouldShowErrorDocumentWarning() {
+    return (
+      this.warningTypes?.includes('has-error-card-documents') &&
+      Array.isArray(this.errorDocumentViolations) &&
+      this.errorDocumentViolations.length > 0
     );
   }
 
@@ -331,13 +346,19 @@ export default class PublishRealmModal extends Component<Signature> {
 
   private checkPrivateDependenciesTask = restartableTask(async () => {
     this.privateDependencyCheckError = null;
+    this.warningTypes = null;
     try {
       let report = await this.realm.fetchPrivateDependencyReport(
         this.currentRealmURL,
       );
-      this.privateDependencyViolations = report.publishable
-        ? []
-        : report.violations;
+      this.warningTypes = report.warningTypes ?? [];
+      let violations = report.publishable ? [] : report.violations;
+      this.privateDependencyViolations = violations.filter(
+        (violation) => violation.kind === 'private-dependency',
+      ) as PrivateDependencyViolation[];
+      this.errorDocumentViolations = violations.filter(
+        (violation) => violation.kind === 'error-document',
+      ) as ErrorDocumentViolation[];
     } catch (error) {
       console.error(
         'Failed to check for private dependencies before publishing',
@@ -346,6 +367,8 @@ export default class PublishRealmModal extends Component<Signature> {
       this.privateDependencyCheckError =
         'Unable to verify private dependencies. Publishing may cause errors.';
       this.privateDependencyViolations = null;
+      this.errorDocumentViolations = null;
+      this.warningTypes = null;
     }
   });
 
@@ -645,23 +668,6 @@ export default class PublishRealmModal extends Component<Signature> {
           <div class='publish-warning error' data-test-private-dependency-error>
             {{this.privateDependencyCheckError}}
           </div>
-        {{else if this.shouldShowPrivateDependencyWarning}}
-          <div class='publish-warning' data-test-private-dependency-warning>
-            <div>
-              This workspace will have rendering errors when published because
-              of private external dependencies.
-            </div>
-            <ul class='violation-list'>
-              {{#each this.privateDependencyViolations as |violation|}}
-                <PrivateDependencyViolationComponent
-                  @violation={{violation}}
-                  @privateRealmURLs={{this.privateRealmURLsForViolation
-                    violation
-                  }}
-                />
-              {{/each}}
-            </ul>
-          </div>
         {{else if this.isCheckingPrivateDependencies}}
           <div
             class='publish-warning info'
@@ -670,6 +676,40 @@ export default class PublishRealmModal extends Component<Signature> {
             <LoadingIndicator />
             Checking for private dependencies…
           </div>
+        {{else}}
+          {{#if this.shouldShowPrivateDependencyWarning}}
+            <div class='publish-warning' data-test-private-dependency-warning>
+              <div>
+                This workspace will have rendering errors when published because
+                of private external dependencies.
+              </div>
+              <ul class='violation-list'>
+                {{#each this.privateDependencyViolations as |violation|}}
+                  <PrivateDependencyViolationComponent
+                    @violation={{violation}}
+                    @privateRealmURLs={{this.privateRealmURLsForViolation
+                      violation
+                    }}
+                  />
+                {{/each}}
+              </ul>
+            </div>
+          {{/if}}
+          {{#if this.shouldShowErrorDocumentWarning}}
+            <div class='publish-warning' data-test-error-document-warning>
+              <div>
+                This workspace contains cards that failed to index and cannot be
+                safely published.
+              </div>
+              <ul class='violation-list'>
+                {{#each this.errorDocumentViolations as |violation|}}
+                  <li>
+                    {{violation.resource}}
+                  </li>
+                {{/each}}
+              </ul>
+            </div>
+          {{/if}}
         {{/if}}
 
         <div class='domain-options'>

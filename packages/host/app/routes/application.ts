@@ -1,8 +1,13 @@
 import Route from '@ember/routing/route';
+import { service } from '@ember/service';
 
 import ENV from '@cardstack/host/config/environment';
 
+import type MonacoService from '../services/monaco-service';
+
 export default class Application extends Route {
+  @service declare monacoService: MonacoService;
+
   async beforeModel(transition: any): Promise<void> {
     // Override the matrix URL for testing
     if (ENV.environment === 'test' || ENV.environment === 'development') {
@@ -13,6 +18,24 @@ export default class Application extends Route {
           ENV.matrixURL,
         );
       }
+    }
+    if (typeof globalThis !== 'undefined') {
+      // This global function allows the markdown field to asynchronously
+      // load monaco context for syntax highlighting.
+      let route = this;
+      (globalThis as any).__loadMonacoForMarkdown ??= async () => {
+        if (route.isDestroying || route.isDestroyed) {
+          return undefined;
+        }
+        return await route.monacoService.getMonacoContext();
+      };
+    }
+  }
+
+  willDestroy(): void {
+    super.willDestroy?.();
+    if (typeof globalThis !== 'undefined') {
+      delete (globalThis as any).__loadMonacoForMarkdown;
     }
   }
 }

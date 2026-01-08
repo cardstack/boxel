@@ -23,7 +23,7 @@ const log = logger('resource:directory');
 interface Args {
   named: {
     relativePath: string;
-    realmURL: URL;
+    realmURL: string;
   };
 }
 
@@ -35,7 +35,7 @@ export interface Entry {
 
 export class DirectoryResource extends Resource<Args> {
   @tracked entries: Entry[] = [];
-  private directoryURL: URL | undefined;
+  private directoryURL: string | undefined;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
 
   @service declare private loaderService: LoaderService;
@@ -54,19 +54,23 @@ export class DirectoryResource extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     let { relativePath, realmURL } = named;
-    this.directoryURL = new URL(relativePath, realmURL);
+    let directoryURL = new URL(relativePath, realmURL).href;
+    if (this.directoryURL === directoryURL) {
+      return;
+    }
+    this.directoryURL = directoryURL;
     this.readdir.perform();
 
-    if (this.subscription && this.subscription.url !== realmURL.href) {
+    if (this.subscription && this.subscription.url !== realmURL) {
       this.subscription.unsubscribe();
       this.subscription = undefined;
     }
 
     if (!this.subscription) {
       this.subscription = {
-        url: realmURL.href,
+        url: realmURL,
         unsubscribe: this.messageService.subscribe(
-          realmURL.href,
+          realmURL,
           (event: RealmEventContent) => {
             if (!this.directoryURL) {
               return;
@@ -84,7 +88,7 @@ export class DirectoryResource extends Resource<Args> {
             let segments = updatedFile.split('/');
             segments.pop();
             let updatedDir = segments.join('/').replace(/([^/])$/, '$1/'); // directories always end in '/'
-            if (updatedDir.startsWith(this.directoryURL.href)) {
+            if (updatedDir.startsWith(this.directoryURL)) {
               this.readdir.perform();
             }
           },
@@ -109,7 +113,7 @@ export class DirectoryResource extends Resource<Args> {
     this.entries = entries;
   });
 
-  private async getEntries(url: URL): Promise<Entry[]> {
+  private async getEntries(url: string): Promise<Entry[]> {
     let response: Response | undefined;
     response = await this.network.authedFetch(url, {
       headers: { Accept: SupportedMimeType.DirectoryListing },
@@ -140,7 +144,7 @@ export class DirectoryResource extends Resource<Args> {
 export function directory(
   parent: object,
   relativePath: () => string,
-  realmURL: () => URL,
+  realmURL: () => string,
 ) {
   return DirectoryResource.from(parent, () => ({
     relativePath: relativePath(),
