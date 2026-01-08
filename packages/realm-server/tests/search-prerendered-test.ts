@@ -8,7 +8,6 @@ import {
   setupBaseRealmServer,
   setupPermissionedRealm,
   matrixURL,
-  testRealmHref,
   createJWT,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -17,6 +16,9 @@ module(basename(__filename), function () {
   module('Realm-specific Endpoints | _search-prerendered', function (hooks) {
     let testRealm: Realm;
     let request: SuperTest<Test>;
+    let searchPath: string;
+    let realmHref: string;
+    let realmURL = new URL('http://127.0.0.1:4444/test/');
 
     function onRealmSetup(args: {
       testRealm: Realm;
@@ -24,6 +26,9 @@ module(basename(__filename), function () {
     }) {
       testRealm = args.testRealm;
       request = args.request;
+      let realmURLFromTest = new URL(testRealm.url);
+      realmHref = realmURLFromTest.href;
+      searchPath = `${realmURLFromTest.pathname.replace(/\/$/, '')}/_search-prerendered`;
     }
 
     type PrerenderedSearchQuery = Query & {
@@ -49,7 +54,7 @@ module(basename(__filename), function () {
         searchParams.set('renderType[module]', renderType.module);
         searchParams.set('renderType[name]', renderType.name);
       }
-      return `/_search-prerendered?${searchParams.toString()}`;
+      return `${searchPath}?${searchParams.toString()}`;
     }
 
     setupBaseRealmServer(hooks, matrixURL);
@@ -59,6 +64,7 @@ module(basename(__filename), function () {
         'instances with no embedded template css of its own',
         function (hooks) {
           setupPermissionedRealm(hooks, {
+            realmURL,
             permissions: {
               '*': ['read'],
             },
@@ -121,7 +127,7 @@ module(basename(__filename), function () {
             let query: Query & { prerenderedHtmlFormat: string } = {
               filter: {
                 on: {
-                  module: `${testRealmHref}person`,
+                  module: `${realmHref}person`,
                   name: 'Person',
                 },
                 eq: {
@@ -137,7 +143,7 @@ module(basename(__filename), function () {
             assert.strictEqual(response.status, 200, 'HTTP 200 status');
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
-              testRealmHref,
+              realmHref,
               'realm url header is correct',
             );
             assert.strictEqual(
@@ -179,6 +185,7 @@ module(basename(__filename), function () {
 
       module('instances whose embedded template has css', function (hooks) {
         setupPermissionedRealm(hooks, {
+          realmURL,
           permissions: {
             '*': ['read'],
           },
@@ -302,7 +309,7 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
-            testRealmHref,
+            realmHref,
             'realm url header is correct',
           );
           assert.strictEqual(
@@ -367,7 +374,7 @@ module(basename(__filename), function () {
           let query: Query & { prerenderedHtmlFormat: string } = {
             filter: {
               on: {
-                module: `${testRealmHref}fancy-person`,
+                module: `${realmHref}fancy-person`,
                 name: 'FancyPerson',
               },
               not: {
@@ -409,10 +416,7 @@ module(basename(__filename), function () {
 
           assertScopedCssUrlsContain(assert, json.meta.scopedCssUrls, [
             ...cardDefModuleDependencies,
-            ...[
-              `${testRealmHref}fancy-person.gts`,
-              `${testRealmHref}person.gts`,
-            ],
+            ...[`${realmHref}fancy-person.gts`, `${realmHref}person.gts`],
           ]);
         });
 
@@ -420,7 +424,7 @@ module(basename(__filename), function () {
           let query: Query & { prerenderedHtmlFormat: string } = {
             filter: {
               on: {
-                module: `${testRealmHref}person`,
+                module: `${realmHref}person`,
                 name: 'Person',
               },
               eq: {
@@ -440,10 +444,7 @@ module(basename(__filename), function () {
             1,
             'one prerendered card instance is returned in the filtered search results',
           );
-          assert.strictEqual(
-            json.data[0].id,
-            'http://127.0.0.1:4444/jimmy.json',
-          );
+          assert.strictEqual(json.data[0].id, `${realmHref}jimmy.json`);
         });
 
         test('can use cardUrls to filter prerendered instances', async function (assert) {
@@ -452,7 +453,7 @@ module(basename(__filename), function () {
             cardUrls: string[];
           } = {
             prerenderedHtmlFormat: 'embedded',
-            cardUrls: [`${testRealmHref}jimmy.json`],
+            cardUrls: [`${realmHref}jimmy.json`],
           };
           let response = await request
             .get(buildPrerenderedSearchPath(query))
@@ -465,17 +466,11 @@ module(basename(__filename), function () {
             1,
             'one prerendered card instance is returned in the filtered search results',
           );
-          assert.strictEqual(
-            json.data[0].id,
-            'http://127.0.0.1:4444/jimmy.json',
-          );
+          assert.strictEqual(json.data[0].id, `${realmHref}jimmy.json`);
 
           query = {
             prerenderedHtmlFormat: 'embedded',
-            cardUrls: [
-              `${testRealmHref}jimmy.json`,
-              `${testRealmHref}jane.json`,
-            ],
+            cardUrls: [`${realmHref}jimmy.json`, `${realmHref}jane.json`],
           };
           response = await request
             .get(buildPrerenderedSearchPath(query))
@@ -488,14 +483,8 @@ module(basename(__filename), function () {
             2,
             '2 prerendered card instances are returned in the filtered search results',
           );
-          assert.strictEqual(
-            json.data[0].id,
-            'http://127.0.0.1:4444/jane.json',
-          );
-          assert.strictEqual(
-            json.data[1].id,
-            'http://127.0.0.1:4444/jimmy.json',
-          );
+          assert.strictEqual(json.data[0].id, `${realmHref}jane.json`);
+          assert.strictEqual(json.data[1].id, `${realmHref}jimmy.json`);
         });
 
         test('can sort prerendered instances', async function (assert) {
@@ -503,7 +492,7 @@ module(basename(__filename), function () {
             sort: [
               {
                 by: 'firstName',
-                on: { module: `${testRealmHref}person`, name: 'Person' },
+                on: { module: `${realmHref}person`, name: 'Person' },
                 direction: 'desc',
               },
             ],
@@ -518,22 +507,10 @@ module(basename(__filename), function () {
           assert.strictEqual(json.data.length, 4, 'results count is correct');
 
           // firstName descending
-          assert.strictEqual(
-            json.data[0].id,
-            'http://127.0.0.1:4444/jimmy.json',
-          );
-          assert.strictEqual(
-            json.data[1].id,
-            'http://127.0.0.1:4444/jane.json',
-          );
-          assert.strictEqual(
-            json.data[2].id,
-            'http://127.0.0.1:4444/craig.json',
-          );
-          assert.strictEqual(
-            json.data[3].id,
-            'http://127.0.0.1:4444/aaron.json',
-          );
+          assert.strictEqual(json.data[0].id, `${realmHref}jimmy.json`);
+          assert.strictEqual(json.data[1].id, `${realmHref}jane.json`);
+          assert.strictEqual(json.data[2].id, `${realmHref}craig.json`);
+          assert.strictEqual(json.data[3].id, `${realmHref}aaron.json`);
         });
 
         test('can paginate prerendered instances', async function (assert) {
@@ -546,7 +523,7 @@ module(basename(__filename), function () {
             sort: [
               {
                 by: 'firstName',
-                on: { module: `${testRealmHref}person`, name: 'Person' },
+                on: { module: `${realmHref}person`, name: 'Person' },
                 direction: 'asc',
               },
             ],
@@ -561,14 +538,8 @@ module(basename(__filename), function () {
 
           assert.strictEqual(json.data.length, 2, 'first page has 2 results');
           assert.strictEqual(json.meta.page.total, 4, 'total count is correct');
-          assert.strictEqual(
-            json.data[0].id,
-            'http://127.0.0.1:4444/aaron.json',
-          );
-          assert.strictEqual(
-            json.data[1].id,
-            'http://127.0.0.1:4444/craig.json',
-          );
+          assert.strictEqual(json.data[0].id, `${realmHref}aaron.json`);
+          assert.strictEqual(json.data[1].id, `${realmHref}craig.json`);
 
           // Second page
           query.page = { number: 1, size: 2 };
@@ -580,14 +551,8 @@ module(basename(__filename), function () {
 
           assert.strictEqual(json.data.length, 2, 'second page has 2 results');
           assert.strictEqual(json.meta.page.total, 4, 'total count is correct');
-          assert.strictEqual(
-            json.data[0].id,
-            'http://127.0.0.1:4444/jane.json',
-          );
-          assert.strictEqual(
-            json.data[1].id,
-            'http://127.0.0.1:4444/jimmy.json',
-          );
+          assert.strictEqual(json.data[0].id, `${realmHref}jane.json`);
+          assert.strictEqual(json.data[1].id, `${realmHref}jimmy.json`);
         });
       });
     });
@@ -597,6 +562,7 @@ module(basename(__filename), function () {
         'instances with no embedded template css of its own',
         function (hooks) {
           setupPermissionedRealm(hooks, {
+            realmURL,
             permissions: {
               '*': ['read'],
             },
@@ -643,7 +609,7 @@ module(basename(__filename), function () {
 
           test('endpoint will respond with a bad request if html format is not provided', async function (assert) {
             let response = await request
-              .post('/_search-prerendered')
+              .post(searchPath)
               .set('Accept', 'application/vnd.card+json')
               .set('X-HTTP-Method-Override', 'QUERY')
               .send({});
@@ -660,7 +626,7 @@ module(basename(__filename), function () {
             let query: Query & { prerenderedHtmlFormat: string } = {
               filter: {
                 on: {
-                  module: `${testRealmHref}person`,
+                  module: `${realmHref}person`,
                   name: 'Person',
                 },
                 eq: {
@@ -671,7 +637,7 @@ module(basename(__filename), function () {
             };
 
             let response = await request
-              .post('/_search-prerendered')
+              .post(searchPath)
               .set('Accept', 'application/vnd.card+json')
               .set('X-HTTP-Method-Override', 'QUERY')
               .send(query);
@@ -679,7 +645,7 @@ module(basename(__filename), function () {
             assert.strictEqual(response.status, 200, 'HTTP 200 status');
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
-              testRealmHref,
+              realmHref,
               'realm url header is correct',
             );
             assert.strictEqual(
@@ -721,6 +687,7 @@ module(basename(__filename), function () {
 
       module('instances whose embedded template has css', function (hooks) {
         setupPermissionedRealm(hooks, {
+          realmURL,
           permissions: {
             '*': ['read'],
           },
@@ -834,7 +801,7 @@ module(basename(__filename), function () {
 
         test('returns instances with CardDef prerendered embedded html + css using QUERY method', async function (assert) {
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .send({
@@ -844,7 +811,7 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
-            testRealmHref,
+            realmHref,
             'realm url header is correct',
           );
           assert.strictEqual(
@@ -893,14 +860,11 @@ module(basename(__filename), function () {
             cardUrls: string[];
           } = {
             prerenderedHtmlFormat: 'embedded',
-            cardUrls: [
-              `${testRealmHref}jimmy.json`,
-              `${testRealmHref}jane.json`,
-            ],
+            cardUrls: [`${realmHref}jimmy.json`, `${realmHref}jane.json`],
           };
 
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .send(query);
@@ -912,21 +876,15 @@ module(basename(__filename), function () {
             2,
             '2 prerendered card instances are returned in the filtered search results',
           );
-          assert.strictEqual(
-            json.data[0].id,
-            'http://127.0.0.1:4444/jane.json',
-          );
-          assert.strictEqual(
-            json.data[1].id,
-            'http://127.0.0.1:4444/jimmy.json',
-          );
+          assert.strictEqual(json.data[0].id, `${realmHref}jane.json`);
+          assert.strictEqual(json.data[1].id, `${realmHref}jimmy.json`);
         });
 
         test('can filter prerendered instances with complex query in request body', async function (assert) {
           let complexQuery = {
             filter: {
               on: {
-                module: `${testRealmHref}fancy-person`,
+                module: `${realmHref}fancy-person`,
                 name: 'FancyPerson',
               },
               not: {
@@ -939,7 +897,7 @@ module(basename(__filename), function () {
           };
 
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .send(complexQuery);
@@ -962,10 +920,7 @@ module(basename(__filename), function () {
 
           assertScopedCssUrlsContain(assert, json.meta.scopedCssUrls, [
             ...cardDefModuleDependencies,
-            ...[
-              `${testRealmHref}fancy-person.gts`,
-              `${testRealmHref}person.gts`,
-            ],
+            ...[`${realmHref}fancy-person.gts`, `${realmHref}person.gts`],
           ]);
         });
 
@@ -986,7 +941,7 @@ module(basename(__filename), function () {
           };
 
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .send(complexQuery);
@@ -1006,7 +961,7 @@ module(basename(__filename), function () {
             sort: [
               {
                 by: 'firstName',
-                on: { module: `${testRealmHref}person`, name: 'Person' },
+                on: { module: `${realmHref}person`, name: 'Person' },
                 direction: 'desc',
               },
             ],
@@ -1014,7 +969,7 @@ module(basename(__filename), function () {
           };
 
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .send(query);
@@ -1024,27 +979,16 @@ module(basename(__filename), function () {
           assert.strictEqual(json.data.length, 4, 'results count is correct');
 
           // firstName descending
-          assert.strictEqual(
-            json.data[0].id,
-            'http://127.0.0.1:4444/jimmy.json',
-          );
-          assert.strictEqual(
-            json.data[1].id,
-            'http://127.0.0.1:4444/jane.json',
-          );
-          assert.strictEqual(
-            json.data[2].id,
-            'http://127.0.0.1:4444/craig.json',
-          );
-          assert.strictEqual(
-            json.data[3].id,
-            'http://127.0.0.1:4444/aaron.json',
-          );
+          assert.strictEqual(json.data[0].id, `${realmHref}jimmy.json`);
+          assert.strictEqual(json.data[1].id, `${realmHref}jane.json`);
+          assert.strictEqual(json.data[2].id, `${realmHref}craig.json`);
+          assert.strictEqual(json.data[3].id, `${realmHref}aaron.json`);
         });
       });
 
       module('permissioned realm', function (hooks) {
         setupPermissionedRealm(hooks, {
+          realmURL,
           permissions: {
             john: ['read'],
           },
@@ -1081,7 +1025,7 @@ module(basename(__filename), function () {
 
         test('401 with invalid JWT', async function (assert) {
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .set('Authorization', `Bearer invalid-token`)
@@ -1092,7 +1036,7 @@ module(basename(__filename), function () {
 
         test('401 without a JWT', async function (assert) {
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .send({ prerenderedHtmlFormat: 'embedded' }); // no Authorization header
@@ -1102,7 +1046,7 @@ module(basename(__filename), function () {
 
         test('403 without permission', async function (assert) {
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`)
@@ -1113,7 +1057,7 @@ module(basename(__filename), function () {
 
         test('200 with permission', async function (assert) {
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .set(
@@ -1128,6 +1072,7 @@ module(basename(__filename), function () {
 
       module('search query validation', function (hooks) {
         setupPermissionedRealm(hooks, {
+          realmURL,
           permissions: {
             '*': ['read'],
           },
@@ -1136,7 +1081,7 @@ module(basename(__filename), function () {
 
         test('400 with invalid query schema', async function (assert) {
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .send({
@@ -1153,7 +1098,7 @@ module(basename(__filename), function () {
 
         test('400 with invalid filter logic', async function (assert) {
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .send({

@@ -2,6 +2,7 @@ import { getService } from '@universal-ember/test-support';
 
 import {
   buildSearchErrorResponse,
+  ensureTrailingSlash,
   parseRealmsParam,
   parsePrerenderedSearchRequestFromRequest,
   parseSearchQueryFromRequest,
@@ -16,6 +17,8 @@ import type {
   CardCollectionDocument,
   PrerenderedCardCollectionDocument,
 } from '@cardstack/runtime-common/document-types';
+
+import ENV from '@cardstack/host/config/environment';
 
 import type NetworkService from '@cardstack/host/services/network';
 
@@ -60,6 +63,7 @@ export function getRealmServerRoute(
 export function registerDefaultRoutes() {
   registerSearchRoutes();
   registerAuthRoutes();
+  registerCatalogRoutes();
 }
 
 function registerSearchRoutes() {
@@ -179,6 +183,30 @@ function registerAuthRoutes() {
             testRealmSecretSeed,
           ),
         },
+      });
+    },
+  });
+}
+
+function registerCatalogRoutes() {
+  registerRealmServerRoute({
+    path: '/_catalog-realms',
+    handler: async () => {
+      let catalogURLs = [
+        ENV.resolvedCatalogRealmURL,
+        ENV.resolvedSkillsRealmURL,
+      ]
+        .filter(Boolean)
+        .map((url) => ensureTrailingSlash(url));
+
+      let data = catalogURLs.map((id) => ({
+        type: 'realm',
+        id,
+      }));
+
+      return new Response(JSON.stringify({ data }), {
+        status: 200,
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
       });
     },
   });

@@ -355,6 +355,10 @@ export default class RealmServerService extends Service {
   }
 
   get url() {
+    if (ENV.environment === 'test') {
+      return new URL(ENV.realmServerURL);
+    }
+
     let url;
     if (hostsOwnAssets) {
       url = new URL(resolvedBaseRealmURL).origin;

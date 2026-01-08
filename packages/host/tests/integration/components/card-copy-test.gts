@@ -975,6 +975,7 @@ module('Integration | card-copy', function (hooks) {
         if (
           req.method !== 'GET' &&
           req.method !== 'HEAD' &&
+          req.method !== 'QUERY' &&
           !(
             req.method === 'POST' &&
             req.headers.get('X-HTTP-Method-Override') === 'QUERY'
@@ -1113,6 +1114,7 @@ module('Integration | card-copy', function (hooks) {
         if (
           req.method !== 'GET' &&
           req.method !== 'HEAD' &&
+          req.method !== 'QUERY' &&
           !(
             req.method === 'POST' &&
             req.headers.get('X-HTTP-Method-Override') === 'QUERY'

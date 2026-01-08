@@ -25,6 +25,8 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import { skillsRealm } from '@cardstack/host/lib/utils';
+
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { AiAssistantMessageDrafts } from '@cardstack/host/utils/local-storage-keys';
@@ -1991,6 +1993,11 @@ module('Acceptance | AI Assistant tests', function (hooks) {
           name: 'Cardstack Catalog',
           type: 'catalog-workspace',
           url: catalogRealm.url,
+        },
+        {
+          name: 'Boxel Skills',
+          type: 'catalog-workspace',
+          url: skillsRealm.url,
         },
       ],
       'Context sent with message contains correct workspaces',
