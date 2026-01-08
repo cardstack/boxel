@@ -16,6 +16,7 @@ on:
 permissions:
   contents: read
   deployments: write
+  id-token: write
 
 jobs:
   create-deployment:
