@@ -270,6 +270,19 @@ export function getReader(
           Accept: SupportedMimeType.Mtimes,
         },
       });
+      if (!response.ok) {
+        let responseText = '';
+        try {
+          responseText = await response.text();
+        } catch {
+          responseText = '';
+        }
+        let details = responseText ? `: ${responseText}` : '';
+        console.warn(
+          `mtimes request failed for ${realmURL}_mtimes (${response.status} ${response.statusText})${details}`,
+        );
+        return {};
+      }
       let {
         data: {
           attributes: { mtimes },

@@ -1192,7 +1192,7 @@ module('Integration | Store', function (hooks) {
           },
         },
       },
-      new URL(testRealmURL),
+      [testRealmURL],
     );
 
     assert.strictEqual(

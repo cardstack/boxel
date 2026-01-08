@@ -141,6 +141,7 @@ import './realm-endpoints/publishability-test';
 import './realm-endpoints/search-test';
 import './realm-endpoints/user-test';
 import './search-prerendered-test';
+import './server-endpoints/search-test';
 import './server-endpoints-test';
 import './transpile-test';
 import './types-endpoint-test';

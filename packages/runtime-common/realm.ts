@@ -3,6 +3,7 @@ import {
   makeCardTypeSummaryDoc,
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
+  type CardCollectionDocument,
 } from './document-types';
 import { isMeta, type CardResource, type Relationship } from './resource-types';
 import { normalizeRelationships } from './relationship-utils';
@@ -56,6 +57,7 @@ import {
   type RealmAction,
   type LintArgs,
   type LintResult,
+  type Query,
   codeRefWithAbsoluteURL,
   userInitiatedPriority,
   systemInitiatedPriority,
@@ -522,8 +524,16 @@ export class Realm {
       )
       .query('/_lint', SupportedMimeType.JSON, this.lint.bind(this))
       .get('/_mtimes', SupportedMimeType.Mtimes, this.realmMtimes.bind(this))
-      .get('/_search', SupportedMimeType.CardJson, this.search.bind(this))
-      .query('/_search', SupportedMimeType.CardJson, this.search.bind(this))
+      .get(
+        '/_search',
+        SupportedMimeType.CardJson,
+        this.searchResponse.bind(this),
+      )
+      .query(
+        '/_search',
+        SupportedMimeType.CardJson,
+        this.searchResponse.bind(this),
+      )
       .get(
         '/_search-prerendered',
         SupportedMimeType.CardJson,
@@ -2847,7 +2857,14 @@ export class Realm {
     return this.#realmIndexUpdater.isIgnored(url);
   }
 
-  private async search(
+  public async search(cardsQuery: Query): Promise<CardCollectionDocument> {
+    assertQuery(cardsQuery);
+    return await this.#realmIndexQueryEngine.search(cardsQuery, {
+      loadLinks: true,
+    });
+  }
+
+  private async searchResponse(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
@@ -2855,11 +2872,22 @@ export class Realm {
     if (request.method === 'QUERY') {
       cardsQuery = await request.json();
     } else {
-      cardsQuery = parseQuery(new URL(request.url).search.slice(1));
+      let url = new URL(request.url);
+      let queryParam = url.searchParams.get('query');
+      cardsQuery = queryParam
+        ? parseQuery(queryParam)
+        : parseQuery(url.search.slice(1));
     }
 
     try {
-      assertQuery(cardsQuery);
+      let doc = await this.search(cardsQuery);
+      return createResponse({
+        body: JSON.stringify(doc, null, 2),
+        init: {
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        },
+        requestContext,
+      });
     } catch (e) {
       if (e instanceof InvalidQueryError) {
         return createResponse({
@@ -2882,17 +2910,6 @@ export class Realm {
       // Re-throw other errors
       throw e;
     }
-
-    let doc = await this.#realmIndexQueryEngine.search(cardsQuery, {
-      loadLinks: true,
-    });
-    return createResponse({
-      body: JSON.stringify(doc, null, 2),
-      init: {
-        headers: { 'content-type': SupportedMimeType.CardJson },
-      },
-      requestContext,
-    });
   }
 
   private async lint(
