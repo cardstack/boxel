@@ -270,7 +270,7 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
     let realmServerURLs = this.realmServer.getRealmServersForRealms(
       this.realmsToSearch,
     );
-    // TODO remove this assertion after multi-realm serer/federated identity is supported
+    // TODO remove this assertion after multi-realm server/federated identity is supported
     this.realmServer.assertOwnRealmServer(realmServerURLs);
     let [realmServerURL] = realmServerURLs;
     try {

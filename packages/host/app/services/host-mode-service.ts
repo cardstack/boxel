@@ -210,7 +210,7 @@ export default class HostModeService extends Service {
     let realmServerURLs = this.realmServer.getRealmServersForRealms([
       realmRoot,
     ]);
-    // TODO remove this assertion after multi-realm serer/federated identity is supported
+    // TODO remove this assertion after multi-realm server/federated identity is supported
     this.realmServer.assertOwnRealmServer(realmServerURLs);
     let [realmServerURL] = realmServerURLs;
     let searchURL = new URL('_search-prerendered', realmServerURL);

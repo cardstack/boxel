@@ -231,7 +231,7 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
     }
 
     let realmServerURLs = this.realmServer.getRealmServersForRealms(realms);
-    // TODO remove this assertion after multi-realm serer/federated identity is supported
+    // TODO remove this assertion after multi-realm server/federated identity is supported
     this.realmServer.assertOwnRealmServer(realmServerURLs);
     let [realmServerURL] = realmServerURLs;
     let searchURL = new URL('_search-prerendered', realmServerURL);
@@ -244,7 +244,6 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
       headers: {
         Accept: SupportedMimeType.CardJson,
         'Content-Type': 'application/json',
-        'X-HTTP-Method-Override': 'QUERY',
       },
       body: JSON.stringify({
         ...query,

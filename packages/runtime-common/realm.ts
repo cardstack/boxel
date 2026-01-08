@@ -3040,27 +3040,7 @@ export class Realm {
               status: '400',
               title: 'Bad Request',
               message:
-                "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint",
-            },
-          ],
-        }),
-        init: {
-          status: 400,
-          headers: { 'content-type': SupportedMimeType.CardJson },
-        },
-        requestContext,
-      });
-    }
-
-    if (htmlFormat === undefined) {
-      return createResponse({
-        body: JSON.stringify({
-          errors: [
-            {
-              status: '400',
-              title: 'Bad Request',
-              message:
-                "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint",
+                "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded', 'fitted', 'atom', or 'head' to use this endpoint",
             },
           ],
         }),

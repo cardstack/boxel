@@ -11,6 +11,10 @@ import {
   baseRealm,
   getSerializer,
 } from './index';
+import {
+  isValidPrerenderedHtmlFormat,
+  type PrerenderedHtmlFormat,
+} from './prerendered-html-format';
 import type { DBSpecificExpression, Param } from './expression';
 import {
   type Expression,
@@ -134,7 +138,7 @@ type GetEntryOptions = WIPOptions;
 export type QueryOptions = WIPOptions & PrerenderedCardOptions;
 
 interface PrerenderedCardOptions {
-  htmlFormat?: 'embedded' | 'fitted' | 'atom' | 'head';
+  htmlFormat?: PrerenderedHtmlFormat;
   renderType?: ResolvedCodeRef;
   includeErrors?: true;
   cardUrls?: string[];
@@ -166,14 +170,7 @@ export const generalSortFields: Record<string, string> = {
   cardURL: 'url COLLATE "POSIX"',
 };
 
-export function isValidPrerenderedHtmlFormat(
-  format: string | undefined,
-): format is PrerenderedCardOptions['htmlFormat'] {
-  return (
-    format !== undefined &&
-    ['embedded', 'fitted', 'atom', 'head'].includes(format)
-  );
-}
+export { isValidPrerenderedHtmlFormat };
 
 export class IndexQueryEngine {
   #dbAdapter: DBAdapter;

@@ -5,6 +5,10 @@ import {
   parseQuery,
   type Query,
 } from './query';
+import {
+  isValidPrerenderedHtmlFormat,
+  type PrerenderedHtmlFormat,
+} from './prerendered-html-format';
 import type {
   CardCollectionDocument,
   PrerenderedCardCollectionDocument,
@@ -19,8 +23,6 @@ export type SearchRequestErrorCode =
   | 'invalid-query'
   | 'invalid-prerendered-html-format';
 
-type PrerenderedHtmlFormat = 'embedded' | 'fitted' | 'atom' | 'head';
-
 type PrerenderedRenderType = {
   module: string;
   name: string;
@@ -34,15 +36,6 @@ export class SearchRequestError extends Error {
     this.code = code;
     this.name = 'SearchRequestError';
   }
-}
-
-function isValidPrerenderedHtmlFormat(
-  format: string | undefined,
-): format is PrerenderedHtmlFormat {
-  return (
-    format !== undefined &&
-    ['embedded', 'fitted', 'atom', 'head'].includes(format)
-  );
 }
 
 function normalizeStringParam(value: unknown): string | undefined {
@@ -216,7 +209,7 @@ export async function parsePrerenderedSearchRequestFromRequest(
   if (!isValidPrerenderedHtmlFormat(htmlFormat)) {
     throw new SearchRequestError(
       'invalid-prerendered-html-format',
-      "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint",
+      "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded', 'fitted', 'atom', or 'head' to use this endpoint",
     );
   }
 

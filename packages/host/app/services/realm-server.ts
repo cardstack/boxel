@@ -438,7 +438,7 @@ export default class RealmServerService extends Service {
   }
 
   get url() {
-    if (ENV.environment === 'test') {
+    if (isTesting()) {
       return new URL(ENV.realmServerURL);
     }
 
