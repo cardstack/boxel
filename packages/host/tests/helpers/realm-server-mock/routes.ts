@@ -1,5 +1,6 @@
 import {
   buildSearchErrorResponse,
+  baseRealm,
   ensureTrailingSlash,
   parseRealmsParam,
   parsePrerenderedSearchRequestFromRequest,
@@ -37,6 +38,8 @@ type SearchableRealm = {
     >,
   ) => Promise<PrerenderedCardCollectionDocument>;
 };
+
+const remoteRealmCache = new Map<string, SearchableRealm>();
 
 const realmServerRoutes = new Map<string, RealmServerMockRoute>();
 
@@ -214,5 +217,67 @@ function getSearchableRealmForURL(
   if (registryEntry?.realm) {
     return registryEntry.realm;
   }
-  return undefined;
+
+  let cached = remoteRealmCache.get(realmURL);
+  if (cached) {
+    return cached;
+  }
+
+  let resolvedRealmURL = resolveRemoteRealmURL(realmURL);
+  let remoteRealm: SearchableRealm = {
+    url: resolvedRealmURL,
+    // pass thru for live realms on localhost:4201 (base, skills, catalog)
+    async search(query: Query) {
+      let url = new URL('_search', resolvedRealmURL);
+      let response = await globalThis.fetch(url.href, {
+        method: 'QUERY',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(query),
+      });
+      if (!response.ok) {
+        let responseText = await response.text();
+        throw new Error(
+          `Remote realm search failed for ${resolvedRealmURL}: ${response.status} ${responseText}`,
+        );
+      }
+      return (await response.json()) as CardCollectionDocument;
+    },
+    async searchPrerendered(query: Query, opts) {
+      let url = new URL('_search-prerendered', resolvedRealmURL);
+      let response = await globalThis.fetch(url.href, {
+        method: 'QUERY',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...query,
+          prerenderedHtmlFormat: opts.htmlFormat,
+          cardUrls: opts.cardUrls,
+          renderType: opts.renderType,
+        }),
+      });
+      if (!response.ok) {
+        let responseText = await response.text();
+        throw new Error(
+          `Remote realm prerendered search failed for ${resolvedRealmURL}: ${response.status} ${responseText}`,
+        );
+      }
+      return (await response.json()) as PrerenderedCardCollectionDocument;
+    },
+  };
+
+  remoteRealmCache.set(realmURL, remoteRealm);
+  return remoteRealm;
+}
+
+function resolveRemoteRealmURL(realmURL: string): string {
+  let normalizedRealmURL = ensureTrailingSlash(realmURL);
+  if (normalizedRealmURL.startsWith(baseRealm.url)) {
+    return ensureTrailingSlash(ENV.resolvedBaseRealmURL);
+  }
+  return normalizedRealmURL;
 }
