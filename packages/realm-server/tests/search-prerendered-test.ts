@@ -118,7 +118,7 @@ module(basename(__filename), function () {
 
             assert.ok(
               response.body.errors[0].message.includes(
-                "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint",
+                "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded', 'fitted', 'atom', or 'head' to use this endpoint",
               ),
             );
           });
@@ -617,7 +617,7 @@ module(basename(__filename), function () {
             assert.strictEqual(response.status, 400, 'HTTP 400 status');
             assert.ok(
               response.body.errors[0].message.includes(
-                "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint",
+                "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded', 'fitted', 'atom', or 'head' to use this endpoint",
               ),
             );
           });
