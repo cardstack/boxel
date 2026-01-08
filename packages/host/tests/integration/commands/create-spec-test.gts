@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, ensureTrailingSlash } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import CreateSpecCommand from '@cardstack/host/commands/create-specs';
@@ -19,6 +19,12 @@ import {
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+import { catalogRealm } from '@cardstack/host/lib/utils';
+import { renderCard } from '../../helpers/render-component';
+
+const catalogRealmURL = ensureTrailingSlash(catalogRealm.url);
+const FIELD_SPEC_EDIT_COMPONENT = `${catalogRealmURL}field-spec/components/field-spec-edit-template`;
+const FIELD_SPEC_ISOLATED_COMPONENT = `${catalogRealmURL}field-spec/components/field-spec-isolated-template`;
 
 module('Integration | Command | create-specs', function (hooks) {
   setupRenderingTest(hooks);
@@ -105,6 +111,19 @@ export default class TestComponent extends Component {
 
 export default class TestCommand extends Command {
   static displayName = 'Test Command';
+}`,
+        'user-field-spec.gts': `import { field, contains } from 'https://cardstack.com/base/card-api';
+import StringField from 'https://cardstack.com/base/string';
+import { Spec } from 'https://cardstack.com/base/spec';
+import FieldSpecEditTemplate from '${FIELD_SPEC_EDIT_COMPONENT}';
+import FieldSpecIsolatedTemplate from '${FIELD_SPEC_ISOLATED_COMPONENT}';
+
+export class UserFieldSpec extends Spec {
+  static displayName = 'User Field Spec';
+  static isolated = FieldSpecIsolatedTemplate as unknown as typeof Spec.isolated;
+  static edit = FieldSpecEditTemplate as unknown as typeof Spec.edit;
+
+  @field highlight = contains(StringField);
 }`,
         '.realm.json': `{ "name": "${realmName}" }`,
       },
@@ -330,5 +349,53 @@ export default class TestCommand extends Command {
       spec.readMe?.includes('Test Spec README'),
       'readMe content sourced from proxy mock',
     );
+  });
+
+  test('subclassed spec with custom edit template shows Field Configuration Playground section', async function (assert) {
+    const result = await createSpecCommand.execute({
+      codeRef: {
+        module: `${testRealmURL}user-field-spec.gts`,
+        name: 'UserFieldSpec',
+      },
+      targetRealm: testRealmURL,
+    });
+
+    assert.ok(result.newSpecs?.[0], 'Spec was created for the subclass');
+
+    const store = getService('store');
+    const savedSpec = (await store.get(result.newSpecs[0].id!)) as Spec;
+
+    // Render the spec in edit format
+    await renderCard(loader, savedSpec, 'edit');
+
+    // Verify Field Configuration Playground section is present
+    assert
+      .dom('#fields-configuration-preview')
+      .exists('Field Configuration Playground section is present');
+  });
+
+  test('subclassed spec with custom edit template hides Examples section', async function (assert) {
+    const result = await createSpecCommand.execute({
+      codeRef: {
+        module: `${testRealmURL}user-field-spec.gts`,
+        name: 'UserFieldSpec',
+      },
+      targetRealm: testRealmURL,
+    });
+
+    assert.ok(result.newSpecs?.[0], 'Spec was created for the subclass');
+
+    const store = getService('store');
+    const savedSpec = (await store.get(result.newSpecs[0].id!)) as Spec;
+
+    // Render the spec in edit format
+    await renderCard(loader, savedSpec, 'edit');
+
+    // Verify Examples section is NOT present
+    assert
+      .dom('#examples')
+      .doesNotExist(
+        'Examples section is not rendered when using custom edit template',
+      );
   });
 });
