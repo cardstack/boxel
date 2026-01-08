@@ -10,6 +10,7 @@ export class TimeRangeFieldSpec extends Spec {
   // Standard TimeRangeField - default configuration
   @field standard = contains(TimeRangeField);
 
-  static isolated = FieldSpecIsolatedTemplate;
-  static edit = FieldSpecEditTemplate;
+  static isolated =
+    FieldSpecIsolatedTemplate as unknown as typeof Spec.isolated;
+  static edit = FieldSpecEditTemplate as unknown as typeof Spec.edit;
 }

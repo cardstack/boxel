@@ -21,6 +21,7 @@ import {
   isResolvedCodeRef,
   loadCardDef,
 } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
 import GenerateReadmeSpecCommand from '@cardstack/boxel-host/commands/generate-readme-spec';
 import { isOwnField } from '../../utils/is-own-field';
 import { FieldRenderer } from '../../components/field-renderer';

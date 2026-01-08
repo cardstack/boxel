@@ -10,6 +10,7 @@ export class DatetimeStampFieldSpec extends Spec {
   // Standard DatetimeStampField - default configuration
   @field standard = contains(DatetimeStampField);
 
-  static isolated = FieldSpecIsolatedTemplate;
-  static edit = FieldSpecEditTemplate;
+  static isolated =
+    FieldSpecIsolatedTemplate as unknown as typeof Spec.isolated;
+  static edit = FieldSpecEditTemplate as unknown as typeof Spec.edit;
 }

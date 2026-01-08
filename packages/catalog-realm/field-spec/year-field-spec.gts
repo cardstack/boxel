@@ -10,6 +10,7 @@ export class YearFieldSpec extends Spec {
   // Standard YearField - default configuration
   @field standard = contains(YearField);
 
-  static isolated = FieldSpecIsolatedTemplate;
-  static edit = FieldSpecEditTemplate;
+  static isolated =
+    FieldSpecIsolatedTemplate as unknown as typeof Spec.isolated;
+  static edit = FieldSpecEditTemplate as unknown as typeof Spec.edit;
 }

@@ -10,6 +10,7 @@ export class RecurringPatternFieldSpec extends Spec {
   // Standard RecurringPatternField - default configuration
   @field standard = contains(RecurringPatternField);
 
-  static isolated = FieldSpecIsolatedTemplate;
-  static edit = FieldSpecEditTemplate;
+  static isolated =
+    FieldSpecIsolatedTemplate as unknown as typeof Spec.isolated;
+  static edit = FieldSpecEditTemplate as unknown as typeof Spec.edit;
 }

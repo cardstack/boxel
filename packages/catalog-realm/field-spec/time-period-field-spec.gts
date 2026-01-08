@@ -10,6 +10,7 @@ export class TimePeriodFieldSpec extends Spec {
   // Standard TimePeriodField - default configuration
   @field standard = contains(TimePeriodField);
 
-  static isolated = FieldSpecIsolatedTemplate;
-  static edit = FieldSpecEditTemplate;
+  static isolated =
+    FieldSpecIsolatedTemplate as unknown as typeof Spec.isolated;
+  static edit = FieldSpecEditTemplate as unknown as typeof Spec.edit;
 }

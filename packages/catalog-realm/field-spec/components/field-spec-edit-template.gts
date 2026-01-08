@@ -26,6 +26,7 @@ import {
   isResolvedCodeRef,
   loadCardDef,
 } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
 import GenerateReadmeSpecCommand from '@cardstack/boxel-host/commands/generate-readme-spec';
 import { isOwnField } from '../../utils/is-own-field';
 import { FieldRenderer } from '../../components/field-renderer';
@@ -35,7 +36,7 @@ function myLoader(): Loader {
   return (import.meta as any).loader;
 }
 
-export default class FieldSpecEditTemplate extends Component<typeof BaseDef> {
+export default class FieldSpecEditTemplate extends Component<typeof Spec> {
   get defaultIcon() {
     if (!this.args.model) {
       return;

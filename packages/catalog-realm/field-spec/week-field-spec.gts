@@ -10,6 +10,7 @@ export class WeekFieldSpec extends Spec {
   // Standard WeekField - default configuration
   @field standard = contains(WeekField);
 
-  static isolated = FieldSpecIsolatedTemplate;
-  static edit = FieldSpecEditTemplate;
+  static isolated =
+    FieldSpecIsolatedTemplate as unknown as typeof Spec.isolated;
+  static edit = FieldSpecEditTemplate as unknown as typeof Spec.edit;
 }

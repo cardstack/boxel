@@ -10,6 +10,7 @@ export class QuantityFieldSpec extends Spec {
   // Standard QuantityField - default configuration
   @field standard = contains(QuantityField);
 
-  static isolated = FieldSpecIsolatedTemplate;
-  static edit = FieldSpecEditTemplate;
+  static isolated =
+    FieldSpecIsolatedTemplate as unknown as typeof Spec.isolated;
+  static edit = FieldSpecEditTemplate as unknown as typeof Spec.edit;
 }

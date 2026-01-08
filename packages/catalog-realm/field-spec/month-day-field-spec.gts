@@ -10,6 +10,7 @@ export class MonthDayFieldSpec extends Spec {
   // Standard MonthDayField - default configuration
   @field standard = contains(MonthDayField);
 
-  static isolated = FieldSpecIsolatedTemplate;
-  static edit = FieldSpecEditTemplate;
+  static isolated =
+    FieldSpecIsolatedTemplate as unknown as typeof Spec.isolated;
+  static edit = FieldSpecEditTemplate as unknown as typeof Spec.edit;
 }
