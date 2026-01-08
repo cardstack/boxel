@@ -15,6 +15,7 @@ export default function handleRealmAuth({
   dbAdapter,
   realmSecretSeed,
   realms,
+  serverURL,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let allRealms = realms;
@@ -57,6 +58,7 @@ export default function handleRealmAuth({
             realm: realmUrl,
             permissions,
             sessionRoom,
+            realmServerURL: serverURL,
           },
           '7d',
           realmSecretSeed,

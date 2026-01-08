@@ -88,7 +88,10 @@ export type CreateRoutesArgs = {
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
-  let createPrerenderAuth = buildCreatePrerenderAuth(args.realmSecretSeed);
+  let createPrerenderAuth = buildCreatePrerenderAuth(
+    args.realmSecretSeed,
+    args.serverURL,
+  );
   let router = new Router();
 
   router.head('/', livenessCheck);

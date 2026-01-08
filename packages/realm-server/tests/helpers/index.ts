@@ -463,6 +463,7 @@ export async function createRealm({
     dbAdapter,
     queue: publisher,
     realmServerMatrixClient,
+    realmServerURL: new URL(new URL(realmURL).origin).href,
     definitionLookup,
   });
   if (worker) {
@@ -1170,6 +1171,7 @@ export function createJWT(
       realm: realm.url,
       permissions,
       sessionRoom: `test-session-room-for-${user}`,
+      realmServerURL: realm.realmServerURL,
     },
     '7d',
   );
