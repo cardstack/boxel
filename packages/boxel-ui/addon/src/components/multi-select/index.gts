@@ -5,6 +5,7 @@ import type {
   Select,
 } from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
+import 'ember-power-select/styles';
 import PowerSelectMultiple from 'ember-power-select/components/power-select-multiple';
 
 import { BoxelAfterOptionsComponent } from './after-options.gts';

@@ -4,6 +4,7 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import PowerCalendarRange from 'ember-power-calendar/components/power-calendar-range';
+import 'ember-power-calendar/styles';
 import { type TPowerCalendarRangeOnSelect } from 'ember-power-calendar/components/power-calendar-range';
 import powerCalendarFormatDate from 'ember-power-calendar/helpers/power-calendar-format-date';
 import {
@@ -179,7 +180,7 @@ export default class DateRangePicker extends Component<Signature> {
         margin-top: auto;
       }
     </style>
-    {{! 
+    {{!
     Note: I don't think there is any reason why we can't implement scoped styles here unlike ember-power-select which uses wormholes
     but we do so for now to avoid the complexity of maintaining fidelity with the way the ember-power-calendar styles are implemented.
     We do so intentionally to

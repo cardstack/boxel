@@ -11,6 +11,7 @@ import PowerSelect, {
   type PowerSelectArgs,
 } from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
+import 'ember-power-select/styles';
 import PowerSelectOptions from 'ember-power-select/components/power-select/options';
 
 import cn from '../../helpers/cn.ts';
