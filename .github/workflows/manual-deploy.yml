@@ -304,8 +304,6 @@ jobs:
         deploy-ai-bot,
         build-host,
         deploy-host,
-        deploy-motion,
-        deploy-ui,
         build-realm-server,
         build-prerender-manager,
         build-prerender,
@@ -318,7 +316,7 @@ jobs:
         deploy-worker,
         post-deploy-worker,
         deploy-realm-server,
-        post-deploy-realm-server
+        post-deploy-realm-server,
       ]
     if: always()
     runs-on: ubuntu-latest
