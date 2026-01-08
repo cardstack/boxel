@@ -1,12 +1,36 @@
 import * as childProcess from 'child_process';
 
-import { loginUser } from '../docker/synapse';
+import { loginUser, updateAccountData } from '../docker/synapse';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '../helpers/matrix-constants';
 export const adminUsername = 'admin';
 export const adminPassword = 'password';
 
 let username = process.env.MATRIX_USERNAME || adminUsername;
 let password = process.env.MATRIX_PASSWORD || adminPassword;
 let isAdmin = process.env.MATRIX_IS_ADMIN;
+
+function homepageRealmURL(): string {
+  let baseURL = process.env.REALM_SERVER_DOMAIN || 'http://localhost:4201/';
+  return new URL('boxel-homepage/', baseURL).href;
+}
+
+async function maybeSeedHomepageWorkspace(
+  username: string,
+  creds: { userId: string; accessToken: string },
+) {
+  if (username !== 'homepage_writer') {
+    return;
+  }
+
+  await updateAccountData(
+    creds.userId,
+    creds.accessToken,
+    APP_BOXEL_REALMS_EVENT_TYPE,
+    JSON.stringify({
+      realms: [homepageRealmURL()],
+    }),
+  );
+}
 
 async function ensureUserRecord(matrixUserId: string) {
   const database = process.env.PGDATABASE || 'boxel';
@@ -89,6 +113,7 @@ async function ensureUserRecord(matrixUserId: string) {
             if (shouldEnsureUserRecord) {
               await ensureUserRecord(matrixUserId);
             }
+            await maybeSeedHomepageWorkspace(username, cred);
             console.log(
               `User ${username} already exists in matrix and the password matches`,
             );
@@ -101,6 +126,8 @@ async function ensureUserRecord(matrixUserId: string) {
       if (shouldEnsureUserRecord) {
         await ensureUserRecord(matrixUserId);
       }
+      let cred = await loginUser(username, password);
+      await maybeSeedHomepageWorkspace(username, cred);
       console.log(stdout.trim());
       resolve(stdout.trim());
     });
