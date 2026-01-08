@@ -164,7 +164,7 @@ module(basename(__filename), function () {
           assert.deepEqual(errorBody, {
             id: `${testRealmHref}missing-link`,
             status: 404,
-            cardTitle: 'Link Not Found',
+            title: 'Link Not Found',
             message: `missing file ${testRealmHref}does-not-exist.json`,
             realm: testRealmHref,
             meta: {
@@ -186,7 +186,7 @@ module(basename(__filename), function () {
                 import { Person } from "./person";
 
                 export class QueryPersonFinder extends CardDef {
-                  @field title = contains(StringField);
+                  @field cardTitle = contains(StringField);
                   @field favorite = linksTo(Person, {
                     query: {
                       filter: {
@@ -274,7 +274,7 @@ module(basename(__filename), function () {
                 import { Person } from "./person";
 
                 export class QueryLinksField extends FieldDef {
-                  @field title = contains(StringField);
+                  @field cardTitle = contains(StringField);
                   @field favorite = linksTo(Person, {
                     query: {
                       filter: {

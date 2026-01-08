@@ -1251,7 +1251,7 @@ module(basename(__filename), function () {
             additionalErrors: null,
             message: `missing file ${testRealm}post`,
             status: 404,
-            cardTitle: 'Link Not Found',
+            title: 'Link Not Found',
             deps: [`${testRealm}post`],
           },
           'card instance is an error document',

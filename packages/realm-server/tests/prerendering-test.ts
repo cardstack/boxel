@@ -1361,7 +1361,7 @@ module(basename(__filename), function () {
 
       test('isolated HTML', function (assert) {
         assert.ok(
-          /data-test-field="cardDescription"/.test(result.isolatedHTML!),
+          /data-test-field="cardInfo-summary"/.test(result.isolatedHTML!),
           `failed to match isolated html:${result.isolatedHTML}`,
         );
       });

@@ -39,12 +39,12 @@ export class Cat extends CardDef {
 }
 
 export class SimpleSpec extends CardDef {
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field ref = contains(CodeRefField);
 }
 
 export class Event extends CardDef {
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field venue = contains(StringField);
   @field date = contains(DateField);
 }
