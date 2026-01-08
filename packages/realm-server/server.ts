@@ -1111,6 +1111,7 @@ export class RealmServer {
           username,
         },
         realmServerMatrixClient: this.matrixClient,
+        realmServerURL: this.serverURL.href,
         definitionLookup: this.definitionLookup,
       },
       Object.keys(realmOptions).length ? realmOptions : undefined,
@@ -1179,6 +1180,7 @@ export class RealmServer {
               username,
             },
             realmServerMatrixClient: this.matrixClient,
+            realmServerURL: this.serverURL.href,
             definitionLookup: this.definitionLookup,
           });
           this.virtualNetwork.mount(realm.handle);
@@ -1308,6 +1310,7 @@ export class RealmServer {
               username,
             },
             realmServerMatrixClient: this.matrixClient,
+            realmServerURL: this.serverURL.href,
             definitionLookup: this.definitionLookup,
           });
 

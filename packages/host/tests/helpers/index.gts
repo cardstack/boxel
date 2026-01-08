@@ -150,6 +150,8 @@ export function setMonacoContent(content: string): string {
 }
 
 export function cleanupMonacoEditorModels() {
+  // If there's no monaco, nothing to clean up
+  if (!(window as any).monaco) return;
   let diffEditors = (window as any).monaco.editor.getDiffEditors();
   for (let editor of diffEditors) {
     editor.dispose();
@@ -809,6 +811,7 @@ async function setupTestRealm({
       username: testRealmServerMatrixUsername,
       seed: testRealmSecretSeed,
     }),
+    realmServerURL: ensureTrailingSlash(ENV.realmServerURL),
     definitionLookup,
   });
 
@@ -868,6 +871,7 @@ function ensureAuthHandlerState(network: NetworkService): AuthHandlerState {
               sessionRoom: getRoomIdForRealmAndUser(realmURL, TEST_MATRIX_USER),
               permissions,
               realm: realmURL,
+              realmServerURL: ensureTrailingSlash(new URL(realmURL).origin),
             },
             '1d',
             testRealmSecretSeed,

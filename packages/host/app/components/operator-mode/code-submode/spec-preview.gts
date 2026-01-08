@@ -329,7 +329,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   }
 
   private get canWrite() {
-    return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
+    return this.realm.canWrite(this.operatorModeStateService.realmURL);
   }
 
   get isLoading() {

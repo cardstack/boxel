@@ -30,7 +30,9 @@ import {
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import BrandTypography from './brand-typography';
-import BrandFunctionalPalette from './brand-functional-palette';
+import BrandFunctionalPalette, {
+  formatSwatchName,
+} from './brand-functional-palette';
 import BrandLogo from './brand-logo';
 import CSSValueField from './css-value';
 import { mergeRuleMaps } from './structured-theme';
@@ -43,14 +45,24 @@ import {
   CssFieldEditor,
 } from './default-templates/theme-dashboard';
 
-const rootToBrandVariableMapping: Record<string, string> = {
+const sharedBrandVarsMap: Record<string, string> = {
   '--primary': '--brand-primary',
   '--secondary': '--brand-secondary',
   '--accent': '--brand-accent',
-  '--background': '--brand-light',
-  '--foreground': '--brand-dark',
   '--spacing': '--brand-spacing',
   '--radius': '--brand-radius',
+};
+
+const rootToBrandVariableMapping: Record<string, string> = {
+  '--background': '--brand-light',
+  '--foreground': '--brand-dark',
+  ...sharedBrandVarsMap,
+};
+
+const darkToBrandVariableMapping: Record<string, string> = {
+  '--background': '--brand-dark',
+  '--foreground': '--brand-light',
+  ...sharedBrandVarsMap,
 };
 
 class BrandGuideIsolated extends Component<typeof BrandGuide> {
@@ -493,17 +505,23 @@ export class CompoundColorField extends FieldDef {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <Swatch
-        class='compound-color-swatch'
-        @label={{@model.name}}
-        @color={{@model.value}}
-      />
+      {{#if @model.value}}
+        <Swatch
+          class='compound-color-swatch'
+          @label={{formatSwatchName @model.name}}
+          @color={{@model.value}}
+        />
+      {{/if}}
       <style scoped>
         .compound-color-swatch {
           display: flex;
         }
         :deep(.boxel-swatch-name) {
           font-weight: 600;
+          text-transform: capitalize;
+        }
+        :deep(.boxel-swatch-value) {
+          text-transform: lowercase;
         }
       </style>
     </template>
@@ -558,16 +576,21 @@ export default class BrandGuide extends DetailedStyleRef {
     return brandRules;
   }
 
-  private calculatedRootRules(): Map<string, string> | undefined {
-    let rootRules = this.rootVariables?.cssRuleMap;
+  private calculatedRules(opts?: {
+    darkMode: true;
+  }): Map<string, string> | undefined {
+    let rootRules = opts?.darkMode
+      ? this.darkModeVariables?.cssRuleMap
+      : this.rootVariables?.cssRuleMap;
     let functionalRules = this.functionalPalette?.cssRuleMap;
     let combinedRules = rootRules
       ? new Map<string, string>(rootRules)
       : new Map<string, string>();
 
-    for (let [rootName, brandName] of Object.entries(
-      rootToBrandVariableMapping,
-    )) {
+    let variablesMap = opts?.darkMode
+      ? darkToBrandVariableMapping
+      : rootToBrandVariableMapping;
+    for (let [rootName, brandName] of Object.entries(variablesMap)) {
       let rootValue = rootRules?.get(rootName);
       let paletteBrandValue = functionalRules?.get(brandName);
       // if variable exists in root variables, use it, else use brand fallback
@@ -626,10 +649,9 @@ export default class BrandGuide extends DetailedStyleRef {
         return;
       }
       let brandRules = this.calculateBrandRuleMap();
-      let calculatedRootRules = this.calculatedRootRules();
-      let rootRules = mergeRuleMaps(calculatedRootRules, brandRules);
+      let rootRules = mergeRuleMaps(this.calculatedRules(), brandRules);
       let darkRules = mergeRuleMaps(
-        this.darkModeVariables?.cssRuleMap,
+        this.calculatedRules({ darkMode: true }),
         brandRules,
       );
       return generateCssVariables(

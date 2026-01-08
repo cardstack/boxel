@@ -158,6 +158,7 @@ export class MockClient implements ExtendedClient {
       user: this.loggedInAs,
       realm: realmURL.href,
       sessionRoom,
+      realmServerURL: new URL(realmURL.origin).href,
       // adding a nonce to the test token so that we can tell the difference
       // between different tokens created in the same second
       nonce: nonce++,

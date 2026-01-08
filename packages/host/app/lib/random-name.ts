@@ -13,9 +13,14 @@ export function generateRandomWorkspaceName(): string {
     ? [adjectives, animals, numberDictionary]
     : [adjectives, animals];
 
-  return uniqueNamesGenerator({
+  let slug = uniqueNamesGenerator({
     dictionaries,
     separator: '-',
     style: 'lowerCase',
   });
+  return slug
+    .split('-')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
