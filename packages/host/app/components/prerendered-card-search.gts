@@ -230,7 +230,11 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
       return { instances: [], meta: { page: { total: 0 } } };
     }
 
-    let searchURL = new URL('_search-prerendered', this.realmServer.url);
+    let realmServerURLs = this.realmServer.getRealmServersForRealms(realms);
+    // TODO remove this assertion after multi-realm serer/federated identity is supported
+    this.realmServer.assertOwnRealmServer(realmServerURLs);
+    let [realmServerURL] = realmServerURLs;
+    let searchURL = new URL('_search-prerendered', realmServerURL);
     for (let realm of realms) {
       searchURL.searchParams.append('realms', realm);
     }

@@ -8,6 +8,7 @@ import config from '@cardstack/host/config/environment';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type RealmServerService from '@cardstack/host/services/realm-server';
 
 interface PublishedRealmMetadata {
   urlString: string;
@@ -19,6 +20,7 @@ export default class HostModeService extends Service {
   @service declare hostModeStateService: HostModeStateService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare realm: RealmService;
+  @service declare realmServer: RealmServerService;
 
   // increasing token to ignore stale async head fetches
   private headUpdateRequestId = 0;
@@ -205,7 +207,13 @@ export default class HostModeService extends Service {
         card.pathname.replace(/[^/]+$/, ''),
         `${card.protocol}//${card.host}`,
       ).href;
-    let searchURL = new URL('_search-prerendered', realmRoot);
+    let realmServerURLs = this.realmServer.getRealmServersForRealms([
+      realmRoot,
+    ]);
+    // TODO remove this assertion after multi-realm serer/federated identity is supported
+    this.realmServer.assertOwnRealmServer(realmServerURLs);
+    let [realmServerURL] = realmServerURLs;
+    let searchURL = new URL('_search-prerendered', realmServerURL);
     let cardJsonURL = cardURL.endsWith('.json') ? cardURL : `${cardURL}.json`;
 
     searchURL.searchParams.set('query', buildQueryParamValue({}));
