@@ -1,0 +1,64 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "ImageFieldSpec",
+        "module": "../image-field-spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "ImageFieldSpec",
+        "module": "http://localhost:4201/catalog/field-spec/image-field-spec"
+      },
+      "title": "Image Field Spec",
+      "avatar": {
+        "imageUrl": null
+      },
+      "browse": {
+        "imageUrl": null
+      },
+      "readMe": null,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "dropzone": {
+        "imageUrl": null
+      },
+      "specType": "card",
+      "description": null,
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      },
+      "avatar.imageCard": {
+        "links": {
+          "self": "../../Image/e2095313-22a8-453d-9c07-810b7c7f9a33"
+        }
+      },
+      "browse.imageCard": {
+        "links": {
+          "self": "../../Image/b190f3e2-0953-4322-a815-3d5c07810b7c"
+        }
+      },
+      "dropzone.imageCard": {
+        "links": {
+          "self": "../../Image/5c07810b-7c7f-4a33-a4b5-58f101fc5a82"
+        }
+      }
+    }
+  }
+}

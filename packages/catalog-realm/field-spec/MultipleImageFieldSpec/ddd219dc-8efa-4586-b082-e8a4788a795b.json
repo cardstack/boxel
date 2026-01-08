@@ -1,0 +1,70 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "MultipleImageFieldSpec",
+        "module": "../multiple-image-field-spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "MultipleImageFieldSpec",
+        "module": "http://localhost:4201/catalog/field-spec/multiple-image-field-spec"
+      },
+      "list": {
+        "images": [
+          {
+            "imageUrl": "https://i.boxel.site/08dfbc87-198a-473f-5b47-8b864ef91d00/public"
+          },
+          {
+            "imageUrl": "https://i.boxel.site/0c85c5cf-00c0-4cc0-cce9-130c8b54f900/public"
+          },
+          {
+            "imageUrl": "https://i.boxel.site/8f934015-a3ff-490a-dd16-2dae35c88100/public"
+          }
+        ]
+      },
+      "title": "Multiple Image Field Spec",
+      "readMe": null,
+      "gallery": {
+        "images": [
+          {
+            "imageUrl": "https://i.boxel.site/ab2f2f52-43a8-42d4-9842-42c1ef533400/public"
+          },
+          {
+            "imageUrl": "https://i.boxel.site/d2f53263-ac4c-42e9-47f1-a1dc79b6af00/public"
+          }
+        ]
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "dropzone": {
+        "images": [
+          {
+            "imageUrl": "https://i.boxel.site/d8e97df1-74f9-4bd2-1f9d-6e31090f8900/public"
+          }
+        ]
+      },
+      "specType": "card",
+      "description": null,
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
