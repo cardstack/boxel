@@ -1,13 +1,14 @@
 import {
   writeFileSync,
   writeJSONSync,
+  readFileSync,
+  utimesSync,
   readdirSync,
   statSync,
   ensureDirSync,
-  copySync,
 } from 'fs-extra';
 import { NodeAdapter } from '../../node-realm';
-import { join } from 'path';
+import { dirname, isAbsolute, join } from 'path';
 import type {
   LooseSingleCardDocument,
   RealmPermissions,
@@ -42,7 +43,7 @@ import {
   CachingDefinitionLookup,
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
-import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
+import { dirSync, file, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
 import { RealmServer } from '../../server';
 
@@ -70,9 +71,11 @@ import type {
 import { createRemotePrerenderer } from '../../prerender/remote-prerenderer';
 import { createPrerenderHttpServer } from '../../prerender/prerender-app';
 import { buildCreatePrerenderAuth } from '../../prerender/auth';
+import { glob } from 'glob';
 
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
+const processStartTimeMs = Date.now();
 
 export const testRealmServerMatrixUsername = 'node-test_realm-server';
 export const testRealmServerMatrixUserId = `@${testRealmServerMatrixUsername}:localhost`;
@@ -128,6 +131,61 @@ export const testRealmInfo = {
   publishable: null,
   lastPublishedAt: null,
 };
+
+export function buildCardFileSystem(entries: string[]): Record<string, string> {
+  let cardsDir = join(__dirname, '..', 'cards');
+  let fileSystem: Record<string, string> = {};
+
+  for (let entry of entries) {
+    let normalized = entry.replace(/^\.\//, '');
+    if (isAbsolute(entry) || normalized.split('/').includes('..')) {
+      throw new Error(`Card entry must be within ../cards: ${entry}`);
+    }
+
+    let matches: string[] = [];
+    let fullPath = join(cardsDir, normalized);
+
+    try {
+      let stats = statSync(fullPath);
+      if (stats.isDirectory()) {
+        matches = glob.sync(`${normalized}/**/*`, {
+          cwd: cardsDir,
+          nodir: true,
+          dot: true,
+        });
+      } else {
+        matches = [normalized];
+      }
+    } catch {
+      matches = glob.sync(normalized, { cwd: cardsDir, dot: true });
+    }
+
+    if (matches.length === 0) {
+      throw new Error(`No card files matched: ${entry}`);
+    }
+
+    for (let match of matches) {
+      let matchPath = join(cardsDir, match);
+      let stats = statSync(matchPath);
+      if (stats.isDirectory()) {
+        let nestedMatches = glob.sync(`${match}/**/*`, {
+          cwd: cardsDir,
+          nodir: true,
+          dot: true,
+        });
+        for (let nested of nestedMatches) {
+          if (!fileSystem[nested]) {
+            fileSystem[nested] = readFileSync(join(cardsDir, nested), 'utf8');
+          }
+        }
+      } else if (!fileSystem[match]) {
+        fileSystem[match] = readFileSync(matchPath, 'utf8');
+      }
+    }
+  }
+
+  return fileSystem;
+}
 
 export const realmServerTestMatrix: MatrixConfig = {
   url: matrixURL,
@@ -421,11 +479,17 @@ export async function createRealm({
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
   for (let [filename, contents] of Object.entries(fileSystem)) {
+    let fullPath = join(dir, filename);
+    ensureDirSync(dirname(fullPath));
+
     if (typeof contents === 'string') {
-      writeFileSync(join(dir, filename), contents);
+      writeFileSync(fullPath, contents);
     } else {
-      writeJSONSync(join(dir, filename), contents);
+      writeJSONSync(fullPath, contents);
     }
+
+    let mtime = new Date(processStartTimeMs);
+    utimesSync(fullPath, mtime, mtime);
   }
 
   let adapter = new NodeAdapter(dir, enableFileWatcher);
@@ -889,6 +953,9 @@ export function setupPermissionedRealm(
     published?: boolean;
   },
 ) {
+  if (!fileSystem) {
+    fileSystem = buildCardFileSystem(['**/*']);
+  }
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
 
   setGracefulCleanup();
@@ -930,11 +997,6 @@ export function setupPermissionedRealm(
       }
 
       ensureDirSync(testRealmDir);
-
-      // If a fileSystem is provided, use it to populate the test realm, otherwise copy the default cards
-      if (!fileSystem) {
-        copySync(join(__dirname, '..', 'cards'), testRealmDir);
-      }
 
       let virtualNetwork = createVirtualNetwork();
 
