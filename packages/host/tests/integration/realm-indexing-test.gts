@@ -228,10 +228,7 @@ module(`Integration | realm indexing`, function (hooks) {
       fileEntry?.deps?.includes(`${baseRealm.url}file-api`),
       'deps include base file-api module',
     );
-    assert.ok(
-      fileEntry?.deps?.includes(fileURL.href),
-      'deps include file URL',
-    );
+    assert.ok(fileEntry?.deps?.includes(fileURL.href), 'deps include file URL');
   });
 
   test('full indexing skips over unchanged items in index', async function (assert) {

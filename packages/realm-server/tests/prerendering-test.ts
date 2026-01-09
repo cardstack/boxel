@@ -8,8 +8,8 @@ import type {
   ModuleRenderResponse,
   FileExtractResponse,
   RenderRouteOptions,
-  baseRealm,
 } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 import type { Prerenderer } from '../prerender/index';
 import { PagePool } from '../prerender/page-pool';
 import { RenderRunner } from '../prerender/render-runner';
