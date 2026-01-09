@@ -33,7 +33,9 @@ export function getLowCreditThreshold(): number | null {
 export function getNextDailyCreditGrantAt(): number | null {
   try {
     let job = createDailyCreditGrantCronJob(() => {});
-    let nextDates = (job as { nextDates?: () => unknown }).nextDates;
+    let nextDates = (
+      job as CronJob & { nextDates?: (count?: number) => unknown }
+    ).nextDates;
     if (!nextDates) {
       return null;
     }

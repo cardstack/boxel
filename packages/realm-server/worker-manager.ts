@@ -22,9 +22,7 @@ import Router from '@koa/router';
 import { ecsMetadata, fullRequestURL, livenessCheck } from './middleware';
 import type { Server } from 'http';
 import { PgAdapter } from '@cardstack/postgres';
-import {
-  enqueueDailyCreditGrant,
-} from './scripts/daily-credit-grant';
+import { enqueueDailyCreditGrant } from './scripts/daily-credit-grant';
 import {
   DAILY_CREDIT_GRANT_CRON_TZ,
   createDailyCreditGrantCronJob,
