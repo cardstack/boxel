@@ -135,6 +135,10 @@ export default class FieldSpecEditTemplate extends Component<typeof Spec> {
     return Object.keys(this.allFields).filter((name) => isOwnField(card, name));
   }
 
+  get specModal(): CardDef {
+    return this.args.model as CardDef;
+  }
+
   <template>
     <article class='container'>
       <header class='header' aria-labelledby='title'>
@@ -201,7 +205,7 @@ export default class FieldSpecEditTemplate extends Component<typeof Spec> {
                 {{fieldName}}
               </h3>
               <FieldRenderer
-                @instance={{@model}}
+                @instance={{this.specModal}}
                 @fieldName={{fieldName}}
                 @fields={{this.allFields}}
                 as |field|

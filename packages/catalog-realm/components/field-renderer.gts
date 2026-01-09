@@ -1,7 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
 import {
   type CardDef,
-  type PartialBaseInstanceType,
   Box,
   type Field,
 } from 'https://cardstack.com/base/card-api';
@@ -13,7 +12,8 @@ import { initSharedState } from 'https://cardstack.com/base/shared-state';
 
 const fieldRendererCache = initSharedState(
   'fieldRendererCache',
-  () => new WeakMap<object, { box: Box<CardDef>; fieldsProxy: BoxComponent }>(),
+  () =>
+    new WeakMap<CardDef, { box: Box<CardDef>; fieldsProxy: BoxComponent }>(),
 );
 
 interface FieldInfo {
@@ -25,7 +25,7 @@ interface FieldInfo {
 
 interface FieldRendererSignature {
   Args: {
-    instance: CardDef | PartialBaseInstanceType<typeof CardDef>;
+    instance: CardDef;
     fieldName: string;
     showComputedFields?: boolean;
     usedLinksToFieldsOnly?: boolean;
@@ -41,16 +41,16 @@ interface FieldRendererSignature {
 // into account how the template re-renders so there is no flickering
 export class FieldRenderer extends GlimmerComponent<FieldRendererSignature> {
   get fieldsProxy() {
-    let cached = fieldRendererCache.get(this.args.instance as object);
+    let cached = fieldRendererCache.get(this.args.instance);
     if (!cached) {
-      const box = Box.create(this.args.instance as CardDef);
+      const box = Box.create(this.args.instance);
       const fieldsProxy = getBoxComponent(
         this.args.instance.constructor,
         box,
         undefined,
       );
       cached = { box, fieldsProxy };
-      fieldRendererCache.set(this.args.instance as object, cached);
+      fieldRendererCache.set(this.args.instance, cached);
     }
     return cached.fieldsProxy;
   }
