@@ -1,3 +1,5 @@
+import 'ember-power-select/styles';
+
 import Check from '@cardstack/boxel-icons/check';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { concat } from '@ember/helper';
@@ -11,7 +13,6 @@ import PowerSelect, {
   type PowerSelectArgs,
 } from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
-import 'ember-power-select/styles';
 import PowerSelectOptions from 'ember-power-select/components/power-select/options';
 
 import cn from '../../helpers/cn.ts';

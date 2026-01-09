@@ -1,10 +1,11 @@
+import 'ember-power-calendar/styles';
+
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import PowerCalendarRange from 'ember-power-calendar/components/power-calendar-range';
-import 'ember-power-calendar/styles';
 import { type TPowerCalendarRangeOnSelect } from 'ember-power-calendar/components/power-calendar-range';
 import powerCalendarFormatDate from 'ember-power-calendar/helpers/power-calendar-format-date';
 import {
