@@ -783,7 +783,7 @@ export class RealmServer {
 
   private injectIsolatedHTML(indexHTML: string, isolatedHTML: string): string {
     return indexHTML.replace(
-      /(<!--\s*data-boxel-isolated-start\s*-->)([\s\S]*?)(<!--\s*data-boxel-isolated-end\s*-->)/,
+      /(<script[^>]+id="boxel-isolated-start"[^>]*>\s*<\/script>)([\s\S]*?)(<script[^>]+id="boxel-isolated-end"[^>]*>\s*<\/script>)/,
       `$1\n${isolatedHTML}\n$3`,
     );
   }
