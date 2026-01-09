@@ -424,30 +424,19 @@ module(basename(__filename), function () {
           {
             let response = await request2
               .get(
-<<<<<<< HEAD
-                `${new URL(realmURL).pathname}_search?${stringify({
-                  filter: {
-                    on: baseCardRef,
-                    eq: {
-                      cardTitle: 'Test Card',
-                    },
-                  },
-                } as Query)}`,
-=======
                 `${new URL(realmURL).pathname}_search?query=${encodeURIComponent(
                   stringify(
                     {
                       filter: {
                         on: baseCardRef,
                         eq: {
-                          title: 'Test Card',
+                          cardTitle: 'Test Card',
                         },
                       },
                     } as Query,
                     { encode: false },
                   ),
                 )}`,
->>>>>>> main
               )
               .set('Accept', 'application/vnd.card+json')
               .set('Authorization', `Bearer ${createJWT(realm, 'rando')}`);
