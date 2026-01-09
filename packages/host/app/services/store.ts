@@ -9,7 +9,6 @@ import { isTesting } from '@embroider/macros';
 import { formatDistanceToNow } from 'date-fns';
 import { task } from 'ember-concurrency';
 
-import { flatMap } from 'lodash';
 import cloneDeep from 'lodash/cloneDeep';
 import isEqual from 'lodash/isEqual';
 import merge from 'lodash/merge';
@@ -493,23 +492,48 @@ export default class StoreService extends Service implements StoreInterface {
     return persistedResult as T | CardErrorJSONAPI;
   }
 
-  async search(query: Query, realmURL?: URL): Promise<CardDef[]> {
-    let realms = realmURL ? [realmURL] : this.realmServer.availableRealmURLs;
-    return flatMap(
-      await Promise.all(
-        realms.map((realmURL) => this._search(query, new URL(realmURL))),
-      ),
-    );
+  async search(query: Query, realms?: string[]): Promise<CardDef[]> {
+    let normalizedRealms = (realms ?? [])
+      .map((realm) => new RealmPaths(new URL(realm)).url)
+      .filter(Boolean);
+    let searchRealms =
+      normalizedRealms.length > 0
+        ? normalizedRealms
+        : this.realmServer.availableRealmURLs;
+    if (searchRealms.length === 0) {
+      return [];
+    }
+    return this._search(query, searchRealms);
   }
 
-  private async _search(query: Query, realmURL: URL): Promise<CardDef[]> {
-    let json = await this.cardService.fetchJSON(`${realmURL}_search`, {
+  private async _search(query: Query, realms: string[]): Promise<CardDef[]> {
+    let realmServerURLs = this.realmServer.getRealmServersForRealms(realms);
+    // TODO remove this assertion after multi-realm serer/federated identity is supported
+    this.realmServer.assertOwnRealmServer(realmServerURLs);
+    let [realmServerURL] = realmServerURLs;
+    let searchURL = new URL('_search', realmServerURL);
+    for (let realm of realms) {
+      searchURL.searchParams.append('realms', realm);
+    }
+    let response = await this.realmServer.maybeAuthedFetch(searchURL.href, {
       method: 'QUERY',
       headers: {
+        Accept: SupportedMimeType.CardJson,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(query),
     });
+    if (!response.ok) {
+      let responseText = await response.text();
+      let err = new Error(
+        `status: ${response.status} - ${response.statusText}. ${responseText}`,
+      ) as any;
+      err.status = response.status;
+      err.responseText = responseText;
+      err.responseHeaders = response.headers;
+      throw err;
+    }
+    let json = await response.json();
     if (!isCardCollectionDocument(json)) {
       throw new Error(
         `The realm search response was not a card collection document:
@@ -533,7 +557,7 @@ export default class StoreService extends Service implements StoreInterface {
                 query,
                 null,
                 2,
-              )} against realm ${realmURL}`,
+              )} against realms ${realms.join()}`,
               e,
             );
             return undefined;

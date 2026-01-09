@@ -20,7 +20,7 @@ import ToggleButton from './toggle-button';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    realmURL: URL;
+    realmURL: string;
     fileView: FileView | undefined;
     setFileView: (view: FileView) => void;
     isFileOpen: boolean;

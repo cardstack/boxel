@@ -20,7 +20,7 @@ import { normalizeDirPath } from '@cardstack/host/utils/normalized-dir-path';
 interface Args {
   Args: {
     relativePath: string;
-    realmURL: URL;
+    realmURL: string;
     selectedFile?: LocalPath;
     openDirs?: LocalPath[];
     onFileSelected?: (entryPath: LocalPath) => void;

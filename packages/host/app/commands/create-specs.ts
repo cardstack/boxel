@@ -164,10 +164,9 @@ export default class CreateSpecCommand extends HostBaseCommand<
         },
       };
 
-      const existingSpecs = await this.store.search(
-        existingSpecsQuery,
-        new URL(targetRealm),
-      );
+      const existingSpecs = await this.store.search(existingSpecsQuery, [
+        targetRealm,
+      ]);
       if (existingSpecs.length > 0) {
         console.warn(`Spec already exists for ${cardTitle}, skipping`);
         let savedSpec = existingSpecs[0] as Spec;

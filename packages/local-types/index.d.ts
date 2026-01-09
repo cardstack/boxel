@@ -21,6 +21,7 @@ import '@glint/environment-ember-loose/registry';
 import '@glint/environment-ember-loose/native-integration';
 import { ComponentLike } from '@glint/template';
 import 'ember-freestyle/glint';
+import './eslint-js';
 
 import type EmberAnimatedRegistry from 'ember-animated/template-registry';
 import type EmberContextTemplateRegistry from 'ember-provide-consume-context/template-registry';

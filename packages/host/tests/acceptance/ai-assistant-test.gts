@@ -25,6 +25,8 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import { skillsRealm } from '@cardstack/host/lib/utils';
+
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { AiAssistantMessageDrafts } from '@cardstack/host/utils/local-storage-keys';
@@ -47,7 +49,6 @@ import {
   getMonacoContent,
   envSkillId,
   catalogRealm,
-  skillsRealm,
 } from '../helpers';
 
 import {

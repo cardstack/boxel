@@ -1,0 +1,32 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "PageCard",
+        "module": "../site-config"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "pageId": "blog",
+      "pageUrl": "/blog",
+      "cardInfo": {
+        "notes": null,
+        "title": "Blog Page",
+        "description": "Blog landing page",
+        "thumbnailURL": null
+      },
+      "navOrder": 4,
+      "pageLabel": "Blog",
+      "showInNav": true,
+      "hasDropdown": false
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

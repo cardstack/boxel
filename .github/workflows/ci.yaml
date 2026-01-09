@@ -102,6 +102,12 @@ jobs:
         run: |
           echo "run_all=${{ startsWith(github.ref, 'refs/heads/ci-bisect') || startsWith(github.ref, 'refs/heads/ci-bisect-') || startsWith(github.head_ref || '', 'ci-bisect') }}" >> "$GITHUB_OUTPUT"
 
+  test-web-assets:
+    name: Build test web assets
+    needs: change-check
+    if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.matrix == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    uses: ./.github/workflows/test-web-assets.yaml
+
   ai-bot-test:
     name: AI bot Tests
     needs: change-check
@@ -199,7 +205,7 @@ jobs:
 
   boxel-ui-test:
     name: Boxel UI Tests
-    needs: change-check
+    needs: [change-check]
     if: needs.change-check.outputs.boxel-ui == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
@@ -254,7 +260,7 @@ jobs:
 
   matrix-client-test:
     name: Matrix Client Tests
-    needs: change-check
+    needs: [change-check, test-web-assets]
     if: needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     strategy:
@@ -268,25 +274,29 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - uses: ./.github/actions/init
+      - name: Download test web assets
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
       - name: Install Playwright Browsers
         run: pnpm exec playwright install
         working-directory: packages/matrix
-      - name: Build boxel-icons
-        run: pnpm build
-        working-directory: packages/boxel-icons
       - name: Serve boxel-icons
         run: pnpm serve &
         working-directory: packages/boxel-icons
-      - name: Build boxel-ui
-        run: pnpm build
-        working-directory: packages/boxel-ui/addon
       - name: Build boxel-motion
         run: pnpm build
         working-directory: packages/boxel-motion/addon
-      - name: Start host to serve assets for realm server
+      - name: Serve host dist (test assets) for realm server
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
-          run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
+          run: pnpm serve:dist &
           working-directory: packages/host
           wait-for: 3m
           wait-on: http-get://localhost:4200
@@ -410,7 +420,7 @@ jobs:
 
   realm-server-test:
     name: Realm Server Tests
-    needs: change-check
+    needs: [change-check, test-web-assets]
     if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
@@ -451,6 +461,7 @@ jobs:
             "search-prerendered-test.ts",
             "types-endpoint-test.ts",
             "server-endpoints-test.ts",
+            "server-endpoints/search-test.ts",
             "virtual-network-test.ts",
             "atomic-endpoints-test.ts",
             "request-forward-test.ts",
@@ -465,19 +476,23 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - uses: ./.github/actions/init
-      - name: Build boxel-icons
-        run: pnpm build
-        working-directory: packages/boxel-icons
+      - name: Download test web assets
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
       - name: Serve boxel-icons
         run: pnpm serve &
         working-directory: packages/boxel-icons
-      - name: Build boxel-ui
-        run: pnpm build
-        working-directory: packages/boxel-ui/addon
-      - name: Start host to serve assets for realm server
+      - name: Serve host dist (test assets) for realm server
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
-          run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
+          run: pnpm serve:dist &
           working-directory: packages/host
           wait-for: 3m
           wait-on: http-get://localhost:4200
@@ -511,7 +526,7 @@ jobs:
 
   vscode-boxel-tools-package:
     name: Boxel Tools VS Code Extension package
-    needs: change-check
+    needs: [change-check, test-web-assets]
     if: needs.change-check.outputs.vscode-boxel-tools == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
@@ -520,12 +535,16 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - uses: ./.github/actions/init
-      - name: Build boxel-icons
-        run: pnpm build
-        working-directory: packages/boxel-icons
-      - name: Build boxel-ui
-        run: pnpm build
-        working-directory: packages/boxel-ui/addon
+      - name: Download test web assets
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
       - name: Prepublish
         run: pnpm vscode:prepublish
         working-directory: packages/vscode-boxel-tools
@@ -555,7 +574,7 @@ jobs:
 
   workspace-sync-cli-test:
     name: Workspace Sync CLI Integration Tests
-    needs: change-check
+    needs: [change-check, test-web-assets]
     if: needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
@@ -564,19 +583,23 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - uses: ./.github/actions/init
-      - name: Build boxel-icons
-        run: pnpm build
-        working-directory: packages/boxel-icons
-      - name: Build boxel-ui
-        run: pnpm build
-        working-directory: packages/boxel-ui/addon
+      - name: Download test web assets
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
       - name: Build workspace-sync-cli
         run: pnpm build
         working-directory: packages/workspace-sync-cli
-      - name: Start host to serve assets
+      - name: Serve host dist (test assets)
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
-          run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
+          run: pnpm serve:dist &
           working-directory: packages/host
           wait-for: 3m
           wait-on: http-get://localhost:4200

@@ -36,37 +36,37 @@
       "cssImports": [],
       "typography": {
         "body": {
-          "fontSize": "0.875rem",
+          "fontSize": "0.9375rem",
           "fontFamily": "IBM Plex Sans",
           "fontWeight": "400",
-          "lineHeight": "1.5",
+          "lineHeight": "1.6",
           "sampleText": "Efficient data density is key to the Boxel philosophy."
         },
         "caption": {
           "fontSize": "0.75rem",
           "fontFamily": "IBM Plex Mono",
-          "fontWeight": "500",
+          "fontWeight": "600",
           "lineHeight": "1.2",
           "sampleText": "ID: BXL-04 [ACTIVE]"
         },
         "heading": {
-          "fontSize": "2.5rem",
+          "fontSize": "clamp(2.5rem, 6vw, 4rem)",
           "fontFamily": "IBM Plex Sans",
           "fontWeight": "700",
-          "lineHeight": "1.2",
+          "lineHeight": "1.05",
           "sampleText": "Build."
         },
         "subheading": {
-          "fontSize": "1.25rem",
+          "fontSize": "1.5rem",
           "fontFamily": "IBM Plex Sans",
-          "fontWeight": "500",
+          "fontWeight": "700",
           "lineHeight": "1.4",
           "sampleText": "Modular systems for complex workflows."
         },
         "sectionHeading": {
           "fontSize": "0.75rem",
           "fontFamily": "IBM Plex Mono",
-          "fontWeight": "700",
+          "fontWeight": "600",
           "lineHeight": "1",
           "sampleText": "MODULE 01"
         }
@@ -112,7 +112,7 @@
         "shadow2xl": "0 25px 50px -12px rgb(0 0 0 / 0.25)",
         "shadow2xs": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
         "background": "var(--boxel-dove, #F7F8FA)",
-        "foreground": "#0F172A",
+        "foreground": "var(--boxel-slate, #272330)",
         "destructive": "var(--cardstack-red, #FF5050)",
         "sidebarRing": "var(--boxel-teal, #00FFBA)",
         "sidebarAccent": "var(--cardstack-lime, #C3FC33)",
@@ -121,9 +121,9 @@
         "sidebarPrimary": "var(--boxel-teal, #00FFBA)",
         "trackingNormal": "0.01em",
         "mutedForeground": "#64748B",
-        "accentForeground": "#0F172A",
+        "accentForeground": "var(--boxel-slate, #272330)",
         "popoverForeground": "#111111",
-        "primaryForeground": "#0F172A",
+        "primaryForeground": "var(--boxel-slate, #272330)",
         "sidebarForeground": "#0F172A",
         "secondaryForeground": "var(--boxel-light, #FFFFFF)",
         "destructiveForeground": "#F8FAFC",
@@ -208,11 +208,11 @@
         "shadowXl": "0 20px 25px -5px rgb(0 0 0 / 0.5)",
         "shadowXs": "0 1px 2px 0 rgb(0 0 0 / 0.5)",
         "fontSerif": "'IBM Plex Serif', 'Georgia', Times, serif",
-        "secondary": "var(--cardstack-purple, #6638FF)",
+        "secondary": "var(--boxel-light, #FFFFFF)",
         "shadow2xl": "0 25px 50px -12px rgb(0 0 0 / 0.5)",
         "shadow2xs": "0 1px 2px 0 rgb(0 0 0 / 0.5)",
-        "background": "var(--brand-dark, #0F0F0F)",
-        "foreground": "var(--boxel-light, #FFFFFF)",
+        "background": "var(--brand-dark, #272330)",
+        "foreground": "var(--brand-light, #F7F8FA)",
         "destructive": "var(--cardstack-red, #FF5050)",
         "sidebarRing": "var(--boxel-teal, #00FFBA)",
         "sidebarAccent": "oklch(0.9338 0.1913 122.52)",
@@ -225,13 +225,13 @@
         "popoverForeground": "var(--boxel-light, #FFFFFF)",
         "primaryForeground": "#0F172A",
         "sidebarForeground": "var(--boxel-light, #FFFFFF)",
-        "secondaryForeground": "var(--boxel-light, #FFFFFF)",
+        "secondaryForeground": "var(--cardstack-purple, #6638FF)",
         "destructiveForeground": "var(--boxel-light, #FFFFFF)",
         "sidebarAccentForeground": "#0F172A",
         "sidebarPrimaryForeground": "#0F172A"
       },
       "functionalPalette": {
-        "dark": "var(--brand-dark, #0F0F0F)",
+        "dark": "var(--boxel-slate, #272330)",
         "light": "var(--boxel-dove, #F7F8FA)",
         "accent": "var(--cardstack-lime)",
         "primary": "var(--boxel-teal)",

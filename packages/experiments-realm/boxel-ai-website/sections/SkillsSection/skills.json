@@ -1,0 +1,176 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SkillsSection",
+        "module": "../skills-section"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "models": {
+        "headline": "Pick your brains.",
+        "footerNote": "🔓 True multi-model freedom. Switch providers mid-conversation. No vendor lock-in.",
+        "subheadline": "Your skills work with any model. 300+ LLMs via OpenRouter. 200+ image, video, audio & utility models via Replicate.",
+        "openRouterModels": [
+          {
+            "chipIcon": "🅰️",
+            "chipName": "Claude 3.5"
+          },
+          {
+            "chipIcon": "⚡",
+            "chipName": "GPT-4o"
+          },
+          {
+            "chipIcon": "🔷",
+            "chipName": "Gemini 2.5"
+          },
+          {
+            "chipIcon": "🦙",
+            "chipName": "Llama 3.1"
+          },
+          {
+            "chipIcon": "𝕏",
+            "chipName": "Grok"
+          },
+          {
+            "chipIcon": "🌀",
+            "chipName": "Mistral"
+          },
+          {
+            "chipIcon": "💎",
+            "chipName": "DeepSeek"
+          },
+          {
+            "chipIcon": "🌟",
+            "chipName": "Qwen"
+          }
+        ],
+        "replicateCategories": [
+          {
+            "categoryIcon": "🎨",
+            "categoryLabel": "Image & Video",
+            "models": [
+              {
+                "chipIcon": "🎨",
+                "chipName": "Flux Pro"
+              },
+              {
+                "chipIcon": "🎬",
+                "chipName": "WAN 2.5"
+              }
+            ],
+            "modelCount": "200+ models",
+            "accentColor": "var(--boxel-purple)"
+          },
+          {
+            "categoryIcon": "🔊",
+            "categoryLabel": "Audio & Speech",
+            "models": [
+              {
+                "chipIcon": "🔊",
+                "chipName": "Speech"
+              },
+              {
+                "chipIcon": "🎵",
+                "chipName": "Lyria 2"
+              },
+              {
+                "chipIcon": "📝",
+                "chipName": "Whisper"
+              }
+            ],
+            "modelCount": "80+ models",
+            "accentColor": "var(--boxel-purple)"
+          },
+          {
+            "categoryIcon": "🛠️",
+            "categoryLabel": "Utilities",
+            "models": [],
+            "modelCount": "Tools & APIs",
+            "accentColor": "var(--boxel-purple)"
+          }
+        ],
+        "categories": [
+          {
+            "categoryIcon": "🎨",
+            "categoryLabel": "Image & Video",
+            "models": [
+              {
+                "chipIcon": "🎨",
+                "chipName": "Flux Pro"
+              },
+              {
+                "chipIcon": "🎬",
+                "chipName": "WAN 2.5"
+              }
+            ],
+            "modelCount": "200+ models",
+            "accentColor": "var(--boxel-purple)"
+          }
+        ]
+      },
+      "skills": [
+        {
+          "skillIcon": "💬",
+          "skillName": "Prompt",
+          "skillType": null,
+          "skillDescription": "Write in our brand voice...",
+          "skillSections": [],
+          "isHighlighted": false,
+          "accentColor": null
+        },
+        {
+          "skillIcon": "📋",
+          "skillName": "Capture",
+          "skillType": null,
+          "skillDescription": "Session Report",
+          "skillSections": [],
+          "isHighlighted": false,
+          "accentColor": null
+        },
+        {
+          "skillIcon": "📦",
+          "skillName": "Package",
+          "skillType": null,
+          "skillDescription": "Skill Card",
+          "skillSections": [],
+          "isHighlighted": true,
+          "accentColor": "var(--boxel-teal)"
+        },
+        {
+          "skillIcon": "🏛️",
+          "skillName": "Activate",
+          "skillType": null,
+          "skillDescription": "Active Skills",
+          "skillSections": [],
+          "isHighlighted": false,
+          "accentColor": null
+        }
+      ],
+      "bullets": [
+        "Vertical skills: Brand guides, policy manuals",
+        "Domain skills: Legal review, financial analysis",
+        "Behavior skills: How the assistant responds"
+      ],
+      "cardInfo": {
+        "notes": null,
+        "title": "Skills",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "headline": "Choose your model. Own your prompts.",
+      "footerNote": null,
+      "subheadline": "Everything the AI does—vibe coding, workspace orchestration, assistant behavior—is powered by skill cards you can inspect, modify, or replace.",
+      "sectionLabel": "AI Extensibility",
+      "sectionNumber": "005"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -41,6 +41,15 @@ async function getAvailableCredits(
 
   return await sumUpCreditsLedger(dbAdapter, {
     userId: user.id,
+    creditType: [
+      'plan_allowance',
+      'plan_allowance_used',
+      'plan_allowance_expired',
+      'daily_credit',
+      'daily_credit_used',
+      'extra_credit',
+      'extra_credit_used',
+    ],
   });
 }
 

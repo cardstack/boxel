@@ -226,6 +226,7 @@ export async function startServer({
   process.env.MATRIX_URL = matrixURL;
   process.env.REALM_SERVER_MATRIX_USERNAME = 'realm_server';
   process.env.NODE_ENV = 'test';
+  process.env.LOW_CREDIT_THRESHOLD = '2000';
 
   let workerArgs = [
     `--transpileOnly`,
