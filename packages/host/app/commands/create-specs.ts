@@ -16,7 +16,7 @@ import {
   isResolvedCodeRef,
 } from '@cardstack/runtime-common/code-ref';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import type { Spec } from 'https://cardstack.com/base/spec';
 import type { SpecType } from 'https://cardstack.com/base/spec';
@@ -146,7 +146,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
     declaration: ModuleDeclaration,
     codeRef: ResolvedCodeRef,
     targetRealm: string,
-    SpecKlass: typeof BaseDef,
+    SpecKlass: typeof CardDef,
     createIfExists: boolean = false,
     autoGenerateReadme: boolean = false,
   ): Promise<CreateSpecResult> {
@@ -258,9 +258,9 @@ export default class CreateSpecCommand extends HostBaseCommand<
     }
 
     let declarations = await this.moduleContentsService.assemble(url);
-    let SpecKlass = await loadCardDef(specRef, {
+    let SpecKlass = (await loadCardDef(specRef, {
       loader: this.loaderService.loader,
-    });
+    })) as typeof CardDef;
 
     let specs: Spec[] = [];
     let newSpecs: Spec[] = [];
@@ -357,10 +357,10 @@ export default class CreateSpecCommand extends HostBaseCommand<
  */
 async function getSpecClassFromDeclaration(
   codeRef: ResolvedCodeRef,
-  fallbackSpecClass: typeof BaseDef,
+  fallbackSpecClass: typeof CardDef,
   loader: Loader,
   targetRealm: string,
-): Promise<typeof BaseDef> {
+): Promise<typeof CardDef> {
   try {
     const specCodeRef: ResolvedCodeRef = {
       module: codeRef.module,
@@ -373,6 +373,7 @@ async function getSpecClassFromDeclaration(
 
     if (
       loadedSpec &&
+      isCardDef(loadedSpec) &&
       loadedSpec !== fallbackSpecClass &&
       isSpecSubclass(loadedSpec, fallbackSpecClass)
     ) {
@@ -387,10 +388,12 @@ async function getSpecClassFromDeclaration(
 
 /**
  * Checks if candidate class extends ancestor class via prototype chain.
+ * Both candidate and ancestor are CardDefs (Specs are Cards, not Fields).
+ * getAncestor returns typeof BaseDef, so we use that for the internal traversal.
  */
 function isSpecSubclass(
-  candidate: typeof BaseDef,
-  ancestor: typeof BaseDef,
+  candidate: typeof CardDef,
+  ancestor: typeof CardDef,
 ): boolean {
   let current: typeof BaseDef | undefined = candidate;
   while (current) {
