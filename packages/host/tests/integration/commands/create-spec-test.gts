@@ -26,6 +26,64 @@ const catalogRealmURL = ensureTrailingSlash(catalogRealm.url);
 const FIELD_SPEC_EDIT_COMPONENT = `${catalogRealmURL}field-spec/components/field-spec-edit-template`;
 const FIELD_SPEC_ISOLATED_COMPONENT = `${catalogRealmURL}field-spec/components/field-spec-isolated-template`;
 
+const testCardSource = `
+  import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+
+  export class TestCard extends CardDef {
+    static displayName = 'Test Card';
+    @field name = contains(StringField);
+  }
+`;
+
+const testFieldSource = `
+  import { FieldDef } from 'https://cardstack.com/base/card-api';
+
+  export class TestField extends FieldDef {
+    static displayName = 'Test Field';
+  }
+`;
+
+const appCardSource = `
+  import { CardDef } from 'https://cardstack.com/base/card-api';
+
+  export class AppCard extends CardDef {
+    static displayName = 'App Card';
+  }
+`;
+
+const testComponentSource = `
+  import Component from '@glimmer/component';
+
+  export default class TestComponent extends Component {
+    static displayName = 'Test Component';
+  }
+`;
+
+const testCommandSource = `
+  import { Command } from '@cardstack/runtime-common';
+
+  export default class TestCommand extends Command {
+    static displayName = 'Test Command';
+  }
+`;
+
+const userFieldSpecSource = `
+  import { field, contains } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+  import { Spec } from 'https://cardstack.com/base/spec';
+  import FieldSpecEditTemplate from '${FIELD_SPEC_EDIT_COMPONENT}';
+  import FieldSpecIsolatedTemplate from '${FIELD_SPEC_ISOLATED_COMPONENT}';
+
+  export class UserFieldSpec extends Spec {
+    static displayName = 'User Field Spec';
+    static isolated = FieldSpecIsolatedTemplate as unknown as typeof Spec.isolated;
+    static edit = FieldSpecEditTemplate as unknown as typeof Spec.edit;
+
+    @field highlight = contains(StringField);
+  }
+`;
+
 module('Integration | Command | create-specs', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
@@ -85,46 +143,12 @@ module('Integration | Command | create-specs', function (hooks) {
       mockMatrixUtils,
       realmURL: testRealmURL,
       contents: {
-        'test-card.gts': `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-
-export class TestCard extends CardDef {
-  static displayName = 'Test Card';
-  @field name = contains(StringField);
-}`,
-        'test-field.gts': `import { FieldDef } from 'https://cardstack.com/base/card-api';
-
-export class TestField extends FieldDef {
-  static displayName = 'Test Field';
-}`,
-        'app-card.gts': `import { CardDef } from 'https://cardstack.com/base/card-api';
-
-export class AppCard extends CardDef {
-  static displayName = 'App Card';
-}`,
-        'test-component.gts': `import Component from '@glimmer/component';
-
-export default class TestComponent extends Component {
-  static displayName = 'Test Component';
-}`,
-        'test-command.gts': `import { Command } from '@cardstack/runtime-common';
-
-export default class TestCommand extends Command {
-  static displayName = 'Test Command';
-}`,
-        'user-field-spec.gts': `import { field, contains } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import { Spec } from 'https://cardstack.com/base/spec';
-import FieldSpecEditTemplate from '${FIELD_SPEC_EDIT_COMPONENT}';
-import FieldSpecIsolatedTemplate from '${FIELD_SPEC_ISOLATED_COMPONENT}';
-
-export class UserFieldSpec extends Spec {
-  static displayName = 'User Field Spec';
-  static isolated = FieldSpecIsolatedTemplate as unknown as typeof Spec.isolated;
-  static edit = FieldSpecEditTemplate as unknown as typeof Spec.edit;
-
-  @field highlight = contains(StringField);
-}`,
+        'test-card.gts': testCardSource,
+        'test-field.gts': testFieldSource,
+        'app-card.gts': appCardSource,
+        'test-component.gts': testComponentSource,
+        'test-command.gts': testCommandSource,
+        'user-field-spec.gts': userFieldSpecSource,
         '.realm.json': `{ "name": "${realmName}" }`,
       },
     });
