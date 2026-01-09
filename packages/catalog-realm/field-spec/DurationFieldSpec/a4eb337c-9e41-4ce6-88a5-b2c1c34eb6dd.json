@@ -10,7 +10,7 @@
     "attributes": {
       "ref": {
         "name": "DurationFieldSpec",
-        "module": "http://localhost:4201/catalog/field-spec/duration-field-spec"
+        "module": "../duration-field-spec"
       },
       "full": {
         "days": 31,

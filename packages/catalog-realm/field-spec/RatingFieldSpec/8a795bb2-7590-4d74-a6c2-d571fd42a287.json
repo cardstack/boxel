@@ -10,7 +10,7 @@
     "attributes": {
       "ref": {
         "name": "RatingFieldSpec",
-        "module": "http://localhost:4201/catalog/field-spec/rating-field-spec"
+        "module": "../rating-field-spec"
       },
       "title": "Rating Field Spec",
       "readMe": null,

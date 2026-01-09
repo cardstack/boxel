@@ -10,7 +10,7 @@
     "attributes": {
       "ref": {
         "name": "RelativeTimeFieldSpec",
-        "module": "http://localhost:4201/catalog/field-spec/relative-time-field-spec"
+        "module": "../relative-time-field-spec"
       },
       "title": "Relative Time Field Spec",
       "readMe": null,

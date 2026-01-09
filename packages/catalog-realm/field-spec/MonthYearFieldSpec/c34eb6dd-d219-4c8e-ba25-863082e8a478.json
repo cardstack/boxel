@@ -10,7 +10,7 @@
     "attributes": {
       "ref": {
         "name": "MonthYearFieldSpec",
-        "module": "http://localhost:4201/catalog/field-spec/month-year-field-spec"
+        "module": "../month-year-field-spec"
       },
       "title": "Month Year Field Spec",
       "readMe": null,

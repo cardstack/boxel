@@ -10,7 +10,7 @@
     "attributes": {
       "ref": {
         "name": "DatetimeFieldSpec",
-        "module": "http://localhost:4201/catalog/field-spec/datetime-field-spec"
+        "module": "../datetime-field-spec"
       },
       "short": "2026-01-08T16:04:00",
       "title": "Datetime Field Spec",

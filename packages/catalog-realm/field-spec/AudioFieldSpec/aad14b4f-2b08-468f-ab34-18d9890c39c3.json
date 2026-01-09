@@ -10,7 +10,7 @@
     "attributes": {
       "ref": {
         "name": "AudioFieldSpec",
-        "module": "http://localhost:4201/catalog/field-spec/audio-field-spec"
+        "module": "../audio-field-spec"
       },
       "title": "Audio Field Spec",
       "readMe": null,

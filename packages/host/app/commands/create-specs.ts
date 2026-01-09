@@ -153,10 +153,11 @@ export default class CreateSpecCommand extends HostBaseCommand<
     const title = this.getSpecTitle(declaration, codeRef.name);
     const specType = new SpecTypeGuesser(declaration).type;
 
-    const specClassToUse = await getSpecClassFromDeclaration(
+    const ResolvedSpecClass = await getSpecClassFromDeclaration(
       codeRef,
       SpecKlass,
       this.loaderService.loader,
+      targetRealm,
     );
     let createdSpecRes: CreateSpecResult;
     if (!createIfExists) {
@@ -179,7 +180,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
         let savedSpec = existingSpecs[0] as Spec;
         createdSpecRes = { spec: savedSpec, new: false };
       } else {
-        let spec = new specClassToUse({
+        let spec = new ResolvedSpecClass({
           specType,
           ref: codeRef,
           title,
@@ -190,7 +191,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
         createdSpecRes = { spec: savedSpec, new: true };
       }
     } else {
-      let spec = new specClassToUse({
+      let spec = new ResolvedSpecClass({
         specType,
         ref: codeRef,
         title,
@@ -244,7 +245,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
 
     let url: string;
     if (codeRef) {
-      let relativeTo = new URL(codeRef.module);
+      let relativeTo = new URL(targetRealm);
       let maybeAbsoluteRef = codeRefWithAbsoluteURL(codeRef, relativeTo);
       if (isResolvedCodeRef(maybeAbsoluteRef)) {
         codeRef = maybeAbsoluteRef;
@@ -351,12 +352,14 @@ export default class CreateSpecCommand extends HostBaseCommand<
  * @param codeRef - Code reference of the code being documented (used for naming convention)
  * @param fallbackSpecClass - Base Spec class to use if no subclass found
  * @param loader - Module loader for dynamically loading Spec subclasses
+ * @param targetRealm - Realm URL to use as relativeTo for loading the spec class
  * @returns Spec subclass if found, otherwise fallback base Spec
  */
 async function getSpecClassFromDeclaration(
   codeRef: ResolvedCodeRef,
   fallbackSpecClass: typeof BaseDef,
   loader: Loader,
+  targetRealm: string,
 ): Promise<typeof BaseDef> {
   try {
     const specCodeRef: ResolvedCodeRef = {
@@ -365,7 +368,7 @@ async function getSpecClassFromDeclaration(
     };
     const loadedSpec = await loadCardDef(specCodeRef, {
       loader,
-      relativeTo: new URL(codeRef.module),
+      relativeTo: new URL(targetRealm),
     });
 
     if (

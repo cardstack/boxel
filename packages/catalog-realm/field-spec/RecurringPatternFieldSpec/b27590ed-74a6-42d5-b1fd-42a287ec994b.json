@@ -10,7 +10,7 @@
     "attributes": {
       "ref": {
         "name": "RecurringPatternFieldSpec",
-        "module": "http://localhost:4201/catalog/field-spec/recurring-pattern-field-spec"
+        "module": "../recurring-pattern-field-spec"
       },
       "title": "Recurring Pattern Field Spec",
       "readMe": null,

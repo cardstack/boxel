@@ -10,7 +10,7 @@
     "attributes": {
       "ref": {
         "name": "DateFieldSpec",
-        "module": "http://localhost:4201/catalog/field-spec/date-field-spec"
+        "module": "../date-field-spec"
       },
       "title": "Date Field Spec",
       "readMe": null,

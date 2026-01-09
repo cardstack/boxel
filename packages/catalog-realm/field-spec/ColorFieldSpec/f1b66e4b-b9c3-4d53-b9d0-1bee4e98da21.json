@@ -10,7 +10,7 @@
     "attributes": {
       "ref": {
         "name": "ColorFieldSpec",
-        "module": "http://localhost:4201/catalog/field-spec/color-field-spec"
+        "module": "../color-field-spec"
       },
       "title": "Color Field Spec",
       "wheel": "#ddff00",

@@ -10,7 +10,7 @@
     "attributes": {
       "ref": {
         "name": "ImageFieldSpec",
-        "module": "http://localhost:4201/catalog/field-spec/image-field-spec"
+        "module": "../image-field-spec"
       },
       "title": "Image Field Spec",
       "avatar": {

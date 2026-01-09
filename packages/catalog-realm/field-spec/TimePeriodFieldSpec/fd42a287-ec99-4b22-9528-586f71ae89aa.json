@@ -10,7 +10,7 @@
     "attributes": {
       "ref": {
         "name": "TimePeriodFieldSpec",
-        "module": "http://localhost:4201/catalog/field-spec/time-period-field-spec"
+        "module": "../time-period-field-spec"
       },
       "title": "Time Period Field Spec",
       "readMe": null,

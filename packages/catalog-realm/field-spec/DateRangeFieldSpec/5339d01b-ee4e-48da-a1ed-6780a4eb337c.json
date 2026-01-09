@@ -10,7 +10,7 @@
     "attributes": {
       "ref": {
         "name": "DateRangeFieldSpec",
-        "module": "http://localhost:4201/catalog/field-spec/date-range-field-spec"
+        "module": "../date-range-field-spec"
       },
       "title": "Date Range Field Spec",
       "readMe": null,

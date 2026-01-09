@@ -10,7 +10,7 @@
     "attributes": {
       "ref": {
         "name": "DayFieldSpec",
-        "module": "http://localhost:4201/catalog/field-spec/day-field-spec"
+        "module": "../day-field-spec"
       },
       "title": "Day Field Spec",
       "readMe": null,

@@ -10,7 +10,7 @@
     "attributes": {
       "ref": {
         "name": "MultipleImageFieldSpec",
-        "module": "http://localhost:4201/catalog/field-spec/multiple-image-field-spec"
+        "module": "../multiple-image-field-spec"
       },
       "list": {
         "images": [

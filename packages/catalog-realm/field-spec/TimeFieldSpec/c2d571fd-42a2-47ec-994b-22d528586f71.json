@@ -10,7 +10,7 @@
     "attributes": {
       "ref": {
         "name": "TimeFieldSpec",
-        "module": "http://localhost:4201/catalog/field-spec/time-field-spec"
+        "module": "../time-field-spec"
       },
       "title": "Time Field Spec",
       "hour24": {

@@ -10,7 +10,7 @@
     "attributes": {
       "ref": {
         "name": "QuantityFieldSpec",
-        "module": "http://localhost:4201/catalog/field-spec/quantity-field-spec"
+        "module": "../quantity-field-spec"
       },
       "title": "Quantity Field Spec",
       "readMe": null,

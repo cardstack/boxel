@@ -10,7 +10,7 @@
     "attributes": {
       "ref": {
         "name": "DatetimeStampFieldSpec",
-        "module": "http://localhost:4201/catalog/field-spec/datetime-stamp-field-spec"
+        "module": "../datetime-stamp-field-spec"
       },
       "title": "Datetime Stamp Field Spec",
       "readMe": null,

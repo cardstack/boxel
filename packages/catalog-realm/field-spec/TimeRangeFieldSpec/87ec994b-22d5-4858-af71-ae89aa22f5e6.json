@@ -10,7 +10,7 @@
     "attributes": {
       "ref": {
         "name": "TimeRangeFieldSpec",
-        "module": "http://localhost:4201/catalog/field-spec/time-range-field-spec"
+        "module": "../time-range-field-spec"
       },
       "title": "Time Range Field Spec",
       "readMe": null,

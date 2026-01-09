@@ -10,7 +10,7 @@
     "attributes": {
       "ref": {
         "name": "QuarterFieldSpec",
-        "module": "http://localhost:4201/catalog/field-spec/quarter-field-spec"
+        "module": "../quarter-field-spec"
       },
       "title": "Quarter Field Spec",
       "readMe": null,
