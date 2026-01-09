@@ -22,13 +22,13 @@ import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
 import {
   codeRefWithAbsoluteURL,
+  isOwnField,
   isPrimitive,
   isResolvedCodeRef,
   loadCardDef,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common';
 import GenerateReadmeSpecCommand from '@cardstack/boxel-host/commands/generate-readme-spec';
-import { isOwnField } from '../../utils/is-own-field';
 import { FieldRenderer } from '../../components/field-renderer';
 
 function myLoader(): Loader {
