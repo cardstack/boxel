@@ -103,7 +103,7 @@ export class SearchCardsByQueryCommand extends HostBaseCommand<
         (c) =>
           new SearchCardSummaryField({
             id: c.id,
-            title: c.cardTitle,
+            cardTitle: c.cardTitle,
           }),
       ),
       cardDescription: `Query: ${JSON.stringify(input.query.filter, null, 2)}`,
