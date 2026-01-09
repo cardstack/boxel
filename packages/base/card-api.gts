@@ -968,31 +968,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   }
 
   component(model: Box<BaseDef>): BoxComponent {
-    let isComputed = !!this.computeVia;
-    let field = this;
-    return class ContainsComponent extends GlimmerComponent<{
-      Element: HTMLElement;
-      Args: { Named: { format?: Format } };
-    }> {
-      getEffectifeFormat = (defaultFormats: FieldFormats) => {
-        let format = this.args.format ?? defaultFormats.fieldDef;
-        if (format === 'edit' && isComputed) {
-          return 'embedded';
-        }
-        return format;
-      };
-
-      <template>
-        <DefaultFormatsConsumer as |defaultFormats|>
-          {{#let (fieldComponent field model) as |FieldComponent|}}
-            <FieldComponent
-              @format={{this.getEffectifeFormat defaultFormats}}
-              ...attributes
-            />
-          {{/let}}
-        </DefaultFormatsConsumer>
-      </template>
-    };
+    return fieldComponent(this, model);
   }
 }
 
