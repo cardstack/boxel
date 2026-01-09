@@ -2164,6 +2164,9 @@ module(basename(__filename), function () {
                   creditsAvailableInPlanAllowance: null,
                   creditsIncludedInPlanAllowance: null,
                   extraCreditsAvailableInBalance: 0,
+                  lowCreditThreshold: null,
+                  lastDailyCreditGrantAt: null,
+                  nextDailyCreditGrantAt: null,
                 },
                 relationships: {
                   subscription: null,

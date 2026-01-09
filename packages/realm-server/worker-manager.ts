@@ -22,11 +22,14 @@ import Router from '@koa/router';
 import { ecsMetadata, fullRequestURL, livenessCheck } from './middleware';
 import type { Server } from 'http';
 import { PgAdapter } from '@cardstack/postgres';
-import { CronJob } from 'cron';
 import {
   enqueueDailyCreditGrant,
-  parseLowCreditThreshold,
 } from './scripts/daily-credit-grant';
+import {
+  DAILY_CREDIT_GRANT_CRON_TZ,
+  createDailyCreditGrantCronJob,
+  parseLowCreditThreshold,
+} from './lib/daily-credit-grant-config';
 
 /* About the Worker Manager
  *
@@ -36,10 +39,6 @@ import {
  */
 
 let log = logger('worker-manager');
-const DAILY_CREDIT_GRANT_CRON_SCHEDULE =
-  process.env.DAILY_CREDIT_GRANT_CRON_SCHEDULE ?? '0 3 * * *';
-const DAILY_CREDIT_GRANT_CRON_TZ =
-  process.env.DAILY_CREDIT_GRANT_CRON_TZ ?? 'America/New_York';
 
 // This is an ENV var we get from ECS that looks like:
 // http://169.254.170.2/v3/a1de500d004f49bea02ace30cefb0f01-3236013547 where the
@@ -538,8 +537,7 @@ async function query(expression: Expression) {
 
 function startDailyCreditGrantCron() {
   let lowCreditThreshold = parseLowCreditThreshold();
-  let job = new CronJob(
-    DAILY_CREDIT_GRANT_CRON_SCHEDULE,
+  let job = createDailyCreditGrantCronJob(
     async () => {
       try {
         await enqueueDailyCreditGrant({
@@ -551,11 +549,7 @@ function startDailyCreditGrantCron() {
         log.error('daily-credit-grant cron failed to enqueue job', error);
       }
     },
-    null,
-    false,
-    DAILY_CREDIT_GRANT_CRON_TZ,
-    null,
-    true,
+    { runOnInit: true },
   );
 
   job.start();

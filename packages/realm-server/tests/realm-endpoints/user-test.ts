@@ -106,6 +106,9 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
               creditsAvailableInPlanAllowance: null,
               creditsIncludedInPlanAllowance: null,
               extraCreditsAvailableInBalance: 0,
+              lowCreditThreshold: null,
+              lastDailyCreditGrantAt: null,
+              nextDailyCreditGrantAt: null,
             },
             relationships: {
               subscription: null,
@@ -224,6 +227,9 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
               creditsAvailableInPlanAllowance: 2500,
               creditsIncludedInPlanAllowance: 2500,
               extraCreditsAvailableInBalance: 100,
+              lowCreditThreshold: null,
+              lastDailyCreditGrantAt: null,
+              nextDailyCreditGrantAt: null,
             },
             relationships: {
               subscription: {
@@ -265,6 +271,190 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         },
         '/_user response is correct',
       );
+    });
+
+    test('responds with nextDailyCreditGrantAt when user is below low credit threshold', async function (assert) {
+      let originalLowCreditThreshold = process.env.LOW_CREDIT_THRESHOLD;
+      process.env.LOW_CREDIT_THRESHOLD = '2000';
+      try {
+        await insertUser(dbAdapter, 'user@test', 'cus_123', 'user@test.com');
+        let response = await request
+          .get(`/_user`)
+          .set('Accept', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'user@test', ['read', 'write'])}`,
+          );
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let json = response.body;
+        assert.strictEqual(
+          json.data.attributes.lowCreditThreshold,
+          2000,
+          'lowCreditThreshold matches env var',
+        );
+        assert.ok(
+          json.data.attributes.nextDailyCreditGrantAt,
+          'nextDailyCreditGrantAt is set',
+        );
+        assert.strictEqual(
+          json.data.attributes.lastDailyCreditGrantAt,
+          null,
+          'lastDailyCreditGrantAt is null without daily grants',
+        );
+      } finally {
+        if (originalLowCreditThreshold == null) {
+          delete process.env.LOW_CREDIT_THRESHOLD;
+        } else {
+          process.env.LOW_CREDIT_THRESHOLD = originalLowCreditThreshold;
+        }
+      }
+    });
+
+    test('responds with lastDailyCreditGrantAt when user is above low credit threshold', async function (assert) {
+      let originalLowCreditThreshold = process.env.LOW_CREDIT_THRESHOLD;
+      process.env.LOW_CREDIT_THRESHOLD = '2000';
+      try {
+        let user = await insertUser(
+          dbAdapter,
+          'user@test',
+          'cus_123',
+          'user@test.com',
+        );
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: 3000,
+          creditType: 'extra_credit',
+          subscriptionCycleId: null,
+        });
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: 100,
+          creditType: 'daily_credit',
+          subscriptionCycleId: null,
+        });
+
+        let response = await request
+          .get(`/_user`)
+          .set('Accept', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'user@test', ['read', 'write'])}`,
+          );
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let json = response.body;
+        assert.strictEqual(
+          json.data.attributes.lowCreditThreshold,
+          2000,
+          'lowCreditThreshold matches env var',
+        );
+        assert.ok(
+          json.data.attributes.lastDailyCreditGrantAt,
+          'lastDailyCreditGrantAt is set',
+        );
+      } finally {
+        if (originalLowCreditThreshold == null) {
+          delete process.env.LOW_CREDIT_THRESHOLD;
+        } else {
+          process.env.LOW_CREDIT_THRESHOLD = originalLowCreditThreshold;
+        }
+      }
+    });
+
+    test('responds without daily grant timestamps when low credit threshold is unset', async function (assert) {
+      let originalLowCreditThreshold = process.env.LOW_CREDIT_THRESHOLD;
+      delete process.env.LOW_CREDIT_THRESHOLD;
+      try {
+        await insertUser(
+          dbAdapter,
+          'user-threshold-unset@test',
+          'cus_999',
+          'user-threshold-unset@test.com',
+        );
+        let response = await request
+          .get(`/_user`)
+          .set('Accept', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'user-threshold-unset@test', [
+              'read',
+              'write',
+            ])}`,
+          );
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let json = response.body;
+        assert.strictEqual(
+          json.data.attributes.lowCreditThreshold,
+          null,
+          'lowCreditThreshold is null when env var is unset',
+        );
+        assert.strictEqual(
+          json.data.attributes.nextDailyCreditGrantAt,
+          null,
+          'nextDailyCreditGrantAt is null when threshold is unset',
+        );
+        assert.strictEqual(
+          json.data.attributes.lastDailyCreditGrantAt,
+          null,
+          'lastDailyCreditGrantAt is null without daily grants',
+        );
+      } finally {
+        if (originalLowCreditThreshold == null) {
+          delete process.env.LOW_CREDIT_THRESHOLD;
+        } else {
+          process.env.LOW_CREDIT_THRESHOLD = originalLowCreditThreshold;
+        }
+      }
+    });
+
+    test('responds with the most recent daily grant timestamp', async function (assert) {
+      let originalLowCreditThreshold = process.env.LOW_CREDIT_THRESHOLD;
+      process.env.LOW_CREDIT_THRESHOLD = '2000';
+      try {
+        let user = await insertUser(
+          dbAdapter,
+          'user-multi-daily@test',
+          'cus_456',
+          'user-multi-daily@test.com',
+        );
+        await dbAdapter.execute(
+          `INSERT INTO credits_ledger (user_id, credit_amount, credit_type, subscription_cycle_id, created_at)
+          VALUES ($1, $2, $3, $4, $5)`,
+          {
+            bind: [user.id, 50, 'daily_credit', null, 1000],
+          },
+        );
+        await dbAdapter.execute(
+          `INSERT INTO credits_ledger (user_id, credit_amount, credit_type, subscription_cycle_id, created_at)
+          VALUES ($1, $2, $3, $4, $5)`,
+          {
+            bind: [user.id, 75, 'daily_credit', null, 2000],
+          },
+        );
+
+        let response = await request
+          .get(`/_user`)
+          .set('Accept', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'user-multi-daily@test', [
+              'read',
+              'write',
+            ])}`,
+          );
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let json = response.body;
+        assert.strictEqual(
+          json.data.attributes.lastDailyCreditGrantAt,
+          2000,
+          'lastDailyCreditGrantAt reflects the most recent daily grant',
+        );
+      } finally {
+        if (originalLowCreditThreshold == null) {
+          delete process.env.LOW_CREDIT_THRESHOLD;
+        } else {
+          process.env.LOW_CREDIT_THRESHOLD = originalLowCreditThreshold;
+        }
+      }
     });
   });
 
@@ -309,75 +499,94 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     });
 
     test('creates a new user with initial credits', async function (assert) {
-      let response = await request
-        .post(`/_user`)
-        .set('Accept', 'application/vnd.api+json')
-        .set('Content-Type', 'application/vnd.api+json')
-        .set(
-          'Authorization',
-          `Bearer ${createJWT(testRealm, 'newuser@test', ['read', 'write'])}`,
-        )
-        .send({
-          data: {
-            type: 'user',
-            attributes: {
-              registrationToken: 'reg_token_123',
+      let originalLowCreditThreshold = process.env.LOW_CREDIT_THRESHOLD;
+      process.env.LOW_CREDIT_THRESHOLD = '2000';
+      try {
+        let response = await request
+          .post(`/_user`)
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'newuser@test', ['read', 'write'])}`,
+          )
+          .send({
+            data: {
+              type: 'user',
+              attributes: {
+                registrationToken: 'reg_token_123',
+              },
             },
-          },
+          });
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(response.text, 'ok', 'Response is ok');
+
+        // Verify user was created
+        let user = await getUserByMatrixUserId(dbAdapter, 'newuser@test');
+        assert.ok(user, 'User was created');
+        assert.strictEqual(
+          user!.matrixRegistrationToken,
+          'reg_token_123',
+          'Registration token was saved',
+        );
+
+        // Verify credits were added
+        let dailyCredits = await sumUpCreditsLedger(dbAdapter, {
+          userId: user!.id,
+          creditType: 'daily_credit',
         });
+        assert.strictEqual(
+          dailyCredits,
+          2000,
+          'daily credits were added up to the low credit threshold',
+        );
+        let extraCredits = await sumUpCreditsLedger(dbAdapter, {
+          userId: user!.id,
+          creditType: 'extra_credit',
+        });
+        assert.strictEqual(extraCredits, 0, 'extra credits were not added');
+        let planAllowance = await sumUpCreditsLedger(dbAdapter, {
+          userId: user!.id,
+          creditType: 'plan_allowance',
+        });
+        assert.strictEqual(
+          planAllowance,
+          0,
+          'plan allowance was not added (because there is no plan for new user)',
+        );
 
-      assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      assert.strictEqual(response.text, 'ok', 'Response is ok');
-
-      // Verify user was created
-      let user = await getUserByMatrixUserId(dbAdapter, 'newuser@test');
-      assert.ok(user, 'User was created');
-      assert.strictEqual(
-        user!.matrixRegistrationToken,
-        'reg_token_123',
-        'Registration token was saved',
-      );
-
-      // Verify credits were added
-      let extraCredits = await sumUpCreditsLedger(dbAdapter, {
-        userId: user!.id,
-        creditType: 'extra_credit',
-      });
-      assert.strictEqual(extraCredits, 1000, 'extra credits were added');
-      let planAllowance = await sumUpCreditsLedger(dbAdapter, {
-        userId: user!.id,
-        creditType: 'plan_allowance',
-      });
-      assert.strictEqual(
-        planAllowance,
-        0,
-        'plan allowance was not added (because there is no plan for new user)',
-      );
-
-      // Try running the endpoint again
-      response = await request
-        .post(`/_user`)
-        .set('Accept', 'application/vnd.api+json')
-        .set('Content-Type', 'application/vnd.api+json')
-        .set(
-          'Authorization',
-          `Bearer ${createJWT(testRealm, 'newuser@test', ['read', 'write'])}`,
-        )
-        .send({
-          data: {
-            type: 'user',
-            attributes: {
-              registrationToken: 'reg_token_123',
+        // Try running the endpoint again
+        response = await request
+          .post(`/_user`)
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'newuser@test', ['read', 'write'])}`,
+          )
+          .send({
+            data: {
+              type: 'user',
+              attributes: {
+                registrationToken: 'reg_token_123',
+              },
             },
-          },
-        });
+          });
 
-      assert.strictEqual(response.status, 422, 'HTTP 200 status');
-      assert.strictEqual(
-        response.text,
-        'User already exists',
-        'Response is correct',
-      );
+        assert.strictEqual(response.status, 422, 'HTTP 200 status');
+        assert.strictEqual(
+          response.text,
+          'User already exists',
+          'Response is correct',
+        );
+      } finally {
+        if (originalLowCreditThreshold == null) {
+          delete process.env.LOW_CREDIT_THRESHOLD;
+        } else {
+          process.env.LOW_CREDIT_THRESHOLD = originalLowCreditThreshold;
+        }
+      }
     });
   });
 });

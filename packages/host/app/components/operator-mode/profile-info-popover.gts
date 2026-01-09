@@ -96,12 +96,11 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       .info-group button {
         margin-top: var(--boxel-sp-xs);
       }
-
       .buy-more-credits {
         display: flex;
         justify-content: flex-end;
         width: 100%;
-        margin-top: calc(-1 * var(--boxel-sp-sm));
+        margin-top: var(--boxel-sp-xs);
       }
       .buy-more-credits.out-of-credit {
         justify-content: center;
@@ -110,6 +109,19 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       }
       :deep(.buy-more-credits.out-of-credit .size-base) {
         --boxel-button-min-height: 39px;
+      }
+      .daily-grant-note {
+        flex-basis: 100%;
+        color: var(--boxel-500);
+        font: var(--boxel-font-xs);
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+        border: 1px solid var(--boxel-300);
+        background: var(--boxel-50);
+        border-radius: calc(var(--boxel-border-radius) / 2);
+        line-height: 1.3;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-4xs);
       }
     </style>
 
@@ -157,6 +169,13 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
             <span class='label'>Extra Credit</span>
             {{subscriptionData.additionalCredit}}
           </div>
+          {{#if subscriptionData.dailyGrantNote}}
+            <div class='daily-grant-note' data-test-daily-grant-note>
+              {{#each subscriptionData.dailyGrantNote as |line|}}
+                <div>{{line}}</div>
+              {{/each}}
+            </div>
+          {{/if}}
           <div
             class={{cn
               'buy-more-credits'
