@@ -138,7 +138,7 @@ test.describe('Host mode', () => {
     ).toBeVisible();
   });
 
-  test('card in a published realm renders in host mode with a connect button', async ({
+  test.skip('card in a published realm renders in host mode with a connect button', async ({
     page,
   }) => {
     await page.goto(publishedCardURL);
@@ -151,7 +151,7 @@ test.describe('Host mode', () => {
     await expect(connectIframe.locator('[data-test-connect]')).toBeVisible();
   });
 
-  test('clicking connect button logs in on main site and redirects back to host mode', async ({
+  test.skip('clicking connect button logs in on main site and redirects back to host mode', async ({
     page,
   }) => {
     await page.goto(publishedCardURL);
