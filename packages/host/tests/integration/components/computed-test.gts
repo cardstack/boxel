@@ -327,7 +327,7 @@ module('Integration | computeds', function (hooks) {
     assert.strictEqual(family.totalAge, 10, 'computed is correct');
   });
 
-  test('computed fields render as disabled in the edit format', async function (assert) {
+  test('computed fields render as embeeded format in the edit format', async function (assert) {
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field alias = contains(StringField, {
@@ -339,8 +339,8 @@ module('Integration | computeds', function (hooks) {
 
     let person = new Person({ firstName: 'Mango' });
     await renderCard(loader, person, 'edit');
-    assert.dom('[data-test-field=alias] input').hasValue('Mango');
-    assert.dom('[data-test-field=alias] input').hasAttribute('disabled');
+    assert.dom('[data-test-field=alias] input').doesNotExist();
+    assert.dom('[data-test-field=alias]').hasText('Alias Mango');
   });
 
   test('can render a computed linksTo relationship', async function (assert) {

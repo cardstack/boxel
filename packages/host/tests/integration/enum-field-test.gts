@@ -383,8 +383,8 @@ module('Integration | enumField', function (hooks) {
     assert.deepEqual(arr, [null, 'Medium'], 'preserves null element in array');
   });
 
-  test('enumField edit respects @canEdit (computed fields are disabled)', async function (assert) {
-    assert.expect(2);
+  test('enumField edit respects @canEdit (computed fields are displayed as embedded format)', async function (assert) {
+    assert.expect(3);
 
     const PriorityField = enumField(StringField, {
       options: ['High', 'Medium', 'Low'],
@@ -414,10 +414,12 @@ module('Integration | enumField', function (hooks) {
     // Computed select is disabled
     assert
       .dom('[data-test-field="priority"] .boxel-select')
-      .hasAttribute(
-        'aria-disabled',
-        'true',
-        'computed enum should be disabled',
+      .doesNotExist('computed enum should not render in edit format');
+    assert
+      .dom('[data-test-field="priority"]')
+      .hasText(
+        'Priority High',
+        'computed enum renders as embedded format showing current value',
       );
   });
 
