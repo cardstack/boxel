@@ -52,10 +52,7 @@ import {
 import { createRoutes } from './routes';
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 import type { Prerenderer } from '@cardstack/runtime-common';
-import {
-  decodeScopedCSSRequest,
-  isScopedCSSRequest,
-} from 'glimmer-scoped-css';
+import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
 
 export class RealmServer {
   private log = logger('realm-server');
@@ -536,7 +533,11 @@ export class RealmServer {
        LIMIT 1`,
     ]);
 
-    this.scopedCssLog.debug('Scoped CSS query result for %s', cardURL.href, rows);
+    this.scopedCssLog.debug(
+      'Scoped CSS query result for %s',
+      cardURL.href,
+      rows,
+    );
 
     let depsRow = rows[0] as
       | { deps?: string[] | string | null; realm_version?: string | number }
@@ -610,9 +611,7 @@ export class RealmServer {
       deferred.fulfill(css);
       return css;
     } catch (error) {
-      this.scopedCssLog.debug(
-        `Failed to read Boxel base global CSS: ${error}`,
-      );
+      this.scopedCssLog.debug(`Failed to read Boxel base global CSS: ${error}`);
       deferred.fulfill(null);
       return deferred.promise;
     }
@@ -663,7 +662,15 @@ export class RealmServer {
         'styles',
         'variables.css',
       ),
-      resolve(__dirname, '..', 'boxel-ui', 'addon', 'src', 'styles', 'variables.css'),
+      resolve(
+        __dirname,
+        '..',
+        'boxel-ui',
+        'addon',
+        'src',
+        'styles',
+        'variables.css',
+      ),
       resolve(
         __dirname,
         '..',
@@ -695,7 +702,15 @@ export class RealmServer {
         'styles',
         'global.css',
       ),
-      resolve(__dirname, '..', 'boxel-ui', 'addon', 'src', 'styles', 'global.css'),
+      resolve(
+        __dirname,
+        '..',
+        'boxel-ui',
+        'addon',
+        'src',
+        'styles',
+        'global.css',
+      ),
       resolve(
         __dirname,
         '..',
