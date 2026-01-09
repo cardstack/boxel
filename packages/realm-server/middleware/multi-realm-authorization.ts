@@ -1,9 +1,13 @@
 import type Koa from 'koa';
 import type { DBAdapter, Realm } from '@cardstack/runtime-common';
 import {
+  query,
+  param,
+  separatedByCommas,
   fetchUserPermissions,
   parseRealmsParam,
   ensureTrailingSlash,
+  type Expression,
 } from '@cardstack/runtime-common';
 import { AuthenticationError } from '@cardstack/runtime-common/router';
 import { retrieveTokenClaim, type RealmServerTokenClaim } from '../utils/jwt';
@@ -55,6 +59,20 @@ export function multiRealmAuthorization({
       return;
     }
 
+    let publishedRealmURLs = new Set<string>();
+    if (realmList.length > 0) {
+      let publishedRealms = (await query(dbAdapter, [
+        'SELECT published_realm_url FROM published_realms WHERE published_realm_url IN (',
+        ...separatedByCommas(realmList.map((realmURL) => [param(realmURL)])),
+        ')',
+      ] as Expression)) as { published_realm_url: string }[];
+      publishedRealmURLs = new Set(
+        publishedRealms.map((row) =>
+          ensureTrailingSlash(row.published_realm_url),
+        ),
+      );
+    }
+
     let readableRealms = new Set<string>();
     let authorization = ctxt.req.headers['authorization'];
     if (!authorization) {
@@ -67,6 +85,9 @@ export function multiRealmAuthorization({
           .filter(([, permissions]) => permissions.includes('read'))
           .map(([realmURL]) => ensureTrailingSlash(realmURL)),
       );
+      for (let realmURL of publishedRealmURLs) {
+        readableRealms.add(realmURL);
+      }
 
       let realmsRequiringAuth = realmList.filter(
         (realmURL) => !readableRealms.has(realmURL),
@@ -99,6 +120,9 @@ export function multiRealmAuthorization({
           .filter(([, permissions]) => permissions.includes('read'))
           .map(([realmURL]) => ensureTrailingSlash(realmURL)),
       );
+      for (let realmURL of publishedRealmURLs) {
+        readableRealms.add(realmURL);
+      }
 
       let unauthorizedRealms = realmList.filter(
         (realmURL) => !readableRealms.has(realmURL),

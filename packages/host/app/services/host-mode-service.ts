@@ -213,6 +213,13 @@ export default class HostModeService extends Service {
     // TODO remove this assertion after multi-realm server/federated identity is supported
     this.realmServer.assertOwnRealmServer(realmServerURLs);
     let [realmServerURL] = realmServerURLs;
+    let hostModeOrigin = this.hostModeOrigin;
+    if (
+      hostModeOrigin &&
+      new URL(realmServerURL).origin !== new URL(hostModeOrigin).origin
+    ) {
+      realmServerURL = hostModeOrigin;
+    }
     let searchURL = new URL('_search-prerendered', realmServerURL);
     let cardJsonURL = cardURL.endsWith('.json') ? cardURL : `${cardURL}.json`;
 
