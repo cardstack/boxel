@@ -280,7 +280,11 @@ export class IndexRunner {
   }
 
   private errorKey(error: SerializedError): string {
-    return `${error.id ?? ''}|${error.message ?? ''}|${error.status ?? ''}`;
+    return JSON.stringify({
+      id: error.id ?? null,
+      message: error.message ?? null,
+      status: error.status ?? null,
+    });
   }
 
   private async collectModuleErrors(
