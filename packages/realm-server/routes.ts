@@ -39,6 +39,7 @@ import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxe
 import handlePrerenderProxy from './handlers/handle-prerender-proxy';
 import handleSearch from './handlers/handle-search';
 import handleSearchPrerendered from './handlers/handle-search-prerendered';
+import handleRealmInfo from './handlers/handle-realm-info';
 import { multiRealmAuthorization } from './middleware/multi-realm-authorization';
 import { buildCreatePrerenderAuth } from './prerender/auth';
 
@@ -131,6 +132,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     }),
   );
   router.all('/_search', multiRealmAuthorization(args), handleSearch());
+  router.get(
+    '/_info',
+    multiRealmAuthorization(args),
+    handleRealmInfo({ dbAdapter: args.dbAdapter }),
+  );
   router.all(
     '/_search-prerendered',
     multiRealmAuthorization(args),

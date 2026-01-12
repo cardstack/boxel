@@ -18,6 +18,7 @@ import {
   SupportedMimeType,
   Deferred,
   testRealmURL,
+  type RealmInfo,
   type JWTPayload,
 } from '@cardstack/runtime-common';
 import {
@@ -414,6 +415,60 @@ export default class RealmServerService extends Service {
       }
     });
     this._ready.fulfill();
+  }
+
+  async fetchRealmInfos(realmUrls: string[]): Promise<{
+    data: { id: string; type: 'realm-info'; attributes: RealmInfo }[];
+    publicReadableRealms: Set<string>;
+  }> {
+    if (realmUrls.length === 0) {
+      return { data: [], publicReadableRealms: new Set() };
+    }
+
+    let uniqueRealmUrls = Array.from(new Set(realmUrls));
+    let realmServerURLs = this.getRealmServersForRealms(uniqueRealmUrls);
+    // TODO remove this assertion after multi-realm server/federated identity is supported
+    this.assertOwnRealmServer(realmServerURLs);
+    let [realmServerURL] = realmServerURLs;
+
+    await this.login();
+
+    let infoURL = new URL('_info', realmServerURL);
+    for (let realmURL of uniqueRealmUrls) {
+      infoURL.searchParams.append('realms', realmURL);
+    }
+
+    let response = await this.authedFetch(infoURL.href, {
+      method: 'GET',
+      headers: {
+        Accept: SupportedMimeType.RealmInfo,
+      },
+    });
+
+    if (!response.ok) {
+      let responseText = await response.text();
+      throw new Error(
+        `Failed to fetch federated realm info: ${response.status} - ${responseText}`,
+      );
+    }
+
+    let publicReadableRealms = new Set<string>();
+    let publicReadableHeader = response.headers.get(
+      'x-boxel-realms-public-readable',
+    );
+    if (publicReadableHeader) {
+      for (let value of publicReadableHeader.split(',')) {
+        let trimmed = value.trim();
+        if (trimmed) {
+          publicReadableRealms.add(ensureTrailingSlash(trimmed));
+        }
+      }
+    }
+
+    let json = (await response.json()) as {
+      data: { id: string; type: 'realm-info'; attributes: RealmInfo }[];
+    };
+    return { data: json.data ?? [], publicReadableRealms };
   }
 
   async handleEvent(event: Partial<IEvent>) {

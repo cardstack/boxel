@@ -3739,6 +3739,10 @@ export class Realm {
     }
   }
 
+  async getRealmInfo(): Promise<RealmInfo> {
+    return this.parseRealmInfo();
+  }
+
   private async parseRealmInfo(): Promise<RealmInfo> {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);

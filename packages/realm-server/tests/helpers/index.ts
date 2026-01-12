@@ -285,6 +285,10 @@ async function startTestPrerenderServer(): Promise<string> {
 
 async function stopTestPrerenderServer() {
   if (prerenderServer && prerenderServer.listening) {
+    let stopPrerenderer = (prerenderServer as any).__stopPrerenderer;
+    if (typeof stopPrerenderer === 'function') {
+      await stopPrerenderer();
+    }
     await closeServer(prerenderServer);
   }
   prerenderServer = undefined;

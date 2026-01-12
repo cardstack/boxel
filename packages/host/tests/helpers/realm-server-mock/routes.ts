@@ -9,6 +9,7 @@ import {
   searchPrerenderedRealms,
   searchRealms,
   SupportedMimeType,
+  type RealmInfo,
   type Query,
 } from '@cardstack/runtime-common';
 
@@ -59,6 +60,7 @@ export function getRealmServerRoute(
 
 export function registerDefaultRoutes() {
   registerSearchRoutes();
+  registerInfoRoutes();
   registerCatalogRoutes();
   registerAuthRoutes();
 }
@@ -127,6 +129,55 @@ function registerSearchRoutes() {
       return new Response(JSON.stringify(combined), {
         status: 200,
         headers: { 'content-type': SupportedMimeType.CardJson },
+      });
+    },
+  });
+}
+
+function registerInfoRoutes() {
+  registerRealmServerRoute({
+    path: '/_info',
+    handler: async (_req, url) => {
+      let realmList = parseRealmsParam(url);
+
+      if (realmList.length === 0) {
+        return new Response(
+          JSON.stringify({
+            errors: ['realms query param must be supplied'],
+          }),
+          {
+            status: 400,
+            headers: { 'content-type': SupportedMimeType.JSONAPI },
+          },
+        );
+      }
+
+      let data: { id: string; type: 'realm-info'; attributes: RealmInfo }[] =
+        [];
+      let publicReadableRealms: string[] = [];
+
+      for (let realmURL of realmList) {
+        let info = await getRealmInfoForURL(realmURL);
+        if (!info) {
+          continue;
+        }
+        if (info.visibility === 'public') {
+          publicReadableRealms.push(ensureTrailingSlash(realmURL));
+        }
+        data.push({ id: realmURL, type: 'realm-info', attributes: info });
+      }
+
+      let headers: Record<string, string> = {
+        'content-type': SupportedMimeType.RealmInfo,
+      };
+      if (publicReadableRealms.length > 0) {
+        headers['x-boxel-realms-public-readable'] =
+          publicReadableRealms.join(',');
+      }
+
+      return new Response(JSON.stringify({ data }), {
+        status: 200,
+        headers,
       });
     },
   });
@@ -272,6 +323,24 @@ function getSearchableRealmForURL(
 
   remoteRealmCache.set(realmURL, remoteRealm);
   return remoteRealm;
+}
+
+async function getRealmInfoForURL(realmURL: string): Promise<RealmInfo | null> {
+  let registry = getTestRealmRegistry();
+  let registryEntry = registry.get(ensureTrailingSlash(realmURL));
+  if (registryEntry?.realm) {
+    return await registryEntry.realm.getRealmInfo();
+  }
+
+  let resolvedRealmURL = resolveRemoteRealmURL(realmURL);
+  let response = await globalThis.fetch(`${resolvedRealmURL}_info`, {
+    headers: { Accept: SupportedMimeType.RealmInfo },
+  });
+  if (!response.ok) {
+    return null;
+  }
+  let json = await response.json();
+  return json.data.attributes as RealmInfo;
 }
 
 function resolveRemoteRealmURL(realmURL: string): string {

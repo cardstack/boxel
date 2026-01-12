@@ -23,6 +23,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   Deferred,
+  ensureTrailingSlash,
   logger,
   SupportedMimeType,
   type RealmInfo,
@@ -126,6 +127,7 @@ class RealmResource {
   constructor(
     private realmURL: string,
     token: string | undefined,
+    private realmService: RealmService,
   ) {
     this.token = token;
     registerDestructor(this, () => {
@@ -281,6 +283,10 @@ class RealmResource {
 
   private fetchInfoTask = dropTask(async () => {
     try {
+      if (this.info) {
+        return;
+      }
+      await this.realmService.waitForBulkInfoIfNeeded();
       if (this.info) {
         return;
       }
@@ -618,6 +624,7 @@ export default class RealmService extends Service {
   private _realms: Map<string, RealmResource> = this.restoreSessions();
   private currentKnownRealms = new TrackedSet<string>();
   private reauthentications = new Map<string, Promise<string | undefined>>();
+  private bulkInfoPromise: Promise<void> | undefined;
 
   @tracked private identifyRealmTracker = 0;
 
@@ -634,6 +641,12 @@ export default class RealmService extends Service {
     this.logout();
   }
 
+  async waitForBulkInfoIfNeeded(): Promise<void> {
+    if (this.bulkInfoPromise) {
+      await this.bulkInfoPromise;
+    }
+  }
+
   async ensureRealmMeta(realmURL: string): Promise<void> {
     let resource = this.getOrCreateRealmResource(realmURL);
     await resource.fetchInfo();
@@ -642,6 +655,66 @@ export default class RealmService extends Service {
   async login(realmURL: string): Promise<void> {
     let resource = this.getOrCreateRealmResource(realmURL);
     await resource.login();
+  }
+
+  async prefetchRealmInfos(realmUrls: string[]): Promise<void> {
+    let uniqueRealmUrls = Array.from(new Set(realmUrls));
+    if (uniqueRealmUrls.length === 0) {
+      return;
+    }
+
+    if (this.bulkInfoPromise) {
+      await this.bulkInfoPromise;
+    }
+
+    let missingRealmUrls = uniqueRealmUrls.filter((realmURL) => {
+      return !this.knownRealm(realmURL, false)?.info;
+    });
+    if (missingRealmUrls.length === 0) {
+      return;
+    }
+
+    let bulkPromise = (async () => {
+      try {
+        let { data, publicReadableRealms } =
+          await this.realmServer.fetchRealmInfos(missingRealmUrls);
+        let publicReadableSet = new Set(
+          Array.from(publicReadableRealms).map((realmURL) =>
+            ensureTrailingSlash(realmURL),
+          ),
+        );
+        for (let entry of data) {
+          let realmURL = ensureTrailingSlash(entry.id);
+          this.applyRealmInfo(
+            entry.id,
+            entry.attributes,
+            publicReadableSet.has(realmURL),
+          );
+        }
+      } catch (error) {
+        log.warn(`Failed to prefetch realm info: ${error}`);
+      }
+    })();
+
+    this.bulkInfoPromise = bulkPromise;
+    try {
+      await bulkPromise;
+    } finally {
+      if (this.bulkInfoPromise === bulkPromise) {
+        this.bulkInfoPromise = undefined;
+      }
+    }
+  }
+
+  private applyRealmInfo(realmURL: string, info: RealmInfo, isPublic: boolean) {
+    let resource = this.getOrCreateRealmResource(realmURL);
+    let isIndexing = resource.info?.isIndexing ?? false;
+    resource.info = new TrackedObject({
+      url: realmURL,
+      ...info,
+      isIndexing,
+      isPublic,
+    });
   }
 
   restoreSessionsFromStorage(): void {
@@ -852,6 +925,7 @@ export default class RealmService extends Service {
     for (let realm of this.realms.values()) {
       realm.logout();
     }
+    this.bulkInfoPromise = undefined;
   }
 
   async publish(realmURL: string, publishedRealmURLs: string[]) {
@@ -943,7 +1017,7 @@ export default class RealmService extends Service {
     realmURL: string,
     token: string | undefined,
   ): RealmResource {
-    let resource = new RealmResource(realmURL, token);
+    let resource = new RealmResource(realmURL, token, this);
     setOwner(resource, getOwner(this)!);
     associateDestroyableChild(this, resource);
     return resource;
