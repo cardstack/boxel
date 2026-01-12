@@ -148,8 +148,8 @@ export function isAnyFilter(filter: Filter): filter is AnyFilter {
   return (filter as AnyFilter).any !== undefined;
 }
 
-export function buildQueryString(query: Query): string {
-  return `?${qs.stringify(query, { strictNullHandling: true })}`;
+export function buildQueryParamValue(query: Query): string {
+  return qs.stringify(query, { strictNullHandling: true, encode: false });
 }
 
 export function assertQuery(
@@ -555,7 +555,10 @@ export function parseSearchURL(searchURL: string | URL): {
   realm: URL;
 } {
   let url = new URL(searchURL);
-  let query = parseQuery(url.search.slice(1));
+  let queryParam = url.searchParams.get('query');
+  let query = queryParam
+    ? parseQuery(queryParam)
+    : parseQuery(url.search.slice(1));
 
   // strip the trailing "_search" path segment to recover the realm URL
   if (url.pathname.endsWith('_search')) {

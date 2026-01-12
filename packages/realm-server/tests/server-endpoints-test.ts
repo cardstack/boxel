@@ -355,17 +355,22 @@ module(basename(__filename), function () {
             // owner can search in the realm
             let response = await request2
               .get(
-                `${new URL(realm.url).pathname}_search?${stringify({
-                  filter: {
-                    on: {
-                      module: `${testRealmURL}person`,
-                      name: 'Person',
-                    },
-                    eq: {
-                      title: 'My Name',
-                    },
-                  },
-                } as Query)}`,
+                `${new URL(realm.url).pathname}_search?query=${encodeURIComponent(
+                  stringify(
+                    {
+                      filter: {
+                        on: {
+                          module: `${testRealmURL}person`,
+                          name: 'Person',
+                        },
+                        eq: {
+                          title: 'My Name',
+                        },
+                      },
+                    } as Query,
+                    { encode: false },
+                  ),
+                )}`,
               )
               .set('Accept', 'application/vnd.card+json')
               .set(
@@ -420,14 +425,19 @@ module(basename(__filename), function () {
           {
             let response = await request2
               .get(
-                `${new URL(realmURL).pathname}_search?${stringify({
-                  filter: {
-                    on: baseCardRef,
-                    eq: {
-                      title: 'Test Card',
-                    },
-                  },
-                } as Query)}`,
+                `${new URL(realmURL).pathname}_search?query=${encodeURIComponent(
+                  stringify(
+                    {
+                      filter: {
+                        on: baseCardRef,
+                        eq: {
+                          title: 'Test Card',
+                        },
+                      },
+                    } as Query,
+                    { encode: false },
+                  ),
+                )}`,
               )
               .set('Accept', 'application/vnd.card+json')
               .set('Authorization', `Bearer ${createJWT(realm, 'rando')}`);
