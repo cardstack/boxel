@@ -12,8 +12,6 @@ import { tracked } from '@glimmer/tracking';
 
 import { getService } from '@universal-ember/test-support';
 
-import ms from 'ms';
-
 import { validate as uuidValidate } from 'uuid';
 
 import {
@@ -30,7 +28,6 @@ import {
   testRealmInfo,
   testRealmURL,
   testRealmURLToUsername,
-  unixTime,
   Worker,
   type DefinitionLookup,
   type LooseSingleCardDocument,
@@ -40,15 +37,12 @@ import {
   type RealmInfo,
   type RealmPermissions,
   type RenderError,
-  type TokenClaims,
 } from '@cardstack/runtime-common';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
 import { render as renderIntoElement } from '@cardstack/host/lib/isolated-render';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
-import type NetworkService from '@cardstack/host/services/network';
-import type { RealmServerTokenClaims } from '@cardstack/host/services/realm-server';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
 
 import {
@@ -64,10 +58,13 @@ import type {
 
 import { TestRealmAdapter } from './adapter';
 import { testRealmServerMatrixUsername } from './mock-matrix';
-import { getRoomIdForRealmAndUser, type MockUtils } from './mock-matrix/_utils';
 import percySnapshot from './percy-snapshot';
-
+import { setupAuthEndpoints } from './realm-server-mock';
+import { createJWT, testRealmSecretSeed } from './test-auth';
+import { getTestRealmRegistry } from './test-realm-registry';
 import visitOperatorMode from './visit-operator-mode';
+
+import type { MockUtils } from './mock-matrix/_utils';
 
 import type { SimpleElement } from '@simple-dom/interface';
 
@@ -78,6 +75,11 @@ export {
   testRealmInfo,
   percySnapshot,
 };
+export { createJWT, testRealmSecretSeed } from './test-auth';
+export {
+  registerRealmAuthSessionRoomEnsurer,
+  setupAuthEndpoints,
+} from './realm-server-mock';
 export { setupOperatorModeStateCleanup } from './operator-mode-state';
 export * from '@cardstack/runtime-common/helpers';
 export * from './indexer';
@@ -95,26 +97,6 @@ export {
 const { sqlSchema } = ENV;
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
-
-type TestRealmRecord = {
-  realm: Realm;
-  adapter: TestRealmAdapter;
-};
-
-const TEST_REALM_REGISTRY = '__cardstack_testRealmRegistry';
-
-function getTestRealmRegistry(): Map<string, TestRealmRecord> {
-  // We track test realms globally so helpers like persistDocumentToTestRealm can
-  // locate the correct realm/adapter for a card URL during test runs.
-  let registry = (globalThis as any)[TEST_REALM_REGISTRY] as
-    | Map<string, TestRealmRecord>
-    | undefined;
-  if (!registry) {
-    registry = new Map();
-    (globalThis as any)[TEST_REALM_REGISTRY] = registry;
-  }
-  return registry;
-}
 
 const baseTestMatrix = {
   url: new URL(`http://localhost:8008`),
@@ -712,7 +694,6 @@ export async function withoutLoaderMonitoring<T>(cb: () => Promise<T>) {
   }
 }
 
-export const testRealmSecretSeed = "shhh! it's a secret";
 export const createPrerenderAuth = (
   _userId: string,
   _permissions: RealmPermissions,
@@ -835,122 +816,10 @@ async function setupTestRealm({
   return { realm, adapter };
 }
 
-const authHandlerStateSymbol = Symbol('test-auth-handler-state');
-const TEST_MATRIX_USER = '@testuser:localhost';
-
-type EnsureSessionRoom = (
-  realmURL: string,
-  userId: string,
-) => Promise<void> | void;
-
-type AuthHandlerState = {
-  handler: (req: Request) => Promise<Response | null>;
-  realmPermissions: Map<string, RealmAction[]>;
-  mountedVirtualNetwork?: unknown;
-  ensureSessionRoom?: EnsureSessionRoom;
-};
-
-let sessionRoomEnsurer: EnsureSessionRoom | undefined;
-
-function ensureAuthHandlerState(network: NetworkService): AuthHandlerState {
-  let state = (network as any)[authHandlerStateSymbol] as
-    | AuthHandlerState
-    | undefined;
-  if (!state) {
-    let realmPermissions = new Map<string, RealmAction[]>();
-    let handler = async (req: Request) => {
-      if (req.url.includes('_realm-auth')) {
-        const authTokens: Record<string, string> = {};
-        for (let [realmURL, permissions] of realmPermissions.entries()) {
-          if (state && state.ensureSessionRoom) {
-            await state.ensureSessionRoom(realmURL, TEST_MATRIX_USER);
-          }
-          authTokens[realmURL] = createJWT(
-            {
-              user: TEST_MATRIX_USER,
-              sessionRoom: getRoomIdForRealmAndUser(realmURL, TEST_MATRIX_USER),
-              permissions,
-              realm: realmURL,
-              realmServerURL: ensureTrailingSlash(new URL(realmURL).origin),
-            },
-            '1d',
-            testRealmSecretSeed,
-          );
-        }
-        return new Response(JSON.stringify(authTokens), { status: 200 });
-      }
-      if (req.url.includes('_server-session')) {
-        let data = await req.json();
-        if (!data.access_token) {
-          return new Response(
-            JSON.stringify({
-              errors: [`Request body missing 'access_token' property`],
-            }),
-            { status: 400 },
-          );
-        }
-        return new Response(null, {
-          status: 201,
-          headers: {
-            Authorization: createJWT(
-              {
-                user: TEST_MATRIX_USER,
-                sessionRoom: 'test-auth-realm-server-session-room',
-              },
-              '1d',
-              testRealmSecretSeed,
-            ),
-          },
-        });
-      }
-      return null;
-    };
-    state = {
-      realmPermissions,
-      handler,
-      ensureSessionRoom: sessionRoomEnsurer,
-    };
-    (network as any)[authHandlerStateSymbol] = state;
-  }
-  if (state.mountedVirtualNetwork !== network.virtualNetwork) {
-    network.mount(state.handler, { prepend: true });
-    state.mountedVirtualNetwork = network.virtualNetwork;
-  }
-  return state;
-}
-
-export function setupAuthEndpoints(
-  realmPermissions: Record<string, RealmAction[]> = {
-    [testRealmURL]: ['read', 'write'],
-  },
-) {
-  let network = getService('network') as NetworkService;
-  let state = ensureAuthHandlerState(network);
-
-  for (let [realmURL, permissions] of Object.entries(realmPermissions)) {
-    state.realmPermissions.set(
-      ensureTrailingSlash(realmURL),
-      permissions as RealmAction[],
-    );
-  }
-}
-
-export function registerRealmAuthSessionRoomEnsurer(
-  callback: EnsureSessionRoom,
-) {
-  sessionRoomEnsurer = callback;
-  let network = getService('network') as NetworkService;
-  let state = (network as any)[authHandlerStateSymbol] as
-    | AuthHandlerState
-    | undefined;
-  if (state) {
-    state.ensureSessionRoom = callback;
-  }
-}
-
 function deriveTestUserPermissions(
   permissions?: RealmPermissions,
 ): RealmAction[] {
+  const TEST_MATRIX_USER = '@testuser:localhost';
   if (!permissions) {
     return ['read', 'write'];
   }
@@ -1100,29 +969,6 @@ export function setupCardLogs(
     let api = await apiThunk();
     await api.flushLogs();
   });
-}
-
-export function createJWT(
-  claims: TokenClaims | RealmServerTokenClaims,
-  expiration: string,
-  secret: string,
-) {
-  let nowInSeconds = unixTime(Date.now());
-  let expires = nowInSeconds + unixTime(ms(expiration));
-  let header = { alg: 'none', typ: 'JWT' };
-  let payload = {
-    iat: nowInSeconds,
-    exp: expires,
-    ...claims,
-  };
-  let stringifiedHeader = JSON.stringify(header);
-  let stringifiedPayload = JSON.stringify(payload);
-  let headerAndPayload = `${btoa(stringifiedHeader)}.${btoa(
-    stringifiedPayload,
-  )}`;
-  // this is our silly JWT--we don't sign with crypto since we are running in the
-  // browser so the secret is the signature
-  return `${headerAndPayload}.${secret}`;
 }
 
 export function delay(delayAmountMs: number): Promise<void> {

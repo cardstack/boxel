@@ -18,6 +18,7 @@ import {
   type IndexWriter,
   type RenderResponse,
   type ModuleRenderResponse,
+  type FileExtractResponse,
   type ResolvedCodeRef,
   type Batch,
   type LooseCardResource,
@@ -34,9 +35,34 @@ import {
   type LocalPath,
   type Reader,
   type Stats,
+  baseRealm,
 } from './index';
 import { inferContentType } from './infer-content-type';
 import { CardError, isCardError, serializableError } from './error';
+
+const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
+  // TODO: Replace with realm metadata configuration.
+  '.mismatch': { module: './filedef-mismatch', name: 'FileDef' },
+};
+
+function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
+  let name = fileURL.pathname.split('/').pop() ?? '';
+  let dot = name.lastIndexOf('.');
+  let extension = dot === -1 ? '' : name.slice(dot).toLowerCase();
+  let mapping = extension
+    ? FILEDEF_CODE_REF_BY_EXTENSION[extension]
+    : undefined;
+  if (!mapping) {
+    return { module: `${baseRealm.url}file-api`, name: 'FileDef' };
+  }
+  if (mapping.module.includes('://')) {
+    return mapping;
+  }
+  return {
+    ...mapping,
+    module: new URL(mapping.module, fileURL).href,
+  };
+}
 
 function canonicalURL(url: string, relativeTo?: string): string {
   try {
@@ -72,8 +98,10 @@ export class IndexRunner {
   readonly stats: Stats = {
     instancesIndexed: 0,
     modulesIndexed: 0,
+    filesIndexed: 0,
     instanceErrors: 0,
     moduleErrors: 0,
+    fileErrors: 0,
     totalIndexEntries: 0,
   };
   #shouldClearCacheForNextRender = true;
@@ -383,48 +411,46 @@ export class IndexRunner {
     let resourceCreatedAt = await this.batch.ensureFileCreatedAt(localPath);
     if (hasExecutableExtension(url.href)) {
       await this.indexModule(url);
-    } else {
-      if (url.href.endsWith('.json')) {
-        let resource;
+    } else if (url.href.endsWith('.json')) {
+      let resource;
 
-        try {
-          let { data } = JSON.parse(content);
-          resource = data;
-        } catch (e) {
-          this.#log.warn(
-            `${jobIdentity(this.#jobInfo)} unable to parse ${url.href} as card JSON`,
-          );
-        }
-
-        if (resource && isCardResource(resource)) {
-          if (lastModified == null) {
-            this.#log.warn(
-              `${jobIdentity(this.#jobInfo)} No lastModified date available for ${url.href}, using current time`,
-            );
-            lastModified = unixTime(Date.now());
-          }
-          await this.indexCard({
-            path: localPath,
-            lastModified,
-            resourceCreatedAt,
-            resource,
-          });
-          return;
-        }
-      }
-
-      if (lastModified == null) {
+      try {
+        let { data } = JSON.parse(content);
+        resource = data;
+      } catch (e) {
         this.#log.warn(
-          `${jobIdentity(this.#jobInfo)} No lastModified date available for ${url.href}, using current time`,
+          `${jobIdentity(this.#jobInfo)} unable to parse ${url.href} as card JSON`,
         );
-        lastModified = unixTime(Date.now());
       }
-      await this.indexFile({
-        path: localPath,
-        lastModified,
-        resourceCreatedAt,
-      });
+
+      if (resource && isCardResource(resource)) {
+        if (lastModified == null) {
+          this.#log.warn(
+            `${jobIdentity(this.#jobInfo)} No lastModified date available for ${url.href}, using current time`,
+          );
+          lastModified = unixTime(Date.now());
+        }
+        await this.indexCard({
+          path: localPath,
+          lastModified,
+          resourceCreatedAt,
+          resource,
+        });
+        // Intentionally fall through so card JSON files also get a file entry.
+      }
     }
+
+    if (lastModified == null) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} No lastModified date available for ${url.href}, using current time`,
+      );
+      lastModified = unixTime(Date.now());
+    }
+    await this.indexFile({
+      path: localPath,
+      lastModified,
+      resourceCreatedAt,
+    });
     this.#log.debug(
       `${jobIdentity(this.#jobInfo)} completed visiting file ${url.href} in ${Date.now() - start}ms`,
     );
@@ -687,23 +713,102 @@ export class IndexRunner {
     resourceCreatedAt: number;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
+    let entryURL = new URL(fileURL);
     let name = path.split('/').pop() ?? path;
     let contentType = inferContentType(name);
-    await this.batch.updateEntry(new URL(fileURL), {
-      // Temporary: will be replaced once FileDef extractors populate richer metadata.
+    let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
+    let clearCache = this.#consumeClearCacheForRender();
+    let renderOptions: RenderRouteOptions = {
+      fileExtract: true,
+      fileDefCodeRef,
+      ...(clearCache ? { clearCache } : {}),
+    };
+
+    let extractResult: FileExtractResponse | undefined;
+    let uncaughtError: Error | undefined;
+    try {
+      extractResult = await this.#prerenderer.prerenderFileExtract({
+        url: fileURL,
+        realm: this.#realmURL.href,
+        auth: this.#auth,
+        renderOptions,
+      });
+    } catch (err: any) {
+      uncaughtError = err;
+    }
+
+    let normalizeToErrorEntry = (
+      entry: ErrorEntry | undefined,
+      err: unknown,
+    ): ErrorEntry => {
+      if (entry?.error) {
+        let normalizedError = { ...entry.error };
+        normalizedError.additionalErrors =
+          normalizedError.additionalErrors ?? null;
+        normalizedError.status = normalizedError.status ?? 500;
+        return {
+          ...entry,
+          error: normalizedError,
+        };
+      }
+      if (entry && !entry.error) {
+        throw new CardError('ErrorEntry missing error payload', {
+          status: 500,
+        });
+      }
+      if (isCardError(err)) {
+        return { type: 'file-error', error: serializableError(err) };
+      }
+      let fallback = new CardError(
+        (err as Error)?.message ?? 'unknown file extract error',
+        { status: 500 },
+      );
+      fallback.stack = (err as Error)?.stack;
+      return { type: 'file-error', error: serializableError(fallback) };
+    };
+
+    if (!extractResult || extractResult.status === 'error') {
+      let renderError = normalizeToErrorEntry(
+        extractResult?.error,
+        uncaughtError,
+      );
+      renderError.error.deps = renderError.error.deps ?? [];
+      renderError.error.deps.push(fileURL, fileDefCodeRef.module);
+      if (extractResult?.deps) {
+        renderError.error.deps.push(...extractResult.deps);
+      }
+      renderError.error.deps = [...new Set(renderError.error.deps)];
+
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} encountered error indexing file ${path}: ${renderError.error.message}`,
+      );
+      await this.batch.updateEntry(entryURL, renderError);
+      this.stats.fileErrors++;
+      return;
+    }
+
+    if (extractResult.error) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} extractor fallback while indexing file ${path}: ${extractResult.error.error.message}`,
+      );
+    }
+
+    await this.batch.updateEntry(entryURL, {
       type: 'file',
       lastModified,
       resourceCreatedAt,
-      deps: new Set(),
+      deps: new Set([...(extractResult.deps ?? []), fileURL]),
       searchData: {
         url: fileURL,
         sourceUrl: fileURL,
         name,
         contentType,
+        ...(extractResult.searchDoc ?? {}),
       },
       types: [],
       displayNames: [],
     });
+    this.stats.filesIndexed++;
   }
 
   private async updateEntry(

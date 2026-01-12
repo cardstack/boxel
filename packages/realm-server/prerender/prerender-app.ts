@@ -9,6 +9,7 @@ import {
   type RenderRouteOptions,
   type RenderResponse,
   type ModuleRenderResponse,
+  type FileExtractResponse,
 } from '@cardstack/runtime-common';
 import {
   ecsMetadata,
@@ -308,6 +309,24 @@ export function buildPrerenderApp(options: {
       if (moduleResponse.status === 'error' && moduleResponse.error) {
         log.debug(
           `module render of ${url} resulted in error doc:\n${JSON.stringify(moduleResponse.error, null, 2)}`,
+        );
+      }
+    },
+  });
+
+  registerPrerenderRoute('/prerender-file-extract', {
+    requestDescription: 'file extract prerender request',
+    responseType: 'prerender-file-extract-result',
+    infoLabel: 'file extract prerendered',
+    warnTimeoutMessage: (url) => `file extract render of ${url} timed out`,
+    errorContext: '/prerender-file-extract',
+    execute: (args) => prerenderer.prerenderFileExtract(args),
+    drainingPromise: options.drainingPromise,
+    afterResponse: (url, response) => {
+      const fileResponse = response as FileExtractResponse;
+      if (fileResponse.status === 'error' && fileResponse.error) {
+        log.debug(
+          `file extract of ${url} resulted in error doc:\n${JSON.stringify(fileResponse.error, null, 2)}`,
         );
       }
     },
