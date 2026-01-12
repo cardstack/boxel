@@ -1397,7 +1397,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         assert.dom('[data-test-daily-grant-note]').exists();
         assert
           .dom('[data-test-daily-grant-note]')
-          .includesText('Next free credit daily grant (2,000 credits)');
+          .includesText('top up your balance to 2,000 credits');
       } finally {
         userResponseBody.data.attributes = originalAttributes;
       }
@@ -1428,7 +1428,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         assert
           .dom('[data-test-daily-grant-note]')
           .includesText(
-            'We topped up your account with 2,000 free bonus credits since you were getting low.',
+            'We topped up your account to 2,000 credits since you were getting low.',
           );
         assert
           .dom('[data-test-daily-grant-note]')

@@ -172,7 +172,7 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
         size: 'short',
       });
       return [
-        `Next free credit daily grant (${creditAmount} credits) will be added to your account in ${distance} (${timestampEt}).`,
+        `Next free credit daily grant will top up your balance to ${creditAmount} credits in ${distance} (${timestampEt}).`,
       ];
     }
 
@@ -189,10 +189,11 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
     let timestampLastDailyCreditGrant = formatEtTimestamp(
       new Date(this.lastDailyCreditGrantAt * 1000),
     );
+    let thresholdAmount = formatNumber(this.lowCreditThreshold, {
+      size: 'short',
+    });
     return [
-      `We topped up your account with ${formatNumber(this.lowCreditThreshold, {
-        size: 'short',
-      })} free bonus credits since you were getting low.`,
+      `We topped up your account to ${thresholdAmount} credits since you were getting low.`,
       `Last daily credits grant: ${distance} (${timestampLastDailyCreditGrant})`,
     ];
   }
