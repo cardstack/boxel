@@ -119,6 +119,14 @@ jobs:
         if: always()
         run: pnpm run lint
         working-directory: packages/ai-bot
+      - name: Lint Bot Core
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/bot-core
+      - name: Lint Submission Bot
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/submission-bot
       - name: Lint Workspace Sync CLI
         if: always()
         run: pnpm run lint

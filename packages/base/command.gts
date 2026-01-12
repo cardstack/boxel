@@ -299,6 +299,14 @@ export class OpenAiAssistantRoomInput extends CardDef {
   @field roomId = contains(StringField);
 }
 
+// Submission Bot types
+export class InviteSubmissionBotInput extends CardDef {
+  @field submissionTarget = contains(StringField); // What is being submitted (e.g., PR URL, card ID)
+  @field submissionType = contains(StringField); // 'pull-request' | 'card' | 'other'
+  @field autoStart = contains(BooleanField); // Whether to start processing immediately
+  @field metadata = contains(JsonField); // Additional metadata for the submission
+}
+
 export class AddFieldToCardDefinitionInput extends CardDef {
   @field realm = contains(StringField);
   @field path = contains(StringField);
