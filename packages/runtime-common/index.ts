@@ -43,6 +43,16 @@ export interface RenderError extends ErrorEntry {
   evict?: boolean;
 }
 
+export interface FileExtractResponse {
+  id: string;
+  nonce: string;
+  status: 'ready' | 'error';
+  searchDoc: Record<string, any> | null;
+  deps: string[];
+  error?: RenderError;
+  mismatch?: true;
+}
+
 export interface ModuleDefinitionResult {
   type: 'definition';
   moduleURL: string; // node resolution w/o extension
@@ -76,6 +86,7 @@ export type PrerenderCardArgs = ModulePrerenderArgs;
 export interface Prerenderer {
   prerenderCard(args: PrerenderCardArgs): Promise<RenderResponse>;
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
+  prerenderFileExtract(args: ModulePrerenderArgs): Promise<FileExtractResponse>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
@@ -152,6 +163,7 @@ export * from './matrix-constants';
 export * from './matrix-client';
 export * from './queue';
 export * from './expression';
+export * from './infer-content-type';
 export * from './index-query-engine';
 export * from './index-writer';
 export * from './definitions';

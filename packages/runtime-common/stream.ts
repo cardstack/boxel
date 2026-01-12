@@ -50,6 +50,15 @@ export async function webStreamToText(
   return pieces.join('');
 }
 
+export async function byteStreamToUint8Array(
+  stream: ByteStream,
+): Promise<Uint8Array> {
+  if (stream instanceof Uint8Array) {
+    return stream;
+  }
+  return await webStreamToBytes(stream);
+}
+
 export async function fileContentToText({
   content,
 }: Pick<FileRef, 'content'>): Promise<string> {

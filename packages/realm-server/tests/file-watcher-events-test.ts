@@ -11,7 +11,6 @@ import {
   setupMatrixRoom,
   matrixURL,
   waitForRealmEvent,
-  waitUntil,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -325,11 +324,8 @@ export class Person extends CardDef {
         },
       });
 
-      await waitUntil(
-        async () =>
-          (await getMessagesSince(realmEventTimestampStart)).length >= 2,
-        { timeout: 5000, timeoutMessage: 'file watcher events did not arrive' },
-      );
+      await waitForFileChange('updated', basename(personFilePath));
+      await waitForFileChange('updated', basename(louisFilePath));
       await testRealm.flushUpdateEvents();
 
       let updatedSourceResponse = await request

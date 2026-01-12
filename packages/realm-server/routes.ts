@@ -150,6 +150,16 @@ export function createRoutes(args: CreateRoutesArgs) {
     }),
   );
   router.post(
+    '/_prerender-file-extract',
+    jwtMiddleware(args.realmSecretSeed),
+    handlePrerenderProxy({
+      kind: 'file-extract',
+      prerenderer: args.prerenderer,
+      dbAdapter: args.dbAdapter,
+      createPrerenderAuth,
+    }),
+  );
+  router.post(
     '/_publish-realm',
     jwtMiddleware(args.realmSecretSeed),
     handlePublishRealm(args),
