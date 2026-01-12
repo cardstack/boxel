@@ -2,8 +2,11 @@ import Route from '@ember/routing/route';
 import type Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
 
+import { isTesting } from '@embroider/macros';
+
 import {
   baseRealm,
+  CardError,
   formattedError,
   SupportedMimeType,
   type FileExtractResponse,
@@ -12,9 +15,11 @@ import {
 } from '@cardstack/runtime-common';
 
 import { errorJsonApiToErrorEntry } from '../../lib/window-error-handler';
+import { createAuthErrorGuard } from '../../utils/auth-error-guard';
 
 import type LoaderService from '../../services/loader-service';
 import type NetworkService from '../../services/network';
+import type RealmService from '../../services/realm';
 import type { Model as RenderModel } from '../render';
 export type Model = FileExtractResponse;
 const BASE_FILE_DEF_CODE_REF: ResolvedCodeRef = {
@@ -43,6 +48,22 @@ type FileDefExtractResult = {
 export default class RenderFileExtractRoute extends Route<Model> {
   @service declare loaderService: LoaderService;
   @service declare network: NetworkService;
+  @service declare realm: RealmService;
+  #authGuard = createAuthErrorGuard();
+
+  deactivate() {
+    (globalThis as any).__boxelRenderContext = undefined;
+    this.#authGuard.unregister();
+  }
+
+  async beforeModel(transition: Transition) {
+    await super.beforeModel?.(transition);
+    (globalThis as any).__boxelRenderContext = true;
+    this.#authGuard.register();
+    if (!isTesting()) {
+      this.realm.restoreSessionsFromStorage();
+    }
+  }
 
   async model(_: unknown, transition: Transition): Promise<Model> {
     let renderModel =
@@ -80,6 +101,7 @@ export default class RenderFileExtractRoute extends Route<Model> {
     let extractor = new FileDefAttributesExtractor({
       loaderService: this.loaderService,
       network: this.network,
+      authGuard: this.#authGuard,
       fileURL,
       fileDefCodeRef,
       baseFileDefCodeRef: BASE_FILE_DEF_CODE_REF,
@@ -111,6 +133,7 @@ export default class RenderFileExtractRoute extends Route<Model> {
 class FileDefAttributesExtractor {
   #loaderService: LoaderService;
   #network: NetworkService;
+  #authGuard?: ReturnType<typeof createAuthErrorGuard>;
   #fileURL: string;
   #fileDefCodeRef: ResolvedCodeRef;
   #baseFileDefCodeRef: ResolvedCodeRef;
@@ -128,6 +151,7 @@ class FileDefAttributesExtractor {
   constructor({
     loaderService,
     network,
+    authGuard,
     fileURL,
     fileDefCodeRef,
     baseFileDefCodeRef,
@@ -136,6 +160,7 @@ class FileDefAttributesExtractor {
   }: {
     loaderService: LoaderService;
     network: NetworkService;
+    authGuard?: ReturnType<typeof createAuthErrorGuard>;
     fileURL: string;
     fileDefCodeRef: ResolvedCodeRef;
     baseFileDefCodeRef: ResolvedCodeRef;
@@ -144,6 +169,7 @@ class FileDefAttributesExtractor {
   }) {
     this.#loaderService = loaderService;
     this.#network = network;
+    this.#authGuard = authGuard;
     this.#fileURL = fileURL;
     this.#fileDefCodeRef = fileDefCodeRef;
     this.#baseFileDefCodeRef = baseFileDefCodeRef;
@@ -282,12 +308,19 @@ class FileDefAttributesExtractor {
       this.#streamsPromise = (async () => {
         let response: Response;
         try {
-          response = await this.#network.authedFetch(this.#fileURL, {
+          let request = new Request(this.#fileURL, {
             method: 'GET',
             headers: {
               Accept: SupportedMimeType.CardSource,
             },
           });
+          if (this.#authGuard) {
+            response = await this.#authGuard.race(() =>
+              this.#network.authedFetch(request),
+            );
+          } else {
+            response = await this.#network.authedFetch(request);
+          }
         } catch (error) {
           console.warn('file extract fetch failed', {
             fileURL: this.#fileURL,
@@ -300,7 +333,7 @@ class FileDefAttributesExtractor {
             fileURL: this.#fileURL,
             status: response.status,
           });
-          throw new Error(`Failed to fetch file (${response.status})`);
+          throw await CardError.fromFetchResponse(this.#fileURL, response);
         }
         return await this.#teeResponse(response);
       })();
