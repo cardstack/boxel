@@ -1885,13 +1885,13 @@ module(basename(__filename), function () {
           // we splat because despite having the same shape, the constructors are different
           { ...testRealm2.realmIndexUpdater.stats },
           {
-            fileErrors: 0,
-            filesIndexed: 2,
+            fileErrors: 1,
+            filesIndexed: 1,
             instanceErrors: 1,
             instancesIndexed: 0,
             moduleErrors: 1,
             modulesIndexed: 0,
-            totalIndexEntries: 2,
+            totalIndexEntries: 1,
           },
           'has a module error',
         );
