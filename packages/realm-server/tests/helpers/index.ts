@@ -357,6 +357,17 @@ async function restoreDbFromTemplate(options: {
   }
 }
 
+async function dropTestDb(dbName: string): Promise<void> {
+  let client = new Client(adminDbConfig());
+  await client.connect();
+  try {
+    let safeName = safeDbName(dbName);
+    await client.query(`DROP DATABASE IF EXISTS ${safeName} WITH (FORCE)`);
+  } finally {
+    await client.end();
+  }
+}
+
 export const realmServerTestMatrix: MatrixConfig = {
   url: matrixURL,
   username: 'node-test_realm-server',
@@ -589,6 +600,17 @@ export function setupDB(
     await dbAdapter?.close();
     if (dbAdapter) {
       trackedDbAdapters.delete(dbAdapter);
+    }
+
+    if (process.env.PGDATABASE) {
+      try {
+        await dropTestDb(process.env.PGDATABASE);
+      } catch (error) {
+        console.warn(
+          `[test-setup] failed to drop test db ${process.env.PGDATABASE}`,
+          error,
+        );
+      }
     }
     await stopTestPrerenderServer();
   };
