@@ -64,7 +64,7 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
       searchPattern,
       replacePattern,
     );
-    if (resultContent === input.fileContent) {
+    if (resultContent === input.fileContent && searchPattern !== '') {
       throw new Error(
         APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.SEARCH_PATTERN_NOT_FOUND,
       );
@@ -124,6 +124,9 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
     searchPattern: string,
     replacePattern: string,
   ): string {
+    if (searchPattern === '') {
+      return replacePattern;
+    }
     // Create a normalized search pattern for matching
     // This helps with whitespace differences
     const normalizedSearchLines = searchPattern

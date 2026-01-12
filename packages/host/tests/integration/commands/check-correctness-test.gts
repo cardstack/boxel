@@ -1,7 +1,10 @@
+import { waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type { CommandContext } from '@cardstack/runtime-common';
+
+import { REPLACE_MARKER, SEARCH_MARKER, SEPARATOR_MARKER } from '@cardstack/runtime-common';
 
 import CheckCorrectnessCommand from '@cardstack/host/commands/check-correctness';
 import PatchCardInstanceCommand from '@cardstack/host/commands/patch-card-instance';
@@ -237,5 +240,42 @@ module('Integration | commands | check-correctness', function (hooks) {
     });
 
     assert.true(thirdResult.correct, 'third run reports no errors');
+  });
+
+  test('skips correctness checks for empty files', async function (assert) {
+    let commandService = getService('command-service') as {
+      commandContext: CommandContext;
+    };
+    let patchCodeCommand = new PatchCodeCommand(commandService.commandContext);
+    let command = new CheckCorrectnessCommand(commandService.commandContext);
+    let roomId = '!room:example.com';
+    let emptyFileUrl = `${testRealmURL}empty.gts`;
+    let cardService = getService('card-service');
+
+    const codeBlock = `${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+${REPLACE_MARKER}`;
+
+    await patchCodeCommand.execute({
+      fileUrl: emptyFileUrl,
+      codeBlocks: [codeBlock],
+      roomId,
+    });
+
+    await waitUntil(async () => {
+      let { status, content } = await cardService.getSource(
+        new URL(emptyFileUrl),
+      );
+      return status === 200 && content.trim() === '';
+    });
+
+    let result = await command.execute({
+      targetType: 'file',
+      targetRef: emptyFileUrl,
+      roomId,
+    });
+
+    assert.true(result.correct, 'empty file reports as correct');
+    assert.deepEqual(result.errors, [], 'no errors are reported');
   });
 });

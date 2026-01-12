@@ -727,4 +727,23 @@ ${REPLACE_MARKER}`;
 }`,
     );
   });
+
+  test('it allows empty search and replace blocks on empty content', async function (assert) {
+    let commandService = getService('command-service');
+    let applyCommand = new ApplySearchReplaceBlockCommand(
+      commandService.commandContext,
+    );
+
+    const fileContent = '';
+    const codeBlock = `${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+${REPLACE_MARKER}`;
+
+    let result = await applyCommand.execute({
+      fileContent,
+      codeBlock,
+    });
+
+    assert.strictEqual(result.resultContent, '');
+  });
 });
