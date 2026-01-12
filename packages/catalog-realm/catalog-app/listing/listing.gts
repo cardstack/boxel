@@ -33,6 +33,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { eq, type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 import Refresh from '@cardstack/boxel-icons/refresh';
+import Send from '@cardstack/boxel-icons/send';
 import Wand from '@cardstack/boxel-icons/wand';
 
 import AppListingHeader from '../components/app-listing-header';
@@ -42,6 +43,7 @@ import ListOfPills from '../components/list-of-pills';
 import { listingActions, isReady } from '../resources/listing-actions';
 
 import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
+import InviteSubmissionBotCommand from '@cardstack/boxel-host/commands/invite-submission-bot';
 import ListingGenerateExampleCommand from '@cardstack/boxel-host/commands/listing-generate-example';
 import ListingUpdateSpecsCommand from '@cardstack/boxel-host/commands/listing-update-specs';
 
@@ -635,6 +637,36 @@ export class Listing extends CardDef {
     };
   }
 
+  private getSubmitForReviewMenuItem(
+    params: GetCardMenuItemParams,
+  ): MenuItemOptions | undefined {
+    if (params.menuContext !== 'interact') {
+      return;
+    }
+    const commandContext = params.commandContext;
+    const cardId = this.id;
+    if (!commandContext || !cardId) {
+      return;
+    }
+
+    return {
+      label: 'Submit for Review',
+      id: 'submit-listing-for-review',
+      icon: Send,
+      action: async () => {
+        try {
+          await new InviteSubmissionBotCommand(commandContext).execute({
+            submissionTarget: cardId,
+            submissionType: 'listing',
+            autoStart: true,
+          });
+        } catch (error) {
+          console.warn('Failed to submit listing for review', { error });
+        }
+      },
+    };
+  }
+
   [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
     let menuItems = super
       [getCardMenuItems](params)
@@ -647,6 +679,10 @@ export class Listing extends CardDef {
       const updateSpecs = this.getUpdateSpecsMenuItem(params);
       if (updateSpecs) {
         menuItems = [...menuItems, updateSpecs];
+      }
+      const submitForReview = this.getSubmitForReviewMenuItem(params);
+      if (submitForReview) {
+        menuItems = [...menuItems, submitForReview];
       }
     }
     return menuItems;
