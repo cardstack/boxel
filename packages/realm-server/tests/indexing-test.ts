@@ -1122,6 +1122,139 @@ module(basename(__filename), function () {
       );
     });
 
+    test('propagates module errors to dependent instances and recovers after missing modules are added', async function (assert) {
+      await realm.write(
+        'deep-card.json',
+        JSON.stringify({
+          data: {
+            attributes: {
+              middle: {
+                leaf: {
+                  value: 'Root',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './deep-card',
+                name: 'DeepCard',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      let brokenInstance = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}deep-card`),
+      );
+      assert.strictEqual(
+        brokenInstance?.type,
+        'instance-error',
+        'instance is in an error state when DeepCard module is missing',
+      );
+      if (brokenInstance?.type === 'instance-error') {
+        assert.ok(
+          brokenInstance.error.deps?.includes(`${testRealm}deep-card`),
+          'error deps include missing DeepCard module',
+        );
+      } else {
+        assert.ok(false, 'expected instance error details');
+      }
+
+      await realm.write(
+        'deep-card.gts',
+        `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import { MiddleField } from "./middle-field";
+
+          export class DeepCard extends CardDef {
+            @field middle = contains(MiddleField);
+          }
+        `,
+      );
+
+      brokenInstance = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}deep-card`),
+      );
+      assert.strictEqual(
+        brokenInstance?.type,
+        'instance-error',
+        'instance is in an error state when MiddleField module is missing',
+      );
+      if (brokenInstance?.type === 'instance-error') {
+        let additionalErrors = Array.isArray(
+          brokenInstance.error.additionalErrors,
+        )
+          ? brokenInstance.error.additionalErrors
+          : [];
+        assert.ok(
+          additionalErrors.some((error) =>
+            String(error.message ?? '').includes('middle-field'),
+          ),
+          'missing MiddleField details are included in dependency errors',
+        );
+      } else {
+        assert.ok(false, 'expected instance error details');
+      }
+
+      await realm.write(
+        'middle-field.gts',
+        `
+          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
+          import { LeafField } from "./leaf-field";
+
+          export class MiddleField extends FieldDef {
+            @field leaf = contains(LeafField);
+          }
+        `,
+      );
+
+      brokenInstance = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}deep-card`),
+      );
+      assert.strictEqual(
+        brokenInstance?.type,
+        'instance-error',
+        'instance is in an error state when LeafField module is missing',
+      );
+      if (brokenInstance?.type === 'instance-error') {
+        let additionalErrors = Array.isArray(
+          brokenInstance.error.additionalErrors,
+        )
+          ? brokenInstance.error.additionalErrors
+          : [];
+        assert.ok(
+          additionalErrors.some((error) =>
+            String(error.message ?? '').includes('leaf-field'),
+          ),
+          'missing LeafField details are included in dependency errors',
+        );
+      } else {
+        assert.ok(false, 'expected instance error details');
+      }
+
+      await realm.write(
+        'leaf-field.gts',
+        `
+          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class LeafField extends FieldDef {
+            @field value = contains(StringField);
+          }
+        `,
+      );
+
+      let healedInstance = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}deep-card`),
+      );
+      assert.strictEqual(
+        healedInstance?.type,
+        'instance',
+        'instance is repaired when missing module is added',
+      );
+    });
+
     test('can incrementally index deleted instance', async function (assert) {
       await realm.delete('mango.json');
 

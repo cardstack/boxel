@@ -12,6 +12,7 @@ import {
   unixTime,
   jobIdentity,
   modulesConsumedInMeta,
+  trimExecutableExtension,
   Deferred,
   RealmPaths,
   isIgnored,
@@ -36,7 +37,12 @@ import {
   type Stats,
 } from './index';
 import { inferContentType } from './infer-content-type';
-import { CardError, isCardError, serializableError } from './error';
+import {
+  CardError,
+  isCardError,
+  serializableError,
+  type SerializedError,
+} from './error';
 
 function canonicalURL(url: string, relativeTo?: string): string {
   try {
@@ -264,6 +270,131 @@ export class IndexRunner {
     return true;
   }
 
+  private normalizeDependencyForLookup(dep: string, relativeTo: URL): string {
+    let canonical = canonicalURL(dep, relativeTo.href);
+    try {
+      return trimExecutableExtension(new URL(canonical)).href;
+    } catch (_err) {
+      return canonical;
+    }
+  }
+
+  private errorKey(error: SerializedError): string {
+    return `${error.id ?? ''}|${error.message ?? ''}|${error.status ?? ''}`;
+  }
+
+  private async collectModuleErrors(
+    deps: string[],
+    relativeTo: URL,
+  ): Promise<SerializedError[]> {
+    let pending = new Set<string>();
+    let visited = new Set<string>();
+    let enqueue = (dep: string, base: URL) => {
+      let normalized = this.normalizeDependencyForLookup(dep, base);
+      if (!normalized || normalized.endsWith('.json')) {
+        return;
+      }
+      if (visited.has(normalized)) {
+        return;
+      }
+      visited.add(normalized);
+      pending.add(normalized);
+    };
+
+    for (let dep of deps) {
+      enqueue(dep, relativeTo);
+    }
+
+    let collected: SerializedError[] = [];
+    let seenErrors = new Set<string>();
+
+    while (pending.size > 0) {
+      let batchDeps = [...pending];
+      pending.clear();
+      let errors = await this.batch.getModuleErrors(batchDeps);
+      for (let error of errors) {
+        let key = this.errorKey(error);
+        if (!seenErrors.has(key)) {
+          collected.push(error);
+          seenErrors.add(key);
+        }
+        let base = relativeTo;
+        if (error.id) {
+          try {
+            base = new URL(error.id);
+          } catch (_err) {
+            base = relativeTo;
+          }
+        }
+        for (let dep of error.deps ?? []) {
+          enqueue(dep, base);
+        }
+      }
+    }
+
+    return collected;
+  }
+
+  private async appendDependencyErrors(
+    entry: ErrorEntry,
+    entryURL: URL,
+  ): Promise<ErrorEntry> {
+    let deps = entry.error.deps ?? [];
+    if (deps.length === 0) {
+      return entry;
+    }
+    let dependencyErrors = await this.collectModuleErrors(deps, entryURL);
+    if (dependencyErrors.length === 0) {
+      return entry;
+    }
+
+    let existing = Array.isArray(entry.error.additionalErrors)
+      ? [...entry.error.additionalErrors]
+      : [];
+    let seen = new Set(existing.map((error) => this.errorKey(error)));
+    seen.add(this.errorKey(entry.error));
+    let added = false;
+    for (let error of dependencyErrors) {
+      let key = this.errorKey(error);
+      if (!seen.has(key)) {
+        existing.push(error);
+        seen.add(key);
+        added = true;
+      }
+    }
+    if (!added) {
+      return entry;
+    }
+    return {
+      ...entry,
+      error: {
+        ...entry.error,
+        additionalErrors: existing,
+      },
+    };
+  }
+
+  private mergeErrorDeps(
+    entry: ErrorEntry,
+    deps: string[] | undefined,
+    relativeTo: URL,
+  ): ErrorEntry {
+    if (!deps || deps.length === 0) {
+      return entry;
+    }
+    let normalizedDeps = deps.map((dep) =>
+      this.normalizeDependencyForLookup(dep, relativeTo),
+    );
+    let merged = new Set([...(entry.error.deps ?? []), ...normalizedDeps]);
+    return {
+      ...entry,
+      error: {
+        ...entry.error,
+        deps: [...merged],
+      },
+    };
+  }
+
   @Memoize()
   private get ignoreMap() {
     let ignoreMap = new Map<string, Ignore>();
@@ -448,14 +579,16 @@ export class IndexRunner {
       this.#log.warn(
         `${jobIdentity(this.#jobInfo)} encountered error rendering module "${url.href}": ${err.message}`,
       );
-      await this.batch.updateEntry(url, {
+      let errorEntry: ErrorEntry = {
         type: 'module-error',
         error: {
           status: err.status ?? 500,
           message: `encountered error rendering module "${url.href}": ${err.message}`,
           additionalErrors: [serializableError(err)],
         },
-      });
+      };
+      errorEntry = await this.appendDependencyErrors(errorEntry, url);
+      await this.batch.updateEntry(url, errorEntry);
       return;
     }
 
@@ -469,7 +602,13 @@ export class IndexRunner {
 
     if (error) {
       this.stats.moduleErrors++;
-      await this.batch.updateEntry(url, { ...error, type: 'module-error' });
+      let errorEntry = this.mergeErrorDeps(
+        { ...error, type: 'module-error' },
+        deps,
+        url,
+      );
+      errorEntry = await this.appendDependencyErrors(errorEntry, url);
+      await this.batch.updateEntry(url, errorEntry);
       return;
     }
 
@@ -633,6 +772,11 @@ export class IndexRunner {
               renderError.searchData?._cardType ?? renderError.cardType,
           };
         }
+
+        renderError = await this.appendDependencyErrors(
+          renderError,
+          instanceURL,
+        );
 
         this.#log.warn(
           `${jobIdentity(this.#jobInfo)} encountered error indexing card instance ${path}: ${renderError.error.message}`,
