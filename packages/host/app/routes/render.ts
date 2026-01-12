@@ -124,7 +124,9 @@ export default class RenderRoute extends Route<Model> {
       currentURL: this.router.currentURL,
     });
     this.#setAllModelStatuses('unusable');
-    (globalThis as any).__boxelRenderContext = undefined;
+    if (isTesting()) {
+      (globalThis as any).__boxelRenderContext = undefined;
+    }
   };
 
   activate() {
@@ -133,7 +135,9 @@ export default class RenderRoute extends Route<Model> {
   }
 
   deactivate() {
-    (globalThis as any).__boxelRenderContext = undefined;
+    if (isTesting()) {
+      (globalThis as any).__boxelRenderContext = undefined;
+    }
     (globalThis as any).__renderModel = undefined;
     window.removeEventListener('boxel-render-error', this.handleRenderError);
     this.#detachWindowErrorListeners();
