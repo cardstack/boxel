@@ -1428,7 +1428,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         assert
           .dom('[data-test-daily-grant-note]')
           .includesText(
-            'You will receive free daily credits when your account balance falls below 2,000 credits.',
+            'We topped up your account with 2,000 free bonus credits since you were getting low.',
           );
         assert
           .dom('[data-test-daily-grant-note]')

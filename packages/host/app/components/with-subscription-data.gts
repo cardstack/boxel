@@ -190,7 +190,9 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
       new Date(this.lastDailyCreditGrantAt * 1000),
     );
     return [
-      `You will receive free daily credits when your account balance falls below ${this.lowCreditThreshold} credits.`,
+      `We topped up your account with ${formatNumber(this.lowCreditThreshold, {
+        size: 'short',
+      })} free bonus credits since you were getting low.`,
       `Last daily credits grant: ${distance} (${timestampLastDailyCreditGrant})`,
     ];
   }
