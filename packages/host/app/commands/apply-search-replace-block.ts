@@ -14,6 +14,7 @@ export const APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES = {
   SEARCH_BLOCK_PARSE_ERROR: `${standardErrorMessage} (search block parse error)`,
   REPLACE_BLOCK_PARSE_ERROR: `${standardErrorMessage} (replace block parse error)`,
   SEARCH_PATTERN_NOT_FOUND: `${standardErrorMessage} (search pattern not found in the target source file)`,
+  EMPTY_SEARCH_PATTERN_ON_NONEMPTY_FILE: `${standardErrorMessage} (empty search pattern for non-empty file)`,
 } as const;
 
 export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
@@ -55,6 +56,10 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
     } else if (replacePattern == null) {
       throw new Error(
         APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.REPLACE_BLOCK_PARSE_ERROR,
+      );
+    } else if (searchPattern === '' && input.fileContent.trim() !== '') {
+      throw new Error(
+        APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.EMPTY_SEARCH_PATTERN_ON_NONEMPTY_FILE,
       );
     }
 
