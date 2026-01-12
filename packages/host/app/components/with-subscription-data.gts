@@ -3,8 +3,8 @@ import { hash } from '@ember/helper';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { task } from 'ember-concurrency';
 import { formatDistanceToNow } from 'date-fns';
+import { task } from 'ember-concurrency';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { cn, formatNumber } from '@cardstack/boxel-ui/helpers';

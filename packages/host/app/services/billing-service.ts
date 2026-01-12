@@ -149,7 +149,8 @@ export default class BillingService extends Service {
       let stripeCustomerId = json.data?.attributes?.stripeCustomerId ?? null;
       let stripeCustomerEmail =
         json.data?.attributes?.stripeCustomerEmail ?? null;
-      let lowCreditThreshold = json.data?.attributes?.lowCreditThreshold ?? null;
+      let lowCreditThreshold =
+        json.data?.attributes?.lowCreditThreshold ?? null;
       let lastDailyCreditGrantAt =
         json.data?.attributes?.lastDailyCreditGrantAt ?? null;
       let nextDailyCreditGrantAt =
