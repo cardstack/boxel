@@ -1,10 +1,15 @@
 import { waitUntil } from '@ember/test-helpers';
+
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type { CommandContext } from '@cardstack/runtime-common';
 
-import { REPLACE_MARKER, SEARCH_MARKER, SEPARATOR_MARKER } from '@cardstack/runtime-common';
+import {
+  REPLACE_MARKER,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+} from '@cardstack/runtime-common';
 
 import CheckCorrectnessCommand from '@cardstack/host/commands/check-correctness';
 import PatchCardInstanceCommand from '@cardstack/host/commands/patch-card-instance';

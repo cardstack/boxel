@@ -78,7 +78,10 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     let errors: string[] = [];
     let lintIssues: string[] = [];
 
-    if (targetType === 'file' && (await this.isEmptyFileContent(input.targetRef))) {
+    if (
+      targetType === 'file' &&
+      (await this.isEmptyFileContent(input.targetRef))
+    ) {
       return new CorrectnessResultCard({
         correct: true,
         errors: [],
