@@ -419,60 +419,66 @@ jobs:
             -d '{"context":"Matrix Playwright tests report","description":"'"$description"'","target_url":"'"$PLAYWRIGHT_REPORT_URL"'","state":"'"$state"'"}'
 
   realm-server-test:
-    name: Realm Server Tests
+    name: Realm Server Tests (shard ${{ matrix.shard }})
     needs: [change-check, test-web-assets]
     if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
-      group: realm-server-test-${{ matrix.testModule }}-${{ github.head_ref || github.run_id }}
+      group: realm-server-test-${{ matrix.shard }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     strategy:
       fail-fast: false
       matrix:
-        testModule:
-          [
-            "auth-client-test.ts",
-            "billing-test.ts",
-            "card-dependencies-endpoint-test.ts",
-            "card-endpoints-test.ts",
-            "card-source-endpoints-test.ts",
-            "definition-lookup-test.ts",
-            "file-watcher-events-test.ts",
-            "indexing-test.ts",
-            "transpile-test.ts",
-            "module-syntax-test.ts",
-            "permissions/permission-checker-test.ts",
-            "prerendering-test.ts",
-            "prerender-server-test.ts",
-            "prerender-manager-test.ts",
-            "prerender-proxy-test.ts",
-            "remote-prerenderer-test.ts",
-            "queue-test.ts",
-            "realm-endpoints/dependencies-test.ts",
-            "realm-endpoints/directory-test.ts",
-            "realm-endpoints/info-test.ts",
-            "realm-endpoints/lint-test.ts",
-            "realm-endpoints/mtimes-test.ts",
-            "realm-endpoints/permissions-test.ts",
-            "realm-endpoints/publishability-test.ts",
-            "realm-endpoints/search-test.ts",
-            "realm-endpoints/user-test.ts",
-            "realm-endpoints-test.ts",
-            "search-prerendered-test.ts",
-            "types-endpoint-test.ts",
-            "server-endpoints-test.ts",
-            "server-endpoints/search-test.ts",
-            "virtual-network-test.ts",
-            "atomic-endpoints-test.ts",
-            "request-forward-test.ts",
-            "publish-unpublish-realm-test.ts",
-            "boxel-domain-availability-test.ts",
-            "claim-boxel-domain-test.ts",
-            "delete-boxel-claimed-domain-test.ts",
-            "get-boxel-claimed-domain-test.ts",
-            "realm-auth-test.ts",
-            "queries-test.ts",
-          ]
+        include:
+          - shard: 1
+            testModules:
+              - server-endpoints-test.ts
+              - atomic-endpoints-test.ts
+              - request-forward-test.ts
+              - realm-endpoints/info-test.ts
+              - realm-endpoints/user-test.ts
+              - file-watcher-events-test.ts
+              - types-endpoint-test.ts
+              - prerender-manager-test.ts
+              - prerender-proxy-test.ts
+              - transpile-test.ts
+          - shard: 2
+            testModules:
+              - card-endpoints-test.ts
+              - publish-unpublish-realm-test.ts
+              - realm-endpoints/lint-test.ts
+              - claim-boxel-domain-test.ts
+              - realm-endpoints/publishability-test.ts
+              - boxel-domain-availability-test.ts
+              - realm-endpoints/dependencies-test.ts
+              - queue-test.ts
+              - remote-prerenderer-test.ts
+              - permissions/permission-checker-test.ts
+          - shard: 3
+            testModules:
+              - realm-endpoints-test.ts
+              - prerendering-test.ts
+              - search-prerendered-test.ts
+              - card-dependencies-endpoint-test.ts
+              - delete-boxel-claimed-domain-test.ts
+              - get-boxel-claimed-domain-test.ts
+              - realm-endpoints/mtimes-test.ts
+              - billing-test.ts
+              - virtual-network-test.ts
+              - module-syntax-test.ts
+          - shard: 4
+            testModules:
+              - indexing-test.ts
+              - card-source-endpoints-test.ts
+              - realm-endpoints/search-test.ts
+              - server-endpoints/search-test.ts
+              - realm-endpoints/permissions-test.ts
+              - realm-endpoints/directory-test.ts
+              - definition-lookup-test.ts
+              - prerender-server-test.ts
+              - realm-auth-test.ts
+              - auth-client-test.ts
+              - queries-test.ts
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - uses: ./.github/actions/init
@@ -506,7 +512,7 @@ jobs:
         run: pnpm test:wait-for-servers
         working-directory: packages/realm-server
         env:
-          TEST_MODULE: ${{matrix.testModule}}
+          TEST_MODULES: ${{ join(matrix.testModules, '|') }}
       - name: Print realm server logs
         if: always()
         run: cat /tmp/server.log
@@ -514,7 +520,7 @@ jobs:
         id: artifact_name
         if: always()
         run: |
-          export SAFE_ARTIFACT_NAME=$(echo ${{ matrix.testModule }} |  sed 's/[/]/_/g')
+          export SAFE_ARTIFACT_NAME=shard-${{ matrix.shard }}
           echo "artifact_name=$SAFE_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
       - name: Upload realm server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
