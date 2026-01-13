@@ -22,7 +22,6 @@ import { stringify } from 'qs';
 import { v4 as uuidv4 } from 'uuid';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
-  setupBaseRealmServer,
   setupPermissionedRealm,
   runTestRealmServer,
   setupDB,
@@ -115,7 +114,6 @@ module(basename(__filename), function () {
         dir = args.dir;
         dbAdapter = args.dbAdapter;
       }
-      setupBaseRealmServer(hooks, matrixURL);
 
       hooks.beforeEach(async function () {
         dir = dirSync();
@@ -306,11 +304,11 @@ module(basename(__filename), function () {
               .send({
                 data: {
                   type: 'card',
-                  attributes: { cardInfo: { title: 'Test Card' } },
+                  attributes: { firstName: 'My Name' },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/card-api',
-                      name: 'CardDef',
+                      module: `${testRealmURL}person`,
+                      name: 'Person',
                     },
                   },
                 },
@@ -348,7 +346,7 @@ module(basename(__filename), function () {
             let doc = response.body as SingleCardDocument;
             assert.strictEqual(
               doc.data.attributes?.title,
-              'Test Card',
+              'My Name',
               'instance data is correct',
             );
           }
@@ -361,9 +359,12 @@ module(basename(__filename), function () {
                   stringify(
                     {
                       filter: {
-                        on: baseCardRef,
+                        on: {
+                          module: `${testRealmURL}person`,
+                          name: 'Person',
+                        },
                         eq: {
-                          title: 'Test Card',
+                          title: 'My Name',
                         },
                       },
                     } as Query,
@@ -511,11 +512,11 @@ module(basename(__filename), function () {
               .send({
                 data: {
                   type: 'card',
-                  attributes: { cardInfo: { title: 'Test Card' } },
+                  attributes: { firstName: 'My Name' },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/card-api',
-                      name: 'CardDef',
+                      module: `${testRealmURL}person`,
+                      name: 'Person',
                     },
                   },
                 },
@@ -566,7 +567,7 @@ module(basename(__filename), function () {
             let doc = response.body as SingleCardDocument;
             assert.strictEqual(
               doc.data.attributes?.title,
-              'Test Card',
+              'My Name',
               'instance data is correct',
             );
           }
@@ -2858,8 +2859,6 @@ module(basename(__filename), function () {
     let testRealmServer: Server;
     let request: SuperTest<Test>;
     let dir: DirResult;
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.beforeEach(async function () {
       dir = dirSync();

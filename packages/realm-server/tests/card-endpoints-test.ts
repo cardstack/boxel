@@ -14,11 +14,9 @@ import {
 import { stringify, parse } from 'qs';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
-  setupBaseRealmServer,
   setupPermissionedRealm,
   setupPermissionedRealms,
   setupMatrixRoom,
-  matrixURL,
   closeServer,
   testRealmInfo,
   cleanWhiteSpace,
@@ -71,8 +69,6 @@ module(basename(__filename), function () {
         dbAdapter,
       };
     }
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.afterEach(async function () {
       await closeServer(testRealmHttpServer);
@@ -703,8 +699,8 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'CardDef',
+                    module: `${testRealm.url}person`,
+                    name: 'Person',
                   },
                 },
               },
@@ -718,6 +714,7 @@ module(basename(__filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              type: 'Person',
             },
           );
           let id = incrementalEventContent.invalidations[0].split('/').pop()!;
@@ -746,7 +743,7 @@ module(basename(__filename), function () {
 
           assert.strictEqual(
             json.data.id,
-            `${testRealmHref}CardDef/${id}`,
+            `${testRealmHref}Person/${id}`,
             'the id is correct',
           );
           assert.ok(json.data.meta.lastModified, 'lastModified is populated');
@@ -754,7 +751,7 @@ module(basename(__filename), function () {
             dir.name,
             'realm_server_1',
             'test',
-            'CardDef',
+            'Person',
             `${id}.json`,
           );
           assert.ok(existsSync(cardFile), 'card json exists');
@@ -767,8 +764,8 @@ module(basename(__filename), function () {
                 type: 'card',
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'CardDef',
+                    module: '../person',
+                    name: 'Person',
                   },
                 },
               },
@@ -1715,8 +1712,8 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'CardDef',
+                    module: `${testRealm.url}person`,
+                    name: 'Person',
                   },
                 },
               },
@@ -3504,8 +3501,6 @@ module(basename(__filename), function () {
     const consumerRealmURL = 'http://127.0.0.1:5522/';
     const UNREACHABLE_REALM_URL = 'https://example.invalid/offline/';
     let consumerRequest: SuperTest<Test>;
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealms(hooks, {
       realms: [

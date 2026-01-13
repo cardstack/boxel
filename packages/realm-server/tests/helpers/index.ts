@@ -7,7 +7,7 @@ import {
   copySync,
 } from 'fs-extra';
 import { NodeAdapter } from '../../node-realm';
-import { resolve, join } from 'path';
+import { join } from 'path';
 import type {
   LooseSingleCardDocument,
   RealmPermissions,
@@ -107,7 +107,7 @@ export async function waitUntil<T>(
 }
 
 export const testRealm = 'http://test-realm/';
-export const localBaseRealm = 'http://localhost:4441/';
+export const localBaseRealm = 'http://localhost:4201/';
 export const matrixURL = new URL('http://localhost:8008');
 const testPrerenderHost = '127.0.0.1';
 const testPrerenderPort = 4460;
@@ -148,8 +148,6 @@ const trackedPrerenderers = new Set<TestPrerenderer>();
 const trackedDbAdapters = new Set<PgAdapter>();
 const trackedQueuePublishers = new Set<QueuePublisher>();
 const trackedQueueRunners = new Set<QueueRunner>();
-
-const basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
 
 export function cleanWhiteSpace(text: string) {
   return text
@@ -471,101 +469,6 @@ export async function createRealm({
     await worker.run();
   }
   return { realm, adapter };
-}
-
-export function setupBaseRealmServer(hooks: NestedHooks, matrixURL: URL) {
-  let baseRealmServer: Server | undefined;
-  setupDB(hooks, {
-    before: async (dbAdapter, publisher, runner) => {
-      let dir = dirSync();
-      baseRealmServer = await runBaseRealmServer(
-        createVirtualNetwork(),
-        publisher,
-        runner,
-        dbAdapter,
-        matrixURL,
-        dir.name,
-        { '*': ['read'] },
-      );
-    },
-    after: async () => {
-      if (baseRealmServer) {
-        await closeServer(baseRealmServer);
-        baseRealmServer = undefined;
-      }
-    },
-  });
-}
-
-export async function runBaseRealmServer(
-  virtualNetwork: VirtualNetwork,
-  publisher: QueuePublisher,
-  runner: QueueRunner,
-  dbAdapter: PgAdapter,
-  matrixURL: URL,
-  realmsRootPath: string,
-  permissions: RealmPermissions = { '*': ['read'] },
-) {
-  let localBaseRealmURL = new URL(localBaseRealm);
-  virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
-
-  let prerenderer = await getTestPrerenderer();
-  let definitionLookup = new CachingDefinitionLookup(
-    dbAdapter,
-    prerenderer,
-    virtualNetwork,
-    testCreatePrerenderAuth,
-  );
-  let worker = new Worker({
-    indexWriter: new IndexWriter(dbAdapter),
-    queue: runner,
-    dbAdapter,
-    queuePublisher: publisher,
-    virtualNetwork,
-    matrixURL,
-    secretSeed: realmSecretSeed,
-    realmServerMatrixUsername: testRealmServerMatrixUsername,
-    prerenderer,
-    createPrerenderAuth: testCreatePrerenderAuth,
-  });
-  let { realm: testBaseRealm } = await createRealm({
-    dir: basePath,
-    realmURL: baseRealm.url,
-    virtualNetwork,
-    publisher,
-    dbAdapter,
-    permissions,
-    definitionLookup,
-  });
-  // the base realm is public readable so it doesn't need a private network
-  virtualNetwork.mount(testBaseRealm.handle);
-  await worker.run();
-  await testBaseRealm.start();
-  let matrixClient = new MatrixClient({
-    matrixURL: realmServerTestMatrix.url,
-    username: realmServerTestMatrix.username,
-    seed: realmSecretSeed,
-  });
-  let realms = [testBaseRealm];
-  let testBaseRealmServer = new RealmServer({
-    realms,
-    virtualNetwork,
-    matrixClient,
-    realmServerSecretSeed,
-    realmSecretSeed,
-    matrixRegistrationSecret,
-    realmsRootPath,
-    dbAdapter,
-    queue: publisher,
-    getIndexHTML,
-    grafanaSecret,
-    serverURL: new URL(localBaseRealmURL.origin),
-    assetsURL: new URL(`http://example.com/notional-assets-host/`),
-    definitionLookup,
-    prerenderer,
-  });
-  let server = testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
-  return trackServer(server);
 }
 
 export async function runTestRealmServer({

@@ -14,7 +14,6 @@ import type {
   QueueRunner,
 } from '@cardstack/runtime-common';
 import {
-  setupBaseRealmServer,
   setupDB,
   createVirtualNetwork,
   matrixURL,
@@ -467,8 +466,6 @@ module(basename(__filename), function () {
       }
       return maybeInstance as IndexedInstance | undefined;
     }
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupDB(hooks, {
       before: async (dbAdapter, publisher, runner) => {
@@ -1021,8 +1018,6 @@ module(basename(__filename), function () {
     let realm: Realm;
     let adapter: RealmAdapter;
     let testRealmServer: TestRealmServerResult | undefined;
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupDB(hooks, {
       beforeEach: async (dbAdapter, publisher, runner) => {
@@ -1779,9 +1774,7 @@ module(basename(__filename), function () {
     });
   });
 
-  module('permissioned realm', function (hooks) {
-    setupBaseRealmServer(hooks, matrixURL);
-
+  module('permissioned realm', function () {
     let testRealm1URL = 'http://127.0.0.1:4447/';
     let testRealm2URL = 'http://127.0.0.1:4448/';
     let testRealm2: Realm;

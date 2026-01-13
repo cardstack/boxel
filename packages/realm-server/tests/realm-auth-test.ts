@@ -12,8 +12,6 @@ import {
   insertUser,
   realmSecretSeed,
   testRealmHref,
-  setupBaseRealmServer,
-  matrixURL,
 } from './helpers';
 import { createJWT as createRealmServerJWT } from '../utils/jwt';
 
@@ -22,8 +20,6 @@ module(basename(__filename), function () {
     let dbAdapter: PgAdapter;
     let request: SuperTest<SupertestTest>;
     const matrixUserId = '@firsttimer:localhost';
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealm(hooks, {
       permissions: {
