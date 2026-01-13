@@ -157,11 +157,6 @@ export async function handleGitHubWebhookEvent(args: {
   if (result.github.branchName) {
     try {
       result.matrix.roomId = branchNameToMatrixRoomId(result.github.branchName);
-      let o = toBranchName(
-        '!XezEDqUlIJcNdsuaFB:localhost',
-        'SomeSampleListing',
-      );
-      console.log(o);
     } catch (error) {
       throw new Error(`Unsupported branch name: ${result.github.branchName}`);
     }
