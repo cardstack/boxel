@@ -762,6 +762,67 @@ export default class RealmServerService extends Service {
     return response.json();
   }
 
+  async createGitHubPR(params: {
+    listingName: string;
+    listingId?: string;
+    snapshotId: string;
+    branch: string;
+    baseBranch?: string;
+    files: Array<{ path: string; content: string }>;
+  }): Promise<{
+    prUrl: string;
+    prNumber: number;
+    branch: string;
+    sha: string;
+    status: 'open' | 'merged' | 'closed' | 'failed';
+  }> {
+    await this.login();
+
+    const response = await this.authedFetch(`${this.url.href}_github-pr`, {
+      method: 'POST',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        data: {
+          type: 'github-pr',
+          attributes: params,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage: string;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.errors?.[0]?.detail || errorText;
+      } catch {
+        errorMessage = errorText;
+      }
+      throw new Error(
+        `GitHub PR creation failed: ${response.status} - ${errorMessage}`,
+      );
+    }
+
+    const { data } = (await response.json()) as {
+      data: {
+        type: string;
+        id: string;
+        attributes: {
+          prUrl: string;
+          prNumber: number;
+          branch: string;
+          sha: string;
+          status: 'open' | 'merged' | 'closed' | 'failed';
+        };
+      };
+    };
+
+    return data.attributes;
+  }
+
   private async getToken() {
     if (!this.token) {
       await this.login();
