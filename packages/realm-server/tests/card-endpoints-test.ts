@@ -14,16 +14,17 @@ import {
 import { stringify, parse } from 'qs';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
-  setupPermissionedRealm,
+  setupPermissionedRealmAtURL,
   setupPermissionedRealms,
   setupMatrixRoom,
   closeServer,
   testRealmInfo,
   cleanWhiteSpace,
-  testRealmHref,
   createJWT,
   testRealmServerMatrixUserId,
   cardInfo,
+  type RealmRequest,
+  withRealmPath,
 } from './helpers';
 import { expectIncrementalIndexEvent } from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -40,9 +41,12 @@ function parseSearchQuery(searchURL: URL) {
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints | card URLs', function (hooks) {
+    let realmURL = new URL('http://127.0.0.1:4444/test/');
+    let testRealmHref = realmURL.href;
     let testRealm: Realm;
     let testRealmHttpServer: Server;
-    let request: SuperTest<Test>;
+    let request: RealmRequest;
+    let serverRequest: SuperTest<Test>;
     let dir: DirResult;
     let dbAdapter: PgAdapter;
 
@@ -55,7 +59,8 @@ module(basename(__filename), function () {
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
-      request = args.request;
+      serverRequest = args.request;
+      request = withRealmPath(args.request, realmURL);
       dir = args.dir;
       dbAdapter = args.dbAdapter;
     }
@@ -65,6 +70,7 @@ module(basename(__filename), function () {
         testRealm,
         testRealmHttpServer,
         request,
+        serverRequest,
         dir,
         dbAdapter,
       };
@@ -77,7 +83,7 @@ module(basename(__filename), function () {
 
     module('card GET request', function (_hooks) {
       module('public readable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read'],
           },
@@ -89,7 +95,11 @@ module(basename(__filename), function () {
             .get('/person-1')
             .set('Accept', 'application/vnd.card+json');
 
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
           let json = response.body;
           assert.ok(json.data.meta.lastModified, 'lastModified exists');
           delete json.data.meta.lastModified;
@@ -232,7 +242,11 @@ module(basename(__filename), function () {
             .get('/query-person-finder')
             .set('Accept', 'application/vnd.card+json');
 
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
           let doc = response.body;
           let favorite = doc.data.relationships.favorite;
           assert.deepEqual(
@@ -408,7 +422,7 @@ module(basename(__filename), function () {
       });
 
       module('published realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read'],
           },
@@ -421,7 +435,11 @@ module(basename(__filename), function () {
             .get('/person-1')
             .set('Accept', 'application/vnd.card+json');
 
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
 
           let json = response.body;
 
@@ -479,7 +497,7 @@ module(basename(__filename), function () {
 
       // using public writable realm to make it easy for test setup for the error tests
       module('public writable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
           },
@@ -553,7 +571,7 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             john: ['read'],
             '@node-test_realm:localhost': ['read'],
@@ -657,7 +675,7 @@ module(basename(__filename), function () {
       });
 
       module('public readable realm with file', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read'],
           },
@@ -679,7 +697,7 @@ module(basename(__filename), function () {
 
     module('card POST request', function (_hooks) {
       module('public writable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
           },
@@ -1652,7 +1670,7 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             john: ['read', 'write'],
             '@node-test_realm:localhost': ['read'],
@@ -1730,7 +1748,7 @@ module(basename(__filename), function () {
 
     module('card POST request | file URL', function (_hooks) {
       module('public writable realm with file', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
           },
@@ -1764,7 +1782,7 @@ module(basename(__filename), function () {
 
     module('card PATCH request', function (_hooks) {
       module('public writable realm with file', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
           },
@@ -1796,7 +1814,7 @@ module(basename(__filename), function () {
       });
 
       module('public writable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
           },
@@ -3218,7 +3236,7 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             john: ['read', 'write'],
             '@node-test_realm:localhost': ['read'],
@@ -3289,7 +3307,7 @@ module(basename(__filename), function () {
 
     module('card PUT request | file URL', function (_hooks) {
       module('public writable realm with file', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
           },
@@ -3323,7 +3341,7 @@ module(basename(__filename), function () {
 
     module('card DELETE request', function (_hooks) {
       module('public writable realm with file', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
           },
@@ -3343,7 +3361,7 @@ module(basename(__filename), function () {
       });
 
       module('public writable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
           },
@@ -3453,7 +3471,7 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             john: ['read', 'write'],
             '@node-test_realm:localhost': ['read'],

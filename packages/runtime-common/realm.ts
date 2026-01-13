@@ -1317,18 +1317,24 @@ export class Realm {
     }
     // hard coded test URLs
     if ((globalThis as any).__environment === 'test') {
-      switch (this.url) {
-        case 'http://127.0.0.1:4441/':
-          return '@base_realm:localhost';
-        case 'http://127.0.0.1:4444/':
-        case 'http://127.0.0.1:4445/':
-        case 'http://127.0.0.1:4445/test/':
-        case 'http://127.0.0.1:4446/demo/':
-        case 'http://127.0.0.1:4448/':
-          return '@node-test_realm:localhost';
-        default:
-          return '@test_realm:localhost';
+      let url = new URL(this.url);
+      if (url.hostname === '127.0.0.1') {
+        switch (url.port) {
+          case '4441':
+            return '@base_realm:localhost';
+          case '4444':
+          case '4445':
+          case '4446':
+          case '4447':
+          case '4448':
+          case '4449':
+          case '4450':
+          case '4451':
+          case '4452':
+            return '@node-test_realm:localhost';
+        }
       }
+      return '@test_realm:localhost';
     }
     throw new Error(`Cannot determine realm owner for realm ${this.url}.`);
   }
