@@ -4,9 +4,9 @@
     "attributes": {
       "cloudflareId": "57e0e511-3878-43c8-c9ac-1d1c4bb1c100",
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

@@ -120,7 +120,7 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
 
     return [
       'All Games',
-      ...new Set(this.gameRecordsData.instances?.map((game) => game.title)),
+      ...new Set(this.gameRecordsData.instances?.map((game) => game.cardTitle)),
     ];
   }
 
@@ -145,7 +145,7 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
             module: gameResult.ref.module,
             name: gameResult.ref.name,
           },
-          title: gameResult.game.title,
+          title: gameResult.game.cardTitle,
         });
       }
     });
@@ -1002,7 +1002,7 @@ export class GameRecordsBoard extends CardDef {
   static displayName = 'Game Records Board';
   static icon = GamepadIcon;
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: GameRecordsBoard) {
       return 'Game Records Board';
     },

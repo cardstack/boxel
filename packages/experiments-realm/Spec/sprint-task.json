@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Sprint Task",
-      "description": "Spec for Sprint Task",
+      "cardTitle": "Sprint Task",
+      "cardDescription": "Spec for Sprint Task",
       "ref": {
         "name": "SprintTask",
         "module": "../sprint-task"

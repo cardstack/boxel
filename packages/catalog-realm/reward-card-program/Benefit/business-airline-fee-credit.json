@@ -16,14 +16,14 @@
         }
       },
       "details": [
-        "Statement credits up to $200 per calendar year for incidental fees charged by your one selected qualifying airline.‡"
+        "Statement credits up to $200 per calendar year for incidental fees charged by your one selected qualifying airline.\u2021"
       ],
       "partner": "",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "minSpend": {
         "amount": null,

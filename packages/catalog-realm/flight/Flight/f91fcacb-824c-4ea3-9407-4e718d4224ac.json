@@ -15,9 +15,9 @@
       "price": 285,
       "cabinClass": "Economy",
       "airlineLogo": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Air_France_Logo.svg/200px-Air_France_Logo.svg.png",
-      "title": "Air France Flight to Paris",
-      "description": "Direct flight from London Heathrow to Paris Charles de Gaulle",
-      "thumbnailURL": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/Airfrance_Logo.svg/2560px-Airfrance_Logo.svg.png"
+      "cardTitle": "Air France Flight to Paris",
+      "cardDescription": "Direct flight from London Heathrow to Paris Charles de Gaulle",
+      "cardThumbnailURL": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/Airfrance_Logo.svg/2560px-Airfrance_Logo.svg.png"
     },
     "meta": {
       "adoptsFrom": {

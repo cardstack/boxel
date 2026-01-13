@@ -61,9 +61,9 @@
           "requiresApproval": false
         }
       ],
-      "title": "Boxel Environment",
-      "description": "Help users navigate Boxel efficiently, switching between modes and orchestrating workflows",
-      "thumbnailURL": null
+      "cardTitle": "Boxel Environment",
+      "cardDescription": "Help users navigate Boxel efficiently, switching between modes and orchestrating workflows",
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

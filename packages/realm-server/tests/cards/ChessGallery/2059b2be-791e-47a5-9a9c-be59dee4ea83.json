@@ -6,9 +6,9 @@
       "dateOfGame": "2022-12-12",
       "whitePlayer": "Magnus Carlsen",
       "blackPlayer": "Ian Nepomniachtchi",
-      "title": "Magnus Carlsen vs Ian Nepomniachtchi - 2022 World Championship",
-      "description": "A thrilling game in the 2022 World Championship where Magnus Carlsen faced Ian Nepomniachtchi. An intense battle showcasing advanced strategies.",
-      "thumbnailURL": "https://www.chessdom.com/wp-content/uploads/2022/09/nepo-magnus-end-nr.jpeg"
+      "cardTitle": "Magnus Carlsen vs Ian Nepomniachtchi - 2022 World Championship",
+      "cardDescription": "A thrilling game in the 2022 World Championship where Magnus Carlsen faced Ian Nepomniachtchi. An intense battle showcasing advanced strategies.",
+      "cardThumbnailURL": "https://www.chessdom.com/wp-content/uploads/2022/09/nepo-magnus-end-nr.jpeg"
     },
     "meta": {
       "adoptsFrom": {

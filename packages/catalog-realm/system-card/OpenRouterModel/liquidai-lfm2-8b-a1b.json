@@ -6,7 +6,7 @@
       "canonicalSlug": "liquid/lfm2-8b-a1b",
       "name": "LiquidAI/LFM2-8B-A1B",
       "created": 1760970984,
-      "description": "Model created via inbox interface",
+      "cardDescription": "Model created via inbox interface",
       "pricing": {
         "prompt": "0.00000005",
         "completion": "0.0000001",
@@ -45,9 +45,9 @@
       ],
       "defaultParameters": {},
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

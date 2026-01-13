@@ -11,9 +11,9 @@
       "name": "Analytics & Reporting",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Business intelligence, data visualization, performance metrics, dashboard creation, and automated reporting tools.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Business intelligence, data visualization, performance metrics, dashboard creation, and automated reporting tools.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

@@ -17,9 +17,9 @@
       "summary": "A complete study management platform with goals, resources, sessions, flashcards, notes, quizzes, timers, and calendar integration",
       "cardInfo": {
         "notes": null,
-        "title": "Study Hub",
-        "description": "StudyHub is a comprehensive study management system that helps students organize their learning journey. It includes features for setting weekly goals, managing study resources, tracking study sessions, creating flashcards, taking notes, practicing with quizzes, using focus timers, and managing study schedules through an integrated calendar. Perfect for students, professionals, and lifelong learners who want to optimize their study efficiency and track their progress.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/study-hub-listing/thumbnail.png"
+        "name": "Study Hub",
+        "summary": "StudyHub is a comprehensive study management system that helps students organize their learning journey. It includes features for setting weekly goals, managing study resources, tracking study sessions, creating flashcards, taking notes, practicing with quizzes, using focus timers, and managing study schedules through an integrated calendar. Perfect for students, professionals, and lifelong learners who want to optimize their study efficiency and track their progress.",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/study-hub-listing/thumbnail.png"
       }
     },
     "relationships": {

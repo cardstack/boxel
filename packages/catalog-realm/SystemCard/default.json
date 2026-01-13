@@ -3,9 +3,9 @@
     "type": "card",
     "attributes": {
       "cardInfo": {
-        "title": "Default System Configuration",
-        "description": "This card defines the available language models and their settings, designed to work best in Boxel.",
-        "thumbnailURL": null,
+        "name": "Default System Configuration",
+        "summary": "This card defines the available language models and their settings, designed to work best in Boxel.",
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

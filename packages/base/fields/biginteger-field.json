@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Bigint Field",
-      "description": "A field that captures big int values",
+      "cardTitle": "Bigint Field",
+      "cardDescription": "A field that captures big int values",
       "specType": "field",
       "ref": {
         "module": "https://cardstack.com/base/big-integer",

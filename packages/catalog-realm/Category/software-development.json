@@ -11,9 +11,9 @@
       "name": "Software Development",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Application development, coding projects, software architecture, version control, and code review processes.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Application development, coding projects, software architecture, version control, and code review processes.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

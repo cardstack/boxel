@@ -10,9 +10,9 @@
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": "Ember Animated usage examples",
-        "description": null,
-        "thumbnailURL": null
+        "name": "Ember Animated usage examples",
+        "summary": null,
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

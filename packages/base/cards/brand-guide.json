@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Brand Guide",
-      "description": "Guide to brand elements and visual style",
+      "cardTitle": "Brand Guide",
+      "cardDescription": "Guide to brand elements and visual style",
       "specType": "card",
       "ref": {
         "module": "https://cardstack.com/base/brand-guide",

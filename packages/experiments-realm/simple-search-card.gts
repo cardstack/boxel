@@ -22,7 +22,7 @@ export class SimpleSearchCard extends CardDef {
       typeof SearchCardsResult
     >(this, SearchCardsByTypeAndTitleCommand, () => {
       return {
-        title: this.args.model.titleSearch,
+        cardTitle: this.args.model.titleSearch,
       };
     });
 

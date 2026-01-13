@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "patternName": "House Groove",
-      "description": "Steady four-on-the-floor house pattern with off-beat hi-hats",
+      "cardDescription": "Steady four-on-the-floor house pattern with off-beat hi-hats",
       "bpm": 125,
       "genre": "House",
       "creator": "Beat Maker Studio",
@@ -16,7 +16,7 @@
         "clap": "[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]",
         "crash": "[true,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]"
       },
-      "title": "House Groove"
+      "cardTitle": "House Groove"
     },
     "relationships": {},
     "meta": {

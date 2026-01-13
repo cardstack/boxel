@@ -10,9 +10,9 @@
       "details": "Join us for an epic Minecraft-themed birthday party! We'll have Minecraft games, a pixel art station, and a TNT piñata. Don't forget to wear your favorite Minecraft gear!\n\nFood and refreshments will be provided. Prepare for a day of mining and crafting fun!",
       "rsvpContact": "Call or text Jane at 555-123-4567",
       "backgroundImage": "https://image.api.playstation.com/vulcan/ap/rnd/202407/1020/91fe046f742042e3b31e57f7731dbe2226e1fd1e02a36223.jpg?w=5000&thumb=false",
-      "title": "Minecraft Birthday Party",
-      "description": "A fun Minecraft-themed birthday party for Alex's 10th birthday",
-      "thumbnailURL": null
+      "cardTitle": "Minecraft Birthday Party",
+      "cardDescription": "A fun Minecraft-themed birthday party for Alex's 10th birthday",
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

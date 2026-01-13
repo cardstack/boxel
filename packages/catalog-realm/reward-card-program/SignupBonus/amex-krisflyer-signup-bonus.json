@@ -10,12 +10,12 @@
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "bonusType": "points",
-      "description": "Earn 30,000 KrisFlyer miles after you spend $3,000 in purchases within the first 3 months.",
+      "cardDescription": "Earn 30,000 KrisFlyer miles after you spend $3,000 in purchases within the first 3 months.",
       "pointsAmount": 30000,
       "bonusCurrency": "Membership Rewards",
       "spendWindowDays": 90,

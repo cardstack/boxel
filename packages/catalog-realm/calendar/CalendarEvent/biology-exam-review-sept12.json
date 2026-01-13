@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Biology Exam Review Session",
-      "description": "Comprehensive review for the upcoming midterm exam. Focus on cell biology, genetics, and molecular processes.",
+      "cardTitle": "Biology Exam Review Session",
+      "cardDescription": "Comprehensive review for the upcoming midterm exam. Focus on cell biology, genetics, and molecular processes.",
       "startTime": "2025-09-12T16:00:00.000Z",
       "endTime": "2025-09-12T18:00:00.000Z",
       "location": "Study Hall B - Main Building",

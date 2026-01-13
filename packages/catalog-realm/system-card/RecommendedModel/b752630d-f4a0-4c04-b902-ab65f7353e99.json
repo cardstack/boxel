@@ -11,9 +11,9 @@
       "purpose": "design",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "thinkingEffort": "low"
     },

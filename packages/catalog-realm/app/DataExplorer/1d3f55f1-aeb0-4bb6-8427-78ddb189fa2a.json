@@ -14,9 +14,9 @@
       },
       "cardInfo": {
         "notes": "",
-        "title": "",
-        "description": null,
-        "thumbnailURL": null
+        "name": "",
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "showClean": false,
       "showComputedFields": true,

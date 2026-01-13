@@ -8,8 +8,8 @@
           "goalTitle": null
         }
       },
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "destinations": {

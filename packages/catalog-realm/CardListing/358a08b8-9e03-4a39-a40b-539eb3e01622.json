@@ -15,9 +15,9 @@
       "summary": "Classic Klondike Solitaire with authentic casino-green felt interface - track game statistics, time management, and win rates while experiencing traditional card gameplay with premium visual animations. Features full deck shuffling, foundation auto-completion, cascading tableau mechanics, waste pile cycling, golden selection highlights, and victory celebration modals for sophisticated desktop card gaming entertainment.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/solitaire-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/solitaire-listing/thumbnail.png"
       }
     },
     "relationships": {

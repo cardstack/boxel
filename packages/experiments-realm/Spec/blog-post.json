@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "BlogPost",
-      "description": "Spec for BlogPost",
+      "cardTitle": "BlogPost",
+      "cardDescription": "Spec for BlogPost",
       "specType": "card",
       "ref": {
         "module": "../blog-post",

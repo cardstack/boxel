@@ -13,9 +13,9 @@
       "intelligence": 10,
       "wisdom": 12,
       "charisma": 10,
-      "title": "The Brave",
-      "description": "A seasoned warrior known for his valor in battle and strong sense of justice.",
-      "thumbnailURL": null
+      "cardTitle": "The Brave",
+      "cardDescription": "A seasoned warrior known for his valor in battle and strong sense of justice.",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "spells.0": {

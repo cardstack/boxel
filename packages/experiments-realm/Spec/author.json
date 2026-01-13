@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Author",
-      "description": "Spec for Author",
-      "thumbnailURL": null
+      "cardTitle": "Author",
+      "cardDescription": "Spec for Author",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples.0": {

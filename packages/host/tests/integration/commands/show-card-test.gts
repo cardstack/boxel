@@ -156,7 +156,7 @@ module('Integration | Command | show-card', function (hooks) {
             static displayName = 'Person';
             @field firstName = contains(StringField);
             @field lastName = contains(StringField);
-            @field title = contains(StringField, {
+            @field cardTitle = contains(StringField, {
               computeVia: function (this: Person) {
                 return [this.firstName, this.lastName].filter(Boolean).join(' ');
               },
@@ -171,7 +171,7 @@ module('Integration | Command | show-card', function (hooks) {
             static displayName = 'Pet';
             @field name = contains(StringField);
             @field species = contains(StringField);
-            @field title = contains(StringField, {
+            @field cardTitle = contains(StringField, {
               computeVia: function (this: Pet) {
                 return this.name;
               },

@@ -9,9 +9,9 @@
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Filter Dropdown",
-      "description": "Spec for Filter Dropdown component",
-      "thumbnailURL": null
+      "cardTitle": "Filter Dropdown",
+      "cardDescription": "Spec for Filter Dropdown component",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

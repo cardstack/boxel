@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "ScheduleItem",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "ScheduleItem",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

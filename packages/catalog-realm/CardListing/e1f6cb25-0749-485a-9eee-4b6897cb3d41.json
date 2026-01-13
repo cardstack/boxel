@@ -15,9 +15,9 @@
       "summary": "This listing provides a comprehensive 3D model viewer and loader for GLTF and GLB formats, enabling interactive visualization with customizable settings, progress tracking, and error handling to enhance user experience. Its primary purpose is to embed and display 3D content within applications, supporting features like camera control, wireframe view, and model reloading.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/3d-model-viewer-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/3d-model-viewer-listing/thumbnail.png"
       }
     },
     "relationships": {

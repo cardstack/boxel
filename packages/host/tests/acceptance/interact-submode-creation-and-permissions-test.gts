@@ -192,7 +192,7 @@ module(
 
         await click(`[data-test-card-catalog-go-button]`);
 
-        await fillIn('[data-test-field="title"] input', 'new skill');
+        await fillIn('[data-test-field="cardTitle"] input', 'new skill');
         assert.dom(`[data-test-attached-card]`).containsText('new skill');
       });
 
@@ -936,7 +936,7 @@ module(
             cards: [
               {
                 id: `${personalRealmURL}index`,
-                title: 'Test Personal Workspace',
+                cardTitle: 'Test Personal Workspace',
               },
             ],
           },
@@ -1033,7 +1033,7 @@ module(
             cards: [
               {
                 id: `${personalRealmURL}index`,
-                title: 'Test Personal Workspace',
+                cardTitle: 'Test Personal Workspace',
               },
             ],
           },

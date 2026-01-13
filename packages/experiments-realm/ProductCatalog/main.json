@@ -10,9 +10,9 @@
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": "Furniture Catalog",
-        "description": "Auto-generated grid of all IKEA-inspired products.",
-        "thumbnailURL": null
+        "name": "Furniture Catalog",
+        "summary": "Auto-generated grid of all IKEA-inspired products.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

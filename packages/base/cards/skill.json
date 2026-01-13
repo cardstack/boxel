@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Skill",
-      "description": "A card with instructions to teach a skill to the AI bot",
+      "cardTitle": "Skill",
+      "cardDescription": "A card with instructions to teach a skill to the AI bot",
       "specType": "card",
       "ref": {
         "module": "https://cardstack.com/base/skill",

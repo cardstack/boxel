@@ -18,8 +18,8 @@
       },
       "name": "Pair with Lucas to complete demo",
       "details": "By Tuesday, we should have a demo that completes everything",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "project": {

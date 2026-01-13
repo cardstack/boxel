@@ -1558,7 +1558,7 @@ export class Solitaire extends CardDef {
   @field tableauPile5 = containsMany(SolitaireField);
   @field tableauPile6 = containsMany(SolitaireField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Solitaire) {
       return 'Solitaire';
     },

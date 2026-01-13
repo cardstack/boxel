@@ -12,23 +12,23 @@ import { PersonField } from './person';
 import { PostField } from './post';
 
 export class Booking extends CardDef {
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field venue = contains(StringField);
   @field startTime = contains(DateTimeField);
   @field endTime = contains(DateTimeField);
   @field hosts = containsMany(PersonField);
   @field sponsors = containsMany(StringField);
   @field posts = containsMany(PostField);
-  @field description = contains(StringField, {
+  @field cardDescription = contains(StringField, {
     computeVia: function (this: Booking) {
       return this.venue;
     },
   });
-  @field thumbnailURL = contains(StringField, { computeVia: () => null });
+  @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <h2><@fields.title /></h2>
+      <h2><@fields.cardTitle /></h2>
       <div><@fields.startTime /> to <@fields.endTime /></div>
       <div>Hosted by: <@fields.hosts /></div>
     </template>
@@ -36,7 +36,7 @@ export class Booking extends CardDef {
 
   static fitted = class Fitted extends Component<typeof this> {
     <template>
-      <h2><@fields.title /></h2>
+      <h2><@fields.cardTitle /></h2>
       <div><@fields.startTime /> to <@fields.endTime /></div>
       <div>Hosted by: <@fields.hosts /></div>
     </template>

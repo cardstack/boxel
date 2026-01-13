@@ -11,12 +11,12 @@
       "version": null,
       "cardInfo": {
         "notes": null,
-        "title": "Playful Illustration",
-        "description": "Flat doodles, chunky lines, pastel pops, witty copy, asym‑grid",
-        "thumbnailURL": null
+        "name": "Playful Illustration",
+        "summary": "Flat doodles, chunky lines, pastel pops, witty copy, asym\u2011grid",
+        "cardThumbnailURL": null
       },
       "styleName": "Playful Illustration",
-      "visualDNA": "Flat doodles, chunky lines, pastel pops, witty copy, asym‑grid",
+      "visualDNA": "Flat doodles, chunky lines, pastel pops, witty copy, asym\u2011grid",
       "cssImports": [
         "https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
       ],

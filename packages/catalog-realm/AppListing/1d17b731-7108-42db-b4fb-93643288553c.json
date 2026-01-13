@@ -13,12 +13,12 @@
         "https://boxel-images.boxel.ai/app-assets/catalog/sprint-planner-listing/screenshot-02.png",
         "https://boxel-images.boxel.ai/app-assets/catalog/sprint-planner-listing/screenshot-01.png"
       ],
-      "summary": "Plan, prioritize, and execute your sprints with ease using Sprint Planner, a powerful drag-and-drop editor designed for agile teams. Built for speed and clarity, Sprint Planner transforms the way your team organizes user stories, tasks, and goals—all in a visual, intuitive interface.",
+      "summary": "Plan, prioritize, and execute your sprints with ease using Sprint Planner, a powerful drag-and-drop editor designed for agile teams. Built for speed and clarity, Sprint Planner transforms the way your team organizes user stories, tasks, and goals\u2014all in a visual, intuitive interface.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/sprint-planner-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/sprint-planner-listing/thumbnail.png"
       }
     },
     "relationships": {

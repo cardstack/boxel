@@ -10,7 +10,7 @@
     "attributes": {
       "songTitle": "Summer Nights",
       "artist": "Melody Makers",
-      "description": "A catchy pop anthem with familiar chord progressions and memorable hooks",
+      "cardDescription": "A catchy pop anthem with familiar chord progressions and memorable hooks",
       "genre": "Pop",
       "key": "G Major",
       "tempo": 128,
@@ -23,28 +23,48 @@
             {
               "chordName": "G",
               "chordType": "major",
-              "notes": ["G3", "B3", "D4", "G4"],
+              "notes": [
+                "G3",
+                "B3",
+                "D4",
+                "G4"
+              ],
               "rootNote": "G",
               "quality": "major"
             },
             {
               "chordName": "Em",
-              "chordType": "minor", 
-              "notes": ["E3", "G3", "B3", "E4"],
+              "chordType": "minor",
+              "notes": [
+                "E3",
+                "G3",
+                "B3",
+                "E4"
+              ],
               "rootNote": "E",
               "quality": "minor"
             },
             {
               "chordName": "C",
               "chordType": "major",
-              "notes": ["C3", "E3", "G3", "C4"],
+              "notes": [
+                "C3",
+                "E3",
+                "G3",
+                "C4"
+              ],
               "rootNote": "C",
               "quality": "major"
             },
             {
               "chordName": "D",
               "chordType": "major",
-              "notes": ["D3", "F#3", "A3", "D4"],
+              "notes": [
+                "D3",
+                "F#3",
+                "A3",
+                "D4"
+              ],
               "rootNote": "D",
               "quality": "major"
             }
@@ -59,28 +79,48 @@
             {
               "chordName": "G",
               "chordType": "major",
-              "notes": ["G3", "B3", "D4", "G4"],
+              "notes": [
+                "G3",
+                "B3",
+                "D4",
+                "G4"
+              ],
               "rootNote": "G",
               "quality": "major"
             },
             {
               "chordName": "D",
               "chordType": "major",
-              "notes": ["D3", "F#3", "A3", "D4"],
+              "notes": [
+                "D3",
+                "F#3",
+                "A3",
+                "D4"
+              ],
               "rootNote": "D",
               "quality": "major"
             },
             {
               "chordName": "Em",
               "chordType": "minor",
-              "notes": ["E3", "G3", "B3", "E4"],
+              "notes": [
+                "E3",
+                "G3",
+                "B3",
+                "E4"
+              ],
               "rootNote": "E",
               "quality": "minor"
             },
             {
               "chordName": "C",
               "chordType": "major",
-              "notes": ["C3", "E3", "G3", "C4"],
+              "notes": [
+                "C3",
+                "E3",
+                "G3",
+                "C4"
+              ],
               "rootNote": "C",
               "quality": "major"
             }
@@ -95,28 +135,48 @@
             {
               "chordName": "Am",
               "chordType": "minor",
-              "notes": ["A3", "C4", "E4", "A4"],
+              "notes": [
+                "A3",
+                "C4",
+                "E4",
+                "A4"
+              ],
               "rootNote": "A",
               "quality": "minor"
             },
             {
               "chordName": "C",
               "chordType": "major",
-              "notes": ["C3", "E3", "G3", "C4"],
+              "notes": [
+                "C3",
+                "E3",
+                "G3",
+                "C4"
+              ],
               "rootNote": "C",
               "quality": "major"
             },
             {
               "chordName": "G",
               "chordType": "major",
-              "notes": ["G3", "B3", "D4", "G4"],
+              "notes": [
+                "G3",
+                "B3",
+                "D4",
+                "G4"
+              ],
               "rootNote": "G",
               "quality": "major"
             },
             {
               "chordName": "D",
               "chordType": "major",
-              "notes": ["D3", "F#3", "A3", "D4"],
+              "notes": [
+                "D3",
+                "F#3",
+                "A3",
+                "D4"
+              ],
               "rootNote": "D",
               "quality": "major"
             }
@@ -125,34 +185,54 @@
           "notes": "Build energy here. Add layers and prepare for the big chorus."
         },
         {
-          "sectionName": "chorus", 
+          "sectionName": "chorus",
           "lyrics": "**Chorus:**\n\nThese are the summer nights we'll remember\nDancing until the morning light\nNothing else matters when we're together\nEverything's gonna be alright\n\nSummer nights, summer nights\nFeel so good, feel so right\nSummer nights, summer nights\nLiving life in black and white",
           "chords": [
             {
               "chordName": "G",
               "chordType": "major",
-              "notes": ["G3", "B3", "D4", "G4"],
+              "notes": [
+                "G3",
+                "B3",
+                "D4",
+                "G4"
+              ],
               "rootNote": "G",
               "quality": "major"
             },
             {
               "chordName": "D",
               "chordType": "major",
-              "notes": ["D3", "F#3", "A3", "D4"],
+              "notes": [
+                "D3",
+                "F#3",
+                "A3",
+                "D4"
+              ],
               "rootNote": "D",
               "quality": "major"
             },
             {
               "chordName": "Em",
               "chordType": "minor",
-              "notes": ["E3", "G3", "B3", "E4"],
+              "notes": [
+                "E3",
+                "G3",
+                "B3",
+                "E4"
+              ],
               "rootNote": "E",
               "quality": "minor"
             },
             {
               "chordName": "C",
               "chordType": "major",
-              "notes": ["C3", "E3", "G3", "C4"],
+              "notes": [
+                "C3",
+                "E3",
+                "G3",
+                "C4"
+              ],
               "rootNote": "C",
               "quality": "major"
             }
@@ -167,28 +247,48 @@
             {
               "chordName": "G",
               "chordType": "major",
-              "notes": ["G3", "B3", "D4", "G4"],
+              "notes": [
+                "G3",
+                "B3",
+                "D4",
+                "G4"
+              ],
               "rootNote": "G",
               "quality": "major"
             },
             {
               "chordName": "D",
               "chordType": "major",
-              "notes": ["D3", "F#3", "A3", "D4"],
+              "notes": [
+                "D3",
+                "F#3",
+                "A3",
+                "D4"
+              ],
               "rootNote": "D",
               "quality": "major"
             },
             {
               "chordName": "Em",
               "chordType": "minor",
-              "notes": ["E3", "G3", "B3", "E4"],
+              "notes": [
+                "E3",
+                "G3",
+                "B3",
+                "E4"
+              ],
               "rootNote": "E",
               "quality": "minor"
             },
             {
               "chordName": "C",
               "chordType": "major",
-              "notes": ["C3", "E3", "G3", "C4"],
+              "notes": [
+                "C3",
+                "E3",
+                "G3",
+                "C4"
+              ],
               "rootNote": "C",
               "quality": "major"
             }
@@ -203,28 +303,48 @@
             {
               "chordName": "Am",
               "chordType": "minor",
-              "notes": ["A3", "C4", "E4", "A4"],
+              "notes": [
+                "A3",
+                "C4",
+                "E4",
+                "A4"
+              ],
               "rootNote": "A",
               "quality": "minor"
             },
             {
               "chordName": "F",
               "chordType": "major",
-              "notes": ["F3", "A3", "C4", "F4"],
+              "notes": [
+                "F3",
+                "A3",
+                "C4",
+                "F4"
+              ],
               "rootNote": "F",
               "quality": "major"
             },
             {
               "chordName": "C",
               "chordType": "major",
-              "notes": ["C3", "E3", "G3", "C4"],
+              "notes": [
+                "C3",
+                "E3",
+                "G3",
+                "C4"
+              ],
               "rootNote": "C",
               "quality": "major"
             },
             {
               "chordName": "G",
               "chordType": "major",
-              "notes": ["G3", "B3", "D4", "G4"],
+              "notes": [
+                "G3",
+                "B3",
+                "D4",
+                "G4"
+              ],
               "rootNote": "G",
               "quality": "major"
             }
@@ -239,28 +359,48 @@
             {
               "chordName": "G",
               "chordType": "major",
-              "notes": ["G3", "B3", "D4", "G4"],
+              "notes": [
+                "G3",
+                "B3",
+                "D4",
+                "G4"
+              ],
               "rootNote": "G",
               "quality": "major"
             },
             {
               "chordName": "D",
               "chordType": "major",
-              "notes": ["D3", "F#3", "A3", "D4"],
+              "notes": [
+                "D3",
+                "F#3",
+                "A3",
+                "D4"
+              ],
               "rootNote": "D",
               "quality": "major"
             },
             {
               "chordName": "Em",
               "chordType": "minor",
-              "notes": ["E3", "G3", "B3", "E4"],
+              "notes": [
+                "E3",
+                "G3",
+                "B3",
+                "E4"
+              ],
               "rootNode": "E",
               "quality": "minor"
             },
             {
               "chordName": "C",
               "chordType": "major",
-              "notes": ["C3", "E3", "G3", "C4"],
+              "notes": [
+                "C3",
+                "E3",
+                "G3",
+                "C4"
+              ],
               "rootNote": "C",
               "quality": "major"
             }
@@ -275,21 +415,36 @@
             {
               "chordName": "G",
               "chordType": "major",
-              "notes": ["G3", "B3", "D4", "G4"],
+              "notes": [
+                "G3",
+                "B3",
+                "D4",
+                "G4"
+              ],
               "rootNote": "G",
               "quality": "major"
             },
             {
               "chordName": "Em",
               "chordType": "minor",
-              "notes": ["E3", "G3", "B3", "E4"],
+              "notes": [
+                "E3",
+                "G3",
+                "B3",
+                "E4"
+              ],
               "rootNote": "E",
               "quality": "minor"
             },
             {
               "chordName": "C",
               "chordType": "major",
-              "notes": ["C3", "E3", "G3", "C4"],
+              "notes": [
+                "C3",
+                "E3",
+                "G3",
+                "C4"
+              ],
               "rootNote": "C",
               "quality": "major"
             }
@@ -383,9 +538,9 @@
       "masterVolume": 90,
       "songDuration": 210,
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

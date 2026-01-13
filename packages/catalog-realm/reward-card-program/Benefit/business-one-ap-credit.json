@@ -16,16 +16,16 @@
         }
       },
       "details": [
-        "Unlock up to $2,400 in statement credits for use in the next calendar year on American Express One AP® monthly fees¹ after you spend $250,000 on eligible purchases on the Business Platinum Card in this calendar year.² Statement credits will be applied to your monthly bill charged to the Card for our accounts payable solution, One AP.‡",
-        "¹Monthly fees include an auto-renewing platform access fee, transaction fees based on One AP usage, and applicable taxes.",
-        "²Statement credits valid from January 1 through December 31 of the calendar year after the calendar year in which you spend $250,000 on eligible purchases on the Business Platinum Card."
+        "Unlock up to $2,400 in statement credits for use in the next calendar year on American Express One AP\u00ae monthly fees\u00b9 after you spend $250,000 on eligible purchases on the Business Platinum Card in this calendar year.\u00b2 Statement credits will be applied to your monthly bill charged to the Card for our accounts payable solution, One AP.\u2021",
+        "\u00b9Monthly fees include an auto-renewing platform access fee, transaction fees based on One AP usage, and applicable taxes.",
+        "\u00b2Statement credits valid from January 1 through December 31 of the calendar year after the calendar year in which you spend $250,000 on eligible purchases on the Business Platinum Card."
       ],
       "partner": "",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "minSpend": {
         "amount": 250000,

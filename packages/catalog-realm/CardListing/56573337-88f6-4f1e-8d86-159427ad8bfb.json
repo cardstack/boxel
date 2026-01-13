@@ -15,9 +15,9 @@
       "summary": "Professional automotive lease and finance calculator with comprehensive deal analysis - configure all payment parameters, fees, and incentives while viewing real-time calculations. Features dual-mode comparison between lease and finance options, Leasehackr scoring integration, and detailed payment breakdowns with effective monthly cost analysis",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/lease-calculator-2-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/lease-calculator-2-listing/thumbnail.png"
       }
     },
     "relationships": {

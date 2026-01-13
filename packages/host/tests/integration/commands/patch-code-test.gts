@@ -50,8 +50,8 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 export class Task extends CardDef {
   static displayName = 'Task';
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field priority = contains(NumberField);
 }`,
       },
@@ -127,8 +127,8 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 export class Task extends CardDef {
   static displayName = 'Task';
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field priority = contains(NumberField);
   <template>
     {{#if (eq priority 1)}}

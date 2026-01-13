@@ -18,9 +18,9 @@ export default class DefaultEmbeddedTemplate extends GlimmerComponent<{
         <div class='thumbnail-section'>
           <div
             class='card-thumbnail'
-            style={{cssUrl 'background-image' @model.thumbnailURL}}
+            style={{cssUrl 'background-image' @model.cardThumbnailURL}}
           >
-            {{#unless @model.thumbnailURL}}
+            {{#unless @model.cardThumbnailURL}}
               <div
                 class='card-thumbnail-placeholder'
                 data-test-card-thumbnail-placeholder
@@ -29,7 +29,7 @@ export default class DefaultEmbeddedTemplate extends GlimmerComponent<{
           </div>
         </div>
         <div class='info-section'>
-          <h3 class='card-title' data-test-card-title>{{@model.title}}</h3>
+          <h3 class='card-title' data-test-card-title>{{@model.cardTitle}}</h3>
           <h4 class='card-display-name' data-test-card-display-name>
             {{cardTypeDisplayName @model}}
           </h4>
@@ -37,7 +37,7 @@ export default class DefaultEmbeddedTemplate extends GlimmerComponent<{
         <div
           class='card-description'
           data-test-card-description
-        >{{@model.description}}</div>
+        >{{@model.cardDescription}}</div>
       {{else}}
         {{! empty links-to field }}
         <div data-test-empty-field class='empty-field'></div>

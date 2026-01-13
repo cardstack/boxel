@@ -3098,7 +3098,7 @@ export class GameQuizCard extends CardDef {
     },
   });
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: GameQuizCard) {
       try {
         const quiz = this.quizTitle || 'Game Quiz';

@@ -17,9 +17,9 @@
       "summary": "A comprehensive e-commerce management system that provides everything needed to run an online store. Features include real-time dashboard metrics, product catalog management with inventory tracking, order processing and status management, customer relationship management with loyalty tiers, and customizable branding options. \n\nThe interface offers tabbed navigation between Products, Orders, and Customers sections, with responsive design that adapts from compact views to full dashboard layouts. \n\nPerfect for small to medium businesses looking to manage their online retail operations efficiently.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/online-store-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/online-store-listing/thumbnail.png"
       }
     },
     "relationships": {

@@ -11,9 +11,9 @@
       "spacing": "0.25rem",
       "cardInfo": {
         "notes": null,
-        "title": "Cardstack",
-        "description": "Guide to brand elements and visual style",
-        "thumbnailURL": "https://app-assets-cardstack.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-icon.svg"
+        "name": "Cardstack",
+        "summary": "Guide to brand elements and visual style",
+        "cardThumbnailURL": "https://app-assets-cardstack.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-icon.svg"
       },
       "markUsage": {
         "primaryMark1": "https://app-assets-cardstack.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-logo-primary-mark-1.svg",

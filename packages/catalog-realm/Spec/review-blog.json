@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Review Blog",
-      "description": "Spec for Review Blog card",
-      "thumbnailURL": null
+      "cardTitle": "Review Blog",
+      "cardDescription": "Spec for Review Blog card",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples.0": {

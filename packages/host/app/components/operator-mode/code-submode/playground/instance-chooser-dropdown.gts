@@ -23,7 +23,7 @@ const getItemTitle = (selection: SelectedInstance | undefined) => {
     return;
   }
   let { card, fieldIndex } = selection;
-  let title = card.title ?? `Untitled ${cardTypeDisplayName(card)}`;
+  let title = card.cardTitle ?? `Untitled ${cardTypeDisplayName(card)}`;
   if (fieldIndex === undefined) {
     return title;
   }

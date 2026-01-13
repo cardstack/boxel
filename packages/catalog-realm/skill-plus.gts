@@ -595,17 +595,17 @@ export class SkillPlus extends Skill {
   static displayName = 'Skill Plus';
   static prefersWideFormat = true;
 
-  // override skill card's title field to be computed of cardInfo.title
-  @field title = contains(StringField, {
+  // override skill card's title field to be computed of cardInfo.name
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: SkillPlus) {
-      return this.cardInfo?.title ?? `Untitled ${SkillPlus.displayName}`;
+      return this.cardInfo?.name ?? `Untitled ${SkillPlus.displayName}`;
     },
   });
 
-  // override skill card's description field to be computed of cardInfo.description
-  @field description = contains(StringField, {
+  // override skill card's description field to be computed of cardInfo.summary
+  @field cardDescription = contains(StringField, {
     computeVia: function (this: SkillPlus) {
-      return this.cardInfo?.description;
+      return this.cardInfo?.summary;
     },
   });
 
@@ -624,8 +624,8 @@ export class SkillPlus extends Skill {
     <template>
       <DocLayout
         @titleMeta='Skill Plus Documentation'
-        @title={{@model.title}}
-        @description={{@model.description}}
+        @title={{@model.cardTitle}}
+        @description={{@model.cardDescription}}
         @hideToc={{this.isTocEmpty}}
       >
         <:navbar>

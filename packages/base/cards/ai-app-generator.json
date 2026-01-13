@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "AI App Generator",
-      "description": "Design your own app UI by describing what you want to build",
+      "cardTitle": "AI App Generator",
+      "cardDescription": "Design your own app UI by describing what you want to build",
       "specType": "card",
       "ref": {
         "module": "https://cardstack.com/base/ai-app-generator",

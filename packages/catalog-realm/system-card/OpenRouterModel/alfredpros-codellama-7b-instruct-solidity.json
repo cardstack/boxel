@@ -6,7 +6,7 @@
       "canonicalSlug": "alfredpros/codellama-7b-instruct-solidity",
       "name": "AlfredPros: CodeLLaMa 7B Instruct Solidity",
       "created": 1744641874,
-      "description": "A finetuned 7 billion parameters Code LLaMA - Instruct model to generate Solidity smart contract using 4-bit QLoRA finetuning provided by PEFT library.",
+      "cardDescription": "A finetuned 7 billion parameters Code LLaMA - Instruct model to generate Solidity smart contract using 4-bit QLoRA finetuning provided by PEFT library.",
       "pricing": {
         "prompt": "0.0000008",
         "completion": "0.0000012",
@@ -45,9 +45,9 @@
       ],
       "defaultParameters": {},
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

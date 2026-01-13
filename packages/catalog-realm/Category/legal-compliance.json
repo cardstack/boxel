@@ -11,9 +11,9 @@
       "name": "Legal & Compliance",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Legal document management, contract review, regulatory compliance, intellectual property tracking, and risk assessment tools.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Legal document management, contract review, regulatory compliance, intellectual property tracking, and risk assessment tools.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

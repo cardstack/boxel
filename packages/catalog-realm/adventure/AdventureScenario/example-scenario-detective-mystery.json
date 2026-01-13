@@ -3,8 +3,8 @@
     "type": "card",
     "attributes": {
       "key": "detective-mystery",
-      "title": "The Vanishing Detective",
-      "description": "A famed sleuth disappears in 1947 Manhattan. The fog knows more.",
+      "cardTitle": "The Vanishing Detective",
+      "cardDescription": "A famed sleuth disappears in 1947 Manhattan. The fog knows more.",
       "tags": ["noir", "mystery", "gritty"],
       "imageStyles": ["film-noir", "black-and-white"]
     },

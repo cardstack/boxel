@@ -2,14 +2,14 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Fall Festival",
+      "cardTitle": "Fall Festival",
       "startDateTime": "2024-10-18T14:00:00.000Z",
       "endDateTime": "2024-10-18T19:00:00.000Z",
-      "description": "Annual fall celebration with games, activities, and seasonal treats. Students and families are invited to enjoy an afternoon of autumn fun on the school grounds. Costume contest, pumpkin decorating, and hay rides will be available.",
+      "cardDescription": "Annual fall celebration with games, activities, and seasonal treats. Students and families are invited to enjoy an afternoon of autumn fun on the school grounds. Costume contest, pumpkin decorating, and hay rides will be available.",
       "location": "School Grounds",
       "isAllDay": true,
       "requiresRsvp": false,
-      "thumbnailURL": "https://images.unsplash.com/photo-1507484467459-0c01be16726e?q=80&w=2070&auto=format&fit=crop"
+      "cardThumbnailURL": "https://images.unsplash.com/photo-1507484467459-0c01be16726e?q=80&w=2070&auto=format&fit=crop"
     },
     "relationships": {
       "rsvp": {

@@ -125,16 +125,16 @@ class Isolated extends Component<typeof StructuredTheme> {
     <ThemeDashboard
       class='structured-theme-card'
       style={{if this.isDarkMode @model.darkModeStyles}}
-      @title={{@model.title}}
-      @description={{@model.description}}
+      @title={{@model.cardTitle}}
+      @description={{@model.cardDescription}}
       @isDarkMode={{this.isDarkMode}}
       @version={{@model.version}}
     >
       <:header>
         <BoxelContainer @tag='header' @display='flex' class='theme-header'>
-          <h1><@fields.title /></h1>
+          <h1><@fields.cardTitle /></h1>
           <p class='theme-description'>
-            <@fields.description />
+            <@fields.cardDescription />
           </p>
         </BoxelContainer>
       </:header>
@@ -286,11 +286,11 @@ export default class StructuredTheme extends Theme {
         <header class='structured-theme-embedded__header'>
           <div>
             <h3 class='structured-theme-embedded__title'>
-              <@fields.title />
+              <@fields.cardTitle />
             </h3>
-            {{#if @model.description}}
+            {{#if @model.cardDescription}}
               <p class='structured-theme-embedded__description'>
-                <@fields.description />
+                <@fields.cardDescription />
               </p>
             {{/if}}
           </div>

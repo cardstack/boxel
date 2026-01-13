@@ -18,8 +18,8 @@
       },
       "name": "Paws Clinic Booking System Demo",
       "details": "Prepare and conduct demo of proposed booking system integration for stakeholders",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "crmApp": {

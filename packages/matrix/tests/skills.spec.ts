@@ -370,7 +370,7 @@ test.describe('Skills', () => {
       .click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await page
-      .locator('[data-test-field="title"] input')
+      .locator('[data-test-field="cardTitle"] input')
       .fill('Automatic Switch Command');
     await page
       .locator('[data-test-field="instructions"] textarea')

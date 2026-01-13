@@ -12,9 +12,9 @@
           "requiresApproval": false
         }
       ],
-      "title": "Daily Report Generation",
-      "description": "Automatically generates comprehensive daily reports by analyzing activity logs, identifying patterns, and creating actionable recommendations for the next day.",
-      "thumbnailURL": null
+      "cardTitle": "Daily Report Generation",
+      "cardDescription": "Automatically generates comprehensive daily reports by analyzing activity logs, identifying patterns, and creating actionable recommendations for the next day.",
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

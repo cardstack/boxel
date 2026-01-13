@@ -18,8 +18,8 @@
       },
       "name": "Create RHS Sheet",
       "details": null,
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "project": {

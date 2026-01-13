@@ -41,8 +41,8 @@
           "value": "@johnsmith"
         }
       ],
-      "description": "Showed interest through website contact form",
-      "thumbnailURL": "https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg"
+      "cardDescription": "Showed interest through website contact form",
+      "cardThumbnailURL": "https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg"
     },
     "relationships": {
       "crmApp": {

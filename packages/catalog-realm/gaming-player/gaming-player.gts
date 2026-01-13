@@ -184,7 +184,7 @@ export class GamingPlayer extends Player {
 
   @field statistics = contains(GamingStatsField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: GamingPlayer) {
       try {
         const gamerTag = this.gamerTag ?? 'Anonymous Gamer';
@@ -209,15 +209,15 @@ export class GamingPlayer extends Player {
 
   static embedded = class Embedded extends Component<typeof this> {
     get avatarAlt() {
-      return this.args.model.title || 'Player avatar';
+      return this.args.model.cardTitle || 'Player avatar';
     }
 
     get avatarFallback() {
-      return this.args.model.title || 'Player';
+      return this.args.model.cardTitle || 'Player';
     }
 
     get playerName() {
-      return this.args.model.title || 'Unknown Player';
+      return this.args.model.cardTitle || 'Unknown Player';
     }
 
     <template>

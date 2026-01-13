@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Physics Tutoring Session",
-      "description": "One-on-one tutoring for quantum mechanics and wave functions. Focus on problem-solving techniques and exam preparation.",
+      "cardTitle": "Physics Tutoring Session",
+      "cardDescription": "One-on-one tutoring for quantum mechanics and wave functions. Focus on problem-solving techniques and exam preparation.",
       "startTime": "2025-09-05T15:00:00.000Z",
       "endTime": "2025-09-05T16:30:00.000Z",
       "location": "Tutoring Center - Room 205",

@@ -11,9 +11,9 @@
       "name": "Creative Projects",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Art projects, creative writing, music compositions, design concepts, crafting ideas, and artistic inspiration.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Art projects, creative writing, music compositions, design concepts, crafting ideas, and artistic inspiration.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

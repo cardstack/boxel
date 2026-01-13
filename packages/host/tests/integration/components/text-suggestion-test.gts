@@ -48,7 +48,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
     class Post extends CardDef {
       static displayName = 'Post';
       @field article = linksTo(Article);
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
     }
 
     class BlogPost extends Post {
@@ -229,7 +229,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
             name: 'Post',
           },
         },
-        { eq: { title: 'Card 1' } },
+        { eq: { cardTitle: 'Card 1' } },
         { not: { eq: { 'author.firstName': 'Cardy' } } },
       ],
       type: { module: `${baseRealm.url}card-api`, name: 'CardDef' },

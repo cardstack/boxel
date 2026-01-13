@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "playlistName": "Midnight Chill",
-      "description": "Smooth beats and dreamy melodies for late-night relaxation and contemplation.",
+      "cardDescription": "Smooth beats and dreamy melodies for late-night relaxation and contemplation.",
       "coverImageUrl": "https://images.unsplash.com/photo-1519681393784-d120267933ba?w=300&h=300&fit=crop&crop=center",
       "songCount": 35,
       "duration": "2h 18m",

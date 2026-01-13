@@ -5,8 +5,8 @@
       "modelId": "openai/gpt-4.1-nano",
       "modelName": "GPT-4.1 Nano",
       "displayName": "GPT-4.1 Nano",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

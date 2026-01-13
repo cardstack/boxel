@@ -11,9 +11,9 @@
       "partner": "American Express Travel",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "conditions": "Receive a $100 credit towards eligible charges when you book two nights or more with The Hotel Collection with AmexTravel.com. The Hotel Collection requires a two-night minimum stay. Eligible charges vary by property.",
       "statusLevel": null,

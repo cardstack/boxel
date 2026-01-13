@@ -11,15 +11,15 @@
       "inventory": 15,
       "inStock": true,
       "imageUrl": "https://images.pexels.com/photos/1545998/pexels-photo-1545998.jpeg",
-      "title": "Vintage Canvas Travel Backpack",
+      "cardTitle": "Vintage Canvas Travel Backpack",
       "cardInfo": {
-        "title": "Vintage Canvas Travel Backpack",
-        "description": "Durable vintage-style canvas backpack perfect for travel and outdoor adventures. Category: Bags & Luggage. SKU: VCT-BP-OLIVE",
-        "thumbnailURL": "https://images.pexels.com/photos/1545998/pexels-photo-1545998.jpeg",
+        "name": "Vintage Canvas Travel Backpack",
+        "summary": "Durable vintage-style canvas backpack perfect for travel and outdoor adventures. Category: Bags & Luggage. SKU: VCT-BP-OLIVE",
+        "cardThumbnailURL": "https://images.pexels.com/photos/1545998/pexels-photo-1545998.jpeg",
         "notes": null
       },
-      "description": "Durable vintage-style canvas backpack perfect for travel and outdoor adventures. Category: Bags & Luggage. SKU: VCT-BP-OLIVE",
-      "thumbnailURL": "https://images.pexels.com/photos/1545998/pexels-photo-1545998.jpeg"
+      "cardDescription": "Durable vintage-style canvas backpack perfect for travel and outdoor adventures. Category: Bags & Luggage. SKU: VCT-BP-OLIVE",
+      "cardThumbnailURL": "https://images.pexels.com/photos/1545998/pexels-photo-1545998.jpeg"
     },
     "relationships": {
       "cardInfo.theme": {

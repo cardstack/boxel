@@ -180,9 +180,9 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   <template>
     <div class='app-listing-embedded'>
       <AppListingHeader
-        @thumbnailUrl={{@model.thumbnailURL}}
+        @thumbnailUrl={{@model.cardThumbnailURL}}
         @name={{this.appName}}
-        @description={{@model.description}}
+        @description={{@model.cardDescription}}
         @publisher={{this.publisherName}}
       >
         <:action>
@@ -573,7 +573,7 @@ export class Listing extends CardDef {
   @field examples = linksToMany(() => CardDef);
   @field skills = linksToMany(() => Skill);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia(this: Listing) {
       return this.name;
     },

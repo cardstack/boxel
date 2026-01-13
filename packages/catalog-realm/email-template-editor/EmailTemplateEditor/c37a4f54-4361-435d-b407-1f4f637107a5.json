@@ -11,16 +11,16 @@
       "subject": "Welcome to Your Premium Membership!",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "fromName": "Sarah Cheng",
       "buttonUrl": "https://www.google.com/",
       "fromEmail": "sarah@acmecompany.com",
       "textColor": "#0F172A",
       "buttonText": "Get Started Nows",
-      "footerText": "© 2024 Acme Company. All rights reserved.\n123 Innovation Drive, San Francisco, CA 94103\n\nYou're receiving this because you signed up for our premium membership.",
+      "footerText": "\u00a9 2024 Acme Company. All rights reserved.\n123 Innovation Drive, San Francisco, CA 94103\n\nYou're receiving this because you signed up for our premium membership.",
       "headerText": "Welcome Aboard!",
       "bodyContent": "We're thrilled to have you join our community. Your premium membership gives you access to exclusive features, priority support, and monthly insights delivered straight to your inbox.\n\nOur team is here to help you get the most out of your membership. Don't hesitate to reach out if you have any questions.",
       "buttonColor": null,

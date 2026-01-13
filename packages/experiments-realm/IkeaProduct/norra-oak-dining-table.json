@@ -6,12 +6,12 @@
       "heroImage": "https://images.pexels.com/photos/292999/pexels-photo-292999.jpeg?auto=compress&cs=tinysrgb&w=1920",
       "price": 749,
       "currency": "USD",
-      "description": "Solid oak top with softly chamfered edges, supported by powder-coated steel legs that echo IKEA's classic trestle silhouette. Seats six comfortably and wipes clean with one cloth.",
+      "cardDescription": "Solid oak top with softly chamfered edges, supported by powder-coated steel legs that echo IKEA's classic trestle silhouette. Seats six comfortably and wipes clean with one cloth.",
       "cardInfo": {
         "notes": null,
-        "title": "NORRA Oak Dining Table",
-        "description": "Solid oak trestle table with matte steel base.",
-        "thumbnailURL": "https://images.pexels.com/photos/292999/pexels-photo-292999.jpeg?auto=compress&cs=tinysrgb&w=600"
+        "name": "NORRA Oak Dining Table",
+        "summary": "Solid oak trestle table with matte steel base.",
+        "cardThumbnailURL": "https://images.pexels.com/photos/292999/pexels-photo-292999.jpeg?auto=compress&cs=tinysrgb&w=600"
       }
     },
     "relationships": {

@@ -3,9 +3,9 @@
     "type": "card",
     "attributes": {
       "cardInfo": {
-        "title": "OpenAI: GPT-5",
-        "description": "Test fixture model configuration referencing GPT-5.",
-        "thumbnailURL": null,
+        "name": "OpenAI: GPT-5",
+        "summary": "Test fixture model configuration referencing GPT-5.",
+        "cardThumbnailURL": null,
         "notes": null
       },
       "modelId": "openai/gpt-5",

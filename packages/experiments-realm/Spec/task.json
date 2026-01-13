@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Task",
-      "description": "Spec for Task",
+      "cardTitle": "Task",
+      "cardDescription": "Spec for Task",
       "ref": {
         "name": "Task",
         "module": "../task"

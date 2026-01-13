@@ -11,9 +11,9 @@
       "partner": "Hilton Worldwide",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "conditions": "With Hilton Honors Gold status, you can enjoy benefits at hotels and resorts within the Hilton Portfolio and earn reward stays faster with Hilton Honors Bonus Points. Status automatically granted to cardmembers in good standing.",
       "statusLevel": "Gold",

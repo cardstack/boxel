@@ -112,7 +112,7 @@ module('Integration | card-delete', function (hooks) {
     class Pet extends CardDef {
       static displayName = 'Pet';
       @field firstName = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.firstName;
         },

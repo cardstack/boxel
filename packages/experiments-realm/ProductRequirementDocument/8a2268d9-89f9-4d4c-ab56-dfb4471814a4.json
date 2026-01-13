@@ -16,7 +16,7 @@
       "schema": "1. **User:**\n- Username\n- Password\n- Email\n2. **Task:**\n- Task ID\n- Title\n- Description\n- Status (To Do, In Progress, Completed)\n- Due Date\n- Priority Level\n3. **Category:**\n- Category ID\n- Name\n- Color",
       "layoutAndNavigation": "- **Home:** Shows a dashboard with all tasks categorized by status (To Do, In Progress, Completed).\n- **Tasks:** A screen to add, edit, or delete tasks with fields for title, description, due date, priority, and status.\n- **Categories:** Allows users to create and manage categories, assigning tasks to specific categories for better organization.\n- **Settings:** Offers user settings such as profile management, notifications, and application preferences.",
       "moduleURL": null,
-      "thumbnailURL": null
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

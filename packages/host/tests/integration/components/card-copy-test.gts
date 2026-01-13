@@ -120,7 +120,7 @@ module('Integration | card-copy', function (hooks) {
     class Pet extends CardDef {
       static displayName = 'Pet';
       @field firstName = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.firstName;
         },
@@ -141,7 +141,7 @@ module('Integration | card-copy', function (hooks) {
       static displayName = 'Person';
       @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },

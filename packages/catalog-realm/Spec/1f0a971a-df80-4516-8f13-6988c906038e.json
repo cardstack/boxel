@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "PolicyManual",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "PolicyManual",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

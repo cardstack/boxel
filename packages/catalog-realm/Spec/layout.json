@@ -9,9 +9,9 @@
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Layout",
-      "description": "Spec for Layout component",
-      "thumbnailURL": null
+      "cardTitle": "Layout",
+      "cardDescription": "Spec for Layout component",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

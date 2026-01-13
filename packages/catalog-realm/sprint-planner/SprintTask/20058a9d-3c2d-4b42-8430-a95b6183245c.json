@@ -18,8 +18,8 @@
       },
       "name": "Port the already done work for CRM into the monorepo",
       "details": "Copy the existing work that has been carried out through spikes and git commit to our monorepo",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "project": {

@@ -16,17 +16,17 @@ export class IkeaProduct extends CardDef {
   @field heroImage = contains(StringField);
   @field price = contains(NumberField);
   @field currency = contains(StringField);
-  @field description = contains(MarkdownField);
+  @field cardDescription = contains(MarkdownField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: IkeaProduct) {
-      return this.cardInfo?.title ?? this.productName ?? 'New Product';
+      return this.cardInfo?.name ?? this.productName ?? 'New Product';
     },
   });
 
-  @field thumbnailURL = contains(StringField, {
+  @field cardThumbnailURL = contains(StringField, {
     computeVia: function (this: IkeaProduct) {
-      return this.cardInfo?.thumbnailURL ?? this.heroImage ?? null;
+      return this.cardInfo?.cardThumbnailURL ?? this.heroImage ?? null;
     },
   });
 
@@ -41,7 +41,7 @@ export class IkeaProduct extends CardDef {
           {{#if @model.heroImage}}
             <img
               src={{@model.heroImage}}
-              alt={{@model.title}}
+              alt={{@model.cardTitle}}
               class='hero-image'
             />
           {{else}}
@@ -53,14 +53,14 @@ export class IkeaProduct extends CardDef {
         <section class='details-panel'>
           <header>
             <p class='eyebrow'>IKEA COLLECTION</p>
-            <h1>{{if @model.title @model.title 'New product'}}</h1>
+            <h1>{{if @model.cardTitle @model.cardTitle 'New product'}}</h1>
             <p class='price-tag'>
               {{formatCurrency @model.price currency=this.currencyCode}}
             </p>
           </header>
           <div class='description-block'>
-            {{#if @model.description}}
-              <@fields.description />
+            {{#if @model.cardDescription}}
+              <@fields.cardDescription />
             {{else}}
               <p class='placeholder'>
                 Design notes coming soon. Add material, finishes, and care instructions to help shoppers choose confidently.
@@ -172,13 +172,13 @@ export class IkeaProduct extends CardDef {
       <section class='embedded-card'>
         <div class='embedded-visual'>
           {{#if @model.heroImage}}
-            <img src={{@model.heroImage}} alt={{@model.title}} />
+            <img src={{@model.heroImage}} alt={{@model.cardTitle}} />
           {{else}}
             <div class='tiny-placeholder'>IMG</div>
           {{/if}}
         </div>
         <div class='embedded-content'>
-          <p class='name'>{{if @model.title @model.title 'New product'}}</p>
+          <p class='name'>{{if @model.cardTitle @model.cardTitle 'New product'}}</p>
           <p class='price'>
             {{formatCurrency @model.price currency=this.currencyCode}}
           </p>
@@ -243,13 +243,13 @@ export class IkeaProduct extends CardDef {
       <article class='fitted-card'>
         <div class='image-wrap'>
           {{#if @model.heroImage}}
-            <img src={{@model.heroImage}} alt={{@model.title}} />
+            <img src={{@model.heroImage}} alt={{@model.cardTitle}} />
           {{else}}
             <div class='fitted-placeholder'>Awaiting photo</div>
           {{/if}}
         </div>
         <div class='text-block'>
-          <p class='title'>{{if @model.title @model.title 'New product'}}</p>
+          <p class='title'>{{if @model.cardTitle @model.cardTitle 'New product'}}</p>
           <p class='price'>
             {{formatCurrency @model.price currency=this.currencyCode}}
           </p>

@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "patternName": "Rock Beat",
-      "description": "Driving rock pattern with steady kick and punchy snare backbeat",
+      "cardDescription": "Driving rock pattern with steady kick and punchy snare backbeat",
       "bpm": 115,
       "genre": "Rock",
       "creator": "Beat Maker Studio",
@@ -16,7 +16,7 @@
         "clap": "[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]",
         "crash": "[true,false,false,false,false,false,false,false,true,false,false,false,false,false,false,false]"
       },
-      "title": "Rock Beat"
+      "cardTitle": "Rock Beat"
     },
     "relationships": {},
     "meta": {

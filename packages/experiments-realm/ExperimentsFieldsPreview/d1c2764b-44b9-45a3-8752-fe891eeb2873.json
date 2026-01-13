@@ -56,9 +56,9 @@
         "width": null
       },
       "images": [],
-      "title": null,
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": null,
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

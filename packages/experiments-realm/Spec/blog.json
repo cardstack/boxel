@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Blog",
-      "description": "Spec for Blog App card",
+      "cardTitle": "Blog",
+      "cardDescription": "Spec for Blog App card",
       "ref": {
         "module": "../blog-app",
         "name": "BlogApp"

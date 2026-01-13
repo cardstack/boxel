@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "StylishFashionInfluencerLinktree",
-      "description": "Spec of StylishFashionInfluencerLinktree",
-      "thumbnailURL": null
+      "cardTitle": "StylishFashionInfluencerLinktree",
+      "cardDescription": "Spec of StylishFashionInfluencerLinktree",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

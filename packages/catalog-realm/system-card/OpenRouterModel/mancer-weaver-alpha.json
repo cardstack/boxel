@@ -6,7 +6,7 @@
       "canonicalSlug": "mancer/weaver",
       "name": "Mancer: Weaver (alpha)",
       "created": 1690934400,
-      "description": "An attempt to recreate Claude-style verbosity, but don't expect the same level of coherence or memory. Meant for use in roleplay/narrative situations.",
+      "cardDescription": "An attempt to recreate Claude-style verbosity, but don't expect the same level of coherence or memory. Meant for use in roleplay/narrative situations.",
       "pricing": {
         "prompt": "0.000001125",
         "completion": "0.000001125",
@@ -50,9 +50,9 @@
       ],
       "defaultParameters": {},
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

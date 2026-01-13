@@ -6,7 +6,7 @@
       "canonicalSlug": "arcee-ai/maestro-reasoning",
       "name": "Arcee AI: Maestro Reasoning",
       "created": 1746481269,
-      "description": "Maestro Reasoning is Arcee's flagship analysis model: a 32 B‑parameter derivative of Qwen 2.5‑32 B tuned with DPO and chain‑of‑thought RL for step‑by‑step logic. Compared to the earlier 7 B preview, the production 32 B release widens the context window to 128 k tokens and doubles pass‑rate on MATH and GSM‑8K, while also lifting code completion accuracy. Its instruction style encourages structured \"thought → answer\" traces that can be parsed or hidden according to user preference. That transparency pairs well with audit‑focused industries like finance or healthcare where seeing the reasoning path matters. In Arcee Conductor, Maestro is automatically selected for complex, multi‑constraint queries that smaller SLMs bounce. ",
+      "cardDescription": "Maestro Reasoning is Arcee's flagship analysis model: a 32\u202fB\u2011parameter derivative of Qwen\u202f2.5\u201132\u202fB tuned with DPO and chain\u2011of\u2011thought RL for step\u2011by\u2011step logic. Compared to the earlier 7\u202fB preview, the production 32\u202fB release widens the context window to 128\u202fk tokens and doubles pass\u2011rate on MATH and GSM\u20118K, while also lifting code completion accuracy. Its instruction style encourages structured \"thought \u2192 answer\" traces that can be parsed or hidden according to user preference. That transparency pairs well with audit\u2011focused industries like finance or healthcare where seeing the reasoning path matters. In Arcee Conductor, Maestro is automatically selected for complex, multi\u2011constraint queries that smaller SLMs bounce. ",
       "pricing": {
         "prompt": "0.0000009",
         "completion": "0.0000033",
@@ -45,9 +45,9 @@
       ],
       "defaultParameters": {},
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

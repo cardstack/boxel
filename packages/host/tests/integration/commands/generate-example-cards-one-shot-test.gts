@@ -28,8 +28,8 @@ module(
 
     let llmResponseContent = JSON.stringify({
       attributes: {
-        title: 'Generated Title',
-        description: 'Generated description from LLM',
+        cardTitle: 'Generated Title',
+        cardDescription: 'Generated description from LLM',
       },
     });
 
@@ -77,8 +77,8 @@ import StringField from 'https://cardstack.com/base/string';
 
 export class TestCard extends CardDef {
   static displayName = 'Test Card';
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
 }`,
         },
       });
@@ -106,12 +106,12 @@ export class TestCard extends CardDef {
       const serialized = await cardService.serializeCard(createdCard);
 
       assert.strictEqual(
-        serialized.data.attributes?.title,
+        serialized.data.attributes?.cardTitle,
         'Generated Title',
         'created card adopts title from LLM payload',
       );
       assert.strictEqual(
-        serialized.data.attributes?.description,
+        serialized.data.attributes?.cardDescription,
         'Generated description from LLM',
         'created card adopts description from LLM payload',
       );

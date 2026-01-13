@@ -23,7 +23,7 @@ export class Asset extends CardDef {
       return new URL(this.logoURL, this[relativeTo] || this.id).href;
     },
   });
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Asset) {
       return this.name;
     },
@@ -67,7 +67,7 @@ export class Asset extends CardDef {
             aria-hidden='true'
           />
         {{/if}}
-        {{@model.title}}
+        {{@model.cardTitle}}
       </span>
       <style scoped>
         img {
@@ -92,7 +92,7 @@ class AssetField extends FieldDef {
       return new URL(this.logoURL, this[relativeTo] || this.id).href;
     },
   });
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Asset) {
       return this.name;
     },

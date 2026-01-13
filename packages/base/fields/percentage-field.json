@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Percentage Field",
-      "description": "A field that captures percentage values.",
+      "cardTitle": "Percentage Field",
+      "cardDescription": "A field that captures percentage values.",
       "specType": "field",
       "ref": {
         "module": "https://cardstack.com/base/percentage",

@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Text Area Field",
-      "description": "A field that can capture string values in a multi-line input format. Useful for capturing a large body of text.",
+      "cardTitle": "Text Area Field",
+      "cardDescription": "A field that can capture string values in a multi-line input format. Useful for capturing a large body of text.",
       "specType": "field",
       "ref": {
         "module": "https://cardstack.com/base/text-area",

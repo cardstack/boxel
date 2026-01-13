@@ -13,9 +13,9 @@
       "yHeader": "",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "chartType": "stackedBar",
       "binaryHeader": "Pclass",

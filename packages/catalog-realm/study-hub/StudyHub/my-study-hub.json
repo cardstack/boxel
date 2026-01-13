@@ -11,9 +11,9 @@
       "hubName": "Alex's Study Hub",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "weeklyGoal": 600
     },

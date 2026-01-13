@@ -6,12 +6,12 @@
       "heroImage": "https://images.pexels.com/photos/1125137/pexels-photo-1125137.jpeg?auto=compress&cs=tinysrgb&w=1920",
       "price": 429,
       "currency": "USD",
-      "description": "A ladder-inspired shelving system with adjustable ash shelves, cable cutouts for lighting, and a neutral palette built to disappear against white walls.",
+      "cardDescription": "A ladder-inspired shelving system with adjustable ash shelves, cable cutouts for lighting, and a neutral palette built to disappear against white walls.",
       "cardInfo": {
         "notes": null,
-        "title": "LOOM Tall Bookshelf",
-        "description": "Ladder-style shelving with adjustable ash shelves.",
-        "thumbnailURL": "https://images.pexels.com/photos/1125137/pexels-photo-1125137.jpeg?auto=compress&cs=tinysrgb&w=600"
+        "name": "LOOM Tall Bookshelf",
+        "summary": "Ladder-style shelving with adjustable ash shelves.",
+        "cardThumbnailURL": "https://images.pexels.com/photos/1125137/pexels-photo-1125137.jpeg?auto=compress&cs=tinysrgb&w=600"
       }
     },
     "relationships": {

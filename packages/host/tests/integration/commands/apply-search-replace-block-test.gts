@@ -32,8 +32,8 @@ import NumberField from 'https://cardstack.com/base/number';
 
 export class Task extends CardDef {
   static displayName = 'Task';
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field dueDate = contains(DatetimeField);
   @field priority = contains(NumberField);
 }`;
@@ -62,8 +62,8 @@ import BooleanField from 'https://cardstack.com/base/boolean';
 
 export class Task extends CardDef {
   static displayName = 'Task';
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field dueDate = contains(DatetimeField);
   @field priority = contains(NumberField);
 }`;
@@ -77,7 +77,7 @@ export class Task extends CardDef {
     );
 
     const fileContent = `class BlogPost extends CardDef {
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field content = contains(MarkdownField);
   @field author = linksTo(Author);
   @field publishedAt = contains(DatetimeField);
@@ -87,21 +87,21 @@ export class Task extends CardDef {
 class EmbeddedTemplate extends Component<typeof BlogPost> {
   <template>
     <article class='blog-post'>
-      <h2 class='title'><@fields.title /></h2>
+      <h2 class='title'><@fields.cardTitle /></h2>
       <div class='post-meta'>
         <span>Published: <@fields.publishedAt /></span>
         <span>By: <@fields.author /></span>
       </div>
       <div class='content'><@fields.content /></div>
       And that title again
-      <h2 class='title'><@fields.title /></h2>
+      <h2 class='title'><@fields.cardTitle /></h2>
     </article>
   </template>
 }`;
     const codeBlock = `${SEARCH_MARKER}
-      <h2 class='title'><@fields.title /></h2>
+      <h2 class='title'><@fields.cardTitle /></h2>
 ${SEPARATOR_MARKER}
-      <h2 class='title' data-test-title><@fields.title /></h2>
+      <h2 class='title' data-test-title><@fields.cardTitle /></h2>
 ${REPLACE_MARKER}`;
 
     let result = await applyCommand.execute({
@@ -110,7 +110,7 @@ ${REPLACE_MARKER}`;
     });
 
     const expectedResult = `class BlogPost extends CardDef {
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field content = contains(MarkdownField);
   @field author = linksTo(Author);
   @field publishedAt = contains(DatetimeField);
@@ -120,14 +120,14 @@ ${REPLACE_MARKER}`;
 class EmbeddedTemplate extends Component<typeof BlogPost> {
   <template>
     <article class='blog-post'>
-      <h2 class='title' data-test-title><@fields.title /></h2>
+      <h2 class='title' data-test-title><@fields.cardTitle /></h2>
       <div class='post-meta'>
         <span>Published: <@fields.publishedAt /></span>
         <span>By: <@fields.author /></span>
       </div>
       <div class='content'><@fields.content /></div>
       And that title again
-      <h2 class='title'><@fields.title /></h2>
+      <h2 class='title'><@fields.cardTitle /></h2>
     </article>
   </template>
 }`;
@@ -143,7 +143,7 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
     const fileContent = `export class Product extends CardDef {
   static displayName = 'Product';
   @field name = contains(StringField);
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field price = contains(MonetaryAmountField);
   @field inStock = contains(BooleanField);
   @field category = linksTo(ProductCategory);
@@ -163,7 +163,7 @@ ${REPLACE_MARKER}`;
     const expectedResult = `export class Product extends CardDef {
   static displayName = 'Product';
   @field name = contains(StringField);
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field price = contains(MonetaryAmountField);
   @field inStock = contains(BooleanField);
   @field category = linksTo(ProductCategory);
@@ -180,7 +180,7 @@ ${REPLACE_MARKER}`;
 
     const fileContent = `export class Review extends CardDef {
   static displayName = 'Review';
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field content = contains(MarkdownField);
   @field rating = contains(NumberField, { min: 1, max: 5 });
   @field product = linksTo(Product);
@@ -423,8 +423,8 @@ class CardTemplate extends Component<typeof ContactCard> {
     // File uses spaces for indentation
     const fileContent = `export class Task extends CardDef {
   static displayName = 'Task';
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field assignee = linksTo(User);
   @field dueDate = contains(DatetimeField);
   @field status = contains(StringField, {
@@ -456,8 +456,8 @@ ${REPLACE_MARKER}`;
 
     const expectedResult = `export class Task extends CardDef {
   static displayName = 'Task';
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field assignee = linksTo(User);
   @field dueDate = contains(DatetimeField);
   @field status = contains(StringField, {
@@ -599,7 +599,7 @@ ${REPLACE_MARKER}`;
   static displayName = 'Product Card';
   @field name = contains(StringField);
   @field price = contains(MonetaryAmountField);
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field category = linksTo(Category);
 }`;
 
@@ -608,11 +608,11 @@ ${REPLACE_MARKER}`;
     const codeBlock = `${SEARCH_MARKER}
   @field name = contains(StringField);\r
   @field price = contains(MonetaryAmountField);\r
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
 ${SEPARATOR_MARKER}
   @field name = contains(StringField);
   @field price = contains(MonetaryAmountField);
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field inStock = contains(BooleanField);
 ${REPLACE_MARKER}`;
 
@@ -625,7 +625,7 @@ ${REPLACE_MARKER}`;
   static displayName = 'Product Card';
   @field name = contains(StringField);
   @field price = contains(MonetaryAmountField);
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field inStock = contains(BooleanField);
   @field category = linksTo(Category);
 }`;
@@ -706,13 +706,13 @@ ${REPLACE_MARKER}`;
 
     const fileContent = `class Task extends CardDef {
   static displayName = 'Task';
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
 }`;
     const codeBlock = `${SEARCH_MARKER}
   class Task extends CardDef {
     static displayName = 'Task';
-    @field title = contains(StringField);
+    @field cardTitle = contains(StringField);
 ${SEPARATOR_MARKER}
 ${REPLACE_MARKER}`;
 
@@ -723,7 +723,7 @@ ${REPLACE_MARKER}`;
 
     assert.strictEqual(
       result.resultContent,
-      `  @field description = contains(StringField);
+      `  @field cardDescription = contains(StringField);
 }`,
     );
   });

@@ -282,7 +282,7 @@ module('Integration | card-basics', function (hooks) {
     }
 
     class BeatMakerCard extends CardDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
     }
 
     class Listing extends CardDef {
@@ -296,7 +296,7 @@ module('Integration | card-basics', function (hooks) {
     });
 
     let e1 = new DrumKitCard({ name: '808 Analog Kit' });
-    let e2 = new BeatMakerCard({ title: 'Beat Maker Studio' });
+    let e2 = new BeatMakerCard({ cardTitle: 'Beat Maker Studio' });
 
     await saveCard(e1, `${testRealmURL}e1`, loader);
     await saveCard(e2, `${testRealmURL}e2`, loader);
@@ -384,7 +384,7 @@ module('Integration | card-basics', function (hooks) {
     test('primitive field type checking', async function (assert) {
       class Person extends CardDef {
         @field firstName = contains(StringField);
-        @field title = contains(StringField);
+        @field cardTitle = contains(StringField);
         @field number = contains(NumberField);
         @field languagesSpoken = containsMany(StringField);
         @field ref = contains(CodeRefField);
@@ -393,7 +393,7 @@ module('Integration | card-basics', function (hooks) {
         static isolated = class Isolated extends Component<typeof this> {
           <template>
             {{@model.firstName}}
-            {{@model.title}}
+            {{@model.cardTitle}}
             {{@model.number}}
             {{@model.ref.module}}
             {{@model.ref.name}}
@@ -434,12 +434,12 @@ module('Integration | card-basics', function (hooks) {
       }
 
       class Post extends CardDef {
-        @field title = contains(StringField);
+        @field cardTitle = contains(StringField);
         @field author = contains(Person);
         @field languagesSpoken = containsMany(StringField);
         static isolated = class Isolated extends Component<typeof this> {
           <template>
-            {{@model.title}}
+            {{@model.cardTitle}}
             by
             {{@model.author.firstName}}
             speaks
@@ -455,7 +455,7 @@ module('Integration | card-basics', function (hooks) {
       loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
       let helloWorld = new Post({
-        title: 'First Post',
+        cardTitle: 'First Post',
         author: new Person({
           firstName: 'Arthur',
           subscribers: 5,
@@ -540,7 +540,7 @@ module('Integration | card-basics', function (hooks) {
       class Guest extends FieldDef {
         @field name = contains(EmphasizedString);
         @field additionalGuestCount = contains(StrongNumber);
-        @field title = contains(StringField, {
+        @field cardTitle = contains(StringField, {
           computeVia: function (this: Guest) {
             return `${this.name} - ${this.additionalGuestCount}`;
           },
@@ -605,7 +605,7 @@ module('Integration | card-basics', function (hooks) {
       class Guest extends FieldDef {
         @field name = contains(StringField);
         @field additionalGuestCount = contains(NumberField);
-        @field title = contains(StringField, {
+        @field cardTitle = contains(StringField, {
           computeVia: function (this: Guest) {
             return `${this.name} - ${this.additionalGuestCount}`;
           },
@@ -671,7 +671,7 @@ module('Integration | card-basics', function (hooks) {
       class Guest extends CardDef {
         @field name = contains(StringField);
         @field additionalGuestCount = contains(NumberField);
-        @field title = contains(StringField, {
+        @field cardTitle = contains(StringField, {
           computeVia: function (this: Guest) {
             return this.name;
           },
@@ -744,17 +744,17 @@ module('Integration | card-basics', function (hooks) {
         static displayName = 'Person';
         @field firstName = contains(StringField);
         @field image = contains(Base64ImageField);
-        @field title = contains(StringField, {
+        @field cardTitle = contains(StringField, {
           computeVia: function (this: Person) {
             return this.firstName;
           },
         });
-        @field thumbnailURL = contains(MaybeBase64Field, {
+        @field cardThumbnailURL = contains(MaybeBase64Field, {
           computeVia: function (this: Person) {
             return this.image.base64;
           },
         });
-        @field description = contains(StringField);
+        @field cardDescription = contains(StringField);
       }
 
       let FittedViewDriver = fittedViewDriver();
@@ -766,7 +766,7 @@ module('Integration | card-basics', function (hooks) {
 
       let mang = new Person({
         firstName: 'Mango',
-        description: 'test card',
+        cardDescription: 'test card',
         image: new Base64ImageField({
           altText: 'Picture of Mango',
           size: 'contain',
@@ -802,12 +802,12 @@ module('Integration | card-basics', function (hooks) {
         static displayName = 'Person';
         @field firstName = contains(StringField);
         @field image = contains(Base64ImageField);
-        @field title = contains(StringField, {
+        @field cardTitle = contains(StringField, {
           computeVia: function (this: Person) {
             return this.firstName;
           },
         });
-        @field thumbnailURL = contains(MaybeBase64Field, {
+        @field cardThumbnailURL = contains(MaybeBase64Field, {
           computeVia: function (this: Person) {
             return this.image.base64;
           },
@@ -1710,13 +1710,13 @@ module('Integration | card-basics', function (hooks) {
 
     test('render whole composite contains field', async function (assert) {
       class Person extends FieldDef {
-        @field title = contains(StringField);
+        @field cardTitle = contains(StringField);
         @field firstName = contains(StringField);
         @field lastName = contains(StringField);
         @field number = contains(NumberField);
         static embedded = class Embedded extends Component<typeof this> {
           <template>
-            <div data-test-embedded-person><@fields.title />
+            <div data-test-embedded-person><@fields.cardTitle />
               <@fields.firstName />
               <@fields.lastName />
               <@fields.number /></div>
@@ -1729,7 +1729,7 @@ module('Integration | card-basics', function (hooks) {
         @field body = contains(StringField);
         static isolated = class Isolated extends Component<typeof this> {
           <template>
-            <div data-test-title><@fields.title /></div>
+            <div data-test-title><@fields.cardTitle /></div>
             {{! template-lint-disable no-inline-styles }}
             <div data-test-author><@fields.author style='width: 120px' /></div>
             <div data-test-body><@fields.body /></div>
@@ -1739,11 +1739,11 @@ module('Integration | card-basics', function (hooks) {
       loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
       let helloWorld = new Post({
-        title: 'This is My First Post',
+        cardTitle: 'This is My First Post',
         author: new Person({
           firstName: 'Arthur',
           lastName: 'Mephistophoclesiasticallious',
-          title: 'Mr',
+          cardTitle: 'Mr',
           number: 10,
         }),
         body: 'Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
@@ -1787,7 +1787,7 @@ module('Integration | card-basics', function (hooks) {
       }
 
       class Post extends CardDef {
-        @field title = contains(TestString);
+        @field cardTitle = contains(TestString);
         @field author = contains(Person);
         static isolated = class Isolated extends Component<typeof this> {
           <template>
@@ -1815,15 +1815,15 @@ module('Integration | card-basics', function (hooks) {
       class MeetingMinutes extends CardDef {}
       loader.shimModule(`${testRealmURL}test-cards`, { MeetingMinutes });
 
-      const title = 'Minutes of Meeting - Project Alpha';
-      const description =
+      const name = 'Minutes of Meeting - Project Alpha';
+      const summary =
         'Concise documentation of the decisions, tasks, and discussions from the Project Alpha Meeting on January 15, 2024.';
 
       let instance = new MeetingMinutes({
         cardInfo: new CardInfoField({
-          title,
-          description,
-          thumbnailURL: null,
+          name,
+          summary,
+          cardThumbnailURL: null,
           notes:
             '## Meeting Notes\n\nDate: January 15, 2024<br>\nParticipants: John Doe, Jane Smith, Alice Johnson\n\n### Key Points Discussed\n<ul>\n<li>Project timeline was reviewed and adjusted for Q2</li>\n<li> Budget allocation confirmed</li>\n<li> Risk assessment introduced, with mitigation strategies \n   identified</li>\n</ul>\n\n### Actions Items\n<ol>\n<li> <strong>John Doe:</strong> Update project timeline by January 20</li>\n<li> <strong>Jane Smith:</strong> Finalize budget report by January 22</li>\n<li> <strong>Alice Johnson:</strong> Conduct a follow-up meeting with  \n    stakeholders by January 30</li>\n</ol>',
         }),
@@ -1832,18 +1832,18 @@ module('Integration | card-basics', function (hooks) {
       // isolated format
       await renderCard(loader, instance, 'isolated');
       assert.dom('[data-test-thumbnail-icon]').exists();
-      assert.dom('[data-test-field="cardTitle"]').hasText(title);
-      assert.dom('[data-test-field="cardDescription"]').hasText(description);
+      assert.dom('[data-test-field="cardInfo-name"]').hasText(name);
+      assert.dom('[data-test-field="cardInfo-summary"]').hasText(summary);
       assert
         .dom('[data-test-field="cardInfo-notes"]')
         .containsText('Meeting Notes');
 
       // edit format
       await renderCard(loader, instance, 'edit');
-      assert.dom('[data-test-field="cardInfo-name"] input').hasValue(title);
+      assert.dom('[data-test-field="cardInfo-name"] input').hasValue(name);
       assert
         .dom('[data-test-field="cardInfo-summary"] input')
-        .hasValue(description);
+        .hasValue(summary);
       assert.dom('[data-test-thumbnail-icon]').exists();
       await click('[data-test-toggle-thumbnail-editor]');
       assert
@@ -1860,10 +1860,10 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-edit-preview="cardType"]')
         .hasText('Card Type Card');
-      assert.dom('[data-test-edit-preview="cardTitle"]').containsText(title);
+      assert.dom('[data-test-edit-preview="cardTitle"]').containsText(name);
       assert
         .dom('[data-test-edit-preview="cardDescription"]')
-        .containsText(description);
+        .containsText(summary);
       assert
         .dom('[data-test-edit-preview="cardThumbnailURL"]')
         .hasText('Thumbnail URL');
@@ -1880,12 +1880,12 @@ module('Integration | card-basics', function (hooks) {
         @field firstName = contains(StringField);
         @field lastName = contains(StringField);
         @field profilePic = contains(StringField);
-        @field title = contains(StringField, {
+        @field cardTitle = contains(StringField, {
           computeVia: function (this: Person) {
             return [this.firstName, this.lastName].filter(Boolean).join(' ');
           },
         });
-        @field thumbnailURL = contains(StringField, {
+        @field cardThumbnailURL = contains(StringField, {
           computeVia: function (this: Person) {
             return this.profilePic;
           },
@@ -1895,9 +1895,9 @@ module('Integration | card-basics', function (hooks) {
 
       let instance = new Person({
         cardInfo: new CardInfoField({
-          title: 'Johnny',
-          description: 'Volleyball player',
-          thumbnailURL: 'http://pic/of/volleyball',
+          name: 'Johnny',
+          summary: 'Volleyball player',
+          cardThumbnailURL: 'http://pic/of/volleyball',
         }),
         firstName: 'John',
         lastName: 'Doe',
@@ -1906,11 +1906,11 @@ module('Integration | card-basics', function (hooks) {
       await renderCard(loader, instance, 'isolated');
       assert.dom('[data-test-thumbnail-icon]').doesNotExist();
       assert
-        .dom('[data-test-field="cardThumbnailURL"]')
+        .dom('[data-test-field="cardInfo-thumbnailURL"]')
         .hasAttribute('style', `background-image: url(http://john/pic.jpg);`);
-      assert.dom('[data-test-field="cardTitle"]').hasText('John Doe');
+      assert.dom('[data-test-field="cardInfo-name"]').hasText('John Doe');
       assert
-        .dom('[data-test-field="cardDescription"]')
+        .dom('[data-test-field="cardInfo-summary"]')
         .hasText('Volleyball player');
 
       await renderCard(loader, instance, 'edit');
@@ -1953,17 +1953,17 @@ module('Integration | card-basics', function (hooks) {
         @field bookTitle = contains(StringField);
         @field blurb = contains(StringField);
         @field bookCoverImage = contains(StringField);
-        @field title = contains(StringField, {
+        @field cardTitle = contains(StringField, {
           computeVia: function (this: Book) {
-            return this.bookTitle ?? this.cardInfo.title ?? 'Untitled Book';
+            return this.bookTitle ?? this.cardInfo.name ?? 'Untitled Book';
           },
         });
-        @field description = contains(StringField, {
+        @field cardDescription = contains(StringField, {
           computeVia: function (this: Book) {
-            return this.blurb ?? this.cardInfo.description;
+            return this.blurb ?? this.cardInfo.summary;
           },
         });
-        @field thumbnailURL = contains(StringField, {
+        @field cardThumbnailURL = contains(StringField, {
           computeVia: function (this: Book) {
             return this.bookCoverImage;
           },
@@ -1973,7 +1973,7 @@ module('Integration | card-basics', function (hooks) {
 
       let instance = new Book({
         cardInfo: new CardInfoField({
-          description: 'The latest novel from John Doe',
+          summary: 'The latest novel from John Doe',
         }),
         bookTitle: 'Insomniac',
         blurb: 'This book will keep you up at night',
@@ -1982,11 +1982,11 @@ module('Integration | card-basics', function (hooks) {
       await renderCard(loader, instance, 'isolated');
       assert.dom('[data-test-thumbnail-icon]').doesNotExist();
       assert
-        .dom('[data-test-field="cardThumbnailURL"]')
+        .dom('[data-test-field="cardInfo-thumbnailURL"]')
         .hasAttribute('style', `background-image: url(http://book/pic.jpg);`);
-      assert.dom('[data-test-field="cardTitle"]').hasText('Insomniac');
+      assert.dom('[data-test-field="cardInfo-name"]').hasText('Insomniac');
       assert
-        .dom('[data-test-field="cardDescription"]')
+        .dom('[data-test-field="cardInfo-summary"]')
         .hasText('This book will keep you up at night');
 
       await renderCard(loader, instance, 'edit');
@@ -2022,35 +2022,37 @@ module('Integration | card-basics', function (hooks) {
     test('render card-def instance with cardInfo overrides (not computed)', async function (assert) {
       class Book extends CardDef {
         static displayName = 'Book';
-        @field title = contains(StringField);
-        @field description = contains(StringField);
-        @field thumbnailURL = contains(StringField);
+        @field cardTitle = contains(StringField);
+        @field cardDescription = contains(StringField);
+        @field cardThumbnailURL = contains(StringField);
       }
 
       let insomniac = new Book({
-        title: 'Insomniac',
-        description: 'This book will keep you up at night',
-        thumbnailURL: 'http://book/pic.jpg',
+        cardTitle: 'Insomniac',
+        cardDescription: 'This book will keep you up at night',
+        cardThumbnailURL: 'http://book/pic.jpg',
         cardInfo: new CardInfoField({
-          description: 'The latest novel from John Doe',
+          summary: 'The latest novel from John Doe',
         }),
       });
       await renderCard(loader, insomniac, 'isolated');
-      assert.dom('[data-test-field="cardTitle"]').hasText('Insomniac');
+      assert.dom('[data-test-field="cardInfo-name"]').hasText('Insomniac');
       assert
-        .dom('[data-test-field="cardDescription"]')
+        .dom('[data-test-field="cardInfo-summary"]')
         .hasText('This book will keep you up at night');
       assert
-        .dom('[data-test-field="cardThumbnailURL"]')
+        .dom('[data-test-field="cardInfo-thumbnailURL"]')
         .hasAttribute('style', 'background-image: url(http://book/pic.jpg);');
 
-      assert.dom('[data-test-field="title"]').hasText('Title Insomniac');
       assert
-        .dom('[data-test-field="description"]')
-        .hasText('Description This book will keep you up at night');
+        .dom('[data-test-field="cardTitle"]')
+        .hasText('Card Title Insomniac');
       assert
-        .dom('[data-test-field="thumbnailURL"]')
-        .hasText('Thumbnail URL http://book/pic.jpg');
+        .dom('[data-test-field="cardDescription"]')
+        .hasText('Card Description This book will keep you up at night');
+      assert
+        .dom('[data-test-field="cardThumbnailURL"]')
+        .hasText('Card Thumbnail URL http://book/pic.jpg');
 
       await renderCard(loader, insomniac, 'edit');
       assert.dom('[data-test-field="cardInfo-name"] input').hasNoValue();
@@ -2063,12 +2065,12 @@ module('Integration | card-basics', function (hooks) {
         .hasValue('http://book/pic.jpg');
       assert.dom('[data-test-thumbnail-input] input').hasNoValue();
       await click('[data-test-toggle-thumbnail-editor]');
-      assert.dom('[data-test-field="title"] input').hasValue('Insomniac');
+      assert.dom('[data-test-field="cardTitle"] input').hasValue('Insomniac');
       assert
-        .dom('[data-test-field="description"] input')
+        .dom('[data-test-field="cardDescription"] input')
         .hasValue('This book will keep you up at night');
       assert
-        .dom('[data-test-field="thumbnailURL"] input')
+        .dom('[data-test-field="cardThumbnailURL"] input')
         .hasValue('http://book/pic.jpg');
 
       // default preview (on edit template)
@@ -2094,7 +2096,7 @@ module('Integration | card-basics', function (hooks) {
         @field date = contains(DatetimeField);
         @field flightNumber = contains(StringField);
 
-        @field title = contains(StringField, {
+        @field cardTitle = contains(StringField, {
           computeVia: function (this: FlightBooking) {
             let route;
             let date;
@@ -2112,9 +2114,9 @@ module('Integration | card-basics', function (hooks) {
           },
         });
 
-        @field description = contains(StringField, {
+        @field cardDescription = contains(StringField, {
           computeVia: function (this: FlightBooking) {
-            return [this.cardInfo.title, this.cardInfo.description]
+            return [this.cardInfo.name, this.cardInfo.summary]
               .filter(Boolean)
               .join(' - ');
           },
@@ -2126,19 +2128,19 @@ module('Integration | card-basics', function (hooks) {
         origin: 'JFK',
         cardInfo: new CardInfoField({
           notes: null,
-          title: 'Smith Wedding Flight',
-          description: 'John, Jane + kids to LA for holiday wedding',
-          thumbnailURL: null,
+          name: 'Smith Wedding Flight',
+          summary: 'John, Jane + kids to LA for holiday wedding',
+          cardThumbnailURL: null,
         }),
         destination: 'LAX',
         flightNumber: '101',
       });
       await renderCard(loader, instance, 'isolated');
       assert
-        .dom('[data-test-field="cardTitle"]')
+        .dom('[data-test-field="cardInfo-name"]')
         .hasText('JFK to LAX (12/25/25) Flt. 101');
       assert
-        .dom('[data-test-field="cardDescription"]')
+        .dom('[data-test-field="cardInfo-summary"]')
         .hasText(
           'Smith Wedding Flight - John, Jane + kids to LA for holiday wedding',
         );
@@ -2169,7 +2171,7 @@ module('Integration | card-basics', function (hooks) {
         .containsText('Flight Booking');
       assert
         .dom('[data-test-edit-preview="cardTitle"]')
-        .containsText('JFK to LAX (12/25/25) Flt. 101');
+        .containsText('Title JFK to LAX (12/25/25) Flt. 101');
       assert
         .dom('[data-test-edit-preview="cardDescription"]')
         .containsText(
@@ -2191,18 +2193,18 @@ module('Integration | card-basics', function (hooks) {
 
       let title = await testString('title');
       class Post extends CardDef {
-        @field title = contains(title);
+        @field cardTitle = contains(title);
         @field author = contains(Person);
       }
       loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
       let helloWorld = new Post({
-        title: 'First Post',
+        cardTitle: 'First Post',
         author: new Person({ firstName: 'Arthur' }),
       });
       await renderCard(loader, helloWorld, 'isolated');
       assert.dom('[data-test="first-name"]').containsText('Arthur');
-      assert.dom('[data-test-field="title"]').containsText('First Post');
+      assert.dom('[data-test-field="cardTitle"]').containsText('First Post');
       assert.dom('[data-test-thumbnail-icon]').exists();
       assert.dom('[data-test-field="cardInfo-notes"]').hasText('Notes');
     });
@@ -2213,7 +2215,7 @@ module('Integration | card-basics', function (hooks) {
         @field firstName = contains(StringField);
         @field lastName = contains(StringField);
         @field age = contains(NumberField);
-        @field title = contains(StringField, {
+        @field cardTitle = contains(StringField, {
           computeVia: function (this: Person) {
             return `${this.firstName} ${this.lastName}`;
           },
@@ -2243,7 +2245,7 @@ module('Integration | card-basics', function (hooks) {
       class Person extends FieldDef {
         @field firstName = contains(StringField);
         @field age = contains(NumberField);
-        @field title = contains(StringField, {
+        @field cardTitle = contains(StringField, {
           computeVia: function (this: Person) {
             return this.firstName;
           },
@@ -2317,7 +2319,7 @@ module('Integration | card-basics', function (hooks) {
     test('can render empty linksTo and linksToMany fields in default atom format', async function (assert) {
       class Pet extends CardDef {
         @field firstName = contains(StringField);
-        @field title = contains(StringField, {
+        @field cardTitle = contains(StringField, {
           computeVia: function (this: Pet) {
             return this.firstName;
           },
@@ -3269,22 +3271,22 @@ module('Integration | card-basics', function (hooks) {
       }
 
       class Post extends CardDef {
-        @field title = contains(StringField);
+        @field cardTitle = contains(StringField);
         @field author = contains(Person);
       }
       loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
       let helloWorld = new Post({
-        title: 'My Post',
+        cardTitle: 'My Post',
         author: new Person({ firstName: 'Arthur' }),
       });
 
       await renderCard(loader, helloWorld, 'edit');
-      assert.dom('[data-test-field="title"]').hasText('Title');
+      assert.dom('[data-test-field="cardTitle"]').hasText('Card Title');
       assert
-        .dom('[data-test-field="title"] .boxel-field__icon')
+        .dom('[data-test-field="cardTitle"] .boxel-field__icon')
         .hasClass('icon-tabler-letter-case');
-      assert.dom('[data-test-field="title"] input').hasValue('My Post');
+      assert.dom('[data-test-field="cardTitle"] input').hasValue('My Post');
       assert
         .dom(
           '[data-test-field="author"] [data-test-field="firstName"] [data-test-boxel-field-label]',
@@ -3297,10 +3299,10 @@ module('Integration | card-basics', function (hooks) {
         .dom('[data-test-field="author"] .boxel-field__icon')
         .hasClass('lucide-rectangle-ellipsis');
 
-      await fillIn('[data-test-field="title"] input', 'New Post');
+      await fillIn('[data-test-field="cardTitle"] input', 'New Post');
       await fillIn('[data-test-field="firstName"] input', 'Carl Stack');
 
-      assert.dom('[data-test-field="title"] input').hasValue('New Post');
+      assert.dom('[data-test-field="cardTitle"] input').hasValue('New Post');
       assert
         .dom('[data-test-field="author"] [data-test-field="firstName"] input')
         .hasValue('Carl Stack');
@@ -3327,7 +3329,7 @@ module('Integration | card-basics', function (hooks) {
       class Person extends CardDef {
         @field firstName = contains(StringField);
         @field isCool = contains(BooleanField);
-        @field title = contains(StringField, {
+        @field cardTitle = contains(StringField, {
           computeVia(this: Person) {
             return this.firstName;
           },
@@ -3408,19 +3410,20 @@ module('Integration | card-basics', function (hooks) {
       }
 
       class Post extends CardDef {
-        @field title = contains(StringField);
+        @field cardTitle = contains(StringField);
         @field reviews = contains(NumberField);
         @field author = contains(Person);
         static edit = class Edit extends Component<typeof this> {
           <template>
             <fieldset>
-              <label data-test-field='title'>Title <@fields.title /></label>
+              <label data-test-field='cardTitle'>Title
+                <@fields.cardTitle /></label>
               <label data-test-field='reviews'>Reviews
                 <@fields.reviews /></label>
               <label data-test-field='author'>Author <@fields.author /></label>
             </fieldset>
 
-            <div data-test-output='title'>{{@model.title}}</div>
+            <div data-test-output='cardTitle'>{{@model.cardTitle}}</div>
             <div data-test-output='reviews'>{{@model.reviews}}</div>
             <div
               data-test-output='author.firstName'
@@ -3431,24 +3434,24 @@ module('Integration | card-basics', function (hooks) {
       loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
       let helloWorld = new Post({
-        title: 'First Post',
+        cardTitle: 'First Post',
         reviews: 1,
         author: new Person({ firstName: 'Arthur' }),
       });
 
       await renderCard(loader, helloWorld, 'edit');
-      assert.dom('[data-test-field="title"] input').hasValue('First Post');
+      assert.dom('[data-test-field="cardTitle"] input').hasValue('First Post');
       assert.dom('[data-test-field="reviews"] input').hasValue('1');
       assert.dom('[data-test-field="firstName"] input').hasValue('Arthur');
       assert
         .dom('[data-test-field="id"] input')
         .doesNotExist('contained card does not have an id input field');
 
-      await fillIn('[data-test-field="title"] input', 'New Title');
+      await fillIn('[data-test-field="cardTitle"] input', 'New Title');
       await fillIn('[data-test-field="reviews"] input', '5');
       await fillIn('[data-test-field="firstName"] input', 'Carl Stack');
 
-      assert.dom('[data-test-output="title"]').hasText('New Title');
+      assert.dom('[data-test-output="cardTitle"]').hasText('New Title');
       assert.dom('[data-test-output="reviews"]').hasText('5');
       assert.dom('[data-test-output="author.firstName"]').hasText('Carl Stack');
     });
@@ -3549,7 +3552,7 @@ module('Integration | card-basics', function (hooks) {
 
     test('add, remove and edit items in containsMany composite field', async function (assert) {
       class Post extends FieldDef {
-        @field title = contains(StringField);
+        @field cardTitle = contains(StringField);
       }
 
       class Blog extends CardDef {
@@ -3559,7 +3562,7 @@ module('Integration | card-basics', function (hooks) {
             <@fields.posts />
             <ul data-test-output>
               {{#each @model.posts as |post|}}
-                <li>{{post.title}}</li>
+                <li>{{post.cardTitle}}</li>
               {{/each}}
             </ul>
           </template>
@@ -3572,7 +3575,10 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-item]').doesNotExist();
 
       await click('[data-test-add-new]');
-      await fillIn('[data-test-field="title"] input', 'Tail Wagging Basics');
+      await fillIn(
+        '[data-test-field="cardTitle"] input',
+        'Tail Wagging Basics',
+      );
       assert.dom('[data-test-item]').exists({ count: 1 });
       assert.dom('[data-test-output]').hasText('Tail Wagging Basics');
 
@@ -3583,7 +3589,10 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-item]').exists({ count: 1 });
       assert.dom('[data-test-output]').hasText('');
 
-      await fillIn('[data-test-field="title"] input', 'Begging for Beginners');
+      await fillIn(
+        '[data-test-field="cardTitle"] input',
+        'Begging for Beginners',
+      );
       assert.dom('[data-test-item]').exists({ count: 1 });
       assert.dom('[data-test-output]').hasText('Begging for Beginners');
     });
@@ -3743,7 +3752,7 @@ module('Integration | card-basics', function (hooks) {
       class Country extends CardDef {
         @field countryName = contains(StringField);
         @field flag = contains(StringField);
-        @field title = contains(StringField, {
+        @field cardTitle = contains(StringField, {
           computeVia: function (this: Country) {
             return `${this.flag} ${this.countryName}`;
           },

@@ -74,7 +74,7 @@ export class RecommendedModel extends ModelConfiguration {
     },
   });
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: RecommendedModel) {
       // Get the full model name (e.g., "OpenAI: GPT-5.1 Chat" or "Google: Gemini 2.5 Flash")
       let fullModelName = '';
@@ -132,8 +132,8 @@ export class RecommendedModel extends ModelConfiguration {
       // Non-role-specific: ✓ OpenAI: GPT-5.1 Chat
       const autoTitle = `${purposeSegment}${modelSegment}${thinkingSuffix}`;
 
-      // Allow manual override via cardInfo.title
-      return this.cardInfo?.title || autoTitle;
+      // Allow manual override via cardInfo.name
+      return this.cardInfo?.name || autoTitle;
     },
   });
 

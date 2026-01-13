@@ -19,8 +19,8 @@
       "phone": 14255553456,
       "website": "https://greenthumbgarden.com",
       "stockSymbol": null,
-      "description": "Garden center and nursery wanting to launch seasonal marketing campaigns and e-commerce platform.",
-      "thumbnailURL": "https://example.com/green-thumb-logo.png"
+      "cardDescription": "Garden center and nursery wanting to launch seasonal marketing campaigns and e-commerce platform.",
+      "cardThumbnailURL": "https://example.com/green-thumb-logo.png"
     },
     "relationships": {
       "crmApp": {

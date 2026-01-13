@@ -59,8 +59,8 @@
           }
         }
       ],
-      "description": "",
-      "thumbnailURL": "https://picsum.photos/id/169/200/300"
+      "cardDescription": "",
+      "cardThumbnailURL": "https://picsum.photos/id/169/200/300"
     },
     "relationships": {
       "crmApp": {

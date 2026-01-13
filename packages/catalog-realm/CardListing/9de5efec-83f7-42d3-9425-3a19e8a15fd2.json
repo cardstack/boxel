@@ -15,9 +15,9 @@
       "summary": "This card presents real-time flight info, complete with airline logos, times, prices, aircraft type, and routing details. Automatically formats pricing, supports visual timelines with icons, and includes both detailed and compact layouts. Perfect for booking flows, travel dashboards, and itinerary builders.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/flight-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/flight-listing/thumbnail.png"
       }
     },
     "relationships": {

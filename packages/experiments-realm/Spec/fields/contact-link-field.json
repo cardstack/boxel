@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Contact Link Field",
+      "cardTitle": "Contact Link Field",
       "specType": "field",
       "ref": {
         "module": "../../fields/contact-link",

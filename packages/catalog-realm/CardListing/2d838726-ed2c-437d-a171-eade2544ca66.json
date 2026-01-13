@@ -16,9 +16,9 @@
       "summary": "A comprehensive communication logging and news feed system for tracking interactions, messages, and updates. Features include real-time communication logging, map rendering capabilities, and customizable news feed displays for teams and organizations.",
       "cardInfo": {
         "notes": null,
-        "title": "Communication Log & News Feed",
-        "description": "Track and display communications with map integration and news feed capabilities",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/commnuication-log-listing/thumbnail.png"
+        "name": "Communication Log & News Feed",
+        "summary": "Track and display communications with map integration and news feed capabilities",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/commnuication-log-listing/thumbnail.png"
       }
     },
     "relationships": {

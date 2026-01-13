@@ -88,8 +88,8 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
           >
             <:default>
               <div class='pill-content'>
-                <div class='card-content' title={{this.card.title}}>
-                  {{this.card.title}}
+                <div class='card-content' title={{this.card.cardTitle}}>
+                  {{this.card.cardTitle}}
                 </div>
               </div>
             </:default>
@@ -119,7 +119,7 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
             class='toggle'
             @isEnabled={{@isEnabled}}
             @onChange={{@onToggle}}
-            @label={{this.card.title}}
+            @label={{this.card.cardTitle}}
             data-test-skill-toggle='{{@cardId}}-{{if @isEnabled "on" "off"}}'
           />
         </div>

@@ -52,7 +52,7 @@ export class SearchCardsByQueryInput extends CardDef {
 export class SearchCardsByTypeAndTitleInput extends CardDef {
   static displayName = 'Search Cards';
   static icon = IconSearchThick;
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field type = contains(CodeRefField);
   @field cardType = contains(StringField);
 }
@@ -261,7 +261,7 @@ class SearchCardsResultIsolatedView extends SearchCardsResultEmbeddedView {
       </header>
       <div class='fields'>
         <FieldContainer @label='Description'>
-          {{@model.description}}
+          {{@model.cardDescription}}
         </FieldContainer>
         <FieldContainer @label='Results' class='results'>
           <CardList
@@ -306,7 +306,7 @@ class SearchCardsResultIsolatedView extends SearchCardsResultEmbeddedView {
 
 export class SearchCardSummaryField extends FieldDef {
   @field id = contains(StringField); //since it is field, it doesn't conflict with id
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
 }
 
 export class SearchCardsResult extends CardDef {
@@ -317,10 +317,10 @@ export class SearchCardsResult extends CardDef {
   @field summaries = containsMany(SearchCardSummaryField);
   static embedded = SearchCardsResultEmbeddedView;
   static isolated = SearchCardsResultIsolatedView;
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: SearchCardsResult) {
       return 'Search Results';
     },
   });
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
 }

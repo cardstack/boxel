@@ -11,15 +11,15 @@
       "inventory": 8,
       "inStock": true,
       "imageUrl": "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg",
-      "title": "Handcrafted Ceramic Coffee Mug Set",
+      "cardTitle": "Handcrafted Ceramic Coffee Mug Set",
       "cardInfo": {
-        "title": "Handcrafted Ceramic Coffee Mug Set",
-        "description": "Beautiful set of 4 handcrafted ceramic coffee mugs with unique glazed finishes. Category: Home & Kitchen. SKU: CCM-SET-4PC",
-        "thumbnailURL": "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg",
+        "name": "Handcrafted Ceramic Coffee Mug Set",
+        "summary": "Beautiful set of 4 handcrafted ceramic coffee mugs with unique glazed finishes. Category: Home & Kitchen. SKU: CCM-SET-4PC",
+        "cardThumbnailURL": "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg",
         "notes": null
       },
-      "description": "Beautiful set of 4 handcrafted ceramic coffee mugs with unique glazed finishes. Category: Home & Kitchen. SKU: CCM-SET-4PC",
-      "thumbnailURL": "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg"
+      "cardDescription": "Beautiful set of 4 handcrafted ceramic coffee mugs with unique glazed finishes. Category: Home & Kitchen. SKU: CCM-SET-4PC",
+      "cardThumbnailURL": "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg"
     },
     "relationships": {
       "cardInfo.theme": {

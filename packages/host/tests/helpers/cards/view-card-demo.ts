@@ -14,7 +14,7 @@ export const viewCardDemoCardSource = `
   export class ViewCardDemo extends CardDef {
     static displayName = 'View Card Demo';
 
-    @field title = contains(StringField);
+    @field cardTitle = contains(StringField);
     @field targetCardURL = contains(StringField);
 
     static isolated = class Isolated extends Component<typeof this> {
@@ -22,19 +22,19 @@ export const viewCardDemoCardSource = `
         {
           id: 'overview',
           label: 'Overview',
-          description:
+          cardDescription:
             'This tab summarizes the key information that the card is showing.',
         },
         {
           id: 'details',
           label: 'Details',
-          description:
+          cardDescription:
             'Additional details about this card that help confirm interactive state.',
         },
         {
           id: 'history',
           label: 'History',
-          description:
+          cardDescription:
             'Historical context to make it easier to confirm tab state persists.',
         },
       ];
@@ -71,7 +71,7 @@ export const viewCardDemoCardSource = `
       <template>
         <article data-test-view-card-demo>
           <header>
-            <h2 data-test-view-card-demo-title>{{@model.title}}</h2>
+            <h2 data-test-view-card-demo-title>{{@model.cardTitle}}</h2>
           </header>
           <div
             role="tablist"

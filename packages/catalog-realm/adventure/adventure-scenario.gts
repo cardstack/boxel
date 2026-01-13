@@ -13,8 +13,8 @@ export class AdventureScenario extends CardDef {
   static icon = BookOpenIcon;
 
   @field key = contains(StringField);
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
 
   // Open-ended guidance
   @field tags = containsMany(StringField); // narrative/style hints (free-form)
@@ -25,8 +25,8 @@ export class AdventureScenario extends CardDef {
       <article class='scenario-iso'>
         <header class='head'>
           <h1 class='name'>{{if
-              @model.title
-              @model.title
+              @model.cardTitle
+              @model.cardTitle
               'Unnamed Scenario'
             }}</h1>
           <div class='meta'>
@@ -47,8 +47,8 @@ export class AdventureScenario extends CardDef {
           </div>
         </header>
 
-        {{#if @model.description}}
-          <p class='desc'>{{@model.description}}</p>
+        {{#if @model.cardDescription}}
+          <p class='desc'>{{@model.cardDescription}}</p>
         {{else}}
           <p class='desc muted'>No description provided yet.</p>
         {{/if}}
@@ -145,8 +145,8 @@ export class AdventureScenario extends CardDef {
       <div class='scenario-emb'>
         <div class='row'>
           <strong class='title'>{{if
-              @model.title
-              @model.title
+              @model.cardTitle
+              @model.cardTitle
               'Unnamed Scenario'
             }}</strong>
           <div class='tags'>
@@ -157,9 +157,9 @@ export class AdventureScenario extends CardDef {
             {{/if}}
           </div>
         </div>
-        {{#if @model.description}}<div
+        {{#if @model.cardDescription}}<div
             class='one-line'
-          >{{@model.description}}</div>{{/if}}
+          >{{@model.cardDescription}}</div>{{/if}}
       </div>
 
       <style scoped>
@@ -210,36 +210,36 @@ export class AdventureScenario extends CardDef {
         <div class='badge'>
           <div class='dot'></div>
           <div class='lbl'>
-            <div class='t'>{{if @model.title @model.title 'Scenario'}}</div>
+            <div class='t'>{{if @model.cardTitle @model.cardTitle 'Scenario'}}</div>
           </div>
         </div>
 
         <div class='strip'>
           <div class='main'>
-            <div class='t'>{{if @model.title @model.title 'Scenario'}}</div>
-            {{#if @model.description}}<div
+            <div class='t'>{{if @model.cardTitle @model.cardTitle 'Scenario'}}</div>
+            {{#if @model.cardDescription}}<div
                 class='s'
-              >{{@model.description}}</div>{{/if}}
+              >{{@model.cardDescription}}</div>{{/if}}
           </div>
 
         </div>
 
         <div class='tile'>
-          <h4 class='t'>{{if @model.title @model.title 'Scenario'}}</h4>
+          <h4 class='t'>{{if @model.cardTitle @model.cardTitle 'Scenario'}}</h4>
 
-          {{#if @model.description}}<p
+          {{#if @model.cardDescription}}<p
               class='p'
-            >{{@model.description}}</p>{{/if}}
+            >{{@model.cardDescription}}</p>{{/if}}
         </div>
 
         <div class='card'>
           <div class='h'>
-            <h3 class='t'>{{if @model.title @model.title 'Scenario'}}</h3>
+            <h3 class='t'>{{if @model.cardTitle @model.cardTitle 'Scenario'}}</h3>
 
           </div>
-          {{#if @model.description}}<div
+          {{#if @model.cardDescription}}<div
               class='p'
-            >{{@model.description}}</div>{{/if}}
+            >{{@model.cardDescription}}</div>{{/if}}
         </div>
       </div>
 

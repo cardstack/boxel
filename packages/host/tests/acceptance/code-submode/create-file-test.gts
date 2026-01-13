@@ -89,8 +89,8 @@ const files: Record<string, any> = {
     data: {
       type: 'card',
       attributes: {
-        title: 'Error',
-        description: 'Spec for Error',
+        cardTitle: 'Error',
+        cardDescription: 'Spec for Error',
         specType: 'card',
         ref: {
           module: '../error',
@@ -109,8 +109,8 @@ const files: Record<string, any> = {
     data: {
       type: 'card',
       attributes: {
-        title: 'Pet',
-        description: 'Spec for Pet',
+        cardTitle: 'Pet',
+        cardDescription: 'Spec for Pet',
         specType: 'card',
         ref: { module: `../pet`, name: 'default' },
       },
@@ -126,8 +126,8 @@ const files: Record<string, any> = {
     data: {
       type: 'card',
       attributes: {
-        title: 'Person',
-        description: 'Spec for Person',
+        cardTitle: 'Person',
+        cardDescription: 'Spec for Person',
         specType: 'card',
         ref: { module: `../person`, name: 'Person' },
       },
@@ -453,7 +453,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
           throw new Error('expected JSON save data');
         }
         assert.strictEqual(
-          json.data.attributes?.title,
+          json.data.attributes?.cardTitle,
           'Untitled Card',
           'title field defaults to fallback',
         );
@@ -515,7 +515,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
           throw new Error('expected JSON save data');
         }
         assert.strictEqual(
-          json.data.attributes?.title,
+          json.data.attributes?.cardTitle,
           'Untitled Card',
           'title field defaults to fallback',
         );

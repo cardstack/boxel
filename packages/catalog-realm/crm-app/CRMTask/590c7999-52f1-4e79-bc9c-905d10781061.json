@@ -18,8 +18,8 @@
       },
       "name": "Digital Transformation Implementation Plan",
       "details": "Create detailed rollout schedule for new systems",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "crmApp": {

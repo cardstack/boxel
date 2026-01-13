@@ -6,9 +6,9 @@
       "lon": -90.20071907912077,
       "tileserverUrl": "https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}{r}.png",
       "gtfsUrl": "https://s3.gtfs.pro/files/uran/improved-gtfs-metro-transit-missouri.zip",
-      "title": "Saint Louis",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "Saint Louis",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

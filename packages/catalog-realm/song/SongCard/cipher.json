@@ -10,12 +10,12 @@
     "attributes": {
       "genre": "Electronic",
       "artist": "Kevin MacLeod",
-       "audioUrl": "https://www.soundjay.com/misc/sounds/bell-ringing-05.wav",
+      "audioUrl": "https://www.soundjay.com/misc/sounds/bell-ringing-05.wav",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "duration": "4:22",
       "songTitle": "Cipher",

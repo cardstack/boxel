@@ -14,7 +14,7 @@ import PawPrintIcon from '@cardstack/boxel-icons/paw-print';
 export class FullName extends FieldDef {
   @field firstName = contains(StringField);
   @field lastName = contains(StringField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: FullName) {
       let fullName = [this.firstName, this.lastName].filter(Boolean).join(' ');
       return fullName.length ? fullName : 'Pet';
@@ -22,25 +22,25 @@ export class FullName extends FieldDef {
   });
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <@fields.title />
+      <@fields.cardTitle />
     </template>
   };
 }
 
 export class Treat extends FieldDef {
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <@fields.title />
+      <@fields.cardTitle />
     </template>
   };
 }
 
 export class Toy extends FieldDef {
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <@fields.title />
+      <@fields.cardTitle />
     </template>
   };
 }
@@ -53,12 +53,12 @@ export class Pet extends CardDef {
   @field favoriteTreat = contains(StringField);
   @field cutenessRating = contains(NumberField);
   @field sleepsOnTheCouch = contains(BooleanField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Pet) {
       return this.firstName;
     },
   });
-  @field description = contains(StringField, {
+  @field cardDescription = contains(StringField, {
     computeVia: function (this: Pet) {
       return `${this.firstName} the Pet`;
     },
@@ -77,7 +77,7 @@ export class Pet extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <GridContainer class='container'>
-        <h2><@fields.title /></h2>
+        <h2><@fields.cardTitle /></h2>
         <div>
           <div>Sleeps On the Couch: <@fields.sleepsOnTheCouch /></div>
           <div>Favorite Toy: <@fields.favoriteToy /></div>

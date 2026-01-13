@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Flight",
-      "description": "Spec of Flight",
-      "thumbnailURL": null
+      "cardTitle": "Flight",
+      "cardDescription": "Spec of Flight",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

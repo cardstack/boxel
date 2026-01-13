@@ -40,7 +40,7 @@ export class Chain extends CardDef {
       return BLOCK_EXPLORER_URLS[CHAIN_IDS[this.name]];
     },
   });
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Chain) {
       return this.name;
     },
@@ -61,9 +61,9 @@ export class Chain extends CardDef {
   static isolated = class Isolated extends Component<typeof Chain> {
     <template>
       <div class='container'>
-        <FieldContainer @label='Title'><@fields.title />
-          (<@fields.title />)</FieldContainer>
-        <FieldContainer @label='Chain'><@fields.title />
+        <FieldContainer @label='Title'><@fields.cardTitle />
+          (<@fields.cardTitle />)</FieldContainer>
+        <FieldContainer @label='Chain'><@fields.cardTitle />
           (<@fields.chainId />)</FieldContainer>
         <FieldContainer @label='BlockExplorer'>
           <a href={{@model.blockExplorer}}>{{@model.blockExplorer}}</a>

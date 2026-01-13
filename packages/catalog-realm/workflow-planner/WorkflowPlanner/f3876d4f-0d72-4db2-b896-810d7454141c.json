@@ -2,72 +2,72 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "California Driver's License Application Process",
-      "description": "A step-by-step guide to obtaining a driver's license in California through the Department of Motor Vehicles (DMV).",
+      "cardTitle": "California Driver's License Application Process",
+      "cardDescription": "A step-by-step guide to obtaining a driver's license in California through the Department of Motor Vehicles (DMV).",
       "steps": [
         {
           "name": "Prepare Required Documents",
-          "description": "Gather your Social Security Number, proof of identity (passport, birth certificate), and proof of California residency (utility bills, rental agreement).",
+          "cardDescription": "Gather your Social Security Number, proof of identity (passport, birth certificate), and proof of California residency (utility bills, rental agreement).",
           "isComplete": true,
           "dueDate": "2023-07-05"
         },
         {
           "name": "Complete Form DL 44",
-          "description": "Fill out the California Driver's License application form (DL 44). This form must be submitted in person and cannot be downloaded.",
+          "cardDescription": "Fill out the California Driver's License application form (DL 44). This form must be submitted in person and cannot be downloaded.",
           "isComplete": false,
           "dueDate": "2023-07-10"
         },
         {
           "name": "Study for Written Test",
-          "description": "Study the California Driver Handbook and take practice tests to prepare for the written knowledge test.",
+          "cardDescription": "Study the California Driver Handbook and take practice tests to prepare for the written knowledge test.",
           "isComplete": false,
           "dueDate": "2023-07-15"
         },
         {
           "name": "Schedule DMV Appointment",
-          "description": "Book an appointment at your local DMV office online or by calling 1-800-777-0133 to avoid long wait times.",
+          "cardDescription": "Book an appointment at your local DMV office online or by calling 1-800-777-0133 to avoid long wait times.",
           "isComplete": false,
           "dueDate": "2023-07-18"
         },
         {
           "name": "Visit DMV Office",
-          "description": "Bring all required documents, submit your application, provide fingerprints, take a vision test, and pay the application fee.",
+          "cardDescription": "Bring all required documents, submit your application, provide fingerprints, take a vision test, and pay the application fee.",
           "isComplete": false,
           "dueDate": "2023-07-25"
         },
         {
           "name": "Pass Written Test",
-          "description": "Take and pass the written knowledge test. You must answer at least 30 out of 36 questions correctly to pass.",
+          "cardDescription": "Take and pass the written knowledge test. You must answer at least 30 out of 36 questions correctly to pass.",
           "isComplete": false,
           "dueDate": "2023-07-25"
         },
         {
           "name": "Have Photo Taken",
-          "description": "If you pass the written test, you'll have your photo taken for your license.",
+          "cardDescription": "If you pass the written test, you'll have your photo taken for your license.",
           "isComplete": false,
           "dueDate": "2023-07-25"
         },
         {
           "name": "Receive Temporary License",
-          "description": "You'll receive a temporary paper license valid for 60 days while your permanent license is being processed.",
+          "cardDescription": "You'll receive a temporary paper license valid for 60 days while your permanent license is being processed.",
           "isComplete": false,
           "dueDate": "2023-07-25"
         },
         {
           "name": "Schedule Behind-the-Wheel Test",
-          "description": "Schedule your driving test. New drivers must wait at least 14 days after getting their permit before taking the driving test.",
+          "cardDescription": "Schedule your driving test. New drivers must wait at least 14 days after getting their permit before taking the driving test.",
           "isComplete": false,
           "dueDate": "2023-08-05"
         },
         {
           "name": "Take Behind-the-Wheel Test",
-          "description": "Bring a properly registered and insured vehicle for your driving test. You'll be evaluated on your driving skills and knowledge of road rules.",
+          "cardDescription": "Bring a properly registered and insured vehicle for your driving test. You'll be evaluated on your driving skills and knowledge of road rules.",
           "isComplete": false,
           "dueDate": "2023-08-10"
         },
         {
           "name": "Receive Official License",
-          "description": "If you pass your driving test, you'll receive your official California driver's license by mail within 3-4 weeks.",
+          "cardDescription": "If you pass your driving test, you'll receive your official California driver's license by mail within 3-4 weeks.",
           "isComplete": false,
           "dueDate": "2023-08-15"
         }
@@ -76,7 +76,7 @@
         "start": "2025-07-01",
         "end": "2025-08-15"
       },
-      "thumbnailURL": null
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

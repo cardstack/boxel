@@ -17,9 +17,9 @@
       "summary": "Professional school calendar management system with event and schedule integration - organize academic events, weekly schedules, and school year planning while viewing clean grid-based layouts. Features date range management, embedded event cards, schedule item organization, hover animations, and educational institution styling for comprehensive academic calendar coordination.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/school-calendar-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/school-calendar-listing/thumbnail.png"
       }
     },
     "relationships": {

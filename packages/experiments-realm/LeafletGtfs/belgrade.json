@@ -6,9 +6,9 @@
       "lon": 20.40895,
       "tileserverUrl": "https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.jpg",
       "gtfsUrl": "https://s3.gtfs.pro/files/uran/improved-gtfs-bgprevoz.zip",
-      "title": "Belgrade",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "Belgrade",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

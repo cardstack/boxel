@@ -10,168 +10,168 @@
     "attributes": {
       "stock": [
         {
-          "suit": "♣",
+          "suit": "\u2663",
           "rank": "Q",
           "value": 12,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♣",
+          "suit": "\u2663",
           "rank": "J",
           "value": 11,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♥",
+          "suit": "\u2665",
           "rank": "5",
           "value": 5,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♠",
+          "suit": "\u2660",
           "rank": "J",
           "value": 11,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♦",
+          "suit": "\u2666",
           "rank": "J",
           "value": 11,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♣",
+          "suit": "\u2663",
           "rank": "A",
           "value": 1,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♦",
+          "suit": "\u2666",
           "rank": "K",
           "value": 13,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♠",
+          "suit": "\u2660",
           "rank": "2",
           "value": 2,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♦",
+          "suit": "\u2666",
           "rank": "5",
           "value": 5,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♥",
+          "suit": "\u2665",
           "rank": "8",
           "value": 8,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♠",
+          "suit": "\u2660",
           "rank": "K",
           "value": 13,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♥",
+          "suit": "\u2665",
           "rank": "9",
           "value": 9,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♣",
+          "suit": "\u2663",
           "rank": "7",
           "value": 7,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♦",
+          "suit": "\u2666",
           "rank": "3",
           "value": 3,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♦",
+          "suit": "\u2666",
           "rank": "7",
           "value": 7,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♦",
+          "suit": "\u2666",
           "rank": "10",
           "value": 10,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♥",
+          "suit": "\u2665",
           "rank": "2",
           "value": 2,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♦",
+          "suit": "\u2666",
           "rank": "Q",
           "value": 12,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♥",
+          "suit": "\u2665",
           "rank": "K",
           "value": 13,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♣",
+          "suit": "\u2663",
           "rank": "4",
           "value": 4,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♦",
+          "suit": "\u2666",
           "rank": "4",
           "value": 4,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♣",
+          "suit": "\u2663",
           "rank": "8",
           "value": 8,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♠",
+          "suit": "\u2660",
           "rank": "4",
           "value": 4,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♠",
+          "suit": "\u2660",
           "rank": "7",
           "value": 7,
           "color": "black",
@@ -181,14 +181,14 @@
       "waste": [],
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "gameState": "",
       "tableauPile0": [
         {
-          "suit": "♥",
+          "suit": "\u2665",
           "rank": "6",
           "value": 6,
           "color": "red",
@@ -197,14 +197,14 @@
       ],
       "tableauPile1": [
         {
-          "suit": "♦",
+          "suit": "\u2666",
           "rank": "8",
           "value": 8,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♥",
+          "suit": "\u2665",
           "rank": "3",
           "value": 3,
           "color": "red",
@@ -213,21 +213,21 @@
       ],
       "tableauPile2": [
         {
-          "suit": "♥",
+          "suit": "\u2665",
           "rank": "10",
           "value": 10,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♠",
+          "suit": "\u2660",
           "rank": "3",
           "value": 3,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♣",
+          "suit": "\u2663",
           "rank": "2",
           "value": 2,
           "color": "black",
@@ -236,28 +236,28 @@
       ],
       "tableauPile3": [
         {
-          "suit": "♣",
+          "suit": "\u2663",
           "rank": "6",
           "value": 6,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♥",
+          "suit": "\u2665",
           "rank": "7",
           "value": 7,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♠",
+          "suit": "\u2660",
           "rank": "A",
           "value": 1,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♦",
+          "suit": "\u2666",
           "rank": "A",
           "value": 1,
           "color": "red",
@@ -266,35 +266,35 @@
       ],
       "tableauPile4": [
         {
-          "suit": "♦",
+          "suit": "\u2666",
           "rank": "6",
           "value": 6,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♠",
+          "suit": "\u2660",
           "rank": "9",
           "value": 9,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♥",
+          "suit": "\u2665",
           "rank": "Q",
           "value": 12,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♠",
+          "suit": "\u2660",
           "rank": "5",
           "value": 5,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♠",
+          "suit": "\u2660",
           "rank": "6",
           "value": 6,
           "color": "black",
@@ -303,42 +303,42 @@
       ],
       "tableauPile5": [
         {
-          "suit": "♥",
+          "suit": "\u2665",
           "rank": "A",
           "value": 1,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♠",
+          "suit": "\u2660",
           "rank": "8",
           "value": 8,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♦",
+          "suit": "\u2666",
           "rank": "2",
           "value": 2,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♣",
+          "suit": "\u2663",
           "rank": "5",
           "value": 5,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♣",
+          "suit": "\u2663",
           "rank": "3",
           "value": 3,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♣",
+          "suit": "\u2663",
           "rank": "10",
           "value": 10,
           "color": "black",
@@ -347,49 +347,49 @@
       ],
       "tableauPile6": [
         {
-          "suit": "♥",
+          "suit": "\u2665",
           "rank": "4",
           "value": 4,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♠",
+          "suit": "\u2660",
           "rank": "10",
           "value": 10,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♦",
+          "suit": "\u2666",
           "rank": "9",
           "value": 9,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♣",
+          "suit": "\u2663",
           "rank": "K",
           "value": 13,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♥",
+          "suit": "\u2665",
           "rank": "J",
           "value": 11,
           "color": "red",
           "faceUp": false
         },
         {
-          "suit": "♣",
+          "suit": "\u2663",
           "rank": "9",
           "value": 9,
           "color": "black",
           "faceUp": false
         },
         {
-          "suit": "♠",
+          "suit": "\u2660",
           "rank": "Q",
           "value": 12,
           "color": "black",

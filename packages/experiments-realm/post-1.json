@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Things That I Like to Chew On",
+      "cardTitle": "Things That I Like to Chew On",
       "body": "I like to chew on my toys, my bones, and my daddy's nose."
     },
     "relationships": {

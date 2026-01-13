@@ -8,8 +8,8 @@
       "startTime": "2024-05-09T10:30:00.000Z",
       "endTime": "2024-05-09T12:30:00.000Z",
       "players": ["Erik"],
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

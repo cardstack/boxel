@@ -5,8 +5,8 @@
       "modelId": "openai/gpt-4.1",
       "modelName": "GPT-4.1",
       "displayName": "GPT-4.1",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

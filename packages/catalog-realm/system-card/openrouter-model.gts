@@ -97,11 +97,11 @@ class Isolated extends Component<typeof OpenRouterModel> {
   }
 
   get truncatedDescription(): string {
-    if (!this.args.model.description) return '';
+    if (!this.args.model.cardDescription) return '';
     const maxLength = 200;
-    if (this.args.model.description.length <= maxLength)
-      return this.args.model.description;
-    return this.args.model.description.substring(0, maxLength) + '...';
+    if (this.args.model.cardDescription.length <= maxLength)
+      return this.args.model.cardDescription;
+    return this.args.model.cardDescription.substring(0, maxLength) + '...';
   }
 
   <template>
@@ -203,16 +203,16 @@ class Isolated extends Component<typeof OpenRouterModel> {
           {{/if}}
         </div>
 
-        {{#if @model.description}}
+        {{#if @model.cardDescription}}
           <div class='description-block'>
             <p class='description-text'>
               {{#if this.showFullDescription}}
-                {{@model.description}}
+                {{@model.cardDescription}}
               {{else}}
                 {{this.truncatedDescription}}
               {{/if}}
             </p>
-            {{#if (gt @model.description.length 200)}}
+            {{#if (gt @model.cardDescription.length 200)}}
               <button
                 class='show-more-btn'
                 {{on 'click' this.toggleDescription}}
@@ -776,7 +776,7 @@ export class OpenRouterModel extends ModelConfiguration {
   // Identification (modelId and canonicalSlug inherited from parent)
   @field name = contains(StringField); // e.g., "GPT-4"
   @field created = contains(NumberField); // epoch seconds
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
 
   // Pricing
   @field pricing = contains(OpenRouterPricing);
@@ -800,10 +800,10 @@ export class OpenRouterModel extends ModelConfiguration {
   @field defaultParameters = contains(OpenRouterDefaultParameters);
 
   // Override inherited title to use name or modelId
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: OpenRouterModel) {
       return (
-        this.cardInfo?.title || this.name || this.modelId || 'OpenRouter Model'
+        this.cardInfo?.name || this.name || this.modelId || 'OpenRouter Model'
       );
     },
   });
@@ -887,8 +887,8 @@ export class OpenRouterModel extends ModelConfiguration {
           {{/if}}
         </div>
 
-        {{#if @model.description}}
-          <p class='embedded-description'>{{@model.description}}</p>
+        {{#if @model.cardDescription}}
+          <p class='embedded-description'>{{@model.cardDescription}}</p>
         {{/if}}
 
         <div class='model-stats'>

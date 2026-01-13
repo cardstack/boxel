@@ -15,17 +15,17 @@
         "2024-12-31"
       ],
       "trip": {
-        "title": "Trip 1"
+        "cardTitle": "Trip 1"
       },
       "trips": [
         {
-          "title": "Trip 1"
+          "cardTitle": "Trip 1"
         },
         {
-          "title": "Trip 2"
+          "cardTitle": "Trip 2"
         },
         {
-          "title": "Trip 3"
+          "cardTitle": "Trip 3"
         }
       ],
       "contactLink": {
@@ -46,9 +46,9 @@
           "value": "mywebsite-boxel.io"
         }
       ],
-      "title": "Samples 1",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "Samples 1",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "author": {

@@ -18,8 +18,8 @@
       },
       "name": "Edit Quotation on Item A",
       "details": "The quantity should be 50, instead of 100.",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "crmApp": {

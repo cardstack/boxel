@@ -15,9 +15,9 @@
       "summary": "The GeoSearchPointField is an enhanced geographic field type that extends the base GeoPointField to provide address search functionality with automatic geocoding. It allows users to search for locations by address and automatically converts them to geographic coordinate.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/geo-search-point-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/geo-search-point-listing/thumbnail.png"
       }
     },
     "relationships": {

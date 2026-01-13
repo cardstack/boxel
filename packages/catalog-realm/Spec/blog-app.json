@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Blog App",
-      "description": "Spec for Blog App card",
-      "thumbnailURL": null
+      "cardTitle": "Blog App",
+      "cardDescription": "Spec for Blog App card",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples.0": {

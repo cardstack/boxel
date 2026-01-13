@@ -18,8 +18,8 @@
       },
       "name": "Meet Prospect Customer",
       "details": null,
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "crmApp": {

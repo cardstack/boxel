@@ -11,9 +11,9 @@
       "name": "Adventure & Outdoor Activities",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Outdoor adventures, nature exploration, camping trips, hiking expeditions, extreme sports, and outdoor equipment management.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Outdoor adventures, nature exploration, camping trips, hiking expeditions, extreme sports, and outdoor equipment management.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

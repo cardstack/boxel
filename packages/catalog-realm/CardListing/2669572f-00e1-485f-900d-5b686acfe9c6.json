@@ -15,9 +15,9 @@
       "summary": "This listing defines a component for displaying and editing amounts with associated currencies, serving as a reusable UI element for financial data input and presentation within a card-based framework.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/amount-currency-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/amount-currency-listing/thumbnail.png"
       }
     },
     "relationships": {

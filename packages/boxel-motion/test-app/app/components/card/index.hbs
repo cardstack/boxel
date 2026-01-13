@@ -43,10 +43,10 @@
           style={{css-url "background-image" @model.imgURL}}
         />
       {{/if}}
-      {{#if @model.title}}
-        <h3 class="boxel-card__title">{{@model.title}}</h3>
+      {{#if @model.cardTitle}}
+        <h3 class="boxel-card__title">{{@model.cardTitle}}</h3>
       {{/if}}
-      {{#if @model.description}}
+      {{#if @model.cardDescription}}
         <p class="boxel-card__description">
           {{#if @model.createdDate}}
             Created
@@ -54,7 +54,7 @@
             /><br />
           {{/if}}
 
-          {{@model.description}}
+          {{@model.cardDescription}}
         </p>
       {{/if}}
 

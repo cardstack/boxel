@@ -92,10 +92,10 @@ class Isolated extends Component<typeof DailyReportDashboard> {
               <rect x='9' y='9' width='13' height='13' rx='2' ry='2' />
             </svg>
             <div>
-              <h1>{{@model.title}}</h1>
+              <h1>{{@model.cardTitle}}</h1>
               <p class='dashboard-subtitle'>{{if
-                  @model.description
-                  @model.description
+                  @model.cardDescription
+                  @model.cardDescription
                   'Operations dashboard'
                 }}</p>
             </div>

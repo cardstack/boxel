@@ -18,9 +18,9 @@
       "summary": "A comprehensive interactive adventure card component enabling scenario selection, custom storytelling, image generation, and real-time management of game state and user interactions for immersive narrative experiences.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/adventure-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/adventure-listing/thumbnail.png"
       }
     },
     "relationships": {

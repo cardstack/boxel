@@ -18,9 +18,9 @@
       },
       "cardInfo": {
         "notes": null,
-        "title": "QR Code Preview",
-        "description": null,
-        "thumbnailURL": null
+        "name": "QR Code Preview",
+        "summary": null,
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

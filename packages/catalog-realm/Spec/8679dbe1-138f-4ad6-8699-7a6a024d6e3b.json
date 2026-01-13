@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Piano",
-      "description": "Spec of Piano",
-      "thumbnailURL": null
+      "cardTitle": "Piano",
+      "cardDescription": "Spec of Piano",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

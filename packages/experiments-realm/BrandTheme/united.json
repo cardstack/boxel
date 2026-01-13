@@ -6,8 +6,8 @@
       "logoURL": "https://cdn.brandfetch.io/idmlRiz-2q/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B",
       "symbolURL": "https://cdn.brandfetch.io/idmlRiz-2q/theme/dark/symbol.svg?c=1dxbfHSJFAPEGdCLU4o5B",
       "cssVariables": "--logo-primary-url: 'https://www.united.com/logo.png';\n--logo-symbol-url: 'https://www.united.com/icon.png';\n--logo-wordmark-url: 'https://www.united.com/wordmark.png';\n--logo-clear-space-ratio: 0.85;\n--logo-min-height-digital: 34px;\n--logo-min-height-print: 0.4in;\n--color-primary: #002244;\n--color-secondary: #4B8CD8;\n--color-dark: #232323;\n--color-light: #FFFFFF;\n--color-background: #F2F4F8;\n--font-family-base: 'Helvetica Neue', Arial, sans-serif;\n--typescale-h1: 26px;\n--typescale-body: 15px;\n--lineheight-base: 1.5;\n--spacing-unit: 10px;\n--radius-base: 4px;\n--icon-set-url: 'https://www.united.com/icons.svg';\n--pattern-background-url: 'https://www.united.com/bg-pattern.svg';",
-      "title": "United Airlines Theme",
-      "description": "United Airlines brand style guide featuring colors, typography, and design elements."
+      "cardTitle": "United Airlines Theme",
+      "cardDescription": "United Airlines brand style guide featuring colors, typography, and design elements."
     },
     "meta": {
       "adoptsFrom": {

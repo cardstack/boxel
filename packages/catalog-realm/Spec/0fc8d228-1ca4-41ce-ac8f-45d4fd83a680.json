@@ -19,12 +19,12 @@
           "crashParams": null
         }
       ],
-      "title": "DrumKitField",
-      "description": null,
+      "cardTitle": "DrumKitField",
+      "cardDescription": null,
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

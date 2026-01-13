@@ -52,7 +52,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
       static displayName = 'Pet';
       @field name = contains(StringField);
       @field species = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
         },

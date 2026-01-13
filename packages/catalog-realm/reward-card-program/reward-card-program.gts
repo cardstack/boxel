@@ -87,7 +87,7 @@ export class TimePeriod extends CardDef {
   @field minAmount = contains(AmountWithCurrency);
   @field notes = contains(MarkdownField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: TimePeriod) {
       try {
         const parts = [];
@@ -186,9 +186,9 @@ export class SignupBonus extends CardDef {
   @field bonusCurrency = contains(BonusCurrencyField);
   @field spendRequirement = contains(AmountWithCurrency);
   @field spendWindowDays = contains(NumberField);
-  @field description = contains(MarkdownField);
+  @field cardDescription = contains(MarkdownField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: SignupBonus) {
       try {
         if (this.pointsAmount && this.bonusCurrency) {
@@ -236,8 +236,8 @@ export class SignupBonus extends CardDef {
             </div>
           {{/if}}
         </div>
-        {{#if @model.description}}
-          <div class='description'>{{@model.description}}</div>
+        {{#if @model.cardDescription}}
+          <div class='description'>{{@model.cardDescription}}</div>
         {{/if}}
       </div>
 
@@ -350,7 +350,7 @@ export class Benefit extends CardDef {
   @field conditions = contains(MarkdownField);
   @field details = containsMany(StringField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Benefit) {
       try {
         return this.name ?? 'Benefit';
@@ -600,7 +600,7 @@ export class MembershipBenefit extends CardDef {
   @field enrollmentRequired = contains(BooleanField);
   @field conditions = contains(MarkdownField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: MembershipBenefit) {
       try {
         const parts = [];
@@ -803,7 +803,7 @@ export class EarningRule extends CardDef {
   @field capPeriod = linksTo(TimePeriod);
   @field conditions = contains(MarkdownField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: EarningRule) {
       try {
         const rate = this.rateMultiplier ? `${this.rateMultiplier}X` : '';
@@ -994,7 +994,7 @@ export class RewardCardProgram extends CardDef {
   @field notes = contains(MarkdownField);
   @field networkLogoUrl = contains(UrlField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: RewardCardProgram) {
       try {
         return this.cardName ?? 'Unnamed Card Program';
@@ -1149,11 +1149,11 @@ export class RewardCardProgram extends CardDef {
               {{/if}}
             </div>
 
-            {{#if @model.thumbnailURL}}
+            {{#if @model.cardThumbnailURL}}
               <div class='card-showcase'>
                 <div class='card-frame'>
                   <img
-                    src='{{@model.thumbnailURL}}'
+                    src='{{@model.cardThumbnailURL}}'
                     alt='{{@model.cardName}} Physical Card'
                     class='card-image'
                   />

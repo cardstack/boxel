@@ -86,7 +86,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
         static displayName = 'Author';
         @field firstName = contains(StringField);
         @field lastName = contains(StringField);
-        @field title = contains(StringField, {
+        @field cardTitle = contains(StringField, {
           computeVia: function (this: Author) {
             return [this.firstName, this.lastName].filter(Boolean).join(' ');
           },
@@ -200,7 +200,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
               {{this.queryString}}
               <h2> Search Results </h2>
               {{#each this.authors as |author|}}
-                <div data-test-title>{{author.title}}</div>
+                <div data-test-title>{{author.cardTitle}}</div>
               {{/each}}
             {{/if}}
           </div>

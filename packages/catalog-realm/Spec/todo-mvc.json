@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "TodoMvc",
-      "description": "Spec of Todo Mvc",
-      "thumbnailURL": null
+      "cardTitle": "TodoMvc",
+      "cardDescription": "Spec of Todo Mvc",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

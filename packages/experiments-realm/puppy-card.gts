@@ -13,12 +13,12 @@ export class PuppyCard extends CardDef {
   static icon = DogIcon;
   @field name = contains(StringField);
   @field picture = contains(Base64ImageField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: PuppyCard) {
       return this.name;
     },
   });
-  @field thumbnailURL = contains(MaybeBase64Field, {
+  @field cardThumbnailURL = contains(MaybeBase64Field, {
     computeVia: function (this: PuppyCard) {
       return this.picture.base64;
     },

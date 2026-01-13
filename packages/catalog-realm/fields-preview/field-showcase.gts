@@ -3641,7 +3641,7 @@ export class FieldShowcase extends CardDef {
   static icon = CalendarIcon;
   static prefersWideFormat = true;
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     // ⁴ Card title
     computeVia: function () {
       return 'Field Showcase';

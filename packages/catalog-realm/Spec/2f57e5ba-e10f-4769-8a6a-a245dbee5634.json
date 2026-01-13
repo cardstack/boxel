@@ -9,9 +9,9 @@
       },
       "specType": "field",
       "containedExamples": [],
-      "title": "GarnishField",
-      "description": "Spec of Garnish Field",
-      "thumbnailURL": null
+      "cardTitle": "GarnishField",
+      "cardDescription": "Spec of Garnish Field",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

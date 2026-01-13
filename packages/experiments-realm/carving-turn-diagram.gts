@@ -163,8 +163,8 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
   ];
 
   <template>
-    <div class='title'><@fields.title /></div>
-    <div class='description'><@fields.description /></div>
+    <div class='title'><@fields.cardTitle /></div>
+    <div class='description'><@fields.cardDescription /></div>
     <div class='stance-switch'>
       <RadioInput
         @items={{this.stanceItems}}
@@ -545,13 +545,13 @@ export class CarvingTurnDiagram extends CardDef {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <@fields.title />
+      <@fields.cardTitle />
     </template>
   };
 
   static atom = class Atom extends Component<typeof this> {
     <template>
-      <@fields.title />
+      <@fields.cardTitle />
     </template>
   };
 }

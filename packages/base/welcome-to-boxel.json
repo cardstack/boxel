@@ -9,29 +9,29 @@
       "backgroundUrl": "https://boxel-assets-store.s3.us-east-1.amazonaws.com/welcome-to-boxel-bg.webp",
       "content": [
         {
-          "title": "Tutorial 1",
-          "description": "From Prompt to Prototype: One‑Shot Coding in Boxel",
+          "cardTitle": "Tutorial 1",
+          "cardDescription": "From Prompt to Prototype: One‑Shot Coding in Boxel",
           "backgroundColor": "#f0e58c",
           "icon": "card",
           "url": "https://boxel.ai/blog/posts/from-prompt-to-prototype-one-shot-coding-in-boxel"
         },
         {
-          "title": "Tutorial 2",
-          "description": "Inside the Boxel Environment: Navigating Workspaces, Modes, and Prompts",
+          "cardTitle": "Tutorial 2",
+          "cardDescription": "Inside the Boxel Environment: Navigating Workspaces, Modes, and Prompts",
           "backgroundColor": "#272330",
           "textColor": "#fff",
           "url": "https://boxel.ai/blog/posts/inside-boxel-environment-navigating-workspaces-modes-and-prompts"
         },
         {
-          "title": "Tutorial 3",
-          "description": "Activating Advanced Design Skills and Generating Sample Data",
+          "cardTitle": "Tutorial 3",
+          "cardDescription": "Activating Advanced Design Skills and Generating Sample Data",
           "backgroundColor": "#dde2ff",
           "icon": "book",
           "url": "https://boxel.ai/blog/posts/activating-advanced-design-skills-generating-sample-data"
         },
         {
-          "title": "Tutorial 4",
-          "description": "Formats Unlocked: Customizing Fitted, Embedded, Atom, Edit, and Isolated Views",
+          "cardTitle": "Tutorial 4",
+          "cardDescription": "Formats Unlocked: Customizing Fitted, Embedded, Atom, Edit, and Isolated Views",
           "backgroundColor": "#ff9b98",
           "icon": "code",
           "url": "https://boxel.ai/blog/posts/formats-unlocked-customizing-fitted-embedded-atom-edit-and-isolated-views"

@@ -6,9 +6,9 @@
       "dateOfGame": "1999-10-23",
       "whitePlayer": "Garry Kasparov",
       "blackPlayer": "Veselin Topalov",
-      "title": "Kasparov's Immortal Game - 1999",
-      "description": "Garry Kasparov's stunning victory against Veselin Topalov at the 1999 Wijk aan Zee tournament, often referred to as Kasparov's Immortal.",
-      "thumbnailURL": "https://i.ytimg.com/vi/9PwSa7hkiKc/maxresdefault.jpg"
+      "cardTitle": "Kasparov's Immortal Game - 1999",
+      "cardDescription": "Garry Kasparov's stunning victory against Veselin Topalov at the 1999 Wijk aan Zee tournament, often referred to as Kasparov's Immortal.",
+      "cardThumbnailURL": "https://i.ytimg.com/vi/9PwSa7hkiKc/maxresdefault.jpg"
     },
     "meta": {
       "adoptsFrom": {

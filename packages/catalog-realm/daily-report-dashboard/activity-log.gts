@@ -20,7 +20,7 @@ export class ActivityLog extends CardDef {
   @field activity = contains(TextAreaField); // ⁶ Freeform activity description
 
   // ⁷ Compute title from timestamp for easy identification
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: ActivityLog) {
       try {
         if (!this.timestamp) return 'Activity Log Entry';

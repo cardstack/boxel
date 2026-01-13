@@ -188,7 +188,7 @@ module('Integration | field configuration', function (hooks) {
 
     class ParentCard extends CardDef {
       static displayName = 'Parent';
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field color = contains(ColorField, {
         configuration: {
           presentation: {
@@ -251,7 +251,7 @@ module('Integration | field configuration', function (hooks) {
             type: 'card',
             id: `${testRealmURL}ParentCard/instance`,
             attributes: {
-              title: 'test parent',
+              cardTitle: 'test parent',
               color: {},
             },
             meta: {
@@ -283,7 +283,7 @@ module('Integration | field configuration', function (hooks) {
     // import the card class and create a local instance for rendering
     let mod = await loader.import(`${testRealmURL}parent`);
     let ParentCard = (mod as any).ParentCard;
-    let card = new ParentCard({ title: 'local parent' });
+    let card = new ParentCard({ cardTitle: 'local parent' });
     await renderCard(loader, card, 'isolated');
 
     assert
@@ -297,7 +297,7 @@ module('Integration | field configuration', function (hooks) {
   test('configuration reacts when a linked relationship loads', async function (assert) {
     // Create a ParentReactive instance that links to ThemeCard/main but does not include it
     let resource = {
-      attributes: { color: {}, title: 'parent' },
+      attributes: { color: {}, cardTitle: 'parent' },
       relationships: {
         theme: { links: { self: `${testRealmURL}ThemeCard/main` } },
       },
@@ -339,7 +339,7 @@ module('Integration | field configuration', function (hooks) {
   test('configuration reacts when a consumed linked card field value changes', async function (assert) {
     // Create a ParentReactive instance that links to ThemeCard/main using a cached Theme instance
     let resource = {
-      attributes: { color: {}, title: 'parent' },
+      attributes: { color: {}, cardTitle: 'parent' },
       relationships: {
         theme: { links: { self: `${testRealmURL}ThemeCard/main` } },
       },
@@ -449,7 +449,7 @@ module('Integration | field configuration', function (hooks) {
     }
 
     class ParentWithLink extends CardDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field child = linksTo(InnerCard, {
         configuration: { presentation: { tag: 'from-linksTo' } },
       });
@@ -463,7 +463,7 @@ module('Integration | field configuration', function (hooks) {
     }
 
     let inner = new InnerCard({});
-    let parent = new ParentWithLink({ title: 't', child: inner });
+    let parent = new ParentWithLink({ cardTitle: 't', child: inner });
     await renderCard(loader, parent, 'isolated');
 
     assert
@@ -490,7 +490,7 @@ module('Integration | field configuration', function (hooks) {
     }
 
     class ParentWithLinksMany extends CardDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field children = linksToMany(InnerCardMany, {
         configuration: { presentation: { tag: 'from-linksToMany' } },
       });
@@ -506,7 +506,7 @@ module('Integration | field configuration', function (hooks) {
     let child1 = new InnerCardMany({});
     let child2 = new InnerCardMany({});
     let parent = new ParentWithLinksMany({
-      title: 't',
+      cardTitle: 't',
       children: [child1, child2],
     });
     await renderCard(loader, parent, 'isolated');
@@ -550,7 +550,7 @@ module('Integration | field configuration', function (hooks) {
     }
 
     class ParentWithMergedLink extends CardDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field child = linksTo(InnerCardWithConfig, {
         configuration: {
           presentation: { tag: 'from-linksTo', other: 'present' },
@@ -566,7 +566,7 @@ module('Integration | field configuration', function (hooks) {
     }
 
     let inner = new InnerCardWithConfig({});
-    let parent = new ParentWithMergedLink({ title: 't', child: inner });
+    let parent = new ParentWithMergedLink({ cardTitle: 't', child: inner });
     await renderCard(loader, parent, 'isolated');
 
     // tag should be overridden by per-usage config

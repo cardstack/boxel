@@ -11,9 +11,9 @@
       "name": "Home & Living",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Home maintenance, interior design, household organization, appliance management, and smart home automation.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Home maintenance, interior design, household organization, appliance management, and smart home automation.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

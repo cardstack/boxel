@@ -11,9 +11,9 @@
       "name": "Quality Assurance",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Testing procedures, bug tracking, quality control processes, compliance auditing, and performance monitoring tools.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Testing procedures, bug tracking, quality control processes, compliance auditing, and performance monitoring tools.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

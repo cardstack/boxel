@@ -129,7 +129,7 @@ export class Person extends CardDef {
   @field address = contains(AddressField);
   @field pet = linksTo(Pet);
   @field trips = contains(Trips);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Person) {
       return [this.firstName, this.lastName].filter(Boolean).join(' ');
     },
@@ -147,7 +147,7 @@ export class Person extends CardDef {
   static isolated = class Isolated extends Component<typeof Person> {
     <template>
       <GridContainer class='container'>
-        <h2><@fields.title /></h2>
+        <h2><@fields.cardTitle /></h2>
         <div>
           <div>Is Cool: <@fields.isCool /></div>
           <div>Is Human: <@fields.isHuman /></div>

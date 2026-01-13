@@ -1424,7 +1424,7 @@ export class OnlineStore extends CardDef {
   @field contactEmail = contains(EmailField);
   @field storePhysicalAddress = contains(TextAreaField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: OnlineStore) {
       try {
         const name = this.storeName ?? 'Online Store';

@@ -101,12 +101,12 @@ export function setupOperatorModeTests(
       import { Component, field, contains, linksTo, CardDef, StringField } from 'https://cardstack.com/base/card-api';
       export class FriendWithCSS extends CardDef {
         static displayName = 'Friend';
-        @field title = contains(StringField);
+        @field cardTitle = contains(StringField);
         @field friend = linksTo(() => FriendWithCSS);
         static isolated = class Isolated extends Component<typeof this> {
           <template>
             <div class='friend'>
-              <@fields.title />
+              <@fields.cardTitle />
               has a friend
               <div class="friend-container">
                 <@fields.friend />
@@ -129,7 +129,7 @@ export function setupOperatorModeTests(
     class Car extends CardDef {
       static displayName = 'Car';
       @field name = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Car) {
           return this.name;
         },
@@ -153,7 +153,7 @@ export function setupOperatorModeTests(
     class Pet extends CardDef {
       static displayName = 'Pet';
       @field name = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
         },
@@ -178,7 +178,7 @@ export function setupOperatorModeTests(
       static displayName = 'Shipping Info';
       @field preferredCarrier = contains(StringField);
       @field remarks = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: ShippingInfo) {
           return this.preferredCarrier;
         },
@@ -253,7 +253,7 @@ export function setupOperatorModeTests(
           return this.firstName[0];
         },
       });
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
@@ -311,7 +311,7 @@ export function setupOperatorModeTests(
       static displayName = 'Author';
       @field firstName = contains(StringField);
       @field lastName = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Author) {
           return [this.firstName, this.lastName].filter(Boolean).join(' ');
         },
@@ -319,7 +319,7 @@ export function setupOperatorModeTests(
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <div data-test-isolated-author>
-            <@fields.title />
+            <@fields.cardTitle />
             <@fields.firstName />
             <@fields.lastName />
           </div>
@@ -338,17 +338,17 @@ export function setupOperatorModeTests(
     class SpecCardLinker extends CardDef {
       static displayName = 'Spec Card Link';
       @field spec = linksTo(Spec);
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       // Don't render the spec, it causes an error about constructors in the test
       // and isn't required.
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <div data-test-spec-card-linker-isolated>
             The card is:
-            <@fields.title />
+            <@fields.cardTitle />
             <br />
             Linked to:
-            {{@model.spec.title}}
+            {{@model.spec.cardTitle}}
           </div>
         </template>
       };
@@ -356,19 +356,19 @@ export function setupOperatorModeTests(
 
     class BlogPost extends CardDef {
       static displayName = 'Blog Post';
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field slug = contains(StringField);
       @field body = contains(TextAreaField);
       @field authorBio = linksTo(Author);
       static fitted = class Fitted extends Component<typeof this> {
         <template>
-          <@fields.title /> by <@fields.authorBio />
+          <@fields.cardTitle /> by <@fields.authorBio />
         </template>
       };
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <div data-test-blog-post-isolated>
-            <@fields.title />
+            <@fields.cardTitle />
             by
             <@fields.authorBio />
           </div>
@@ -380,7 +380,7 @@ export function setupOperatorModeTests(
       static displayName = 'Exploding Card';
       @field name = contains(StringField);
       @field status = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: ExplodingCard) {
           if (this.status === 'boom') {
             throw new Error('Boom!');
@@ -400,7 +400,7 @@ export function setupOperatorModeTests(
     class PetRoom extends CardDef {
       static displayName = 'Pet Room';
       @field name = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: PetRoom) {
           return this.name;
         },
@@ -419,7 +419,7 @@ export function setupOperatorModeTests(
       lastName: 'Bob',
     });
     let blogPost = new BlogPost({
-      title: 'Outer Space Journey',
+      cardTitle: 'Outer Space Journey',
       body: 'Hello world',
       authorBio: author1,
     });
@@ -470,7 +470,7 @@ export function setupOperatorModeTests(
           'SpecCardLinker/spec-card-linker.json': {
             data: {
               attributes: {
-                title: 'Spec Card Linker',
+                cardTitle: 'Spec Card Linker',
               },
               meta: {
                 adoptsFrom: {
@@ -530,7 +530,7 @@ export function setupOperatorModeTests(
           'FriendWithCSS/friend-b.json': {
             data: {
               attributes: {
-                title: 'Jade',
+                cardTitle: 'Jade',
               },
               meta: {
                 adoptsFrom: {
@@ -543,7 +543,7 @@ export function setupOperatorModeTests(
           'FriendWithCSS/friend-a.json': {
             data: {
               attributes: {
-                title: 'Hassan',
+                cardTitle: 'Hassan',
               },
               relationships: {
                 friend: {
@@ -563,7 +563,7 @@ export function setupOperatorModeTests(
           'FriendWithCSS/missing-link.json': {
             data: {
               attributes: {
-                title: 'Boris',
+                cardTitle: 'Boris',
               },
               relationships: {
                 friend: {
@@ -583,8 +583,8 @@ export function setupOperatorModeTests(
           'grid.json': new CardsGrid(),
           'index.json': new CardsGrid(),
           'Spec/publishing-packet.json': new Spec({
-            title: 'Publishing Packet',
-            description: 'Spec for PublishingPacket',
+            cardTitle: 'Publishing Packet',
+            cardDescription: 'Spec for PublishingPacket',
             specType: 'card',
             ref: {
               module: `${testRealmURL}publishing-packet`,
@@ -592,8 +592,8 @@ export function setupOperatorModeTests(
             },
           }),
           'Spec/pet-room.json': new Spec({
-            title: 'General Pet Room',
-            description: 'Spec for Pet Room Card',
+            cardTitle: 'General Pet Room',
+            cardDescription: 'Spec for Pet Room Card',
             specType: 'card',
             ref: {
               module: `${testRealmURL}pet-room`,
@@ -601,8 +601,8 @@ export function setupOperatorModeTests(
             },
           }),
           'Spec/pet-card.json': new Spec({
-            title: 'Pet',
-            description: 'Spec for Pet',
+            cardTitle: 'Pet',
+            cardDescription: 'Spec for Pet',
             specType: 'card',
             ref: {
               module: `${testRealmURL}pet`,
@@ -616,11 +616,11 @@ export function setupOperatorModeTests(
             lastName: 'Jackson',
           }),
           'BlogPost/1.json': blogPost,
-          'BlogPost/2.json': new BlogPost({ title: 'Beginnings' }),
+          'BlogPost/2.json': new BlogPost({ cardTitle: 'Beginnings' }),
           'ExplodingCard/1.json': explodingCard,
-          'CardDef/1.json': new CardDef({ title: 'CardDef instance' }),
+          'CardDef/1.json': new CardDef({ cardTitle: 'CardDef instance' }),
           'PublishingPacket/story.json': new PublishingPacket({
-            title: 'Space Story',
+            cardTitle: 'Space Story',
             blogPost,
           }),
           '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-o.png" }`,

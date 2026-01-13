@@ -67,7 +67,7 @@ module('Integration | loading', function (hooks) {
     let doc = {
       data: {
         attributes: {
-          cardInfo: { title: 'Example' },
+          cardInfo: { name: 'Example' },
         },
         meta: {
           adoptsFrom: {

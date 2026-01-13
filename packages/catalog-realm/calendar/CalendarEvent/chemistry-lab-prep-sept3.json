@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Chemistry Lab Preparation",
-      "description": "Preparation session for organic chemistry lab experiment on synthesis reactions. Review safety protocols and procedures.",
+      "cardTitle": "Chemistry Lab Preparation",
+      "cardDescription": "Preparation session for organic chemistry lab experiment on synthesis reactions. Review safety protocols and procedures.",
       "startTime": "2025-09-03T10:00:00.000Z",
       "endTime": "2025-09-03T12:00:00.000Z",
       "location": "Chemistry Lab Building - Room 101",

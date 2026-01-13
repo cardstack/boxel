@@ -71,9 +71,9 @@ module('Integration | Command | preview-format', function (hooks) {
           export class RentalItem extends CardDef {
             static displayName = 'RentalItem';
             @field name = contains(StringField);
-            @field description = contains(StringField);
+            @field cardDescription = contains(StringField);
             @field price = contains(NumberField);
-            @field title = contains(StringField, {
+            @field cardTitle = contains(StringField, {
               computeVia: function (this: RentalItem) {
                 return this.name;
               },
@@ -85,7 +85,7 @@ module('Integration | Command | preview-format', function (hooks) {
             type: 'card',
             attributes: {
               name: 'Bike Rental',
-              description: 'Mountain bike for rent',
+              cardDescription: 'Mountain bike for rent',
               price: 25,
             },
             meta: {

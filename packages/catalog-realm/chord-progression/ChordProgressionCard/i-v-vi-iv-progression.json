@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "progressionName": "I-V-vi-IV (Classic Rock)",
-      "description": "A timeless progression that moves from stability through tension to resolution. The major-to-minor shift in the middle creates emotional depth that works across many genres.",
+      "cardDescription": "A timeless progression that moves from stability through tension to resolution. The major-to-minor shift in the middle creates emotional depth that works across many genres.",
       "key": "C major",
       "scale": "major",
       "timeSignature": "4/4",
@@ -63,7 +63,7 @@
           }
         ]
       },
-      "title": "I-V-vi-IV (Classic Rock)"
+      "cardTitle": "I-V-vi-IV (Classic Rock)"
     },
     "relationships": {},
     "meta": {

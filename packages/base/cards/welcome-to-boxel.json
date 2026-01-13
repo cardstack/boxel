@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Welcome to Boxel",
-      "description": "A welcome card with onboarding content and lesson cards",
+      "cardTitle": "Welcome to Boxel",
+      "cardDescription": "A welcome card with onboarding content and lesson cards",
       "specType": "card",
       "ref": {
         "module": "https://cardstack.com/base/welcome-to-boxel",

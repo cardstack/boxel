@@ -11,9 +11,9 @@
       "name": "API Integration",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "REST APIs, webhooks, third-party service integrations, data exchange protocols, and external system connectivity.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "REST APIs, webhooks, third-party service integrations, data exchange protocols, and external system connectivity.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

@@ -76,7 +76,7 @@ export class Company extends CardDef {
   @field website = contains(WebsiteField);
   @field stockSymbol = contains(StringField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Company) {
       return this.name;
     },

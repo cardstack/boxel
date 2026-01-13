@@ -22,10 +22,10 @@ export class ContentItem extends FieldDef {
   static displayName = 'ContentItem';
   static icon = CaptionsIcon;
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     description: 'The title of the content',
   });
-  @field description = contains(StringField, {
+  @field cardDescription = contains(StringField, {
     description: 'The description of the content',
   });
   @field textColor = contains(StringField, {
@@ -58,13 +58,13 @@ export class ContentItem extends FieldDef {
           class='content-title'
           style={{htmlSafe (concat 'color: ' @model.textColor)}}
         >
-          {{@model.title}}:
+          {{@model.cardTitle}}:
         </div>
         <div
           class='content-description'
           style={{htmlSafe (concat 'color: ' @model.textColor)}}
         >
-          {{@model.description}}</div>
+          {{@model.cardDescription}}</div>
         <div class='content-icon'>
           {{#if (eq @model.icon 'card')}}
             <CaptionsIcon class='icon' />

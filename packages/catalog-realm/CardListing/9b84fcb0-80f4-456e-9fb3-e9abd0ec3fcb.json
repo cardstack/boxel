@@ -17,9 +17,9 @@
       "summary": "The Leaflet Map card is an interactive mapping component built using the Leaflet.js library. It accepts three key parameters: latitude and longitude coordinates for map positioning, and an optional custom tile server URL (defaulting to OpenStreetMap). The map is rendered in a full-width and full-height container, automatically loading the necessary Leaflet.js library and CSS from CDN.\n\nThe component centers the map on the specified coordinates with a default zoom level of 13, providing users with an interactive experience that includes panning and zooming capabilities. It supports both isolated and embedded views, though the embedded view functionality is currently not implemented. This makes it a versatile tool for displaying geographical data in various contexts.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/leaflet-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/leaflet-listing/thumbnail.png"
       }
     },
     "relationships": {

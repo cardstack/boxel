@@ -28,7 +28,7 @@ export class GamingPlatform extends CardDef {
   @field logoImageUrl = contains(UrlField);
   @field connectionToken = contains(StringField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: GamingPlatform) {
       return this.name ?? 'Untitled Gaming Platform';
     },

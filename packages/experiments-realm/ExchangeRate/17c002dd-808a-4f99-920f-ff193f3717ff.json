@@ -3,8 +3,8 @@
     "type": "card",
     "attributes": {
       "conversionRate": 83.07,
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "asset1": {

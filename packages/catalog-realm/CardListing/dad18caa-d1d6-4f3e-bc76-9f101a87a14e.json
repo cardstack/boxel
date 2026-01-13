@@ -16,9 +16,9 @@
       "summary": "Interactive quiz card for testing knowledge and skills with customizable questions, time limits, and difficulty levels",
       "cardInfo": {
         "notes": "Supports customizable difficulty levels, time limits, and subject categorization. Tracks completion status and scores.",
-        "title": "Practice Quiz",
-        "description": "A comprehensive quiz application that allows users to create and take interactive quizzes with multiple-choice questions, time tracking, and progress monitoring. Perfect for educational assessments, skill testing, and knowledge verification.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/practice-quiz-listing/thumbnail.png"
+        "name": "Practice Quiz",
+        "summary": "A comprehensive quiz application that allows users to create and take interactive quizzes with multiple-choice questions, time tracking, and progress monitoring. Perfect for educational assessments, skill testing, and knowledge verification.",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/practice-quiz-listing/thumbnail.png"
       }
     },
     "relationships": {

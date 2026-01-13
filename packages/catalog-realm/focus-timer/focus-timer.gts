@@ -1600,7 +1600,7 @@ export class FocusTimerCard extends CardDef {
   });
 
   // ²¹ Enhanced computed title with subject context
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: FocusTimerCard) {
       try {
         const session = this.sessionName || 'Focus Session';

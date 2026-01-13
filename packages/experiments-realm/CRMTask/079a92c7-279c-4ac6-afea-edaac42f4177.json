@@ -18,8 +18,8 @@
       },
       "name": "Prepare Startup Marketing Proposal",
       "details": "Create comprehensive digital marketing strategy proposal",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "crmApp": {

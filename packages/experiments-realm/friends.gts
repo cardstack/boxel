@@ -15,7 +15,7 @@ export class Friends extends CardDef {
   static icon = UsersIcon;
   @field firstName = contains(StringField);
   @field friends = linksToMany(Friend);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Friends) {
       return this.firstName;
     },

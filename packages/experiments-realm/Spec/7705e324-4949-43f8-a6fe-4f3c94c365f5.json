@@ -1,124 +1,5 @@
 {
   "data": {
-    "type": "card",
-    "attributes": {
-      "readMe": null,
-      "ref": {
-        "name": "TravelGoalWithProgress",
-        "module": "../trip-info"
-      },
-      "specType": "field",
-      "containedExamples": [
-        {
-          "progress": 10,
-          "goalTitle": "Summer trip 2025"
-        },
-        {
-          "progress": null,
-          "goalTitle": null
-        },
-        {
-          "progress": null,
-          "goalTitle": null
-        },
-        {
-          "progress": null,
-          "goalTitle": null
-        },
-        {
-          "progress": null,
-          "goalTitle": null
-        },
-        {
-          "progress": null,
-          "goalTitle": "Summer 2025"
-        },
-        {
-          "progress": null,
-          "goalTitle": null
-        }
-      ],
-      "title": "TravelGoalWithProgress",
-      "description": null,
-      "thumbnailURL": null
-    },
-    "relationships": {
-      "linkedExamples": {
-        "links": {
-          "self": null
-        }
-      },
-      "containedExamples.0.country": {
-        "links": {
-          "self": "../Country/2"
-        }
-      },
-      "containedExamples.0.alternateTrips": {
-        "links": {
-          "self": null
-        }
-      },
-      "containedExamples.1.country": {
-        "links": {
-          "self": null
-        }
-      },
-      "containedExamples.1.alternateTrips": {
-        "links": {
-          "self": null
-        }
-      },
-      "containedExamples.2.country": {
-        "links": {
-          "self": null
-        }
-      },
-      "containedExamples.2.alternateTrips": {
-        "links": {
-          "self": null
-        }
-      },
-      "containedExamples.3.country": {
-        "links": {
-          "self": null
-        }
-      },
-      "containedExamples.3.alternateTrips": {
-        "links": {
-          "self": null
-        }
-      },
-      "containedExamples.4.country": {
-        "links": {
-          "self": null
-        }
-      },
-      "containedExamples.4.alternateTrips": {
-        "links": {
-          "self": null
-        }
-      },
-      "containedExamples.5.country": {
-        "links": {
-          "self": null
-        }
-      },
-      "containedExamples.5.alternateTrips": {
-        "links": {
-          "self": null
-        }
-      },
-      "containedExamples.6.country": {
-        "links": {
-          "self": null
-        }
-      },
-      "containedExamples.6.alternateTrips": {
-        "links": {
-          "self": null
-        }
-      }
-    },
     "meta": {
       "fields": {
         "containedExamples": [
@@ -167,8 +48,137 @@
         ]
       },
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
-        "name": "Spec"
+        "name": "Spec",
+        "module": "https://cardstack.com/base/spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "TravelGoalWithProgress",
+        "module": "http://localhost:4201/experiments/trip-info"
+      },
+      "readMe": null,
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "specType": "field",
+      "cardTitle": "TravelGoalWithProgress",
+      "cardDescription": null,
+      "containedExamples": [
+        {
+          "progress": 10,
+          "goalTitle": "Summer trip 2025"
+        },
+        {
+          "progress": null,
+          "goalTitle": null
+        },
+        {
+          "progress": null,
+          "goalTitle": null
+        },
+        {
+          "progress": null,
+          "goalTitle": null
+        },
+        {
+          "progress": null,
+          "goalTitle": null
+        },
+        {
+          "progress": null,
+          "goalTitle": "Summer 2025"
+        },
+        {
+          "progress": null,
+          "goalTitle": null
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      },
+      "containedExamples.0.country": {
+        "links": {
+          "self": "../Country/2"
+        }
+      },
+      "containedExamples.1.country": {
+        "links": {
+          "self": null
+        }
+      },
+      "containedExamples.2.country": {
+        "links": {
+          "self": null
+        }
+      },
+      "containedExamples.3.country": {
+        "links": {
+          "self": null
+        }
+      },
+      "containedExamples.4.country": {
+        "links": {
+          "self": null
+        }
+      },
+      "containedExamples.5.country": {
+        "links": {
+          "self": null
+        }
+      },
+      "containedExamples.6.country": {
+        "links": {
+          "self": null
+        }
+      },
+      "containedExamples.0.alternateTrips": {
+        "links": {
+          "self": null
+        }
+      },
+      "containedExamples.1.alternateTrips": {
+        "links": {
+          "self": null
+        }
+      },
+      "containedExamples.2.alternateTrips": {
+        "links": {
+          "self": null
+        }
+      },
+      "containedExamples.3.alternateTrips": {
+        "links": {
+          "self": null
+        }
+      },
+      "containedExamples.4.alternateTrips": {
+        "links": {
+          "self": null
+        }
+      },
+      "containedExamples.5.alternateTrips": {
+        "links": {
+          "self": null
+        }
+      },
+      "containedExamples.6.alternateTrips": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

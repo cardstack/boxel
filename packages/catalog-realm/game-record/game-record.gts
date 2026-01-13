@@ -58,13 +58,13 @@ export class GameRecord extends CardDef {
   @field screenshotUrls = containsMany(UrlField);
   @field lastPlayedDate = contains(DatetimeField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: GameRecord) {
       if (!this.player || !this.game) {
         return undefined;
       }
 
-      return this.player.title + ' - ' + this.game.title;
+      return this.player.cardTitle + ' - ' + this.game.cardTitle;
     },
   });
 

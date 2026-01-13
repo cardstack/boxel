@@ -13,9 +13,9 @@
       "subject": "Computer Science",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "startTime": "2025-09-24T09:00:00.000Z",
       "isCompleted": true,

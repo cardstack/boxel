@@ -6,7 +6,7 @@
       "canonicalSlug": "x-ai/grok-3-mini",
       "name": "xAI: Grok 3 Mini",
       "created": 1749583245,
-      "description": "A lightweight model that thinks before responding. Fast, smart, and great for logic-based tasks that do not require deep domain knowledge. The raw thinking traces are accessible.",
+      "cardDescription": "A lightweight model that thinks before responding. Fast, smart, and great for logic-based tasks that do not require deep domain knowledge. The raw thinking traces are accessible.",
       "pricing": {
         "prompt": "0.0000003",
         "completion": "0.0000005",
@@ -48,9 +48,9 @@
       ],
       "defaultParameters": {},
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

@@ -70,7 +70,7 @@ module('Integration | commands | search-google-images', function (hooks) {
               ],
             },
             context: {
-              title: 'boxel-search-image',
+              cardTitle: 'boxel-search-image',
             },
             searchInformation: {
               searchTime: 0.5,

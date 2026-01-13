@@ -11,9 +11,9 @@
       "name": "Developer Tools & Code",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Code repositories, pull requests, API endpoints, SDK packages, debugging tools, and development environments.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Code repositories, pull requests, API endpoints, SDK packages, debugging tools, and development environments.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

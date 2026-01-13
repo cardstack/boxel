@@ -6,7 +6,7 @@
       "canonicalSlug": "mistralai/pixtral-12b",
       "name": "Mistral: Pixtral 12B",
       "created": 1725926400,
-      "description": "The first multi-modal, text+image-to-text model from Mistral AI. Its weights were launched via torrent: https://x.com/mistralai/status/1833758285167722836.",
+      "cardDescription": "The first multi-modal, text+image-to-text model from Mistral AI. Its weights were launched via torrent: https://x.com/mistralai/status/1833758285167722836.",
       "pricing": {
         "prompt": "0.0000001",
         "completion": "0.0000001",
@@ -53,9 +53,9 @@
         "temperature": 0.3
       },
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

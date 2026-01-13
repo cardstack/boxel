@@ -224,7 +224,7 @@ class Isolated extends Component<typeof GardenDesign> {
                 module: `${baseRealm.url}card-api`,
                 name: 'CardDef',
               },
-              by: 'title',
+              by: 'cardTitle',
             },
           ],
         };
@@ -245,7 +245,7 @@ class Isolated extends Component<typeof GardenDesign> {
   }
 
   get title() {
-    return this.args.model.title ?? 'Untitled Garden';
+    return this.args.model.cardTitle ?? 'Untitled Garden';
   }
 
   generateGridIds = () => {
@@ -376,7 +376,7 @@ export class GardenItem extends CardDef {
   @field gardenItemId = contains(StringField);
   @field name = contains(StringField);
   @field symbol = contains(StringField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: GardenItem) {
       return this.symbol;
     },

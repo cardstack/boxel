@@ -16,8 +16,8 @@
           "name": "surf"
         }
       ],
-      "description": "Updated summary block styling to use square rectangles for a more modern look",
-      "thumbnailURL": null
+      "cardDescription": "Updated summary block styling to use square rectangles for a more modern look",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "parent": {

@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "AppCard",
-      "description": "Spec for AppCard",
+      "cardTitle": "AppCard",
+      "cardDescription": "Spec for AppCard",
       "specType": "app",
       "ref": {
         "module": "../app-card",

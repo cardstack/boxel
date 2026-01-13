@@ -633,7 +633,7 @@ export class SocialLinkField extends FieldDef {
   static displayName = 'Social Link';
   static icon = HeartIcon;
 
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field url = contains(UrlField);
   @field backgroundColor = contains(ColorField);
   @field textColor = contains(ColorField);
@@ -659,7 +659,7 @@ export class SocialLinkField extends FieldDef {
         {{#if @model.emoji}}
           <span class='emoji'>{{@model.emoji}}</span>
         {{/if}}
-        <span class='title'>{{@model.title}}</span>
+        <span class='title'>{{@model.cardTitle}}</span>
         <div class='shine-overlay'></div>
       </a>
 
@@ -739,7 +739,7 @@ export class StylishFashionInfluencerLinktree extends CardDef {
   @field accentColor = contains(ColorField);
   @field socialLinks = containsMany(SocialLinkField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: StylishFashionInfluencerLinktree) {
       return this.influencerName ?? 'Premium Fashion Influencer Linktree';
     },

@@ -15,9 +15,9 @@
       "summary": "Interactive EV car configurator simulating real-time customization of a luxury electric vehicle. Choose from exterior colors, trims, ranges, wheels, interiors, and premium features like autopilot and immersive audio. Dynamic pricing updates instantly based on selections, with sleek visuals and section-based navigation for a seamless experience.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/ev-car-configurator-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/ev-car-configurator-listing/thumbnail.png"
       }
     },
     "relationships": {

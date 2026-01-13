@@ -11,9 +11,9 @@
       "name": "Operations & Supply Chain",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Supply chain management, inventory tracking, logistics coordination, vendor management, and operational efficiency tools.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Supply chain management, inventory tracking, logistics coordination, vendor management, and operational efficiency tools.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

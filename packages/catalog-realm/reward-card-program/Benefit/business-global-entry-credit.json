@@ -16,19 +16,19 @@
         }
       },
       "details": [
-        "Receive either a statement credit every 4 years after you apply for Global Entry ($120) or a statement credit every 4.5 years after you apply for a five-year membership for TSA PreCheck® (up to $85 through a TSA PreCheck official enrollment provider) and pay the application fee with the Card. If approved for Global Entry, at no additional charge, you will receive access to TSA Pre-Check.‡",
+        "Receive either a statement credit every 4 years after you apply for Global Entry ($120) or a statement credit every 4.5 years after you apply for a five-year membership for TSA PreCheck\u00ae (up to $85 through a TSA PreCheck official enrollment provider) and pay the application fee with the Card. If approved for Global Entry, at no additional charge, you will receive access to TSA Pre-Check.\u2021",
         "Global Entry: $120 statement credit every 4 years",
-        "TSA PreCheck®: Up to $85 statement credit every 4.5 years",
+        "TSA PreCheck\u00ae: Up to $85 statement credit every 4.5 years",
         "Must pay application fee with Business Platinum Card",
-        "Global Entry includes TSA PreCheck® at no additional charge",
+        "Global Entry includes TSA PreCheck\u00ae at no additional charge",
         "Credit applies to application fees paid to official government enrollment providers"
       ],
       "partner": "U.S. Customs and Border Protection / Transportation Security Administration",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "minSpend": {
         "amount": null,
@@ -36,7 +36,7 @@
           "code": null
         }
       },
-      "conditions": "Receive either a statement credit every 4 years after you apply for Global Entry ($120) or a statement credit every 4.5 years after you apply for a five-year membership for TSA PreCheck® (up to $85 through a TSA PreCheck official enrollment provider) and pay the application fee with the Card. If approved for Global Entry, at no additional charge, you will receive access to TSA Pre-Check. Credit applies to application fees only.",
+      "conditions": "Receive either a statement credit every 4 years after you apply for Global Entry ($120) or a statement credit every 4.5 years after you apply for a five-year membership for TSA PreCheck\u00ae (up to $85 through a TSA PreCheck official enrollment provider) and pay the application fee with the Card. If approved for Global Entry, at no additional charge, you will receive access to TSA Pre-Check. Credit applies to application fees only.",
       "programURL": "https://www.cbp.gov/travel/trusted-traveler-programs/global-entry",
       "benefitKind": "statement-credit",
       "enrollmentRequired": false

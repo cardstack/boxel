@@ -6,7 +6,7 @@
       "canonicalSlug": "openai/gpt-4o-mini-search-preview-2025-03-11",
       "name": "OpenAI: GPT-4o-mini Search Preview",
       "created": 1741818122,
-      "description": "GPT-4o mini Search Preview is a specialized model for web search in Chat Completions. It is trained to understand and execute web search queries.",
+      "cardDescription": "GPT-4o mini Search Preview is a specialized model for web search in Chat Completions. It is trained to understand and execute web search queries.",
       "pricing": {
         "prompt": "0.00000015",
         "completion": "0.0000006",
@@ -39,9 +39,9 @@
       ],
       "defaultParameters": {},
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

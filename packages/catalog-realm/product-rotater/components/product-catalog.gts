@@ -11,11 +11,11 @@ import { ProductRotationImage } from './product-rotation-image';
 
 class ProductCatalogIsolated extends Component<typeof ProductCatalog> {
   get title() {
-    return this.args.model?.title ?? 'Product Catalog';
+    return this.args.model?.cardTitle ?? 'Product Catalog';
   }
 
   get description() {
-    return this.args.model?.description ?? '';
+    return this.args.model?.cardDescription ?? '';
   }
 
   get rotationImages() {
@@ -192,8 +192,8 @@ export class ProductCatalog extends CardDef {
   static displayName = 'Product Catalog';
   static prefersWideFormat = true;
 
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field rotationImages = linksToMany(() => ProductRotationImage);
 
   static isolated = ProductCatalogIsolated;

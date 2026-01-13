@@ -18,8 +18,8 @@
       },
       "name": "Resolve bug where overlay only appears on certain cards",
       "details": "The overlay is only appearing on specific cards due to a faulty modifier that's not being applied consistently across all card instances.",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "project": {

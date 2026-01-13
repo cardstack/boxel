@@ -16,7 +16,7 @@ class Alias extends CardDef {
   static icon = ContactIcon;
 
   @field name = contains(StringField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Alias) {
       return this.name;
     },
@@ -81,7 +81,7 @@ export class ContactCard extends CardDef {
   @field guestNames = containsMany(Name);
   @field guest = contains(Guest);
   @field aliases = linksToMany(Alias);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: ContactCard) {
       return this.name;
     },

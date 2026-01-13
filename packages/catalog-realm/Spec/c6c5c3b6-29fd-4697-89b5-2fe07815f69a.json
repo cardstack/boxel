@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "WorkflowPlanner",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "WorkflowPlanner",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

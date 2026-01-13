@@ -16,10 +16,10 @@ export class SchoolCalendar extends CardDef {
   static displayName = 'School Calendar';
   static icon = CalendarIcon;
 
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field schoolYearStart = contains(DateField);
   @field schoolYearEnd = contains(DateField);
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field events = linksToMany(CalendarEvent);
   @field scheduleItems = linksToMany(ScheduleItem);
 
@@ -27,14 +27,14 @@ export class SchoolCalendar extends CardDef {
     <template>
       <div class='calendar-container'>
         <div class='calendar-header'>
-          <h1>{{@model.title}}</h1>
+          <h1>{{@model.cardTitle}}</h1>
           <div class='school-year'>
             <span>School Year:
               {{dayjsFormat @model.schoolYearStart 'MMMM D, YYYY'}}
               -
               {{dayjsFormat @model.schoolYearEnd 'MMMM D, YYYY'}}</span>
           </div>
-          <p class='description'>{{@model.description}}</p>
+          <p class='description'>{{@model.cardDescription}}</p>
         </div>
 
         <div class='calendar-section'>

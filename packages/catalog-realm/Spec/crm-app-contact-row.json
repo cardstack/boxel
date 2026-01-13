@@ -9,9 +9,9 @@
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Contact Row",
-      "description": "Spec for Contact Row component",
-      "thumbnailURL": null
+      "cardTitle": "Contact Row",
+      "cardDescription": "Spec for Contact Row component",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

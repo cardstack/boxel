@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "kitName": "Trap Kit",
-      "description": "Sub-heavy kicks with snappy snares and metallic hi-hats for modern trap production",
+      "cardDescription": "Sub-heavy kicks with snappy snares and metallic hi-hats for modern trap production",
       "category": "Trap",
       "creator": "Beat Maker Studio",
       "kit": {
@@ -15,7 +15,7 @@
         "clapParams": "{\"type\": \"trap\", \"frequency\": 2500, \"decay\": 0.12, \"amplitude\": 0.8, \"shape\": 2.5, \"resonance\": 8}",
         "crashParams": "{\"type\": \"trap\", \"frequency\": 4000, \"decay\": 0.6, \"amplitude\": 0.4, \"shape\": 1, \"resonance\": 2}"
       },
-      "title": "Trap Kit"
+      "cardTitle": "Trap Kit"
     },
     "relationships": {},
     "meta": {

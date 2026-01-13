@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Model Configuration",
-      "description": "Spec for Model Configuration card",
-      "thumbnailURL": null
+      "cardTitle": "Model Configuration",
+      "cardDescription": "Spec for Model Configuration card",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples.0": {

@@ -11,9 +11,9 @@
       "name": "Certifications & Training",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Training programs, certification paths, course materials, exam preparations, and skill validations.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Training programs, certification paths, course materials, exam preparations, and skill validations.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

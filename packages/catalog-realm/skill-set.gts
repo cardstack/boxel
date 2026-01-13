@@ -109,7 +109,7 @@ function computeTableOfContents(
 
     sectionNumber += 1;
 
-    const topicName = skillRef.topicName || skillRef.skill?.title || 'Untitled';
+    const topicName = skillRef.topicName || skillRef.skill?.cardTitle || 'Untitled';
     const dividerAnchorId = `skill-divider-${i}`;
     tocLines.push(`- [**${sectionNumber}** ${topicName}](#${dividerAnchorId})`);
 
@@ -200,9 +200,9 @@ export class SkillSet extends SkillPlus {
   static displayName = 'Skill Set';
   static prefersWideFormat = true;
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: SkillSet) {
-      return this.cardInfo?.title || `Untitled ${SkillSet.displayName}`;
+      return this.cardInfo?.name || `Untitled ${SkillSet.displayName}`;
     },
   });
 
@@ -418,8 +418,8 @@ export class SkillSet extends SkillPlus {
       <DocLayout
         class='skill-set-documentation'
         @titleMeta='Skill Set Documentation'
-        @title={{@model.title}}
-        @description={{@model.description}}
+        @title={{@model.cardTitle}}
+        @description={{@model.cardDescription}}
         @hideToc={{this.isTocEmpty}}
       >
         <:navbar>
@@ -731,14 +731,14 @@ export class SkillSet extends SkillPlus {
             SKILL SET
           </div>
           <h3 class='embedded-title'>{{if
-              @model.title
-              @model.title
+              @model.cardTitle
+              @model.cardTitle
               'Untitled Skill Set'
             }}</h3>
         </div>
 
-        {{#if @model.description}}
-          <p class='embedded-description'>{{@model.description}}</p>
+        {{#if @model.cardDescription}}
+          <p class='embedded-description'>{{@model.cardDescription}}</p>
         {{/if}}
 
         {{#if (gt @model.relatedSkills.length 0)}}
@@ -901,8 +901,8 @@ export class SkillSet extends SkillPlus {
         {{! Badge format (≤150px width, <170px height) - Compact title display }}
         <div class='badge-format'>
           <div class='badge-title'>{{if
-              @model.title
-              @model.title
+              @model.cardTitle
+              @model.cardTitle
               'Skill Set'
             }}</div>
         </div>
@@ -921,8 +921,8 @@ export class SkillSet extends SkillPlus {
               <path d='M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z' />
             </svg>
             <div class='strip-title'>{{if
-                @model.title
-                @model.title
+                @model.cardTitle
+                @model.cardTitle
                 'Skill Set'
               }}</div>
           </div>
@@ -945,15 +945,15 @@ export class SkillSet extends SkillPlus {
             <div class='tile-badge'>SKILL SET</div>
           </div>
           <h4 class='tile-title'>{{if
-              @model.title
-              @model.title
+              @model.cardTitle
+              @model.cardTitle
               'Untitled'
             }}</h4>
           <div class='tile-stats'>
             <span class='stat'>{{@model.relatedSkills.length}} skills</span>
           </div>
-          {{#if @model.description}}
-            <p class='tile-description'>{{@model.description}}</p>
+          {{#if @model.cardDescription}}
+            <p class='tile-description'>{{@model.cardDescription}}</p>
           {{/if}}
         </div>
 
@@ -974,13 +974,13 @@ export class SkillSet extends SkillPlus {
               <span class='card-type'>SKILL SET</span>
             </div>
             <h4 class='card-title'>{{if
-                @model.title
-                @model.title
+                @model.cardTitle
+                @model.cardTitle
                 'Untitled Skill Set'
               }}</h4>
           </div>
-          {{#if @model.description}}
-            <p class='card-description'>{{@model.description}}</p>
+          {{#if @model.cardDescription}}
+            <p class='card-description'>{{@model.cardDescription}}</p>
           {{/if}}
           <div class='card-footer'>
             <span class='footer-stat'>

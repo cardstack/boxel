@@ -19,9 +19,9 @@
       "partner": "Selected Airline",
       "cardInfo": {
         "notes": null,
-        "title": "",
-        "description": null,
-        "thumbnailURL": null
+        "name": "",
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "minSpend": {
         "amount": null,

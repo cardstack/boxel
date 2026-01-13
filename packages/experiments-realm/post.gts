@@ -15,23 +15,23 @@ let imageURL = new URL('./logo.png', import.meta.url).href;
 
 class BasicField extends FieldDef {
   static displayName = 'Basic Field';
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      Title: <@fields.title />
+      Title: <@fields.cardTitle />
     </template>
   };
 }
 
 class VeryBasicField extends BasicField {
   static displayName = 'Very Basic Field';
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       Title:
-      <@fields.title />
+      <@fields.cardTitle />
       Description:
-      <@fields.description />
+      <@fields.cardDescription />
     </template>
   };
 }
@@ -40,13 +40,13 @@ export class Post extends CardDef {
   static displayName = 'Post';
   static icon = FileTextIcon;
   @field author = linksTo(Person);
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field body = contains(TextAreaField);
   @field titleRef = contains(VeryBasicField);
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <div class='container'>
-        <h1><@fields.title /><img src='{{imageURL}}' aria-hidden='true' /></h1>
+        <h1><@fields.cardTitle /><img src='{{imageURL}}' aria-hidden='true' /></h1>
         <h3>by <@fields.author.firstName /> <@fields.author.lastName /></h3>
         <p><@fields.body /></p>
       </div>
@@ -59,7 +59,7 @@ export class Post extends CardDef {
   };
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <em><@fields.title /></em>
+      <em><@fields.cardTitle /></em>
       by
       <@fields.author.firstName />
       <@fields.author.lastName />

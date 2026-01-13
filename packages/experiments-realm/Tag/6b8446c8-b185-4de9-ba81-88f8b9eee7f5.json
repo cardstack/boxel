@@ -4,8 +4,8 @@
     "attributes": {
       "name": "Boxel UI",
       "color": "",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

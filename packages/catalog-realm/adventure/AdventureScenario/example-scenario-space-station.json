@@ -3,8 +3,8 @@
     "type": "card",
     "attributes": {
       "key": "space-station",
-      "title": "Lost in Space",
-      "description": "You wake on a silent space station with flickering lights and no memory.",
+      "cardTitle": "Lost in Space",
+      "cardDescription": "You wake on a silent space station with flickering lights and no memory.",
       "tags": [],
       "imageStyles": []
     },

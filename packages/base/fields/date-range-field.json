@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Date Range Field",
-      "description": "A field that captures date range values.",
+      "cardTitle": "Date Range Field",
+      "cardDescription": "A field that captures date range values.",
       "ref": {
         "module": "https://cardstack.com/base/date-range-field",
         "name": "default"

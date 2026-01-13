@@ -12,9 +12,9 @@
       "csvData": "Username; Identifier;First name;Last name\nbooker12;9012;Rachel;Booker\ngrey07;2070;Laura;Grey\njohnson81;4081;Craig;Johnson\njenkins46;9346;Mary;Jenkins\nsmith79;5079;Jamie;Smith",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "delimiter": ";"
     },

@@ -25,9 +25,9 @@
       "isHuman": true,
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "lastName": "Abdel-Rahman",
       "firstName": "Hassan"

@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "progressionName": "Circle of Fifths (vi-ii-V-I)",
-      "description": "A sophisticated progression that follows the circle of fifths, creating smooth voice leading and strong harmonic momentum. Each chord's root is a fifth below the next.",
+      "cardDescription": "A sophisticated progression that follows the circle of fifths, creating smooth voice leading and strong harmonic momentum. Each chord's root is a fifth below the next.",
       "key": "C major",
       "scale": "major",
       "timeSignature": "4/4",
@@ -63,7 +63,7 @@
           }
         ]
       },
-      "title": "Circle of Fifths (vi-ii-V-I)"
+      "cardTitle": "Circle of Fifths (vi-ii-V-I)"
     },
     "relationships": {},
     "meta": {

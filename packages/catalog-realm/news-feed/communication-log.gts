@@ -322,7 +322,7 @@ export class CommunicationLog extends CardDef {
   static icon = MessageSquareIcon;
 
   @field author = linksTo(Author);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function () {
       return 'Communication Log';
     },

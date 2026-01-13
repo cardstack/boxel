@@ -10,9 +10,9 @@
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": "Starry Night",
-        "description": null,
-        "thumbnailURL": null
+        "name": "Starry Night",
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "cssImports": [
         "https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap"

@@ -192,7 +192,7 @@ export default class CreateFileModal extends Component<Signature> {
                       {{else}}
                         {{#if this.selectedSpecResource.card}}
                           <SelectedTypePill
-                            @title={{this.selectedSpecResource.card.title}}
+                            @title={{this.selectedSpecResource.card.cardTitle}}
                             @id={{this.selectedSpecResource.card.id}}
                           />
                         {{/if}}

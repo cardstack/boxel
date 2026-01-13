@@ -304,7 +304,7 @@ module(basename(__filename), function () {
               .send({
                 data: {
                   type: 'card',
-                  attributes: { cardInfo: { title: 'Test Card' } },
+                  attributes: { cardInfo: { name: 'Test Card' } },
                   meta: {
                     adoptsFrom: {
                       module: 'https://cardstack.com/base/card-api',
@@ -345,7 +345,7 @@ module(basename(__filename), function () {
             assert.strictEqual(response.status, 200, 'HTTP 200 status');
             let doc = response.body as SingleCardDocument;
             assert.strictEqual(
-              doc.data.attributes?.title,
+              doc.data.attributes?.cardTitle,
               'Test Card',
               'instance data is correct',
             );
@@ -361,7 +361,7 @@ module(basename(__filename), function () {
                       filter: {
                         on: baseCardRef,
                         eq: {
-                          title: 'Test Card',
+                          cardTitle: 'Test Card',
                         },
                       },
                     } as Query,
@@ -428,7 +428,7 @@ module(basename(__filename), function () {
                       filter: {
                         on: baseCardRef,
                         eq: {
-                          title: 'Test Card',
+                          cardTitle: 'Test Card',
                         },
                       },
                     } as Query,
@@ -447,7 +447,7 @@ module(basename(__filename), function () {
                 data: {
                   type: 'card',
                   attributes: {
-                    title: 'Test Card',
+                    cardTitle: 'Test Card',
                   },
                   meta: {
                     adoptsFrom: {
@@ -509,7 +509,7 @@ module(basename(__filename), function () {
               .send({
                 data: {
                   type: 'card',
-                  attributes: { cardInfo: { title: 'Test Card' } },
+                  attributes: { cardInfo: { name: 'Test Card' } },
                   meta: {
                     adoptsFrom: {
                       module: 'https://cardstack.com/base/card-api',
@@ -563,7 +563,7 @@ module(basename(__filename), function () {
             assert.strictEqual(response.status, 200, 'HTTP 200 status');
             let doc = response.body as SingleCardDocument;
             assert.strictEqual(
-              doc.data.attributes?.title,
+              doc.data.attributes?.cardTitle,
               'Test Card',
               'instance data is correct',
             );

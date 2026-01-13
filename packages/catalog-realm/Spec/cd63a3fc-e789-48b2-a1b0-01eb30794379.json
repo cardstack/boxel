@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "CarConfiguratorEV",
-      "description": "Spec of Car Configurator EV",
-      "thumbnailURL": null
+      "cardTitle": "CarConfiguratorEV",
+      "cardDescription": "Spec of Car Configurator EV",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

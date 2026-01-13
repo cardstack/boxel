@@ -26,9 +26,9 @@
           "distance": 75
         }
       ],
-      "title": "Cycling Route Indonesia",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "Cycling Route Indonesia",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

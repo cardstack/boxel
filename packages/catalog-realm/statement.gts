@@ -34,7 +34,7 @@ export class Statement extends CardDef {
   @field content = contains(MarkdownField);
   @field position = contains(PositionField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Statement) {
       return this.topicName || this.reference || 'Untitled Statement';
     },

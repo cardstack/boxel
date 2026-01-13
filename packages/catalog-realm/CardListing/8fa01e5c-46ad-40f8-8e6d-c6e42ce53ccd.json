@@ -15,9 +15,9 @@
       "summary": "A comprehensive video game card template featuring detailed game information, ratings, system requirements, and achievements with cyberpunk-themed styling.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/video-game-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/video-game-listing/thumbnail.png"
       }
     },
     "relationships": {

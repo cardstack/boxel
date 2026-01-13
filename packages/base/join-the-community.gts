@@ -19,7 +19,7 @@ export class SocialMediaLink extends FieldDef {
       'The name of the social media platform (e.g., Discord, Twitter)',
   });
 
-  @field description = contains(StringField, {
+  @field cardDescription = contains(StringField, {
     description: 'A brief description of what users can find on this platform',
   });
 
@@ -96,7 +96,7 @@ export class SocialMediaLink extends FieldDef {
           <p
             class='community-description'
             data-test-community-description={{@model.platform}}
-          >{{@model.description}}</p>
+          >{{@model.cardDescription}}</p>
           <span
             class='community-link'
             data-test-community-link={{@model.platform}}

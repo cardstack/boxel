@@ -18,8 +18,8 @@
       },
       "name": "Review Contract Renewal Options",
       "details": "Prepare renewal package with updated service offerings",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "crmApp": {

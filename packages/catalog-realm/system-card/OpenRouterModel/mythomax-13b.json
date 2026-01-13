@@ -6,7 +6,7 @@
       "canonicalSlug": "gryphe/mythomax-l2-13b",
       "name": "MythoMax 13B",
       "created": 1688256000,
-      "description": "One of the highest performing and most popular fine-tunes of Llama 2 13B, with rich descriptions and roleplay. #merge",
+      "cardDescription": "One of the highest performing and most popular fine-tunes of Llama 2 13B, with rich descriptions and roleplay. #merge",
       "pricing": {
         "prompt": "0.00000006",
         "completion": "0.00000006",
@@ -51,9 +51,9 @@
       ],
       "defaultParameters": {},
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

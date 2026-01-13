@@ -442,7 +442,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get headerTitle() {
-    let cardTitle = this.card?.title;
+    let cardTitle = this.card?.cardTitle;
     if (this.card && cardTitle?.startsWith('Untitled ')) {
       let strippedTitle = cardTitle.slice('Untitled '.length);
       if (strippedTitle === cardTypeDisplayName(this.card)) {
@@ -454,7 +454,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get cardTitle() {
-    return this.card ? this.card.title : undefined;
+    return this.card ? this.card.cardTitle : undefined;
   }
 
   private get moreOptionsMenuItemsForErrorCard() {

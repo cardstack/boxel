@@ -16,9 +16,9 @@
       "summary": "A comprehensive study session management card for tracking academic progress, planning study time, and monitoring learning outcomes.",
       "cardInfo": {
         "notes": "Includes fields for session title, subject, time tracking (planned vs actual duration), completion status, and detailed notes. Can be used for individual study sessions, group study coordination, or academic progress monitoring.",
-        "title": "Study Session",
-        "description": "Track and manage your study sessions with this comprehensive card that includes session planning, time tracking, subject organization, and progress monitoring features. Perfect for students, educators, and self-learners who want to optimize their study habits and measure learning effectiveness.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/study-session-listing/thumbnail.png"
+        "name": "Study Session",
+        "summary": "Track and manage your study sessions with this comprehensive card that includes session planning, time tracking, subject organization, and progress monitoring features. Perfect for students, educators, and self-learners who want to optimize their study habits and measure learning effectiveness.",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/study-session-listing/thumbnail.png"
       }
     },
     "relationships": {

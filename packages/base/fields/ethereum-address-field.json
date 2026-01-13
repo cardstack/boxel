@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Ethereum Address Field",
-      "description": "A field that captures checksum ethereum addresses",
+      "cardTitle": "Ethereum Address Field",
+      "cardDescription": "A field that captures checksum ethereum addresses",
       "specType": "field",
       "ref": {
         "module": "https://cardstack.com/base/ethereum-address",

@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "BookRecommender",
-      "description": "Spec of Book Recommender",
-      "thumbnailURL": null
+      "cardTitle": "BookRecommender",
+      "cardDescription": "Spec of Book Recommender",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

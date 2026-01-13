@@ -31,9 +31,9 @@
           "width": null
         }
       ],
-      "title": "Featured Image Preview",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "Featured Image Preview",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

@@ -5,8 +5,8 @@
       "modelId": "anthropic/claude-3.7-sonnet:thinking",
       "modelName": "Claude 3.7 Sonnet Thinking",
       "displayName": "Claude 3.7 - Thinking Model",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

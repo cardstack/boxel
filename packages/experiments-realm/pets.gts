@@ -100,13 +100,13 @@ export class PetOwner extends CardDef {
 // Inheritance substitution example: a base card with a primitive StringField
 // that a subclass overrides with an enum built on StringField.
 export class BaseTask extends CardDef {
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field priority = contains(StringField);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <div class='task-card'>
-        <strong>{{@model.title}}</strong>
+        <strong>{{@model.cardTitle}}</strong>
         <span>Priority: {{@model.priority}}</span>
       </div>
     </template>
@@ -127,7 +127,7 @@ export class AppTask extends BaseTask {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <div class='task-card'>
-        <strong>{{@model.title}}</strong>
+        <strong>{{@model.cardTitle}}</strong>
         <span>
           Priority:
           <@fields.priority @format='atom' />

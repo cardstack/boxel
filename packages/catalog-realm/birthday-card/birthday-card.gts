@@ -584,7 +584,7 @@ export class BirthdayCard extends CardDef {
   @field wishes = containsMany(BirthdayWish);
   @field surpriseMessage = contains(TextAreaField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: BirthdayCard) {
       const name = this.recipientName ?? 'Someone Special';
       const age = this.age ? ` (${this.age})` : '';

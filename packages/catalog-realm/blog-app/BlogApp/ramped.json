@@ -3,13 +3,13 @@
     "type": "card",
     "attributes": {
       "website": "ramped.com",
-      "title": "Ramped",
-      "description": "Urban insights",
-      "thumbnailURL": "https://boxel-images.boxel.ai/icons/ramped.png",
+      "cardTitle": "Ramped",
+      "cardDescription": "Urban insights",
+      "cardThumbnailURL": "https://boxel-images.boxel.ai/icons/ramped.png",
       "cardInfo": {
-        "title": "Ramped",
-        "description": "Urban insights",
-        "thumbnailURL": "https://boxel-images.boxel.ai/icons/ramped.png"
+        "name": "Ramped",
+        "summary": "Urban insights",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/icons/ramped.png"
       }
     },
     "meta": {

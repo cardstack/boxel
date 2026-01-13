@@ -18,8 +18,8 @@
       },
       "name": "Techflow SEO Strategy Planning",
       "details": "Prepare detailed SEO strategy document for TechFlow's $60k package component",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "crmApp": {

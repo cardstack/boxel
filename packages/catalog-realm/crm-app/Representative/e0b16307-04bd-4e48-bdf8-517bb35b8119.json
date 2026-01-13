@@ -32,8 +32,8 @@
         }
       },
       "socialLinks": [],
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "crmApp": {

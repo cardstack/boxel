@@ -1392,7 +1392,7 @@ export class OnlineCustomer extends CardDef {
   @field customerSince = contains(DatetimeField);
   @field loyaltyTier = contains(LoyaltyTierField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: OnlineCustomer) {
       try {
         const name = this.customerName ?? 'Customer';

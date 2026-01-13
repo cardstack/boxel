@@ -11,7 +11,7 @@ export class License extends CardDef {
   static headerColor = '#00ebac';
   @field name = contains(StringField);
   @field content = contains(TextAreaField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: License) {
       return this.name;
     },

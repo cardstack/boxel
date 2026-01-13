@@ -11,11 +11,11 @@
       "image": {},
       "cardInfo": {
         "notes": null,
-        "title": "Blue Bottle 5",
-        "description": null,
-        "thumbnailURL": null
+        "name": "Blue Bottle 5",
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "angleLabel": "240° view",
+      "angleLabel": "240\u00b0 view",
       "angleDegrees": 240
     },
     "relationships": {

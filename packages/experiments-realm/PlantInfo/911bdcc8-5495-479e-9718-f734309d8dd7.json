@@ -38,9 +38,9 @@
           "selectedValue": "Fall"
         }
       ],
-      "title": "Anise Hyssop (Agastache foeniculum)",
-      "description": "Agastache foeniculum, commonly known as Anise Hyssop, is valued for its aromatic foliage and striking purple flowers. It is easy to grow and is often used in gardens to attract pollinators like bees and butterflies. This perennial thrives in full to partial sun and prefers well-draining soil. It offers visual interest from mid-summer to fall.",
-      "thumbnailURL": "https://www.gardenia.net/wp-content/uploads/2023/05/agastache-foeniculum-721x533.webp"
+      "cardTitle": "Anise Hyssop (Agastache foeniculum)",
+      "cardDescription": "Agastache foeniculum, commonly known as Anise Hyssop, is valued for its aromatic foliage and striking purple flowers. It is easy to grow and is often used in gardens to attract pollinators like bees and butterflies. This perennial thrives in full to partial sun and prefers well-draining soil. It offers visual interest from mid-summer to fall.",
+      "cardThumbnailURL": "https://www.gardenia.net/wp-content/uploads/2023/05/agastache-foeniculum-721x533.webp"
     },
     "meta": {
       "adoptsFrom": {

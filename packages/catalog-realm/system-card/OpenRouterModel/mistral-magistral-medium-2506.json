@@ -6,7 +6,7 @@
       "canonicalSlug": "mistralai/magistral-medium-2506",
       "name": "Mistral: Magistral Medium 2506",
       "created": 1749354054,
-      "description": "Magistral is Mistral's first reasoning model. It is ideal for general purpose use requiring longer thought processing and better accuracy than with non-reasoning LLMs. From legal research and financial forecasting to software development and creative storytelling — this model solves multi-step challenges where transparency and precision are critical.",
+      "cardDescription": "Magistral is Mistral's first reasoning model. It is ideal for general purpose use requiring longer thought processing and better accuracy than with non-reasoning LLMs. From legal research and financial forecasting to software development and creative storytelling \u2014 this model solves multi-step challenges where transparency and precision are critical.",
       "pricing": {
         "prompt": "0.000002",
         "completion": "0.000005",
@@ -50,9 +50,9 @@
         "temperature": 0.3
       },
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

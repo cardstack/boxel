@@ -5,7 +5,7 @@ interface FormattingTestCase {
   name: string;
   input: string;
   expected: string;
-  description: string;
+  cardDescription: string;
 }
 
 /**
@@ -163,7 +163,7 @@ export interface ErrorTestCase {
   name: string;
   input: string;
   expectedError: string;
-  description: string;
+  cardDescription: string;
 }
 
 /**
@@ -248,7 +248,7 @@ export class PrettierTestUtils {
         name: `concurrent-test-${i}`,
         input: `import{CardDef}from'somewhere${i}';export class Test${i} extends CardDef{@field name=contains(StringField);}`,
         expected: `import { CardDef } from 'somewhere${i}';\n\nexport class Test${i} extends CardDef {\n  @field name = contains(StringField);\n}`,
-        description: `Concurrent test case ${i}`,
+        cardDescription: `Concurrent test case ${i}`,
       });
     }
 
@@ -265,20 +265,20 @@ export class PrettierTestUtils {
         input:
           'import { CardDef } from "somewhere";\nexport class Test extends CardDef {\n  @field }{ invalid\n}',
         expectedError: 'SyntaxError',
-        description: 'Test handling of invalid syntax',
+        cardDescription: 'Test handling of invalid syntax',
       },
       {
         name: 'malformed-template',
         input: '<template>\n  <div>\n    <span>unclosed\n  </div>\n</template>',
         expectedError: 'TemplateError',
-        description: 'Test handling of malformed template',
+        cardDescription: 'Test handling of malformed template',
       },
       {
         name: 'missing-imports',
         input:
           'export class Test extends CardDef {\n  @field name = contains(StringField);\n}',
         expectedError: 'ReferenceError',
-        description: 'Test handling of missing imports',
+        cardDescription: 'Test handling of missing imports',
       },
     ];
   }
@@ -335,7 +335,7 @@ export class MyCard extends CardDef {
 export function createConcurrentTestData(count: number = 5): Array<{
   source: string;
   filename: string;
-  description: string;
+  cardDescription: string;
   expectedOutput: string;
 }> {
   const testData = [];
@@ -356,7 +356,7 @@ export class MyCard${i} extends CardDef {
     testData.push({
       source,
       filename: `test-${i}.gts`,
-      description: `Concurrent test ${i}`,
+      cardDescription: `Concurrent test ${i}`,
       expectedOutput,
     });
   }

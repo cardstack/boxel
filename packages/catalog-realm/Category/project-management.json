@@ -11,9 +11,9 @@
       "name": "Project Management",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Project planning, task management, team collaboration, timeline tracking, and resource allocation tools.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Project planning, task management, team collaboration, timeline tracking, and resource allocation tools.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

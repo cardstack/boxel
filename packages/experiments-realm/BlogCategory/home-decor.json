@@ -7,9 +7,9 @@
       "slug": "home",
       "pillColor": "#FCF8A6",
       "cardInfo": {
-        "description": "Articles about the aesthetic side of home building and renovation",
-        "title": "Home decoration & interior design",
-        "thumbnailURL": null
+        "summary": "Articles about the aesthetic side of home building and renovation",
+        "name": "Home decoration & interior design",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

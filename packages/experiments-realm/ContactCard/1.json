@@ -30,8 +30,8 @@
           "Valerie Storm"
         ]
       },
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "aliases": {

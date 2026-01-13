@@ -10,9 +10,9 @@
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": "Boxel Default WIP",
-        "description": null,
-        "thumbnailURL": null
+        "name": "Boxel Default WIP",
+        "summary": null,
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

@@ -11,9 +11,9 @@
       "name": "Hobbies & Crafts",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "DIY projects, creative hobbies, craft supplies, skill development, and hobby community participation.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "DIY projects, creative hobbies, craft supplies, skill development, and hobby community participation.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

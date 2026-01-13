@@ -16,14 +16,14 @@
         }
       },
       "details": [
-        "Statement credits up to $90 per quarter for U.S. purchases made directly with Indeed. Enrollment required.‡"
+        "Statement credits up to $90 per quarter for U.S. purchases made directly with Indeed. Enrollment required.\u2021"
       ],
       "partner": "",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "minSpend": {
         "amount": 90,

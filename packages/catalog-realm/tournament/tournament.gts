@@ -36,7 +36,7 @@ export class Tournament extends CardDef {
   @field streamUrl = contains(UrlField);
   @field bracketImageUrl = contains(UrlField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Tournament) {
       return this.name ?? 'Untitled Tournament';
     },
@@ -1075,7 +1075,7 @@ export class Tournament extends CardDef {
                 'Untitled Tournament'
               }}</h4>
             {{#if @model.game}}
-              <div class='tournament-game-compact'>{{@model.game.title}}</div>
+              <div class='tournament-game-compact'>{{@model.game.cardTitle}}</div>
             {{/if}}
           </div>
           <div class='tournament-status-compact status-{{@model.status}}'>

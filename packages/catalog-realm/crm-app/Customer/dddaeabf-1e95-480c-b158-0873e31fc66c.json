@@ -38,8 +38,8 @@
           "value": "x.com"
         }
       ],
-      "description": "Manages all three Fitness First locations",
-      "thumbnailURL": "https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg"
+      "cardDescription": "Manages all three Fitness First locations",
+      "cardThumbnailURL": "https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg"
     },
     "relationships": {
       "crmApp": {

@@ -15,9 +15,9 @@
       "summary": "Manage and track your gaming platform connections, game libraries, and sync status across multiple platforms like Steam, Epic, and more.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/gaming-platform-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/gaming-platform-listing/thumbnail.png"
       }
     },
     "relationships": {

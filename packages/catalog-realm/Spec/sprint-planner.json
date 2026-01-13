@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "SprintPlanner",
-      "description": "Spec of Sprint Planner",
-      "thumbnailURL": null
+      "cardTitle": "SprintPlanner",
+      "cardDescription": "Spec of Sprint Planner",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

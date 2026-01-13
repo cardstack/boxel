@@ -175,9 +175,9 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
     >
       <:sidebar>
         <TitleGroup
-          @title={{or @model.title ''}}
-          @tagline={{or @model.description ''}}
-          @thumbnailURL={{or @model.thumbnailURL ''}}
+          @title={{or @model.cardTitle ''}}
+          @tagline={{or @model.cardDescription ''}}
+          @thumbnailURL={{or @model.cardThumbnailURL ''}}
           @icon={{@model.constructor.icon}}
           @element='header'
           aria-label='Sidebar Header'
@@ -502,9 +502,9 @@ export class BlogApp extends CardDef {
     <template>
       <BasicFitted
         class='fitted-blog'
-        @thumbnailURL={{@model.thumbnailURL}}
+        @thumbnailURL={{@model.cardThumbnailURL}}
         @iconComponent={{@model.constructor.icon}}
-        @primary={{@model.title}}
+        @primary={{@model.cardTitle}}
         @secondary={{@model.website}}
       />
       <style scoped>

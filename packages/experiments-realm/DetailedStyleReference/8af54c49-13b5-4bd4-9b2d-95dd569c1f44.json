@@ -11,9 +11,9 @@
       "version": null,
       "cardInfo": {
         "notes": null,
-        "title": "Winter Wonderland",
-        "description": "A crisp, magical theme inspired by snowy landscapes, ice crystals, and the serene beauty of winter",
-        "thumbnailURL": null
+        "name": "Winter Wonderland",
+        "summary": "A crisp, magical theme inspired by snowy landscapes, ice crystals, and the serene beauty of winter",
+        "cardThumbnailURL": null
       },
       "styleName": "Winter Wonderland",
       "visualDNA": "Winter evergreens meet icy blues with touches of winter berries. Deep forest greens anchor the interface, cool blues provide serene atmosphere, and soft pink-reds add warmth like holly berries in snow. The palette balances natural vitality with crisp winter elegance.",
@@ -113,7 +113,7 @@
         "sidebarAccentForeground": "#0F2942",
         "sidebarPrimaryForeground": "#FFFFFF"
       },
-      "motionLanguage": "### Animation Principles\n\n**Gentle Cascades:** Staggered animations feel like snowflakes falling in sequence\n\n**Refined Timing:** \n- Micro-interactions: 180ms for responsive feel\n- Component transitions: 320ms for smooth, noticeable changes\n- Page transitions: 420ms with content fade-in\n- Easing: cubic-bezier(0.32, 0.0, 0.18, 1) for elegant deceleration\n\n**Subtle Scale:** Hover states use transform: scale(1.015) for refined lift without exaggeration\n\n**Opacity Transitions:** Fade effects (opacity 0.85 → 1.0) add sophistication to state changes",
+      "motionLanguage": "### Animation Principles\n\n**Gentle Cascades:** Staggered animations feel like snowflakes falling in sequence\n\n**Refined Timing:** \n- Micro-interactions: 180ms for responsive feel\n- Component transitions: 320ms for smooth, noticeable changes\n- Page transitions: 420ms with content fade-in\n- Easing: cubic-bezier(0.32, 0.0, 0.18, 1) for elegant deceleration\n\n**Subtle Scale:** Hover states use transform: scale(1.015) for refined lift without exaggeration\n\n**Opacity Transitions:** Fade effects (opacity 0.85 \u2192 1.0) add sophistication to state changes",
       "technicalSpecs": "### Implementation Details\n\n**Breakpoints:**\n- Mobile: 0-640px\n- Tablet: 641-1024px\n- Desktop: 1025px+\n\n**Accessibility:**\n- WCAG AA minimum contrast ratios\n- Focus indicators on all interactive elements\n- Keyboard navigation support\n- Screen reader optimized labels\n\n**Performance:**\n- Use CSS transforms for animations\n- Lazy load images below fold\n- Optimize font loading with font-display: swap",
       "wallpaperImages": [],
       "compositionRules": "## Layout Principles\n\n**Strategic Spacing:** 1.5rem minimum between major sections creates clear visual separation\n\n**Golden Ratio Layout:** Content width follows 1.618 ratio for natural, balanced compositions\n\n**Asymmetric Harmony:** Intentional asymmetry creates visual interest while maintaining balance\n\n**Elevation System:** 5-tier shadow system (2xs, xs, sm, md, lg, xl, 2xl) for consistent depth\n\n**Responsive Grid:** \n- Desktop: 12-column with 32px gutters\n- Tablet: 8-column with 24px gutters  \n- Mobile: 4-column with 16px gutters\n\n**Generous Margins:** 2rem minimum page margins on mobile, 4rem on desktop",

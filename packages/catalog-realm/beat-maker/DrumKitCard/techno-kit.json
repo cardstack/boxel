@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "kitName": "Techno Kit",
-      "description": "Industrial driving sounds with hard distortion and aggressive filtering",
+      "cardDescription": "Industrial driving sounds with hard distortion and aggressive filtering",
       "category": "Techno",
       "creator": "Beat Maker Studio",
       "kit": {
@@ -15,7 +15,7 @@
         "clapParams": "{\"type\": \"techno\", \"frequency\": 2200, \"decay\": 0.1, \"amplitude\": 0.8, \"shape\": 3, \"resonance\": 6}",
         "crashParams": "{\"type\": \"techno\", \"frequency\": 4500, \"decay\": 0.7, \"amplitude\": 0.5, \"shape\": 1, \"resonance\": 3}"
       },
-      "title": "Techno Kit"
+      "cardTitle": "Techno Kit"
     },
     "relationships": {},
     "meta": {

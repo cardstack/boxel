@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "SprintTask",
-      "description": "Spec of Sprint Task",
-      "thumbnailURL": null
+      "cardTitle": "SprintTask",
+      "cardDescription": "Spec of Sprint Task",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

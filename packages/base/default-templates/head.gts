@@ -9,16 +9,16 @@ export default class DefaultHeadTemplate extends GlimmerComponent<{
 }> {
   get title() {
     return (
-      this.args.model?.title ?? this.args.cardOrField.displayName ?? 'Card'
+      this.args.model?.cardTitle ?? this.args.cardOrField.displayName ?? 'Card'
     );
   }
 
   get description(): string | undefined {
-    return this.args.model?.description;
+    return this.args.model?.cardDescription;
   }
 
   get image(): string | undefined {
-    return this.args.model?.thumbnailURL;
+    return this.args.model?.cardThumbnailURL;
   }
 
   <template>

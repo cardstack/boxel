@@ -2,14 +2,14 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Science Class",
+      "cardTitle": "Science Class",
       "dayOfWeek": "Tuesday",
       "startTime": "10:15 AM",
       "endTime": "11:15 AM",
       "location": "Room 102",
-      "description": "Physics and chemistry experiments. Lab coat required.",
+      "cardDescription": "Physics and chemistry experiments. Lab coat required.",
       "color": "#27ae60",
-      "thumbnailURL": null
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

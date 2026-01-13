@@ -34,7 +34,7 @@ export class TodoItem extends FieldDef {
     },
   });
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: TodoItem) {
       return this.text || 'New Todo';
     },
@@ -791,7 +791,7 @@ class EmbeddedTemplate extends Component<typeof TodoMvc> {
   <template>
     <div class='embed-container'>
       <div class='todo-summary'>
-        <h2>{{if @model.title @model.title 'Todo List'}}</h2>
+        <h2>{{if @model.cardTitle @model.cardTitle 'Todo List'}}</h2>
         <div class='stats'>
           <div class='stat-item'>
             <div class='stat-value'>{{this.activeTodoCount}}</div>
@@ -867,13 +867,13 @@ export class TodoMvc extends CardDef {
     },
   });
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: TodoMvc) {
       return 'TodoMVC in Boxel';
     },
   });
 
-  @field description = contains(StringField, {
+  @field cardDescription = contains(StringField, {
     computeVia: function (this: TodoMvc) {
       return 'A feature-complete implementation using Boxel architecture';
     },

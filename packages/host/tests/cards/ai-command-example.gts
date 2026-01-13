@@ -64,7 +64,7 @@ export class AiCommandExample extends CardDef {
       );
       let weatherSkill = new Skill({
         name: 'Weather Skill',
-        description: 'A skill to get weather information',
+        cardDescription: 'A skill to get weather information',
         instructions:
           'Use the command to ask for the weather in a specific location',
         commands: [

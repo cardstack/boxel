@@ -535,7 +535,7 @@ export class ProductRotator extends CardDef {
   static displayName = 'Product Rotator';
   static icon = PackageIcon;
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: ProductRotator) {
       return 'Product Rotator';
     },

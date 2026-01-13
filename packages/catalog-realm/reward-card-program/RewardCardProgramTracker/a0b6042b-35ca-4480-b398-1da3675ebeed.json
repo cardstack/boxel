@@ -11,9 +11,9 @@
       "notes": null,
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "trackingYear": "2025",
       "cardholderName": "David Liu",

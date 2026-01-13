@@ -10,12 +10,12 @@
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "bonusType": "points",
-      "description": "Earn 60,000 Membership Rewards points after you spend $4,000 in purchases within the first 6 months.",
+      "cardDescription": "Earn 60,000 Membership Rewards points after you spend $4,000 in purchases within the first 6 months.",
       "pointsAmount": 60000,
       "bonusCurrency": "Membership Rewards",
       "spendWindowDays": 180,

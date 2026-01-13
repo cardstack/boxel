@@ -10,9 +10,9 @@
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "colorWheel": "rgb(68, 255, 0)",
       "imageAvatar": {
@@ -47,7 +47,7 @@
       "playgroundAudio": {
         "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
         "liked": false,
-        "title": "Electronic Symphony",
+        "cardTitle": "Electronic Symphony",
         "artist": "SoundHelix",
         "loopEnd": null,
         "trimEnd": null,
