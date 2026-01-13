@@ -68,6 +68,11 @@ if (!REALM_SERVER_MATRIX_USERNAME) {
   process.exit(-1);
 }
 
+const SUBMISSION_BOT_MATRIX_USERNAME =
+  process.env.SUBMISSION_BOT_MATRIX_USERNAME;
+const SUBMISSION_BOT_MATRIX_PASSWORD =
+  process.env.SUBMISSION_BOT_MATRIX_PASSWORD;
+
 const MATRIX_REGISTRATION_SHARED_SECRET =
   process.env.MATRIX_REGISTRATION_SHARED_SECRET;
 
@@ -271,6 +276,10 @@ const getIndexHTML = async () => {
         queue,
         realmServerMatrixClient,
         realmServerURL: serverURL,
+        submissionBotMatrix: {
+          username: SUBMISSION_BOT_MATRIX_USERNAME ?? 'submission_bot',
+          password: SUBMISSION_BOT_MATRIX_PASSWORD ?? 'password',
+        },
         definitionLookup,
       },
       {

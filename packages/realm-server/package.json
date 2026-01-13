@@ -14,6 +14,7 @@
     "@cardstack/runtime-common": "workspace:*",
     "@koa/cors": "catalog:",
     "@koa/router": "catalog:",
+    "@octokit/webhooks": "^14.2.0",
     "@sentry/node": "catalog:",
     "@types/flat": "catalog:",
     "@types/fs-extra": "catalog:",

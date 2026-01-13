@@ -448,6 +448,8 @@ jobs:
             "prerender-proxy-test.ts",
             "remote-prerenderer-test.ts",
             "queue-test.ts",
+            "submissions-branch-naming-test.ts",
+            "submissions-test.ts",
             "realm-endpoints/dependencies-test.ts",
             "realm-endpoints/directory-test.ts",
             "realm-endpoints/info-test.ts",

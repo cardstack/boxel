@@ -178,6 +178,7 @@ export * from './fetcher';
 export * from './scoped-css';
 export * from './html-utils';
 export * from './utils';
+export * from './github-webhook';
 export * from './authorization-middleware';
 export * from './resource-types';
 export * from './query';

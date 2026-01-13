@@ -39,6 +39,7 @@ import {
   type QueueRunner,
   type Definition,
   type Prerenderer,
+  type SubmissionBotMatrixConfig,
   CachingDefinitionLookup,
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
@@ -400,6 +401,7 @@ export async function createRealm({
   publisher,
   dbAdapter,
   matrixConfig = testMatrix,
+  submissionBotMatrix,
   withWorker,
   enableFileWatcher = false,
 }: {
@@ -410,6 +412,7 @@ export async function createRealm({
   permissions?: RealmPermissions;
   virtualNetwork: VirtualNetwork;
   matrixConfig?: MatrixConfig;
+  submissionBotMatrix?: SubmissionBotMatrixConfig;
   publisher: QueuePublisher;
   runner?: QueueRunner;
   dbAdapter: PgAdapter;
@@ -464,6 +467,7 @@ export async function createRealm({
     queue: publisher,
     realmServerMatrixClient,
     realmServerURL: new URL(new URL(realmURL).origin).href,
+    submissionBotMatrix,
     definitionLookup,
   });
   if (worker) {
@@ -579,6 +583,7 @@ export async function runTestRealmServer({
   dbAdapter,
   matrixConfig,
   matrixURL,
+  submissionBotMatrix,
   permissions = { '*': ['read'] },
   enableFileWatcher = false,
   domainsForPublishedRealms = {
@@ -597,6 +602,7 @@ export async function runTestRealmServer({
   dbAdapter: PgAdapter;
   matrixURL: URL;
   matrixConfig?: MatrixConfig;
+  submissionBotMatrix?: SubmissionBotMatrixConfig;
   enableFileWatcher?: boolean;
   domainsForPublishedRealms?: {
     boxelSpace?: string;
@@ -630,6 +636,7 @@ export async function runTestRealmServer({
     permissions,
     virtualNetwork,
     matrixConfig,
+    submissionBotMatrix,
     publisher,
     dbAdapter,
     enableFileWatcher,
@@ -1181,6 +1188,7 @@ export function setupPermissionedRealm(
     subscribeToRealmEvents = false,
     mode = 'beforeEach',
     published = false,
+    submissionBotMatrix,
   }: {
     permissions: RealmPermissions;
     realmURL?: URL;
@@ -1197,6 +1205,7 @@ export function setupPermissionedRealm(
     subscribeToRealmEvents?: boolean;
     mode?: 'beforeEach' | 'before';
     published?: boolean;
+    submissionBotMatrix?: SubmissionBotMatrixConfig;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -1261,6 +1270,7 @@ export function setupPermissionedRealm(
         matrixURL,
         fileSystem,
         enableFileWatcher: subscribeToRealmEvents,
+        submissionBotMatrix,
       });
 
       let request = supertest(testRealmServer.testRealmHttpServer);

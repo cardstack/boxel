@@ -19,6 +19,8 @@
     "@eslint/js": "catalog:",
     "@glint/template": "1.3.0",
     "@lukeed/uuid": "catalog:",
+    "@octokit/webhooks": "^14.2.0",
+    "@octokit/webhooks-types": "^7.6.1",
     "@types/babel__core": "catalog:",
     "@types/babel__generator": "catalog:",
     "@types/babel__traverse": "catalog:",

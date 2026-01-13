@@ -66,7 +66,7 @@ NODE_ENV=development \
   ${START_CATALOG:+--path="${CATALOG_REALM_PATH}"} \
   ${START_CATALOG:+--username='catalog_realm'} \
   ${START_CATALOG:+--fromUrl="${CATALOG_REALM_URL}"} \
-  ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"} \
+  ${START_CATALOG:+--toUrl="${DEFAULT_CATALOG_REALM_URL}"} \
   \
   --path='../skills-realm/contents' \
   --username='skills_realm' \

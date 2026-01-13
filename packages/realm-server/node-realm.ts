@@ -39,6 +39,7 @@ import type {
   UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import { Webhooks } from '@octokit/webhooks';
 import { createJWT, verifyJWT } from './jwt';
 
 const realmEventsLog = logger('realm:events');
@@ -264,6 +265,22 @@ export class NodeAdapter implements RealmAdapter {
         );
       }
     }
+  }
+
+  async verifyGitHubWebhookSignature(
+    request: Request,
+    secret: string,
+  ): Promise<boolean> {
+    let signatureHeader = request.headers.get('X-Hub-Signature-256');
+    if (!signatureHeader) {
+      return false;
+    }
+
+    let payload = Buffer.from(await request.clone().arrayBuffer()).toString(
+      'utf8',
+    );
+    let webhooks = new Webhooks({ secret });
+    return webhooks.verify(payload, signatureHeader);
   }
 
   private async waitForSessionRooms(

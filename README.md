@@ -98,8 +98,29 @@ You can also use `start:development` if you want the functionality of `start:all
 
 Optional environment variables for `start:development`:
 
-- `USE_EXTERNAL_CATALOG=1` to load `/catalog` from `packages/catalog/contents` (cloned from the `boxel-catalog` repo). 
+- `USE_EXTERNAL_CATALOG=1` loads `/catalog` from `packages/catalog/contents` (cloned from the `boxel-catalog` repo).
+- Use `CATALOG_ENV=testing USE_EXTERNAL_CATALOG=1 pnpm start:all` to run against `boxel-catalog-testing` without manually cloning.
 
+#### Testing catalog submissions locally
+
+- Example with hardcoded values:
+  ```bash
+  RESOLVED_CATALOG_REALM_URL="https://82610557c687.ngrok-free.app/catalog/" \
+  CATALOG_WEBHOOK_SECRET=some-secret \
+  CATALOG_ENV=testing \
+  USE_EXTERNAL_CATALOG=1 \
+  pnpm start:all
+  ```
+- Start ngrok on the realm server port (default 4201): `ngrok http 4201`
+- Validate ngrok is set up with the realm server:
+  ```bash
+  curl --location '<RESOLVED_CATALOG_REALM_URL>_readiness-check' \
+  --header 'Accept: application/vnd.api+json'
+  ```
+- Configure the GitHub webhook URL  
+  - `Payload URL = <RESOLVED_CATALOG_REALM_URL>/submissions` 
+  - `Secret = <CATALOG_WEBHOOK_SECRET>`
+  - `Content-type = application/json`
 ### Card Pre-rendering
 
 Boxel supports server-side rendering of cards via a lightweight prerender service and an optional manager that coordinates multiple services.

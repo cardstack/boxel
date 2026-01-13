@@ -115,6 +115,11 @@ import { RealmIndexQueryEngine } from './realm-index-query-engine';
 import { RealmIndexUpdater } from './realm-index-updater';
 import serialize from './file-serializer';
 import { md5 } from 'super-fast-md5';
+import {
+  handleGitHubWebhookEvent,
+  parseGitHubWebhookEvent,
+  type GitHubWebhookHandledResult,
+} from './github-webhook-handler';
 
 import type { Utils } from './matrix-backend-authentication';
 import { MatrixBackendAuthentication } from './matrix-backend-authentication';
@@ -340,6 +345,11 @@ export interface RealmAdapter {
     dbAdapter: DBAdapter,
   ): Promise<void>;
 
+  verifyGitHubWebhookSignature?(
+    request: Request,
+    secret: string,
+  ): Promise<boolean>;
+
   // optional, set this to override _lint endpoint behavior in tests
   lintStub?(
     request: Request,
@@ -364,11 +374,17 @@ export interface MatrixConfig {
   username: string;
 }
 
+export interface SubmissionBotMatrixConfig {
+  username: string;
+  password?: string;
+}
+
 export type RequestContext = { realm: Realm; permissions: RealmPermissions };
 
 export class Realm {
   #startedUp = new Deferred<void>();
   #matrixClient: MatrixClient;
+  #submissionBotMatrixClient: MatrixClient | undefined;
   #realmServerMatrixClient: MatrixClient;
   #realmServerURL: string;
   #realmIndexUpdater: RealmIndexUpdater;
@@ -398,6 +414,10 @@ export class Realm {
     [
       SupportedMimeType.JSONAPI,
       new Map([['GET' as Method, new Map([['/_readiness-check', true]])]]),
+    ],
+    [
+      SupportedMimeType.All,
+      new Map([['POST' as Method, new Map([['/_submissions', true]])]]),
     ],
   ]);
   #dbAdapter: DBAdapter;
@@ -429,6 +449,7 @@ export class Realm {
       virtualNetwork,
       realmServerMatrixClient,
       realmServerURL,
+      submissionBotMatrix,
       definitionLookup,
     }: {
       url: string;
@@ -440,6 +461,7 @@ export class Realm {
       virtualNetwork: VirtualNetwork;
       realmServerMatrixClient: MatrixClient;
       realmServerURL: string;
+      submissionBotMatrix?: SubmissionBotMatrixConfig;
       definitionLookup: DefinitionLookup;
     },
     opts?: Options,
@@ -464,6 +486,13 @@ export class Realm {
       username,
       seed: secretSeed,
     });
+    if (submissionBotMatrix?.username) {
+      this.#submissionBotMatrixClient = new MatrixClient({
+        matrixURL,
+        username: submissionBotMatrix.username,
+        password: submissionBotMatrix.password,
+      });
+    }
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
     this.#copiedFromRealm = opts?.copiedFromRealm;
     let owner: string | undefined;
@@ -563,6 +592,7 @@ export class Realm {
         SupportedMimeType.CardDependencies,
         this.getCardDependencies.bind(this),
       )
+      .post('/_submissions', SupportedMimeType.All, this.submissions.bind(this))
       .post(
         '/_session',
         SupportedMimeType.Session,
@@ -1381,6 +1411,172 @@ export class Realm {
     );
 
     return await matrixBackendAuthentication.createSession(request);
+  }
+
+  private async submissions(
+    request: Request,
+    _requestContext: RequestContext,
+  ): Promise<Response> {
+    console.log('Hit /_submissions:', request.method, request.url);
+    let secret = this.getCatalogWebhookSecret();
+    if (!secret) {
+      return new Response(
+        JSON.stringify({ message: 'Webhook secret not configured' }),
+        {
+          status: 500,
+          headers: { 'content-type': SupportedMimeType.JSON },
+        },
+      );
+    }
+
+    if (!this.#adapter.verifyGitHubWebhookSignature) {
+      return new Response(
+        JSON.stringify({ message: 'Webhook verification unavailable' }),
+        {
+          status: 500,
+          headers: { 'content-type': SupportedMimeType.JSON },
+        },
+      );
+    }
+
+    let isValid = await this.#adapter.verifyGitHubWebhookSignature(
+      request,
+      secret,
+    );
+    if (!isValid) {
+      return new Response(JSON.stringify({ message: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'content-type': SupportedMimeType.JSON },
+      });
+    }
+
+    let rawEventType = request.headers.get('X-GitHub-Event');
+    if (!rawEventType) {
+      return new Response(
+        JSON.stringify({ message: 'Missing webhook event header' }),
+        {
+          status: 400,
+          headers: { 'content-type': SupportedMimeType.JSON },
+        },
+      );
+    }
+
+    let submissionBody: unknown;
+    try {
+      submissionBody = await request.json();
+    } catch (error) {
+      console.error('Failed to parse submission body as JSON:', error);
+      return new Response(JSON.stringify({ message: 'Invalid JSON body' }), {
+        status: 400,
+        headers: { 'content-type': SupportedMimeType.JSON },
+      });
+    }
+    console.log('Submission body:', submissionBody);
+
+    let branchName: string | undefined;
+    let matrixRoomId: string | undefined;
+    let matrixEventType: string | undefined;
+    let matrixEventContent:
+      | GitHubWebhookHandledResult['matrix']['eventContent']
+      | undefined;
+    let eventType: string | undefined;
+
+    try {
+      let parsedEvent = parseGitHubWebhookEvent({
+        eventType: rawEventType,
+        payload: submissionBody,
+      });
+      let result = await handleGitHubWebhookEvent({
+        secret,
+        deliveryId: request.headers.get('X-GitHub-Delivery') ?? uuidV4(),
+        event: parsedEvent,
+      });
+      branchName = result.github.branchName;
+      eventType = result.github.eventType;
+      matrixRoomId = result.matrix.roomId;
+      matrixEventType = result.matrix.eventType;
+      matrixEventContent = result.matrix.eventContent;
+    } catch (error) {
+      return new Response(
+        JSON.stringify({
+          message: 'Unsupported webhook event',
+          eventType: rawEventType,
+        }),
+        {
+          status: 400,
+          headers: { 'content-type': SupportedMimeType.JSON },
+        },
+      );
+    }
+
+    if (!matrixRoomId || !matrixEventType || !matrixEventContent) {
+      return new Response(
+        JSON.stringify({
+          message: 'Unable to derive Matrix event for webhook',
+          eventType,
+          branchName,
+        }),
+        {
+          status: 500,
+          headers: { 'content-type': SupportedMimeType.JSON },
+        },
+      );
+    }
+
+    if (!this.#submissionBotMatrixClient) {
+      return new Response(
+        JSON.stringify({
+          message: 'Submission bot matrix client is not configured',
+          eventType,
+          branchName,
+        }),
+        {
+          status: 500,
+          headers: { 'content-type': SupportedMimeType.JSON },
+        },
+      );
+    }
+
+    try {
+      if (!(await this.#submissionBotMatrixClient.isTokenValid())) {
+        await this.#submissionBotMatrixClient.login();
+      }
+      await this.#submissionBotMatrixClient.sendEvent(
+        matrixRoomId,
+        matrixEventType,
+        matrixEventContent,
+      );
+    } catch (error) {
+      return new Response(
+        JSON.stringify({
+          message: 'Failed to send Matrix event',
+          eventType,
+          branchName,
+          matrixRoomId,
+        }),
+        {
+          status: 500,
+          headers: { 'content-type': SupportedMimeType.JSON },
+        },
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        message: 'OK',
+        eventType,
+        branchName,
+        matrixRoomId,
+      }),
+      {
+        headers: { 'content-type': SupportedMimeType.JSON },
+      },
+    );
+  }
+
+  private getCatalogWebhookSecret(): string | undefined {
+    let env = (globalThis as any).process?.env;
+    let secret = env?.CATALOG_WEBHOOK_SECRET;
+    return typeof secret === 'string' && secret.length > 0 ? secret : undefined;
   }
 
   private async internalHandle(

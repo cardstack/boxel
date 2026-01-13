@@ -130,6 +130,8 @@ import './prerender-server-test';
 import './prerender-manager-test';
 import './prerender-proxy-test';
 import './queue-test';
+import './submissions-branch-naming-test';
+import './submissions-test';
 import './realm-endpoints-test';
 import './realm-endpoints/dependencies-test';
 import './realm-endpoints/directory-test';

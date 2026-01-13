@@ -24,6 +24,8 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
+  APP_BOXEL_PR_EVENT_TYPE,
+  APP_BOXEL_PR_REVIEW_EVENT_TYPE,
   CodeRef,
   APP_BOXEL_LLM_MODE,
   type LLMMode,
@@ -426,6 +428,47 @@ export interface FileRemovedEventContent {
   removed: string;
 }
 
+export interface PRReviewEvent extends BaseMatrixEvent {
+  type: typeof APP_BOXEL_PR_REVIEW_EVENT_TYPE;
+  content: PRReviewEventContent;
+}
+
+export interface PRReviewEventContent {
+  action: 'submitted' | 'edited' | 'dismissed';
+  state: 'approved' | 'changes_requested' | 'commented';
+  pullRequest: {
+    number: number;
+    title?: string;
+    url?: string;
+    htmlUrl?: string;
+    author?: string;
+    branch?: string;
+    baseBranch?: string;
+    merged?: boolean;
+    state?: 'open' | 'closed';
+  };
+}
+
+export interface PREvent extends BaseMatrixEvent {
+  type: typeof APP_BOXEL_PR_EVENT_TYPE;
+  content: PREventContent;
+}
+
+export interface PREventContent {
+  action: 'opened' | 'closed' | 'reopened' | 'synchronize';
+  pullRequest: {
+    number: number;
+    title?: string;
+    url?: string;
+    htmlUrl?: string;
+    author?: string;
+    branch?: string;
+    baseBranch?: string;
+    merged?: boolean;
+    state?: 'open' | 'closed';
+  };
+}
+
 export interface StopGeneratingEvent extends BaseMatrixEvent {
   type: typeof APP_BOXEL_STOP_GENERATING_EVENT_TYPE;
 }
@@ -446,6 +489,8 @@ export type MatrixEvent =
   | LeaveEvent
   | LLMModeEvent
   | MessageEvent
+  | PREvent
+  | PRReviewEvent
   | RealmEvent
   | RealmServerEvent
   | RoomCreateEvent

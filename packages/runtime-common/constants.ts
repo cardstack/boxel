@@ -41,6 +41,7 @@ export const realmURL = Symbol.for('cardstack-realm-url');
 export const relativeTo = Symbol.for('cardstack-relative-to');
 
 export const aiBotUsername = 'aibot';
+export const submissionBotUsername = 'submission_bot';
 
 export const CardContextName = 'card-context';
 export const CardCrudFunctionsContextName = 'card-crud-functions-context';
