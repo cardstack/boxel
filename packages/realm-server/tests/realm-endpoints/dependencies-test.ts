@@ -4,12 +4,7 @@ import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
 import { SupportedMimeType } from '@cardstack/runtime-common';
 import type { Server } from 'http';
-import {
-  closeServer,
-  matrixURL,
-  setupBaseRealmServer,
-  setupPermissionedRealm,
-} from '../helpers';
+import { closeServer, setupPermissionedRealm } from '../helpers';
 
 module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
   let testRealm: Realm;
@@ -28,8 +23,6 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     testRealmHttpServer = server;
     request = req;
   }
-
-  setupBaseRealmServer(hooks, matrixURL);
 
   hooks.afterEach(async function () {
     await closeServer(testRealmHttpServer);
@@ -57,16 +50,20 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
 
     let targetUrl = `${testRealm.url}dependencies-card.gts`;
     let response = await request
-      .get(`/_dependencies?url=${encodeURIComponent(targetUrl)}`)
+      .get(`/_dependencies?url=${encodeURIComponent(targetUrl)}&type=module`)
       .set('Accept', SupportedMimeType.JSONAPI);
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
     assert.true(response.body.data.length > 0, 'returns at least one entry');
 
-    let entry = response.body.data[0];
+    let entry = response.body.data.find(
+      (candidate: any) => candidate.attributes?.entryType === 'module',
+    );
+    assert.ok(entry, 'returns module entry');
     assert.strictEqual(entry.id, targetUrl);
     assert.strictEqual(entry.attributes.canonicalUrl, targetUrl);
     assert.strictEqual(entry.attributes.realmUrl, testRealm.url);
+    assert.strictEqual(entry.attributes.entryType, 'module');
     assert.true(
       entry.attributes.dependencies.includes(
         'https://cardstack.com/base/string',

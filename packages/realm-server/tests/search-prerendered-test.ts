@@ -2,18 +2,18 @@ import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
-import { buildQueryParamValue } from '@cardstack/runtime-common';
-import type { Query } from '@cardstack/runtime-common/query';
+import { setupPermissionedRealm, createJWT } from './helpers';
 import {
-  setupBaseRealmServer,
-  setupPermissionedRealm,
-  matrixURL,
-  createJWT,
-} from './helpers';
+  buildQueryParamValue,
+  PRERENDERED_HTML_FORMATS,
+} from '@cardstack/runtime-common';
+import type { Query } from '@cardstack/runtime-common/query';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
+const missingPrerenderedHtmlFormatMessage = `Must include a 'prerenderedHtmlFormat' parameter with a value of ${PRERENDERED_HTML_FORMATS.join()} to use this endpoint`;
+
 module(basename(__filename), function () {
-  module('Realm-specific Endpoints | _search-prerendered', function (hooks) {
+  module('Realm-specific Endpoints | _search-prerendered', function () {
     let testRealm: Realm;
     let request: SuperTest<Test>;
     let searchPath: string;
@@ -56,8 +56,6 @@ module(basename(__filename), function () {
       }
       return `${searchPath}?${searchParams.toString()}`;
     }
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     module('GET request', function (_hooks) {
       module(
@@ -118,7 +116,7 @@ module(basename(__filename), function () {
 
             assert.ok(
               response.body.errors[0].message.includes(
-                "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded', 'fitted', 'atom', or 'head' to use this endpoint",
+                missingPrerenderedHtmlFormatMessage,
               ),
             );
           });
@@ -617,7 +615,7 @@ module(basename(__filename), function () {
             assert.strictEqual(response.status, 400, 'HTTP 400 status');
             assert.ok(
               response.body.errors[0].message.includes(
-                "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded', 'fitted', 'atom', or 'head' to use this endpoint",
+                missingPrerenderedHtmlFormatMessage,
               ),
             );
           });

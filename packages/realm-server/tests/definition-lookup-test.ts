@@ -7,8 +7,6 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
-  matrixURL,
-  setupBaseRealmServer,
   setupPermissionedRealms,
   createVirtualNetwork,
   testCreatePrerenderAuth,
@@ -76,6 +74,9 @@ module(basename(__filename), function () {
             },
           });
         },
+        async prerenderFileExtract() {
+          throw new Error('Not implemented in mock');
+        },
       };
       definitionLookup = new CachingDefinitionLookup(
         dbAdapter,
@@ -93,8 +94,6 @@ module(basename(__filename), function () {
         },
       });
     });
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealms(hooks, {
       realms: [

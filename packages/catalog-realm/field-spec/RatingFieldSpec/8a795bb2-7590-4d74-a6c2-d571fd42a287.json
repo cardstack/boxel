@@ -1,0 +1,41 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "RatingFieldSpec",
+        "module": "../rating-field-spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "RatingFieldSpec",
+        "module": "../rating-field-spec"
+      },
+      "title": "Rating Field Spec",
+      "readMe": null,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "specType": "card",
+      "standard": 4,
+      "description": null,
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -13,7 +13,6 @@ import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import {
   closeServer,
   createVirtualNetwork,
-  setupBaseRealmServer,
   setupDB,
   insertUser,
   matrixURL,
@@ -32,8 +31,6 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
     let testRealmHttpServer: Server;
 
     let ownerUserId = '@mango:localhost';
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     async function startInfoRealmServer({
       dbAdapter,

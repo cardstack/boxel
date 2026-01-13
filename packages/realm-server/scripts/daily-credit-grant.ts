@@ -3,26 +3,10 @@ import '../setup-logger'; // This should be first
 import { logger } from '@cardstack/runtime-common';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import * as Sentry from '@sentry/node';
+export { parseLowCreditThreshold } from '../lib/daily-credit-grant-config';
 
 const log = logger('daily-credit-grant');
 const DAILY_CREDIT_GRANT_JOB_TIMEOUT_SEC = 10 * 60;
-
-export function parseLowCreditThreshold(
-  rawThreshold = process.env.LOW_CREDIT_THRESHOLD,
-): number {
-  if (rawThreshold == null || rawThreshold === '') {
-    throw new Error(
-      'LOW_CREDIT_THRESHOLD must be set to run daily-credit-grant',
-    );
-  }
-  let lowCreditThreshold = Number(rawThreshold);
-  if (!Number.isInteger(lowCreditThreshold) || lowCreditThreshold < 0) {
-    throw new Error(
-      `LOW_CREDIT_THRESHOLD must be a non-negative integer. Received "${rawThreshold}".`,
-    );
-  }
-  return lowCreditThreshold;
-}
 
 export async function enqueueDailyCreditGrant({
   lowCreditThreshold,

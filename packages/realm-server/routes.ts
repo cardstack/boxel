@@ -41,6 +41,7 @@ import handleSearch from './handlers/handle-search';
 import handleSearchPrerendered from './handlers/handle-search-prerendered';
 import handleRealmInfo from './handlers/handle-realm-info';
 import { multiRealmAuthorization } from './middleware/multi-realm-authorization';
+import handleGitHubPRRequest from './handlers/handle-github-pr';
 import { buildCreatePrerenderAuth } from './prerender/auth';
 
 export type CreateRoutesArgs = {
@@ -163,6 +164,16 @@ export function createRoutes(args: CreateRoutesArgs) {
     }),
   );
   router.post(
+    '/_prerender-file-extract',
+    jwtMiddleware(args.realmSecretSeed),
+    handlePrerenderProxy({
+      kind: 'file-extract',
+      prerenderer: args.prerenderer,
+      dbAdapter: args.dbAdapter,
+      createPrerenderAuth,
+    }),
+  );
+  router.post(
     '/_publish-realm',
     jwtMiddleware(args.realmSecretSeed),
     handlePublishRealm(args),
@@ -219,6 +230,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_boxel-claimed-domains/:claimedDomainId',
     jwtMiddleware(args.realmSecretSeed),
     handleDeleteBoxelClaimedDomainRequest(args),
+  );
+  router.post(
+    '/_github-pr',
+    jwtMiddleware(args.realmSecretSeed),
+    handleGitHubPRRequest(args),
   );
 
   return router.routes();

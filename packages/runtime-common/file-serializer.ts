@@ -68,7 +68,7 @@ export default function serialize({
       definition,
       doc,
       relativeTo,
-      codeRefOpts,
+      codeRefOpts: metaCodeRefOpts,
       customFieldDefinitions,
     });
   }

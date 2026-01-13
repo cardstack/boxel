@@ -7,7 +7,6 @@ import { copySync, ensureDirSync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
 import type { QueuePublisher, QueueRunner } from '@cardstack/runtime-common';
 import {
-  setupBaseRealmServer,
   setupPermissionedRealm,
   runTestRealmServer,
   setupDB,
@@ -59,7 +58,6 @@ module(basename(__filename), function () {
         dbAdapter,
       };
     }
-    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.afterEach(async function () {
       await closeServer(testRealmHttpServer);

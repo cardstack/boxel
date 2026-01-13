@@ -1,3 +1,5 @@
+import 'ember-power-calendar/styles';
+
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -179,7 +181,7 @@ export default class DateRangePicker extends Component<Signature> {
         margin-top: auto;
       }
     </style>
-    {{! 
+    {{!
     Note: I don't think there is any reason why we can't implement scoped styles here unlike ember-power-select which uses wormholes
     but we do so for now to avoid the complexity of maintaining fidelity with the way the ember-power-calendar styles are implemented.
     We do so intentionally to

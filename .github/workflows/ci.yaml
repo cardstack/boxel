@@ -634,6 +634,10 @@ jobs:
       - boxel-ui-test
       - realm-server-test
     uses: ./.github/workflows/manual-deploy.yml
+    permissions:
+      contents: read
+      deployments: write
+      id-token: write
     secrets: inherit
     with:
       environment: "staging"

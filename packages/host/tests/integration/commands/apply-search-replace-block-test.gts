@@ -727,4 +727,53 @@ ${REPLACE_MARKER}`;
 }`,
     );
   });
+
+  test('it allows empty search and replace blocks on empty content', async function (assert) {
+    let commandService = getService('command-service');
+    let applyCommand = new ApplySearchReplaceBlockCommand(
+      commandService.commandContext,
+    );
+
+    const fileContent = '';
+    const codeBlock = `${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+${REPLACE_MARKER}`;
+
+    let result = await applyCommand.execute({
+      fileContent,
+      codeBlock,
+    });
+
+    assert.strictEqual(result.resultContent, '');
+  });
+
+  test('it rejects empty search blocks on non-empty content', async function (assert) {
+    let commandService = getService('command-service');
+    let applyCommand = new ApplySearchReplaceBlockCommand(
+      commandService.commandContext,
+    );
+
+    const fileContent = `export class Task extends CardDef {
+  static displayName = 'Task';
+}`;
+    const codeBlock = `${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+export class Task extends CardDef {
+  static displayName = 'Task v2';
+}
+${REPLACE_MARKER}`;
+
+    try {
+      await applyCommand.execute({
+        fileContent,
+        codeBlock,
+      });
+      assert.ok(false, 'Should have thrown an error for empty search block');
+    } catch (error: any) {
+      assert.ok(
+        error.message.includes('empty search pattern for non-empty file'),
+        'Error should mention empty search pattern for non-empty file',
+      );
+    }
+  });
 });

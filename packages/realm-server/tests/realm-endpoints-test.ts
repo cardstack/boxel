@@ -23,7 +23,6 @@ import {
   type QueueRunner,
 } from '@cardstack/runtime-common';
 import {
-  setupBaseRealmServer,
   setupPermissionedRealm,
   runTestRealmServer,
   setupDB,
@@ -100,8 +99,6 @@ module(basename(__filename), function () {
         dbAdapter,
       };
     }
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealm(hooks, {
       permissions: {
@@ -216,7 +213,6 @@ module(basename(__filename), function () {
         ),
         'content-type uses file meta mime type',
       );
-
       let json = response.body as LooseSingleCardDocument;
       assert.strictEqual(json.data.attributes?.name, 'person.gts');
       assert.deepEqual(json.data.meta?.adoptsFrom, {
@@ -1184,8 +1180,6 @@ module(basename(__filename), function () {
 
     let dir: DirResult;
 
-    setupBaseRealmServer(hooks, matrixURL);
-
     hooks.beforeEach(async function () {
       dir = dirSync();
     });
@@ -1682,8 +1676,6 @@ module(basename(__filename), function () {
     let request: SuperTest<Test>;
 
     let dir: DirResult;
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.beforeEach(async function () {
       dir = dirSync();

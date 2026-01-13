@@ -20,7 +20,6 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 
 import {
-  envSkillId,
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -155,6 +154,20 @@ export class DoThing extends Command {
               }),
             ],
           }),
+          'Skill/boxel-environment.json': new Skill({
+            title: 'Boxel Environment',
+            description: 'Test environment skill',
+            instructions: 'Test skill card for environment commands',
+            commands: [
+              new CommandField({
+                codeRef: {
+                  module: `${testRealmURL}test-command.gts`,
+                  name: 'DoThing',
+                },
+                requiresApproval: false,
+              }),
+            ],
+          }),
         },
       });
       let matrixService = getService('matrix-service') as any;
@@ -168,7 +181,7 @@ export class DoThing extends Command {
       let command = new UpdateRoomSkillsCommand(
         getService('command-service').commandContext,
       );
-      let skillCardId = envSkillId;
+      let skillCardId = `${testRealmURL}Skill/boxel-environment`;
       await command.execute({
         roomId: matrixRoomId,
         skillCardIdsToActivate: [skillCardId],
@@ -211,7 +224,7 @@ export class DoThing extends Command {
       let command = new UpdateRoomSkillsCommand(
         getService('command-service').commandContext,
       );
-      let skillCardId = envSkillId;
+      let skillCardId = `${testRealmURL}Skill/boxel-environment`;
       mockMatrixUtils.setRoomState(
         matrixRoomId,
         APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -259,7 +272,7 @@ export class DoThing extends Command {
       let command = new UpdateRoomSkillsCommand(
         getService('command-service').commandContext,
       );
-      let skillCardId = envSkillId;
+      let skillCardId = `${testRealmURL}Skill/boxel-environment`;
       await command.execute({
         roomId: matrixRoomId,
         skillCardIdsToActivate: [skillCardId],

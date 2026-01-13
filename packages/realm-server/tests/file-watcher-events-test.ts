@@ -6,12 +6,9 @@ import type { DirResult } from 'tmp';
 import { removeSync, writeJSONSync, writeFileSync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
 import {
-  setupBaseRealmServer,
   setupPermissionedRealm,
   setupMatrixRoom,
-  matrixURL,
   waitForRealmEvent,
-  waitUntil,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -52,7 +49,6 @@ module(basename(__filename), function () {
         dbAdapter,
       };
     }
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealm(hooks, {
       permissions: {
@@ -325,11 +321,8 @@ export class Person extends CardDef {
         },
       });
 
-      await waitUntil(
-        async () =>
-          (await getMessagesSince(realmEventTimestampStart)).length >= 2,
-        { timeout: 5000, timeoutMessage: 'file watcher events did not arrive' },
-      );
+      await waitForFileChange('updated', basename(personFilePath));
+      await waitForFileChange('updated', basename(louisFilePath));
       await testRealm.flushUpdateEvents();
 
       let updatedSourceResponse = await request

@@ -1,0 +1,44 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "DateRangeFieldSpec",
+        "module": "../date-range-field-spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "DateRangeFieldSpec",
+        "module": "../date-range-field-spec"
+      },
+      "title": "Date Range Field Spec",
+      "readMe": null,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "specType": "card",
+      "standard": {
+        "end": "2026-02-11",
+        "start": "2026-01-08"
+      },
+      "description": null,
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
