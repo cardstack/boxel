@@ -1,0 +1,43 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "DayFieldSpec",
+        "module": "../day-field-spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "DayFieldSpec",
+        "module": "../day-field-spec"
+      },
+      "title": "Day Field Spec",
+      "readMe": null,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "specType": "card",
+      "standard": {
+        "value": 2
+      },
+      "description": null,
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
