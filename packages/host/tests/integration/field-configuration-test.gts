@@ -6,6 +6,7 @@ import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
 import type { SingleCardDocument } from '@cardstack/runtime-common';
+import type { LoadDocumentOptions } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type {
@@ -59,8 +60,8 @@ class DeferredLinkStore implements CardStore {
 
   makeTracked(_id: string) {}
 
-  async loadDocument(url: string) {
-    let normalized = this.normalize(url);
+  async loadDocument(_url: string, _opts?: LoadDocumentOptions) {
+    let normalized = this.normalize(_url);
     let ready = this.readyDocs.get(normalized);
     if (ready) {
       return ready;

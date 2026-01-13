@@ -13,6 +13,7 @@ import {
   type ErrorEntry,
   type CardErrorJSONAPI,
   type CardError,
+  type LoadDocumentOptions,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
 
@@ -160,13 +161,13 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.setItem(id, instance, true);
   }
 
-  async loadDocument(url: string) {
+  async loadDocument(url: string, opts?: LoadDocumentOptions) {
     let promise = this.#docsInFlight.get(url);
     if (promise) {
       this.trackLoad(promise);
       return await promise;
     }
-    promise = loadDocument(this.#fetch, url);
+    promise = loadDocument(this.#fetch, url, opts);
     this.#docsInFlight.set(url, promise);
     this.trackLoad(promise);
     try {
