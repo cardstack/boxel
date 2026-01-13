@@ -11,6 +11,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import type RenderFileExtractRoute from '@cardstack/host/routes/render/file-extract';
+import type RenderStoreService from '@cardstack/host/services/render-store';
 
 import {
   setupLocalIndexing,
@@ -225,5 +226,31 @@ module('Acceptance | prerender | file-extract', function (hooks) {
     let result = await captureFileExtractResult('error');
     assert.strictEqual(result.status, 'error');
     assert.ok(result.error, 'includes a render error');
+  });
+
+  test('blocks saves while file-extract is active', async function (assert) {
+    let renderStore = this.owner.lookup(
+      'service:render-store',
+    ) as RenderStoreService;
+    let savedUrls: string[] = [];
+    renderStore._onSave((url) => savedUrls.push(url.href));
+
+    await visit(renderPath(fileURL('sample.txt'), { fileExtract: true }));
+
+    let patchResult = await renderStore.patch(
+      fileURL('ModelConfiguration/test-gpt'),
+      {
+        attributes: { modelId: 'openai/gpt-5' },
+      },
+    );
+
+    assert.strictEqual(
+      patchResult,
+      undefined,
+      'patch is ignored during file-extract render context',
+    );
+    assert.deepEqual(savedUrls, [], 'does not emit save events');
+
+    renderStore._unregisterSaveSubscriber();
   });
 });
