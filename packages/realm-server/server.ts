@@ -75,8 +75,6 @@ export class RealmServer {
   private serverURL: URL;
   private matrixRegistrationSecret: string | undefined;
   private promiseForIndexHTML: Promise<string> | undefined;
-  private promiseForBoxelVariablesCSS: Promise<string | null> | undefined;
-  private promiseForBoxelGlobalCSS: Promise<string | null> | undefined;
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
