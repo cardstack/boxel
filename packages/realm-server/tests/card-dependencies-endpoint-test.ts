@@ -44,7 +44,7 @@ module(basename(__filename), function () {
 
           test('serves the request', async function (assert) {
             let response = await request
-              .get(`/_dependencies?url=${testRealm.url}person`)
+              .get(`/_card-dependencies?url=${testRealm.url}person`)
               .set('Accept', 'application/json')
               .set(
                 'Authorization',
@@ -73,7 +73,7 @@ module(basename(__filename), function () {
 
           test('serves the request with a .json extension', async function (assert) {
             let response = await request
-              .get(`/_dependencies?url=${testRealm.url}person.json`)
+              .get(`/_card-dependencies?url=${testRealm.url}person.json`)
               .set('Accept', 'application/json')
               .set(
                 'Authorization',
@@ -89,7 +89,7 @@ module(basename(__filename), function () {
 
           test('gives 404 for a non-existent card', async function (assert) {
             let response = await request
-              .get(`/_dependencies?url=${testRealm.url}non-existent-card`)
+              .get(`/_card-dependencies?url=${testRealm.url}non-existent-card`)
               .set('Accept', 'application/json');
 
             assert.strictEqual(response.status, 404, 'HTTP 404 status');
@@ -106,7 +106,7 @@ module(basename(__filename), function () {
 
           test('401 with invalid JWT', async function (assert) {
             let response = await request
-              .get(`/_dependencies?url=${testRealm.url}person`)
+              .get(`/_card-dependencies?url=${testRealm.url}person`)
               .set('Accept', 'application/json')
               .set('Authorization', `Bearer invalid-token`);
 
@@ -115,7 +115,7 @@ module(basename(__filename), function () {
 
           test('401 without a JWT', async function (assert) {
             let response = await request
-              .get(`/_dependencies?url=${testRealm.url}person`)
+              .get(`/_card-dependencies?url=${testRealm.url}person`)
               .set('Accept', 'application/json'); // no Authorization header
 
             assert.strictEqual(response.status, 401, 'HTTP 401 status');
@@ -123,7 +123,7 @@ module(basename(__filename), function () {
 
           test('403 without permission', async function (assert) {
             let response = await request
-              .get(`/_dependencies?url=${testRealm.url}person`)
+              .get(`/_card-dependencies?url=${testRealm.url}person`)
               .set('Accept', 'application/json')
               .set(
                 'Authorization',
@@ -135,7 +135,7 @@ module(basename(__filename), function () {
 
           test('200 with permission', async function (assert) {
             let response = await request
-              .get(`/_dependencies?url=${testRealm.url}person`)
+              .get(`/_card-dependencies?url=${testRealm.url}person`)
               .set('Accept', 'application/json')
               .set(
                 'Authorization',
