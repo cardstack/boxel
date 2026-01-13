@@ -6,7 +6,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, skillCardRef } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
@@ -201,6 +201,36 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         'Person/matic.json': new Person({ firstName: 'Matic' }),
         'Person/buck.json': new Person({ firstName: 'Buck' }),
         'Person/hassan.json': new Person({ firstName: 'Hassan' }),
+        'Skill/boxel-environment.json': {
+          data: {
+            attributes: {
+              title: 'Boxel Environment',
+              description: 'Test environment skill',
+              instructions: 'Test skill card for environment commands',
+              commands: [
+                {
+                  codeRef: {
+                    name: 'default',
+                    module:
+                      '@cardstack/boxel-host/commands/read-file-for-ai-assistant',
+                  },
+                  requiresApproval: false,
+                },
+                {
+                  codeRef: {
+                    name: 'default',
+                    module:
+                      '@cardstack/boxel-host/commands/read-card-for-ai-assistant',
+                  },
+                  requiresApproval: false,
+                },
+              ],
+            },
+            meta: {
+              adoptsFrom: skillCardRef,
+            },
+          },
+        },
         '.realm.json': `{ "name": "${realmName}" }`,
       },
     });
@@ -1343,7 +1373,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
     await fillIn('[data-test-search-field]', 'boxel environment');
     await click(
-      '[data-test-card-catalog-item="http://localhost:4201/skills/Skill/boxel-environment"]',
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/boxel-environment"]',
     );
     await click('[data-test-card-catalog-go-button]');
 
@@ -1441,7 +1471,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
     await fillIn('[data-test-search-field]', 'boxel environment');
     await click(
-      '[data-test-card-catalog-item="http://localhost:4201/skills/Skill/boxel-environment"]',
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/boxel-environment"]',
     );
     await click('[data-test-card-catalog-go-button]');
 

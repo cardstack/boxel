@@ -35,6 +35,7 @@ export async function startTestRealmServer(
     REALM_SERVER_MATRIX_USERNAME: 'realm_server',
     NODE_ENV: 'test',
     NODE_NO_WARNINGS: '1',
+    LOW_CREDIT_THRESHOLD: '2000',
   };
 
   // Minimal stub prerender server to satisfy required args without needing full prerender stack

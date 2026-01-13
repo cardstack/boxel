@@ -86,6 +86,7 @@ function createColumns(
         : item.dataType.nameKw;
       switch (dataTypeName.name) {
         case 'CHARACTER':
+        case 'TEXT':
           column.push('TEXT');
           break;
         case 'JSONB':
