@@ -4,18 +4,27 @@ import { basename } from 'path';
 import type { Server } from 'http';
 import type { DirResult } from 'tmp';
 import type { Realm, RealmAdapter } from '@cardstack/runtime-common';
-import { createHmac } from 'crypto';
+import type { WebhookEventMap } from '@octokit/webhooks-types';
+import { createHmac, createHash } from 'crypto';
 import {
   setupBaseRealmServer,
   setupPermissionedRealm,
   matrixURL,
+  realmSecretSeed,
 } from './helpers';
+import { matrixRoomIdToBranchName } from '@cardstack/runtime-common/github-webhook';
+import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints | _submissions', function (hooks) {
     let request: SuperTest<Test>;
     let originalWebhookSecret: string | undefined;
     const webhookSecret = 'test-webhook-secret';
+    const submissionBotUsername = 'node-test_realm';
+    const submissionBotPassword = passwordForRealmUser(
+      submissionBotUsername,
+      realmSecretSeed,
+    );
 
     function onRealmSetup(args: {
       testRealm: Realm;
@@ -34,6 +43,10 @@ module(basename(__filename), function () {
         '*': ['read'],
       },
       onRealmSetup,
+      submissionBotMatrix: {
+        username: submissionBotUsername,
+        password: submissionBotPassword,
+      },
     });
 
     hooks.beforeEach(function () {
@@ -146,5 +159,106 @@ module(basename(__filename), function () {
         'returns unsupported event error',
       );
     });
+
+    test('submissions endpoint accepts pull_request events', async function (assert) {
+      let { roomId, branchName } = await createRoomForBranch(
+        submissionBotUsername,
+      );
+      let payload = {
+        action: 'opened',
+        pull_request: {
+          number: 42,
+          title: 'Webhook test',
+          url: 'https://api.github.com/repos/example/repo/pulls/42',
+          html_url: 'https://github.com/example/repo/pull/42',
+          state: 'open',
+          merged: false,
+          user: { login: 'octocat' },
+          head: { ref: branchName },
+          base: { ref: 'main' },
+        },
+      } as WebhookEventMap['pull_request'];
+      let body = JSON.stringify(payload);
+      let signature = createHmac('sha256', webhookSecret)
+        .update(body)
+        .digest('hex');
+
+      let response = await request
+        .post('/_submissions')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set('X-GitHub-Event', 'pull_request')
+        .set('X-GitHub-Delivery', 'test-delivery')
+        .set('X-Hub-Signature-256', `sha256=${signature}`)
+        .send(body);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.body.message,
+        'OK',
+        'returns OK response',
+      );
+      assert.strictEqual(response.body.branchName, branchName);
+      assert.strictEqual(response.body.matrixRoomId, roomId);
+    });
+
+    test('submissions endpoint accepts pull_request_review events', async function (assert) {
+      let { roomId, branchName } = await createRoomForBranch(
+        submissionBotUsername,
+      );
+      let payload = {
+        action: 'submitted',
+        review: { state: 'approved' },
+        pull_request: {
+          number: 42,
+          title: 'Webhook test',
+          url: 'https://api.github.com/repos/example/repo/pulls/42',
+          html_url: 'https://github.com/example/repo/pull/42',
+          state: 'open',
+          user: { login: 'octocat' },
+          head: { ref: branchName },
+          base: { ref: 'main' },
+        },
+      } as WebhookEventMap['pull_request_review'];
+      let body = JSON.stringify(payload);
+      let signature = createHmac('sha256', webhookSecret)
+        .update(body)
+        .digest('hex');
+
+      let response = await request
+        .post('/_submissions')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set('X-GitHub-Event', 'pull_request_review')
+        .set('X-GitHub-Delivery', 'test-delivery-review')
+        .set('X-Hub-Signature-256', `sha256=${signature}`)
+        .send(body);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.body.message,
+        'OK',
+        'returns OK response',
+      );
+      assert.strictEqual(response.body.branchName, branchName);
+      assert.strictEqual(response.body.matrixRoomId, roomId);
+    });
   });
 });
+
+function passwordForRealmUser(username: string, seed: string) {
+  let cleanUsername = username.replace(/^@/, '').replace(/:.*$/, '');
+  return createHash('sha256').update(cleanUsername).update(seed).digest('hex');
+}
+
+async function createRoomForBranch(username: string) {
+  let matrixClient = new MatrixClient({
+    matrixURL,
+    username,
+    seed: realmSecretSeed,
+  });
+  await matrixClient.login();
+  let roomId = await matrixClient.createDM('@test_realm:localhost');
+  let branchName = `${matrixRoomIdToBranchName(roomId)}/feature-1`;
+  return { roomId, branchName };
+}
