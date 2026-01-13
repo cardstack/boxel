@@ -327,7 +327,7 @@ module('Integration | computeds', function (hooks) {
     assert.strictEqual(family.totalAge, 10, 'computed is correct');
   });
 
-  test('computed fields render as embeeded format in the edit format', async function (assert) {
+  test('computed fields render as embedded format in the edit format', async function (assert) {
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field alias = contains(StringField, {
