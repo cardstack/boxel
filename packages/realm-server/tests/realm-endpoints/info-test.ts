@@ -6,9 +6,7 @@ import { dirSync, type DirResult } from 'tmp';
 import { copySync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
 import {
-  setupBaseRealmServer,
   setupPermissionedRealm,
-  matrixURL,
   closeServer,
   testRealmInfo,
   testRealmHref,
@@ -35,8 +33,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       request = args.request;
       dir = args.dir;
     }
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.beforeEach(async function () {
       dir = dirSync();

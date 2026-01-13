@@ -15,7 +15,6 @@ import {
   createVirtualNetwork,
   matrixURL,
   closeServer,
-  setupBaseRealmServer,
 } from './helpers';
 import type { RealmServerTokenClaim } from '../utils/jwt';
 import { createJWT as createRealmServerJWT } from '../utils/jwt';
@@ -30,8 +29,6 @@ const testRealmURL = new URL('http://127.0.0.1:0/test/');
 
 module(basename(__filename), function () {
   module('delete boxel claimed domain endpoint', function (hooks) {
-    setupBaseRealmServer(hooks, matrixURL);
-
     let testRealmServer: Server;
     let request: SuperTest<Test>;
     let dir: DirResult;
