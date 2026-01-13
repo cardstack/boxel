@@ -251,7 +251,6 @@ async function createTemplateDb(options: {
   templateDbName: string;
 }): Promise<void> {
   let client = new Client(adminDbConfig());
-  let start = process.hrtime.bigint();
   let dumpPath = `/tmp/${options.templateDbName}.dump`;
   await client.connect();
   try {
@@ -305,12 +304,6 @@ async function createTemplateDb(options: {
       `ALTER DATABASE ${templateDbName} WITH ALLOW_CONNECTIONS false`,
     );
   } finally {
-    let durationMs = Number(process.hrtime.bigint() - start) / 1e6;
-    console.log(
-      `[template-db] create template ${options.templateDbName} took ${durationMs.toFixed(
-        1,
-      )}ms`,
-    );
     try {
       await runCommand(
         'docker',
@@ -329,7 +322,6 @@ async function restoreDbFromTemplate(options: {
   templateDbName: string;
 }): Promise<boolean> {
   let client = new Client(adminDbConfig());
-  let start = process.hrtime.bigint();
   await client.connect();
   try {
     let existing = await client.query(
@@ -347,12 +339,6 @@ async function restoreDbFromTemplate(options: {
     );
     return true;
   } finally {
-    let durationMs = Number(process.hrtime.bigint() - start) / 1e6;
-    console.log(
-      `[template-db] restore ${options.targetDbName} from ${options.templateDbName} took ${durationMs.toFixed(
-        1,
-      )}ms`,
-    );
     await client.end();
   }
 }
