@@ -22,6 +22,7 @@ import {
   closeServer,
   setupPermissionedRealms,
   cardInfo,
+  setupPermissionedRealm,
 } from './helpers';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { join, basename } from 'path';
@@ -441,7 +442,7 @@ async function stopTestRealm(testRealmServer?: TestRealmServerResult) {
 module(basename(__filename), function () {
   module('indexing (read only)', function (hooks) {
     let realm: Realm;
-    let testRealmServer: TestRealmServerResult | undefined;
+    let testDbAdapter: PgAdapter;
 
     async function getInstance(
       realm: Realm,
@@ -454,20 +455,18 @@ module(basename(__filename), function () {
       return maybeInstance as IndexedInstance | undefined;
     }
 
-    setupDB(hooks, {
-      before: async (dbAdapter, publisher, runner) => {
-        testDbAdapter = dbAdapter;
-        testRealmServer = await startTestRealm({
-          dbAdapter,
-          publisher,
-          runner,
-        });
-        realm = testRealmServer.testRealm;
+    function onRealmSetup(args: { testRealm: Realm; dbAdapter: PgAdapter }) {
+      realm = args.testRealm;
+      testDbAdapter = args.dbAdapter;
+    }
+
+    setupPermissionedRealm(hooks, {
+      permissions: {
+        '*': ['read'],
       },
-      after: async () => {
-        await stopTestRealm(testRealmServer);
-        testRealmServer = undefined;
-      },
+      realmURL: testRealm,
+      fileSystem: makeTestRealmFileSystem(),
+      onRealmSetup,
     });
 
     test('realm is full indexed at boot', async function (assert) {
