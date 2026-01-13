@@ -550,7 +550,7 @@ export class Realm {
         this.publishability.bind(this),
       )
       .get(
-        '/_dependencies',
+        '/_card-dependencies',
         SupportedMimeType.CardDependencies,
         this.getCardDependencies.bind(this),
       )

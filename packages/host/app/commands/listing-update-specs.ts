@@ -84,14 +84,38 @@ export default class ListingUpdateSpecsCommand extends HostBaseCommand<
 
     const response = await this.network.authedFetch(
       `${targetRealm}_dependencies?url=${encodeURIComponent(exampleId)}`,
-      { headers: { Accept: SupportedMimeType.CardDependencies } },
+      { headers: { Accept: SupportedMimeType.JSONAPI } },
     );
     if (!response.ok) {
       throw new Error('Failed to fetch dependencies for listing');
     }
 
-    const deps = (await response.json()) as string[];
-    const sanitizedDeps = this.sanitizeDeps(deps ?? []);
+    const jsonApiResponse = (await response.json()) as {
+      data?: Array<{
+        type: string;
+        id: string;
+        attributes?: {
+          dependencies?: string[];
+        };
+      }>;
+    };
+
+    // Extract dependencies from all entries in the JSONAPI response
+    const deps: string[] = [];
+    if (jsonApiResponse.data && Array.isArray(jsonApiResponse.data)) {
+      for (const entry of jsonApiResponse.data) {
+        if (
+          entry.attributes?.dependencies &&
+          Array.isArray(entry.attributes.dependencies)
+        ) {
+          deps.push(...entry.attributes.dependencies);
+        }
+      }
+    }
+
+    console.log('updated listing deps', deps);
+
+    const sanitizedDeps = this.sanitizeDeps(deps);
     const commandModule = await this.loadCommandModule();
     if (!sanitizedDeps.length) {
       (listing as any).specs = [];
