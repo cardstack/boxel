@@ -461,6 +461,7 @@ jobs:
             "search-prerendered-test.ts",
             "types-endpoint-test.ts",
             "server-endpoints-test.ts",
+            "server-endpoints/search-test.ts",
             "virtual-network-test.ts",
             "atomic-endpoints-test.ts",
             "request-forward-test.ts",
@@ -631,6 +632,10 @@ jobs:
       - boxel-ui-test
       - realm-server-test
     uses: ./.github/workflows/manual-deploy.yml
+    permissions:
+      contents: read
+      deployments: write
+      id-token: write
     secrets: inherit
     with:
       environment: "staging"

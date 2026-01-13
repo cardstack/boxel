@@ -70,7 +70,10 @@ module(basename(__filename), function () {
         new Response(null, {
           status: 201,
           headers: {
-            Authorization: createJWT('1h', { sessionRoom: 'room' }),
+            Authorization: createJWT('1h', {
+              sessionRoom: 'room',
+              realmServerURL: 'http://testrealm.com/',
+            }),
           },
         });
 
@@ -124,6 +127,20 @@ module(basename(__filename), function () {
       );
     });
 
+    test('it includes the realm server url in the jwt claims', async function (assert) {
+      let jwtFromClient = await client.getJWT();
+      let [_header, payload] = jwtFromClient.split('.');
+      let claims = JSON.parse(atob(payload)) as {
+        realmServerURL: string;
+      };
+
+      assert.strictEqual(
+        claims.realmServerURL,
+        'http://testrealm.com/',
+        'realmServerURL is included in the jwt claims',
+      );
+    });
+
     test('it sends the openid token when requesting a realm session', async function (assert) {
       assert.expect(2);
       sessionHandler = async (request) => {
@@ -136,7 +153,10 @@ module(basename(__filename), function () {
         return new Response(null, {
           status: 201,
           headers: {
-            Authorization: createJWT('1h', { sessionRoom: 'room' }),
+            Authorization: createJWT('1h', {
+              sessionRoom: 'room',
+              realmServerURL: 'http://testrealm.com/',
+            }),
           },
         });
       };

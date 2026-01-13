@@ -3,6 +3,7 @@ import { hash } from '@ember/helper';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { formatDistanceToNow } from 'date-fns';
 import { task } from 'ember-concurrency';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
@@ -12,6 +13,19 @@ import { IconHexagon } from '@cardstack/boxel-ui/icons';
 import type BillingService from '../services/billing-service';
 
 import type { ComponentLike } from '@glint/template';
+
+function formatEtTimestamp(date: Date) {
+  let formatter = new Intl.DateTimeFormat(undefined, {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
+  return formatter.format(date);
+}
 
 interface ValueSignature {
   Args: {
@@ -62,6 +76,7 @@ interface WithSubscriptionDataSignature {
         plan: ComponentLike;
         monthlyCredit: ComponentLike;
         additionalCredit: ComponentLike;
+        dailyGrantNote: string[] | null;
         isOutOfCredit: boolean;
         isLoading: boolean;
       },
@@ -98,6 +113,18 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
     return this.billingService.subscriptionData?.extraCreditsAvailableInBalance;
   }
 
+  private get lowCreditThreshold() {
+    return this.billingService.subscriptionData?.lowCreditThreshold ?? null;
+  }
+
+  private get lastDailyCreditGrantAt() {
+    return this.billingService.subscriptionData?.lastDailyCreditGrantAt;
+  }
+
+  private get nextDailyCreditGrantAt() {
+    return this.billingService.subscriptionData?.nextDailyCreditGrantAt;
+  }
+
   private get monthlyCreditText() {
     return this.creditsAvailableInPlanAllowance != null &&
       this.creditsIncludedInPlanAllowance != null
@@ -123,6 +150,52 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
       this.creditsIncludedInPlanAllowance == null ||
       this.creditsAvailableInPlanAllowance <= 0
     );
+  }
+
+  private get dailyGrantNote() {
+    if (this.isLoading || this.lowCreditThreshold == null) {
+      return null;
+    }
+
+    let availableCredits = this.billingService.availableCredits;
+    if (availableCredits < this.lowCreditThreshold) {
+      if (!this.nextDailyCreditGrantAt) {
+        return null;
+      }
+      let distance = formatDistanceToNow(
+        new Date(this.nextDailyCreditGrantAt * 1000),
+      );
+      let timestampEt = formatEtTimestamp(
+        new Date(this.nextDailyCreditGrantAt * 1000),
+      );
+      let creditAmount = formatNumber(this.lowCreditThreshold, {
+        size: 'short',
+      });
+      return [
+        `Next free credit daily grant will top up your balance to ${creditAmount} credits in ${distance} (${timestampEt}).`,
+      ];
+    }
+
+    if (!this.lastDailyCreditGrantAt) {
+      return null;
+    }
+
+    let distance = formatDistanceToNow(
+      new Date(this.lastDailyCreditGrantAt * 1000),
+      {
+        addSuffix: true,
+      },
+    );
+    let timestampLastDailyCreditGrant = formatEtTimestamp(
+      new Date(this.lastDailyCreditGrantAt * 1000),
+    );
+    let thresholdAmount = formatNumber(this.lowCreditThreshold, {
+      size: 'short',
+    });
+    return [
+      `We topped up your account to ${thresholdAmount} credits since you were getting low.`,
+      `Last daily credits grant: ${distance} (${timestampLastDailyCreditGrant})`,
+    ];
   }
 
   private loadSubscriptionData = task(async () => {
@@ -156,6 +229,7 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
           isOutOfCredit=this.isOutOfCredit
           displayCreditIcon=true
         )
+        dailyGrantNote=this.dailyGrantNote
         isOutOfCredit=this.isOutOfCredit
         isLoading=this.isLoading
       )

@@ -5,6 +5,7 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 wait_for_postgres
 
 pnpm --dir=../skills-realm skills:setup
+pnpm --dir=../boxel-homepage-realm boxel-homepage:setup
 
 if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
   MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly "$SCRIPTS_DIR/matrix-registration-secret.ts")
@@ -13,9 +14,12 @@ fi
 
 START_EXPERIMENTS=$(if [ -z "$SKIP_EXPERIMENTS" ]; then echo "true"; else echo ""; fi)
 START_CATALOG=$(if [ -z "$SKIP_CATALOG" ]; then echo "true"; else echo ""; fi)
+START_BOXEL_HOMEPAGE=$(if [ -z "$SKIP_BOXEL_HOMEPAGE" ]; then echo "true"; else echo ""; fi)
 
 DEFAULT_CATALOG_REALM_URL='http://localhost:4201/catalog/'
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
+DEFAULT_BOXEL_HOMEPAGE_REALM_URL='http://localhost:4201/boxel-homepage/'
+BOXEL_HOMEPAGE_REALM_URL="${RESOLVED_BOXEL_HOMEPAGE_REALM_URL:-$DEFAULT_BOXEL_HOMEPAGE_REALM_URL}"
 
 # This can be overridden from the environment to point to a different catalog
 # and is used in start-services-for-host-tests.sh to point to a trimmed down
@@ -33,6 +37,7 @@ PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
 
 
 
+LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   PGPORT=5435 \
@@ -67,6 +72,11 @@ NODE_ENV=development \
   --username='skills_realm' \
   --fromUrl='http://localhost:4201/skills/' \
   --toUrl='http://localhost:4201/skills/' \
+  \
+  ${START_BOXEL_HOMEPAGE:+--path='../boxel-homepage-realm/contents'} \
+  ${START_BOXEL_HOMEPAGE:+--username='boxel_homepage_realm'} \
+  ${START_BOXEL_HOMEPAGE:+--fromUrl="${BOXEL_HOMEPAGE_REALM_URL}"} \
+  ${START_BOXEL_HOMEPAGE:+--toUrl="${BOXEL_HOMEPAGE_REALM_URL}"} \
   \
   ${START_EXPERIMENTS:+--path='../experiments-realm'} \
   ${START_EXPERIMENTS:+--username='experiments_realm'} \

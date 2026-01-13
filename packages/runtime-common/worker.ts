@@ -1,4 +1,5 @@
 import type * as JSONTypes from 'json-typescript';
+import { Readable } from 'stream';
 import { parse } from 'date-fns';
 import {
   authorizationMiddleware,
@@ -8,9 +9,11 @@ import {
   RealmPaths,
   SupportedMimeType,
   fileContentToText,
+  fileContentToBytes,
   unixTime,
   logger,
   userIdFromUsername,
+  type ByteStream,
   type QueueRunner,
   type TextFileRef,
   type VirtualNetwork,
@@ -28,13 +31,24 @@ import type { WorkerArgs, TaskArgs } from './tasks';
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
   modulesIndexed: number;
+  filesIndexed: number;
   instanceErrors: number;
   moduleErrors: number;
+  fileErrors: number;
   totalIndexEntries: number;
+}
+
+export interface StreamFileRef {
+  stream: ByteStream;
+  lastModified: number;
+  created: number;
+  path: string;
+  isShimmed?: true;
 }
 
 export interface Reader {
   readFile: (url: URL) => Promise<TextFileRef | undefined>;
+  readStream: (url: URL) => Promise<StreamFileRef | undefined>;
   mtimes: () => Promise<{ [url: string]: number }>;
 }
 
@@ -205,6 +219,40 @@ export function getReader(
   _fetch: typeof globalThis.fetch,
   realmURL: string,
 ): Reader {
+  let parseResponseMetadata = (
+    response: Response,
+    url: URL,
+  ): { lastModified: number; created: number; path: string } => {
+    let lastModifiedRfc7321 = response.headers.get('last-modified');
+    if (!lastModifiedRfc7321) {
+      throw new Error(`Response for ${url.href} has no 'last-modified' header`);
+    }
+    // This is RFC-7321 format which is the last modified date format used in HTTP headers
+    let lastModified = unixTime(
+      parse(
+        lastModifiedRfc7321.replace(/ GMT$/, 'Z'),
+        'EEE, dd MMM yyyy HH:mm:ssX',
+        new Date(),
+      ).getTime(),
+    );
+
+    let createdRfc7321 = response.headers.get('x-created');
+    let created: number;
+    if (createdRfc7321) {
+      created = unixTime(
+        parse(
+          createdRfc7321.replace(/ GMT$/, 'Z'),
+          'EEE, dd MMM yyyy HH:mm:ssX',
+          new Date(),
+        ).getTime(),
+      );
+    } else {
+      created = lastModified; // Default created to lastModified if no created header is present
+    }
+    let path = new RealmPaths(new URL(realmURL)).local(url);
+    return { lastModified, created, path };
+  };
+
   return {
     readFile: async (url: URL) => {
       let response: ResponseWithNodeStream = await _fetch(url, {
@@ -223,37 +271,55 @@ export function getReader(
       } else {
         content = await response.text();
       }
-      let lastModifiedRfc7321 = response.headers.get('last-modified');
-      if (!lastModifiedRfc7321) {
-        throw new Error(
-          `Response for ${url.href} has no 'last-modified' header`,
-        );
-      }
-      // This is RFC-7321 format which is the last modified date format used in HTTP headers
-      let lastModified = unixTime(
-        parse(
-          lastModifiedRfc7321.replace(/ GMT$/, 'Z'),
-          'EEE, dd MMM yyyy HH:mm:ssX',
-          new Date(),
-        ).getTime(),
+      let { lastModified, created, path } = parseResponseMetadata(
+        response,
+        url,
       );
-
-      let createdRfc7321 = response.headers.get('x-created');
-      let created: number;
-      if (createdRfc7321) {
-        created = unixTime(
-          parse(
-            createdRfc7321.replace(/ GMT$/, 'Z'),
-            'EEE, dd MMM yyyy HH:mm:ssX',
-            new Date(),
-          ).getTime(),
-        );
-      } else {
-        created = lastModified; // Default created to lastModified if no created header is present
-      }
-      let path = new RealmPaths(new URL(realmURL)).local(url);
       return {
         content,
+        lastModified,
+        created,
+        path,
+        ...(Symbol.for('shimmed-module') in response ||
+        response.headers.get('X-Boxel-Shimmed-Module')
+          ? { isShimmed: true }
+          : {}),
+      };
+    },
+
+    readStream: async (url: URL) => {
+      let response: ResponseWithNodeStream = await _fetch(url, {
+        headers: {
+          Accept: SupportedMimeType.CardSource,
+        },
+      });
+      if (!response.ok) {
+        return undefined;
+      }
+
+      let stream: ByteStream;
+      if ('nodeStream' in response && response.nodeStream) {
+        if (Readable.toWeb) {
+          stream = Readable.toWeb(
+            response.nodeStream,
+          ) as ReadableStream<Uint8Array>;
+        } else {
+          stream = await fileContentToBytes({
+            content: response.nodeStream,
+          });
+        }
+      } else if (response.body) {
+        stream = response.body;
+      } else {
+        stream = new Uint8Array();
+      }
+
+      let { lastModified, created, path } = parseResponseMetadata(
+        response,
+        url,
+      );
+      return {
+        stream,
         lastModified,
         created,
         path,
@@ -270,6 +336,19 @@ export function getReader(
           Accept: SupportedMimeType.Mtimes,
         },
       });
+      if (!response.ok) {
+        let responseText = '';
+        try {
+          responseText = await response.text();
+        } catch {
+          responseText = '';
+        }
+        let details = responseText ? `: ${responseText}` : '';
+        console.warn(
+          `mtimes request failed for ${realmURL}_mtimes (${response.status} ${response.statusText})${details}`,
+        );
+        return {};
+      }
       let {
         data: {
           attributes: { mtimes },

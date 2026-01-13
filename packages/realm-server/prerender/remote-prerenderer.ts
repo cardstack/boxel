@@ -2,6 +2,7 @@ import {
   type Prerenderer,
   type RenderResponse,
   type ModuleRenderResponse,
+  type FileExtractResponse,
   type RenderRouteOptions,
   logger,
 } from '@cardstack/runtime-common';
@@ -167,6 +168,18 @@ export function createRemotePrerenderer(
       return await requestWithRetry<ModuleRenderResponse>(
         'prerender-module',
         'prerender-module-request',
+        {
+          realm,
+          url,
+          auth,
+          renderOptions: renderOptions ?? {},
+        },
+      );
+    },
+    async prerenderFileExtract({ realm, url, auth, renderOptions }) {
+      return await requestWithRetry<FileExtractResponse>(
+        'prerender-file-extract',
+        'prerender-file-extract-request',
         {
           realm,
           url,

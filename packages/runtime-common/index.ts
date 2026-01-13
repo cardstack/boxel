@@ -43,6 +43,16 @@ export interface RenderError extends ErrorEntry {
   evict?: boolean;
 }
 
+export interface FileExtractResponse {
+  id: string;
+  nonce: string;
+  status: 'ready' | 'error';
+  searchDoc: Record<string, any> | null;
+  deps: string[];
+  error?: RenderError;
+  mismatch?: true;
+}
+
 export interface ModuleDefinitionResult {
   type: 'definition';
   moduleURL: string; // node resolution w/o extension
@@ -76,6 +86,7 @@ export type PrerenderCardArgs = ModulePrerenderArgs;
 export interface Prerenderer {
   prerenderCard(args: PrerenderCardArgs): Promise<RenderResponse>;
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
+  prerenderFileExtract(args: ModulePrerenderArgs): Promise<FileExtractResponse>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
@@ -152,6 +163,7 @@ export * from './matrix-constants';
 export * from './matrix-client';
 export * from './queue';
 export * from './expression';
+export * from './infer-content-type';
 export * from './index-query-engine';
 export * from './index-writer';
 export * from './definitions';
@@ -169,6 +181,7 @@ export * from './utils';
 export * from './authorization-middleware';
 export * from './resource-types';
 export * from './query';
+export * from './search-utils';
 export * from './query-field-utils';
 export * from './relationship-utils';
 export * from './formats';
@@ -222,7 +235,11 @@ export type { CodeRef };
 export * from './code-ref';
 export * from './serializers';
 
-export type { CardDocument, SingleCardDocument } from './document-types';
+export type {
+  CardDocument,
+  SingleCardDocument,
+  CardCollectionDocument,
+} from './document-types';
 export type {
   CardResource,
   ModuleResource,
@@ -434,7 +451,7 @@ export interface Store {
     patchData: PatchData,
     opts?: { doNotPersist?: boolean; clientRequestId?: string },
   ): Promise<T | CardErrorJSONAPI | undefined>;
-  search(query: Query, realmURL?: URL): Promise<CardDef[]>;
+  search(query: Query, realmURLs?: string[]): Promise<CardDef[]>;
   getSaveState(id: string): AutoSaveState | undefined;
 }
 
