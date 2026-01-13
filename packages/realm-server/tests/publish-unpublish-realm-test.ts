@@ -28,7 +28,6 @@ import {
   createVirtualNetwork,
   realmSecretSeed,
   matrixURL,
-  setupBaseRealmServer,
 } from './helpers';
 import { createJWT as createRealmServerJWT } from '../utils/jwt';
 
@@ -83,7 +82,6 @@ module(basename(__filename), function () {
         }));
       request = supertest(testRealmHttpServer);
     }
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupDB(hooks, {
       beforeEach: async (_dbAdapter, _publisher, _runner) => {

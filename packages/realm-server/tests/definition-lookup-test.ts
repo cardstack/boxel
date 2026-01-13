@@ -7,8 +7,6 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
-  matrixURL,
-  setupBaseRealmServer,
   setupPermissionedRealms,
   createVirtualNetwork,
   testCreatePrerenderAuth,
@@ -96,8 +94,6 @@ module(basename(__filename), function () {
         },
       });
     });
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealms(hooks, {
       realms: [
