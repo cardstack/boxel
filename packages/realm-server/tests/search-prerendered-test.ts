@@ -2,7 +2,10 @@ import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
-import { buildQueryParamValue } from '@cardstack/runtime-common';
+import {
+  buildQueryParamValue,
+  PRERENDERED_HTML_FORMATS,
+} from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
   setupBaseRealmServer,
@@ -13,6 +16,8 @@ import {
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(basename(__filename), function () {
+  const missingPrerenderedHtmlFormatMessage = `Must include a 'prerenderedHtmlFormat' parameter with a value of ${PRERENDERED_HTML_FORMATS.join()} to use this endpoint`;
+
   module('Realm-specific Endpoints | _search-prerendered', function (hooks) {
     let testRealm: Realm;
     let request: SuperTest<Test>;
@@ -118,7 +123,7 @@ module(basename(__filename), function () {
 
             assert.ok(
               response.body.errors[0].message.includes(
-                "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded', 'fitted', 'atom', or 'head' to use this endpoint",
+                missingPrerenderedHtmlFormatMessage,
               ),
             );
           });
@@ -617,7 +622,7 @@ module(basename(__filename), function () {
             assert.strictEqual(response.status, 400, 'HTTP 400 status');
             assert.ok(
               response.body.errors[0].message.includes(
-                "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded', 'fitted', 'atom', or 'head' to use this endpoint",
+                missingPrerenderedHtmlFormatMessage,
               ),
             );
           });

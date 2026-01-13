@@ -60,6 +60,7 @@ import {
   type LintArgs,
   type LintResult,
   type Query,
+  type PrerenderedHtmlFormat,
   codeRefWithAbsoluteURL,
   userInitiatedPriority,
   systemInitiatedPriority,
@@ -67,6 +68,7 @@ import {
   isCardDocumentString,
   isBrowserTestEnv,
   type IndexedFile,
+  PRERENDERED_HTML_FORMATS,
 } from './index';
 import { visitModuleDeps } from './code-ref';
 import merge from 'lodash/merge';
@@ -2971,7 +2973,7 @@ export class Realm {
   public async searchPrerendered(
     cardsQuery: Query,
     opts: {
-      htmlFormat: 'embedded' | 'fitted' | 'atom' | 'head';
+      htmlFormat: PrerenderedHtmlFormat;
       cardUrls?: string[];
       renderType?: ResolvedCodeRef;
     },
@@ -3039,8 +3041,7 @@ export class Realm {
             {
               status: '400',
               title: 'Bad Request',
-              message:
-                "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded', 'fitted', 'atom', or 'head' to use this endpoint",
+              message: `Must include a 'prerenderedHtmlFormat' parameter with a value of ${PRERENDERED_HTML_FORMATS.join()} to use this endpoint`,
             },
           ],
         }),
