@@ -1,5 +1,6 @@
 import {
   branchNameToMatrixRoomId,
+  fromBranchName,
   matrixRoomIdToBranchName,
   toBranchName,
 } from '../github-webhook';
@@ -66,6 +67,16 @@ const tests = Object.freeze({
     let roomId = '!XezEDqUlIJcNdsuaFB:localhost';
     let roomPrefix = matrixRoomIdToBranchName(roomId);
     assert.strictEqual(toBranchName(roomId, '   '), roomPrefix);
+  },
+
+  'it can invert a branch name into room id and listing name': async (
+    assert,
+  ) => {
+    let roomId = '!XezEDqUlIJcNdsuaFB:localhost';
+    let branchName = toBranchName(roomId, 'SomeSampleListing');
+    let result = fromBranchName(branchName);
+    assert.strictEqual(result.matrixRoomId, roomId);
+    assert.strictEqual(result.listingName, 'some-sample-listing');
   },
 
   'it rejects branch names without the prefix': async (assert) => {

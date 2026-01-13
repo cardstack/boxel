@@ -47,6 +47,16 @@ export function toBranchName(
   return listingSlug ? `${roomPrefix}/${listingSlug}` : roomPrefix;
 }
 
+export function fromBranchName(branchName: string): {
+  matrixRoomId: string;
+  listingName?: string;
+} {
+  let [roomSegment, ...listingParts] = branchName.split('/');
+  let matrixRoomId = branchNameToMatrixRoomId(roomSegment);
+  let listingName = listingParts.join('/');
+  return listingName ? { matrixRoomId, listingName } : { matrixRoomId };
+}
+
 export function branchNameToMatrixRoomId(branchName: string): string {
   if (!branchName) {
     throw new Error('branchName is required');
