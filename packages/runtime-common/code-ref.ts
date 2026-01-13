@@ -289,6 +289,13 @@ export function getField<T extends BaseDef>(
   return undefined;
 }
 
+export function normalizeCodeRef(ref: CodeRef): { module: string; name: string } {
+  if (!('type' in ref)) {
+    return { module: ref.module, name: ref.name };
+  }
+  return normalizeCodeRef(ref.card);
+}
+
 export function getAncestor(
   card: BaseDefConstructor,
 ): BaseDefConstructor | undefined {

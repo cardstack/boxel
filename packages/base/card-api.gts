@@ -16,6 +16,7 @@ import { getLinksToManyComponent } from './links-to-many-component';
 import {
   assertIsSerializerName,
   baseRef,
+  baseRealm,
   CardContextName,
   CardError,
   CodeRef,
@@ -31,6 +32,7 @@ import {
   getSerializer,
   humanReadable,
   identifyCard,
+  normalizeCodeRef,
   isBaseInstance,
   isCardError,
   isCardInstance as _isCardInstance,
@@ -43,6 +45,7 @@ import {
   Loader,
   localId,
   LocalPath,
+  type LoadDocumentOptions,
   meta,
   primitive,
   realmURL,
@@ -320,6 +323,28 @@ export function instanceOf(instance: BaseDef, clazz: typeof BaseDef): boolean {
   return false;
 }
 
+export function isFileDefConstructor(card: typeof BaseDef): boolean {
+  let baseFileDefRef = {
+    module: `${baseRealm.url}file-api`,
+    name: 'FileDef',
+  };
+  let current: typeof BaseDef | undefined = card;
+  while (current) {
+    let ref = identifyCard(current);
+    if (ref) {
+      let normalized = normalizeCodeRef(ref);
+      if (
+        normalized.module === baseFileDefRef.module &&
+        normalized.name === baseFileDefRef.name
+      ) {
+        return true;
+      }
+    }
+    current = getAncestor(current) as typeof BaseDef | undefined;
+  }
+  return false;
+}
+
 class Logger {
   private promises: Promise<any>[] = [];
 
@@ -385,7 +410,10 @@ export interface CardStore {
   set(url: string, instance: CardDef): void;
   setNonTracked(id: string, instance: CardDef): void;
   makeTracked(id: string): void;
-  loadDocument(url: string): Promise<SingleCardDocument | CardError>;
+  loadDocument(
+    url: string,
+    opts?: LoadDocumentOptions,
+  ): Promise<SingleCardDocument | CardError>;
   trackLoad(load: Promise<unknown>): void;
   loaded(): Promise<void>;
   getSearchResource: GetSearchResourceFunc;
@@ -1069,6 +1097,11 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         },
       };
     }
+    if (isFileDefConstructor(this.card as typeof BaseDef) && !value.id) {
+      throw new Error(
+        `linksTo field '${this.name}' cannot serialize a FileDef without an id`,
+      );
+    }
     if (visited.has(value.id)) {
       return {
         relationships: {
@@ -1215,6 +1248,11 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       if (isNotLoadedValue(value)) {
         return value;
       }
+      if (isFileDefConstructor(this.card as typeof BaseDef) && !value.id) {
+        throw new Error(
+          `field validation error: the linksTo field '${this.name}' cannot reference a FileDef without an id`,
+        );
+      }
       if (!instanceOf(value, this.card)) {
         console.warn(
           'linksTo instance mismatch',
@@ -1254,23 +1292,27 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       let innerModel = model.field(fieldName);
       return innerModel as unknown as Box<CardDef | null>;
     };
+    let isFileDef = isFileDefConstructor(linksToField.card as typeof BaseDef);
     function shouldRenderEditor(
       format: Format | undefined,
       defaultFormat: Format,
       isComputed: boolean,
+      isFileDef: boolean,
     ) {
-      return (format ?? defaultFormat) === 'edit' && !isComputed;
+      return (format ?? defaultFormat) === 'edit' && !isComputed && !isFileDef;
     }
     function getChildFormat(
       format: Format | undefined,
       defaultFormat: Format,
       model: Box<FieldDef>,
+      isFileDef: boolean,
     ) {
       let effectiveFormat = format ?? defaultFormat;
       if (
         effectiveFormat === 'edit' &&
-        'isCardDef' in model.value.constructor &&
-        model.value.constructor.isCardDef
+        (('isCardDef' in model.value.constructor &&
+          model.value.constructor.isCardDef) ||
+          isFileDef)
       ) {
         return 'fitted';
       }
@@ -1291,7 +1333,12 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         <CardCrudFunctionsConsumer as |cardCrudFunctions|>
           <DefaultFormatsConsumer as |defaultFormats|>
             {{#if
-              (shouldRenderEditor @format defaultFormats.cardDef isComputed)
+              (shouldRenderEditor
+                @format
+                defaultFormats.cardDef
+                isComputed
+                isFileDef
+              )
             }}
               <LinksToEditor
                 @model={{(getInnerModel)}}
@@ -1307,6 +1354,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
                     @format
                     defaultFormats.cardDef
                     model
+                    isFileDef
                   }}
                   @displayContainer={{@displayContainer}}
                   ...attributes
@@ -1537,6 +1585,11 @@ class LinksToMany<FieldT extends CardDefConstructor>
         };
         return;
       }
+      if (isFileDefConstructor(this.card as typeof BaseDef) && !value.id) {
+        throw new Error(
+          `linksToMany field '${this.name}' cannot serialize a FileDef without an id`,
+        );
+      }
       if (visited.has(value.id)) {
         relationships[`${this.name}\.${i}`] = {
           links: {
@@ -1734,6 +1787,16 @@ class LinksToMany<FieldT extends CardDefConstructor>
       ) {
         throw new Error(
           `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${expectedCard.name}`,
+        );
+      }
+      if (
+        !isNotLoadedValue(value) &&
+        value != null &&
+        isFileDefConstructor(expectedCard as typeof BaseDef) &&
+        !value.id
+      ) {
+        throw new Error(
+          `field validation error: the linksToMany field '${this.name}' cannot reference a FileDef without an id`,
         );
       }
     }
@@ -2682,13 +2745,19 @@ function lazilyLoadLink(
     ),
   );
   (async () => {
+    let isFileLink = isFileDefConstructor(field.card as typeof BaseDef);
     try {
-      let doc = await store.loadDocument(reference);
+      let doc = await store.loadDocument(
+        reference,
+        isFileLink ? { mode: 'file' } : undefined,
+      );
       if (isCardError(doc)) {
         let cardError = doc;
-        cardError.deps = [
-          !reference.endsWith('.json') ? `${reference}.json` : reference,
-        ];
+        let referenceForDeps =
+          isFileLink || reference.endsWith('.json')
+            ? reference
+            : `${reference}.json`;
+        cardError.deps = [referenceForDeps];
         throw cardError;
       }
       let fieldValue = (await createFromSerialized(
@@ -2728,6 +2797,10 @@ function lazilyLoadLink(
       let error = e as Error;
       let isMissingFile =
         typeof error?.message === 'string' && /not found/i.test(error.message);
+      let referenceForMissingFile =
+        isFileLink || reference.endsWith('.json')
+          ? reference
+          : `${reference}.json`;
       let payloadError: {
         title: string;
         status: number;
@@ -2740,7 +2813,7 @@ function lazilyLoadLink(
           : error?.message ?? 'Card Error',
         status: isMissingFile ? 404 : (error as any)?.status ?? 500,
         message: isMissingFile
-          ? `missing file ${reference}.json`
+          ? `missing file ${referenceForMissingFile}`
           : error?.message ?? String(e),
         stack: error?.stack,
       };
@@ -3631,8 +3704,8 @@ class FallbackCardStore implements CardStore {
       observedGeneration = this.#loadGeneration;
     }
   }
-  async loadDocument(url: string) {
-    let promise = loadDocument(fetch, url);
+  async loadDocument(url: string, opts?: LoadDocumentOptions) {
+    let promise = loadDocument(fetch, url, opts);
     this.trackLoad(promise);
     return await promise;
   }

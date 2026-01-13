@@ -1024,6 +1024,94 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('loads FileDef links from included resources', async function (assert) {
+    await testRealm.writeMany(
+      new Map<string, string>([
+        [
+          'gallery.gts',
+          `
+            import { CardDef, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+            import { FileDef } from "https://cardstack.com/base/file-api";
+
+            export class Gallery extends CardDef {
+              @field hero = linksTo(FileDef);
+              @field attachments = linksToMany(FileDef);
+            }
+          `,
+        ],
+        [
+          'Gallery/hero.json',
+          JSON.stringify({
+            data: {
+              attributes: {
+                cardInfo: {},
+              },
+              relationships: {
+                hero: {
+                  links: {
+                    self: `${testRealmURL}hero.png`,
+                  },
+                },
+                'attachments.0': {
+                  links: {
+                    self: `${testRealmURL}first.png`,
+                  },
+                },
+                'attachments.1': {
+                  links: {
+                    self: `${testRealmURL}second.png`,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}gallery`,
+                  name: 'Gallery',
+                },
+              },
+            },
+          } satisfies LooseSingleCardDocument),
+        ],
+        ['hero.png', 'mock hero image'],
+        ['first.png', 'mock first image'],
+        ['second.png', 'mock second image'],
+      ]),
+    );
+
+    let gallery = (await storeService.get(
+      `${testRealmURL}Gallery/hero`,
+    )) as CardDefType;
+
+    assert.ok((gallery as any).hero, 'hero is loaded from included resources');
+    assert.strictEqual(
+      (gallery as any).hero?.name,
+      'hero.png',
+      'hero FileDef uses file meta name',
+    );
+    assert.strictEqual(
+      (gallery as any).hero?.url,
+      `${testRealmURL}hero.png`,
+      'hero FileDef uses file meta url',
+    );
+
+    let attachments = (gallery as any).attachments ?? [];
+    assert.strictEqual(
+      attachments.length,
+      2,
+      'attachments are loaded from included resources',
+    );
+    assert.strictEqual(
+      attachments[0]?.name,
+      'first.png',
+      'first attachment uses file meta name',
+    );
+    assert.strictEqual(
+      attachments[1]?.name,
+      'second.png',
+      'second attachment uses file meta name',
+    );
+  });
+
   test<TestContextWithSave>('can skip waiting for the save when patching an instance', async function (assert) {
     assert.expect(4);
 

@@ -1,12 +1,20 @@
 import { SupportedMimeType, CardError, isSingleCardDocument } from './index';
 
+export type LoadDocumentOptions = {
+  mode?: 'card' | 'file';
+};
+
 export async function loadDocument(
   fetch: typeof globalThis.fetch,
   url: string,
+  opts?: LoadDocumentOptions,
 ) {
   let response: Response;
-  let urlWithExtension = !url.endsWith('.json') ? `${url}.json` : url;
-  let requestURL = new URL(urlWithExtension);
+  let mode = opts?.mode ?? 'card';
+  let requestURL =
+    mode === 'file'
+      ? new URL(url)
+      : new URL(!url.endsWith('.json') ? `${url}.json` : url);
   requestURL.searchParams.set('noCache', 'true');
   try {
     response = await fetch(requestURL.href, {
@@ -18,7 +26,10 @@ export async function loadDocument(
       // the visit() function when crawling the links of documents being indexed
       // and not finding the document yet in the index.
       headers: {
-        Accept: SupportedMimeType.CardSource,
+        Accept:
+          mode === 'file'
+            ? SupportedMimeType.FileMeta
+            : SupportedMimeType.CardSource,
       },
     });
   } catch (err: any) {

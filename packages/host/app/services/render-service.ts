@@ -16,6 +16,7 @@ import {
   loadDocument,
   type CardError,
   type CodeRef,
+  type LoadDocumentOptions,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
 
@@ -66,13 +67,13 @@ export class CardStoreWithErrors implements CardStore {
 
   readonly errors = new Set<string>();
 
-  async loadDocument(url: string) {
+  async loadDocument(url: string, opts?: LoadDocumentOptions) {
     let promise = this.#docsInFlight.get(url);
     if (promise) {
       return await promise;
     }
     try {
-      promise = loadDocument(this.#fetch, url);
+      promise = loadDocument(this.#fetch, url, opts);
       this.#docsInFlight.set(url, promise);
       return await promise;
     } finally {

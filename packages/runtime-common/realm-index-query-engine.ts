@@ -3,6 +3,9 @@ import { isScopedCSSRequest } from 'glimmer-scoped-css';
 import cloneDeep from 'lodash/cloneDeep';
 import {
   SupportedMimeType,
+  baseRealm,
+  inferContentType,
+  unixTime,
   maxLinkDepth,
   maybeURL,
   IndexQueryEngine,
@@ -595,8 +598,14 @@ export class RealmIndexQueryEngine {
             linkURL,
             opts,
           );
-          linkResource =
-            maybeResult?.type === 'instance' ? maybeResult.instance : undefined;
+          if (maybeResult?.type === 'instance') {
+            linkResource = maybeResult.instance;
+          } else {
+            let fileEntry = await this.#indexQueryEngine.getFile(linkURL, opts);
+            if (fileEntry) {
+              linkResource = fileResourceFromIndex(linkURL, fileEntry);
+            }
+          }
         } else {
           let response = await this.#fetch(linkURL, {
             headers: { Accept: SupportedMimeType.CardJson },
@@ -722,4 +731,38 @@ function relativizeResource(
     let absoluteModuleURL = new URL(moduleURL, resource.id ?? primaryURL);
     setModuleURL(maybeRelativeURL(absoluteModuleURL, primaryURL, realmURL));
   });
+}
+
+function fileResourceFromIndex(
+  fileURL: URL,
+  fileEntry: IndexedFile,
+): CardResource<Saved> {
+  let name = fileURL.pathname.split('/').pop() ?? fileURL.pathname;
+  let inferredContentType = inferContentType(name);
+  let searchDoc = fileEntry.searchDoc ?? {};
+  let contentHash =
+    typeof searchDoc.contentHash === 'string' ? searchDoc.contentHash : undefined;
+  let lastModified = fileEntry.lastModified ?? unixTime(Date.now());
+  let createdAt = fileEntry.resourceCreatedAt ?? lastModified;
+  return {
+    id: fileURL.href,
+    type: 'card',
+    attributes: {
+      name: searchDoc.name ?? name,
+      url: searchDoc.url ?? fileURL.href,
+      sourceUrl: searchDoc.sourceUrl ?? fileURL.href,
+      contentType: searchDoc.contentType ?? inferredContentType,
+      contentHash,
+      lastModified,
+      createdAt,
+    },
+    meta: {
+      adoptsFrom: {
+        module: `${baseRealm.url}file-api`,
+        name: 'FileDef',
+      },
+      realmURL: fileEntry.realmURL,
+    },
+    links: { self: fileURL.href },
+  };
 }
