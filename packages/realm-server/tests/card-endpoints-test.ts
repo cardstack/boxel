@@ -84,9 +84,9 @@ module(basename(__filename), function () {
           onRealmSetup,
         });
 
-        test('serves the request', async function (assert) {
+        test('serves the request TESTTHIS', async function (assert) {
           let response = await request
-            .get('/person-1')
+            .get('/basic-card')
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -699,8 +699,8 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: `${testRealm.url}person`,
-                    name: 'Person',
+                    module: 'https://cardstack.com/base/card-api',
+                    name: 'CardDef',
                   },
                 },
               },
@@ -714,7 +714,6 @@ module(basename(__filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
-              type: 'Person',
             },
           );
           let id = incrementalEventContent.invalidations[0].split('/').pop()!;
@@ -1712,8 +1711,8 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: `${testRealm.url}person`,
-                    name: 'Person',
+                    module: 'https://cardstack.com/base/card-api',
+                    name: 'CardDef',
                   },
                 },
               },

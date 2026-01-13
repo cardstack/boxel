@@ -304,11 +304,11 @@ module(basename(__filename), function () {
               .send({
                 data: {
                   type: 'card',
-                  attributes: { firstName: 'My Name' },
+                  attributes: { cardInfo: { title: 'Test Card' } },
                   meta: {
                     adoptsFrom: {
-                      module: `${testRealmURL}person`,
-                      name: 'Person',
+                      module: 'https://cardstack.com/base/card-api',
+                      name: 'CardDef',
                     },
                   },
                 },
@@ -346,7 +346,7 @@ module(basename(__filename), function () {
             let doc = response.body as SingleCardDocument;
             assert.strictEqual(
               doc.data.attributes?.title,
-              'My Name',
+              'Test Card',
               'instance data is correct',
             );
           }
@@ -359,12 +359,9 @@ module(basename(__filename), function () {
                   stringify(
                     {
                       filter: {
-                        on: {
-                          module: `${testRealmURL}person`,
-                          name: 'Person',
-                        },
+                        on: baseCardRef,
                         eq: {
-                          title: 'My Name',
+                          title: 'Test Card',
                         },
                       },
                     } as Query,
@@ -512,11 +509,11 @@ module(basename(__filename), function () {
               .send({
                 data: {
                   type: 'card',
-                  attributes: { firstName: 'My Name' },
+                  attributes: { cardInfo: { title: 'Test Card' } },
                   meta: {
                     adoptsFrom: {
-                      module: `${testRealmURL}person`,
-                      name: 'Person',
+                      module: 'https://cardstack.com/base/card-api',
+                      name: 'CardDef',
                     },
                   },
                 },
@@ -567,7 +564,7 @@ module(basename(__filename), function () {
             let doc = response.body as SingleCardDocument;
             assert.strictEqual(
               doc.data.attributes?.title,
-              'My Name',
+              'Test Card',
               'instance data is correct',
             );
           }

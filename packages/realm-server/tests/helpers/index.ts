@@ -107,7 +107,7 @@ export async function waitUntil<T>(
 }
 
 export const testRealm = 'http://test-realm/';
-export const localBaseRealm = 'http://localhost:4201/';
+export const localBaseRealm = 'http://localhost:4201/base';
 export const matrixURL = new URL('http://localhost:8008');
 const testPrerenderHost = '127.0.0.1';
 const testPrerenderPort = 4460;
