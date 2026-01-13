@@ -74,6 +74,9 @@ module(basename(__filename), function () {
             },
           });
         },
+        async prerenderFileExtract() {
+          throw new Error('Not implemented in mock');
+        },
       };
       definitionLookup = new CachingDefinitionLookup(
         dbAdapter,

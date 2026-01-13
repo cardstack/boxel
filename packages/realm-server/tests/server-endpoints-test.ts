@@ -1310,11 +1310,13 @@ module(basename(__filename), function () {
               )
               .set('Content-Type', 'application/json');
             assert.deepEqual(response.body, {
+              fileErrors: 0,
+              filesIndexed: 2,
               moduleErrors: 0,
               instanceErrors: 0,
               modulesIndexed: 0,
               instancesIndexed: 2,
-              totalIndexEntries: 2,
+              totalIndexEntries: 4,
             });
           }
           let finalJobs = await dbAdapter.execute('select * from jobs');
@@ -2172,6 +2174,9 @@ module(basename(__filename), function () {
                   creditsAvailableInPlanAllowance: null,
                   creditsIncludedInPlanAllowance: null,
                   extraCreditsAvailableInBalance: 0,
+                  lowCreditThreshold: null,
+                  lastDailyCreditGrantAt: null,
+                  nextDailyCreditGrantAt: null,
                 },
                 relationships: {
                   subscription: null,

@@ -30,6 +30,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     let request: SuperTest<Test>;
     let dir: DirResult;
     let dbAdapter: PgAdapter;
+    let originalLowCreditThreshold: string | undefined;
 
     function onRealmSetup(args: {
       testRealm: Realm;
@@ -46,6 +47,8 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     }
 
     hooks.beforeEach(async function () {
+      originalLowCreditThreshold = process.env.LOW_CREDIT_THRESHOLD;
+      process.env.LOW_CREDIT_THRESHOLD = '2000';
       dir = dirSync();
       copySync(join(__dirname, '..', 'cards'), dir.name);
     });
@@ -53,6 +56,11 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     hooks.afterEach(async function () {
       await closeServer(testRealmHttpServer);
       resetCatalogRealms();
+      if (originalLowCreditThreshold == null) {
+        delete process.env.LOW_CREDIT_THRESHOLD;
+      } else {
+        process.env.LOW_CREDIT_THRESHOLD = originalLowCreditThreshold;
+      }
     });
 
     setupPermissionedRealm(hooks, {
@@ -89,6 +97,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         );
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
       let json = response.body;
+      assert.ok(
+        json.data.attributes.nextDailyCreditGrantAt,
+        'nextDailyCreditGrantAt is set',
+      );
       assert.deepEqual(
         json,
         {
@@ -102,6 +114,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
               creditsAvailableInPlanAllowance: null,
               creditsIncludedInPlanAllowance: null,
               extraCreditsAvailableInBalance: 0,
+              lowCreditThreshold: 2000,
+              lastDailyCreditGrantAt: null,
+              nextDailyCreditGrantAt:
+                json.data.attributes.nextDailyCreditGrantAt,
             },
             relationships: {
               subscription: null,
@@ -207,6 +223,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         );
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
       let json = response.body;
+      assert.ok(
+        json.data.attributes.nextDailyCreditGrantAt,
+        'nextDailyCreditGrantAt is set',
+      );
       assert.deepEqual(
         json,
         {
@@ -220,6 +240,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
               creditsAvailableInPlanAllowance: 2500,
               creditsIncludedInPlanAllowance: 2500,
               extraCreditsAvailableInBalance: 100,
+              lowCreditThreshold: 2000,
+              lastDailyCreditGrantAt: null,
+              nextDailyCreditGrantAt:
+                json.data.attributes.nextDailyCreditGrantAt,
             },
             relationships: {
               subscription: {
@@ -262,6 +286,151 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         '/_user response is correct',
       );
     });
+
+    test('responds with nextDailyCreditGrantAt when user is below low credit threshold', async function (assert) {
+      await insertUser(dbAdapter, 'user@test', 'cus_123', 'user@test.com');
+      let response = await request
+        .get(`/_user`)
+        .set('Accept', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user@test', ['read', 'write'])}`,
+        );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let json = response.body;
+      assert.strictEqual(
+        json.data.attributes.lowCreditThreshold,
+        2000,
+        'lowCreditThreshold matches env var',
+      );
+      assert.ok(
+        json.data.attributes.nextDailyCreditGrantAt,
+        'nextDailyCreditGrantAt is set',
+      );
+      assert.strictEqual(
+        json.data.attributes.lastDailyCreditGrantAt,
+        null,
+        'lastDailyCreditGrantAt is null without daily grants',
+      );
+    });
+
+    test('responds with lastDailyCreditGrantAt when user is above low credit threshold', async function (assert) {
+      let user = await insertUser(
+        dbAdapter,
+        'user@test',
+        'cus_123',
+        'user@test.com',
+      );
+      await addToCreditsLedger(dbAdapter, {
+        userId: user.id,
+        creditAmount: 3000,
+        creditType: 'extra_credit',
+        subscriptionCycleId: null,
+      });
+      await addToCreditsLedger(dbAdapter, {
+        userId: user.id,
+        creditAmount: 100,
+        creditType: 'daily_credit',
+        subscriptionCycleId: null,
+      });
+
+      let response = await request
+        .get(`/_user`)
+        .set('Accept', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user@test', ['read', 'write'])}`,
+        );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let json = response.body;
+      assert.strictEqual(
+        json.data.attributes.lowCreditThreshold,
+        2000,
+        'lowCreditThreshold matches env var',
+      );
+      assert.ok(
+        json.data.attributes.lastDailyCreditGrantAt,
+        'lastDailyCreditGrantAt is set',
+      );
+    });
+
+    test('responds without daily grant timestamps when low credit threshold is unset', async function (assert) {
+      delete process.env.LOW_CREDIT_THRESHOLD;
+      await insertUser(
+        dbAdapter,
+        'user-threshold-unset@test',
+        'cus_999',
+        'user-threshold-unset@test.com',
+      );
+      let response = await request
+        .get(`/_user`)
+        .set('Accept', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user-threshold-unset@test', [
+            'read',
+            'write',
+          ])}`,
+        );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let json = response.body;
+      assert.strictEqual(
+        json.data.attributes.lowCreditThreshold,
+        null,
+        'lowCreditThreshold is null when env var is unset',
+      );
+      assert.strictEqual(
+        json.data.attributes.nextDailyCreditGrantAt,
+        null,
+        'nextDailyCreditGrantAt is null when threshold is unset',
+      );
+      assert.strictEqual(
+        json.data.attributes.lastDailyCreditGrantAt,
+        null,
+        'lastDailyCreditGrantAt is null without daily grants',
+      );
+    });
+
+    test('responds with the most recent daily grant timestamp', async function (assert) {
+      let user = await insertUser(
+        dbAdapter,
+        'user-multi-daily@test',
+        'cus_456',
+        'user-multi-daily@test.com',
+      );
+      await dbAdapter.execute(
+        `INSERT INTO credits_ledger (user_id, credit_amount, credit_type, subscription_cycle_id, created_at)
+        VALUES ($1, $2, $3, $4, $5)`,
+        {
+          bind: [user.id, 50, 'daily_credit', null, 1000],
+        },
+      );
+      await dbAdapter.execute(
+        `INSERT INTO credits_ledger (user_id, credit_amount, credit_type, subscription_cycle_id, created_at)
+        VALUES ($1, $2, $3, $4, $5)`,
+        {
+          bind: [user.id, 75, 'daily_credit', null, 2000],
+        },
+      );
+
+      let response = await request
+        .get(`/_user`)
+        .set('Accept', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user-multi-daily@test', [
+            'read',
+            'write',
+          ])}`,
+        );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let json = response.body;
+      assert.strictEqual(
+        json.data.attributes.lastDailyCreditGrantAt,
+        2000,
+        'lastDailyCreditGrantAt reflects the most recent daily grant',
+      );
+    });
   });
 
   module('Realm-specific Endpoints | POST _user', function (hooks) {
@@ -270,6 +439,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     let request: SuperTest<Test>;
     let dir: DirResult;
     let dbAdapter: PgAdapter;
+    let originalLowCreditThreshold: string | undefined;
 
     function onRealmSetup(args: {
       testRealm: Realm;
@@ -286,6 +456,8 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     }
 
     hooks.beforeEach(async function () {
+      originalLowCreditThreshold = process.env.LOW_CREDIT_THRESHOLD;
+      process.env.LOW_CREDIT_THRESHOLD = '2000';
       dir = dirSync();
       copySync(join(__dirname, '..', 'cards'), dir.name);
     });
@@ -293,6 +465,11 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     hooks.afterEach(async function () {
       await closeServer(testRealmHttpServer);
       resetCatalogRealms();
+      if (originalLowCreditThreshold == null) {
+        delete process.env.LOW_CREDIT_THRESHOLD;
+      } else {
+        process.env.LOW_CREDIT_THRESHOLD = originalLowCreditThreshold;
+      }
     });
 
     setupPermissionedRealm(hooks, {
@@ -333,11 +510,20 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       );
 
       // Verify credits were added
+      let dailyCredits = await sumUpCreditsLedger(dbAdapter, {
+        userId: user!.id,
+        creditType: 'daily_credit',
+      });
+      assert.strictEqual(
+        dailyCredits,
+        2000,
+        'daily credits were added up to the low credit threshold',
+      );
       let extraCredits = await sumUpCreditsLedger(dbAdapter, {
         userId: user!.id,
         creditType: 'extra_credit',
       });
-      assert.strictEqual(extraCredits, 1000, 'extra credits were added');
+      assert.strictEqual(extraCredits, 0, 'extra credits were not added');
       let planAllowance = await sumUpCreditsLedger(dbAdapter, {
         userId: user!.id,
         creditType: 'plan_allowance',

@@ -442,6 +442,7 @@ jobs:
               - prerender-manager-test.ts
               - prerender-proxy-test.ts
               - transpile-test.ts
+              - server-endpoints/search-prerendered-test.ts
           - shard: 2
             testModules:
               - card-endpoints-test.ts

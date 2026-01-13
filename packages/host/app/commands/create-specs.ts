@@ -7,6 +7,8 @@ import {
   isCardDef,
   isFieldDef,
   type Query,
+  type Loader,
+  getAncestor,
 } from '@cardstack/runtime-common';
 
 import {
@@ -14,7 +16,7 @@ import {
   isResolvedCodeRef,
 } from '@cardstack/runtime-common/code-ref';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import type { Spec } from 'https://cardstack.com/base/spec';
 import type { SpecType } from 'https://cardstack.com/base/spec';
@@ -118,7 +120,6 @@ class SpecTypeGuesser {
     );
   }
 }
-
 interface CreateSpecResult {
   spec: Spec;
   new: boolean;
@@ -145,13 +146,19 @@ export default class CreateSpecCommand extends HostBaseCommand<
     declaration: ModuleDeclaration,
     codeRef: ResolvedCodeRef,
     targetRealm: string,
-    SpecKlass: typeof BaseDef,
+    SpecKlass: typeof CardDef,
     createIfExists: boolean = false,
     autoGenerateReadme: boolean = false,
   ): Promise<CreateSpecResult> {
     const title = this.getSpecTitle(declaration, codeRef.name);
     const specType = new SpecTypeGuesser(declaration).type;
 
+    const ResolvedSpecClass = await getSpecClassFromDeclaration(
+      codeRef,
+      SpecKlass,
+      this.loaderService.loader,
+      targetRealm,
+    );
     let createdSpecRes: CreateSpecResult;
     if (!createIfExists) {
       // Check if a spec already exists for this code ref
@@ -172,7 +179,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
         let savedSpec = existingSpecs[0] as Spec;
         createdSpecRes = { spec: savedSpec, new: false };
       } else {
-        let spec = new SpecKlass({
+        let spec = new ResolvedSpecClass({
           specType,
           ref: codeRef,
           title,
@@ -183,7 +190,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
         createdSpecRes = { spec: savedSpec, new: true };
       }
     } else {
-      let spec = new SpecKlass({
+      let spec = new ResolvedSpecClass({
         specType,
         ref: codeRef,
         title,
@@ -237,7 +244,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
 
     let url: string;
     if (codeRef) {
-      let relativeTo = new URL(codeRef.module);
+      let relativeTo = new URL(targetRealm);
       let maybeAbsoluteRef = codeRefWithAbsoluteURL(codeRef, relativeTo);
       if (isResolvedCodeRef(maybeAbsoluteRef)) {
         codeRef = maybeAbsoluteRef;
@@ -250,9 +257,9 @@ export default class CreateSpecCommand extends HostBaseCommand<
     }
 
     let declarations = await this.moduleContentsService.assemble(url);
-    let SpecKlass = await loadCardDef(specRef, {
+    let SpecKlass = (await loadCardDef(specRef, {
       loader: this.loaderService.loader,
-    });
+    })) as typeof CardDef;
 
     let specs: Spec[] = [];
     let newSpecs: Spec[] = [];
@@ -336,4 +343,64 @@ export default class CreateSpecCommand extends HostBaseCommand<
       throw e;
     }
   }
+}
+
+/**
+ * Finds the appropriate Spec class to use when creating a spec instance.
+ *
+ * @param codeRef - Code reference of the code being documented (used for naming convention)
+ * @param fallbackSpecClass - Base Spec class to use if no subclass found
+ * @param loader - Module loader for dynamically loading Spec subclasses
+ * @param targetRealm - Realm URL to use as relativeTo for loading the spec class
+ * @returns Spec subclass if found, otherwise fallback base Spec
+ */
+async function getSpecClassFromDeclaration(
+  codeRef: ResolvedCodeRef,
+  fallbackSpecClass: typeof CardDef,
+  loader: Loader,
+  targetRealm: string,
+): Promise<typeof CardDef> {
+  try {
+    const specCodeRef: ResolvedCodeRef = {
+      module: codeRef.module,
+      name: codeRef.name,
+    };
+    const loadedSpec = await loadCardDef(specCodeRef, {
+      loader,
+      relativeTo: new URL(targetRealm),
+    });
+
+    if (
+      loadedSpec &&
+      isCardDef(loadedSpec) &&
+      loadedSpec !== fallbackSpecClass &&
+      isSpecSubclass(loadedSpec, fallbackSpecClass)
+    ) {
+      return loadedSpec;
+    }
+  } catch {
+    // Spec subclass doesn't exist; fall back to base Spec
+  }
+
+  return fallbackSpecClass;
+}
+
+/**
+ * Checks if candidate class extends ancestor class via prototype chain.
+ * Both candidate and ancestor are CardDefs (Specs are Cards, not Fields).
+ * getAncestor returns typeof BaseDef, so we use that for the internal traversal.
+ */
+function isSpecSubclass(
+  candidate: typeof CardDef,
+  ancestor: typeof CardDef,
+): boolean {
+  let current: typeof BaseDef | undefined = candidate;
+  while (current) {
+    const parent = getAncestor(current);
+    if (parent === ancestor) {
+      return true;
+    }
+    current = parent;
+  }
+  return false;
 }

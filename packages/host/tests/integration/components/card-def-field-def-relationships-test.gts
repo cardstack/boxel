@@ -399,6 +399,25 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       .exists('top level containsMany field item has remove button');
   });
 
+  test('computed contains field renders embedded in edit format', async function (assert) {
+    class ContactCard extends CardDef {
+      @field name = contains(StringField, {
+        computeVia: () => 'Marcelius Wilde',
+      });
+    }
+
+    let card = new ContactCard();
+
+    await renderCard(loader, card, 'edit');
+
+    assert
+      .dom('[data-test-field="name"] input')
+      .doesNotExist('computed field does not render an edit input');
+    assert
+      .dom('[data-test-field="name"]')
+      .containsText('Marcelius Wilde', 'computed value is rendered');
+  });
+
   test('render a CardDef field (singular) linked to from a FieldDef', async function (assert) {
     class CurrencyCard extends CardDef {
       static displayName = 'Currency';

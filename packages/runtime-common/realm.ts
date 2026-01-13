@@ -4,6 +4,7 @@ import {
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
   type CardCollectionDocument,
+  type PrerenderedCardCollectionDocument,
 } from './document-types';
 import { isMeta, type CardResource, type Relationship } from './resource-types';
 import { normalizeRelationships } from './relationship-utils';
@@ -52,12 +53,14 @@ import {
   type FileMeta,
   type DirectoryMeta,
   type ResolvedCodeRef,
+  isResolvedCodeRef,
   type FieldDefinition,
   type RealmPermissions,
   type RealmAction,
   type LintArgs,
   type LintResult,
   type Query,
+  type PrerenderedHtmlFormat,
   codeRefWithAbsoluteURL,
   userInitiatedPriority,
   systemInitiatedPriority,
@@ -65,6 +68,7 @@ import {
   isCardDocumentString,
   isBrowserTestEnv,
   type IndexedFile,
+  PRERENDERED_HTML_FORMATS,
 } from './index';
 import { visitModuleDeps } from './code-ref';
 import merge from 'lodash/merge';
@@ -181,7 +185,6 @@ const CACHE_HIT_VALUE = 'hit';
 const CACHE_MISS_VALUE = 'miss';
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
-const CONTENT_HASH_HEADER = 'X-Boxel-Content-Hash';
 const FILE_DEF_CODE_REF: ResolvedCodeRef = {
   module: `${baseRealm.url}file-api`,
   name: 'FileDef',
@@ -537,12 +540,12 @@ export class Realm {
       .get(
         '/_search-prerendered',
         SupportedMimeType.CardJson,
-        this.searchPrerendered.bind(this),
+        this.searchPrerenderedResponse.bind(this),
       )
       .query(
         '/_search-prerendered',
         SupportedMimeType.CardJson,
-        this.searchPrerendered.bind(this),
+        this.searchPrerenderedResponse.bind(this),
       )
       .get(
         '/_types',
@@ -2110,7 +2113,7 @@ export class Realm {
     return this.#adapter.openFile(localPath);
   }
 
-  private async fileCardDocument(
+  private async fileMetaDocument(
     requestContext: RequestContext,
     localPath: LocalPath,
     contentType: SupportedMimeType = SupportedMimeType.CardJson,
@@ -2138,13 +2141,13 @@ export class Realm {
           sourceUrl: fileURL,
           contentType: inferredContentType,
           contentHash,
+          lastModified: fileRef.lastModified,
+          createdAt: createdAt ?? fileRef.lastModified,
         },
         meta: {
           adoptsFrom: FILE_DEF_CODE_REF,
-          lastModified: fileRef.lastModified,
           realmInfo,
           realmURL: this.url,
-          resourceCreatedAt: createdAt ?? fileRef.lastModified,
         },
         links: { self: fileURL },
       },
@@ -2154,22 +2157,16 @@ export class Realm {
       init: {
         headers: {
           'content-type': contentType,
-          ...lastModifiedHeader(doc),
-          ...(createdAt != null
-            ? { 'x-created': formatRFC7231(createdAt * 1000) }
-            : {}),
-          ...(contentHash ? { [CONTENT_HASH_HEADER]: contentHash } : {}),
         },
       },
       requestContext,
     });
   }
 
-  private async fileCardDocumentFromIndex(
+  private async fileMetaDocumentFromIndex(
     requestContext: RequestContext,
     localPath: LocalPath,
     fileEntry: IndexedFile,
-    contentType: SupportedMimeType = SupportedMimeType.CardJson,
   ): Promise<Response> {
     let fileURL = this.paths.fileURL(localPath).href;
     let name = localPath.split('/').pop() ?? localPath;
@@ -2193,13 +2190,13 @@ export class Realm {
           sourceUrl: searchDoc.sourceUrl ?? fileURL,
           contentType: searchDoc.contentType ?? inferredContentType,
           contentHash,
+          lastModified: fileEntry.lastModified ?? unixTime(Date.now()),
+          createdAt: createdAt ?? unixTime(Date.now()),
         },
         meta: {
           adoptsFrom: FILE_DEF_CODE_REF,
-          lastModified: fileEntry.lastModified ?? unixTime(Date.now()),
           realmInfo,
           realmURL: this.url,
-          resourceCreatedAt: createdAt ?? unixTime(Date.now()),
         },
         links: { self: fileURL },
       },
@@ -2208,12 +2205,7 @@ export class Realm {
       body: JSON.stringify(doc, null, 2),
       init: {
         headers: {
-          'content-type': contentType,
-          ...lastModifiedHeader(doc),
-          ...(createdAt != null
-            ? { 'x-created': formatRFC7231(createdAt * 1000) }
-            : {}),
-          ...(contentHash ? { [CONTENT_HASH_HEADER]: contentHash } : {}),
+          'content-type': SupportedMimeType.FileMeta,
         },
       },
       requestContext,
@@ -2232,14 +2224,13 @@ export class Realm {
       this.paths.fileURL(localPath),
     );
     if (fileEntry) {
-      return await this.fileCardDocumentFromIndex(
+      return await this.fileMetaDocumentFromIndex(
         requestContext,
         localPath,
         fileEntry,
-        SupportedMimeType.FileMeta,
       );
     }
-    let fileResponse = await this.fileCardDocument(
+    let fileResponse = await this.fileMetaDocument(
       requestContext,
       localPath,
       SupportedMimeType.FileMeta,
@@ -2966,28 +2957,68 @@ export class Realm {
     });
   }
 
-  private async searchPrerendered(
+  public async searchPrerendered(
+    cardsQuery: Query,
+    opts: {
+      htmlFormat: PrerenderedHtmlFormat;
+      cardUrls?: string[];
+      renderType?: ResolvedCodeRef;
+    },
+  ): Promise<PrerenderedCardCollectionDocument> {
+    assertQuery(cardsQuery);
+    let results = await this.#realmIndexQueryEngine.searchPrerendered(
+      cardsQuery,
+      {
+        htmlFormat: opts.htmlFormat,
+        cardUrls: opts.cardUrls,
+        renderType: opts.renderType,
+        includeErrors: true,
+      },
+    );
+
+    return transformResultsToPrerenderedCardsDoc(results);
+  }
+
+  private async searchPrerenderedResponse(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let payload;
-    let htmlFormat;
-    let cardUrls;
-    let renderType;
+    let payload: Record<string, any> | undefined;
+    let htmlFormat: string | undefined;
+    let cardUrls: string[] | string | undefined;
+    let renderType: unknown;
+    let cardsQuery: unknown;
 
-    // Handle QUERY method
     if (request.method === 'QUERY') {
-      payload = await request.json();
+      payload = (await request.json()) as Record<string, any>;
       htmlFormat = payload.prerenderedHtmlFormat;
       cardUrls = payload.cardUrls;
       renderType = payload.renderType;
+      // prerenderedHtmlFormat and cardUrls are special parameters only for this endpoint
+      delete payload.prerenderedHtmlFormat;
+      delete payload.cardUrls;
+      delete payload.renderType;
+      cardsQuery = payload;
     } else {
-      // Handle GET method (existing logic)
-      let href = new URL(request.url).search.slice(1);
-      payload = parseQuery(href);
-      htmlFormat = payload.prerenderedHtmlFormat;
-      cardUrls = payload.cardUrls;
-      renderType = payload.renderType;
+      let url = new URL(request.url);
+      let queryParam = url.searchParams.get('query');
+      if (queryParam !== null) {
+        cardsQuery = parseQuery(queryParam);
+        payload = parseQuery(url.search.slice(1)) as Record<string, any>;
+        htmlFormat = payload.prerenderedHtmlFormat;
+        cardUrls = payload.cardUrls;
+        renderType = payload.renderType;
+      } else {
+        let href = url.search.slice(1);
+        payload = parseQuery(href) as Record<string, any>;
+        htmlFormat = payload.prerenderedHtmlFormat;
+        cardUrls = payload.cardUrls;
+        renderType = payload.renderType;
+        delete payload.prerenderedHtmlFormat;
+        delete payload.cardUrls;
+        delete payload.renderType;
+        cardsQuery = payload;
+      }
     }
 
     if (!isValidPrerenderedHtmlFormat(htmlFormat)) {
@@ -2997,8 +3028,7 @@ export class Realm {
             {
               status: '400',
               title: 'Bad Request',
-              message:
-                "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint",
+              message: `Must include a 'prerenderedHtmlFormat' parameter with a value of ${PRERENDERED_HTML_FORMATS.join()} to use this endpoint`,
             },
           ],
         }),
@@ -3010,12 +3040,14 @@ export class Realm {
       });
     }
 
-    // prerenderedHtmlFormat and cardUrls are special parameters only for this endpoint
-    delete payload.prerenderedHtmlFormat;
-    delete payload.cardUrls;
-    delete payload.renderType;
-
-    let cardsQuery = payload;
+    let normalizedCardUrls = Array.isArray(cardUrls)
+      ? cardUrls.map((url) => String(url))
+      : cardUrls
+        ? [String(cardUrls)]
+        : undefined;
+    let normalizedRenderType = isResolvedCodeRef(renderType as any)
+      ? (renderType as ResolvedCodeRef)
+      : undefined;
 
     try {
       assertQuery(cardsQuery);
@@ -3041,17 +3073,11 @@ export class Realm {
       throw e;
     }
 
-    let results = await this.#realmIndexQueryEngine.searchPrerendered(
-      cardsQuery,
-      {
-        htmlFormat,
-        cardUrls,
-        renderType,
-        includeErrors: true,
-      },
-    );
-
-    let doc = transformResultsToPrerenderedCardsDoc(results);
+    let doc = await this.searchPrerendered(cardsQuery as Query, {
+      htmlFormat,
+      cardUrls: normalizedCardUrls,
+      renderType: normalizedRenderType,
+    });
 
     return createResponse({
       body: JSON.stringify(doc, null, 2),
@@ -3130,18 +3156,36 @@ export class Realm {
     let resourceUrl = Array.isArray(payload.url)
       ? String(payload.url[0])
       : String(payload.url);
+    let requestedType = payload.type
+      ? Array.isArray(payload.type)
+        ? String(payload.type[0])
+        : String(payload.type)
+      : undefined;
+    let acceptedTypes = requestedType
+      ? [requestedType, `${requestedType}-error`]
+      : ['instance', 'instance-error', 'module', 'module-error'];
 
     let rows = (await query(this.#dbAdapter, [
-      `SELECT url, realm_url, deps FROM boxel_index WHERE (url =`,
+      `SELECT url, realm_url, deps, type FROM boxel_index WHERE (url =`,
       param(resourceUrl),
       `OR file_alias =`,
       param(resourceUrl),
+      `) AND type IN (`,
+      ...acceptedTypes.flatMap((type, index) =>
+        index === 0 ? [param(type)] : [',', param(type)],
+      ),
       `) AND (is_deleted IS NULL OR is_deleted = FALSE)`,
-    ])) as { url: string; realm_url: string; deps: unknown }[];
+    ])) as {
+      url: string;
+      realm_url: string;
+      deps: unknown;
+      type: string;
+    }[];
 
     let entries = rows.map((row) => ({
       canonicalUrl: row.url,
       realmUrl: ensureTrailingSlash(row.realm_url),
+      entryType: row.type,
       dependencies: parseDeps(row.deps),
     }));
 
@@ -3152,6 +3196,7 @@ export class Realm {
         attributes: {
           canonicalUrl: entry.canonicalUrl,
           realmUrl: entry.realmUrl,
+          entryType: entry.entryType,
           dependencies: entry.dependencies,
         },
       })),
@@ -3271,12 +3316,21 @@ export class Realm {
         return [];
       }
       let rows = (await query(this.#dbAdapter, [
-        `SELECT url, realm_url, deps FROM boxel_index WHERE (url =`,
+        `SELECT url, realm_url, deps, type FROM boxel_index WHERE (url =`,
         param(resourceUrl),
         `OR file_alias =`,
         param(resourceUrl),
+        `) AND type IN (`,
+        param('instance'),
+        `,`,
+        param('instance-error'),
         `) AND (is_deleted IS NULL OR is_deleted = FALSE)`,
-      ])) as { url: string; realm_url: string; deps: unknown }[];
+      ])) as {
+        url: string;
+        realm_url: string;
+        deps: unknown;
+        type: ResourceIndexEntry['entryType'];
+      }[];
 
       if (rows.length === 0) {
         return [];
@@ -3285,6 +3339,7 @@ export class Realm {
       return rows.map((row) => ({
         canonicalUrl: row.url,
         realmUrl: ensureTrailingSlash(row.realm_url),
+        entryType: row.type,
         dependencies: parseDeps(row.deps),
       }));
     };
@@ -3321,6 +3376,7 @@ export class Realm {
           attributes?: {
             canonicalUrl?: string;
             realmUrl?: string;
+            entryType?: string;
             dependencies?: unknown;
           };
         }>;
@@ -3342,6 +3398,7 @@ export class Realm {
           return {
             canonicalUrl,
             realmUrl: ensureTrailingSlash(realmUrl),
+            entryType: resource.attributes?.entryType,
             dependencies,
           };
         })
