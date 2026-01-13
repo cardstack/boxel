@@ -84,9 +84,9 @@ module(basename(__filename), function () {
           onRealmSetup,
         });
 
-        test('serves the request TESTTHIS', async function (assert) {
+        test('serves the request', async function (assert) {
           let response = await request
-            .get('/basic-card')
+            .get('/person-1')
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -742,7 +742,7 @@ module(basename(__filename), function () {
 
           assert.strictEqual(
             json.data.id,
-            `${testRealmHref}Person/${id}`,
+            `${testRealmHref}CardDef/${id}`,
             'the id is correct',
           );
           assert.ok(json.data.meta.lastModified, 'lastModified is populated');
@@ -750,7 +750,7 @@ module(basename(__filename), function () {
             dir.name,
             'realm_server_1',
             'test',
-            'Person',
+            'CardDef',
             `${id}.json`,
           );
           assert.ok(existsSync(cardFile), 'card json exists');
@@ -763,8 +763,8 @@ module(basename(__filename), function () {
                 type: 'card',
                 meta: {
                   adoptsFrom: {
-                    module: '../person',
-                    name: 'Person',
+                    module: 'https://cardstack.com/base/card-api',
+                    name: 'CardDef',
                   },
                 },
               },
