@@ -199,6 +199,7 @@ export * from './helpers/ensure-extension';
 export * from './url';
 export * from './render-route-options';
 export * from './publishability';
+export * from './pr-manifest';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
