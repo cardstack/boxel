@@ -38,6 +38,7 @@ import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain'
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain';
 import handlePrerenderProxy from './handlers/handle-prerender-proxy';
 import handleSearch from './handlers/handle-search';
+import handleGitHubPRRequest from './handlers/handle-github-pr';
 import { buildCreatePrerenderAuth } from './prerender/auth';
 
 export type CreateRoutesArgs = {
@@ -216,6 +217,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_boxel-claimed-domains/:claimedDomainId',
     jwtMiddleware(args.realmSecretSeed),
     handleDeleteBoxelClaimedDomainRequest(args),
+  );
+  router.post(
+    '/_github-pr',
+    jwtMiddleware(args.realmSecretSeed),
+    handleGitHubPRRequest(args),
   );
 
   return router.routes();
