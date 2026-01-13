@@ -286,8 +286,6 @@ export default class ListingCreateCommand extends HostBaseCommand<
       }
     }
 
-    console.log('deps', deps);
-
     const sanitizedDeps = this.sanitizeDeps(deps);
     if (!sanitizedDeps.length) {
       (listing as any).specs = [];

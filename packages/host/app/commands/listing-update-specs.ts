@@ -113,8 +113,6 @@ export default class ListingUpdateSpecsCommand extends HostBaseCommand<
       }
     }
 
-    console.log('updated listing deps', deps);
-
     const sanitizedDeps = this.sanitizeDeps(deps);
     const commandModule = await this.loadCommandModule();
     if (!sanitizedDeps.length) {
