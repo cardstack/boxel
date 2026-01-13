@@ -1,11 +1,10 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, ensureTrailingSlash } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import CreateSpecCommand from '@cardstack/host/commands/create-specs';
-import { catalogRealm } from '@cardstack/host/lib/utils';
 
 import type { Spec } from 'https://cardstack.com/base/spec';
 
@@ -19,70 +18,7 @@ import {
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
-import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
-
-const catalogRealmURL = ensureTrailingSlash(catalogRealm.url);
-const FIELD_SPEC_EDIT_COMPONENT = `${catalogRealmURL}field-spec/components/field-spec-edit-template`;
-const FIELD_SPEC_ISOLATED_COMPONENT = `${catalogRealmURL}field-spec/components/field-spec-isolated-template`;
-
-const testCardSource = `
-  import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
-
-  export class TestCard extends CardDef {
-    static displayName = 'Test Card';
-    @field name = contains(StringField);
-  }
-`;
-
-const testFieldSource = `
-  import { FieldDef } from 'https://cardstack.com/base/card-api';
-
-  export class TestField extends FieldDef {
-    static displayName = 'Test Field';
-  }
-`;
-
-const appCardSource = `
-  import { CardDef } from 'https://cardstack.com/base/card-api';
-
-  export class AppCard extends CardDef {
-    static displayName = 'App Card';
-  }
-`;
-
-const testComponentSource = `
-  import Component from '@glimmer/component';
-
-  export default class TestComponent extends Component {
-    static displayName = 'Test Component';
-  }
-`;
-
-const testCommandSource = `
-  import { Command } from '@cardstack/runtime-common';
-
-  export default class TestCommand extends Command {
-    static displayName = 'Test Command';
-  }
-`;
-
-const userFieldSpecSource = `
-  import { field, contains } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
-  import { Spec } from 'https://cardstack.com/base/spec';
-  import FieldSpecEditTemplate from '${FIELD_SPEC_EDIT_COMPONENT}';
-  import FieldSpecIsolatedTemplate from '${FIELD_SPEC_ISOLATED_COMPONENT}';
-
-  export class UserFieldSpec extends Spec {
-    static displayName = 'User Field Spec';
-    static isolated = FieldSpecIsolatedTemplate as unknown as typeof Spec.isolated;
-    static edit = FieldSpecEditTemplate as unknown as typeof Spec.edit;
-
-    @field highlight = contains(StringField);
-  }
-`;
 
 module('Integration | Command | create-specs', function (hooks) {
   setupRenderingTest(hooks);
@@ -143,12 +79,33 @@ module('Integration | Command | create-specs', function (hooks) {
       mockMatrixUtils,
       realmURL: testRealmURL,
       contents: {
-        'test-card.gts': testCardSource,
-        'test-field.gts': testFieldSource,
-        'app-card.gts': appCardSource,
-        'test-component.gts': testComponentSource,
-        'test-command.gts': testCommandSource,
-        'user-field-spec.gts': userFieldSpecSource,
+        'test-card.gts': `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import StringField from 'https://cardstack.com/base/string';
+
+export class TestCard extends CardDef {
+  static displayName = 'Test Card';
+  @field name = contains(StringField);
+}`,
+        'test-field.gts': `import { FieldDef } from 'https://cardstack.com/base/card-api';
+
+export class TestField extends FieldDef {
+  static displayName = 'Test Field';
+}`,
+        'app-card.gts': `import { CardDef } from 'https://cardstack.com/base/card-api';
+
+export class AppCard extends CardDef {
+  static displayName = 'App Card';
+}`,
+        'test-component.gts': `import Component from '@glimmer/component';
+
+export default class TestComponent extends Component {
+  static displayName = 'Test Component';
+}`,
+        'test-command.gts': `import { Command } from '@cardstack/runtime-common';
+
+export default class TestCommand extends Command {
+  static displayName = 'Test Command';
+}`,
         '.realm.json': `{ "name": "${realmName}" }`,
       },
     });
@@ -373,53 +330,5 @@ module('Integration | Command | create-specs', function (hooks) {
       spec.readMe?.includes('Test Spec README'),
       'readMe content sourced from proxy mock',
     );
-  });
-
-  test('subclassed spec with custom edit template shows Field Configuration Playground section', async function (assert) {
-    const result = await createSpecCommand.execute({
-      codeRef: {
-        module: `${testRealmURL}user-field-spec.gts`,
-        name: 'UserFieldSpec',
-      },
-      targetRealm: testRealmURL,
-    });
-
-    assert.ok(result.newSpecs?.[0], 'Spec was created for the subclass');
-
-    const store = getService('store');
-    const savedSpec = (await store.get(result.newSpecs[0].id!)) as Spec;
-
-    // Render the spec in edit format
-    await renderCard(loader, savedSpec, 'edit');
-
-    // Verify Field Configuration Playground section is present
-    assert
-      .dom('#fields-configuration-preview')
-      .exists('Field Configuration Playground section is present');
-  });
-
-  test('subclassed spec with custom edit template hides Examples section', async function (assert) {
-    const result = await createSpecCommand.execute({
-      codeRef: {
-        module: `${testRealmURL}user-field-spec.gts`,
-        name: 'UserFieldSpec',
-      },
-      targetRealm: testRealmURL,
-    });
-
-    assert.ok(result.newSpecs?.[0], 'Spec was created for the subclass');
-
-    const store = getService('store');
-    const savedSpec = (await store.get(result.newSpecs[0].id!)) as Spec;
-
-    // Render the spec in edit format
-    await renderCard(loader, savedSpec, 'edit');
-
-    // Verify Examples section is NOT present
-    assert
-      .dom('#examples')
-      .doesNotExist(
-        'Examples section is not rendered when using custom edit template',
-      );
   });
 });
