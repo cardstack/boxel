@@ -98,7 +98,7 @@ You can also use `start:development` if you want the functionality of `start:all
 
 Optional environment variables for `start:development`:
 
-- `USE_EXTERNAL_CATALOG=1` to load `/catalog` from `packages/catalog/contents` (cloned from the `boxel-catalog` repo). 
+- `USE_EXTERNAL_CATALOG=1` to load `/catalog` from `packages/catalog/contents` (cloned from the `boxel-catalog` repo).
 
 ### Card Pre-rendering
 
@@ -394,12 +394,15 @@ The tests are available at `http://localhost:4200/tests`
 
 ### Realm Server Node tests
 
-First make sure to generate the host app's `dist/` output in order to support card pre-rendering by first starting the host app (instructions above). If you want to make the host app's `dist/` output without starting the host app, you can run `pnpm build` in the host app's workspace.
-
 To run the `packages/realm-server/` workspace tests start:
 
-1. `pnpm start:all` in the `packages/realm-server/` to serve _both_ the base realm and the realm that serves the test cards for node.
-2. Run `pnpm test` in the `packages/realm-server/` workspace to run the realm node tests. `TEST_MODULE=realm-endpoints-test.ts pnpm test-module` is an example of how to run a single test module.
+1. The host application on port 4200. You can do this by running `pnpm start` in the `packages/host/` workspace, or if you have a built folder you can serve it with a static server with `pnpm serve:dist`.
+2. The base realm and associated workers, postgres and synapse. You can do this by running `pnpm start:all` in the `packages/realm-server/` workspace, or `pnpm:start-services-for-host-tests` for a more lightweight setup.
+3. Run the realm server tests:
+
+- `pnpm test` in the `packages/realm-server/` workspace to run the realm node tests in full (~1hr).
+- `TEST_MODULES="types-endpoint-test.ts|another-test-module.ts" pnpm test` in the `packages/realm-server/` workspace to run tests for a subset of modules.
+- `TEST_MODULE="types-endpoint-test.ts" pnpm test-module` in the `packages/realm-server/` workspace to run tests for a specific module.
 
 ### Boxel UI
 

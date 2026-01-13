@@ -81,7 +81,6 @@
   "scripts": {
     "test": "./scripts/remove-test-dbs.sh; LOG_LEVELS=\"*=error,prerenderer-chrome=silent,pg-adapter=warn,realm:requests=warn${LOG_LEVELS:+,}${LOG_LEVELS}\" NODE_NO_WARNINGS=1 PGPORT=5435 STRIPE_WEBHOOK_SECRET=stripe-webhook-secret STRIPE_API_KEY=stripe-api-key qunit --require ts-node/register/transpile-only tests/index.ts",
     "test-module": "./scripts/remove-test-dbs.sh; LOG_LEVELS=\"*=error,prerenderer-chrome=silent,pg-adapter=warn,realm:requests=warn${LOG_LEVELS:+,}${LOG_LEVELS}\" NODE_NO_WARNINGS=1 PGPORT=5435 STRIPE_WEBHOOK_SECRET=stripe-webhook-secret STRIPE_API_KEY=stripe-api-key qunit --require ts-node/register/transpile-only --module ${TEST_MODULE} tests/index.ts",
-    "test-modules": "./scripts/remove-test-dbs.sh; LOG_LEVELS=\"*=error,prerenderer-chrome=silent,pg-adapter=warn,realm:requests=warn${LOG_LEVELS:+,}${LOG_LEVELS}\" NODE_NO_WARNINGS=1 PGPORT=5435 STRIPE_WEBHOOK_SECRET=stripe-webhook-secret STRIPE_API_KEY=stripe-api-key node ./scripts/run-test-modules.js",
     "start:matrix": "cd ../matrix && pnpm assert-synapse-running",
     "start:smtp": "cd ../matrix && pnpm assert-smtp-running",
     "start:pg": "./scripts/start-pg.sh",
