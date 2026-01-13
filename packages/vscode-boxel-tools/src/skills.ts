@@ -3,6 +3,7 @@ import type { RealmAuth } from './realm-auth';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { LocalFileSystem } from './local-file-system';
+import { buildQueryParamValue } from '@cardstack/runtime-common';
 
 export interface StoredSkillData {
   skillLists: {
@@ -370,19 +371,24 @@ export class SkillList extends vscode.TreeItem {
     }
 
     const searchUrl = new URL('./_search', this.realmUrl);
-
-    // Update search parameters to match the example URL
-    searchUrl.searchParams.set(
-      'sort[0][on][module]',
-      'https://cardstack.com/base/card-api',
-    );
-    searchUrl.searchParams.set('sort[0][on][name]', 'CardDef');
-    searchUrl.searchParams.set('sort[0][by]', 'title');
-    searchUrl.searchParams.set(
-      'filter[type][module]',
-      'https://cardstack.com/base/skill',
-    );
-    searchUrl.searchParams.set('filter[type][name]', 'Skill');
+    const query = {
+      sort: [
+        {
+          by: 'title',
+          on: {
+            module: 'https://cardstack.com/base/card-api',
+            name: 'CardDef',
+          },
+        },
+      ],
+      filter: {
+        type: {
+          module: 'https://cardstack.com/base/skill',
+          name: 'Skill',
+        },
+      },
+    };
+    searchUrl.searchParams.set('query', buildQueryParamValue(query));
 
     const response = await fetch(searchUrl, {
       headers,

@@ -67,6 +67,7 @@
     "sinon": "catalog:",
     "start-server-and-test": "catalog:",
     "stripe": "catalog:",
+    "super-fast-md5": "catalog:",
     "supertest": "catalog:",
     "testem": "catalog:",
     "tmp": "catalog:",

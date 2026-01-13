@@ -152,13 +152,17 @@ export class MockClient implements ExtendedClient {
       permissions = ['read'];
     }
     let sessionRoom = `test-session-room-realm-${realmURL.href}-user-${this.loggedInAs}`;
+    let realmServerURL =
+      ensureTrailingSlash(realmURL.href) === baseRealm.url
+        ? new URL(ENV.resolvedBaseRealmURL).origin
+        : realmURL.origin;
     let payload = {
       iat: nowInSeconds,
       exp: expires,
       user: this.loggedInAs,
       realm: realmURL.href,
       sessionRoom,
-      realmServerURL: new URL(realmURL.origin).href,
+      realmServerURL: ensureTrailingSlash(realmServerURL),
       // adding a nonce to the test token so that we can tell the difference
       // between different tokens created in the same second
       nonce: nonce++,
