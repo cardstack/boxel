@@ -81,7 +81,6 @@ export class SearchCardsByQueryCommand extends HostBaseCommand<
       instances = await this.store.search(input.query, realmUrls);
     } catch (e) {
       console.error(`Error searching in realms:`, e, input.query);
-      instances = [];
     }
 
     let commandModule = await this.loadCommandModule();

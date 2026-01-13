@@ -182,6 +182,7 @@ export * from './authorization-middleware';
 export * from './resource-types';
 export * from './query';
 export * from './search-utils';
+export * from './prerendered-html-format';
 export * from './query-field-utils';
 export * from './relationship-utils';
 export * from './formats';
