@@ -1,0 +1,43 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "DatetimeFieldSpec",
+        "module": "../datetime-field-spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "DatetimeFieldSpec",
+        "module": "../datetime-field-spec"
+      },
+      "short": "2026-01-08T16:04:00",
+      "title": "Datetime Field Spec",
+      "readMe": null,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "specType": "card",
+      "standard": "2026-01-08T16:03:00",
+      "description": null,
+      "customFormat": "2026-01-08T16:04:00",
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

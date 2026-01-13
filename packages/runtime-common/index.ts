@@ -182,6 +182,7 @@ export * from './authorization-middleware';
 export * from './resource-types';
 export * from './query';
 export * from './search-utils';
+export * from './prerendered-html-format';
 export * from './query-field-utils';
 export * from './relationship-utils';
 export * from './formats';
@@ -198,6 +199,7 @@ export * from './helpers/ensure-extension';
 export * from './url';
 export * from './render-route-options';
 export * from './publishability';
+export * from './pr-manifest';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';

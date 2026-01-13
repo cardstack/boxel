@@ -254,12 +254,12 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 
   private get availableRealms(): Record<string, RealmInfo> | undefined {
+    if (!this.state) {
+      return undefined;
+    }
     let items: Record<string, RealmInfo> = {};
-    for (let [url, realmMeta] of Object.entries(this.realm.allRealmsInfo)) {
-      if (this.state == null || !this.state.availableRealmUrls.includes(url)) {
-        continue;
-      }
-      items[url] = realmMeta.info;
+    for (let url of this.state.availableRealmUrls) {
+      items[url] = this.realm.info(url);
     }
     return items;
   }
@@ -347,6 +347,17 @@ export default class CardCatalogModal extends Component<Signature> {
       } = {},
     ) => {
       await this.realmServer.ready;
+      // Preload realm info without blocking the modal from opening.
+      void Promise.all(
+        this.realmServer.availableRealmURLs.map(async (realmURL) => {
+          let resource = this.realm.getOrCreateRealmResource(realmURL);
+          try {
+            await resource.fetchInfo();
+          } catch {
+            // Leave realm info as fallback if it cannot be fetched.
+          }
+        }),
+      );
       this.stateId++;
       let title = await chooseCardTitle(
         query.filter,

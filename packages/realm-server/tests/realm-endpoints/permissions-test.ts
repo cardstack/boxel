@@ -6,9 +6,7 @@ import { copySync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
 import { fetchRealmPermissions } from '@cardstack/runtime-common';
 import {
-  setupBaseRealmServer,
   setupPermissionedRealm,
-  matrixURL,
   testRealmHref,
   testRealmURL,
   createJWT,
@@ -34,8 +32,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       dbAdapter = args.dbAdapter;
       dir = args.dir;
     }
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.beforeEach(async function () {
       dir = dirSync();

@@ -8,19 +8,13 @@ import {
   type LooseSingleCardDocument,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
-import {
-  setupBaseRealmServer,
-  setupPermissionedRealm,
-  matrixURL,
-  testRealmHref,
-  createJWT,
-} from './helpers';
+import { setupPermissionedRealm, testRealmHref, createJWT } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(basename(__filename), function () {
   module(
     'Realm-specific Endpoints: can make request to post /_atomic',
-    function (hooks) {
+    function () {
       let testRealm: Realm;
       let testRealmAdapter: RealmAdapter;
       let request: SuperTest<Test>;
@@ -36,8 +30,6 @@ module(basename(__filename), function () {
         testRealmAdapter = args.testRealmAdapter;
         request = args.request;
       }
-
-      setupBaseRealmServer(hooks, matrixURL);
 
       module('writes', function (hooks) {
         setupPermissionedRealm(hooks, {

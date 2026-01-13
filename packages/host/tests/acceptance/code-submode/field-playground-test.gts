@@ -1095,7 +1095,6 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         name: 'room-test',
       });
       setupUserSubscription();
-      setupAuthEndpoints();
 
       await setupAcceptanceTestRealm({
         mockMatrixUtils,

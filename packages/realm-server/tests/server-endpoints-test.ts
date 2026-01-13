@@ -22,7 +22,6 @@ import { stringify } from 'qs';
 import { v4 as uuidv4 } from 'uuid';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
-  setupBaseRealmServer,
   setupPermissionedRealm,
   runTestRealmServer,
   setupDB,
@@ -115,7 +114,6 @@ module(basename(__filename), function () {
         dir = args.dir;
         dbAdapter = args.dbAdapter;
       }
-      setupBaseRealmServer(hooks, matrixURL);
 
       hooks.beforeEach(async function () {
         dir = dirSync();
@@ -2226,6 +2224,9 @@ module(basename(__filename), function () {
                   creditsAvailableInPlanAllowance: null,
                   creditsIncludedInPlanAllowance: null,
                   extraCreditsAvailableInBalance: 0,
+                  lowCreditThreshold: null,
+                  lastDailyCreditGrantAt: null,
+                  nextDailyCreditGrantAt: null,
                 },
                 relationships: {
                   subscription: null,
@@ -2905,8 +2906,6 @@ module(basename(__filename), function () {
     let testRealmServer: Server;
     let request: SuperTest<Test>;
     let dir: DirResult;
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.beforeEach(async function () {
       dir = dirSync();

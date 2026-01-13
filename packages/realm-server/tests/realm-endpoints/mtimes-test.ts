@@ -3,9 +3,7 @@ import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
 import {
-  setupBaseRealmServer,
   setupPermissionedRealm,
-  matrixURL,
   mtimes,
   testRealmHref,
   testRealmURL,
@@ -28,7 +26,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       testRealmPath = args.testRealmPath;
       request = args.request;
     }
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealm(hooks, {
       permissions: {

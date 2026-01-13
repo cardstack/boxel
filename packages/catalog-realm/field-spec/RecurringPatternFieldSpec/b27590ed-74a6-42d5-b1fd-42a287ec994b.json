@@ -1,0 +1,51 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "RecurringPatternFieldSpec",
+        "module": "../recurring-pattern-field-spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "RecurringPatternFieldSpec",
+        "module": "../recurring-pattern-field-spec"
+      },
+      "title": "Recurring Pattern Field Spec",
+      "readMe": null,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "specType": "card",
+      "standard": {
+        "endDate": "2026-01-29",
+        "pattern": "weekdays",
+        "interval": null,
+        "startDate": "2026-01-09",
+        "customRule": null,
+        "dayOfMonth": null,
+        "daysOfWeek": "1,2,3,4,5",
+        "monthOfYear": null,
+        "occurrences": 2
+      },
+      "description": null,
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
