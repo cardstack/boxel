@@ -4,9 +4,7 @@ import supertest from 'supertest';
 import { basename } from 'path';
 
 import {
-  setupBaseRealmServer,
   setupPermissionedRealm,
-  matrixURL,
   testRealmHref,
   testCreatePrerenderAuth,
 } from './helpers';
@@ -26,8 +24,6 @@ module(basename(__filename), function () {
     let prerenderer: Prerenderer;
     const testUserId = '@jade:localhost';
     let draining = false;
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealm(hooks, {
       mode: 'before',

@@ -2830,6 +2830,9 @@ importers:
       stripe:
         specifier: 'catalog:'
         version: 17.2.1
+      super-fast-md5:
+        specifier: 'catalog:'
+        version: 1.0.1
       supertest:
         specifier: 'catalog:'
         version: 6.2.4

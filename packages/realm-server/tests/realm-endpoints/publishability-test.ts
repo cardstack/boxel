@@ -10,17 +10,13 @@ import {
 
 import {
   createJWT,
-  matrixURL,
-  setupBaseRealmServer,
   setupPermissionedRealm,
   setupPermissionedRealms,
 } from '../helpers';
 
 const ownerUserId = '@mango:localhost';
 
-module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
-  setupBaseRealmServer(hooks, matrixURL);
-
+module(`realm-endpoints/${basename(__filename)}`, function () {
   module('with a publishable realm', function (hooks) {
     let request: SuperTest<Test>;
     let testRealm: Realm;
@@ -169,7 +165,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
         await dbAdapter.execute(
           `UPDATE ${table}
            SET type = 'instance-error', error_doc = $1::jsonb
-           WHERE url = $2`,
+           WHERE url = $2 AND type = 'instance'`,
           {
             bind: [JSON.stringify(errorDoc), cardURL],
           },

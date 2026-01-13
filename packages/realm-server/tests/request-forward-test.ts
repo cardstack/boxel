@@ -7,7 +7,6 @@ import type { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync, ensureDirSync } from 'fs-extra';
 import {
-  setupBaseRealmServer,
   setupDB,
   runTestRealmServer,
   closeServer,
@@ -42,8 +41,6 @@ module(basename(__filename), function () {
       dir = dirSync();
       copySync(join(__dirname, 'cards'), dir.name);
     });
-
-    setupBaseRealmServer(hooks, new URL('http://localhost:8008'));
 
     async function startRealmServer(
       dbAdapter: any,

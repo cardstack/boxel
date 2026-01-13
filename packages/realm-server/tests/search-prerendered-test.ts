@@ -7,18 +7,13 @@ import {
   PRERENDERED_HTML_FORMATS,
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
-import {
-  setupBaseRealmServer,
-  setupPermissionedRealm,
-  matrixURL,
-  createJWT,
-} from './helpers';
+import { setupPermissionedRealm, createJWT } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(basename(__filename), function () {
-  const missingPrerenderedHtmlFormatMessage = `Must include a 'prerenderedHtmlFormat' parameter with a value of ${PRERENDERED_HTML_FORMATS.join()} to use this endpoint`;
+const missingPrerenderedHtmlFormatMessage = `Must include a 'prerenderedHtmlFormat' parameter with a value of ${PRERENDERED_HTML_FORMATS.join()} to use this endpoint`;
 
-  module('Realm-specific Endpoints | _search-prerendered', function (hooks) {
+module(basename(__filename), function () {
+  module('Realm-specific Endpoints | _search-prerendered', function () {
     let testRealm: Realm;
     let request: SuperTest<Test>;
     let searchPath: string;
@@ -61,8 +56,6 @@ module(basename(__filename), function () {
       }
       return `${searchPath}?${searchParams.toString()}`;
     }
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     module('GET request', function (_hooks) {
       module(
