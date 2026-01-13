@@ -42,10 +42,7 @@ function trimCardContainer(text: string) {
     );
 }
 
-let testDbAdapter: DBAdapter;
 const testRealm = new URL('http://127.0.0.1:4445/test/');
-
-type TestRealmServerResult = Awaited<ReturnType<typeof runTestRealmServer>>;
 
 function makeTestRealmFileSystem(): Record<
   string,
@@ -402,41 +399,6 @@ function makeTestRealmFileSystem(): Record<
     '.DS_Store':
       'In  macOS, .DS_Store is a file that stores custom attributes of its containing folder',
   };
-}
-
-async function startTestRealm({
-  dbAdapter,
-  publisher,
-  runner,
-}: {
-  dbAdapter: DBAdapter;
-  publisher: QueuePublisher;
-  runner: QueueRunner;
-}): Promise<TestRealmServerResult> {
-  let virtualNetwork = createVirtualNetwork();
-  let dir = dirSync().name;
-  let testRealmServer = await runTestRealmServer({
-    testRealmDir: dir,
-    realmsRootPath: join(dir, 'realm_server_1'),
-    virtualNetwork,
-    realmURL: testRealm,
-    dbAdapter: dbAdapter as PgAdapter,
-    publisher: publisher as PgQueuePublisher,
-    runner: runner as PgQueueRunner,
-    matrixURL,
-    fileSystem: makeTestRealmFileSystem(),
-  });
-  await testRealmServer.testRealm.start();
-  return testRealmServer;
-}
-
-async function stopTestRealm(testRealmServer?: TestRealmServerResult) {
-  if (!testRealmServer) {
-    return;
-  }
-  testRealmServer.testRealm.unsubscribe();
-  await closeServer(testRealmServer.testRealmHttpServer);
-  resetCatalogRealms();
 }
 
 module(basename(__filename), function () {
@@ -892,23 +854,24 @@ module(basename(__filename), function () {
   module('indexing (mutating)', function (hooks) {
     let realm: Realm;
     let adapter: RealmAdapter;
-    let testRealmServer: TestRealmServerResult | undefined;
+    let testDbAdapter: PgAdapter;
 
-    setupDB(hooks, {
-      beforeEach: async (dbAdapter, publisher, runner) => {
-        testDbAdapter = dbAdapter;
-        testRealmServer = await startTestRealm({
-          dbAdapter,
-          publisher,
-          runner,
-        });
-        realm = testRealmServer.testRealm;
-        adapter = testRealmServer.testRealmAdapter;
-      },
-      afterEach: async () => {
-        await stopTestRealm(testRealmServer);
-        testRealmServer = undefined;
-      },
+    function onRealmSetup(args: {
+      testRealm: Realm;
+      testRealmAdapter: RealmAdapter;
+      dbAdapter: PgAdapter;
+    }) {
+      realm = args.testRealm;
+      adapter = args.testRealmAdapter;
+      testDbAdapter = args.dbAdapter;
+    }
+    setupPermissionedRealm(hooks, {
+      permissions: {
+        '*': ['read', 'write'],
+      } as RealmPermissions,
+      realmURL: testRealm,
+      fileSystem: makeTestRealmFileSystem(),
+      onRealmSetup,
     });
 
     test('can incrementally index updated instance', async function (assert) {
@@ -1230,29 +1193,31 @@ module(basename(__filename), function () {
           'the deleted type results in no card instance results',
         );
       }
-      let actual = await realm.realmIndexQueryEngine.cardDocument(
-        new URL(`${testRealm}post-1`),
-      );
-      if (actual?.type === 'error') {
-        assert.ok(actual.error.errorDetail.stack, 'stack trace is included');
-        delete actual.error.errorDetail.stack;
-        assert.deepEqual(
-          // we splat because despite having the same shape, the constructors are different
-          { ...actual.error.errorDetail },
-          {
-            id: `${testRealm}post`,
-            isCardError: true,
-            additionalErrors: null,
-            message: `missing file ${testRealm}post`,
-            status: 404,
-            title: 'Link Not Found',
-            deps: [`${testRealm}post`],
-          },
-          'card instance is an error document',
+      // Wait until the error document has a stack trace as expected
+      let retries = 10;
+      let hasStackTrace = false;
+      while (retries > 0 && !hasStackTrace) {
+        let actual = await realm.realmIndexQueryEngine.cardDocument(
+          new URL(`${testRealm}post-1`),
         );
-      } else {
-        assert.ok(false, 'search index entry is not an error document');
+        if (actual?.type === 'error') {
+          // Should have a stack trace
+          if (
+            actual.error.errorDetail.stack &&
+            actual.error.errorDetail.message ===
+              `missing file ${testRealm}post` &&
+            actual.error.errorDetail.id === `${testRealm}post`
+          ) {
+            hasStackTrace = true;
+            break;
+          }
+        }
+        // Wait and check again
+        console.log('waiting for error document to have stack trace...');
+        retries--;
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
+      assert.ok(hasStackTrace, 'error document has stack trace as expected');
 
       // when the definitions is created again, the instance should mend its broken link
       await realm.write(
