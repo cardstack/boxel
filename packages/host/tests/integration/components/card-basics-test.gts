@@ -1997,8 +1997,8 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-thumbnail-icon]').exists();
       await click('[data-test-toggle-thumbnail-editor]');
       assert
-        .dom('[data-test-thumbnail-placeholder] input')
-        .hasValue('http://book/pic.jpg');
+        .dom('[data-test-thumbnail-placeholder]')
+        .hasText('http://book/pic.jpg');
       assert.dom('[data-test-thumbnail-input] input').hasNoValue();
       await click('[data-test-toggle-thumbnail-editor]');
       assert
