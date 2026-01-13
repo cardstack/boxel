@@ -474,7 +474,10 @@ module('Integration | card-basics', function (hooks) {
         .exists('FileDef links render via the plural view');
       assert
         .dom('[data-test-image-def]')
-        .exists({ count: 2 }, 'FileDef uses delegated fitted view for each item');
+        .exists(
+          { count: 2 },
+          'FileDef uses delegated fitted view for each item',
+        );
     });
 
     test('linksTo FileDef renders delegated embedded view', async function (assert) {
@@ -557,7 +560,10 @@ module('Integration | card-basics', function (hooks) {
 
       assert
         .dom('[data-test-image-def-fitted]')
-        .exists({ count: 2 }, 'FileDef uses delegated fitted view for each item');
+        .exists(
+          { count: 2 },
+          'FileDef uses delegated fitted view for each item',
+        );
       assert
         .dom('[data-test-plural-view-format="fitted"]')
         .exists('linksToMany renders in fitted format');
@@ -584,7 +590,9 @@ module('Integration | card-basics', function (hooks) {
         throw new Error('expected error was not thrown');
       } catch (err: any) {
         assert.ok(
-          err.message.match(/linksTo field 'hero' cannot reference a FileDef without an id/),
+          err.message.match(
+            /linksTo field 'hero' cannot reference a FileDef without an id/,
+          ),
           'linksTo rejects FileDef without id at assignment time',
         );
       }
@@ -616,7 +624,9 @@ module('Integration | card-basics', function (hooks) {
         throw new Error('expected error was not thrown');
       } catch (err: any) {
         assert.ok(
-          err.message.match(/linksTo field 'hero' cannot serialize a FileDef without an id/),
+          err.message.match(
+            /linksTo field 'hero' cannot serialize a FileDef without an id/,
+          ),
           'linksTo refuses to serialize FileDef without id',
         );
       }
@@ -738,7 +748,7 @@ module('Integration | card-basics', function (hooks) {
         let gallery = await store.get(`${testRealmURL}Gallery/hero`);
         await store.loaded();
 
-        await renderCard(loader, gallery, 'fitted');
+        await renderCard(loader, gallery as BaseDef, 'fitted');
         await waitUntil(() =>
           document
             .querySelector('[data-test-gallery-fitted]')
@@ -747,12 +757,17 @@ module('Integration | card-basics', function (hooks) {
 
         assert
           .dom('[data-test-gallery-fitted]')
-          .includesText('hero.png', 'FileDef renders delegated view from file meta');
+          .includesText(
+            'hero.png',
+            'FileDef renders delegated view from file meta',
+          );
       });
 
       test('linksToMany FileDef renders delegated view from realm file meta', async function (assert) {
         class Gallery extends CardDef {
-          @field attachments = linksToMany(FileDef as unknown as typeof CardDef);
+          @field attachments = linksToMany(
+            FileDef as unknown as typeof CardDef,
+          );
           static fitted = class Fitted extends Component<typeof this> {
             <template>
               <div data-test-gallery-fitted>
@@ -809,11 +824,12 @@ module('Integration | card-basics', function (hooks) {
         let gallery = await store.get(`${testRealmURL}Gallery/attachments`);
         await store.loaded();
 
-        await renderCard(loader, gallery, 'fitted');
+        await renderCard(loader, gallery as BaseDef, 'fitted');
         await waitUntil(() => {
           let text =
-            document.querySelector('[data-test-plural-view-field="attachments"]')
-              ?.textContent ?? '';
+            document.querySelector(
+              '[data-test-plural-view-field="attachments"]',
+            )?.textContent ?? '';
           return text.includes('first.png') && text.includes('second.png');
         });
 
@@ -822,7 +838,10 @@ module('Integration | card-basics', function (hooks) {
           .exists('FileDef links render via the plural view');
         assert
           .dom('[data-test-plural-view-field="attachments"]')
-          .includesText('first.png', 'FileDef renders delegated view from file meta');
+          .includesText(
+            'first.png',
+            'FileDef renders delegated view from file meta',
+          );
         assert
           .dom('[data-test-plural-view-field="attachments"]')
           .includesText(

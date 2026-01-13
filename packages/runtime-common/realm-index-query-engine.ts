@@ -741,7 +741,9 @@ function fileResourceFromIndex(
   let inferredContentType = inferContentType(name);
   let searchDoc = fileEntry.searchDoc ?? {};
   let contentHash =
-    typeof searchDoc.contentHash === 'string' ? searchDoc.contentHash : undefined;
+    typeof searchDoc.contentHash === 'string'
+      ? searchDoc.contentHash
+      : undefined;
   let lastModified = fileEntry.lastModified ?? unixTime(Date.now());
   let createdAt = fileEntry.resourceCreatedAt ?? lastModified;
   return {

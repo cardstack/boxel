@@ -5,7 +5,7 @@ import { join, basename } from 'path';
 import type { Server } from 'http';
 import type { DirResult } from 'tmp';
 import { existsSync, readJSONSync, statSync } from 'fs-extra';
-import type { Realm } from '@cardstack/runtime-common';
+import type { Realm, Relationship } from '@cardstack/runtime-common';
 import {
   baseRealm,
   isSingleCardDocument,
@@ -264,18 +264,27 @@ module(basename(__filename), function () {
             name: 'FileDef',
           });
 
-          assert.deepEqual(doc.data.relationships?.hero?.data, {
-            type: 'card',
-            id: `${testRealmHref}hero.png`,
-          });
-          assert.deepEqual(doc.data.relationships?.['attachments.0']?.data, {
-            type: 'card',
-            id: `${testRealmHref}first.png`,
-          });
-          assert.deepEqual(doc.data.relationships?.['attachments.1']?.data, {
-            type: 'card',
-            id: `${testRealmHref}second.png`,
-          });
+          assert.deepEqual(
+            (doc.data.relationships?.hero as Relationship)?.data,
+            {
+              type: 'card',
+              id: `${testRealmHref}hero.png`,
+            },
+          );
+          assert.deepEqual(
+            (doc.data.relationships?.['attachments.0'] as Relationship)?.data,
+            {
+              type: 'card',
+              id: `${testRealmHref}first.png`,
+            },
+          );
+          assert.deepEqual(
+            (doc.data.relationships?.['attachments.1'] as Relationship)?.data,
+            {
+              type: 'card',
+              id: `${testRealmHref}second.png`,
+            },
+          );
         });
         test('card-level query-backed relationships resolve via search at read time', async function (assert) {
           let { testRealm: realm, request } = getRealmSetup();
