@@ -11,7 +11,7 @@ import {
   APP_BOXEL_PR_EVENT_TYPE,
   APP_BOXEL_PR_REVIEW_EVENT_TYPE,
 } from './matrix-constants';
-import { branchNameToMatrixRoomId, toBranchName } from './github-webhook';
+import { branchNameToMatrixRoomId } from './github-webhook';
 
 export type GitHubWebhookEventName = Extract<
   EmitterWebhookEventName,
