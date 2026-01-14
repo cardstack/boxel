@@ -26,6 +26,18 @@
 
     <div id="ember-basic-dropdown-wormhole"></div>
 
+    <script type="module">
+      globalThis.process = {
+        env: {},
+        cwd() {
+          return '';
+        },
+      };
+      globalThis.global = globalThis;
+      import * as contentTag from 'content-tag';
+      globalThis.ContentTagGlobal = contentTag;
+    </script>
+
     <script src="/testem.js" integrity="" data-embroider-ignore></script>
     <script src="/@embroider/virtual/vendor.js"></script>
     <script src="/@embroider/virtual/test-support.js"></script>
@@ -35,8 +47,9 @@
     </script>
     <script type="module">
       import { start } from './test-helper';
-      import.meta.glob('./**/*-test.{js,ts,gjs,gts}', { eager: true });
-      start();
+      let availableModules = import.meta.glob('./**/*-test.{js,ts,gjs,gts}');
+
+      start({ availableModules });
     </script>
 
     {{content-for "body-footer"}}

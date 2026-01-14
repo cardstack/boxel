@@ -4,16 +4,18 @@ import * as QUnit from 'qunit';
 import { setApplication } from '@ember/test-helpers';
 import { setup } from 'qunit-dom';
 import setupOperatorModeParametersMatchAssertion from '@cardstack/host/tests/helpers/operator-mode-parameters-match';
-import start from 'ember-exam/test-support/start';
+import examStart from 'ember-exam/test-support/start';
 import { useTestWaiters } from '@cardstack/runtime-common';
 import * as TestWaiters from '@ember/test-waiters';
 
-QUnit.dump.maxDepth = 20;
+export function start(options) {
+  QUnit.dump.maxDepth = 20;
 
-useTestWaiters(TestWaiters);
-setApplication(Application.create(config.APP));
+  useTestWaiters(TestWaiters);
+  setApplication(Application.create(config.APP));
 
-setup(QUnit.assert);
-setupOperatorModeParametersMatchAssertion(QUnit.assert);
+  setup(QUnit.assert);
+  setupOperatorModeParametersMatchAssertion(QUnit.assert);
 
-start();
+  examStart(options);
+}
