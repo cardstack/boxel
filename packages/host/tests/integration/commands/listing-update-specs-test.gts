@@ -1,7 +1,11 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Realm } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  SupportedMimeType,
+  type Realm,
+} from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import ListingUpdateSpecsCommand from '@cardstack/host/commands/listing-update-specs';
@@ -27,6 +31,7 @@ module('Integration | commands | listing-update-specs', function (hooks) {
   setupLocalIndexing(hooks);
 
   const modulePath = `${testRealmURL}listing-example.gts`;
+  const exampleCardId = `${testRealmURL}Example/1`;
   let loader: Loader;
   let testRealm: Realm;
 
@@ -34,10 +39,26 @@ module('Integration | commands | listing-update-specs', function (hooks) {
     {
       route: '_dependencies',
       getResponse: async function () {
-        return new Response(JSON.stringify([modulePath]), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                type: 'dependencies',
+                id: exampleCardId,
+                attributes: {
+                  canonicalUrl: exampleCardId,
+                  realmUrl: testRealmURL,
+                  entryType: 'instance',
+                  dependencies: [modulePath],
+                },
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': SupportedMimeType.JSONAPI },
+          },
+        );
       },
     },
     {
