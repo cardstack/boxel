@@ -188,9 +188,7 @@ export async function parsePrerenderedSearchRequestFromRequest(
   return parsePrerenderedSearchRequestFromPayload(payload);
 }
 
-export function parsePrerenderedSearchRequestFromPayload(
-  payload: unknown,
-): {
+export function parsePrerenderedSearchRequestFromPayload(payload: unknown): {
   cardsQuery: Query;
   htmlFormat: PrerenderedHtmlFormat;
   cardUrls?: string[];
