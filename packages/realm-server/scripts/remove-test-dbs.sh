@@ -11,7 +11,6 @@ for pid in $isolated_realm_processes; do
 done
 
 echo "cleaning up old test databases..."
-exit 0
 docker exec -i boxel-pg psql -X -U postgres -d postgres -v ON_ERROR_STOP=0 <<'SQL'
 \set AUTOCOMMIT on
 COMMIT;
