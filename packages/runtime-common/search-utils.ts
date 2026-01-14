@@ -2,7 +2,6 @@ import { ensureTrailingSlash } from './paths';
 import {
   assertQuery,
   InvalidQueryError,
-  parseQuery,
   type Query,
 } from './query';
 import {
@@ -17,7 +16,6 @@ import { SupportedMimeType } from './router';
 
 export type SearchRequestErrorCode =
   | 'missing-realms'
-  | 'missing-query'
   | 'invalid-json'
   | 'unsupported-method'
   | 'invalid-query'
@@ -90,61 +88,53 @@ export function parseRealmsParam(url: URL): string[] {
 
 export async function parseRealmsFromRequest(
   request: Request,
-  url: URL = new URL(request.url),
 ): Promise<string[]> {
   let method = resolveSearchRequestMethod(request);
-  if (method === 'QUERY') {
-    let payload: unknown;
-    try {
-      payload = await request.clone().json();
-    } catch (e: any) {
-      throw new SearchRequestError(
-        'invalid-json',
-        `Request body is not valid JSON: ${e?.message ?? e}`,
-      );
-    }
-
-    let payloadRecord =
-      payload && typeof payload === 'object'
-        ? (payload as Record<string, unknown>)
-        : {};
-    if (!('realms' in payloadRecord)) {
-      throw new SearchRequestError(
-        'missing-realms',
-        'realms must be supplied in request body',
-      );
-    }
-    let realmsValue = payloadRecord.realms;
-    if (!Array.isArray(realmsValue)) {
-      throw new SearchRequestError(
-        'missing-realms',
-        'realms must be an array of strings',
-      );
-    }
-    if (!realmsValue.every((realm) => typeof realm === 'string')) {
-      throw new SearchRequestError(
-        'missing-realms',
-        'realms must be an array of strings',
-      );
-    }
-    let realmList = realmsValue
-      .map((realm) => realm.trim())
-      .filter(Boolean)
-      .map((realm) => ensureTrailingSlash(realm));
-    if (realmList.length === 0) {
-      throw new SearchRequestError(
-        'missing-realms',
-        'realms must be supplied in request body',
-      );
-    }
-    return realmList;
+  if (method !== 'QUERY') {
+    throw new SearchRequestError('unsupported-method', 'method must be QUERY');
   }
 
-  let realmList = parseRealmsParam(url);
+  let payload: unknown;
+  try {
+    payload = await request.clone().json();
+  } catch (e: any) {
+    throw new SearchRequestError(
+      'invalid-json',
+      `Request body is not valid JSON: ${e?.message ?? e}`,
+    );
+  }
+
+  let payloadRecord =
+    payload && typeof payload === 'object'
+      ? (payload as Record<string, unknown>)
+      : {};
+  if (!('realms' in payloadRecord)) {
+    throw new SearchRequestError(
+      'missing-realms',
+      'realms must be supplied in request body',
+    );
+  }
+  let realmsValue = payloadRecord.realms;
+  if (!Array.isArray(realmsValue)) {
+    throw new SearchRequestError(
+      'missing-realms',
+      'realms must be an array of strings',
+    );
+  }
+  if (!realmsValue.every((realm) => typeof realm === 'string')) {
+    throw new SearchRequestError(
+      'missing-realms',
+      'realms must be an array of strings',
+    );
+  }
+  let realmList = realmsValue
+    .map((realm) => realm.trim())
+    .filter(Boolean)
+    .map((realm) => ensureTrailingSlash(realm));
   if (realmList.length === 0) {
     throw new SearchRequestError(
       'missing-realms',
-      'realms query param must be supplied',
+      'realms must be supplied in request body',
     );
   }
   return realmList;
@@ -177,20 +167,10 @@ export async function parseSearchQueryFromRequest(
         `Request body is not valid JSON: ${e?.message ?? e}`,
       );
     }
-  } else if (method === 'GET') {
-    let url = new URL(request.url);
-    let queryParam = url.searchParams.get('query');
-    if (!queryParam) {
-      throw new SearchRequestError(
-        'missing-query',
-        'query param "query" must be supplied',
-      );
-    }
-    cardsQuery = parseQuery(queryParam);
   } else {
     throw new SearchRequestError(
       'unsupported-method',
-      'method must be QUERY or GET',
+      'method must be QUERY',
     );
   }
 
@@ -247,24 +227,10 @@ export async function parsePrerenderedSearchRequestFromRequest(
       ...rest
     } = payloadRecord;
     cardsQuery = rest;
-  } else if (method === 'GET') {
-    let url = new URL(request.url);
-    let queryParam = url.searchParams.get('query');
-    if (queryParam === null) {
-      throw new SearchRequestError(
-        'missing-query',
-        'query param "query" must be supplied',
-      );
-    }
-    cardsQuery = parseQuery(queryParam);
-    let params = parseQuery(url.search.slice(1)) as Record<string, unknown>;
-    htmlFormat = normalizeStringParam(params.prerenderedHtmlFormat);
-    cardUrls = normalizeStringArrayParam(params.cardUrls);
-    renderType = normalizeRenderType(params.renderType);
   } else {
     throw new SearchRequestError(
       'unsupported-method',
-      'method must be QUERY or GET',
+      'method must be QUERY',
     );
   }
 

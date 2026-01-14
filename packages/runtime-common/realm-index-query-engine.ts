@@ -500,7 +500,11 @@ export class RealmIndexQueryEngine {
     try {
       let searchURL = buildQuerySearchURL(realmHref, query);
       let response = await this.#fetch(searchURL, {
-        headers: { Accept: SupportedMimeType.CardJson },
+        method: 'QUERY',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+        },
+        body: JSON.stringify(query),
       });
       if (!response.ok) {
         let type: QueryFieldErrorType =

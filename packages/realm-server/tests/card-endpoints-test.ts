@@ -11,7 +11,7 @@ import {
   type LooseSingleCardDocument,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
-import { stringify, parse } from 'qs';
+import { parse } from 'qs';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
   setupPermissionedRealm,
@@ -1901,12 +1901,10 @@ module(basename(__filename), function () {
           };
 
           response = await request
-            .get(
-              `/_search?realms=${encodeURIComponent(testRealmHref)}&query=${encodeURIComponent(
-                stringify(query, { encode: false }),
-              )}`,
-            )
-            .set('Accept', 'application/vnd.card+json');
+            .post('/_search')
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({ ...query, realms: [testRealmHref] });
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           assert.strictEqual(response.body.data.length, 1, 'found one card');

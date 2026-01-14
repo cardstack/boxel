@@ -193,7 +193,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       );
     });
 
-    test('GET /_search-prerendered supports query param', async function (assert) {
+    test('GET /_search-prerendered returns 400 for unsupported method', async function (assert) {
       await insertUser(dbAdapter, ownerUserId, 'stripe-test-user', null);
 
       let realmServerToken = createRealmServerJWT(
@@ -220,8 +220,11 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         .set('Accept', 'application/vnd.card+json')
         .set('Authorization', `Bearer ${realmServerToken}`);
 
-      assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      assert.strictEqual(response.body.data.length, 1, 'found one card');
+      assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      assert.ok(
+        response.body.errors?.[0]?.includes('method must be QUERY'),
+        'response explains unsupported method',
+      );
     });
 
     test('QUERY /_search-prerendered returns 403 when user lacks read access', async function (assert) {
