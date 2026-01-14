@@ -2,9 +2,10 @@ import {
   buildSearchErrorResponse,
   baseRealm,
   ensureTrailingSlash,
-  parseRealmsParam,
-  parsePrerenderedSearchRequestFromRequest,
-  parseSearchQueryFromRequest,
+  parsePrerenderedSearchRequestFromPayload,
+  parseRealmsFromPayload,
+  parseSearchQueryFromPayload,
+  parseSearchRequestPayload,
   SearchRequestError,
   searchPrerenderedRealms,
   searchRealms,
@@ -33,7 +34,7 @@ type SearchableRealm = {
   searchPrerendered: (
     query: Query,
     opts: Pick<
-      Awaited<ReturnType<typeof parsePrerenderedSearchRequestFromRequest>>,
+      ReturnType<typeof parsePrerenderedSearchRequestFromPayload>,
       'htmlFormat' | 'cardUrls' | 'renderType'
     >,
   ) => Promise<PrerenderedCardCollectionDocument>;
@@ -66,16 +67,22 @@ export function registerDefaultRoutes() {
 function registerSearchRoutes() {
   registerRealmServerRoute({
     path: '/_search',
-    handler: async (req, url) => {
-      let realmList = parseRealmsParam(url);
-
-      if (realmList.length === 0) {
-        return buildSearchErrorResponse('realms query param must be supplied');
+    handler: async (req, _url) => {
+      let realmList: string[];
+      let payload: unknown;
+      try {
+        payload = await parseSearchRequestPayload(req);
+        realmList = parseRealmsFromPayload(payload);
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          return buildSearchErrorResponse(e.message);
+        }
+        throw e;
       }
 
       let cardsQuery;
       try {
-        cardsQuery = await parseSearchQueryFromRequest(req.clone());
+        cardsQuery = parseSearchQueryFromPayload(payload);
       } catch (e) {
         if (e instanceof SearchRequestError) {
           return buildSearchErrorResponse(e.message);
@@ -97,16 +104,22 @@ function registerSearchRoutes() {
 
   registerRealmServerRoute({
     path: '/_search-prerendered',
-    handler: async (req, url) => {
-      let realmList = parseRealmsParam(url);
-
-      if (realmList.length === 0) {
-        return buildSearchErrorResponse('realms query param must be supplied');
+    handler: async (req, _url) => {
+      let realmList: string[];
+      let payload: unknown;
+      try {
+        payload = await parseSearchRequestPayload(req);
+        realmList = parseRealmsFromPayload(payload);
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          return buildSearchErrorResponse(e.message);
+        }
+        throw e;
       }
 
       let parsed;
       try {
-        parsed = await parsePrerenderedSearchRequestFromRequest(req.clone());
+        parsed = parsePrerenderedSearchRequestFromPayload(payload);
       } catch (e) {
         if (e instanceof SearchRequestError) {
           return buildSearchErrorResponse(e.message);
