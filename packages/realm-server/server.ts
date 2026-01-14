@@ -24,7 +24,6 @@ import {
   writeJSONSync,
   readdirSync,
   existsSync,
-  readFile,
 } from 'fs-extra';
 import { setupCloseHandler } from './node-realm';
 import {
@@ -52,13 +51,12 @@ import {
 import { createRoutes } from './routes';
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 import type { Prerenderer } from '@cardstack/runtime-common';
-import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
+import { retrieveScopedCSS } from './lib/retrieve-scoped-css';
 
 export class RealmServer {
   private log = logger('realm-server');
   private headLog = logger('realm-server:head');
   private isolatedLog = logger('realm-server:isolated');
-  private scopedCssLog = logger('realm-server:scoped-css');
   private realms: Realm[];
   private virtualNetwork: VirtualNetwork;
   private matrixClient: MatrixClient;
@@ -321,7 +319,13 @@ export class RealmServer {
         this.retrieveIndexHTML(),
         this.retrieveHeadHTML(cardURL),
         this.retrieveIsolatedHTML(cardURL),
-        this.retrieveScopedCSS(cardURL),
+        retrieveScopedCSS({
+          cardURL,
+          dbAdapter: this.dbAdapter,
+          indexURLCandidates: (url) => this.indexURLCandidates(url),
+          indexCandidateExpressions: (candidates) =>
+            this.indexCandidateExpressions(candidates),
+        }),
       ]);
 
       if (headHTML != null) {
@@ -496,60 +500,6 @@ export class RealmServer {
     return isolatedRow?.isolated_html ?? null;
   }
 
-  private async retrieveScopedCSS(cardURL: URL): Promise<string | null> {
-    let candidates = this.indexURLCandidates(cardURL);
-
-    this.scopedCssLog.debug(
-      `Scoped CSS URL candidates for ${cardURL.href}: ${candidates.join(', ')}`,
-    );
-
-    if (candidates.length === 0) {
-      this.scopedCssLog.debug(`No scoped CSS candidates for ${cardURL.href}`);
-      return null;
-    }
-
-    let rows = await query(this.dbAdapter, [
-      `SELECT deps, realm_version FROM boxel_index_working WHERE deps IS NOT NULL AND`,
-      ...this.indexCandidateExpressions(candidates),
-      `UNION ALL
-       SELECT deps, realm_version FROM boxel_index WHERE deps IS NOT NULL AND`,
-      ...this.indexCandidateExpressions(candidates),
-      `ORDER BY realm_version DESC
-       LIMIT 1`,
-    ]);
-
-    this.scopedCssLog.debug(
-      'Scoped CSS query result for %s',
-      cardURL.href,
-      rows,
-    );
-
-    let depsRow = rows[0] as
-      | { deps?: string[] | string | null; realm_version?: string | number }
-      | undefined;
-
-    let deps = this.coerceDeps(depsRow?.deps);
-    if (!deps || deps.length === 0) {
-      this.scopedCssLog.debug(
-        `No deps returned from database for ${cardURL.href}`,
-      );
-      return null;
-    }
-
-    let scopedCSS = this.decodeScopedCSSFromDeps(deps);
-    if (scopedCSS) {
-      this.scopedCssLog.debug(
-        `Using scoped CSS from realm version ${depsRow?.realm_version} for ${cardURL.href}`,
-      );
-    } else {
-      this.scopedCssLog.debug(
-        `No scoped CSS found in deps for ${cardURL.href}`,
-      );
-    }
-
-    return scopedCSS;
-  }
-
   private stripProtocol(href: string): string {
     return href.replace(/^https?:\/\//, '');
   }
@@ -582,64 +532,6 @@ export class RealmServer {
         ],
       ]),
     ) as Expression;
-  }
-
-  private coerceDeps(deps: unknown): string[] | null {
-    if (!deps) {
-      return null;
-    }
-    if (Array.isArray(deps)) {
-      return deps.filter((dep): dep is string => typeof dep === 'string');
-    }
-    if (Buffer.isBuffer(deps)) {
-      try {
-        let parsed = JSON.parse(deps.toString('utf8'));
-        return Array.isArray(parsed)
-          ? parsed.filter((dep): dep is string => typeof dep === 'string')
-          : null;
-      } catch (_error) {
-        return null;
-      }
-    }
-    if (typeof deps === 'string') {
-      try {
-        let parsed = JSON.parse(deps);
-        return Array.isArray(parsed)
-          ? parsed.filter((dep): dep is string => typeof dep === 'string')
-          : null;
-      } catch (_error) {
-        return null;
-      }
-    }
-    return null;
-  }
-
-  private decodeScopedCSSFromDeps(deps: string[]): string | null {
-    let cssBlocks = new Set<string>();
-
-    for (let dep of deps) {
-      if (typeof dep !== 'string') {
-        continue;
-      }
-      let pathname: string;
-      try {
-        pathname = new URL(dep).pathname;
-      } catch (_error) {
-        continue;
-      }
-      if (!isScopedCSSRequest(pathname)) {
-        continue;
-      }
-      let decoded = decodeScopedCSSRequest(pathname);
-      if (decoded?.css) {
-        cssBlocks.add(decoded.css);
-      }
-    }
-
-    if (cssBlocks.size === 0) {
-      return null;
-    }
-    return [...cssBlocks].join('\n');
   }
 
   private injectHeadHTML(indexHTML: string, headHTML: string): string {
