@@ -18,7 +18,6 @@ import {
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
-import { stringify } from 'qs';
 import { v4 as uuidv4 } from 'uuid';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
@@ -434,22 +433,9 @@ module(basename(__filename), function () {
           {
             // owner can search in the realm
             let response = await request2
-              .get(
-                `${new URL(realm.url).pathname}_search?query=${encodeURIComponent(
-                  stringify(
-                    {
-                      filter: {
-                        on: baseCardRef,
-                        eq: {
-                          title: 'Test Card',
-                        },
-                      },
-                    } as Query,
-                    { encode: false },
-                  ),
-                )}`,
-              )
+              .post(`${new URL(realm.url).pathname}_search`)
               .set('Accept', 'application/vnd.card+json')
+              .set('X-HTTP-Method-Override', 'QUERY')
               .set(
                 'Authorization',
                 `Bearer ${createJWT(realm, ownerUserId, [
@@ -457,7 +443,15 @@ module(basename(__filename), function () {
                   'write',
                   'realm-owner',
                 ])}`,
-              );
+              )
+              .send({
+                filter: {
+                  on: baseCardRef,
+                  eq: {
+                    title: 'Test Card',
+                  },
+                },
+              } as Query);
 
             assert.strictEqual(response.status, 200, 'HTTP 200 status');
             let results = response.body as CardCollectionDocument;
@@ -501,23 +495,18 @@ module(basename(__filename), function () {
 
           {
             let response = await request2
-              .get(
-                `${new URL(realmURL).pathname}_search?query=${encodeURIComponent(
-                  stringify(
-                    {
-                      filter: {
-                        on: baseCardRef,
-                        eq: {
-                          title: 'Test Card',
-                        },
-                      },
-                    } as Query,
-                    { encode: false },
-                  ),
-                )}`,
-              )
+              .post(`${new URL(realmURL).pathname}_search`)
               .set('Accept', 'application/vnd.card+json')
-              .set('Authorization', `Bearer ${createJWT(realm, 'rando')}`);
+              .set('X-HTTP-Method-Override', 'QUERY')
+              .set('Authorization', `Bearer ${createJWT(realm, 'rando')}`)
+              .send({
+                filter: {
+                  on: baseCardRef,
+                  eq: {
+                    title: 'Test Card',
+                  },
+                },
+              } as Query);
 
             assert.strictEqual(response.status, 403, 'HTTP 403 status');
 
