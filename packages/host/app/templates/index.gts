@@ -198,6 +198,24 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     };
   });
 
+  // TODO: remove in CS-9977, with rehydration
+  removeIsolatedMarkup = modifier(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    let start = document.getElementById('boxel-isolated-start');
+    let end = document.getElementById('boxel-isolated-end');
+    if (!start || !end) {
+      return;
+    }
+    let node = start.nextSibling;
+    while (node && node !== end) {
+      let next = node.nextSibling;
+      node.parentNode?.removeChild(node);
+      node = next;
+    }
+  });
+
   <template>
     {{#if this.hostModeService.isActive}}
       {{pageTitle this.title}}
@@ -214,6 +232,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
           @removeCardFromStack={{this.removeCardFromStack}}
           @viewCard={{this.viewCard}}
           class='host-mode-content'
+          {{this.removeIsolatedMarkup}}
         />
       {{/if}}
     {{else}}

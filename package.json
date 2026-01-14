@@ -47,7 +47,8 @@
       "@embroider/compat": "patches/@embroider__compat.patch",
       "ember-eslint-parser": "patches/ember-eslint-parser.patch",
       "openai": "patches/openai.patch",
-      "matrix-js-sdk@38.3.0": "patches/matrix-js-sdk@38.3.0.patch"
+      "matrix-js-sdk@38.3.0": "patches/matrix-js-sdk@38.3.0.patch",
+      "@embroider/webpack": "patches/@embroider__webpack.patch"
     },
     "onlyBuiltDependencies": [
       "esbuild",

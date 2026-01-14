@@ -52,7 +52,9 @@ export default class RenderFileExtractRoute extends Route<Model> {
   #authGuard = createAuthErrorGuard();
 
   deactivate() {
-    (globalThis as any).__boxelRenderContext = undefined;
+    if (isTesting()) {
+      (globalThis as any).__boxelRenderContext = undefined;
+    }
     this.#authGuard.unregister();
   }
 
