@@ -1,5 +1,6 @@
 import type { DBAdapter } from '@cardstack/runtime-common';
 import { query } from '@cardstack/runtime-common';
+import { parseDeps } from '@cardstack/runtime-common/realm';
 import type { Expression } from '@cardstack/runtime-common/expression';
 import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
 
@@ -34,44 +35,14 @@ export async function retrieveScopedCSS({
     | { deps?: string[] | string | null; realm_version?: string | number }
     | undefined;
 
-  let deps = coerceDeps(depsRow?.deps);
-  if (!deps || deps.length === 0) {
+  let deps = parseDeps(depsRow?.deps);
+  if (deps.length === 0) {
     return null;
   }
 
   let scopedCSS = decodeScopedCSSFromDeps(deps);
 
   return scopedCSS;
-}
-
-function coerceDeps(deps: unknown): string[] | null {
-  if (!deps) {
-    return null;
-  }
-  if (Array.isArray(deps)) {
-    return deps.filter((dep): dep is string => typeof dep === 'string');
-  }
-  if (Buffer.isBuffer(deps)) {
-    try {
-      let parsed = JSON.parse(deps.toString('utf8'));
-      return Array.isArray(parsed)
-        ? parsed.filter((dep): dep is string => typeof dep === 'string')
-        : null;
-    } catch (_error) {
-      return null;
-    }
-  }
-  if (typeof deps === 'string') {
-    try {
-      let parsed = JSON.parse(deps);
-      return Array.isArray(parsed)
-        ? parsed.filter((dep): dep is string => typeof dep === 'string')
-        : null;
-    } catch (_error) {
-      return null;
-    }
-  }
-  return null;
 }
 
 function decodeScopedCSSFromDeps(deps: string[]): string | null {

@@ -4159,7 +4159,7 @@ export class Realm {
 
 export type Kind = 'file' | 'directory';
 
-function parseDeps(value: unknown): string[] {
+export function parseDeps(value: unknown): string[] {
   if (value == null) {
     return [];
   }
