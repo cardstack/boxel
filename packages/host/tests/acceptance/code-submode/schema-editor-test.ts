@@ -1162,7 +1162,11 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     });
 
     await waitFor('[data-test-empty-file-message]');
-    assert.dom('[data-test-empty-file-message]').hasText('File is empty');
+    assert
+      .dom('[data-test-empty-file-message]')
+      .hasText(
+        'File is empty - tools like schema inspector, and file preview, are unavailable.',
+      );
   });
 
   test<TestContextWithSave>('updates cursor position in monaco editor when field row clicked', async function (assert) {
