@@ -1133,7 +1133,7 @@ ${REPLACE_MARKER}
 
     await click('[data-test-open-ai-assistant]');
     let matrixService = getService('matrix-service');
-    await waitUntil(() => Boolean(matrixService.currentRoomId));
+    await waitFor('[data-room-settled]');
 
     let codeBlock = `\`\`\`
 ${testRealmURL}empty-file.gts (new)
@@ -1169,7 +1169,7 @@ ${SEARCH_MARKER}
 
     await click('[data-test-open-ai-assistant]');
     let matrixService = getService('matrix-service');
-    await waitUntil(() => Boolean(matrixService.currentRoomId));
+    await waitFor('[data-room-settled]');
 
     let codeBlock = `\`\`\`
 ${testRealmURL}empty-file.gts (new)
@@ -1206,7 +1206,7 @@ ${REPLACE_MARKER}
     await waitFor('[data-test-empty-file-message]');
     await click('[data-test-open-ai-assistant]');
     let matrixService = getService('matrix-service');
-    await waitUntil(() => Boolean(matrixService.currentRoomId));
+    await waitFor('[data-room-settled]');
 
     let codeBlock = `\`\`\`
 ${testRealmURL}empty-file.gts (new)
@@ -1238,9 +1238,7 @@ ${REPLACE_MARKER}
       return !messageText.includes('generating content');
     });
 
-    assert
-      .dom('[data-test-empty-file-message]')
-      .hasText('File is empty');
+    assert.dom('[data-test-empty-file-message]').hasText('File is empty');
   });
 
   test('when code patch is historic (user moved on to the next message), or it was applied, it will render the code (replace portion of the search/replace block) in a standard (non-diff) editor', async function (assert) {
