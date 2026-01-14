@@ -6,6 +6,10 @@
     "#lint-task": {
       "node": "./tasks/lint.ts",
       "browser": "./tasks/lint-browser.ts"
+    },
+    "#fetch": {
+      "node": "./fetch-node.ts",
+      "browser": "./fetch-browser.ts"
     }
   },
   "dependencies": {
