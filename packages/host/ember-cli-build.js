@@ -30,13 +30,7 @@ module.exports = async function (defaults) {
     },
   });
   return compatBuild(app, buildOnce, {
-    staticAddonTrees: true,
-    staticAddonTestSupportTrees: true,
-    staticHelpers: true,
-
-    staticComponents: true,
-
-    staticModifiers: true,
+    staticInvokables: true,
     staticAppPaths: ['lib'],
     packagerOptions: {
       ...{
