@@ -2,7 +2,7 @@ import {
   buildSearchErrorResponse,
   baseRealm,
   ensureTrailingSlash,
-  parseRealmsParam,
+  parseRealmsFromRequest,
   parsePrerenderedSearchRequestFromRequest,
   parseSearchQueryFromRequest,
   SearchRequestError,
@@ -66,11 +66,15 @@ export function registerDefaultRoutes() {
 function registerSearchRoutes() {
   registerRealmServerRoute({
     path: '/_search',
-    handler: async (req, url) => {
-      let realmList = parseRealmsParam(url);
-
-      if (realmList.length === 0) {
-        return buildSearchErrorResponse('realms query param must be supplied');
+    handler: async (req, _url) => {
+      let realmList: string[];
+      try {
+        realmList = await parseRealmsFromRequest(req);
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          return buildSearchErrorResponse(e.message);
+        }
+        throw e;
       }
 
       let cardsQuery;
@@ -97,11 +101,15 @@ function registerSearchRoutes() {
 
   registerRealmServerRoute({
     path: '/_search-prerendered',
-    handler: async (req, url) => {
-      let realmList = parseRealmsParam(url);
-
-      if (realmList.length === 0) {
-        return buildSearchErrorResponse('realms query param must be supplied');
+    handler: async (req, _url) => {
+      let realmList: string[];
+      try {
+        realmList = await parseRealmsFromRequest(req);
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          return buildSearchErrorResponse(e.message);
+        }
+        throw e;
       }
 
       let parsed;

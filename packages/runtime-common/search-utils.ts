@@ -88,6 +88,68 @@ export function parseRealmsParam(url: URL): string[] {
     .map((realm) => ensureTrailingSlash(realm));
 }
 
+export async function parseRealmsFromRequest(
+  request: Request,
+  url: URL = new URL(request.url),
+): Promise<string[]> {
+  let method = resolveSearchRequestMethod(request);
+  if (method === 'QUERY') {
+    let payload: unknown;
+    try {
+      payload = await request.clone().json();
+    } catch (e: any) {
+      throw new SearchRequestError(
+        'invalid-json',
+        `Request body is not valid JSON: ${e?.message ?? e}`,
+      );
+    }
+
+    let payloadRecord =
+      payload && typeof payload === 'object'
+        ? (payload as Record<string, unknown>)
+        : {};
+    if (!('realms' in payloadRecord)) {
+      throw new SearchRequestError(
+        'missing-realms',
+        'realms must be supplied in request body',
+      );
+    }
+    let realmsValue = payloadRecord.realms;
+    if (!Array.isArray(realmsValue)) {
+      throw new SearchRequestError(
+        'missing-realms',
+        'realms must be an array of strings',
+      );
+    }
+    if (!realmsValue.every((realm) => typeof realm === 'string')) {
+      throw new SearchRequestError(
+        'missing-realms',
+        'realms must be an array of strings',
+      );
+    }
+    let realmList = realmsValue
+      .map((realm) => realm.trim())
+      .filter(Boolean)
+      .map((realm) => ensureTrailingSlash(realm));
+    if (realmList.length === 0) {
+      throw new SearchRequestError(
+        'missing-realms',
+        'realms must be supplied in request body',
+      );
+    }
+    return realmList;
+  }
+
+  let realmList = parseRealmsParam(url);
+  if (realmList.length === 0) {
+    throw new SearchRequestError(
+      'missing-realms',
+      'realms query param must be supplied',
+    );
+  }
+  return realmList;
+}
+
 export function resolveSearchRequestMethod(request: Request): string {
   let method = request.method.toUpperCase();
   if (method === 'POST') {

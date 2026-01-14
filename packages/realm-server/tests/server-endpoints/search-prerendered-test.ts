@@ -157,8 +157,6 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       };
 
       let searchURL = new URL('/_search-prerendered', testRealm.url);
-      searchURL.searchParams.append('realms', testRealm.url);
-      searchURL.searchParams.append('realms', secondaryRealm.url);
 
       let searchResponse = await request
         .post(`${searchURL.pathname}${searchURL.search}`)
@@ -166,7 +164,11 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         .set('Content-Type', 'application/json')
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Authorization', `Bearer ${realmServerToken}`)
-        .send({ ...query, prerenderedHtmlFormat: 'embedded' });
+        .send({
+          ...query,
+          realms: [testRealm.url, secondaryRealm.url],
+          prerenderedHtmlFormat: 'embedded',
+        });
 
       assert.strictEqual(searchResponse.status, 200, 'HTTP 200 status');
       let results = searchResponse.body;
@@ -238,7 +240,6 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       };
 
       let searchURL = new URL('/_search-prerendered', testRealm.url);
-      searchURL.searchParams.append('realms', testRealm.url);
 
       let response = await request
         .post(`${searchURL.pathname}${searchURL.search}`)
@@ -246,7 +247,11 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         .set('Content-Type', 'application/json')
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Authorization', `Bearer ${realmServerToken}`)
-        .send({ ...query, prerenderedHtmlFormat: 'embedded' });
+        .send({
+          ...query,
+          realms: [testRealm.url],
+          prerenderedHtmlFormat: 'embedded',
+        });
 
       assert.strictEqual(response.status, 403, 'HTTP 403 status');
       assert.ok(
@@ -266,14 +271,17 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       };
 
       let searchURL = new URL('/_search-prerendered', testRealm.url);
-      searchURL.searchParams.append('realms', testRealm.url);
 
       let response = await request
         .post(`${searchURL.pathname}${searchURL.search}`)
         .set('Accept', 'application/vnd.card+json')
         .set('Content-Type', 'application/json')
         .set('X-HTTP-Method-Override', 'QUERY')
-        .send({ ...query, prerenderedHtmlFormat: 'embedded' });
+        .send({
+          ...query,
+          realms: [testRealm.url],
+          prerenderedHtmlFormat: 'embedded',
+        });
 
       assert.strictEqual(response.status, 401, 'HTTP 401 status');
       assert.ok(
@@ -290,7 +298,6 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       );
 
       let searchURL = new URL('/_search-prerendered', testRealm.url);
-      searchURL.searchParams.append('realms', testRealm.url);
 
       let response = await request
         .post(`${searchURL.pathname}${searchURL.search}`)
@@ -299,6 +306,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Authorization', `Bearer ${realmServerToken}`)
         .send({
+          realms: [testRealm.url],
           invalid: 'query structure',
           prerenderedHtmlFormat: 'embedded',
         });
@@ -326,9 +334,9 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       assert.strictEqual(response.status, 400, 'HTTP 400 status');
       assert.ok(
         response.body.errors?.[0]?.includes(
-          'realms query param must be supplied',
+          'realms must be supplied in request body',
         ),
-        'response explains missing realms query param',
+        'response explains missing realms in request body',
       );
     });
   });

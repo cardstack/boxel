@@ -5,14 +5,15 @@ import {
   param,
   separatedByCommas,
   fetchUserPermissions,
-  parseRealmsParam,
+  parseRealmsFromRequest,
   ensureTrailingSlash,
+  SearchRequestError,
   type Expression,
 } from '@cardstack/runtime-common';
 import { AuthenticationError } from '@cardstack/runtime-common/router';
 import { retrieveTokenClaim, type RealmServerTokenClaim } from '../utils/jwt';
 import {
-  fullRequestURL,
+  fetchRequestFromContext,
   sendResponseForBadRequest,
   sendResponseForForbiddenRequest,
   sendResponseForNotFound,
@@ -36,15 +37,16 @@ export function multiRealmAuthorization({
   realms: Realm[];
 }): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, next: Koa.Next) {
-    let url = fullRequestURL(ctxt);
-    let realmList = parseRealmsParam(url);
-
-    if (realmList.length === 0) {
-      await sendResponseForBadRequest(
-        ctxt,
-        'realms query param must be supplied',
-      );
-      return;
+    let request = await fetchRequestFromContext(ctxt);
+    let realmList: string[];
+    try {
+      realmList = await parseRealmsFromRequest(request);
+    } catch (e: any) {
+      if (e instanceof SearchRequestError) {
+        await sendResponseForBadRequest(ctxt, e.message);
+        return;
+      }
+      throw e;
     }
 
     let realmByURL = new Map(realms.map((realm) => [realm.url, realm]));
