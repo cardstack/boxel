@@ -2,9 +2,10 @@ import {
   buildSearchErrorResponse,
   baseRealm,
   ensureTrailingSlash,
-  parseRealmsFromRequest,
-  parsePrerenderedSearchRequestFromRequest,
-  parseSearchQueryFromRequest,
+  parsePrerenderedSearchRequestFromPayload,
+  parseRealmsFromPayload,
+  parseSearchQueryFromPayload,
+  parseSearchRequestPayload,
   SearchRequestError,
   searchPrerenderedRealms,
   searchRealms,
@@ -33,7 +34,7 @@ type SearchableRealm = {
   searchPrerendered: (
     query: Query,
     opts: Pick<
-      Awaited<ReturnType<typeof parsePrerenderedSearchRequestFromRequest>>,
+      ReturnType<typeof parsePrerenderedSearchRequestFromPayload>,
       'htmlFormat' | 'cardUrls' | 'renderType'
     >,
   ) => Promise<PrerenderedCardCollectionDocument>;
@@ -68,8 +69,10 @@ function registerSearchRoutes() {
     path: '/_search',
     handler: async (req, _url) => {
       let realmList: string[];
+      let payload: unknown;
       try {
-        realmList = await parseRealmsFromRequest(req);
+        payload = await parseSearchRequestPayload(req);
+        realmList = parseRealmsFromPayload(payload);
       } catch (e) {
         if (e instanceof SearchRequestError) {
           return buildSearchErrorResponse(e.message);
@@ -79,7 +82,7 @@ function registerSearchRoutes() {
 
       let cardsQuery;
       try {
-        cardsQuery = await parseSearchQueryFromRequest(req.clone());
+        cardsQuery = parseSearchQueryFromPayload(payload);
       } catch (e) {
         if (e instanceof SearchRequestError) {
           return buildSearchErrorResponse(e.message);
@@ -103,8 +106,10 @@ function registerSearchRoutes() {
     path: '/_search-prerendered',
     handler: async (req, _url) => {
       let realmList: string[];
+      let payload: unknown;
       try {
-        realmList = await parseRealmsFromRequest(req);
+        payload = await parseSearchRequestPayload(req);
+        realmList = parseRealmsFromPayload(payload);
       } catch (e) {
         if (e instanceof SearchRequestError) {
           return buildSearchErrorResponse(e.message);
@@ -114,7 +119,7 @@ function registerSearchRoutes() {
 
       let parsed;
       try {
-        parsed = await parsePrerenderedSearchRequestFromRequest(req.clone());
+        parsed = parsePrerenderedSearchRequestFromPayload(payload);
       } catch (e) {
         if (e instanceof SearchRequestError) {
           return buildSearchErrorResponse(e.message);

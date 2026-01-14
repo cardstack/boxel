@@ -2,6 +2,7 @@ import type Koa from 'koa';
 import {
   buildSearchErrorResponse,
   SupportedMimeType,
+  parseSearchQueryFromPayload,
   parseSearchQueryFromRequest,
   SearchRequestError,
   searchRealms,
@@ -11,7 +12,10 @@ import {
   sendResponseForBadRequest,
   setContextResponse,
 } from '../middleware';
-import { getMultiRealmAuthorization } from '../middleware/multi-realm-authorization';
+import {
+  getMultiRealmAuthorization,
+  getSearchRequestPayload,
+} from '../middleware/multi-realm-authorization';
 
 export default function handleSearch(): (ctxt: Koa.Context) => Promise<void> {
   return async function (ctxt: Koa.Context) {
@@ -20,7 +24,11 @@ export default function handleSearch(): (ctxt: Koa.Context) => Promise<void> {
     let cardsQuery;
     let request = await fetchRequestFromContext(ctxt);
     try {
-      cardsQuery = await parseSearchQueryFromRequest(request);
+      let payload = getSearchRequestPayload(ctxt);
+      cardsQuery =
+        payload !== undefined
+          ? parseSearchQueryFromPayload(payload)
+          : await parseSearchQueryFromRequest(request);
     } catch (e) {
       if (e instanceof SearchRequestError) {
         if (e.code === 'invalid-query') {

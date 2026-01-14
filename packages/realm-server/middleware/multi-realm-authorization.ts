@@ -5,7 +5,8 @@ import {
   param,
   separatedByCommas,
   fetchUserPermissions,
-  parseRealmsFromRequest,
+  parseRealmsFromPayload,
+  parseSearchRequestPayload,
   ensureTrailingSlash,
   SearchRequestError,
   type Expression,
@@ -26,6 +27,7 @@ export type MultiRealmAuthorizationState = {
 };
 
 const MULTI_REALM_AUTH_STATE = 'multiRealmAuthorization';
+const SEARCH_REQUEST_PAYLOAD_STATE = 'searchRequestPayload';
 
 export function multiRealmAuthorization({
   dbAdapter,
@@ -40,7 +42,10 @@ export function multiRealmAuthorization({
     let request = await fetchRequestFromContext(ctxt);
     let realmList: string[];
     try {
-      realmList = await parseRealmsFromRequest(request);
+      let payload = await parseSearchRequestPayload(request);
+      realmList = parseRealmsFromPayload(payload);
+      (ctxt.state as Record<string, unknown>)[SEARCH_REQUEST_PAYLOAD_STATE] =
+        payload;
     } catch (e: any) {
       if (e instanceof SearchRequestError) {
         await sendResponseForBadRequest(ctxt, e.message);
@@ -159,4 +164,12 @@ export function getMultiRealmAuthorization(
     throw new Error('Multi-realm authorization state is missing');
   }
   return state;
+}
+
+export function getSearchRequestPayload(
+  ctxt: Koa.Context,
+): unknown | undefined {
+  return (ctxt.state as Record<string, unknown>)[
+    SEARCH_REQUEST_PAYLOAD_STATE
+  ];
 }
