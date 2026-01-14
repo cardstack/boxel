@@ -668,7 +668,7 @@ export default class RealmService extends Service {
     }
 
     let missingRealmUrls = uniqueRealmUrls.filter((realmURL) => {
-      return !this.knownRealm(realmURL, false)?.info;
+      return !this.knownRealm(realmURL, { tracked: false })?.info;
     });
     if (missingRealmUrls.length === 0) {
       return;
@@ -731,7 +731,7 @@ export default class RealmService extends Service {
   }
 
   info = (url: string): EnhancedRealmInfo => {
-    let resource = this.knownRealm(url, false);
+    let resource = this.knownRealm(url, { tracked: false });
     if (!resource) {
       this.identifyRealm.perform(url);
 
@@ -912,11 +912,11 @@ export default class RealmService extends Service {
   }
 
   token = (url: string): string | undefined => {
-    let resource = this.knownRealm(url, false);
+    let resource = this.knownRealm(url, { tracked: false });
     if (!resource && (globalThis as any).__boxelRenderContext && !isTesting()) {
       // prerender contexts should always reflect localStorage session state
       this.restoreSessionsFromStorage();
-      resource = this.knownRealm(url, false);
+      resource = this.knownRealm(url, { tracked: false });
     }
     return resource?.token;
   };
@@ -973,7 +973,7 @@ export default class RealmService extends Service {
   // use it untracked to implement the read-through cache.
   private knownRealm(
     url: string | undefined,
-    tracked = true,
+    { tracked = true }: { tracked?: boolean } = {},
   ): RealmResource | undefined {
     if (!url) {
       if (tracked) {
@@ -1029,7 +1029,7 @@ export default class RealmService extends Service {
   ): RealmResource {
     // this should be the only place we do the untracked read. It needs to be
     // untracked so our `this._realms.set` below will not be an assertion.
-    let resource = this.knownRealm(realmURL, false);
+    let resource = this.knownRealm(realmURL, { tracked: false });
 
     if (resource && !resource?.token && token) {
       resource.token = token;
@@ -1048,7 +1048,7 @@ export default class RealmService extends Service {
   private identifyRealm = task(
     { maxConcurrency: 1, enqueue: true },
     async (url: string): Promise<void> => {
-      if (this.knownRealm(url, false)) {
+      if (this.knownRealm(url, { tracked: false })) {
         // could have already been discovered while we were queued
         return;
       }
