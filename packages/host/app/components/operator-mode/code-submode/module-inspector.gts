@@ -51,6 +51,7 @@ import ToggleButton from '@cardstack/host/components/operator-mode/code-submode/
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
+import { isHtmlPreTagGroup } from '@cardstack/host/lib/formatted-message/utils';
 import type { FileResource } from '@cardstack/host/resources/file';
 import type { Ready } from '@cardstack/host/resources/file';
 import { isReady } from '@cardstack/host/resources/file';
@@ -60,7 +61,6 @@ import {
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
-import { isHtmlPreTagGroup } from '@cardstack/host/lib/formatted-message/utils';
 
 import type CommandService from '@cardstack/host/services/command-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
