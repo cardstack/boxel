@@ -212,6 +212,36 @@ module(basename(__filename), function () {
           );
         });
 
+        test('does not inject head or isolated HTML when realm is not public', async function (assert) {
+          let cardURL = new URL('private-index-test', testRealm2URL).href;
+          let headHTML = '<meta data-test-head-html content="private-head" />';
+          let isolatedHTML =
+            '<div data-test-isolated-html>Private isolated HTML</div>';
+
+          await dbAdapter.execute(
+            `INSERT INTO boxel_index_working (url, file_alias, type, realm_version, realm_url, head_html, isolated_html)
+             VALUES ('${cardURL}', '${cardURL}', 'instance', 1, '${testRealm2URL.href}', '${headHTML}', '${isolatedHTML}')`,
+          );
+
+          await dbAdapter.execute(
+            `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealm2URL.href}' AND username = '*'`,
+          );
+
+          let response = await request2
+            .get('/test/private-index-test')
+            .set('Accept', 'text/html');
+
+          assert.strictEqual(response.status, 200, 'serves HTML response');
+          assert.notOk(
+            response.text.includes('data-test-head-html'),
+            'head HTML is not injected into the HTML response',
+          );
+          assert.notOk(
+            response.text.includes('data-test-isolated-html'),
+            'isolated HTML is not injected into the HTML response',
+          );
+        });
+
         test('serves scoped CSS in index responses for card URLs', async function (assert) {
           let cardURL = new URL('scoped-css-test', testRealm2URL).href;
           let scopedCSS = '.layout{display:flex;}';

@@ -7,6 +7,7 @@ import {
   logger,
   SupportedMimeType,
   insertPermissions,
+  fetchRealmPermissions,
   param,
   query,
   Deferred,
@@ -15,6 +16,7 @@ import {
   type QueuePublisher,
   DEFAULT_PERMISSIONS,
   PUBLISHED_DIRECTORY_NAME,
+  RealmPaths,
   fetchSessionRoom,
   REALM_SERVER_REALM,
   userInitiatedPriority,
@@ -312,11 +314,18 @@ export class RealmServer {
         `${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`,
       );
 
+      let indexHTML = await this.retrieveIndexHTML();
+      let hasPublicPermissions = await this.hasPublicPermissions(cardURL);
+
+      if (!hasPublicPermissions) {
+        ctxt.body = indexHTML;
+        return;
+      }
+
       this.headLog.debug(`Fetching head HTML for ${cardURL.href}`);
       this.isolatedLog.debug(`Fetching isolated HTML for ${cardURL.href}`);
 
-      let [indexHTML, headHTML, isolatedHTML, scopedCSS] = await Promise.all([
-        this.retrieveIndexHTML(),
+      let [headHTML, isolatedHTML, scopedCSS] = await Promise.all([
         this.retrieveHeadHTML(cardURL),
         this.retrieveIsolatedHTML(cardURL),
         retrieveScopedCSS({
@@ -367,6 +376,25 @@ export class RealmServer {
     }
     return next();
   };
+
+  private async hasPublicPermissions(cardURL: URL): Promise<boolean> {
+    let realm = this.realms.find((candidate) => {
+      let realmURL = new URL(candidate.url);
+      realmURL.protocol = cardURL.protocol;
+      return new RealmPaths(realmURL).inRealm(cardURL);
+    });
+
+    if (!realm) {
+      return false;
+    }
+
+    let permissions = await fetchRealmPermissions(
+      this.dbAdapter,
+      new URL(realm.url),
+    );
+
+    return permissions['*']?.includes('read') ?? false;
+  }
 
   private async retrieveIndexHTML(): Promise<string> {
     if (this.promiseForIndexHTML) {
