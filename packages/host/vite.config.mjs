@@ -22,5 +22,8 @@ export default defineConfig({
       extensions,
     }),
   ],
+  optimizeDeps: {
+    exclude: ['@sqlite.org/sqlite-wasm', 'content-tag'],
+  },
 });
 7;
