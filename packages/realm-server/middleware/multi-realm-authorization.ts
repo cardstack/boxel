@@ -169,7 +169,5 @@ export function getMultiRealmAuthorization(
 export function getSearchRequestPayload(
   ctxt: Koa.Context,
 ): unknown | undefined {
-  return (ctxt.state as Record<string, unknown>)[
-    SEARCH_REQUEST_PAYLOAD_STATE
-  ];
+  return (ctxt.state as Record<string, unknown>)[SEARCH_REQUEST_PAYLOAD_STATE];
 }
