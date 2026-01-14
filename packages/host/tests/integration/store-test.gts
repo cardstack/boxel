@@ -1051,16 +1051,19 @@ module('Integration | Store', function (hooks) {
                   links: {
                     self: `${testRealmURL}hero.png`,
                   },
+                  data: { type: 'file-meta', id: `${testRealmURL}hero.png` },
                 },
                 'attachments.0': {
                   links: {
                     self: `${testRealmURL}first.png`,
                   },
+                  data: { type: 'file-meta', id: `${testRealmURL}first.png` },
                 },
                 'attachments.1': {
                   links: {
                     self: `${testRealmURL}second.png`,
                   },
+                  data: { type: 'file-meta', id: `${testRealmURL}second.png` },
                 },
               },
               meta: {
@@ -1070,7 +1073,57 @@ module('Integration | Store', function (hooks) {
                 },
               },
             },
-          } satisfies LooseSingleCardDocument),
+            included: [
+              {
+                type: 'file-meta',
+                id: `${testRealmURL}hero.png`,
+                attributes: {
+                  name: 'hero.png',
+                  url: `${testRealmURL}hero.png`,
+                  sourceUrl: `${testRealmURL}hero.png`,
+                  contentType: 'image/png',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/file-api',
+                    name: 'FileDef',
+                  },
+                },
+              },
+              {
+                type: 'file-meta',
+                id: `${testRealmURL}first.png`,
+                attributes: {
+                  name: 'first.png',
+                  url: `${testRealmURL}first.png`,
+                  sourceUrl: `${testRealmURL}first.png`,
+                  contentType: 'image/png',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/file-api',
+                    name: 'FileDef',
+                  },
+                },
+              },
+              {
+                type: 'file-meta',
+                id: `${testRealmURL}second.png`,
+                attributes: {
+                  name: 'second.png',
+                  url: `${testRealmURL}second.png`,
+                  sourceUrl: `${testRealmURL}second.png`,
+                  contentType: 'image/png',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/file-api',
+                    name: 'FileDef',
+                  },
+                },
+              },
+            ],
+          }),
         ],
         ['hero.png', 'mock hero image'],
         ['first.png', 'mock first image'],
@@ -1083,6 +1136,11 @@ module('Integration | Store', function (hooks) {
     )) as CardDefType;
 
     assert.ok((gallery as any).hero, 'hero is loaded from included resources');
+    assert.strictEqual(
+      (gallery as any).hero?.id,
+      `${testRealmURL}hero.png`,
+      'hero FileDef has id set from file meta',
+    );
     assert.strictEqual(
       (gallery as any).hero?.name,
       'hero.png',
@@ -1101,9 +1159,19 @@ module('Integration | Store', function (hooks) {
       'attachments are loaded from included resources',
     );
     assert.strictEqual(
+      attachments[0]?.id,
+      `${testRealmURL}first.png`,
+      'first attachment has id set from file meta',
+    );
+    assert.strictEqual(
       attachments[0]?.name,
       'first.png',
       'first attachment uses file meta name',
+    );
+    assert.strictEqual(
+      attachments[1]?.id,
+      `${testRealmURL}second.png`,
+      'second attachment has id set from file meta',
     );
     assert.strictEqual(
       attachments[1]?.name,

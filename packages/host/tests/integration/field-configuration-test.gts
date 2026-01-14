@@ -5,8 +5,10 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
-import type { SingleCardDocument } from '@cardstack/runtime-common';
-import type { LoadDocumentOptions } from '@cardstack/runtime-common';
+import type {
+  SingleCardDocument,
+  SingleFileMetaDocument,
+} from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type {
@@ -41,8 +43,13 @@ let loader: Loader;
 
 class DeferredLinkStore implements CardStore {
   private instances = new Map<string, CardDefType>();
-  private readyDocs = new Map<string, SingleCardDocument>();
-  private pendingDocs = new Map<string, Deferred<SingleCardDocument>>();
+  private readyCardDocs = new Map<string, SingleCardDocument>();
+  private pendingCardDocs = new Map<string, Deferred<SingleCardDocument>>();
+  private readyFileMetaDocs = new Map<string, SingleFileMetaDocument>();
+  private pendingFileMetaDocs = new Map<
+    string,
+    Deferred<SingleFileMetaDocument>
+  >();
   private inFlightLoads = new Set<Promise<unknown>>();
   private loadGeneration = 0;
 
@@ -60,16 +67,30 @@ class DeferredLinkStore implements CardStore {
 
   makeTracked(_id: string) {}
 
-  async loadDocument(_url: string, _opts?: LoadDocumentOptions) {
-    let normalized = this.normalize(_url);
-    let ready = this.readyDocs.get(normalized);
+  async loadCardDocument(url: string): Promise<SingleCardDocument> {
+    let normalized = this.normalize(url);
+    let ready = this.readyCardDocs.get(normalized);
     if (ready) {
-      return ready;
+      return Promise.resolve(ready);
     }
-    let pending = this.pendingDocs.get(normalized);
+    let pending = this.pendingCardDocs.get(normalized);
     if (!pending) {
       pending = new Deferred<SingleCardDocument>();
-      this.pendingDocs.set(normalized, pending);
+      this.pendingCardDocs.set(normalized, pending);
+    }
+    return pending.promise;
+  }
+
+  async loadFileMetaDocument(url: string) {
+    let normalized = this.normalize(url);
+    let ready = this.readyFileMetaDocs.get(normalized);
+    if (ready) {
+      return Promise.resolve(ready);
+    }
+    let pending = this.pendingFileMetaDocs.get(normalized);
+    if (!pending) {
+      pending = new Deferred<SingleFileMetaDocument>();
+      this.pendingFileMetaDocs.set(normalized, pending);
     }
     return pending.promise;
   }
@@ -107,11 +128,11 @@ class DeferredLinkStore implements CardStore {
 
   provideDocument(url: string, doc: SingleCardDocument) {
     let normalized = this.normalize(url);
-    this.readyDocs.set(normalized, doc);
-    let pending = this.pendingDocs.get(normalized);
+    this.readyCardDocs.set(normalized, doc);
+    let pending = this.pendingCardDocs.get(normalized);
     if (pending) {
       pending.fulfill(doc);
-      this.pendingDocs.delete(normalized);
+      this.pendingCardDocs.delete(normalized);
     }
   }
 

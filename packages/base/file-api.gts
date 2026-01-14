@@ -13,6 +13,7 @@ import {
   StringField,
   contains,
   field,
+  getDataBucket,
 } from './card-api';
 
 class View extends Component<typeof FileDef> {
@@ -60,6 +61,21 @@ export class FileContentMismatchError extends Error {
 export class FileDef extends BaseDef {
   static displayName = 'File';
   static icon = FileIcon;
+
+  static assignInitialFieldValue(
+    instance: BaseDef,
+    fieldName: string,
+    value: any,
+  ) {
+    if (fieldName === 'id') {
+      // Similar to CardDef, set 'id' directly in the deserialized cache
+      // to avoid triggering recomputes during instantiation
+      let deserialized = getDataBucket(instance);
+      deserialized.set('id', value);
+    } else {
+      super.assignInitialFieldValue(instance, fieldName, value);
+    }
+  }
 
   @field id = contains(ReadOnlyField);
   @field sourceUrl = contains(StringField);

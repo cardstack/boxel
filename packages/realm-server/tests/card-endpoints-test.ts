@@ -257,6 +257,11 @@ module(basename(__filename), function () {
           assert.ok(hero, 'includes hero FileDef resource');
           assert.ok(first, 'includes first attachment FileDef resource');
           assert.ok(second, 'includes second attachment FileDef resource');
+          assert.strictEqual(
+            hero?.type,
+            'file-meta',
+            'FileDef uses file-meta type',
+          );
           assert.strictEqual(hero?.attributes?.name, 'hero.png');
           assert.strictEqual(hero?.attributes?.contentType, 'image/png');
           assert.deepEqual(hero?.meta?.adoptsFrom, {
@@ -267,21 +272,21 @@ module(basename(__filename), function () {
           assert.deepEqual(
             (doc.data.relationships?.hero as Relationship)?.data,
             {
-              type: 'card',
+              type: 'file-meta',
               id: `${testRealmHref}hero.png`,
             },
           );
           assert.deepEqual(
             (doc.data.relationships?.['attachments.0'] as Relationship)?.data,
             {
-              type: 'card',
+              type: 'file-meta',
               id: `${testRealmHref}first.png`,
             },
           );
           assert.deepEqual(
             (doc.data.relationships?.['attachments.1'] as Relationship)?.data,
             {
-              type: 'card',
+              type: 'file-meta',
               id: `${testRealmHref}second.png`,
             },
           );

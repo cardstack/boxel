@@ -1,35 +1,31 @@
-import { SupportedMimeType, CardError, isSingleCardDocument } from './index';
+import {
+  type SingleFileMetaDocument,
+  isSingleCardDocument,
+  isSingleFileMetaDocument,
+  SupportedMimeType,
+  CardError,
+  isCardError,
+} from './index';
 
-export type LoadDocumentOptions = {
-  mode?: 'card' | 'file';
-};
-
-export async function loadDocument(
+async function loadDocumentWithRequest(
   fetch: typeof globalThis.fetch,
   url: string,
-  opts?: LoadDocumentOptions,
+  requestURL: URL,
+  accept: SupportedMimeType,
 ) {
   let response: Response;
-  let mode = opts?.mode ?? 'card';
-  let requestURL =
-    mode === 'file'
-      ? new URL(url)
-      : new URL(!url.endsWith('.json') ? `${url}.json` : url);
   requestURL.searchParams.set('noCache', 'true');
   try {
     response = await fetch(requestURL.href, {
       // there is a bunch of realm meta that is missing when we load a document
-      // in this manner (card-src), hopefully that does not come back to bite
-      // us. loading a document in this manner is useful because it allows us to
-      // handle an index that is being built: where the document you are loading
-      // might not have been added to the index yet. this allows us to remove
-      // the visit() function when crawling the links of documents being indexed
-      // and not finding the document yet in the index.
+      // in this manner (card-src/file-meta), hopefully that does not come back
+      // to bite us. loading a document in this manner is useful because it
+      // allows us to handle an index that is being built: where the document
+      // you are loading might not have been added to the index yet. this
+      // allows us to remove the visit() function when crawling the links of
+      // documents being indexed and not finding the document yet in the index.
       headers: {
-        Accept:
-          mode === 'file'
-            ? SupportedMimeType.FileMeta
-            : SupportedMimeType.CardSource,
+        Accept: accept,
       },
     });
   } catch (err: any) {
@@ -48,9 +44,56 @@ export async function loadDocument(
     return cardError;
   }
   let json = await response.json();
+  return json;
+}
+
+export async function loadCardDocument(
+  fetch: typeof globalThis.fetch,
+  url: string,
+) {
+  let requestURL = new URL(!url.endsWith('.json') ? `${url}.json` : url);
+  let json = await loadDocumentWithRequest(
+    fetch,
+    url,
+    requestURL,
+    SupportedMimeType.CardSource,
+  );
+  if (isCardError(json)) {
+    return json;
+  }
   if (!isSingleCardDocument(json)) {
     throw new Error(
-      `instance ${url} is not a card document. it is: ${JSON.stringify(
+      `instance ${url} is not a card resource document. it is: ${JSON.stringify(
+        json,
+        null,
+        2,
+      )}`,
+    );
+  }
+  if (!json.data.id) {
+    // card source format is not serialized with the ID, so we add that back in.
+    json.data.id = url;
+  }
+  return json;
+}
+
+export async function loadFileMetaDocument(
+  fetch: typeof globalThis.fetch,
+  url: string,
+): Promise<SingleFileMetaDocument | CardError> {
+  let requestURL = new URL(url);
+  let json = await loadDocumentWithRequest(
+    fetch,
+    url,
+    requestURL,
+    SupportedMimeType.FileMeta,
+  );
+  if (isCardError(json)) {
+    return json;
+  }
+  if (!isSingleFileMetaDocument(json)) {
+    throw new Error(
+      `instance ${url} is not a file meta resource document. it is: ${JSON.stringify(
         json,
         null,
         2,

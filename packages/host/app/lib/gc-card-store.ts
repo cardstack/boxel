@@ -7,14 +7,15 @@ import {
   isCardInstance,
   isLocalId,
   localId as localIdSymbol,
-  loadDocument,
+  loadCardDocument,
+  loadFileMetaDocument,
   type Query,
   type QueryResultsMeta,
   type ErrorEntry,
   type CardErrorJSONAPI,
   type CardError,
-  type LoadDocumentOptions,
   type SingleCardDocument,
+  type SingleFileMetaDocument,
 } from '@cardstack/runtime-common';
 
 import type {
@@ -130,8 +131,12 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   #fetch: typeof globalThis.fetch;
   #inFlight: Set<Promise<unknown>> = new Set();
   #loadGeneration = 0; // increments whenever a new load is tracked
-  #docsInFlight: Map<string, Promise<SingleCardDocument | CardError>> =
+  #cardDocsInFlight: Map<string, Promise<SingleCardDocument | CardError>> =
     new Map();
+  #fileMetaDocsInFlight: Map<
+    string,
+    Promise<SingleFileMetaDocument | CardError>
+  > = new Map();
 
   #storeHooks: StoreHooks | undefined;
 
@@ -161,24 +166,46 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.setItem(id, instance, true);
   }
 
-  async loadDocument(url: string, opts?: LoadDocumentOptions) {
-    let promise = this.#docsInFlight.get(url);
+  async loadCardDocument(url: string) {
+    let promise = this.#cardDocsInFlight.get(url);
     if (promise) {
       this.trackLoad(promise);
       return await promise;
     }
-    promise = loadDocument(this.#fetch, url, opts);
-    this.#docsInFlight.set(url, promise);
+    promise = loadCardDocument(this.#fetch, url);
+    this.#cardDocsInFlight.set(url, promise);
     this.trackLoad(promise);
     try {
       return await promise;
     } finally {
-      this.#docsInFlight.delete(url);
+      this.#cardDocsInFlight.delete(url);
     }
   }
 
-  get docsInFlight() {
-    return [...this.#docsInFlight.keys()];
+  async loadFileMetaDocument(
+    url: string,
+  ): Promise<SingleFileMetaDocument | CardError> {
+    let promise = this.#fileMetaDocsInFlight.get(url);
+    if (promise) {
+      this.trackLoad(promise);
+      return await promise;
+    }
+    promise = loadFileMetaDocument(this.#fetch, url);
+    this.#fileMetaDocsInFlight.set(url, promise);
+    this.trackLoad(promise);
+    try {
+      return await promise;
+    } finally {
+      this.#fileMetaDocsInFlight.delete(url);
+    }
+  }
+
+  get cardDocsInFlight() {
+    return [...this.#cardDocsInFlight.keys()];
+  }
+
+  get fileMetaDocsInFlight() {
+    return [...this.#fileMetaDocsInFlight.keys()];
   }
 
   trackLoad(load: Promise<unknown>) {
@@ -266,7 +293,8 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.#nonTrackedCards.clear();
     this.#clearEphemeralErrors(this.#nonTrackedCardErrors);
     this.#gcCandidates.clear();
-    this.#docsInFlight.clear();
+    this.#cardDocsInFlight.clear();
+    this.#fileMetaDocsInFlight.clear();
     this.#inFlight.clear();
     this.#loadGeneration = 0;
     this.#idResolver.reset();

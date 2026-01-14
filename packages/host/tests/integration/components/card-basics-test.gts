@@ -729,7 +729,7 @@ module('Integration | card-basics', function (hooks) {
                     },
                     data: {
                       id: `${testRealmURL}hero.png`,
-                      type: 'card',
+                      type: 'file-meta',
                     },
                   },
                 },
@@ -796,7 +796,7 @@ module('Integration | card-basics', function (hooks) {
                     },
                     data: {
                       id: `${testRealmURL}first.png`,
-                      type: 'card',
+                      type: 'file-meta',
                     },
                   },
                   'attachments.1': {
@@ -805,7 +805,7 @@ module('Integration | card-basics', function (hooks) {
                     },
                     data: {
                       id: `${testRealmURL}second.png`,
-                      type: 'card',
+                      type: 'file-meta',
                     },
                   },
                 },

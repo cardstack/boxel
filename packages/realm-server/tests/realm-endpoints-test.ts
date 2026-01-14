@@ -214,6 +214,7 @@ module(basename(__filename), function () {
         'content-type uses file meta mime type',
       );
       let json = response.body as LooseSingleCardDocument;
+      assert.strictEqual(json.data.type, 'file-meta');
       assert.strictEqual(json.data.attributes?.name, 'person.gts');
       assert.deepEqual(json.data.meta?.adoptsFrom, {
         module: `${baseRealm.url}file-api`,

@@ -188,6 +188,7 @@ module(`Integration | realm indexing`, function (hooks) {
     assert.true(response.ok, 'file meta request succeeds');
 
     let body = await response.json();
+    assert.strictEqual(body?.data?.type, 'file-meta');
     let contentHash = body?.data?.attributes?.contentHash;
     let expectedHash = md5(
       new TextEncoder().encode('Hello from the test realm.'),

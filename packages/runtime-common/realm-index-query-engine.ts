@@ -33,7 +33,7 @@ import {
   type CardCollectionDocument,
 } from './document-types';
 import { relationshipEntries } from './relationship-utils';
-import type { CardResource, Saved } from './resource-types';
+import type { CardResource, FileMetaResource, Saved } from './resource-types';
 import type { FieldDefinition } from './definitions';
 import {
   normalizeQueryDefinition,
@@ -137,7 +137,7 @@ export class RealmIndexQueryEngine {
     // fill in the included resources for links that were not cached (e.g.
     // volatile fields)
     if (opts?.loadLinks) {
-      let included: CardResource<Saved>[] = [];
+      let included: (CardResource<Saved> | FileMetaResource)[] = [];
       for (let resource of doc.data) {
         included = await this.loadLinks(
           {
@@ -250,7 +250,7 @@ export class RealmIndexQueryEngine {
   }
 
   private async populateQueryFields(
-    resource: LooseCardResource,
+    resource: LooseCardResource | FileMetaResource,
     realmURL: URL,
     opts?: Options,
   ): Promise<void> {
@@ -307,7 +307,7 @@ export class RealmIndexQueryEngine {
     fieldDefinition: FieldDefinition;
     fieldName: string;
     queryDefinition: Query;
-    resource: LooseCardResource;
+    resource: LooseCardResource | FileMetaResource;
     realmURL: URL;
     opts?: Options;
   }): Promise<{
@@ -410,7 +410,7 @@ export class RealmIndexQueryEngine {
   }: {
     fieldDefinition: FieldDefinition;
     fieldName: string;
-    resource: LooseCardResource;
+    resource: LooseCardResource | FileMetaResource;
     results: CardResource<Saved>[];
     errors: QueryFieldErrorDetail[];
     searchURL: string;
@@ -562,14 +562,14 @@ export class RealmIndexQueryEngine {
       stack = [],
     }: {
       realmURL: URL;
-      resource: LooseCardResource;
+      resource: LooseCardResource | FileMetaResource;
       omit?: string[];
-      included?: CardResource<Saved>[];
+      included?: (CardResource<Saved> | FileMetaResource)[];
       visited?: string[];
       stack?: string[];
     },
     opts?: Options,
-  ): Promise<CardResource<Saved>[]> {
+  ): Promise<(CardResource<Saved> | FileMetaResource)[]> {
     if (resource.id != null) {
       if (visited.includes(resource.id)) {
         return [];
@@ -592,7 +592,7 @@ export class RealmIndexQueryEngine {
           relationship.links.self,
           resource.id ? new URL(resource.id) : realmURL,
         );
-        let linkResource: CardResource<Saved> | undefined;
+        let linkResource: CardResource<Saved> | FileMetaResource | undefined;
         if (realmPath.inRealm(linkURL)) {
           let maybeResult = await this.#indexQueryEngine.getInstance(
             linkURL,
@@ -681,8 +681,9 @@ export class RealmIndexQueryEngine {
           omit.includes(relationshipId.href) ||
           included.find((i) => i.id === relationshipId!.href)
         ) {
+          let relationshipType = linkResource?.type ?? 'card';
           relationship.data = {
-            type: 'card',
+            type: relationshipType,
             id: relationshipId.href,
           };
         }
@@ -736,7 +737,7 @@ function relativizeResource(
 function fileResourceFromIndex(
   fileURL: URL,
   fileEntry: IndexedFile,
-): CardResource<Saved> {
+): FileMetaResource {
   let name = fileURL.pathname.split('/').pop() ?? fileURL.pathname;
   let inferredContentType = inferContentType(name);
   let searchDoc = fileEntry.searchDoc ?? {};
@@ -748,7 +749,7 @@ function fileResourceFromIndex(
   let createdAt = fileEntry.resourceCreatedAt ?? lastModified;
   return {
     id: fileURL.href,
-    type: 'card',
+    type: 'file-meta',
     attributes: {
       name: searchDoc.name ?? name,
       url: searchDoc.url ?? fileURL.href,

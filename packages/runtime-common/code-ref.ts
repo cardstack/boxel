@@ -16,7 +16,7 @@ import {
 } from './constants';
 import { CardError } from './error';
 import { meta, relativeTo } from './constants';
-import type { LooseCardResource } from './index';
+import type { LooseCardResource, FileMetaResource } from './index';
 import { isUrlLike, trimExecutableExtension } from './index';
 
 export type ResolvedCodeRef = {
@@ -451,7 +451,7 @@ function visitCodeRef(codeRef: CodeRef, visit: VisitModuleDep): void {
 }
 
 export function visitModuleDeps(
-  resourceJson: LooseCardResource,
+  resourceJson: LooseCardResource | FileMetaResource,
   visit: VisitModuleDep,
 ): void {
   let resourceMeta = resourceJson.meta;

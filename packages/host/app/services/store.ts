@@ -246,8 +246,12 @@ export default class StoreService extends Service implements StoreInterface {
     return this.store.loaded();
   }
 
-  get docsInFlight() {
-    return this.store.docsInFlight;
+  get cardDocsInFlight() {
+    return this.store.cardDocsInFlight;
+  }
+
+  get fileMetaDocsInFlight() {
+    return this.store.fileMetaDocsInFlight;
   }
 
   // This method creates a new instance in the store and return the new card ID

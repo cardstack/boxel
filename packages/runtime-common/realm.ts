@@ -3,6 +3,7 @@ import {
   makeCardTypeSummaryDoc,
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
+  type SingleFileMetaDocument,
   type CardCollectionDocument,
   type PrerenderedCardCollectionDocument,
 } from './document-types';
@@ -2131,9 +2132,9 @@ export class Realm {
       (this.#dbAdapter
         ? await getContentHash(this.#dbAdapter, this.url, localPath)
         : undefined) ?? (await computeContentHashFromRef(fileRef));
-    let doc: LooseSingleCardDocument = {
+    let doc: SingleFileMetaDocument = {
       data: {
-        type: 'card',
+        type: 'file-meta',
         id: fileURL,
         attributes: {
           name,
@@ -2180,9 +2181,9 @@ export class Realm {
         : this.#dbAdapter
           ? await getContentHash(this.#dbAdapter, this.url, localPath)
           : undefined;
-    let doc: LooseSingleCardDocument = {
+    let doc: SingleFileMetaDocument = {
       data: {
-        type: 'card',
+        type: 'file-meta',
         id: fileURL,
         attributes: {
           name: searchDoc.name ?? name,

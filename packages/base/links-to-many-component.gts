@@ -10,6 +10,7 @@ import {
   type Field,
   type FieldDef,
   type Format,
+  type LinkableDefConstructor,
   CreateCardFn,
   CardCrudFunctions,
   isFileDefConstructor,
@@ -61,7 +62,7 @@ interface Signature {
   Args: {
     model: Box<CardDef>;
     arrayField: Box<CardDef[]>;
-    field: Field<typeof CardDef>;
+    field: Field<LinkableDefConstructor>;
     cardTypeFor(
       field: Field<typeof BaseDef>,
       boxedElement: Box<BaseDef>,
@@ -158,7 +159,7 @@ interface LinksToManyStandardEditorSignature {
   Args: {
     model: Box<CardDef>;
     arrayField: Box<CardDef[]>;
-    field: Field<typeof CardDef>;
+    field: Field<LinkableDefConstructor>;
     cardTypeFor(
       field: Field<typeof BaseDef>,
       boxedElement: Box<BaseDef>,
@@ -352,7 +353,7 @@ interface LinksToManyCompactEditorSignature {
   Args: {
     model: Box<CardDef>;
     arrayField: Box<CardDef[]>;
-    field: Field<typeof CardDef>;
+    field: Field<LinkableDefConstructor>;
     cardTypeFor(
       field: Field<typeof BaseDef>,
       boxedElement: Box<BaseDef>,
@@ -498,7 +499,7 @@ export function getLinksToManyComponent({
 }: {
   model: Box<CardDef>;
   arrayField: Box<CardDef[]>;
-  field: Field<typeof CardDef>;
+  field: Field<LinkableDefConstructor>;
   cardTypeFor(
     field: Field<typeof BaseDef>,
     boxedElement: Box<BaseDef>,
@@ -519,7 +520,9 @@ export function getLinksToManyComponent({
     <template>
       <DefaultFormatsConsumer as |defaultFormats|>
         {{#if
-          (shouldRenderEditor @format defaultFormats.cardDef isComputed isFileDef)
+          (shouldRenderEditor
+            @format defaultFormats.cardDef isComputed isFileDef
+          )
         }}
           <LinksToManyEditor
             @model={{model}}

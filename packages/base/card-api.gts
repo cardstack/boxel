@@ -37,15 +37,15 @@ import {
   isCardError,
   isCardInstance as _isCardInstance,
   isCardResource,
+  isFileMetaResource,
   isField,
   isFieldInstance,
   isRelationship,
   loadCardDef,
-  loadDocument,
+  loadCardDocument,
   Loader,
   localId,
   LocalPath,
-  type LoadDocumentOptions,
   meta,
   primitive,
   realmURL,
@@ -71,6 +71,12 @@ import {
   type Query,
   type QueryWithInterpolations,
   type QueryResultsMeta,
+  FileMetaResourceType,
+  CardResourceType,
+  loadFileMetaDocument,
+  CardResource,
+  LooseLinkableResource,
+  LooseSingleResourceDocument,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -141,6 +147,12 @@ import {
   type GetCardMenuItemParams,
   getDefaultCardMenuItems,
 } from './card-menu-items';
+import {
+  LinkableDocument,
+  SingleFileMetaDocument,
+} from '@cardstack/runtime-common/document-types';
+import type { FileMetaResource } from '@cardstack/runtime-common';
+import type { FileDef } from './file-api';
 
 export const BULK_GENERATED_ITEM_COUNT = 3;
 
@@ -153,6 +165,7 @@ export type CardOrFieldTypeIcon = ComponentLike<CardOrFieldTypeIconSignature>;
 export {
   deserialize,
   getCardMeta,
+  getDataBucket,
   getFieldDescription,
   getFields,
   isCard,
@@ -410,10 +423,10 @@ export interface CardStore {
   set(url: string, instance: CardDef): void;
   setNonTracked(id: string, instance: CardDef): void;
   makeTracked(id: string): void;
-  loadDocument(
+  loadCardDocument(url: string): Promise<SingleCardDocument | CardError>;
+  loadFileMetaDocument(
     url: string,
-    opts?: LoadDocumentOptions,
-  ): Promise<SingleCardDocument | CardError>;
+  ): Promise<SingleFileMetaDocument | CardError>;
   trackLoad(load: Promise<unknown>): void;
   loaded(): Promise<void>;
   getSearchResource: GetSearchResourceFunc;
@@ -1000,7 +1013,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   }
 }
 
-class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
+class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly fieldType = 'linksTo';
   private cardThunk: () => CardT;
   private declaredCardThunk: () => CardT;
@@ -1077,6 +1090,9 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     visited: Set<string>,
     opts?: SerializeOpts,
   ) {
+    let relationshipType = isFileDefConstructor(this.card as typeof BaseDef)
+      ? FileMetaResourceType
+      : CardResourceType;
     if (isNotLoadedValue(value)) {
       return {
         relationships: {
@@ -1109,22 +1125,22 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
             links: {
               self: makeRelativeURL(value.id, opts),
             },
-            data: { type: 'card', id: value.id },
+            data: { type: relationshipType, id: value.id },
           },
         },
       };
     }
-    if (visited.has(value[localId])) {
+    if (visited.has((value as CardDef)[localId])) {
       return {
         relationships: {
           [this.name]: {
-            data: { type: 'card', lid: value[localId] },
+            data: { type: relationshipType, lid: (value as CardDef)[localId] },
           },
         },
       };
     }
 
-    visited.add(value.id ?? value[localId]);
+    visited.add(value.id ?? (value as CardDef)[localId]);
 
     let serialized = callSerializeHook(this.card, value, doc, visited, opts) as
       | (JSONAPIResource & { id: string; type: string })
@@ -1138,10 +1154,13 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
                   links: {
                     self: makeRelativeURL(value.id, opts),
                   },
-                  data: { type: 'card', id: value.id },
+                  data: { type: relationshipType, id: value.id },
                 }
               : {
-                  data: { type: 'card', lid: value[localId] },
+                  data: {
+                    type: relationshipType,
+                    lid: (value as CardDef)[localId],
+                  },
                 }),
           },
         },
@@ -1151,9 +1170,9 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
           doc.data.id !== value.id) ||
         (!value.id &&
           !(doc.included ?? []).find(
-            (r) => 'lid' in r && r.lid === value[localId],
+            (r) => 'lid' in r && r.lid === (value as CardDef)[localId],
           ) &&
-          doc.data.lid !== value[localId])
+          doc.data.lid !== (value as CardDef)[localId])
       ) {
         doc.included = doc.included ?? [];
         doc.included.push(serialized);
@@ -1228,8 +1247,10 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       store,
       opts,
     );
-    deserialized[isSavedInstance] = true;
-    return deserialized;
+    if ('isSavedInstance' in deserialized) {
+      (deserialized as CardDef)[isSavedInstance] = true;
+    }
+    return deserialized as BaseInstanceType<CardT>;
   }
 
   emptyValue(_instance: CardDef) {
@@ -1334,10 +1355,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
           <DefaultFormatsConsumer as |defaultFormats|>
             {{#if
               (shouldRenderEditor
-                @format
-                defaultFormats.cardDef
-                isComputed
-                isFileDef
+                @format defaultFormats.cardDef isComputed isFileDef
               )
             }}
               <LinksToEditor
@@ -1368,7 +1386,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   }
 }
 
-class LinksToMany<FieldT extends CardDefConstructor>
+class LinksToMany<FieldT extends LinkableDefConstructor>
   implements Field<FieldT, any[] | null>
 {
   readonly fieldType = 'linksToMany';
@@ -1565,6 +1583,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
       throw new Error(`Expected array for field value ${this.name}`);
     }
 
+    let relationshipType = isFileDefConstructor(this.card as typeof BaseDef)
+      ? FileMetaResourceType
+      : CardResourceType;
     let relationships: Record<string, Relationship> = {};
     values.map((value, i) => {
       if (value == null) {
@@ -1581,7 +1602,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
           links: {
             self: makeRelativeURL(value.reference, opts),
           },
-          data: { type: 'card', id: value.reference },
+          data: { type: relationshipType, id: value.reference },
         };
         return;
       }
@@ -1595,18 +1616,18 @@ class LinksToMany<FieldT extends CardDefConstructor>
           links: {
             self: makeRelativeURL(value.id, opts),
           },
-          data: { type: 'card', id: value.id },
+          data: { type: relationshipType, id: value.id },
         };
         return;
       }
-      if (visited.has(value[localId])) {
+      if (visited.has((value as CardDef)[localId])) {
         relationships[`${this.name}\.${i}`] = {
-          data: { type: 'card', lid: value[localId] },
+          data: { type: relationshipType, lid: (value as CardDef)[localId] },
         };
         return;
       }
 
-      visited.add(value.id ?? value[localId]);
+      visited.add(value.id ?? (value as CardDef)[localId]);
       let serialized: JSONAPIResource & ResourceID = callSerializeHook(
         this.card,
         value,
@@ -1622,9 +1643,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
           doc.data.id !== value.id) ||
         (!value.id &&
           !(doc.included ?? []).find(
-            (r) => 'lid' in r && r.lid === value[localId],
+            (r) => 'lid' in r && r.lid === (value as CardDef)[localId],
           ) &&
-          doc.data.lid !== value[localId])
+          doc.data.lid !== (value as CardDef)[localId])
       ) {
         doc.included = doc.included ?? [];
         doc.included.push(serialized);
@@ -1636,10 +1657,13 @@ class LinksToMany<FieldT extends CardDefConstructor>
               links: {
                 self: makeRelativeURL(value.id, opts),
               },
-              data: { type: 'card', id: value.id },
+              data: { type: relationshipType, id: value.id },
             }
           : {
-              data: { type: 'card', lid: value[localId] },
+              data: {
+                type: relationshipType,
+                lid: (value as CardDef)[localId],
+              },
             }),
       };
     });
@@ -1686,7 +1710,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
         let cachedInstance = store.get(normalizedReference);
 
         if (cachedInstance) {
-          cachedInstance[isSavedInstance] = true;
+          (cachedInstance as CardDef)[isSavedInstance] = true;
           return cachedInstance;
         }
         // links.self is used to tell the consumer of this payload how to get the resource via HTTP.
@@ -1728,7 +1752,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
           store,
           opts,
         );
-        deserialized[isSavedInstance] = true;
+        if ('isSavedInstance' in deserialized) {
+          (deserialized as CardDef)[isSavedInstance] = true;
+        }
         return deserialized;
       });
 
@@ -1939,7 +1965,7 @@ export function contains<FieldT extends FieldDefConstructor>(
   } satisfies InternalFieldInitializer as any;
 }
 
-export function linksTo<CardT extends CardDefConstructor>(
+export function linksTo<CardT extends LinkableDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
   options?: RelationshipOptions,
 ): BaseInstanceType<CardT> {
@@ -1965,7 +1991,7 @@ export function linksTo<CardT extends CardDefConstructor>(
   } satisfies InternalFieldInitializer as any;
 }
 
-export function linksToMany<CardT extends CardDefConstructor>(
+export function linksToMany<CardT extends LinkableDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
   options?: RelationshipOptions,
 ): BaseInstanceType<CardT>[] {
@@ -2556,6 +2582,8 @@ export class Theme extends CardDef {
 export type BaseDefConstructor = typeof BaseDef;
 export type CardDefConstructor = typeof CardDef;
 export type FieldDefConstructor = typeof FieldDef;
+export type FileDefConstructor = typeof FileDef;
+export type LinkableDefConstructor = CardDefConstructor | FileDefConstructor;
 
 export function subscribeToChanges(
   fieldOrCard: BaseDef | BaseDef[],
@@ -2747,27 +2775,36 @@ function lazilyLoadLink(
   (async () => {
     let isFileLink = isFileDefConstructor(field.card as typeof BaseDef);
     try {
-      let doc = await store.loadDocument(
-        reference,
-        isFileLink ? { mode: 'file' } : undefined,
-      );
-      if (isCardError(doc)) {
-        let cardError = doc;
-        let referenceForDeps =
-          isFileLink || reference.endsWith('.json')
-            ? reference
-            : `${reference}.json`;
-        cardError.deps = [referenceForDeps];
-        throw cardError;
+      let fieldValue: CardDef | FileDef;
+      if (isFileLink) {
+        let fileMetaDoc = await store.loadFileMetaDocument(reference);
+        if (isCardError(fileMetaDoc)) {
+          let cardError = fileMetaDoc;
+          let referenceForDeps = reference;
+          cardError.deps = [referenceForDeps];
+          throw cardError;
+        }
+        fieldValue = (await createFromSerialized(
+          fileMetaDoc.data,
+          fileMetaDoc,
+          new URL(fileMetaDoc.data.id!),
+          { store },
+        )) as FileDef;
+      } else {
+        let cardDoc = await store.loadCardDocument(reference);
+        if (isCardError(cardDoc)) {
+          let cardError = cardDoc;
+          let referenceForDeps = reference;
+          cardError.deps = [referenceForDeps];
+          throw cardError;
+        }
+        fieldValue = (await createFromSerialized(
+          cardDoc.data,
+          cardDoc,
+          new URL(cardDoc.data.id!),
+          { store },
+        )) as CardDef;
       }
-      let fieldValue = (await createFromSerialized(
-        doc.data,
-        doc,
-        new URL(doc.data.id!),
-        {
-          store,
-        },
-      )) as CardDef;
       if (pluralArgs) {
         let { value } = pluralArgs;
         let indices: number[] = [];
@@ -2796,7 +2833,9 @@ function lazilyLoadLink(
 
       let error = e as Error;
       let isMissingFile =
-        typeof error?.message === 'string' && /not found/i.test(error.message);
+        (isCardError(error) && error.status === 404) ||
+        (typeof error?.message === 'string' &&
+          /not found/i.test(error.message));
       let referenceForMissingFile =
         isFileLink || reference.endsWith('.json')
           ? reference
@@ -2944,13 +2983,16 @@ async function getDeserializedValue<CardT extends BaseDefConstructor>({
 // to calculate the computeds that the server has already done.
 
 // use an interface loader and not the class Loader
+// use an interface loader and not the class Loader
 export async function createFromSerialized<T extends BaseDefConstructor>(
-  resource: LooseCardResource,
-  doc: LooseSingleCardDocument | CardDocument,
+  resource:
+    | LooseLinkableResource<CardResource>
+    | LooseLinkableResource<FileMetaResource>,
+  doc:
+    | LooseSingleResourceDocument<CardResource | FileMetaResource>
+    | LinkableDocument,
   relativeTo: URL | undefined,
-  opts?: DeserializeOpts & {
-    store?: CardStore;
-  },
+  opts?: DeserializeOpts & { store?: CardStore },
 ): Promise<BaseInstanceType<T>> {
   let store = opts?.store ?? new FallbackCardStore();
   let {
@@ -3012,8 +3054,8 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   opts?: DeserializeOpts,
 ): Promise<BaseInstanceType<T>> {
   let resource: LooseCardResource | undefined;
-  if (isCardResource(data)) {
-    resource = data;
+  if (isCardResource(data) || isFileMetaResource(data)) {
+    resource = data as LooseCardResource;
   }
   if (!resource) {
     let adoptsFrom = identifyCard(card);
@@ -3704,8 +3746,14 @@ class FallbackCardStore implements CardStore {
       observedGeneration = this.#loadGeneration;
     }
   }
-  async loadDocument(url: string, opts?: LoadDocumentOptions) {
-    let promise = loadDocument(fetch, url, opts);
+  async loadCardDocument(url: string) {
+    let promise = loadCardDocument(fetch, url);
+    this.trackLoad(promise);
+    return await promise;
+  }
+
+  async loadFileMetaDocument(url: string) {
+    let promise = loadFileMetaDocument(fetch, url);
     this.trackLoad(promise);
     return await promise;
   }
