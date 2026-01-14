@@ -47,6 +47,7 @@
     "ethers": "catalog:",
     "flat": "catalog:",
     "fs-extra": "catalog:",
+    "glimmer-scoped-css": "catalog:",
     "glob": "catalog:",
     "http-server": "catalog:",
     "js-yaml": "catalog:",
