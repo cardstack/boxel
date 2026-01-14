@@ -45,12 +45,24 @@ class AsyncSemaphore {
 export class Prerenderer {
   #pendingByRealm = new Map<string, Promise<void>>();
   #stopped = false;
+  #shuttingDown = false;
   #browserManager: BrowserManager;
   #pagePool: PagePool;
   #renderRunner: RenderRunner;
   #cleanupInterval: NodeJS.Timeout | undefined;
   #realmIdleEvictMs: number;
   #semaphore: AsyncSemaphore;
+  #logError(message: string, error?: unknown) {
+    if (this.#shuttingDown) {
+      log.debug(`${message} (suppressed during shutdown)`, error);
+      return;
+    }
+    if (typeof error === 'undefined') {
+      log.error(message);
+    } else {
+      log.error(message, error);
+    }
+  }
 
   constructor(options: { serverURL: string; maxPages?: number }) {
     let maxPages = options.maxPages ?? 4;
@@ -69,7 +81,7 @@ export class Prerenderer {
     this.#realmIdleEvictMs = this.#resolveRealmIdleEvictMs();
     this.#startCleanupLoop();
     void this.#pagePool.warmStandbys().catch((e) => {
-      log.error('Failed to warm standby pages during prerenderer startup:', e);
+      this.#logError('Failed to warm standby pages during prerenderer startup:', e);
     });
   }
 
@@ -78,6 +90,8 @@ export class Prerenderer {
   }
 
   async stop(): Promise<void> {
+    this.#shuttingDown = true;
+    this.#pagePool.markShuttingDown();
     if (this.#cleanupInterval) {
       clearInterval(this.#cleanupInterval);
       this.#cleanupInterval = undefined;
@@ -168,7 +182,7 @@ export class Prerenderer {
             renderOptions: attemptOptions,
           });
         } catch (e) {
-          log.error(
+          this.#logError(
             `prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
             e,
           );
@@ -178,16 +192,16 @@ export class Prerenderer {
               realm,
               url,
               auth,
-              opts,
-              renderOptions: attemptOptions,
-            });
-          } catch (e2) {
-            log.error(
-              `prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
-              e2,
-            );
-            throw e2;
-          }
+            opts,
+            renderOptions: attemptOptions,
+          });
+        } catch (e2) {
+          this.#logError(
+            `prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
+            e2,
+          );
+          throw e2;
+        }
         }
         lastResult = result;
 
@@ -221,7 +235,7 @@ export class Prerenderer {
       }
       if (lastResult) {
         if (lastResult.response.error) {
-          log.error(
+          this.#logError(
             `prerender attempts exhausted for ${url} in realm ${realm}, returning last error response`,
           );
         }
@@ -313,7 +327,7 @@ export class Prerenderer {
             renderOptions: attemptOptions,
           });
         } catch (e) {
-          log.error(
+          this.#logError(
             `module prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
             e,
           );
@@ -323,16 +337,16 @@ export class Prerenderer {
               realm,
               url,
               auth,
-              opts,
-              renderOptions: attemptOptions,
-            });
-          } catch (e2) {
-            log.error(
-              `module prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
-              e2,
-            );
-            throw e2;
-          }
+            opts,
+            renderOptions: attemptOptions,
+          });
+        } catch (e2) {
+          this.#logError(
+            `module prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
+            e2,
+          );
+          throw e2;
+        }
         }
         lastResult = result;
 
@@ -366,7 +380,7 @@ export class Prerenderer {
       }
       if (lastResult) {
         if (lastResult.response.error) {
-          log.error(
+          this.#logError(
             `module prerender attempts exhausted for ${url} in realm ${realm}, returning last error response`,
           );
         }
@@ -458,7 +472,7 @@ export class Prerenderer {
             renderOptions: attemptOptions,
           });
         } catch (e) {
-          log.error(
+          this.#logError(
             `file extract prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
             e,
           );
@@ -468,16 +482,16 @@ export class Prerenderer {
               realm,
               url,
               auth,
-              opts,
-              renderOptions: attemptOptions,
-            });
-          } catch (e2) {
-            log.error(
-              `file extract prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
-              e2,
-            );
-            throw e2;
-          }
+            opts,
+            renderOptions: attemptOptions,
+          });
+        } catch (e2) {
+          this.#logError(
+            `file extract prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
+            e2,
+          );
+          throw e2;
+        }
         }
         lastResult = result;
 
@@ -511,7 +525,7 @@ export class Prerenderer {
       }
       if (lastResult) {
         if (lastResult.response.error) {
-          log.error(
+          this.#logError(
             `file extract prerender attempts exhausted for ${url} in realm ${realm}, returning last error response`,
           );
         }
@@ -533,7 +547,7 @@ export class Prerenderer {
     await this.#pagePool.closeAll();
     await this.#browserManager.restartBrowser();
     await this.#pagePool.warmStandbys().catch((e) => {
-      log.error('Failed to warm standby pages after browser restart:', e);
+      this.#logError('Failed to warm standby pages after browser restart:', e);
     });
   }
 

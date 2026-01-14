@@ -38,6 +38,18 @@ export class PagePool {
   #standbyTimeoutMs: number;
   #ensuringStandbys: Promise<void> | null = null;
   #creatingStandbys = 0;
+  #shuttingDown = false;
+  #logError(message: string, error?: unknown) {
+    if (this.#shuttingDown) {
+      log.debug(`${message} (suppressed during shutdown)`, error);
+      return;
+    }
+    if (typeof error === 'undefined') {
+      log.error(message);
+    } else {
+      log.error(message, error);
+    }
+  }
 
   constructor(options: {
     maxPages: number;
@@ -51,6 +63,11 @@ export class PagePool {
     this.#browserManager = options.browserManager;
     this.#boxelHostURL = options.boxelHostURL;
     this.#standbyTimeoutMs = options.standbyTimeoutMs ?? 30_000;
+  }
+
+  markShuttingDown(): void {
+    this.#shuttingDown = true;
+    this.#ensuringStandbys = null;
   }
 
   getWarmRealms(): string[] {
@@ -166,6 +183,9 @@ export class PagePool {
   }
 
   async #ensureStandbyPool(): Promise<void> {
+    if (this.#shuttingDown) {
+      return;
+    }
     if (this.#ensuringStandbys) {
       return await this.#ensuringStandbys;
     }
@@ -176,6 +196,9 @@ export class PagePool {
   }
 
   async #ensureStandbyPoolInternal(): Promise<void> {
+    if (this.#shuttingDown) {
+      return;
+    }
     for (;;) {
       let desired = this.#desiredStandbyCount();
       let current = this.#currentStandbyCount();
@@ -229,6 +252,9 @@ export class PagePool {
   }
 
   async #createStandbyWithRetries(): Promise<StandbyEntry | undefined> {
+    if (this.#shuttingDown) {
+      return undefined;
+    }
     let attempt = 0;
     let backoffMs = STANDBY_BACKOFF_MS;
     while (attempt < STANDBY_CREATION_RETRIES) {
@@ -236,7 +262,7 @@ export class PagePool {
       try {
         return await this.#createStandby();
       } catch (e) {
-        log.error(
+        this.#logError(
           `Standby creation attempt ${attempt} failed (page pool capacity ${this.#totalContextCount()}/${this.#maxPages + 1}):`,
           e,
         );
@@ -270,7 +296,7 @@ export class PagePool {
       this.#standbys.add(entry);
       return entry;
     } catch (e) {
-      log.error('Error creating standby page:', e);
+      this.#logError('Error creating standby page:', e);
       if (context) {
         try {
           await context.close();
@@ -311,7 +337,7 @@ export class PagePool {
     ]);
     if (result && typeof result === 'object' && 'timeout' in result) {
       let message = `Standby page ${pageId} timed out after ${this.#standbyTimeoutMs}ms`;
-      log.error(message);
+      this.#logError(message);
       throw new Error(message);
     }
     return result;

@@ -391,8 +391,21 @@ export function prepareTestDB(): void {
   process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
 }
 
-export async function closeServer(server: Server) {
-  await new Promise<void>((r) => (server ? server.close(() => r()) : r()));
+export async function closeServer(
+  server: Server,
+  options?: { force?: boolean },
+) {
+  let force = options?.force === true;
+  if (!server) {
+    return;
+  }
+  if (force) {
+    // Drop keep-alive/in-flight sockets so server.close() does not wait for them.
+    // This works, what is going on with the types?
+    (server as any).closeIdleConnections?.();
+    (server as any).closeAllConnections?.();
+  }
+  await new Promise<void>((resolve) => server.close(() => resolve()));
 }
 
 function trackServer(server: Server): Server {
@@ -509,7 +522,7 @@ async function startTestPrerenderServer(): Promise<string> {
 
 async function stopTestPrerenderServer() {
   if (prerenderServer && prerenderServer.listening) {
-    await closeServer(prerenderServer);
+    await closeServer(prerenderServer, { force: true });
   }
   prerenderServer = undefined;
   prerenderServerStart = undefined;
@@ -803,8 +816,6 @@ export async function runTestRealmServer({
     enableFileWatcher,
     definitionLookup,
   });
-
-  await testRealm.logInToMatrix();
 
   virtualNetwork.mount(testRealm.handle);
   let realms = [testRealm];
@@ -1390,7 +1401,9 @@ export function setupPermissionedRealm(
       )
       .digest('hex')
       .slice(0, 16);
-    templateDbName = `${TEMPLATE_DB_PREFIX}_${hash}_${process.pid}`;
+    let templateSuffix =
+      process.env.TEST_TEMPLATE_DB_SUFFIX ?? `${process.pid}`;
+    templateDbName = `${TEMPLATE_DB_PREFIX}_${hash}_${templateSuffix}`;
   }
 
   setupDB(
