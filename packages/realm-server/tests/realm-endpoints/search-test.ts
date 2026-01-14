@@ -205,28 +205,15 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         });
 
         test('403 without permission', async function (assert) {
-          console.log(' STARTING WEIRD ONE =================================');
           let response = await request
             .get(`${searchPath}?query=${buildQueryParam(query())}`)
             .set('Accept', 'application/vnd.card+json')
             .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
 
           assert.strictEqual(response.status, 403, 'HTTP 403 status');
-          console.log('403 received ==================================');
-          response = await request
-            .get(`${searchPath}?query=${buildQueryParam(query())}`)
-            .set('Accept', 'application/vnd.card+json')
-            .set(
-              'Authorization',
-              `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
-            );
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          console.log('200 received ==================================');
         });
 
         test('200 with permission', async function (assert) {
-          console.log(' STARTING NORMAL ONE =================================');
           let response = await request
             .get(`${searchPath}?query=${buildQueryParam(query())}`)
             .set('Accept', 'application/vnd.card+json')
@@ -236,7 +223,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             );
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          console.log('200 received ==================================');
         });
       });
     });
