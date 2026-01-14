@@ -2,11 +2,8 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
-import {
-  insertJob,
-  monitoringAuthToken,
-  setupPermissionedRealm,
-} from '../helpers';
+import { insertJob, setupPermissionedRealm } from '../helpers';
+import { monitoringAuthToken } from '../../utils/monitoring';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
