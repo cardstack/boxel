@@ -942,21 +942,19 @@ module(basename(__filename), function () {
           'Authorization',
           `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
         )
-        .send(
-          JSON.stringify({
-            data: {
-              attributes: {
-                firstName: 'Mango',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: '/person',
-                  name: 'Person',
-                },
+        .send({
+          data: {
+            attributes: {
+              firstName: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person.gts',
+                name: 'Person',
               },
             },
-          }),
-        );
+          },
+        });
 
       let newCardId = postResponse.body.data.id;
       let newCardPath = new URL(newCardId).pathname;

@@ -3514,10 +3514,10 @@ module(basename(__filename), function () {
   });
 
   module('Query-backed relationships runtime resolver', function (hooks) {
-    const providerRealmURL = 'http://127.0.0.1:5521/';
-    const consumerRealmURL = 'http://127.0.0.1:5522/';
+    const providerRealmURL = 'http://127.0.0.1:5521/test/';
+    const consumerRealmURL = 'http://127.0.0.1:5522/test/';
     const UNREACHABLE_REALM_URL = 'https://example.invalid/offline/';
-    let consumerRequest: SuperTest<Test>;
+    let consumerRequest: RealmRequest;
 
     setupPermissionedRealms(hooks, {
       realms: [
@@ -3612,7 +3612,10 @@ module(basename(__filename), function () {
       ],
       onRealmSetup({ realms }) {
         let latestRealms = realms.slice(-2);
-        consumerRequest = supertest(latestRealms[1].realmHttpServer);
+        consumerRequest = withRealmPath(
+          supertest(latestRealms[1].realmHttpServer),
+          new URL(consumerRealmURL),
+        );
       },
     });
 
