@@ -14,10 +14,8 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import {
-  setupBaseRealmServer,
   setupPermissionedRealm,
   setupMatrixRoom,
-  matrixURL,
   testRealmHref,
   testRealmURL,
   createJWT,
@@ -33,7 +31,7 @@ import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import isEqual from 'lodash/isEqual';
 
 module(basename(__filename), function () {
-  module('Realm-specific Endpoints | card source requests', function (hooks) {
+  module('Realm-specific Endpoints | card source requests', function () {
     let testRealm: Realm;
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
@@ -63,7 +61,6 @@ module(basename(__filename), function () {
         dbAdapter,
       };
     }
-    setupBaseRealmServer(hooks, matrixURL);
 
     module('card source GET request', function (_hooks) {
       module('public readable realm', function (hooks) {

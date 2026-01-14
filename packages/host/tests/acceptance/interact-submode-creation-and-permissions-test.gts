@@ -549,9 +549,15 @@ module(
           .containsText('address is editable');
 
         await click('[data-test-operator-mode-stack] [data-test-edit-button]');
-
         assert
-          .dom("[data-test-contains-many='additionalAddresses'] input:disabled")
+          .dom(
+            "[data-test-contains-many='additionalAddresses'] [data-test-field='title'] input",
+          )
+          .doesNotExist();
+        assert
+          .dom(
+            "[data-test-contains-many='additionalAddresses'] [data-test-field='title']",
+          )
           .exists({ count: 1 });
 
         assert

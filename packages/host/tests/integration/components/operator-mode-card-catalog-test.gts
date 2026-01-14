@@ -28,7 +28,6 @@ module('Integration | operator-mode | card catalog', function (hooks) {
   let ctx = setupOperatorModeTests(hooks);
 
   let noop = () => {};
-
   test(`displays recently accessed card`, async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(

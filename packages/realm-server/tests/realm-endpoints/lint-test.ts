@@ -2,12 +2,7 @@ import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
-import {
-  setupBaseRealmServer,
-  matrixURL,
-  setupPermissionedRealm,
-  createJWT,
-} from '../helpers';
+import { setupPermissionedRealm, createJWT } from '../helpers';
 import {
   benchmarkOperation,
   createConcurrentTestData,
@@ -29,8 +24,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       testRealm = args.testRealm;
       request = args.request;
     }
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealm(hooks, {
       permissions: {

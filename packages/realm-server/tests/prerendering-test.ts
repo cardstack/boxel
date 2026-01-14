@@ -15,9 +15,7 @@ import { PagePool } from '../prerender/page-pool';
 import { RenderRunner } from '../prerender/render-runner';
 
 import {
-  setupBaseRealmServer,
   setupPermissionedRealms,
-  matrixURL,
   cleanWhiteSpace,
   testCreatePrerenderAuth,
   getPrerendererForTesting,
@@ -105,8 +103,6 @@ module(basename(__filename), function () {
     hooks.afterEach(async () => {
       await prerenderer.disposeRealm(realmURL);
     });
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealms(hooks, {
       realms: [
@@ -787,8 +783,6 @@ module(basename(__filename), function () {
       ]);
     });
 
-    setupBaseRealmServer(hooks, matrixURL);
-
     setupPermissionedRealms(hooks, {
       mode: 'before',
       realms: [
@@ -1039,8 +1033,6 @@ module(basename(__filename), function () {
     hooks.after(async function () {
       await prerenderer.stop();
     });
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealms(hooks, {
       mode: 'before',

@@ -1207,7 +1207,12 @@ module('Integration | Store', function (hooks) {
     );
   });
 
-  test('an instance live updates from indexing events for an instance update', async function (assert) {
+  test<TestContextWithSave>('an instance live updates from indexing events for an instance update', async function (assert) {
+    assert.expect(2);
+    let didSave = false;
+    this.onSave(() => {
+      didSave = true;
+    });
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1238,9 +1243,11 @@ module('Integration | Store', function (hooks) {
         (storeService.peek(`${testRealmURL}Person/hassan`) as any)?.name ===
         'Hassan updated',
     );
+    await storeService.flushSaves();
     assert
       .dom('[data-test-stack-card] [data-test-field="name"]')
       .containsText('Hassan updated', 'card live updated');
+    assert.false(didSave, 'indexing updates do not auto save instances');
   });
 
   test('an instance live updates from indexing events for a code update', async function (assert) {

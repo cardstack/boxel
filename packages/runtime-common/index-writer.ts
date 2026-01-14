@@ -170,6 +170,33 @@ export class Batch {
     return result;
   }
 
+  async getModuleErrors(urls: string[]): Promise<SerializedError[]> {
+    let candidates = [...new Set(urls)].filter(
+      (url) => url && !url.endsWith('.json'),
+    );
+    if (candidates.length === 0) {
+      return [];
+    }
+    let params = candidates.map((url) => [param(url)]);
+    let rows = (await this.#query([
+      `SELECT i.error_doc`,
+      `FROM boxel_index_working as i`,
+      'WHERE',
+      ...every([
+        ['i.realm_url =', param(this.realmURL.href)],
+        ['i.type =', param('module-error')],
+        any([
+          ['i.url IN', ...addExplicitParens(separatedByCommas(params))],
+          ['i.file_alias IN', ...addExplicitParens(separatedByCommas(params))],
+        ]),
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+      ]),
+    ] as Expression)) as Pick<BoxelIndexTable, 'error_doc'>[];
+    return rows
+      .map((row) => row.error_doc)
+      .filter((errorDoc): errorDoc is SerializedError => Boolean(errorDoc));
+  }
+
   async copyFrom(sourceRealmURL: URL, destRealmInfo: RealmInfo): Promise<void> {
     let columns: string[][] | undefined;
     let sources = (await this.#query([
@@ -832,7 +859,7 @@ export class Batch {
       resolved.search = '';
       resolved.hash = '';
       resolved = depMapper ? depMapper(resolved) : resolved;
-      return resolved.href;
+      return trimExecutableExtension(resolved).href;
     } catch (_err) {
       return dep;
     }

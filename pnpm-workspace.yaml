@@ -38,6 +38,7 @@ catalog:
   "@koa/router": ^14.0.0
   "@lucide/lab": ^0.1.2
   "@lukeed/uuid": ^2.0.1
+  "@octokit/rest": ^22.0.1
   "@percy/cli": ^1.31.1
   "@percy/ember": ^5.0.0
   "@playwright/test": ^1.54.0
