@@ -21,7 +21,7 @@ import {
   setupDB,
   setupPermissionedRealm,
 } from '../helpers';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 export const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 
@@ -95,7 +95,11 @@ export function setupServerEndpointsTest(hooks: NestedHooks) {
   }
 
   context.startRealmServer = async () => {
-    await startRealmServer(context.dbAdapter, context.publisher, context.runner);
+    await startRealmServer(
+      context.dbAdapter,
+      context.publisher,
+      context.runner,
+    );
   };
 
   setupDB(hooks, {
