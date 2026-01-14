@@ -56,13 +56,13 @@ export interface IndexComponentComponentSignature {
 }
 
 export class IndexComponent extends Component<IndexComponentComponentSignature> {
-  @service private declare commandService: CommandService;
-  @service private declare hostModeService: HostModeService;
-  @service private declare hostModeStateService: HostModeStateService;
-  @service private declare matrixService: MatrixService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare router: RouterService;
-  @service private declare store: StoreService;
+  @service declare private commandService: CommandService;
+  @service declare private hostModeService: HostModeService;
+  @service declare private hostModeStateService: HostModeStateService;
+  @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private router: RouterService;
+  @service declare private store: StoreService;
 
   @provide(GetCardContextName)
   private get getCard() {

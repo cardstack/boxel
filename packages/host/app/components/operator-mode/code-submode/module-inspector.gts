@@ -116,18 +116,18 @@ interface ModuleInspectorSignature {
 }
 
 export default class ModuleInspector extends Component<ModuleInspectorSignature> {
-  @service private declare commandService: CommandService;
-  @service private declare loaderService: LoaderService;
-  @service private declare matrixService: MatrixService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare playgroundPanelService: PlaygroundPanelService;
-  @service private declare realm: RealmService;
-  @service private declare realmServer: RealmServerService;
-  @service private declare specPanelService: SpecPanelService;
-  @service private declare store: StoreService;
+  @service declare private commandService: CommandService;
+  @service declare private loaderService: LoaderService;
+  @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private playgroundPanelService: PlaygroundPanelService;
+  @service declare private realm: RealmService;
+  @service declare private realmServer: RealmServerService;
+  @service declare private specPanelService: SpecPanelService;
+  @service declare private store: StoreService;
 
-  @consume(GetCardsContextName) private declare getCards: getCards;
-  @consume(GetCardContextName) private declare getCard: getCard;
+  @consume(GetCardsContextName) declare private getCards: getCards;
+  @consume(GetCardContextName) declare private getCard: getCard;
 
   @tracked private specSearch: ReturnType<getCards<Spec>> | undefined;
   @tracked private cardResource: ReturnType<getCard> | undefined;

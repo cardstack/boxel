@@ -412,7 +412,7 @@ export default class ProfileEmail extends Component<Signature> {
     </style>
   </template>
 
-  @service private declare matrixService: MatrixService;
+  @service declare private matrixService: MatrixService;
   @tracked private emailError: string | undefined;
   @tracked private emailState:
     | { type: 'initial' }

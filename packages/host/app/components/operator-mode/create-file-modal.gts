@@ -434,12 +434,12 @@ export default class CreateFileModal extends Component<Signature> {
     </style>
   </template>
 
-  @consume(GetCardContextName) private declare getCard: getCard<Spec>;
+  @consume(GetCardContextName) declare private getCard: getCard<Spec>;
 
-  @service private declare cardService: CardService;
-  @service private declare commandService: CommandService;
-  @service private declare network: NetworkService;
-  @service private declare store: StoreService;
+  @service declare private cardService: CardService;
+  @service declare private commandService: CommandService;
+  @service declare private network: NetworkService;
+  @service declare private store: StoreService;
 
   @tracked private defaultSpecResource: ReturnType<getCard<Spec>> | undefined;
   @tracked private chosenSpecResource: ReturnType<getCard<Spec>> | undefined;
@@ -472,8 +472,8 @@ export default class CreateFileModal extends Component<Signature> {
     return this.maybeFileType?.id === 'card-instance'
       ? 'Adopted From'
       : this.maybeFileType?.id === 'spec-instance'
-      ? 'Code Ref'
-      : 'Inherits From';
+        ? 'Code Ref'
+        : 'Inherits From';
   }
 
   // public API for callers to use this component
@@ -1016,7 +1016,7 @@ interface SelectedTypePillSignature {
 }
 
 export class SelectedTypePill extends Component<SelectedTypePillSignature> {
-  @service private declare realm: RealmService;
+  @service declare private realm: RealmService;
 
   <template>
     <Pill class='selected-type' data-test-selected-type={{@title}}>

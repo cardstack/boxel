@@ -345,7 +345,7 @@ export default class MessageBuilder {
       (commandResultEvent?.content['m.relates_to']?.key ||
         'ready') as CommandStatus,
       commandResultEvent?.content.msgtype ===
-      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+        APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
         ? commandResultEvent.content.data.card
         : undefined,
       getOwner(this)!,

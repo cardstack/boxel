@@ -1668,9 +1668,7 @@ module('Integration | realm', function (hooks) {
       @field message = contains(StringField);
       @field other = linksTo(Other);
       static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          x: {{@model.other.name}}
-        </template>
+        <template>x: {{@model.other.name}}</template>
       };
     }
 

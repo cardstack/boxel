@@ -133,16 +133,16 @@ function urlToFilename(url: URL) {
 }
 
 export default class CodeSubmode extends Component<Signature> {
-  @consume(GetCardContextName) private declare getCard: getCard;
-  @consume(CardContextName) private declare cardContext: CardContext;
+  @consume(GetCardContextName) declare private getCard: getCard;
+  @consume(CardContextName) declare private cardContext: CardContext;
 
-  @service private declare cardService: CardService;
-  @service private declare codeSemanticsService: CodeSemanticsService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare playgroundPanelService: PlaygroundPanelService;
-  @service private declare recentFilesService: RecentFilesService;
-  @service private declare realm: RealmService;
-  @service private declare specPanelService: SpecPanelService;
+  @service declare private cardService: CardService;
+  @service declare private codeSemanticsService: CodeSemanticsService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private playgroundPanelService: PlaygroundPanelService;
+  @service declare private recentFilesService: RecentFilesService;
+  @service declare private realm: RealmService;
+  @service declare private specPanelService: SpecPanelService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private userHasDismissedURLError = false;

@@ -208,7 +208,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
     </style>
   </template>
 
-  @service private declare matrixService: MatrixService;
+  @service declare private matrixService: MatrixService;
   @tracked private displayName: string | undefined;
   @tracked private submode: 'email' | 'password' | undefined;
   @tracked private saveSuccessIndicatorShown = false;

@@ -78,7 +78,7 @@ catalog:
   "@types/pg": ^8.11.5
   "@types/pluralize": ^0.0.30
   "@types/qs": ^6.9.17
-  "@types/qunit": 2.11.3
+  "@types/qunit": ^2.19.12
   "@types/rsvp": ^4.0.9
   "@types/sane": ^2.0.1
   "@types/sinon": ^17.0.3
@@ -193,7 +193,7 @@ catalog:
   pg: ^8.11.5
   pluralize: ^8.0.0
   prettier: ^3.6.2
-  prettier-plugin-ember-template-tag: ^1.1.0
+  prettier-plugin-ember-template-tag: ^2.0.0
   process: ^0.11.10
   qs: ^6.13.0
   qunit: ^2.24.1

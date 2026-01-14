@@ -402,9 +402,7 @@ export async function makeRenderer() {
 
   renderIntoElement(
     class CardPrerenderHost extends GlimmerComponent {
-      <template>
-        <CardPrerender />
-      </template>
+      <template><CardPrerender /></template>
     },
     element as unknown as SimpleElement,
     owner,

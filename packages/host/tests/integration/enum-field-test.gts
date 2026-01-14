@@ -81,9 +81,7 @@ module('Integration | enumField', function (hooks) {
     class Task extends CardDef {
       @field priority = contains(PriorityField);
       static edit = class Edit extends Component<typeof this> {
-        <template>
-          <@fields.priority />
-        </template>
+        <template><@fields.priority /></template>
       };
     }
 
@@ -167,9 +165,7 @@ module('Integration | enumField', function (hooks) {
     class Task extends CardDef {
       @field priorities = containsMany(PriorityField);
       static edit = class Edit extends Component<typeof this> {
-        <template>
-          <@fields.priorities />
-        </template>
+        <template><@fields.priorities /></template>
       };
     }
 
@@ -437,9 +433,7 @@ module('Integration | enumField', function (hooks) {
     class Task extends CardDef {
       @field priority = contains(PriorityField);
       static edit = class Edit extends Component<typeof this> {
-        <template>
-          <@fields.priority />
-        </template>
+        <template><@fields.priority /></template>
       };
     }
 
@@ -555,9 +549,7 @@ module('Integration | enumField', function (hooks) {
     class Task extends CardDef {
       @field priority = contains(PriorityField);
       static edit = class Edit extends Component<typeof this> {
-        <template>
-          <@fields.priority />
-        </template>
+        <template><@fields.priority /></template>
       };
     }
 
@@ -588,9 +580,7 @@ module('Integration | enumField', function (hooks) {
     class Task extends CardDef {
       @field priority = contains(PriorityField);
       static edit = class Edit extends Component<typeof this> {
-        <template>
-          <@fields.priority />
-        </template>
+        <template><@fields.priority /></template>
       };
     }
 
@@ -626,9 +616,7 @@ module('Integration | enumField', function (hooks) {
     class Task extends CardDef {
       @field priorities = containsMany(PriorityField);
       static edit = class Edit extends Component<typeof this> {
-        <template>
-          <@fields.priorities />
-        </template>
+        <template><@fields.priorities /></template>
       };
     }
 
@@ -688,9 +676,7 @@ module('Integration | enumField', function (hooks) {
     class Task extends CardDef {
       @field priority = contains(PriorityField);
       static edit = class Edit extends Component<typeof this> {
-        <template>
-          <@fields.priority />
-        </template>
+        <template><@fields.priority /></template>
       };
     }
 
@@ -760,14 +746,10 @@ module('Integration | enumField', function (hooks) {
     class TaskA extends CardDef {
       @field priority = contains(PriorityField);
       static edit = class Edit extends Component<typeof this> {
-        <template>
-          <@fields.priority />
-        </template>
+        <template><@fields.priority /></template>
       };
       static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <@fields.priority @format='atom' />
-        </template>
+        <template><@fields.priority @format='atom' /></template>
       };
     }
 
@@ -792,9 +774,7 @@ module('Integration | enumField', function (hooks) {
         }),
       });
       static edit = class Edit extends Component<typeof this> {
-        <template>
-          <@fields.priority />
-        </template>
+        <template><@fields.priority /></template>
       };
     }
     let b = new TaskB({ priority: null });
@@ -826,9 +806,7 @@ module('Integration | enumField', function (hooks) {
     class Task extends CardDef {
       @field priorities = containsMany(PriorityField);
       static edit = class Edit extends Component<typeof this> {
-        <template>
-          <@fields.priorities />
-        </template>
+        <template><@fields.priorities /></template>
       };
     }
 
@@ -879,9 +857,7 @@ module('Integration | enumField', function (hooks) {
     class Task extends CardDef {
       @field priority = contains(PriorityField);
       static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <@fields.priority @format='atom' />
-        </template>
+        <template><@fields.priority @format='atom' /></template>
       };
     }
 
@@ -900,9 +876,7 @@ module('Integration | enumField', function (hooks) {
     class Task extends CardDef {
       @field priority = contains(PriorityField);
       static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <@fields.priority @format='atom' />
-        </template>
+        <template><@fields.priority @format='atom' /></template>
       };
     }
 
@@ -972,9 +946,7 @@ module('Integration | enumField', function (hooks) {
         }),
       });
       static edit = class Edit extends Component<typeof this> {
-        <template>
-          <@fields.priority />
-        </template>
+        <template><@fields.priority /></template>
       };
     }
 

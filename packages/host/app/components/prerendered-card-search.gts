@@ -191,7 +191,7 @@ function wrapWithModifier(
 }
 
 export default class PrerenderedCardSearch extends Component<PrerenderedCardComponentSignature> {
-  @consume(CardContextName) private declare cardContext?: CardContext;
+  @consume(CardContextName) declare private cardContext?: CardContext;
   @service declare loaderService: LoaderService;
   @service declare realmServer: RealmServerService;
   _lastSearchQuery: Query | null = null;

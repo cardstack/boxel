@@ -310,9 +310,7 @@ module('Integration | card-copy', function (hooks) {
     ]);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await waitFor('[data-test-operator-mode-stack="0"] [data-test-person]');
@@ -326,9 +324,7 @@ module('Integration | card-copy', function (hooks) {
     await setCardInOperatorModeState([`${testRealmURL}index`]);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await click(`[data-test-boxel-filter-list-button="All Cards"]`);
@@ -353,9 +349,7 @@ module('Integration | card-copy', function (hooks) {
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await click(
@@ -382,9 +376,7 @@ module('Integration | card-copy', function (hooks) {
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await click(
@@ -423,9 +415,7 @@ module('Integration | card-copy', function (hooks) {
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await click(
@@ -453,9 +443,7 @@ module('Integration | card-copy', function (hooks) {
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await waitFor('[data-test-operator-mode-stack="0"] [data-test-person]');
@@ -472,9 +460,7 @@ module('Integration | card-copy', function (hooks) {
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await click('[data-test-boxel-filter-list-button="All Cards"]');
@@ -497,9 +483,7 @@ module('Integration | card-copy', function (hooks) {
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await click('[data-test-boxel-filter-list-button="All Cards"]');
@@ -523,9 +507,7 @@ module('Integration | card-copy', function (hooks) {
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await click(
@@ -554,9 +536,7 @@ module('Integration | card-copy', function (hooks) {
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await click('[data-test-boxel-filter-list-button="All Cards"]');
@@ -591,9 +571,7 @@ module('Integration | card-copy', function (hooks) {
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await click(
@@ -664,9 +642,7 @@ module('Integration | card-copy', function (hooks) {
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await click(
@@ -692,9 +668,7 @@ module('Integration | card-copy', function (hooks) {
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await click(
@@ -724,9 +698,7 @@ module('Integration | card-copy', function (hooks) {
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let id: string | undefined;
@@ -854,9 +826,7 @@ module('Integration | card-copy', function (hooks) {
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let savedCards: SingleCardDocument[] = [];
@@ -962,9 +932,7 @@ module('Integration | card-copy', function (hooks) {
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -1101,9 +1069,7 @@ module('Integration | card-copy', function (hooks) {
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 

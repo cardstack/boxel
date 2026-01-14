@@ -34,7 +34,7 @@ interface Signature {
 
 export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
-  @service private declare recentFilesService: RecentFilesService;
+  @service declare private recentFilesService: RecentFilesService;
 
   private notifyFileBrowserIsVisible: (() => void) | undefined;
 

@@ -302,9 +302,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     setCardInOperatorModeState(id);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let roomId = await openAiAssistant();
@@ -316,9 +314,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
       await renderComponent(
         class TestDriver extends GlimmerComponent {
-          <template>
-            <OperatorMode @onClose={{noop}} />
-          </template>
+          <template><OperatorMode @onClose={{noop}} /></template>
         },
       );
 
@@ -400,9 +396,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -991,9 +985,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     setCardInOperatorModeState();
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await openAiAssistant();

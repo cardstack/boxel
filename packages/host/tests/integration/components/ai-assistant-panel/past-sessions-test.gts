@@ -191,9 +191,7 @@ module('Integration | ai-assistant-panel | past sessions', function (hooks) {
     setCardInOperatorModeState(id);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let roomId = await openAiAssistant();

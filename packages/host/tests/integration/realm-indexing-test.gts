@@ -1278,9 +1278,7 @@ module(`Integration | realm indexing`, function (hooks) {
 
   test('can recover from rendering a card that encounters a template error in its own custom component', async function (assert) {
     class Custom extends GlimmerComponent {
-      <template>
-        {{this.boom}}
-      </template>
+      <template>{{this.boom}}</template>
       get boom() {
         throw new Error('intentional error');
       }

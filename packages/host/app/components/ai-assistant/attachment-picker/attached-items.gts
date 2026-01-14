@@ -46,7 +46,7 @@ interface Signature {
 export default class AttachedItems extends Component<Signature> {
   @tracked areAllItemsDisplayed = false;
 
-  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   get itemsToDisplay() {
     return this.areAllItemsDisplayed

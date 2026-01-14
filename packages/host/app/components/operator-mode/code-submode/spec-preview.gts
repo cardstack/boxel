@@ -100,15 +100,15 @@ type SpecPreviewCardContext = Omit<
 >;
 
 class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
-  @consume(GetCardContextName) private declare getCard: getCard;
-  @consume(GetCardsContextName) private declare getCards: getCards;
+  @consume(GetCardContextName) declare private getCard: getCard;
+  @consume(GetCardsContextName) declare private getCards: getCards;
   @consume(GetCardCollectionContextName)
-  private declare getCardCollection: getCardCollection;
-  @consume(CardContextName) private declare cardContext: CardContext;
-  @service private declare realm: RealmService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare specPanelService: SpecPanelService;
-  @service private declare store: StoreService;
+  declare private getCardCollection: getCardCollection;
+  @consume(CardContextName) declare private cardContext: CardContext;
+  @service declare private realm: RealmService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private specPanelService: SpecPanelService;
+  @service declare private store: StoreService;
 
   private cardTracker = new ElementTracker();
 
@@ -318,11 +318,11 @@ const SpecPreviewLoading: TemplateOnlyComponent<SpecPreviewLoadingSignature> =
   </template>;
 
 export default class SpecPreview extends GlimmerComponent<Signature> {
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
-  @service private declare recentFilesService: RecentFilesService;
-  @service private declare specPanelService: SpecPanelService;
-  @service private declare store: StoreService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realm: RealmService;
+  @service declare private recentFilesService: RecentFilesService;
+  @service declare private specPanelService: SpecPanelService;
+  @service declare private store: StoreService;
 
   @action private onSelectSpec(spec: Spec): void {
     this.specPanelService.setSelection(spec.id);

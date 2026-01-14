@@ -308,9 +308,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await setCardInOperatorModeState(id);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let roomId = await openAiAssistant();

@@ -228,11 +228,11 @@ export default class CardCatalogModal extends Component<Signature> {
 
   private stateStack: State[] = new TrackedArray<State>();
   private stateId = 0;
-  @service private declare loaderService: LoaderService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realmServer: RealmServerService;
-  @service private declare realm: RealmService;
-  @service private declare store: StoreService;
+  @service declare private loaderService: LoaderService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realmServer: RealmServerService;
+  @service declare private realm: RealmService;
+  @service declare private store: StoreService;
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);

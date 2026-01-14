@@ -11,9 +11,9 @@ module('Integration | Component | FormattedUserMessage', function (hooks) {
   setupRenderingTest(hooks);
 
   async function renderFormattedUserMessage(testScenario: any) {
-    await render(<template>
-      <FormattedUserMessage @html={{testScenario.html}} />
-    </template>);
+    await render(
+      <template><FormattedUserMessage @html={{testScenario.html}} /></template>,
+    );
   }
 
   test('it renders content without monaco editor', async function (assert) {

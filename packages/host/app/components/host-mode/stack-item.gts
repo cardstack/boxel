@@ -108,8 +108,8 @@ export default class HostModeStackItem extends Component<Signature> {
     let { constructor } = this.card;
     return Boolean(
       constructor &&
-        'prefersWideFormat' in constructor &&
-        constructor.prefersWideFormat,
+      'prefersWideFormat' in constructor &&
+      constructor.prefersWideFormat,
     );
   }
 

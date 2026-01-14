@@ -353,25 +353,27 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     };
     let realms = [testRealmURL];
 
-    await render(<template>
-      <PrerenderedCardSearch
-        @query={{query}}
-        @format='fitted'
-        @realms={{realms}}
-      >
-        <:loading>
-          Loading...
-        </:loading>
-        <:response as |cards|>
-          {{#each cards as |card|}}
-            <card.component />
-          {{/each}}
-        </:response>
-        <:meta as |meta|>
-          <div data-test-meta-page-total={{meta.page.total}}></div>
-        </:meta>
-      </PrerenderedCardSearch>
-    </template>);
+    await render(
+      <template>
+        <PrerenderedCardSearch
+          @query={{query}}
+          @format='fitted'
+          @realms={{realms}}
+        >
+          <:loading>
+            Loading...
+          </:loading>
+          <:response as |cards|>
+            {{#each cards as |card|}}
+              <card.component />
+            {{/each}}
+          </:response>
+          <:meta as |meta|>
+            <div data-test-meta-page-total={{meta.page.total}}></div>
+          </:meta>
+        </PrerenderedCardSearch>
+      </template>,
+    );
     await waitFor('#ember-testing > [data-test-boxel-card-container]');
     assert
       .dom('#ember-testing > [data-test-boxel-card-container]')
@@ -413,24 +415,26 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     };
     let realms = [testRealmURL];
 
-    await render(<template>
-      <CardContextWithModifier>
-        <PrerenderedCardSearch
-          @query={{query}}
-          @format='fitted'
-          @realms={{realms}}
-        >
-          <:loading>
-            Loading...
-          </:loading>
-          <:response as |cards|>
-            {{#each cards as |card|}}
-              <card.component />
-            {{/each}}
-          </:response>
-        </PrerenderedCardSearch>
-      </CardContextWithModifier>
-    </template>);
+    await render(
+      <template>
+        <CardContextWithModifier>
+          <PrerenderedCardSearch
+            @query={{query}}
+            @format='fitted'
+            @realms={{realms}}
+          >
+            <:loading>
+              Loading...
+            </:loading>
+            <:response as |cards|>
+              {{#each cards as |card|}}
+                <card.component />
+              {{/each}}
+            </:response>
+          </PrerenderedCardSearch>
+        </CardContextWithModifier>
+      </template>,
+    );
 
     await waitUntil(
       () =>
@@ -517,25 +521,27 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     };
     let realms = [testRealmURL];
 
-    await render(<template>
-      <PrerenderedCardSearch
-        @query={{query}}
-        @format='fitted'
-        @realms={{realms}}
-      >
-        <:loading>
-          Loading...
-        </:loading>
-        <:response as |cards|>
-          {{#each cards as |card|}}
-            <card.component />
-          {{/each}}
-        </:response>
-        <:meta as |meta|>
-          <div data-test-meta-page-total={{meta.page.total}}></div>
-        </:meta>
-      </PrerenderedCardSearch>
-    </template>);
+    await render(
+      <template>
+        <PrerenderedCardSearch
+          @query={{query}}
+          @format='fitted'
+          @realms={{realms}}
+        >
+          <:loading>
+            Loading...
+          </:loading>
+          <:response as |cards|>
+            {{#each cards as |card|}}
+              <card.component />
+            {{/each}}
+          </:response>
+          <:meta as |meta|>
+            <div data-test-meta-page-total={{meta.page.total}}></div>
+          </:meta>
+        </PrerenderedCardSearch>
+      </template>,
+    );
     await waitFor('#ember-testing > [data-test-boxel-card-container]');
     assert
       .dom('#ember-testing > [data-test-boxel-card-container]')
@@ -587,26 +593,28 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     };
     let realms = [testRealmURL];
 
-    await render(<template>
-      <PrerenderedCardSearch
-        @query={{query}}
-        @format='fitted'
-        @realms={{realms}}
-        @isLive={{true}}
-      >
-        <:loading>
-          Loading...
-        </:loading>
-        <:response as |cards|>
-          {{#each cards as |card|}}
-            <card.component />
-          {{/each}}
-        </:response>
-        <:meta as |meta|>
-          <div data-test-meta-page-total={{meta.page.total}}></div>
-        </:meta>
-      </PrerenderedCardSearch>
-    </template>);
+    await render(
+      <template>
+        <PrerenderedCardSearch
+          @query={{query}}
+          @format='fitted'
+          @realms={{realms}}
+          @isLive={{true}}
+        >
+          <:loading>
+            Loading...
+          </:loading>
+          <:response as |cards|>
+            {{#each cards as |card|}}
+              <card.component />
+            {{/each}}
+          </:response>
+          <:meta as |meta|>
+            <div data-test-meta-page-total={{meta.page.total}}></div>
+          </:meta>
+        </PrerenderedCardSearch>
+      </template>,
+    );
     await waitFor('#ember-testing > [data-test-boxel-card-container]');
     assert
       .dom('#ember-testing > [data-test-boxel-card-container]')
@@ -656,25 +664,27 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     };
     let realms = [testRealmURL.replace(/\/$/, '')];
 
-    await render(<template>
-      <PrerenderedCardSearch
-        @query={{query}}
-        @format='fitted'
-        @realms={{realms}}
-      >
-        <:loading>
-          Loading...
-        </:loading>
-        <:response as |cards|>
-          {{#each cards as |card|}}
-            <card.component />
-          {{/each}}
-        </:response>
-        <:meta as |meta|>
-          <div data-test-meta-page-total={{meta.page.total}}></div>
-        </:meta>
-      </PrerenderedCardSearch>
-    </template>);
+    await render(
+      <template>
+        <PrerenderedCardSearch
+          @query={{query}}
+          @format='fitted'
+          @realms={{realms}}
+        >
+          <:loading>
+            Loading...
+          </:loading>
+          <:response as |cards|>
+            {{#each cards as |card|}}
+              <card.component />
+            {{/each}}
+          </:response>
+          <:meta as |meta|>
+            <div data-test-meta-page-total={{meta.page.total}}></div>
+          </:meta>
+        </PrerenderedCardSearch>
+      </template>,
+    );
     await waitFor('#ember-testing > [data-test-boxel-card-container]');
     assert
       .dom('#ember-testing > [data-test-boxel-card-container]')
@@ -718,25 +728,27 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     };
     let realms = [testRealmURL];
 
-    await render(<template>
-      <PrerenderedCardSearch
-        @query={{query}}
-        @format='fitted'
-        @realms={{realms}}
-      >
-        <:loading>
-          Loading...
-        </:loading>
-        <:response as |cards|>
-          {{#each cards as |card|}}
-            <card.component />
-          {{/each}}
-        </:response>
-        <:meta as |meta|>
-          <div data-test-meta-page-total={{meta.page.total}}></div>
-        </:meta>
-      </PrerenderedCardSearch>
-    </template>);
+    await render(
+      <template>
+        <PrerenderedCardSearch
+          @query={{query}}
+          @format='fitted'
+          @realms={{realms}}
+        >
+          <:loading>
+            Loading...
+          </:loading>
+          <:response as |cards|>
+            {{#each cards as |card|}}
+              <card.component />
+            {{/each}}
+          </:response>
+          <:meta as |meta|>
+            <div data-test-meta-page-total={{meta.page.total}}></div>
+          </:meta>
+        </PrerenderedCardSearch>
+      </template>,
+    );
 
     await waitFor('#ember-testing > [data-test-boxel-card-container]');
 
@@ -753,25 +765,27 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     // Test second page
     query.page = { number: 1, size: 2 };
 
-    await render(<template>
-      <PrerenderedCardSearch
-        @query={{query}}
-        @format='fitted'
-        @realms={{realms}}
-      >
-        <:loading>
-          Loading...
-        </:loading>
-        <:response as |cards|>
-          {{#each cards as |card|}}
-            <card.component />
-          {{/each}}
-        </:response>
-        <:meta as |meta|>
-          <div data-test-meta-page-total={{meta.page.total}}></div>
-        </:meta>
-      </PrerenderedCardSearch>
-    </template>);
+    await render(
+      <template>
+        <PrerenderedCardSearch
+          @query={{query}}
+          @format='fitted'
+          @realms={{realms}}
+        >
+          <:loading>
+            Loading...
+          </:loading>
+          <:response as |cards|>
+            {{#each cards as |card|}}
+              <card.component />
+            {{/each}}
+          </:response>
+          <:meta as |meta|>
+            <div data-test-meta-page-total={{meta.page.total}}></div>
+          </:meta>
+        </PrerenderedCardSearch>
+      </template>,
+    );
 
     await waitFor('#ember-testing > [data-test-boxel-card-container]');
 
@@ -788,25 +802,27 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     // Test third page (should have 1 result)
     query.page = { number: 2, size: 2 };
 
-    await render(<template>
-      <PrerenderedCardSearch
-        @query={{query}}
-        @format='fitted'
-        @realms={{realms}}
-      >
-        <:loading>
-          Loading...
-        </:loading>
-        <:response as |cards|>
-          {{#each cards as |card|}}
-            <card.component />
-          {{/each}}
-        </:response>
-        <:meta as |meta|>
-          <div data-test-meta-page-total={{meta.page.total}}></div>
-        </:meta>
-      </PrerenderedCardSearch>
-    </template>);
+    await render(
+      <template>
+        <PrerenderedCardSearch
+          @query={{query}}
+          @format='fitted'
+          @realms={{realms}}
+        >
+          <:loading>
+            Loading...
+          </:loading>
+          <:response as |cards|>
+            {{#each cards as |card|}}
+              <card.component />
+            {{/each}}
+          </:response>
+          <:meta as |meta|>
+            <div data-test-meta-page-total={{meta.page.total}}></div>
+          </:meta>
+        </PrerenderedCardSearch>
+      </template>,
+    );
 
     await waitFor('#ember-testing > [data-test-boxel-card-container]');
 
