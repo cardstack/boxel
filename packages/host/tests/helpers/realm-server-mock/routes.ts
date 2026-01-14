@@ -24,6 +24,8 @@ import { getRoomIdForRealmAndUser } from '../mock-matrix/_utils';
 import { createJWT, testRealmSecretSeed } from '../test-auth';
 import { getTestRealmRegistry } from '../test-realm-registry';
 
+import type { TestRealmAdapter } from '../adapter';
+
 import type { RealmServerMockRoute, RealmServerMockState } from './types';
 
 const TEST_MATRIX_USER = '@testuser:localhost';
@@ -339,16 +341,28 @@ function getSearchableRealmForURL(
 
 async function getRealmInfoForURL(realmURL: string): Promise<RealmInfo | null> {
   let registry = getTestRealmRegistry();
-  let registryEntry = registry.get(ensureTrailingSlash(realmURL));
+  let normalizedRealmURL = ensureTrailingSlash(realmURL);
+  let registryEntry = registry.get(normalizedRealmURL);
   if (registryEntry?.realm) {
-    let info = await registryEntry.realm.getRealmInfo();
-    console.info(
-      `[realm-server-mock] _info registry hit ${JSON.stringify({
-        realmURL,
-        name: info?.name,
-      })}`,
-    );
-    return info;
+    let owner = registryEntry.adapter.owner as
+      | { isDestroying?: boolean; isDestroyed?: boolean }
+      | undefined;
+    if (owner?.isDestroying || owner?.isDestroyed) {
+      registry.delete(normalizedRealmURL);
+    } else {
+      let info = await registryEntry.realm.getRealmInfo();
+      let realmConfig = await readRealmConfigFromAdapter(registryEntry.adapter);
+      if (realmConfig) {
+        info = applyRealmConfigOverrides(info, realmConfig);
+      }
+      console.info(
+        `[realm-server-mock] _info registry hit ${JSON.stringify({
+          realmURL,
+          name: info?.name,
+        })}`,
+      );
+      return info;
+    }
   }
 
   let resolvedRealmURL = resolveRemoteRealmURL(realmURL);
@@ -384,6 +398,57 @@ async function getRealmInfoForURL(realmURL: string): Promise<RealmInfo | null> {
     );
     return null;
   }
+}
+
+async function readRealmConfigFromAdapter(
+  adapter: TestRealmAdapter,
+): Promise<Record<string, unknown> | null> {
+  await adapter.ready;
+  let fileRef = await adapter.openFile('.realm.json');
+  if (!fileRef || typeof fileRef.content !== 'string') {
+    return null;
+  }
+  try {
+    return JSON.parse(fileRef.content) as Record<string, unknown>;
+  } catch (error) {
+    console.warn(
+      `[realm-server-mock] _info invalid realm config ${JSON.stringify({
+        error: String(error),
+      })}`,
+    );
+    return null;
+  }
+}
+
+function applyRealmConfigOverrides(
+  info: RealmInfo,
+  realmConfig: Record<string, unknown>,
+): RealmInfo {
+  return {
+    ...info,
+    name: (realmConfig.name as string | null | undefined) ?? info.name,
+    backgroundURL:
+      (realmConfig.backgroundURL as string | null | undefined) ??
+      info.backgroundURL,
+    iconURL: (realmConfig.iconURL as string | null | undefined) ?? info.iconURL,
+    showAsCatalog:
+      (realmConfig.showAsCatalog as boolean | null | undefined) ??
+      info.showAsCatalog,
+    interactHome:
+      (realmConfig.interactHome as string | null | undefined) ??
+      info.interactHome,
+    hostHome:
+      (realmConfig.hostHome as string | null | undefined) ?? info.hostHome,
+    realmUserId:
+      (realmConfig.realmUserId as string | null | undefined) ??
+      info.realmUserId,
+    publishable:
+      (realmConfig.publishable as boolean | null | undefined) ??
+      info.publishable,
+    lastPublishedAt:
+      (realmConfig.lastPublishedAt as string | Record<string, string> | null) ||
+      info.lastPublishedAt,
+  };
 }
 
 function resolveRemoteRealmURL(realmURL: string): string {
