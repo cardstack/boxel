@@ -296,10 +296,33 @@ class RealmResource {
           ? { Authorization: `Bearer ${this.token}` }
           : {}),
       };
-      let response = await this.network.authedFetch(`${this.realmURL}_info`, {
-        headers,
-      });
+      let response: Response;
+      try {
+        response = await this.network.authedFetch(`${this.realmURL}_info`, {
+          headers,
+        });
+      } catch (error) {
+        if (isTesting()) {
+          console.warn(
+            `[realm-service] realm info fetch failed ${JSON.stringify({
+              realmURL: this.realmURL,
+              error: String(error),
+            })}`,
+          );
+        }
+        throw error;
+      }
       if (response.status !== 200) {
+        let responseText = await response.text();
+        if (isTesting()) {
+          console.warn(
+            `[realm-service] realm info fetch bad status ${JSON.stringify({
+              realmURL: this.realmURL,
+              status: response.status,
+              responseText,
+            })}`,
+          );
+        }
         throw new Error(
           `Failed to fetch realm info for ${this.realmURL}: ${response.status}`,
         );
