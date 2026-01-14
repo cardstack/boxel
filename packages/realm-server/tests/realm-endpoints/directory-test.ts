@@ -13,11 +13,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     let request: SuperTest<Test>;
     let dir: DirResult;
 
-    hooks.beforeEach(async function () {
-      dir = dirSync();
-      copySync(join(__dirname, '..', 'cards'), dir.name);
-    });
-
     function onRealmSetup(args: {
       testRealm: Realm;
       request: SuperTest<Test>;
@@ -34,6 +29,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           '*': ['read'],
         },
         onRealmSetup,
+        mode: 'before',
       });
 
       test('serves the request', async function (assert) {
@@ -102,6 +98,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           john: ['read'],
         },
         onRealmSetup,
+        mode: 'before',
       });
 
       test('401 with invalid JWT', async function (assert) {

@@ -54,6 +54,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           },
           realmURL: new URL('http://127.0.0.1:4444/test/'),
           onRealmSetup,
+          mode: 'before',
         });
 
         test('serves a /_search GET request', async function (assert) {
@@ -184,6 +185,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           },
           realmURL: new URL('http://127.0.0.1:4444/test/'),
           onRealmSetup,
+          mode: 'before',
         });
 
         test('401 with invalid JWT', async function (assert) {
@@ -203,15 +205,28 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         });
 
         test('403 without permission', async function (assert) {
+          console.log(' STARTING WEIRD ONE =================================');
           let response = await request
             .get(`${searchPath}?query=${buildQueryParam(query())}`)
             .set('Accept', 'application/vnd.card+json')
             .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
 
           assert.strictEqual(response.status, 403, 'HTTP 403 status');
+          console.log('403 received ==================================');
+          response = await request
+            .get(`${searchPath}?query=${buildQueryParam(query())}`)
+            .set('Accept', 'application/vnd.card+json')
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
+            );
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          console.log('200 received ==================================');
         });
 
         test('200 with permission', async function (assert) {
+          console.log(' STARTING NORMAL ONE =================================');
           let response = await request
             .get(`${searchPath}?query=${buildQueryParam(query())}`)
             .set('Accept', 'application/vnd.card+json')
@@ -221,6 +236,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             );
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          console.log('200 received ==================================');
         });
       });
     });
@@ -235,6 +251,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           },
           realmURL: new URL('http://127.0.0.1:4444/test/'),
           onRealmSetup,
+          mode: 'before',
         });
 
         test('serves a /_search QUERY request', async function (assert) {
@@ -311,6 +328,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           },
           realmURL: new URL('http://127.0.0.1:4444/test/'),
           onRealmSetup,
+          mode: 'before',
         });
 
         test('401 with invalid JWT', async function (assert) {
@@ -334,7 +352,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           assert.strictEqual(response.status, 401, 'HTTP 401 status');
         });
 
-        test('403 without permission', async function (assert) {
+        test('403 without permission followed by 200', async function (assert) {
           let response = await request
             .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
@@ -367,6 +385,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           },
           realmURL: new URL('http://127.0.0.1:4444/test/'),
           onRealmSetup,
+          mode: 'before',
         });
 
         test('400 with invalid query schema', async function (assert) {
