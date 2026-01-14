@@ -308,9 +308,13 @@ export class RealmServer {
 
       ctxt.type = 'html';
 
-      let cardURL = new URL(
+      let requestURL = new URL(
         `${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`,
       );
+      let cardURL = requestURL;
+      if (requestURL.pathname.endsWith('/')) {
+        cardURL = new URL('index', requestURL);
+      }
 
       this.headLog.debug(`Fetching head HTML for ${cardURL.href}`);
       this.isolatedLog.debug(`Fetching isolated HTML for ${cardURL.href}`);

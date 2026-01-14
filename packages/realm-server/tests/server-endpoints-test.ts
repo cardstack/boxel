@@ -4,7 +4,13 @@ import supertest from 'supertest';
 import { join, basename } from 'path';
 import type { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
-import { copySync, existsSync, ensureDirSync, readJSONSync } from 'fs-extra';
+import {
+  copySync,
+  existsSync,
+  ensureDirSync,
+  readJSONSync,
+  writeJSONSync,
+} from 'fs-extra';
 import type { Realm, VirtualNetwork } from '@cardstack/runtime-common';
 import {
   Deferred,
@@ -172,6 +178,22 @@ module(basename(__filename), function () {
             testRealmDir = join(dir.name, 'realm_server_2', 'test');
             ensureDirSync(testRealmDir);
             copySync(join(__dirname, 'cards'), testRealmDir);
+            let subdirectoryPath = join(testRealmDir, 'subdirectory');
+            ensureDirSync(subdirectoryPath);
+            writeJSONSync(join(subdirectoryPath, 'index.json'), {
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Subdirectory Index',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../person.gts',
+                    name: 'Person',
+                  },
+                },
+              },
+            });
             await startRealmServer(dbAdapter, publisher, runner);
           },
           afterEach: async () => {
@@ -212,6 +234,32 @@ module(basename(__filename), function () {
           );
         });
 
+        test('serves head and isolated HTML in index responses for card URLs ending in /', async function (assert) {
+          let cardURL = new URL('subdirectory/index', testRealm2URL).href;
+          let isolatedHTML =
+            '<div data-test-isolated-html>Isolated HTML</div>';
+          let headHTML = '<meta data-test-head-html="Head HTML" />';
+
+          await dbAdapter.execute(
+            `INSERT INTO boxel_index_working (url, file_alias, type, realm_version, realm_url, head_html, isolated_html)
+             VALUES ('${cardURL}', '${cardURL}', 'instance', 1, '${testRealm2URL.href}', '${headHTML}', '${isolatedHTML}')`,
+          );
+
+          let response = await request2
+            .get('/test/subdirectory/')
+            .set('Accept', 'text/html');
+
+          assert.strictEqual(response.status, 200, 'serves HTML response');
+          assert.ok(
+            response.text.includes('data-test-head-html'),
+            'head HTML is injected into the HTML response',
+          );
+          assert.ok(
+            response.text.includes('data-test-isolated-html'),
+            'isolated HTML is injected into the HTML response',
+          );
+        });
+
         test('serves scoped CSS in index responses for card URLs', async function (assert) {
           let cardURL = new URL('scoped-css-test', testRealm2URL).href;
           let scopedCSS = '.layout{display:flex;}';
@@ -239,6 +287,25 @@ module(basename(__filename), function () {
           assert.ok(
             response.text.includes(scopedCSS),
             'scoped CSS is included in the HTML response',
+          );
+        });
+
+        test('serves subdirectory index.json when requesting a trailing slash', async function (assert) {
+          let response = await request2
+            .get('/test/subdirectory/')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'serves JSON response');
+          let doc = response.body as SingleCardDocument;
+          assert.strictEqual(
+            doc.data.id,
+            new URL('subdirectory/index', testRealm2URL).href,
+            'serves the subdirectory index card',
+          );
+          assert.strictEqual(
+            doc.data.attributes?.firstName,
+            'Subdirectory Index',
+            'serves the subdirectory index card content',
           );
         });
 

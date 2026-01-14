@@ -1497,8 +1497,8 @@ export class Realm {
     requestContext: RequestContext,
   ) {
     let start = Date.now();
-    let url = new URL(request.url);
-    let localPath = this.paths.local(url);
+    let requestURL = new URL(request.url);
+    let localPath = this.paths.local(requestURL);
     let moduleCachingDisabled =
       this.#disableModuleCaching ||
       Boolean(request.headers.get('X-Boxel-Disable-Module-Cache'));
@@ -2638,9 +2638,15 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let localPath = this.paths.local(new URL(request.url));
+    let requestURL = new URL(request.url);
+    let localPath = this.paths.local(requestURL);
     if (localPath === '') {
       localPath = 'index';
+    } else if (requestURL.pathname.endsWith('/')) {
+      let indexPath = join(localPath, 'index');
+      if (await this.#adapter.exists(`${indexPath}.json`)) {
+        localPath = indexPath;
+      }
     }
 
     let url = this.paths.fileURL(localPath.replace(/\.json$/, ''));
