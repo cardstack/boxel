@@ -106,6 +106,7 @@ module('Acceptance | Code patches tests', function (hooks) {
         },
         'hello.txt': 'Hello, world!',
         'hi.txt': 'Hi, world!\nHow are you?',
+        'empty-file.gts': '',
         'test-card.gts': testCardContent,
         'Skill/useful-commands.json': {
           data: {
@@ -1119,6 +1120,127 @@ ${REPLACE_MARKER}
       'This file will be created with a suffix because hi.txt already exists',
       'hi-1.txt should be opened in code mode and the content should be the new file content',
     );
+  });
+
+  test('empty file shows generating content while streaming a new file patch', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}empty-file.gts`,
+    });
+
+    await waitFor('[data-test-empty-file-message]');
+    assert.dom('[data-test-empty-file-message]').hasText('File is empty');
+
+    await click('[data-test-open-ai-assistant]');
+    let matrixService = getService('matrix-service');
+    await waitUntil(() => Boolean(matrixService.currentRoomId));
+
+    let codeBlock = `\`\`\`
+${testRealmURL}empty-file.gts (new)
+${SEARCH_MARKER}
+\`\`\``;
+
+    simulateRemoteMessage(matrixService.currentRoomId!, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+    });
+
+    await waitUntil(() =>
+      find('[data-test-empty-file-message]')?.textContent?.includes(
+        'generating content',
+      ),
+    );
+
+    assert
+      .dom('[data-test-empty-file-message]')
+      .hasText('File is empty - generating content in the AI Assistant...');
+  });
+
+  test('empty file shows generating content while waiting for patch acceptance', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}empty-file.gts`,
+    });
+
+    await waitFor('[data-test-empty-file-message]');
+    assert.dom('[data-test-empty-file-message]').hasText('File is empty');
+
+    await click('[data-test-open-ai-assistant]');
+    let matrixService = getService('matrix-service');
+    await waitUntil(() => Boolean(matrixService.currentRoomId));
+
+    let codeBlock = `\`\`\`
+${testRealmURL}empty-file.gts (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+Generated content
+${REPLACE_MARKER}
+\`\`\``;
+
+    simulateRemoteMessage(matrixService.currentRoomId!, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
+    await waitUntil(() =>
+      find('[data-test-empty-file-message]')?.textContent?.includes(
+        'generating content',
+      ),
+    );
+
+    assert
+      .dom('[data-test-empty-file-message]')
+      .hasText('File is empty - generating content in the AI Assistant...');
+  });
+
+  test('empty file stops showing generating content after canceling patch', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}empty-file.gts`,
+    });
+
+    await waitFor('[data-test-empty-file-message]');
+    await click('[data-test-open-ai-assistant]');
+    let matrixService = getService('matrix-service');
+    await waitUntil(() => Boolean(matrixService.currentRoomId));
+
+    let codeBlock = `\`\`\`
+${testRealmURL}empty-file.gts (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+Generated content
+${REPLACE_MARKER}
+\`\`\``;
+
+    simulateRemoteMessage(matrixService.currentRoomId!, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
+    await waitUntil(() =>
+      find('[data-test-empty-file-message]')?.textContent?.includes(
+        'generating content',
+      ),
+    );
+
+    await waitFor('[data-test-ai-assistant-action-bar] [data-test-cancel]');
+    await click('[data-test-ai-assistant-action-bar] [data-test-cancel]');
+
+    await waitUntil(() => {
+      let messageText =
+        find('[data-test-empty-file-message]')?.textContent ?? '';
+      return !messageText.includes('generating content');
+    });
+
+    assert
+      .dom('[data-test-empty-file-message]')
+      .hasText('File is empty');
   });
 
   test('when code patch is historic (user moved on to the next message), or it was applied, it will render the code (replace portion of the search/replace block) in a standard (non-diff) editor', async function (assert) {

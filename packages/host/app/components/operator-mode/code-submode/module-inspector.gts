@@ -60,6 +60,7 @@ import {
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
+import { isHtmlPreTagGroup } from '@cardstack/host/lib/formatted-message/utils';
 
 import type CommandService from '@cardstack/host/services/command-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -134,6 +135,85 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
   private get isEmptyFile() {
     return this.args.readyFile?.content.match(/^\s*$/);
+  }
+
+  private get isGeneratingEmptyFileContent() {
+    if (!this.isEmptyFile) {
+      return false;
+    }
+
+    let roomId = this.matrixService.currentRoomId;
+    if (!roomId) {
+      return false;
+    }
+
+    let roomResource = this.matrixService.roomResources.get(roomId);
+    if (!roomResource) {
+      return false;
+    }
+
+    let lastMessageIndex = roomResource.indexOfLastNonDebugMessage;
+    if (lastMessageIndex < 0) {
+      return false;
+    }
+
+    let lastMessage = roomResource.messages[lastMessageIndex];
+    if (!lastMessage) {
+      return false;
+    }
+
+    let canceledActionMessageId =
+      this.matrixService.getLastCanceledActionEventId(roomId);
+    if (
+      lastMessage.isCanceled ||
+      canceledActionMessageId === lastMessage.eventId
+    ) {
+      return false;
+    }
+
+    if (lastMessage.author.userId !== this.matrixService.aiBotUserId) {
+      return false;
+    }
+
+    if (lastMessage.isStreamingFinished !== false) {
+      return lastMessage.htmlParts?.some((htmlPart) => {
+        if (!isHtmlPreTagGroup(htmlPart)) {
+          return false;
+        }
+
+        let codeData = htmlPart.codeData;
+        if (!codeData) {
+          return false;
+        }
+
+        if (
+          codeData.isNewFile !== true ||
+          codeData.fileUrl !== this.args.readyFile.url ||
+          !codeData.searchReplaceBlock
+        ) {
+          return false;
+        }
+
+        return this.commandService.getCodePatchStatus(codeData) === 'ready';
+      });
+    }
+
+    return lastMessage.htmlParts?.some((htmlPart) => {
+      if (!isHtmlPreTagGroup(htmlPart)) {
+        return false;
+      }
+
+      let codeData = htmlPart.codeData;
+      if (!codeData) {
+        return false;
+      }
+
+      return (
+        codeData.isNewFile === true &&
+        codeData.fileUrl === this.args.readyFile.url &&
+        !codeData.searchReplaceBlock
+      );
+    });
   }
 
   private get sourceFileForCard(): FileDef | undefined {
@@ -388,7 +468,13 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
   <template>
     {{#if this.isEmptyFile}}
-      <SyntaxErrorDisplay @syntaxErrors='File is empty' />
+      <div class='empty-file-message' data-test-empty-file-message>
+        {{if
+          this.isGeneratingEmptyFileContent
+          'File is empty - generating content in the AI Assistant...'
+          'File is empty'
+        }}
+      </div>
     {{else if this.fileIncompatibilityMessage}}
       <div
         class='file-incompatible-message'
@@ -555,6 +641,19 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
       .file-incompatible-message > span {
         max-width: 400px;
+      }
+
+      .empty-file-message {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        background-color: var(--boxel-200);
+        font: var(--boxel-font-sm);
+        color: var(--boxel-450);
+        font-weight: 500;
+        text-align: center;
+        padding: var(--boxel-sp-xl);
       }
 
       .non-preview-panel-content {
