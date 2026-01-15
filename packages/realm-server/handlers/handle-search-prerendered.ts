@@ -2,6 +2,7 @@ import type Koa from 'koa';
 import {
   buildSearchErrorResponse,
   SupportedMimeType,
+  parsePrerenderedSearchRequestFromPayload,
   parsePrerenderedSearchRequestFromRequest,
   SearchRequestError,
   searchPrerenderedRealms,
@@ -11,7 +12,10 @@ import {
   sendResponseForBadRequest,
   setContextResponse,
 } from '../middleware';
-import { getMultiRealmAuthorization } from '../middleware/multi-realm-authorization';
+import {
+  getMultiRealmAuthorization,
+  getSearchRequestPayload,
+} from '../middleware/multi-realm-authorization';
 
 export default function handleSearchPrerendered(): (
   ctxt: Koa.Context,
@@ -22,7 +26,11 @@ export default function handleSearchPrerendered(): (
     let request = await fetchRequestFromContext(ctxt);
     let parsed;
     try {
-      parsed = await parsePrerenderedSearchRequestFromRequest(request);
+      let payload = getSearchRequestPayload(ctxt);
+      parsed =
+        payload !== undefined
+          ? parsePrerenderedSearchRequestFromPayload(payload)
+          : await parsePrerenderedSearchRequestFromRequest(request);
     } catch (e) {
       if (e instanceof SearchRequestError) {
         if (e.code === 'invalid-query') {

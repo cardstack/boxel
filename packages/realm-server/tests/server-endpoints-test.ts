@@ -18,7 +18,6 @@ import {
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
-import { stringify } from 'qs';
 import { v4 as uuidv4 } from 'uuid';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
@@ -192,6 +191,86 @@ module(basename(__filename), function () {
           );
         });
 
+        test('serves isolated HTML in index responses for card URLs', async function (assert) {
+          let cardURL = new URL('isolated-test', testRealm2URL).href;
+          let isolatedHTML = '<div data-test-isolated-html>Isolated HTML</div>';
+
+          await dbAdapter.execute(
+            `INSERT INTO boxel_index_working (url, file_alias, type, realm_version, realm_url, isolated_html)
+             VALUES ('${cardURL}', '${cardURL}', 'instance', 1, '${testRealm2URL.href}', '${isolatedHTML}')`,
+          );
+
+          let response = await request2
+            .get('/test/isolated-test')
+            .set('Accept', 'text/html');
+
+          assert.strictEqual(response.status, 200, 'serves HTML response');
+          assert.ok(
+            response.text.includes('data-test-isolated-html'),
+            'isolated HTML is injected into the HTML response',
+          );
+        });
+
+        test('does not inject head or isolated HTML when realm is not public', async function (assert) {
+          let cardURL = new URL('private-index-test', testRealm2URL).href;
+          let headHTML = '<meta data-test-head-html content="private-head" />';
+          let isolatedHTML =
+            '<div data-test-isolated-html>Private isolated HTML</div>';
+
+          await dbAdapter.execute(
+            `INSERT INTO boxel_index_working (url, file_alias, type, realm_version, realm_url, head_html, isolated_html)
+             VALUES ('${cardURL}', '${cardURL}', 'instance', 1, '${testRealm2URL.href}', '${headHTML}', '${isolatedHTML}')`,
+          );
+
+          await dbAdapter.execute(
+            `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealm2URL.href}' AND username = '*'`,
+          );
+
+          let response = await request2
+            .get('/test/private-index-test')
+            .set('Accept', 'text/html');
+
+          assert.strictEqual(response.status, 200, 'serves HTML response');
+          assert.notOk(
+            response.text.includes('data-test-head-html'),
+            'head HTML is not injected into the HTML response',
+          );
+          assert.notOk(
+            response.text.includes('data-test-isolated-html'),
+            'isolated HTML is not injected into the HTML response',
+          );
+        });
+
+        test('serves scoped CSS in index responses for card URLs', async function (assert) {
+          let cardURL = new URL('scoped-css-test', testRealm2URL).href;
+          let scopedCSS = '.layout{display:flex;}';
+          let encodedCSS = encodeURIComponent(
+            Buffer.from(scopedCSS).toString('base64'),
+          );
+          let deps = JSON.stringify([
+            `https://cardstack.com/base/card-api.gts.${encodedCSS}.glimmer-scoped.css`,
+          ]);
+
+          await dbAdapter.execute(
+            `INSERT INTO boxel_index_working (url, file_alias, type, realm_version, realm_url, deps)
+             VALUES ('${cardURL}', '${cardURL}', 'instance', 1, '${testRealm2URL.href}', '${deps}'::jsonb)`,
+          );
+
+          let response = await request2
+            .get('/test/scoped-css-test')
+            .set('Accept', 'text/html');
+
+          assert.strictEqual(response.status, 200, 'serves HTML response');
+          assert.ok(
+            response.text.includes('data-boxel-scoped-css'),
+            'scoped CSS style tag is injected into the HTML response',
+          );
+          assert.ok(
+            response.text.includes(scopedCSS),
+            'scoped CSS is included in the HTML response',
+          );
+        });
+
         test('POST /_create-realm', async function (assert) {
           // we randomize the realm and owner names so that we can isolate matrix
           // test state--there is no "delete user" matrix API
@@ -354,22 +433,9 @@ module(basename(__filename), function () {
           {
             // owner can search in the realm
             let response = await request2
-              .get(
-                `${new URL(realm.url).pathname}_search?query=${encodeURIComponent(
-                  stringify(
-                    {
-                      filter: {
-                        on: baseCardRef,
-                        eq: {
-                          title: 'Test Card',
-                        },
-                      },
-                    } as Query,
-                    { encode: false },
-                  ),
-                )}`,
-              )
+              .post(`${new URL(realm.url).pathname}_search`)
               .set('Accept', 'application/vnd.card+json')
+              .set('X-HTTP-Method-Override', 'QUERY')
               .set(
                 'Authorization',
                 `Bearer ${createJWT(realm, ownerUserId, [
@@ -377,7 +443,15 @@ module(basename(__filename), function () {
                   'write',
                   'realm-owner',
                 ])}`,
-              );
+              )
+              .send({
+                filter: {
+                  on: baseCardRef,
+                  eq: {
+                    title: 'Test Card',
+                  },
+                },
+              } as Query);
 
             assert.strictEqual(response.status, 200, 'HTTP 200 status');
             let results = response.body as CardCollectionDocument;
@@ -421,23 +495,18 @@ module(basename(__filename), function () {
 
           {
             let response = await request2
-              .get(
-                `${new URL(realmURL).pathname}_search?query=${encodeURIComponent(
-                  stringify(
-                    {
-                      filter: {
-                        on: baseCardRef,
-                        eq: {
-                          title: 'Test Card',
-                        },
-                      },
-                    } as Query,
-                    { encode: false },
-                  ),
-                )}`,
-              )
+              .post(`${new URL(realmURL).pathname}_search`)
               .set('Accept', 'application/vnd.card+json')
-              .set('Authorization', `Bearer ${createJWT(realm, 'rando')}`);
+              .set('X-HTTP-Method-Override', 'QUERY')
+              .set('Authorization', `Bearer ${createJWT(realm, 'rando')}`)
+              .send({
+                filter: {
+                  on: baseCardRef,
+                  eq: {
+                    title: 'Test Card',
+                  },
+                },
+              } as Query);
 
             assert.strictEqual(response.status, 403, 'HTTP 403 status');
 

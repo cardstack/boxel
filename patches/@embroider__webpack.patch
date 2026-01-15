@@ -1,0 +1,14 @@
+diff --git a/src/ember-webpack.js b/src/ember-webpack.js
+index fa144524d7ddb59a6b9649aa4bb991b5b76c15df..34c7f4ba4d9c10900771be9398f4772d001bc6d2 100644
+--- a/src/ember-webpack.js
++++ b/src/ember-webpack.js
+@@ -500,7 +500,8 @@ const Webpack = (_a = class Webpack {
+                     ...this.extraCssLoaderOptions,
+                 },
+             };
+-            if (!variant.optimizeForProduction && variant.runtime === 'browser') {
++            // Make boxel-ui CSS load as expected in host mode SSR isolated templates
++            if (false && !variant.optimizeForProduction && variant.runtime === 'browser') {
+                 // in development builds that only need to work in the browser (not
+                 // fastboot), we can use style-loader because it's fast
+                 return {

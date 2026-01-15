@@ -563,7 +563,7 @@ export class Realm {
         this.publishability.bind(this),
       )
       .get(
-        '/_dependencies',
+        '/_card-dependencies',
         SupportedMimeType.CardDependencies,
         this.getCardDependencies.bind(this),
       )
@@ -2865,18 +2865,49 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let cardsQuery;
-    if (request.method === 'QUERY') {
+    if (request.method !== 'QUERY') {
+      return createResponse({
+        body: JSON.stringify({
+          errors: [
+            {
+              status: '400',
+              title: 'Bad Request',
+              message: 'method must be QUERY',
+            },
+          ],
+        }),
+        init: {
+          status: 400,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        },
+        requestContext,
+      });
+    }
+
+    let cardsQuery: unknown;
+    try {
       cardsQuery = await request.json();
-    } else {
-      let url = new URL(request.url);
-      let queryParam = url.searchParams.get('query');
-      cardsQuery = queryParam
-        ? parseQuery(queryParam)
-        : parseQuery(url.search.slice(1));
+    } catch (e: any) {
+      return createResponse({
+        body: JSON.stringify({
+          errors: [
+            {
+              status: '400',
+              title: 'Bad Request',
+              message: `Request body is not valid JSON: ${e?.message ?? e}`,
+            },
+          ],
+        }),
+        init: {
+          status: 400,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        },
+        requestContext,
+      });
     }
 
     try {
+      assertQuery(cardsQuery);
       let doc = await this.search(cardsQuery);
       return createResponse({
         body: JSON.stringify(doc, null, 2),
@@ -2995,37 +3026,53 @@ export class Realm {
     let renderType: unknown;
     let cardsQuery: unknown;
 
-    if (request.method === 'QUERY') {
-      payload = (await request.json()) as Record<string, any>;
-      htmlFormat = payload.prerenderedHtmlFormat;
-      cardUrls = payload.cardUrls;
-      renderType = payload.renderType;
-      // prerenderedHtmlFormat and cardUrls are special parameters only for this endpoint
-      delete payload.prerenderedHtmlFormat;
-      delete payload.cardUrls;
-      delete payload.renderType;
-      cardsQuery = payload;
-    } else {
-      let url = new URL(request.url);
-      let queryParam = url.searchParams.get('query');
-      if (queryParam !== null) {
-        cardsQuery = parseQuery(queryParam);
-        payload = parseQuery(url.search.slice(1)) as Record<string, any>;
-        htmlFormat = payload.prerenderedHtmlFormat;
-        cardUrls = payload.cardUrls;
-        renderType = payload.renderType;
-      } else {
-        let href = url.search.slice(1);
-        payload = parseQuery(href) as Record<string, any>;
-        htmlFormat = payload.prerenderedHtmlFormat;
-        cardUrls = payload.cardUrls;
-        renderType = payload.renderType;
-        delete payload.prerenderedHtmlFormat;
-        delete payload.cardUrls;
-        delete payload.renderType;
-        cardsQuery = payload;
-      }
+    if (request.method !== 'QUERY') {
+      return createResponse({
+        body: JSON.stringify({
+          errors: [
+            {
+              status: '400',
+              title: 'Bad Request',
+              message: 'method must be QUERY',
+            },
+          ],
+        }),
+        init: {
+          status: 400,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        },
+        requestContext,
+      });
     }
+
+    try {
+      payload = (await request.json()) as Record<string, any>;
+    } catch (e: any) {
+      return createResponse({
+        body: JSON.stringify({
+          errors: [
+            {
+              status: '400',
+              title: 'Bad Request',
+              message: `Request body is not valid JSON: ${e?.message ?? e}`,
+            },
+          ],
+        }),
+        init: {
+          status: 400,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        },
+        requestContext,
+      });
+    }
+    htmlFormat = payload.prerenderedHtmlFormat;
+    cardUrls = payload.cardUrls;
+    renderType = payload.renderType;
+    // prerenderedHtmlFormat and cardUrls are special parameters only for this endpoint
+    delete payload.prerenderedHtmlFormat;
+    delete payload.cardUrls;
+    delete payload.renderType;
+    cardsQuery = payload;
 
     if (!isValidPrerenderedHtmlFormat(htmlFormat)) {
       return createResponse({
@@ -4169,7 +4216,7 @@ export class Realm {
 
 export type Kind = 'file' | 'directory';
 
-function parseDeps(value: unknown): string[] {
+export function parseDeps(value: unknown): string[] {
   if (value == null) {
     return [];
   }

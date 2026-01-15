@@ -1747,6 +1747,11 @@ export default class MatrixService extends Service {
   }
 
   private async processDecryptedEvent(event: TempEvent, oldEventId?: string) {
+    // Graceful test teardown: ignore late events after the service is destroyed.
+    if (this.isDestroying || this.isDestroyed) {
+      return;
+    }
+
     let { room_id: roomId } = event;
     if (!roomId) {
       throw new Error(
