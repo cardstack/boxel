@@ -2254,9 +2254,10 @@ module(basename(__filename), function () {
                   creditsAvailableInPlanAllowance: null,
                   creditsIncludedInPlanAllowance: null,
                   extraCreditsAvailableInBalance: 0,
-                  lowCreditThreshold: null,
+                  lowCreditThreshold: 2000,
                   lastDailyCreditGrantAt: null,
-                  nextDailyCreditGrantAt: null,
+                  nextDailyCreditGrantAt:
+                    json.data.attributes.nextDailyCreditGrantAt,
                 },
                 relationships: {
                   subscription: null,
