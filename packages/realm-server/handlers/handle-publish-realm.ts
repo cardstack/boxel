@@ -32,12 +32,14 @@ import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
 
 const log = logger('handle-publish');
 
-const PUBLISHED_REALM_DOMAIN_OVERRIDES: Record<string, Record<string, string>> =
-  {
-    // '@user:matrix.server': {
-    //   'requested.boxel.ai': 'custom.domain.example',
-    // },
-  };
+const PUBLISHED_REALM_DOMAIN_OVERRIDES: Record<
+  string,
+  Record<string, string>
+> = {
+  '@buck:stack.cards': {
+    'custombuck.staging.boxel.build': 'custombuck.stack.cards',
+  },
+};
 
 function maybeOverridePublishedRealmURL(
   ownerUserId: string,
