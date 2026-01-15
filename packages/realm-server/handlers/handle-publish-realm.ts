@@ -33,6 +33,7 @@ import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
 
 const log = logger('handle-publish');
 
+// Workaround to override published realm URLs to support custom domains. Remove in CS-9061.
 const PUBLISHED_REALM_DOMAIN_OVERRIDES: Record<
   string,
   Record<string, string>
