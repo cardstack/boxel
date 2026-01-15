@@ -9,7 +9,7 @@ import {
 import type { RealmServerTokenClaim } from '../utils/jwt';
 import type { CreateRoutesArgs } from '../routes';
 import { addToCreditsLedger } from '@cardstack/billing/billing-queries';
-import { getLowCreditThreshold } from '../lib/daily-credit-grant-config';
+import { getSignupCreditGrantAmount } from '../lib/daily-credit-grant-config';
 
 export default function handleCreateUserRequest({
   dbAdapter,
@@ -65,11 +65,11 @@ export default function handleCreateUserRequest({
     }
 
     // Grant daily credits up to the low-credit threshold for new users.
-    let lowCreditThreshold = getLowCreditThreshold();
-    if (lowCreditThreshold != null) {
+    let signupCreditGrantAmount = getSignupCreditGrantAmount();
+    if (signupCreditGrantAmount > 0) {
       await addToCreditsLedger(dbAdapter, {
         userId: user!.id,
-        creditAmount: lowCreditThreshold,
+        creditAmount: signupCreditGrantAmount,
         creditType: 'daily_credit',
         subscriptionCycleId: null,
       });

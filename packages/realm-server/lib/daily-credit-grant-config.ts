@@ -4,6 +4,7 @@ export const DAILY_CREDIT_GRANT_CRON_SCHEDULE =
   process.env.DAILY_CREDIT_GRANT_CRON_SCHEDULE ?? '0 3 * * *';
 export const DAILY_CREDIT_GRANT_CRON_TZ =
   process.env.DAILY_CREDIT_GRANT_CRON_TZ ?? 'America/New_York';
+export const DEFAULT_SIGNUP_CREDITS = 2000;
 
 export function parseLowCreditThreshold(
   rawThreshold = process.env.LOW_CREDIT_THRESHOLD,
@@ -28,6 +29,10 @@ export function getLowCreditThreshold(): number | null {
   } catch (error) {
     return null;
   }
+}
+
+export function getSignupCreditGrantAmount(): number {
+  return getLowCreditThreshold() ?? DEFAULT_SIGNUP_CREDITS;
 }
 
 export function getNextDailyCreditGrantAt(): number | null {

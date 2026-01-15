@@ -559,5 +559,47 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         'Response is correct',
       );
     });
+
+    test('creates a new user with default credits when threshold is unset', async function (assert) {
+      delete process.env.LOW_CREDIT_THRESHOLD;
+      let response = await request
+        .post(`/_user`)
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'newuser-threshold-unset@test', [
+            'read',
+            'write',
+          ])}`,
+        )
+        .send({
+          data: {
+            type: 'user',
+            attributes: {
+              registrationToken: 'reg_token_456',
+            },
+          },
+        });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(response.text, 'ok', 'Response is ok');
+
+      let user = await getUserByMatrixUserId(
+        dbAdapter,
+        'newuser-threshold-unset@test',
+      );
+      assert.ok(user, 'User was created');
+
+      let dailyCredits = await sumUpCreditsLedger(dbAdapter, {
+        userId: user!.id,
+        creditType: 'daily_credit',
+      });
+      assert.strictEqual(
+        dailyCredits,
+        2000,
+        'daily credits default to the signup grant amount',
+      );
+    });
   });
 });
