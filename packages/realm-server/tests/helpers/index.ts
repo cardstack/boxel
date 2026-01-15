@@ -319,14 +319,25 @@ async function startTestPrerenderServer(): Promise<string> {
 
 async function stopTestPrerenderServer() {
   if (prerenderServer && prerenderServer.listening) {
-    let stopPrerenderer = (prerenderServer as any).__stopPrerenderer;
-    if (typeof stopPrerenderer === 'function') {
-      await stopPrerenderer();
+    if (hasStopPrerenderer(prerenderServer)) {
+      await prerenderServer.__stopPrerenderer?.();
     }
     await closeServer(prerenderServer);
   }
   prerenderServer = undefined;
   prerenderServerStart = undefined;
+}
+
+interface StoppablePrerenderServer extends Server {
+  __stopPrerenderer?: () => Promise<void>;
+}
+
+function hasStopPrerenderer(
+  server: Server,
+): server is StoppablePrerenderServer {
+  return (
+    typeof (server as StoppablePrerenderServer).__stopPrerenderer === 'function'
+  );
 }
 
 export async function getTestPrerenderer(): Promise<Prerenderer> {

@@ -314,6 +314,9 @@ export default class RealmServerService extends Service {
     let normalizedURL = ensureTrailingSlash(url);
     if (isTesting()) {
       let testRealmOrigin = new URL(testRealmURL).origin;
+      // In tests, realm URLs are often rooted at the test realm origin but
+      // are served by the base realm server; remap to the base origin so
+      // federated requests hit the active test server.
       if (new URL(normalizedURL).origin === testRealmOrigin) {
         return ensureTrailingSlash(new URL(resolvedBaseRealmURL).origin);
       }

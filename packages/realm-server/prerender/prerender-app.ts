@@ -25,6 +25,10 @@ import {
   PRERENDER_SERVER_STATUS_HEADER,
 } from './prerender-constants';
 
+type PrerenderServer = Server & {
+  __stopPrerenderer?: () => Promise<void>;
+};
+
 let log = logger('prerender-server');
 const defaultPrerenderServerPort = 4221;
 
@@ -495,8 +499,8 @@ export function createPrerenderHttpServer(options?: {
     }
   }
 
-  let server = createServer(app.callback());
-  (server as any).__stopPrerenderer = stopPrerendererOnce;
+  let server = createServer(app.callback()) as PrerenderServer;
+  server.__stopPrerenderer = stopPrerendererOnce;
 
   server.on('close', async () => {
     stopHeartbeatLoop();

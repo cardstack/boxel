@@ -3024,7 +3024,7 @@ export class Realm {
     let payload: Record<string, any> | undefined;
     let htmlFormat: string | undefined;
     let cardUrls: string[] | string | undefined;
-    let renderType: unknown;
+    let renderType: CodeRef | undefined;
     let cardsQuery: unknown;
 
     if (request.method !== 'QUERY') {
@@ -3094,13 +3094,32 @@ export class Realm {
       });
     }
 
-    let normalizedCardUrls = Array.isArray(cardUrls)
-      ? cardUrls.map((url) => String(url))
-      : cardUrls
-        ? [String(cardUrls)]
-        : undefined;
-    let normalizedRenderType = isResolvedCodeRef(renderType as any)
-      ? (renderType as ResolvedCodeRef)
+    let normalizedCardUrls: string[] | undefined;
+    if (Array.isArray(cardUrls)) {
+      if (!cardUrls.every((url) => typeof url === 'string')) {
+        return createResponse({
+          body: JSON.stringify({
+            errors: [
+              {
+                status: '400',
+                title: 'Bad Request',
+                message: 'cardUrls must be a string or array of strings',
+              },
+            ],
+          }),
+          init: {
+            status: 400,
+            headers: { 'content-type': SupportedMimeType.CardJson },
+          },
+          requestContext,
+        });
+      }
+      normalizedCardUrls = cardUrls;
+    } else if (typeof cardUrls === 'string') {
+      normalizedCardUrls = [cardUrls];
+    }
+    let normalizedRenderType = isResolvedCodeRef(renderType)
+      ? renderType
       : undefined;
 
     try {

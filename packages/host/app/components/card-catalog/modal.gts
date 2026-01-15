@@ -354,8 +354,14 @@ export default class CardCatalogModal extends Component<Signature> {
           let resource = this.realm.getOrCreateRealmResource(realmURL);
           try {
             await resource.fetchInfo();
-          } catch {
-            // Leave realm info as fallback if it cannot be fetched.
+          } catch (error) {
+            // Keep any existing realm info if the fetch fails; non-fatal for modal.
+
+            console.warn(
+              'Failed to fetch realm info for',
+              realmURL.toString?.() ?? realmURL,
+              error,
+            );
           }
         }),
       );

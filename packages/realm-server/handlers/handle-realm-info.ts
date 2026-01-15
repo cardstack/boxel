@@ -4,15 +4,15 @@ import {
   ensureTrailingSlash,
   fetchUserPermissions,
   logger,
-  param,
-  query,
-  separatedByCommas,
   SupportedMimeType,
-  type Expression,
 } from '@cardstack/runtime-common';
 
 import { setContextResponse } from '../middleware';
 import { getMultiRealmAuthorization } from '../middleware/multi-realm-authorization';
+import {
+  buildReadableRealms,
+  getPublishedRealmURLs,
+} from '../utils/realm-readability';
 
 const log = logger('realm-server');
 
@@ -67,22 +67,11 @@ async function getPublicReadableRealms(
     onlyOwnRealms: false,
   });
 
-  let publicReadable = new Set(
-    Object.entries(publicPermissions)
-      .filter(([, permissions]) => permissions.includes('read'))
-      .map(([realmURL]) => ensureTrailingSlash(realmURL)),
+  let publishedRealmURLs = await getPublishedRealmURLs(dbAdapter, realmList);
+  let publicReadable = buildReadableRealms(
+    publicPermissions,
+    publishedRealmURLs,
   );
-
-  if (realmList.length > 0) {
-    let publishedRealms = (await query(dbAdapter, [
-      'SELECT published_realm_url FROM published_realms WHERE published_realm_url IN (',
-      ...separatedByCommas(realmList.map((realmURL) => [param(realmURL)])),
-      ')',
-    ] as Expression)) as { published_realm_url: string }[];
-    for (let published of publishedRealms) {
-      publicReadable.add(ensureTrailingSlash(published.published_realm_url));
-    }
-  }
 
   let normalizedRealmList = realmList.map((realmURL) =>
     ensureTrailingSlash(realmURL),

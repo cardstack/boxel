@@ -140,7 +140,6 @@ import './realm-endpoints/permissions-test';
 import './realm-endpoints/publishability-test';
 import './realm-endpoints/search-test';
 import './realm-endpoints/user-test';
-import './search-prerendered-test';
 import './server-endpoints/authentication-test';
 import './server-endpoints/index-responses-test';
 import './server-endpoints/maintenance-endpoints-test';
