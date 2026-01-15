@@ -982,16 +982,21 @@ export default class StoreService extends Service implements StoreInterface {
     relativeTo?: URL;
     realm?: string; // used for new cards
     opts?: { noCache?: boolean; localDir?: string };
-  }) {
-    let deferred: Deferred<CardDef | CardErrorJSONAPI> | undefined;
+  }): Promise<T | CardErrorJSONAPI> {
+    // Note: the store can cache FileDef instances (via file-meta documents) for
+    // lookup/rendering, but autosave, dependency tracking, and GC are card-only.
+    let deferred: Deferred<T | CardErrorJSONAPI> | undefined;
     let id = asURL(idOrDoc);
     if (id) {
       let working = this.inflightGetCards.get(id);
       if (working) {
-        return working as Promise<T>;
+        return working as Promise<T | CardErrorJSONAPI>;
       }
-      deferred = new Deferred<CardDef | CardErrorJSONAPI>();
-      this.inflightGetCards.set(id, deferred.promise);
+      deferred = new Deferred<T | CardErrorJSONAPI>();
+      this.inflightGetCards.set(
+        id,
+        deferred.promise as Promise<CardDef | CardErrorJSONAPI>,
+      );
     }
     try {
       if (!id) {
@@ -1011,7 +1016,7 @@ export default class StoreService extends Service implements StoreInterface {
             return maybeError;
           }
           this.store.set(newInstance.id, newInstance);
-          deferred?.fulfill(newInstance);
+          deferred?.fulfill(newInstance as T);
           return newInstance as T;
         } else {
           throw new Error(`cannot save serialized doc in render context`);
@@ -1020,7 +1025,7 @@ export default class StoreService extends Service implements StoreInterface {
 
       let existingInstance = this.peek(id);
       if (!opts?.noCache && existingInstance) {
-        deferred?.fulfill(existingInstance);
+        deferred?.fulfill(existingInstance as T | CardErrorJSONAPI);
         return existingInstance as T;
       }
       if (isLocalId(id)) {
@@ -1050,8 +1055,8 @@ export default class StoreService extends Service implements StoreInterface {
           { store: this.store },
         );
         this.setIdentityContext(fileInstance as unknown as CardDef);
-        deferred?.fulfill(fileInstance as unknown as CardDef);
-        return fileInstance as unknown as CardDef;
+        deferred?.fulfill(fileInstance as unknown as T);
+        return fileInstance as unknown as T;
       }
       if (!doc) {
         let json: CardDocument | undefined;
@@ -1087,7 +1092,7 @@ export default class StoreService extends Service implements StoreInterface {
       // in case the url is an alias for the id (like index card without the
       // "/index") we also add this
       this.store.set(url, instance);
-      deferred?.fulfill(instance);
+      deferred?.fulfill(instance as T);
       if (!existingInstance || !isCardInstance(existingInstance)) {
         this.setIdentityContext(instance);
         await this.startAutoSaving(instance);

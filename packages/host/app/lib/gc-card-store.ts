@@ -463,13 +463,19 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     return item;
   }
 
-  private tryFindingItem(type: 'instance' | 'error', localOrRemoteId: string) {
+  private tryFindingItem(
+    type: 'instance' | 'error',
+    localOrRemoteId: string,
+  ): {
+    item: StoredInstance | CardErrorJSONAPI | undefined;
+    localId: string | undefined;
+  } {
     let bucket = type === 'instance' ? this.#cards : this.#cardErrors;
     let silentBucket =
       type === 'instance' ? this.#nonTrackedCards : this.#nonTrackedCardErrors;
     let localId = isLocalId(localOrRemoteId) ? localOrRemoteId : undefined;
     let remoteId = !isLocalId(localOrRemoteId) ? localOrRemoteId : undefined;
-    let item: CardDef | CardErrorJSONAPI | undefined;
+    let item: StoredInstance | CardErrorJSONAPI | undefined;
     if (remoteId) {
       if (localId) {
         remoteId = this.#idResolver.getRemoteIds(localId)?.[0];
@@ -481,7 +487,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       if (!localId) {
         localId = remoteId.split('/').pop()!;
         item = bucket.get(localId) ?? silentBucket.get(localId);
-        if (item && type === 'instance') {
+        if (item && type === 'instance' && isCardOrFileInstance(item)) {
           item.id = remoteId;
         }
       }
