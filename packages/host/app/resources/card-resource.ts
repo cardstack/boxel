@@ -7,9 +7,12 @@ import { service } from '@ember/service';
 
 import { Resource } from 'ember-modify-based-class-resource';
 
+import type StoreService from '../services/store';
 import { isCardInstance } from '@cardstack/runtime-common';
 
-import type StoreService from '../services/store';
+function isFileDefInstance(value: unknown): boolean {
+  return Boolean((value as any)?.constructor?.isFileDef);
+}
 
 interface Args {
   named: {
@@ -56,7 +59,10 @@ export class CardResource extends Resource<Args> {
       return undefined;
     }
     let maybeCard = this.store.peek(this.#id);
-    return maybeCard && isCardInstance(maybeCard) ? maybeCard : undefined;
+    return maybeCard &&
+      (isCardInstance(maybeCard) || isFileDefInstance(maybeCard))
+      ? maybeCard
+      : undefined;
   }
 
   get cardError() {

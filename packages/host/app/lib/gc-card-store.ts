@@ -25,11 +25,13 @@ import type {
   StoreSearchResource,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 export type ReferenceCount = Map<string, number>;
 
 type LocalId = string;
 type InstanceGraph = Map<LocalId, Set<LocalId>>;
+type StoredInstance = CardDef | FileDef;
 
 type StoreHooks = {
   getSearchResource<T extends CardDef = CardDef>(
@@ -51,6 +53,16 @@ type StoreHooks = {
     },
   ): StoreSearchResource<T>;
 };
+
+function isFileDefInstance(item: unknown): item is FileDef {
+  return Boolean(
+    (item as { constructor?: { isFileDef?: boolean } })?.constructor?.isFileDef,
+  );
+}
+
+function isCardOrFileInstance(item: unknown): item is StoredInstance {
+  return isCardInstance(item) || isFileDefInstance(item);
+}
 
 // we use this 2 way mapping between local ID and remote ID because if we end up
 // trying to search thru all the entries in a single direction Map to find the
@@ -120,10 +132,10 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   // importantly these properties are not tracked so that we are able
   // to deserialize an instance without glimmer rendering the inner workings of
   // the deserialization process.
-  #nonTrackedCards = new Map<string, CardDef>();
+  #nonTrackedCards = new Map<string, StoredInstance>();
   #nonTrackedCardErrors = new Map<string, CardErrorJSONAPI>();
 
-  #cards = new TrackedMap<string, CardDef>();
+  #cards = new TrackedMap<string, StoredInstance>();
   #cardErrors = new TrackedMap<string, CardErrorJSONAPI>();
   #gcCandidates: Set<LocalId> = new Set();
   #referenceCount: ReferenceCount;
@@ -151,7 +163,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   get(id: string): CardDef | undefined {
-    return this.getItem('instance', id);
+    return this.getItem('instance', id) as CardDef | undefined;
   }
 
   getRemoteIds(localId: string) {
@@ -239,7 +251,10 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     }
   }
 
-  addInstanceOrError(id: string, instanceOrError: CardDef | CardErrorJSONAPI) {
+  addInstanceOrError(
+    id: string,
+    instanceOrError: StoredInstance | CardErrorJSONAPI,
+  ) {
     this.setItem(id, instanceOrError);
   }
 
@@ -328,7 +343,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     let rootLocalIds: string[] = [];
 
     for (let instance of this.#cards.values()) {
-      if (!instance) {
+      if (!instance || !isCardInstance(instance)) {
         continue;
       }
       if (visited.has(instance)) {
@@ -359,7 +374,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
     visited = new WeakSet<CardDef>();
     for (let instance of this.#cards.values()) {
-      if (!instance) {
+      if (!instance || !isCardInstance(instance)) {
         continue;
       }
       if (visited.has(instance)) {
@@ -391,7 +406,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     remoteId = remoteId.replace(/\.json$/, '');
     let instance = this.#nonTrackedCards.get(remoteId);
     if (instance) {
-      this.set(remoteId, instance);
+      this.setItem(remoteId, instance);
     }
     this.#nonTrackedCards.delete(remoteId);
 
@@ -426,12 +441,12 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.#nonTrackedCardErrors.delete(id);
   }
 
-  private getItem(type: 'instance', id: string): CardDef | undefined;
+  private getItem(type: 'instance', id: string): StoredInstance | undefined;
   private getItem(type: 'error', id: string): CardErrorJSONAPI | undefined;
   private getItem(
     type: 'instance' | 'error',
     id: string,
-  ): CardDef | CardErrorJSONAPI | undefined {
+  ): StoredInstance | CardErrorJSONAPI | undefined {
     id = id.replace(/\.json$/, '');
     let { item, localId } = this.tryFindingItem(type, id);
 
@@ -485,7 +500,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   private setItem(
     id: string,
-    item: CardDef | CardErrorJSONAPI,
+    item: StoredInstance | CardErrorJSONAPI,
     notTracked?: true,
   ) {
     id = id.replace(/\.json$/, '');
@@ -502,8 +517,8 @@ export default class CardStoreWithGarbageCollection implements CardStore {
         this.#idResolver.addIdPair(maybeLocalId, id);
       }
     }
-    let instance = isCardInstance(item) ? item : undefined;
-    let error = !isCardInstance(item) ? item : undefined;
+    let instance = isCardOrFileInstance(item) ? item : undefined;
+    let error = !isCardOrFileInstance(item) ? item : undefined;
     if (error && !isLocalId(id) && error.id && isLocalId(error.id)) {
       this.#idResolver.addIdPair(error.id, id);
     }
@@ -514,8 +529,9 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     }
     if (remoteIds.length > 0) {
       localId =
-        (instance ? instance[localIdSymbol] : undefined) ??
-        this.#idResolver.getLocalId(remoteIds[0]);
+        (instance && isCardInstance(instance)
+          ? instance[localIdSymbol]
+          : undefined) ?? this.#idResolver.getLocalId(remoteIds[0]);
 
       let maybeOldLocalId = remoteIds[0].split('/').pop()!;
       errorBucket.delete(maybeOldLocalId);
@@ -528,8 +544,10 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     // make entries for both the local ID and the remote ID in the identity map
     if (instance) {
       // instances always have a local ID
-      setIfDifferent(cardBucket, localId!, instance);
-      errorBucket.delete(localId!);
+      if (localId) {
+        setIfDifferent(cardBucket, localId, instance);
+        errorBucket.delete(localId);
+      }
       if (remoteIds.length > 0) {
         for (let remoteId of remoteIds) {
           setIfDifferent(cardBucket, remoteId, instance);
@@ -561,7 +579,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   private makeConsumptionGraph(api: typeof CardAPI): InstanceGraph {
     let consumptionGraph: InstanceGraph = new Map();
     for (let instance of this.#cards.values()) {
-      if (!instance) {
+      if (!instance || !isCardInstance(instance)) {
         continue;
       }
       let deps = getDeps(api, instance);
@@ -580,7 +598,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   private makeDependencyGraph(api: typeof CardAPI): InstanceGraph {
     let dependencyGraph: InstanceGraph = new Map();
     for (let instance of this.#cards.values()) {
-      if (!instance) {
+      if (!instance || !isCardInstance(instance)) {
         continue;
       }
       let deps = getDeps(api, instance);

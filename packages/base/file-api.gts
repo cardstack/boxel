@@ -60,6 +60,7 @@ export class FileContentMismatchError extends Error {
 
 export class FileDef extends BaseDef {
   static displayName = 'File';
+  static isFileDef = true;
   static icon = FileIcon;
 
   static assignInitialFieldValue(

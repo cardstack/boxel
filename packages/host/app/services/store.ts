@@ -17,6 +17,7 @@ import { TrackedObject, TrackedMap } from 'tracked-built-ins';
 
 import {
   hasExecutableExtension,
+  isCardError,
   isCardInstance,
   isSingleCardDocument,
   isCardCollectionDocument,
@@ -1036,6 +1037,22 @@ export default class StoreService extends Service implements StoreInterface {
       let doc = (typeof idOrDoc !== 'string' ? idOrDoc : undefined) as
         | SingleCardDocument
         | undefined;
+      if (!doc && looksLikeFileURL(url)) {
+        let fileMetaDoc = await this.store.loadFileMetaDocument(url);
+        if (isCardError(fileMetaDoc)) {
+          throw fileMetaDoc;
+        }
+        let api = await this.cardService.getAPI();
+        let fileInstance = await api.createFromSerialized(
+          fileMetaDoc.data,
+          fileMetaDoc,
+          fileMetaDoc.data.id ? new URL(fileMetaDoc.data.id) : new URL(url),
+          { store: this.store },
+        );
+        this.setIdentityContext(fileInstance as unknown as CardDef);
+        deferred?.fulfill(fileInstance as unknown as CardDef);
+        return fileInstance as unknown as CardDef;
+      }
       if (!doc) {
         let json: CardDocument | undefined;
         if (this.isRenderStore && (globalThis as any).__boxelRenderContext) {
@@ -1548,6 +1565,26 @@ export function asURL(urlOrDoc: string | LooseSingleCardDocument) {
   return typeof urlOrDoc === 'string'
     ? urlOrDoc.replace(/\.json$/, '')
     : urlOrDoc.data.id;
+}
+
+function looksLikeFileURL(url: string): boolean {
+  try {
+    let pathname = new URL(url).pathname;
+    let name = pathname.split('/').pop() ?? '';
+    if (!name || !name.includes('.')) {
+      return false;
+    }
+    let lower = name.toLowerCase();
+    if (lower.endsWith('.json')) {
+      return false;
+    }
+    if (hasExecutableExtension(url)) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function withStubbedRenderTimers<T>(cb: () => Promise<T>): Promise<T> {

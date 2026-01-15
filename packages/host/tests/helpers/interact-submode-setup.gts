@@ -56,10 +56,12 @@ export function setupInteractSubmodeTests(
     let string: typeof import('https://cardstack.com/base/string');
     let spec: typeof import('https://cardstack.com/base/spec');
     let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
+    let fileApi: typeof import('https://cardstack.com/base/file-api');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     spec = await loader.import(`${baseRealm.url}spec`);
     cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
+    fileApi = await loader.import(`${baseRealm.url}file-api`);
 
     let {
       field,
@@ -74,6 +76,7 @@ export function setupInteractSubmodeTests(
     let { default: StringField } = string;
     let { Spec } = spec;
     let { CardsGrid } = cardsGrid;
+    let { FileDef } = fileApi;
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -239,6 +242,21 @@ export function setupInteractSubmodeTests(
       };
     }
 
+    class FileLinkCard extends CardDef {
+      static displayName = 'File Link Card';
+      @field title = contains(StringField);
+      @field attachment = linksTo(FileDef);
+
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h2 data-test-file-link-card-title><@fields.title /></h2>
+          <div data-test-file-link-attachment>
+            <@fields.attachment />
+          </div>
+        </template>
+      };
+    }
+
     class Personnel extends Person {
       static displayName = 'Personnel';
     }
@@ -290,11 +308,13 @@ export function setupInteractSubmodeTests(
         'address.gts': { Address },
         'focus-test.gts': { FocusTest },
         'focus-nested.gts': { FocusNested, FocusNestedItem },
+        'file-link-card.gts': { FileLinkCard },
         'person.gts': { Person },
         'personnel.gts': { Personnel },
         'pet.gts': { Pet, Puppy },
         'shipping-info.gts': { ShippingInfo },
         'README.txt': `Hello World`,
+        'FileLinkCard/notes.txt': 'Hello from a file link',
         'person-entry.json': new Spec({
           title: 'Person Card',
           description: 'Spec for Person Card',
@@ -363,6 +383,31 @@ export function setupInteractSubmodeTests(
           pet: mangoPet,
           friends: [mangoPet],
         }),
+        'FileLinkCard/with-file.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Linked file example',
+            },
+            relationships: {
+              attachment: {
+                links: {
+                  self: './notes.txt',
+                },
+                data: {
+                  type: 'file-meta',
+                  id: './notes.txt',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../file-link-card',
+                name: 'FileLinkCard',
+              },
+            },
+          },
+        },
         'Puppy/marco.json': new Puppy({ name: 'Marco', age: '5 months' }),
         'grid.json': new CardsGrid(),
         'index.json': new CardsGrid(),
