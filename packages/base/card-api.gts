@@ -2983,7 +2983,6 @@ async function getDeserializedValue<CardT extends BaseDefConstructor>({
 // to calculate the computeds that the server has already done.
 
 // use an interface loader and not the class Loader
-// use an interface loader and not the class Loader
 export async function createFromSerialized<T extends BaseDefConstructor>(
   resource:
     | LooseLinkableResource<CardResource>
