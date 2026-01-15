@@ -6,7 +6,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import { action } from '@ember/object';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, not } from '@cardstack/boxel-ui/helpers';
 import { formatDateTime } from '@cardstack/boxel-ui/helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 
@@ -34,6 +34,7 @@ class TimeFieldEdit extends Component<typeof TimeField> {
       @id='time-input'
       @value={{@model.value}}
       @onInput={{this.updateTime}}
+      @disabled={{not @canEdit}}
       data-test-time-input
     />
   </template>

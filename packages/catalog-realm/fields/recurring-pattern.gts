@@ -200,6 +200,7 @@ class RecurringPatternFieldEdit extends Component<
         @selected={{this.selectedPattern}}
         @options={{this.patterns}}
         @onChange={{this.updatePattern}}
+        @disabled={{not @canEdit}}
         class='pattern-select'
         data-test-pattern-select
         as |option|
@@ -215,7 +216,7 @@ class RecurringPatternFieldEdit extends Component<
           {{! Start Date }}
           <div class='detail-field'>
             <label class='detail-label'>Starts on</label>
-            <@fields.startDate @format='edit' />
+            <@fields.startDate @format='edit' @canEdit={{@canEdit}} />
           </div>
 
           {{! Weekly: Day selection }}
@@ -246,7 +247,7 @@ class RecurringPatternFieldEdit extends Component<
           {{#if this.needsDayOfMonth}}
             <div class='detail-field'>
               <label class='detail-label'>Day of month</label>
-              <@fields.dayOfMonth @format='edit' />
+              <@fields.dayOfMonth @format='edit' @canEdit={{@canEdit}} />
             </div>
           {{/if}}
 
@@ -259,6 +260,7 @@ class RecurringPatternFieldEdit extends Component<
                 @selected={{this.selectedMonth}}
                 @onChange={{this.updateMonthOfYear}}
                 @placeholder='Select month'
+                @disabled={{not @canEdit}}
                 data-test-month-of-year
                 as |option|
               >
@@ -273,13 +275,13 @@ class RecurringPatternFieldEdit extends Component<
             <div class='end-options'>
               <div class='end-option'>
                 <label class='end-option-label'>On date</label>
-                <@fields.endDate @format='edit' />
+                <@fields.endDate @format='edit' @canEdit={{@canEdit}} />
               </div>
               <div class='end-option'>
                 <label class='end-option-label'>After</label>
                 <div class='occurrence-input'>
                   <div class='occurrence-field'>
-                    <@fields.occurrences @format='edit' />
+                    <@fields.occurrences @format='edit' @canEdit={{@canEdit}} />
                   </div>
                   <span class='occurrence-label'>occurrences</span>
                 </div>
