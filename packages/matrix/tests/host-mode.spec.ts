@@ -37,18 +37,36 @@ test.describe('Host mode', () => {
     await postCardSource(
       page,
       realmURL,
-      'host-mode-isolated-card.gts',
+      'host-home-card.gts',
       `
         import { CardDef, Component } from 'https://cardstack.com/base/card-api';
 
-        export class HostModeIsolatedCard extends CardDef {
+        export class HostHomeCard extends CardDef {
           static isolated = class Isolated extends Component<typeof this> {
             <template>
-              <p data-test-host-mode-isolated>Host mode isolated</p>
+              <p data-test-host-home>Host home</p>
             </template>
           };
         }
       `,
+    );
+
+    await postCardSource(
+      page,
+      realmURL,
+      'host-home.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {},
+          meta: {
+            adoptsFrom: {
+              module: './host-home-card.gts',
+              name: 'HostHomeCard',
+            },
+          },
+        },
+      }),
     );
 
     await postCardSource(
@@ -61,8 +79,15 @@ test.describe('Host mode', () => {
           attributes: {},
           meta: {
             adoptsFrom: {
-              module: './host-mode-isolated-card.gts',
-              name: 'HostModeIsolatedCard',
+              module: 'https://cardstack.com/base/index',
+              name: 'IndexCard',
+            },
+          },
+          relationships: {
+            hostHome: {
+              links: {
+                self: './host-home',
+              },
             },
           },
         },
@@ -70,7 +95,7 @@ test.describe('Host mode', () => {
     );
 
     await page.reload();
-    await page.locator('[data-test-host-mode-isolated]').waitFor();
+    await page.locator('[data-test-stack-item-content]').first().waitFor();
 
     publishedRealmURL = `http://published.localhost:4205/${username}/${realmName}/`;
 
@@ -114,11 +139,11 @@ test.describe('Host mode', () => {
     await logout(page);
   });
 
-  test('published card response includes isolated template markup', async ({
+  test('published host home renders from index root', async ({
     page,
   }) => {
     let html = await waitUntil(async () => {
-      let response = await page.request.get(publishedCardURL, {
+      let response = await page.request.get(publishedRealmURL, {
         headers: { Accept: 'text/html' },
       });
 
@@ -127,15 +152,13 @@ test.describe('Host mode', () => {
       }
 
       let text = await response.text();
-      return text.includes('data-test-host-mode-isolated') ? text : false;
+      return text.includes('data-test-host-home') ? text : false;
     });
 
-    expect(html).toContain('data-test-host-mode-isolated');
+    expect(html).toContain('data-test-host-home');
 
-    await page.goto(publishedCardURL);
-    await expect(
-      page.locator('[data-test-host-mode-isolated]'),
-    ).toBeVisible();
+    await page.goto(publishedRealmURL);
+    await expect(page.locator('[data-test-host-home]')).toBeVisible();
   });
 
   test.skip('card in a published realm renders in host mode with a connect button', async ({

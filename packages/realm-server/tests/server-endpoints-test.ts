@@ -234,20 +234,51 @@ module(basename(__filename), function () {
           );
         });
 
-        test('serves head and isolated HTML in index responses for card URLs ending in /', async function (assert) {
-          let cardURL = new URL('subdirectory/index', testRealm2URL).href;
+        test('serves hostHome head and isolated HTML for index responses ending in /', async function (assert) {
+          let hostModeHost = 'published.localhost:4445';
+          let publishedRealmURL = new URL(`http://${hostModeHost}/test/`);
+          let indexCardURL = new URL(
+            'subdirectory/index',
+            publishedRealmURL,
+          ).href;
+          let hostHomeURL = new URL(
+            'subdirectory/host-home',
+            publishedRealmURL,
+          ).href;
           let isolatedHTML =
             '<div data-test-isolated-html>Isolated HTML</div>';
           let headHTML = '<meta data-test-head-html="Head HTML" />';
+          let pristineDoc = JSON.stringify({
+            type: 'card',
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/index',
+                name: 'IndexCard',
+              },
+            },
+            relationships: {
+              hostHome: {
+                links: {
+                  self: './host-home',
+                },
+              },
+            },
+          });
+
+          await dbAdapter.execute(
+            `INSERT INTO boxel_index_working (url, file_alias, type, realm_version, realm_url, pristine_doc)
+             VALUES ('${indexCardURL}', '${indexCardURL}', 'instance', 1, '${testRealm2URL.href}', '${pristineDoc}'::jsonb)`,
+          );
 
           await dbAdapter.execute(
             `INSERT INTO boxel_index_working (url, file_alias, type, realm_version, realm_url, head_html, isolated_html)
-             VALUES ('${cardURL}', '${cardURL}', 'instance', 1, '${testRealm2URL.href}', '${headHTML}', '${isolatedHTML}')`,
+             VALUES ('${hostHomeURL}', '${hostHomeURL}', 'instance', 1, '${testRealm2URL.href}', '${headHTML}', '${isolatedHTML}')`,
           );
 
           let response = await request2
             .get('/test/subdirectory/')
-            .set('Accept', 'text/html');
+            .set('Accept', 'text/html')
+            .set('Host', hostModeHost);
 
           assert.strictEqual(response.status, 200, 'serves HTML response');
           assert.ok(

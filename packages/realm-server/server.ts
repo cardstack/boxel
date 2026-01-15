@@ -7,6 +7,7 @@ import {
   logger,
   SupportedMimeType,
   insertPermissions,
+  coerceTypes,
   param,
   query,
   Deferred,
@@ -18,6 +19,7 @@ import {
   fetchSessionRoom,
   REALM_SERVER_REALM,
   userInitiatedPriority,
+  type CardResource,
 } from '@cardstack/runtime-common';
 import {
   ensureDirSync,
@@ -312,8 +314,19 @@ export class RealmServer {
         `${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`,
       );
       let cardURL = requestURL;
-      if (requestURL.pathname.endsWith('/')) {
+      let isIndexRequest = requestURL.pathname.endsWith('/');
+      if (isIndexRequest) {
         cardURL = new URL('index', requestURL);
+      }
+      if (isIndexRequest) {
+        let prefersHostHome = this.isHostModeRequest(requestURL);
+        let resolvedHome = await this.resolveIndexCardHome(
+          cardURL,
+          prefersHostHome,
+        );
+        if (resolvedHome) {
+          cardURL = resolvedHome;
+        }
       }
 
       this.headLog.debug(`Fetching head HTML for ${cardURL.href}`);
@@ -550,6 +563,99 @@ export class RealmServer {
       /(<script[^>]+id="boxel-isolated-start"[^>]*>\s*<\/script>)([\s\S]*?)(<script[^>]+id="boxel-isolated-end"[^>]*>\s*<\/script>)/,
       `$1\n${isolatedHTML}\n$3`,
     );
+  }
+
+  private isHostModeRequest(requestURL: URL): boolean {
+    return requestURL.host !== this.serverURL.host;
+  }
+
+  private async resolveIndexCardHome(
+    indexCardURL: URL,
+    prefersHostHome: boolean,
+  ): Promise<URL | null> {
+    let indexCard = await this.retrieveIndexCardResource(indexCardURL);
+    if (!indexCard) {
+      return null;
+    }
+
+    let relationshipName = prefersHostHome ? 'hostHome' : 'interactHome';
+    let relationship = indexCard.relationships?.[relationshipName];
+    if (Array.isArray(relationship)) {
+      relationship = relationship[0];
+    }
+    let link =
+      relationship?.links?.self ??
+      relationship?.links?.related ??
+      (Array.isArray(relationship?.data)
+        ? relationship?.data[0]?.id
+        : relationship?.data?.id);
+    if (typeof link !== 'string' || link.length === 0) {
+      return null;
+    }
+
+    let resolved = new URL(link, indexCardURL);
+    let href = resolved.href.replace(/\.json$/, '');
+    return new URL(href);
+  }
+
+  private async retrieveIndexCardResource(
+    cardURL: URL,
+  ): Promise<CardResource | null> {
+    let candidates = this.indexURLCandidates(cardURL);
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    let rows = await query(
+      this.dbAdapter,
+      [
+        `SELECT pristine_doc, realm_version FROM boxel_index_working WHERE pristine_doc IS NOT NULL AND`,
+        ...this.indexCandidateExpressions(candidates),
+        `UNION ALL
+         SELECT pristine_doc, realm_version FROM boxel_index WHERE pristine_doc IS NOT NULL AND`,
+        ...this.indexCandidateExpressions(candidates),
+        `ORDER BY realm_version DESC
+         LIMIT 1`,
+      ],
+      coerceTypes,
+    );
+
+    let docRow = rows[0] as
+      | { pristine_doc?: CardResource | string | null; realm_version?: string }
+      | undefined;
+
+    return this.coerceCardResource(docRow?.pristine_doc);
+  }
+
+  private coerceCardResource(resource: unknown): CardResource | null {
+    if (!resource) {
+      return null;
+    }
+    if (typeof resource === 'object' && !Buffer.isBuffer(resource)) {
+      return resource as CardResource;
+    }
+    if (Buffer.isBuffer(resource)) {
+      try {
+        return JSON.parse(resource.toString('utf8')) as CardResource;
+      } catch (_error) {
+        return null;
+      }
+    }
+    if (resource instanceof Uint8Array) {
+      try {
+        return JSON.parse(Buffer.from(resource).toString('utf8')) as CardResource;
+      } catch (_error) {
+        return null;
+      }
+    }
+    if (typeof resource === 'string') {
+      try {
+        return JSON.parse(resource) as CardResource;
+      } catch (_error) {
+        return null;
+      }
+    }
+    return null;
   }
 
   private serveFromRealm = async (ctxt: Koa.Context, _next: Koa.Next) => {
