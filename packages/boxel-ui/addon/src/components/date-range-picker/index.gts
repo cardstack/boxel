@@ -20,11 +20,11 @@ import { setupDateLibrary } from './setup.gts';
 
 interface Signature {
   Args: {
+    disabled?: boolean;
     end?: Date | null;
     onSelect: TPowerCalendarRangeOnSelect;
     selected?: SelectedPowerCalendarRange;
     start?: Date | null;
-    disabled?: boolean;
   };
   Element: HTMLElement;
 }
